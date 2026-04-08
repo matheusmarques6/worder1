@@ -128,10 +128,10 @@ export function StoreAnalyzer({
             <Store className="w-5 h-5 text-blue-400" />
           </div>
           <div>
-            <h3 className="font-medium text-white">
+            <h3 className="font-medium text-gray-900">
               {storeName || 'Analisar loja'}
             </h3>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-gray-500">
               {isAnalyzing
                 ? 'Analisando sua loja...'
                 : 'Detectamos uma loja Shopify conectada'}
@@ -160,10 +160,10 @@ export function StoreAnalyzer({
           {/* Progress bar */}
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-zinc-400">Progresso</span>
-              <span className="text-white font-medium">{Math.round(progress)}%</span>
+              <span className="text-gray-500">Progresso</span>
+              <span className="text-gray-900 font-medium">{Math.round(progress)}%</span>
             </div>
-            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+            <div className="h-2 bg-gray-50 rounded-full overflow-hidden">
               <motion.div
                 className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
                 initial={{ width: 0 }}
@@ -176,7 +176,7 @@ export function StoreAnalyzer({
           {/* Steps toggle */}
           <button
             onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
+            className="flex items-center gap-2 text-sm text-gray-500 hover:text-white transition-colors"
           >
             <ChevronDown
               className={`w-4 h-4 transition-transform ${showDetails ? 'rotate-180' : ''}`}
@@ -211,7 +211,7 @@ export function StoreAnalyzer({
                       <div
                         className={`
                           w-8 h-8 rounded-lg flex items-center justify-center
-                          ${step.status === 'pending' ? 'bg-zinc-800 text-zinc-500' : ''}
+                          ${step.status === 'pending' ? 'bg-gray-50 text-gray-500' : ''}
                           ${step.status === 'running' ? 'bg-blue-500/20 text-blue-400' : ''}
                           ${step.status === 'complete' ? 'bg-green-500/20 text-green-400' : ''}
                           ${step.status === 'error' ? 'bg-red-500/20 text-red-400' : ''}
@@ -230,9 +230,9 @@ export function StoreAnalyzer({
                       <span
                         className={`
                           text-sm
-                          ${step.status === 'running' ? 'text-white font-medium' : ''}
-                          ${step.status === 'complete' ? 'text-zinc-400' : ''}
-                          ${step.status === 'pending' ? 'text-zinc-500' : ''}
+                          ${step.status === 'running' ? 'text-gray-900 font-medium' : ''}
+                          ${step.status === 'complete' ? 'text-gray-500' : ''}
+                          ${step.status === 'pending' ? 'text-gray-500' : ''}
                           ${step.status === 'error' ? 'text-red-400' : ''}
                         `}
                       >

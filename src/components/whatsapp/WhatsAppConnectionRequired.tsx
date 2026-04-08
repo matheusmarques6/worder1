@@ -66,15 +66,15 @@ export function WhatsAppConnectionCard({
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="p-6 bg-dark-800/50 border border-dark-700 rounded-2xl"
+      className="p-6 bg-gray-50 border border-gray-200 rounded-2xl"
     >
       <div className="flex flex-col items-center text-center">
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center mb-4">
           <MessageSquare className="w-8 h-8 text-green-400" />
         </div>
         
-        <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
-        <p className="text-sm text-dark-400 mb-6 max-w-sm">{description}</p>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
+        <p className="text-sm text-gray-500 mb-6 max-w-sm">{description}</p>
         
         <button
           onClick={() => router.push('/settings?tab=integrations')}
@@ -108,26 +108,26 @@ export function WhatsAppConnectionRequired({
           <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center mx-auto">
             <MessageSquare className="w-12 h-12 text-green-400" />
           </div>
-          <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center border-4 border-dark-900">
+          <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center border-4 border-gray-200">
             <AlertCircle className="w-5 h-5 text-amber-400" />
           </div>
         </div>
 
         {/* Title */}
-        <h1 className="text-2xl font-bold text-white mb-3">{title}</h1>
-        <p className="text-dark-400 mb-8">{description}</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-3">{title}</h1>
+        <p className="text-gray-500 mb-8">{description}</p>
 
         {/* Steps */}
-        <div className="bg-dark-800/50 rounded-xl p-6 mb-8 text-left">
-          <p className="text-sm font-medium text-dark-300 mb-4">Para conectar você vai precisar de:</p>
+        <div className="bg-gray-50 rounded-xl p-6 mb-8 text-left">
+          <p className="text-sm font-medium text-gray-600 mb-4">Para conectar você vai precisar de:</p>
           <ul className="space-y-3">
             <li className="flex items-start gap-3">
               <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                 <span className="text-xs font-bold text-green-400">1</span>
               </div>
               <div>
-                <p className="text-sm text-white">Conta no Meta Business Suite</p>
-                <p className="text-xs text-dark-500">Com verificação do negócio</p>
+                <p className="text-sm text-gray-700">Conta no Meta Business Suite</p>
+                <p className="text-xs text-gray-400">Com verificação do negócio</p>
               </div>
             </li>
             <li className="flex items-start gap-3">
@@ -135,8 +135,8 @@ export function WhatsAppConnectionRequired({
                 <span className="text-xs font-bold text-green-400">2</span>
               </div>
               <div>
-                <p className="text-sm text-white">Número de WhatsApp Business</p>
-                <p className="text-xs text-dark-500">Registrado na API</p>
+                <p className="text-sm text-gray-700">Número de WhatsApp Business</p>
+                <p className="text-xs text-gray-400">Registrado na API</p>
               </div>
             </li>
             <li className="flex items-start gap-3">
@@ -144,8 +144,8 @@ export function WhatsAppConnectionRequired({
                 <span className="text-xs font-bold text-green-400">3</span>
               </div>
               <div>
-                <p className="text-sm text-white">Access Token permanente</p>
-                <p className="text-xs text-dark-500">System User Token da Meta</p>
+                <p className="text-sm text-gray-700">Access Token permanente</p>
+                <p className="text-xs text-gray-400">System User Token da Meta</p>
               </div>
             </li>
           </ul>
@@ -165,7 +165,7 @@ export function WhatsAppConnectionRequired({
             href="https://business.facebook.com/settings/whatsapp-business-accounts"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-dark-800 hover:bg-dark-700 text-dark-300 hover:text-white rounded-xl font-medium transition-colors"
+            className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-white hover:bg-gray-100 text-gray-600 hover:text-white rounded-xl font-medium transition-colors"
           >
             <ExternalLink className="w-4 h-4" />
             Abrir Meta Business Suite
@@ -180,7 +180,7 @@ export function WhatsAppConnectionRequired({
 export function WhatsAppConnectionLoading() {
   return (
     <div className="flex items-center justify-center py-12">
-      <div className="flex items-center gap-3 text-dark-400">
+      <div className="flex items-center gap-3 text-gray-500">
         <Loader2 className="w-5 h-5 animate-spin" />
         <span>Verificando conexão...</span>
       </div>

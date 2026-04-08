@@ -267,7 +267,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">Segmentação RFM</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Segmentação RFM</h2>
           <p className="text-sm text-gray-400">
             Análise de Recência, Frequência e Valor Monetário
           </p>
@@ -325,7 +325,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
                 >
                   <Icon className="h-4 w-4" />
                 </div>
-                <span className="text-2xl font-bold text-white">{s.count}</span>
+                <span className="text-2xl font-bold text-gray-900">{s.count}</span>
               </div>
               <p className="text-xs text-gray-400 truncate">{s.label}</p>
               <p className="text-xs text-gray-500">{s.percentage.toFixed(1)}%</p>
@@ -338,7 +338,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pie Chart */}
         <div className="bg-[#1a1a2e] rounded-xl p-6">
-          <h3 className="text-lg font-medium text-white mb-4">Distribuição de Clientes</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Distribuição de Clientes</h3>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -372,7 +372,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
 
         {/* Bar Chart - Revenue by Segment */}
         <div className="bg-[#1a1a2e] rounded-xl p-6">
-          <h3 className="text-lg font-medium text-white mb-4">Receita por Segmento</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Receita por Segmento</h3>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData} layout="vertical">
@@ -430,7 +430,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
                         <Icon className="h-6 w-6" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-medium text-white">
+                        <h3 className="text-lg font-medium text-gray-900">
                           {summary.find(s => s.segment === selectedSegment)?.label}
                         </h3>
                         <p className="text-sm text-gray-400">{config?.description}</p>
@@ -448,7 +448,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
                 </div>
                 <button
                   onClick={() => setSelectedSegment(null)}
-                  className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+                  className="p-2 hover:bg-gray-50 rounded-lg transition-colors"
                 >
                   <ChevronUp className="h-5 w-5 text-gray-400" />
                 </button>
@@ -561,9 +561,9 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
           >
             <div className="flex items-center gap-3 mb-2">
               <action.icon className={`h-5 w-5 text-${action.color}-400`} />
-              <span className="font-medium text-white">{action.title}</span>
+              <span className="font-medium text-gray-900">{action.title}</span>
             </div>
-            <p className="text-2xl font-bold text-white">{action.count}</p>
+            <p className="text-2xl font-bold text-gray-900">{action.count}</p>
             <p className="text-sm text-gray-400">clientes elegíveis</p>
           </div>
         ))}

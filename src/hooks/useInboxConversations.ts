@@ -26,8 +26,8 @@ interface UseInboxConversationsReturn {
   refresh: () => Promise<void>
 }
 
-// ✅ CORREÇÃO: Recebe storeId além de organizationId
-export function useInboxConversations(organizationId: string, storeId?: string | null): UseInboxConversationsReturn {
+// ✅ CORREÇÃO: Recebe storeId e organizationId (ambos podem ser null)
+export function useInboxConversations(organizationId: string | null, storeId?: string | null): UseInboxConversationsReturn {
   const [conversations, setConversations] = useState<InboxConversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<InboxConversation | null>(null)
   const [isLoading, setIsLoading] = useState(false)      // ✅ Primeira carga
@@ -39,7 +39,14 @@ export function useInboxConversations(organizationId: string, storeId?: string |
   // ✅ Flag para saber se já carregou uma vez
   const hasLoadedOnce = useRef(false)
 
+  // ✅ Debounce: evita chamadas simultâneas
+  const isFetchingRef = useRef(false)
+
   const fetchConversations = useCallback(async (newFilters?: ConversationFilters) => {
+    // ✅ Debounce: ignora chamadas enquanto outra está em andamento
+    if (isFetchingRef.current) {
+      return
+    }
     if (!organizationId) {
       console.log('⚠️ No organizationId yet, waiting...')
       return
@@ -59,7 +66,8 @@ export function useInboxConversations(organizationId: string, storeId?: string |
       setIsRefreshing(true) // Polling silencioso
     }
     setError(null)
-    
+    isFetchingRef.current = true
+
     try {
       const currentFilters = newFilters || filters
       const params = new URLSearchParams({
@@ -100,6 +108,7 @@ export function useInboxConversations(organizationId: string, storeId?: string |
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
+      isFetchingRef.current = false
     }
   }, [organizationId, storeId, filters])
 

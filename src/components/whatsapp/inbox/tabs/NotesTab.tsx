@@ -161,15 +161,15 @@ export function NotesTab({
   return (
     <div className="flex flex-col h-full">
       {/* Input de nova nota */}
-      <div className="p-4 border-b border-dark-700/50">
-        <div className="bg-dark-700/50 rounded-xl overflow-hidden">
+      <div className="p-4 border-b border-gray-200">
+        <div className="bg-gray-100 rounded-xl overflow-hidden">
           <textarea
             value={newNote}
             onChange={(e) => setNewNote(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Adicionar uma nota..."
             rows={2}
-            className="w-full px-4 py-3 bg-transparent text-white placeholder:text-dark-500 
+            className="w-full px-4 py-3 bg-transparent text-white placeholder:text-gray-400 
                        resize-none focus:outline-none text-sm"
           />
           
@@ -180,7 +180,7 @@ export function NotesTab({
                 {attachments.map((att, index) => (
                   <div 
                     key={index}
-                    className="relative group bg-dark-600 rounded-lg overflow-hidden"
+                    className="relative group bg-gray-200 rounded-lg overflow-hidden"
                   >
                     {att.type === 'image' ? (
                       <img 
@@ -192,8 +192,8 @@ export function NotesTab({
                       <div className="w-32 p-2 flex items-center gap-2">
                         <FileText className="w-5 h-5 text-blue-400 flex-shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-xs text-white truncate">{att.name}</p>
-                          <p className="text-[10px] text-dark-400">{formatFileSize(att.size)}</p>
+                          <p className="text-xs text-gray-600 truncate">{att.name}</p>
+                          <p className="text-[10px] text-gray-500">{formatFileSize(att.size)}</p>
                         </div>
                       </div>
                     )}
@@ -212,13 +212,13 @@ export function NotesTab({
           )}
           
           {/* Toolbar */}
-          <div className="flex items-center justify-between px-3 py-2 border-t border-dark-600/50">
+          <div className="flex items-center justify-between px-3 py-2 border-t border-gray-300/50">
             <div className="flex items-center gap-1">
               {/* Anexar imagem */}
               <button
                 onClick={() => imageInputRef.current?.click()}
                 disabled={isUploading}
-                className="p-2 text-dark-400 hover:text-white hover:bg-dark-600 rounded-lg transition-colors"
+                className="p-2 text-gray-500 hover:text-white hover:bg-gray-200 rounded-lg transition-colors"
                 title="Anexar imagem (preview local)"
               >
                 <Image className="w-4 h-4" />
@@ -236,7 +236,7 @@ export function NotesTab({
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                className="p-2 text-dark-400 hover:text-white hover:bg-dark-600 rounded-lg transition-colors"
+                className="p-2 text-gray-500 hover:text-white hover:bg-gray-200 rounded-lg transition-colors"
                 title="Anexar documento (preview local)"
               >
                 <Paperclip className="w-4 h-4" />
@@ -251,7 +251,7 @@ export function NotesTab({
               />
               
               {isUploading && (
-                <Loader2 className="w-4 h-4 text-dark-400 animate-spin ml-2" />
+                <Loader2 className="w-4 h-4 text-gray-500 animate-spin ml-2" />
               )}
               
               {/* Aviso de que anexos são preview */}
@@ -276,7 +276,7 @@ export function NotesTab({
             </button>
           </div>
         </div>
-        <p className="text-[10px] text-dark-500 mt-1 text-center">
+        <p className="text-[10px] text-gray-400 mt-1 text-center">
           Ctrl+Enter para enviar
         </p>
       </div>
@@ -288,7 +288,7 @@ export function NotesTab({
             <Loader2 className="w-6 h-6 text-primary-500 animate-spin" />
           </div>
         ) : notes.length === 0 ? (
-          <div className="text-center py-8 text-dark-500">
+          <div className="text-center py-8 text-gray-400">
             <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p className="text-sm">Nenhuma nota ainda</p>
             <p className="text-xs mt-1">Adicione notas para lembrar de informações importantes</p>
@@ -298,7 +298,7 @@ export function NotesTab({
             {/* Notas fixadas */}
             {pinnedNotes.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs text-dark-500 font-medium flex items-center gap-1">
+                <p className="text-xs text-gray-400 font-medium flex items-center gap-1">
                   <Pin className="w-3 h-3" /> Fixadas
                 </p>
                 {pinnedNotes.map((note) => (
@@ -380,10 +380,10 @@ function NoteCard({
   }
 
   return (
-    <div className={`bg-dark-700/50 rounded-xl p-3 group ${isPinned ? 'border border-primary-500/30' : ''}`}>
+    <div className={`bg-gray-100 rounded-xl p-3 group ${isPinned ? 'border border-brand-300' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-white whitespace-pre-wrap break-words">
+          <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
             {note.content}
           </p>
           
@@ -405,11 +405,11 @@ function NoteCard({
                       href={att.url} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 bg-dark-600 rounded-lg p-2 hover:bg-dark-500 transition-colors"
+                      className="flex items-center gap-2 bg-gray-200 rounded-lg p-2 hover:bg-gray-300 transition-colors"
                     >
                       <FileText className="w-4 h-4 text-blue-400" />
-                      <span className="text-xs text-white truncate max-w-[100px]">{att.name}</span>
-                      <Download className="w-3 h-3 text-dark-400" />
+                      <span className="text-xs text-gray-600 truncate max-w-[100px]">{att.name}</span>
+                      <Download className="w-3 h-3 text-gray-500" />
                     </a>
                   )}
                 </div>
@@ -417,7 +417,7 @@ function NoteCard({
             </div>
           )}
           
-          <div className="flex items-center gap-2 mt-2 text-xs text-dark-500">
+          <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
             <Clock className="w-3 h-3" />
             <span>{formatDate(note.created_at)}</span>
             {note.created_by_name && (
@@ -433,20 +433,20 @@ function NoteCard({
           <div className="relative">
             <button
               onClick={() => setMenuOpen(menuOpen === note.id ? null : note.id)}
-              className="p-1.5 text-dark-500 hover:text-white hover:bg-dark-600 rounded-lg 
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-200 rounded-lg 
                          opacity-0 group-hover:opacity-100 transition-all"
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
             
             {menuOpen === note.id && (
-              <div className="absolute right-0 top-full mt-1 bg-dark-800 border border-dark-700 
+              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 
                               rounded-lg shadow-xl py-1 min-w-[140px] z-10">
                 {onPin && (
                   <button
                     onClick={handlePin}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-dark-300 
-                               hover:bg-dark-700 hover:text-white transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 
+                               hover:bg-gray-100 hover:text-white transition-colors"
                   >
                     <Pin className="w-4 h-4" />
                     {note.is_pinned ? 'Desafixar' : 'Fixar'}

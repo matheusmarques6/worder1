@@ -95,17 +95,17 @@ function KanbanCard({ deal, onClick }: KanbanCardProps) {
       animate={{ opacity: 1, y: 0 }}
       className={cn(
         'kanban-card group',
-        isDragging && 'opacity-50 shadow-2xl shadow-primary-500/20 border-primary-500/50'
+        isDragging && 'opacity-50 shadow-2xl shadow-primary-500/20 border-brand-400'
       )}
       onClick={onClick}
     >
       <div className="flex items-start justify-between mb-3">
-        <h4 className="font-medium text-dark-100 group-hover:text-primary-400 transition-colors line-clamp-2">
+        <h4 className="font-medium text-gray-800 group-hover:text-brand-600 transition-colors line-clamp-2">
           {deal.title}
         </h4>
         <button
           {...listeners}
-          className="p-1 rounded hover:bg-dark-700 text-dark-500 cursor-grab active:cursor-grabbing"
+          className="p-1 rounded hover:bg-gray-100 text-gray-400 cursor-grab active:cursor-grabbing"
         >
           <GripVertical className="w-4 h-4" />
         </button>
@@ -118,11 +118,11 @@ function KanbanCard({ deal, onClick }: KanbanCardProps) {
             size="sm"
           />
           <div className="min-w-0">
-            <p className="text-sm text-dark-200 truncate">
+            <p className="text-sm text-gray-700 truncate">
               {`${deal.contact.first_name || ''} ${deal.contact.last_name || ''}`.trim() || deal.contact.email || 'Sem nome'}
             </p>
             {deal.contact.company && (
-              <p className="text-xs text-dark-500 truncate">{deal.contact.company}</p>
+              <p className="text-xs text-gray-400 truncate">{deal.contact.company}</p>
             )}
           </div>
         </div>
@@ -134,7 +134,7 @@ function KanbanCard({ deal, onClick }: KanbanCardProps) {
           <span className="font-semibold">{formatCurrency(deal.value)}</span>
         </div>
         {deal.expected_close_date && (
-          <div className="flex items-center gap-1 text-dark-500 text-xs">
+          <div className="flex items-center gap-1 text-gray-400 text-xs">
             <Calendar className="w-3 h-3" />
             <span>{new Date(deal.expected_close_date).toLocaleDateString('pt-BR')}</span>
           </div>
@@ -142,12 +142,12 @@ function KanbanCard({ deal, onClick }: KanbanCardProps) {
       </div>
 
       {/* Progress bar */}
-      <div className="mt-3 pt-3 border-t border-dark-700">
+      <div className="mt-3 pt-3 border-t border-gray-200">
         <div className="flex items-center justify-between text-xs mb-1.5">
-          <span className="text-dark-500">Probabilidade</span>
-          <span className="text-dark-300 font-medium">{deal.probability}%</span>
+          <span className="text-gray-400">Probabilidade</span>
+          <span className="text-gray-600 font-medium">{deal.probability}%</span>
         </div>
-        <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-300"
             style={{ width: `${deal.probability}%` }}
@@ -213,7 +213,7 @@ function KanbanColumn({
         <div className="flex items-center gap-3">
           <button
             {...listeners}
-            className="p-1 rounded hover:bg-dark-800 text-dark-500 cursor-grab"
+            className="p-1 rounded hover:bg-white text-gray-400 cursor-grab"
           >
             <GripVertical className="w-4 h-4" />
           </button>
@@ -222,10 +222,10 @@ function KanbanColumn({
             style={{ backgroundColor: column.color }}
           />
           <div>
-            <h3 className="font-semibold text-dark-100">{column.name}</h3>
+            <h3 className="font-semibold text-gray-800">{column.name}</h3>
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-dark-500">{safeDeals.length} deals</span>
-              <span className="text-dark-600">•</span>
+              <span className="text-gray-400">{safeDeals.length} deals</span>
+              <span className="text-gray-400">•</span>
               <span className="text-success-400 font-medium">
                 {formatCurrency(totalValue)}
               </span>
@@ -235,25 +235,25 @@ function KanbanColumn({
         <div className="flex items-center gap-1">
           <button
             onClick={onAddDeal}
-            className="p-1.5 rounded-lg hover:bg-dark-800 text-dark-400 hover:text-dark-100 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-white text-gray-500 hover:text-gray-800 transition-colors"
           >
             <Plus className="w-4 h-4" />
           </button>
           <div className="relative group">
-            <button className="p-1.5 rounded-lg hover:bg-dark-800 text-dark-400 hover:text-dark-100 transition-colors">
+            <button className="p-1.5 rounded-lg hover:bg-white text-gray-500 hover:text-gray-800 transition-colors">
               <MoreHorizontal className="w-4 h-4" />
             </button>
-            <div className="absolute right-0 top-full mt-1 py-1 bg-dark-800 border border-dark-700 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 min-w-[140px]">
+            <div className="absolute right-0 top-full mt-1 py-1 bg-white border border-gray-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 min-w-[140px]">
               <button
                 onClick={onEditColumn}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-dark-300 hover:bg-dark-700 hover:text-dark-100"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-800"
               >
                 <Edit2 className="w-4 h-4" />
                 Editar
               </button>
               <button
                 onClick={onDeleteColumn}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error-400 hover:bg-dark-700"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error-400 hover:bg-gray-100"
               >
                 <Trash2 className="w-4 h-4" />
                 Excluir
@@ -284,7 +284,7 @@ function KanbanColumn({
       {/* Add Deal Button */}
       <button
         onClick={onAddDeal}
-        className="mt-3 w-full py-2.5 rounded-xl border-2 border-dashed border-dark-700 text-dark-500 hover:border-primary-500/50 hover:text-primary-400 transition-colors flex items-center justify-center gap-2"
+        className="mt-3 w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-gray-400 hover:border-brand-400 hover:text-brand-600 transition-colors flex items-center justify-center gap-2"
       >
         <Plus className="w-4 h-4" />
         Adicionar deal
@@ -392,7 +392,7 @@ export function KanbanBoard({ pipeline, deals }: KanbanBoardProps) {
 
         {/* Add Column Button */}
         <div className="min-w-[320px] max-w-[320px]">
-          <button className="w-full h-full min-h-[200px] rounded-2xl border-2 border-dashed border-dark-700 text-dark-500 hover:border-primary-500/50 hover:text-primary-400 transition-colors flex flex-col items-center justify-center gap-2">
+          <button className="w-full h-full min-h-[200px] rounded-2xl border-2 border-dashed border-gray-200 text-gray-400 hover:border-brand-400 hover:text-brand-600 transition-colors flex flex-col items-center justify-center gap-2">
             <Plus className="w-6 h-6" />
             <span className="font-medium">Adicionar coluna</span>
           </button>
@@ -402,8 +402,8 @@ export function KanbanBoard({ pipeline, deals }: KanbanBoardProps) {
       {/* Drag Overlay */}
       <DragOverlay>
         {activeDeal ? (
-          <div className="kanban-card shadow-2xl shadow-primary-500/20 border-primary-500/50">
-            <h4 className="font-medium text-dark-100 mb-2">{activeDeal.title}</h4>
+          <div className="kanban-card shadow-2xl shadow-primary-500/20 border-brand-400">
+            <h4 className="font-medium text-gray-800 mb-2">{activeDeal.title}</h4>
             <div className="flex items-center gap-1.5 text-success-400">
               <DollarSign className="w-4 h-4" />
               <span className="font-semibold">{formatCurrency(activeDeal.value)}</span>
@@ -444,23 +444,23 @@ function DealModal({ deal, onClose }: DealModalProps) {
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
     >
       <div
-        className="absolute inset-0 bg-dark-950/80 backdrop-blur-sm"
+        className="absolute inset-0 bg-gray-50/80 backdrop-blur-sm"
         onClick={onClose}
       />
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-2xl bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-2xl bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-dark-700">
-          <h2 className="text-xl font-semibold text-dark-100">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-800">
             {isEditing ? 'Editar Deal' : 'Novo Deal'}
           </h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl hover:bg-dark-800 text-dark-400 transition-colors"
+            className="p-2 rounded-xl hover:bg-white text-gray-500 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -497,7 +497,7 @@ function DealModal({ deal, onClose }: DealModalProps) {
           />
 
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               Notas
             </label>
             <textarea
@@ -509,7 +509,7 @@ function DealModal({ deal, onClose }: DealModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-dark-700">
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
@@ -546,22 +546,22 @@ export function ContactCard({ contact, onClick }: ContactCardProps) {
           size="lg"
         />
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-dark-100 truncate">
+          <h3 className="font-semibold text-gray-800 truncate">
             {`${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email || 'Sem nome'}
           </h3>
           {contact.company && (
-            <p className="text-dark-400 text-sm truncate">{contact.company}</p>
+            <p className="text-gray-500 text-sm truncate">{contact.company}</p>
           )}
           
           <div className="flex flex-wrap gap-2 mt-3">
             {contact.email && (
-              <div className="flex items-center gap-1 text-dark-500 text-sm">
+              <div className="flex items-center gap-1 text-gray-400 text-sm">
                 <Mail className="w-3.5 h-3.5" />
                 <span className="truncate max-w-[150px]">{contact.email}</span>
               </div>
             )}
             {contact.phone && (
-              <div className="flex items-center gap-1 text-dark-500 text-sm">
+              <div className="flex items-center gap-1 text-gray-400 text-sm">
                 <Phone className="w-3.5 h-3.5" />
                 <span>{contact.phone}</span>
               </div>
@@ -588,7 +588,7 @@ export function ContactCard({ contact, onClick }: ContactCardProps) {
           <p className="text-success-400 font-semibold">
             {formatCurrency(contact.total_spent || contact.total_revenue || 0)}
           </p>
-          <p className="text-dark-500 text-xs mt-1">
+          <p className="text-gray-400 text-xs mt-1">
             {contact.total_orders || 0} pedidos
           </p>
         </div>
@@ -614,7 +614,7 @@ export function PipelineSelector({
   onCreateNew,
 }: PipelineSelectorProps) {
   return (
-    <div className="flex items-center gap-2 p-1 bg-dark-800/50 rounded-xl">
+    <div className="flex items-center gap-2 p-1 bg-gray-50 rounded-xl">
       {pipelines.map((pipeline: Pipeline) => (
         <button
           key={pipeline.id}
@@ -623,7 +623,7 @@ export function PipelineSelector({
             'px-4 py-2 rounded-lg text-sm font-medium transition-all',
             selectedId === pipeline.id
               ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20'
-              : 'text-dark-400 hover:text-dark-100 hover:bg-dark-700'
+              : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
           )}
         >
           {pipeline.name}
@@ -631,7 +631,7 @@ export function PipelineSelector({
       ))}
       <button
         onClick={onCreateNew}
-        className="px-4 py-2 rounded-lg text-sm font-medium text-dark-400 hover:text-dark-100 hover:bg-dark-700 transition-all flex items-center gap-1.5"
+        className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-all flex items-center gap-1.5"
       >
         <Plus className="w-4 h-4" />
         Novo Pipeline

@@ -46,10 +46,13 @@ export function useInboxMessages(): UseInboxMessagesReturn {
   const [error, setError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
-  
+
   // Cursores para paginação
   const oldestCursorRef = useRef<string | null>(null)
   const newestCursorRef = useRef<string | null>(null)
+
+  // Track pending messages by temp ID for proper replacement
+  const pendingMessagesRef = useRef<Map<string, string>>(new Map())
 
   // =============================================
   // FETCH MESSAGES (com paginação real)
@@ -119,11 +122,12 @@ export function useInboxMessages(): UseInboxMessagesReturn {
   }, [currentConversationId, isLoading, hasMore, fetchMessages])
 
   // =============================================
-  // REFETCH LATEST (polling - busca novas mensagens)
+  // REFETCH LATEST (polling - busca novas mensagens + status updates)
   // =============================================
   const refetchLatest = useCallback(async () => {
     if (!currentConversationId) return
     try {
+      // Buscar mensagens mais recentes E atualizar status de todas as mensagens pendentes
       const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
       if (newestCursorRef.current) {
         params.set('after', newestCursorRef.current)
@@ -136,15 +140,47 @@ export function useInboxMessages(): UseInboxMessagesReturn {
       if (!response.ok) return
 
       const fetchedMessages: InboxMessage[] = data.messages || []
+
+      setMessages(prev => {
+        let updated = [...prev]
+        let hasChanges = false
+
+        // Adicionar novas mensagens
+        for (const fetchedMsg of fetchedMessages) {
+          const existingIdx = updated.findIndex(m => m.id === fetchedMsg.id || m.meta_message_id === fetchedMsg.meta_message_id)
+
+          if (existingIdx === -1) {
+            // Nova mensagem - verificar se não é uma duplicata de uma mensagem pendente
+            const pendingIds = Array.from(pendingMessagesRef.current.values())
+            if (!pendingIds.includes(fetchedMsg.id)) {
+              updated.push(fetchedMsg)
+              hasChanges = true
+            }
+          } else {
+            // Mensagem existente - atualizar status se mudou
+            const existing = updated[existingIdx]
+            if (existing.status !== fetchedMsg.status) {
+              updated[existingIdx] = { ...existing, status: fetchedMsg.status }
+              hasChanges = true
+            }
+          }
+        }
+
+        // Ordenar por data
+        if (hasChanges) {
+          updated.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+          return updated
+        }
+
+        return prev
+      })
+
+      // Atualizar cursor
       if (fetchedMessages.length > 0) {
-        setMessages(prev => {
-          const existingIds = new Set(prev.map(m => m.id))
-          const newMsgs = fetchedMessages.filter(m => !existingIds.has(m.id))
-          if (newMsgs.length === 0) return prev
-          return [...prev, ...newMsgs]
-        })
         const newest = fetchedMessages[fetchedMessages.length - 1]
-        newestCursorRef.current = newest.created_at
+        if (!newestCursorRef.current || newest.created_at > newestCursorRef.current) {
+          newestCursorRef.current = newest.created_at
+        }
       }
     } catch (err) {
       console.warn('[useInboxMessages] Polling error:', err)
@@ -152,29 +188,29 @@ export function useInboxMessages(): UseInboxMessagesReturn {
   }, [currentConversationId])
 
   // =============================================
-  // SEND TEXT MESSAGE - COM OPTIMISTIC UI
+  // SEND TEXT MESSAGE - COM OPTIMISTIC UI MELHORADO
   // =============================================
   const sendMessage = useCallback(async (params: SendMessageParams): Promise<InboxMessage | null> => {
     setIsSending(true)
     setError(null)
-    
-    // PATCH 1: OPTIMISTIC UI - Adicionar mensagem imediatamente com status "sending"
-    const tempId = `temp-${Date.now()}`
+
+    // OPTIMISTIC UI - Adicionar mensagem imediatamente com status "pending"
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     const optimisticMessage: InboxMessage = {
       id: tempId,
       conversation_id: params.conversationId,
       direction: 'outbound',
       message_type: params.messageType || 'text',
       content: params.content || '',
-      status: 'pending', // Status visual de "enviando"
+      status: 'pending',
       sent_by_bot: false,
       is_deleted: false,
       created_at: new Date().toISOString(),
     }
-    
+
     // Adicionar mensagem otimista à lista
     setMessages(prev => [...prev, optimisticMessage])
-    
+
     try {
       const response = await fetch(
         `/api/whatsapp/inbox/conversations/${params.conversationId}/messages`,
@@ -188,33 +224,45 @@ export function useInboxMessages(): UseInboxMessagesReturn {
         }
       )
       const data = await response.json()
-      
+
       if (!response.ok) {
-        // PATCH 1: Se falhou, atualizar mensagem otimista para "failed"
-        setMessages(prev => prev.map(m => 
-          m.id === tempId 
-            ? { ...m, status: 'failed' as const, error: data.error } 
+        // Se falhou, atualizar mensagem otimista para "failed"
+        setMessages(prev => prev.map(m =>
+          m.id === tempId
+            ? { ...m, status: 'failed' as const, error_message: data.error }
             : m
         ))
         setError(data.error || 'Failed to send message')
         return null
       }
 
-      // Substituir mensagem otimista pela real
-      const newMessage = data.message
+      // Substituir mensagem otimista pela real com status correto
+      const newMessage: InboxMessage = {
+        ...data.message,
+        // Garantir que o status seja 'sent' se a API retornou sucesso
+        status: data.success ? 'sent' : (data.message?.status || 'sent'),
+      }
+
+      // Rastrear o mapeamento temp -> real para evitar duplicatas
+      if (newMessage.id) {
+        pendingMessagesRef.current.set(tempId, newMessage.id)
+      }
+
       setMessages(prev => {
-        // Remover a otimista e adicionar a real
+        // Remover a otimista e verificar duplicatas
         const filtered = prev.filter(m => m.id !== tempId)
+        // Evitar adicionar se já existe (por real-time ou polling)
         if (filtered.some(m => m.id === newMessage.id)) return filtered
         return [...filtered, newMessage]
       })
+
       if (newMessage.created_at) newestCursorRef.current = newMessage.created_at
       return newMessage
     } catch (err) {
-      // PATCH 1: Se erro de rede, marcar como failed
-      setMessages(prev => prev.map(m => 
-        m.id === tempId 
-          ? { ...m, status: 'failed' as const, error: 'Erro de conexão' } 
+      // Se erro de rede, marcar como failed
+      setMessages(prev => prev.map(m =>
+        m.id === tempId
+          ? { ...m, status: 'failed' as const, error_message: 'Erro de conexão' }
           : m
       ))
       setError(err instanceof Error ? err.message : 'Unknown error')

@@ -128,17 +128,17 @@ function IntegrationCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className={`
-        relative bg-dark-800/50 border rounded-2xl p-5 transition-all duration-200 group
+        relative bg-gray-50 border rounded-2xl p-5 transition-all duration-200 group
         ${isInstalled 
-          ? 'border-primary-500/30 hover:border-primary-500/50' 
-          : 'border-dark-700/50 hover:border-dark-600'
+          ? 'border-brand-300 hover:border-brand-400' 
+          : 'border-gray-200 hover:border-gray-300'
         }
       `}
     >
       {/* Featured badge */}
       {integration.is_featured && !isInstalled && (
         <div className="absolute -top-2 -right-2">
-          <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full text-[10px] font-bold text-white shadow-lg">
+          <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full text-[10px] font-bold text-gray-900 shadow-lg">
             <Sparkles className="w-3 h-3" />
             Popular
           </span>
@@ -148,7 +148,7 @@ function IntegrationCard({
       {/* Builtin badge */}
       {integration.is_builtin && (
         <div className="absolute -top-2 -left-2">
-          <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full text-[10px] font-bold text-white shadow-lg">
+          <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full text-[10px] font-bold text-gray-900 shadow-lg">
             <Zap className="w-3 h-3" />
             Nativo
           </span>
@@ -182,10 +182,10 @@ function IntegrationCard({
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-semibold text-white truncate">{integration.name}</h3>
+            <h3 className="font-semibold text-gray-900 truncate">{integration.name}</h3>
             {isInstalled && <StatusBadge status={installed.status} />}
           </div>
-          <p className="text-sm text-dark-400 line-clamp-2">
+          <p className="text-sm text-gray-500 line-clamp-2">
             {integration.short_description}
           </p>
         </div>
@@ -197,7 +197,7 @@ function IntegrationCard({
           <>
             <button
               onClick={onConfigure}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-dark-700/50 hover:bg-dark-700 rounded-xl text-sm text-white transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-gray-700 transition-colors"
             >
               <Settings className="w-4 h-4" />
               Configurar
@@ -407,8 +407,8 @@ export default function IntegrationsPage() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Integrações</h1>
-          <p className="text-dark-400 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900">Integrações</h1>
+          <p className="text-gray-500 mt-1">
             Conecte suas ferramentas favoritas para capturar leads automaticamente
           </p>
         </div>
@@ -418,13 +418,13 @@ export default function IntegrationsPage() {
       <div className="flex flex-col lg:flex-row gap-4">
         {/* Search */}
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar integrações..."
-            className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500/50"
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-400 focus:outline-none focus:border-brand-400"
           />
         </div>
 
@@ -435,7 +435,7 @@ export default function IntegrationsPage() {
             className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
               !selectedCategory
                 ? 'bg-primary-500 text-white'
-                : 'bg-dark-800/50 text-dark-300 hover:text-white'
+                : 'bg-gray-50 text-gray-600 hover:text-white'
             }`}
           >
             Todas
@@ -449,7 +449,7 @@ export default function IntegrationsPage() {
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
                   selectedCategory === cat.id
                     ? 'bg-primary-500 text-white'
-                    : 'bg-dark-800/50 text-dark-300 hover:text-white'
+                    : 'bg-gray-50 text-gray-600 hover:text-white'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -465,19 +465,19 @@ export default function IntegrationsPage() {
             onClick={() => setShowInstalled(!showInstalled)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
               showInstalled
-                ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                : 'bg-dark-800/50 text-dark-300 hover:text-white'
+                ? 'bg-brand-100 text-brand-600 border border-brand-300'
+                : 'bg-gray-50 text-gray-600 hover:text-white'
             }`}
           >
             <Check className="w-4 h-4" />
             Instaladas
           </button>
 
-          <div className="flex items-center bg-dark-800/50 rounded-xl p-1">
+          <div className="flex items-center bg-gray-50 rounded-xl p-1">
             <button
               onClick={() => setViewMode('grid')}
               className={`p-2 rounded-lg transition-colors ${
-                viewMode === 'grid' ? 'bg-dark-700 text-white' : 'text-dark-400 hover:text-white'
+                viewMode === 'grid' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-white'
               }`}
             >
               <Grid3X3 className="w-4 h-4" />
@@ -485,7 +485,7 @@ export default function IntegrationsPage() {
             <button
               onClick={() => setViewMode('list')}
               className={`p-2 rounded-lg transition-colors ${
-                viewMode === 'list' ? 'bg-dark-700 text-white' : 'text-dark-400 hover:text-white'
+                viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-white'
               }`}
             >
               <List className="w-4 h-4" />
@@ -505,8 +505,8 @@ export default function IntegrationsPage() {
       {/* Other Integrations Header */}
       {!search && !selectedCategory && sortedIntegrations.length > 0 && (
         <div className="flex items-center gap-2 mb-4">
-          <Puzzle className="w-5 h-5 text-primary-400" />
-          <h2 className="text-lg font-semibold text-white">Outras Integrações</h2>
+          <Puzzle className="w-5 h-5 text-brand-600" />
+          <h2 className="text-lg font-semibold text-gray-900">Outras Integrações</h2>
         </div>
       )}
 
@@ -540,11 +540,11 @@ export default function IntegrationsPage() {
             </div>
           ) : (
             <div className="text-center py-20">
-              <Puzzle className="w-12 h-12 mx-auto mb-4 text-dark-600" />
-              <h3 className="text-lg font-semibold text-white mb-2">
+              <Puzzle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Nenhuma integração encontrada
               </h3>
-              <p className="text-dark-400">
+              <p className="text-gray-500">
                 Tente ajustar os filtros ou busque por outro termo
               </p>
             </div>
@@ -685,10 +685,10 @@ function IntegrationInstallModal({
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+        className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="p-6 border-b border-dark-700">
+        <div className="p-6 border-b border-gray-200">
           <div className="flex items-center gap-4">
             <div
               className="w-14 h-14 rounded-xl flex items-center justify-center"
@@ -703,8 +703,8 @@ function IntegrationInstallModal({
               )}
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Instalar {integration.name}</h2>
-              <p className="text-dark-400 text-sm">{integration.short_description}</p>
+              <h2 className="text-xl font-bold text-gray-900">Instalar {integration.name}</h2>
+              <p className="text-gray-500 text-sm">{integration.short_description}</p>
             </div>
           </div>
         </div>
@@ -713,7 +713,7 @@ function IntegrationInstallModal({
         <div className="p-6 space-y-6">
           {/* Pipeline Selection */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               Pipeline padrão para novos leads
             </label>
             <select
@@ -725,7 +725,7 @@ function IntegrationInstallModal({
                   setSelectedStage(pipeline.stages[0].id)
                 }
               }}
-              className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
             >
               {pipelines.map((pipeline) => (
                 <option key={pipeline.id} value={pipeline.id}>
@@ -738,7 +738,7 @@ function IntegrationInstallModal({
           {/* Stage Selection */}
           {selectedPipelineData?.stages?.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Estágio inicial
               </label>
               <div className="flex flex-wrap gap-2">
@@ -749,7 +749,7 @@ function IntegrationInstallModal({
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                       selectedStage === stage.id
                         ? 'text-white'
-                        : 'bg-dark-800 text-dark-400 hover:text-white'
+                        : 'bg-white text-gray-500 hover:text-white'
                     }`}
                     style={
                       selectedStage === stage.id
@@ -766,7 +766,7 @@ function IntegrationInstallModal({
 
           {/* Auto Tags */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               Tags automáticas (opcional)
             </label>
             <div className="flex gap-2 mb-2">
@@ -776,11 +776,11 @@ function IntegrationInstallModal({
                 onChange={(e) => setNewTag(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && addTag()}
                 placeholder="Digite uma tag..."
-                className="flex-1 px-4 py-2 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
               />
               <button
                 onClick={addTag}
-                className="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
               >
                 <Plus className="w-5 h-5" />
               </button>
@@ -790,7 +790,7 @@ function IntegrationInstallModal({
                 {autoTags.map((tag) => (
                   <span
                     key={tag}
-                    className="flex items-center gap-1 px-2 py-1 bg-primary-500/20 text-primary-400 rounded-lg text-sm"
+                    className="flex items-center gap-1 px-2 py-1 bg-brand-100 text-brand-600 rounded-lg text-sm"
                   >
                     {tag}
                     <button onClick={() => setAutoTags(autoTags.filter((t) => t !== tag))}>
@@ -800,24 +800,24 @@ function IntegrationInstallModal({
                 ))}
               </div>
             )}
-            <p className="text-xs text-dark-500 mt-2">
+            <p className="text-xs text-gray-400 mt-2">
               Estas tags serão adicionadas automaticamente a todos os leads capturados por esta integração
             </p>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-dark-700 flex items-center justify-end gap-3">
+        <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2.5 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={handleInstall}
             disabled={loading || !selectedPipeline}
-            className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors"
+            className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-gray-900 font-medium transition-colors"
           >
             {loading ? (
               <>
@@ -906,10 +906,10 @@ function IntegrationConfigModal({
         animate={{ scale: 1 }}
         exit={{ scale: 0.95 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+        className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
       >
         {/* Header */}
-        <div className="p-6 border-b border-dark-700">
+        <div className="p-6 border-b border-gray-200">
           <div className="flex items-center gap-4">
             <div
               className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -924,7 +924,7 @@ function IntegrationConfigModal({
               )}
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Configurar {integration.name}</h2>
+              <h2 className="text-xl font-bold text-gray-900">Configurar {integration.name}</h2>
               <StatusBadge status={installed.status} />
             </div>
           </div>
@@ -934,7 +934,7 @@ function IntegrationConfigModal({
         <div className="p-6 space-y-6">
           {/* Webhook URL */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               URL do Webhook
             </label>
             <div className="flex gap-2">
@@ -942,29 +942,29 @@ function IntegrationConfigModal({
                 type="text"
                 readOnly
                 value={`${window.location.origin}/api/webhooks/${installed.id}`}
-                className="flex-1 px-4 py-2 bg-dark-800 border border-dark-700 rounded-xl text-dark-400 text-sm"
+                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-500 text-sm"
               />
               <button
                 onClick={() => navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/${installed.id}`)}
-                className="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
               >
                 Copiar
               </button>
             </div>
-            <p className="text-xs text-dark-500 mt-2">
+            <p className="text-xs text-gray-400 mt-2">
               Configure esta URL nas configurações de webhook do {integration.name}
             </p>
           </div>
 
           {/* Pipeline */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               Pipeline padrão
             </label>
             <select
               value={selectedPipeline}
               onChange={(e) => setSelectedPipeline(e.target.value)}
-              className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
             >
               {pipelines.map((pipeline) => (
                 <option key={pipeline.id} value={pipeline.id}>
@@ -976,7 +976,7 @@ function IntegrationConfigModal({
 
           {/* Tags */}
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">
+            <label className="block text-sm font-medium text-gray-600 mb-2">
               Tags automáticas
             </label>
             <div className="flex gap-2 mb-2">
@@ -991,7 +991,7 @@ function IntegrationConfigModal({
                   }
                 }}
                 placeholder="Nova tag..."
-                className="flex-1 px-4 py-2 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
               />
             </div>
             {autoTags.length > 0 && (
@@ -999,7 +999,7 @@ function IntegrationConfigModal({
                 {autoTags.map((tag) => (
                   <span
                     key={tag}
-                    className="flex items-center gap-1 px-2 py-1 bg-primary-500/20 text-primary-400 rounded-lg text-sm"
+                    className="flex items-center gap-1 px-2 py-1 bg-brand-100 text-brand-600 rounded-lg text-sm"
                   >
                     {tag}
                     <button onClick={() => setAutoTags(autoTags.filter((t) => t !== tag))}>
@@ -1013,10 +1013,10 @@ function IntegrationConfigModal({
 
           {/* Stats */}
           {installed.last_sync_at && (
-            <div className="p-4 bg-dark-800/50 rounded-xl">
-              <p className="text-sm text-dark-400">
+            <div className="p-4 bg-gray-50 rounded-xl">
+              <p className="text-sm text-gray-500">
                 Última sincronização:{' '}
-                <span className="text-white">
+                <span className="text-gray-900">
                   {new Date(installed.last_sync_at).toLocaleString('pt-BR')}
                 </span>
               </p>
@@ -1025,17 +1025,17 @@ function IntegrationConfigModal({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-dark-700 flex items-center justify-end gap-3">
+        <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2.5 bg-dark-700 hover:bg-dark-600 rounded-xl text-white transition-colors"
+            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={handleSave}
             disabled={loading}
-            className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors"
+            className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-gray-900 font-medium transition-colors"
           >
             {loading ? (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

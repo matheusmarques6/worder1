@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -58,7 +58,7 @@ const ShopifyIcon = () => (
 );
 
 const KlaviyoIcon = () => (
-  <div className="w-6 h-6 bg-[#2a2a2a] rounded flex items-center justify-center">
+  <div className="w-6 h-6 bg-gray-50 rounded flex items-center justify-center">
     <span className="text-[#28c76f] font-bold text-xs">K</span>
   </div>
 );
@@ -95,10 +95,14 @@ const TikTokIcon = () => (
 
 // Tabs
 const settingsTabs = [
-  { id: 'integrations', label: 'Integrações', icon: Plug },
-  { id: 'profile', label: 'Perfil', icon: User },
+  { id: 'profile', label: 'Conta', icon: User },
   { id: 'store', label: 'Loja', icon: Store },
+  { id: 'integrations', label: 'Integrações', icon: Plug },
+  { id: 'email', label: 'E-mail', icon: Mail },
+  { id: 'whatsapp', label: 'WhatsApp', icon: Phone },
+  { id: 'tracking', label: 'Dados', icon: Shield },
   { id: 'api', label: 'API Keys', icon: Key },
+  { id: 'security', label: 'Segurança', icon: Lock },
 ];
 
 // AI Provider Config for API Keys
@@ -196,7 +200,7 @@ const Badge = ({ variant = 'default', children }: { variant?: 'success' | 'warni
     success: 'bg-green-500/20 text-green-400 border-green-500/30',
     warning: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
     error: 'bg-red-500/20 text-red-400 border-red-500/30',
-    default: 'bg-dark-700/50 text-dark-400 border-dark-600',
+    default: 'bg-gray-100 text-gray-500 border-gray-300',
   };
   
   return (
@@ -228,16 +232,16 @@ const IntegrationCard = ({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl"
+      className="p-4 bg-gray-50 border border-gray-200 rounded-xl"
     >
       <div className="flex items-start gap-4">
-        <div className="p-2 bg-dark-700/50 rounded-xl">
+        <div className="p-2 bg-gray-100 rounded-xl">
           <Icon />
         </div>
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold text-white">{integration.name}</h3>
+            <h3 className="font-semibold text-gray-900">{integration.name}</h3>
             {integration.connected ? (
               <Badge variant={integration.status === 'healthy' ? 'success' : integration.status === 'warning' ? 'warning' : 'error'}>
                 {integration.status === 'healthy' ? 'Conectado' : integration.status === 'warning' ? 'Atenção' : 'Erro'}
@@ -247,14 +251,14 @@ const IntegrationCard = ({
             )}
           </div>
           
-          <p className="text-sm text-dark-400 mt-1">{integration.description}</p>
+          <p className="text-sm text-gray-500 mt-1">{integration.description}</p>
           
           {integration.connected && integration.stats && (
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm">
               {Object.entries(integration.stats).map(([key, value]) => (
-                <span key={key} className="text-dark-300">
+                <span key={key} className="text-gray-600">
                   <span className="capitalize">{key}:</span>{' '}
-                  <span className="font-semibold text-white">{value}</span>
+                  <span className="font-semibold text-gray-900">{value}</span>
                 </span>
               ))}
             </div>
@@ -268,7 +272,7 @@ const IntegrationCard = ({
           )}
           
           {integration.connected && integration.lastSync && (
-            <p className="text-xs text-dark-500 mt-2">
+            <p className="text-xs text-gray-400 mt-2">
               Última sincronização: {integration.lastSync}
             </p>
           )}
@@ -280,21 +284,21 @@ const IntegrationCard = ({
               <button
                 onClick={onSync}
                 disabled={isLoading}
-                className="p-2 hover:bg-dark-700/50 rounded-lg text-dark-400 hover:text-white transition-colors disabled:opacity-50"
+                className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-white transition-colors disabled:opacity-50"
                 title="Sincronizar"
               >
                 <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
               </button>
               <button
                 onClick={onSettings}
-                className="p-2 hover:bg-dark-700/50 rounded-lg text-dark-400 hover:text-white transition-colors"
+                className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-white transition-colors"
                 title="Configurações"
               >
                 <Settings className="w-4 h-4" />
               </button>
               <button
                 onClick={onDisconnect}
-                className="p-2 hover:bg-red-500/10 rounded-lg text-dark-400 hover:text-red-400 transition-colors"
+                className="p-2 hover:bg-red-500/10 rounded-lg text-gray-500 hover:text-red-400 transition-colors"
                 title="Desconectar"
               >
                 <Trash2 className="w-4 h-4" />
@@ -369,21 +373,21 @@ const KlaviyoConfigModal = ({
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="relative bg-dark-900 rounded-2xl border border-dark-700 p-6 w-full max-w-md"
+        className="relative bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-md"
       >
-        <button onClick={onClose} className="absolute top-4 right-4 text-dark-400 hover:text-white">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-white">
           <X className="w-5 h-5" />
         </button>
         
         <div className="flex items-center gap-3 mb-4">
           <KlaviyoIcon />
-          <h3 className="text-lg font-semibold text-white">Conectar Klaviyo</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Conectar Klaviyo</h3>
         </div>
         
         <div className="space-y-4">
           {/* Private API Key */}
           <div>
-            <label className="block text-sm text-dark-400 mb-2">
+            <label className="block text-sm text-gray-500 mb-2">
               Private API Key <span className="text-red-400">*</span>
             </label>
             <input
@@ -395,18 +399,18 @@ const KlaviyoConfigModal = ({
               }}
               placeholder="pk_xxxxxxxxxxxxxxxx"
               className={cn(
-                "w-full px-4 py-2 bg-dark-800 border rounded-xl text-white placeholder-dark-500 focus:outline-none transition-colors",
-                error && !privateKey.trim() ? "border-red-500/50 focus:border-red-500" : "border-dark-700 focus:border-primary-500"
+                "w-full px-4 py-2 bg-white border rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none transition-colors",
+                error && !privateKey.trim() ? "border-red-500/50 focus:border-red-500" : "border-gray-200 focus:border-primary-500"
               )}
             />
-            <p className="text-xs text-dark-500 mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               Para ler dados (campanhas, flows, métricas, revenue)
             </p>
           </div>
 
           {/* Public API Key */}
           <div>
-            <label className="block text-sm text-dark-400 mb-2">
+            <label className="block text-sm text-gray-500 mb-2">
               Public API Key / Site ID <span className="text-red-400">*</span>
             </label>
             <input
@@ -419,22 +423,22 @@ const KlaviyoConfigModal = ({
               placeholder="XXXXXX"
               maxLength={6}
               className={cn(
-                "w-full px-4 py-2 bg-dark-800 border rounded-xl text-white placeholder-dark-500 focus:outline-none transition-colors font-mono tracking-wider",
-                error && !publicKey.trim() ? "border-red-500/50 focus:border-red-500" : "border-dark-700 focus:border-primary-500"
+                "w-full px-4 py-2 bg-white border rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none transition-colors font-mono tracking-wider",
+                error && !publicKey.trim() ? "border-red-500/50 focus:border-red-500" : "border-gray-200 focus:border-primary-500"
               )}
             />
-            <p className="text-xs text-dark-500 mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               Para tracking de eventos no site (6 caracteres)
             </p>
           </div>
 
-          <div className="text-xs text-dark-400 bg-dark-800/50 p-3 rounded-lg space-y-2">
-            <p className="font-medium text-dark-300">📍 Onde encontrar:</p>
+          <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg space-y-2">
+            <p className="font-medium text-gray-600">📍 Onde encontrar:</p>
             <div className="space-y-1">
-              <p><span className="text-primary-400">Private Key:</span> Settings → API Keys → Create Private API Key</p>
-              <p><span className="text-primary-400">Public Key:</span> Settings → API Keys → (topo da página)</p>
+              <p><span className="text-brand-600">Private Key:</span> Settings → API Keys → Create Private API Key</p>
+              <p><span className="text-brand-600">Public Key:</span> Settings → API Keys → (topo da página)</p>
             </div>
-            <div className="mt-2 pt-2 border-t border-dark-700/50">
+            <div className="mt-2 pt-2 border-t border-gray-200">
               <p className="font-medium text-yellow-400/80 text-[10px]">⚠️ IMPORTANTE: Ao criar a Private Key, selecione "Full Access" ou habilite os scopes: accounts, campaigns, flows, lists, profiles, metrics, events</p>
             </div>
           </div>
@@ -449,7 +453,7 @@ const KlaviyoConfigModal = ({
           <button
             onClick={handleSave}
             disabled={!privateKey.trim() || !publicKey.trim() || isLoading}
-            className="w-full py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-700 disabled:text-dark-500 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+            className="w-full py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-100 disabled:text-gray-400 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
           >
             {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
             {isLoading ? 'Conectando...' : 'Conectar'}
@@ -461,6 +465,14 @@ const KlaviyoConfigModal = ({
 };
 
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-gray-500" /></div>}>
+      <SettingsContent />
+    </Suspense>
+  );
+}
+
+function SettingsContent() {
   const searchParams = useSearchParams();
   const tabFromUrl = searchParams.get('tab');
   const configFromUrl = searchParams.get('config');
@@ -559,13 +571,17 @@ export default function SettingsPage() {
         // E-commerce section
         {
           id: 'shopify',
-          name: 'Shopify',
+          name: currentStore ? `Shopify — ${currentStore.name}` : 'Shopify',
           description: 'Sincronize pedidos, clientes e produtos',
           icon: ShopifyIcon,
           connected: status.shopify?.connected || stores.length > 0,
           status: (status.shopify?.connected || stores.length > 0) ? 'healthy' : 'disconnected',
-          lastSync: status.shopify?.lastSync || (stores.length > 0 ? 'Agora' : undefined),
-          stats: status.shopify?.stats || (stores.length > 0 ? { Orders: '0', Customers: '-', Products: '-' } : undefined),
+          lastSync: status.shopify?.lastSync || currentStore?.lastSyncAt || undefined,
+          stats: status.shopify?.stats || (stores.length > 0 ? {
+            Orders: String(currentStore?.totalOrders || 0),
+            Customers: '-',
+            Products: '-',
+          } : undefined),
           category: 'ecommerce',
         },
         // Email Marketing section
@@ -718,16 +734,17 @@ export default function SettingsPage() {
 
   // Handle disconnect
   const handleDisconnect = async (integrationId: string) => {
-    if (!confirm(`Deseja realmente desconectar ${integrationId}?`)) return;
-    
+    if (!confirm(`Deseja realmente desconectar ${integrationId}? Dados importados serão mantidos.`)) return;
+
     setLoadingIntegration(integrationId);
-    
+
     try {
-      // TODO: Call API to disconnect
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setIntegrations(prev => prev.map(i => 
-        i.id === integrationId 
+      if (integrationId === 'shopify') {
+        await fetch('/api/integrations/shopify/disconnect', { method: 'POST' });
+      }
+
+      setIntegrations(prev => prev.map(i =>
+        i.id === integrationId
           ? { ...i, connected: false, status: 'disconnected', stats: undefined, lastSync: undefined }
           : i
       ));
@@ -738,16 +755,23 @@ export default function SettingsPage() {
     }
   };
 
-  // Handle sync
+  // Handle sync — calls real API for Shopify
   const handleSync = async (integrationId: string) => {
     setLoadingIntegration(integrationId);
-    
+
     try {
-      // TODO: Call API to sync
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      setIntegrations(prev => prev.map(i => 
-        i.id === integrationId 
+      if (integrationId === 'shopify') {
+        const res = await fetch('/api/shopify/sync-now', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ syncType: 'all' }),
+        });
+        const data = await res.json();
+        console.log('[Settings] Shopify sync result:', data);
+      }
+
+      setIntegrations(prev => prev.map(i =>
+        i.id === integrationId
           ? { ...i, lastSync: 'Agora' }
           : i
       ));
@@ -816,7 +840,7 @@ export default function SettingsPage() {
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Sidebar */}
         <div className="lg:w-64 flex-shrink-0">
-          <nav className="space-y-1 bg-dark-800/50 rounded-xl p-2 border border-dark-700/50">
+          <nav className="space-y-1 bg-gray-50 rounded-xl p-2 border border-gray-200">
             {settingsTabs.map((tab) => {
               const Icon = tab.icon;
               return (
@@ -826,8 +850,8 @@ export default function SettingsPage() {
                   className={cn(
                     'w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-left transition-colors',
                     activeTab === tab.id
-                      ? 'bg-dark-700 text-white'
-                      : 'text-dark-400 hover:text-white hover:bg-dark-700/50'
+                      ? 'bg-gray-100 text-gray-900'
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
                   )}
                 >
                   <Icon className="w-5 h-5" />
@@ -852,13 +876,13 @@ export default function SettingsPage() {
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 animate-spin text-dark-400" />
+                    <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
                   </div>
                 ) : (
                   <>
                     {/* Ads */}
                     <div>
-                      <h2 className="text-sm font-semibold text-dark-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
                         <span className="text-lg">📊</span> ANÚNCIOS
                       </h2>
                       <div className="space-y-3">
@@ -869,7 +893,7 @@ export default function SettingsPage() {
                             onConnect={() => handleConnect(integration.id)}
                             onDisconnect={() => handleDisconnect(integration.id)}
                             onSync={() => handleSync(integration.id)}
-                            onSettings={() => {}}
+                            onSettings={() => window.location.href = '/integrations/shopify'}
                             isLoading={loadingIntegration === integration.id}
                           />
                         ))}
@@ -878,7 +902,7 @@ export default function SettingsPage() {
 
                     {/* E-commerce */}
                     <div>
-                      <h2 className="text-sm font-semibold text-dark-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
                         <span className="text-lg">🛒</span> E-COMMERCE
                       </h2>
                       <div className="space-y-3">
@@ -889,7 +913,7 @@ export default function SettingsPage() {
                             onConnect={() => handleConnect(integration.id)}
                             onDisconnect={() => handleDisconnect(integration.id)}
                             onSync={() => handleSync(integration.id)}
-                            onSettings={() => {}}
+                            onSettings={() => window.location.href = '/integrations/shopify'}
                             isLoading={loadingIntegration === integration.id}
                           />
                         ))}
@@ -898,7 +922,7 @@ export default function SettingsPage() {
 
                     {/* Email Marketing */}
                     <div>
-                      <h2 className="text-sm font-semibold text-dark-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
                         <span className="text-lg">✉️</span> EMAIL MARKETING
                       </h2>
                       <div className="space-y-3">
@@ -909,7 +933,7 @@ export default function SettingsPage() {
                             onConnect={() => handleConnect(integration.id)}
                             onDisconnect={() => handleDisconnect(integration.id)}
                             onSync={() => handleSync(integration.id)}
-                            onSettings={() => {}}
+                            onSettings={() => window.location.href = '/integrations/shopify'}
                             isLoading={loadingIntegration === integration.id}
                           />
                         ))}
@@ -918,7 +942,7 @@ export default function SettingsPage() {
 
                     {/* Messaging */}
                     <div>
-                      <h2 className="text-sm font-semibold text-dark-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
                         <span className="text-lg">💬</span> MENSAGENS
                       </h2>
                       <div className="space-y-3">
@@ -929,7 +953,7 @@ export default function SettingsPage() {
                             onConnect={() => handleConnect(integration.id)}
                             onDisconnect={() => handleDisconnect(integration.id)}
                             onSync={() => handleSync(integration.id)}
-                            onSettings={() => {}}
+                            onSettings={() => window.location.href = '/integrations/shopify'}
                             isLoading={loadingIntegration === integration.id}
                           />
                         ))}
@@ -954,19 +978,19 @@ export default function SettingsPage() {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-6"
               >
-                <div className="p-6 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                  <h2 className="text-lg font-semibold text-white mb-6">Lojas Conectadas</h2>
+                <div className="p-6 bg-gray-50 rounded-xl border border-gray-200">
+                  <h2 className="text-lg font-semibold text-gray-900 mb-6">Lojas Conectadas</h2>
                   
                   {stores.length > 0 ? (
                     <div className="space-y-3">
                       {stores.map((store) => (
-                        <div key={store.id} className="flex items-center gap-4 p-4 bg-dark-700/50 rounded-xl">
+                        <div key={store.id} className="flex items-center gap-4 p-4 bg-gray-100 rounded-xl">
                           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-                            <Store className="w-6 h-6 text-white" />
+                            <Store className="w-6 h-6 text-gray-700" />
                           </div>
                           <div className="flex-1">
-                            <p className="font-medium text-white">{store.name}</p>
-                            <p className="text-sm text-dark-400">{store.domain}</p>
+                            <p className="font-medium text-gray-900">{store.name}</p>
+                            <p className="text-sm text-gray-500">{store.domain}</p>
                           </div>
                           <Badge variant="success">Ativa</Badge>
                         </div>
@@ -974,8 +998,8 @@ export default function SettingsPage() {
                     </div>
                   ) : (
                     <div className="text-center py-8">
-                      <Store className="w-12 h-12 text-dark-500 mx-auto mb-3" />
-                      <p className="text-dark-400">Nenhuma loja conectada</p>
+                      <Store className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                      <p className="text-gray-500">Nenhuma loja conectada</p>
                       <button
                         onClick={() => window.dispatchEvent(new CustomEvent('openAddStoreModal'))}
                         className="mt-4 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg text-sm font-medium transition-colors"
@@ -1001,8 +1025,8 @@ export default function SettingsPage() {
                 {/* Header com botão adicionar */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg font-semibold text-white">API Keys de IA</h2>
-                    <p className="text-dark-400 text-sm">Configure suas chaves para usar modelos de IA</p>
+                    <h2 className="text-lg font-semibold text-gray-900">API Keys de IA</h2>
+                    <p className="text-gray-500 text-sm">Configure suas chaves para usar modelos de IA</p>
                   </div>
                   <button
                     onClick={() => setShowAddKeyModal(true)}
@@ -1015,12 +1039,12 @@ export default function SettingsPage() {
                 </div>
 
                 {/* Info Banner */}
-                <div className="p-4 rounded-xl bg-primary-500/10 border border-primary-500/20">
+                <div className="p-4 rounded-xl bg-brand-50 border border-primary-500/20">
                   <div className="flex gap-3">
-                    <Info className="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" />
+                    <Info className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" />
                     <div className="text-sm">
-                      <p className="text-primary-300 font-medium mb-1">Como funciona</p>
-                      <p className="text-primary-400/80">
+                      <p className="text-brand-500 font-medium mb-1">Como funciona</p>
+                      <p className="text-brand-600/80">
                         Você usa suas próprias API keys e paga diretamente aos providers (OpenAI, Anthropic, etc).
                         A Worder não cobra nada pelo uso de IA - você tem controle total sobre seus custos.
                       </p>
@@ -1031,14 +1055,14 @@ export default function SettingsPage() {
                 {/* Loading */}
                 {loadingApiKeys ? (
                   <div className="flex items-center justify-center h-32">
-                    <Loader2 className="w-6 h-6 text-primary-400 animate-spin" />
+                    <Loader2 className="w-6 h-6 text-brand-600 animate-spin" />
                   </div>
                 ) : aiApiKeys.length === 0 ? (
                   /* Empty State */
-                  <div className="p-8 bg-dark-800/50 rounded-xl border border-dark-700/50 text-center">
-                    <Key className="w-12 h-12 text-dark-500 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-white mb-2">Nenhuma API key configurada</h3>
-                    <p className="text-dark-400 mb-6">Configure suas API keys para usar agentes de IA</p>
+                  <div className="p-8 bg-gray-50 rounded-xl border border-gray-200 text-center">
+                    <Key className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhuma API key configurada</h3>
+                    <p className="text-gray-500 mb-6">Configure suas API keys para usar agentes de IA</p>
                     <button
                       onClick={() => setShowAddKeyModal(true)}
                       className="px-6 py-3 bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 text-white rounded-xl font-medium transition-all"
@@ -1062,8 +1086,8 @@ export default function SettingsPage() {
                       return (
                         <div
                           key={key.id}
-                          className={`bg-dark-800/50 border rounded-xl p-5 ${
-                            key.is_valid ? 'border-dark-700/50' : 'border-red-500/50'
+                          className={`bg-gray-50 border rounded-xl p-5 ${
+                            key.is_valid ? 'border-gray-200' : 'border-red-500/50'
                           }`}
                         >
                           <div className="flex items-start justify-between mb-4">
@@ -1090,7 +1114,7 @@ export default function SettingsPage() {
                             </div>
                             <button
                               onClick={() => handleDeleteApiKey(key.provider)}
-                              className="p-2 rounded-lg text-dark-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                              className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1098,25 +1122,25 @@ export default function SettingsPage() {
 
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
-                              <span className="text-dark-400">Chave</span>
-                              <span className="text-dark-300 font-mono">{key.api_key_hint}</span>
+                              <span className="text-gray-500">Chave</span>
+                              <span className="text-gray-600 font-mono">{key.api_key_hint}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-dark-400">Requisições</span>
-                              <span className="text-white">{key.total_requests.toLocaleString()}</span>
+                              <span className="text-gray-500">Requisições</span>
+                              <span className="text-gray-900">{key.total_requests.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-dark-400">Tokens usados</span>
-                              <span className="text-white">{key.total_tokens_used.toLocaleString()}</span>
+                              <span className="text-gray-500">Tokens usados</span>
+                              <span className="text-gray-900">{key.total_tokens_used.toLocaleString()}</span>
                             </div>
                           </div>
 
-                          <div className="mt-4 pt-4 border-t border-dark-700/50">
+                          <div className="mt-4 pt-4 border-t border-gray-200">
                             <a
                               href={config.createKeyUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                              className="text-xs text-brand-600 hover:text-brand-500 flex items-center gap-1"
                             >
                               Gerenciar no {config.name} <ExternalLink className="w-3 h-3" />
                             </a>
@@ -1129,13 +1153,13 @@ export default function SettingsPage() {
                     {availableProviders.length > 0 && (
                       <button
                         onClick={() => setShowAddKeyModal(true)}
-                        className="bg-dark-800/30 border border-dashed border-dark-600 rounded-xl p-5 flex flex-col items-center justify-center min-h-[200px] hover:border-primary-500/50 hover:bg-dark-800/50 transition-all group"
+                        className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-5 flex flex-col items-center justify-center min-h-[200px] hover:border-brand-400 hover:bg-gray-50 transition-all group"
                       >
-                        <div className="w-12 h-12 rounded-xl bg-dark-700/50 flex items-center justify-center mb-3 group-hover:bg-primary-500/20 transition-colors">
-                          <Plus className="w-6 h-6 text-dark-400 group-hover:text-primary-400" />
+                        <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center mb-3 group-hover:bg-brand-100 transition-colors">
+                          <Plus className="w-6 h-6 text-gray-500 group-hover:text-brand-600" />
                         </div>
-                        <p className="text-dark-400 group-hover:text-white font-medium">Adicionar API Key</p>
-                        <p className="text-dark-500 text-sm mt-1">{availableProviders.length} providers disponíveis</p>
+                        <p className="text-gray-500 group-hover:text-gray-900 font-medium">Adicionar API Key</p>
+                        <p className="text-gray-400 text-sm mt-1">{availableProviders.length} providers disponíveis</p>
                       </button>
                     )}
                   </div>
@@ -1157,14 +1181,14 @@ export default function SettingsPage() {
                     initial={{ scale: 0.95, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.95, opacity: 0 }}
-                    className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-hidden"
+                    className="bg-white border border-gray-200 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-hidden"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="flex items-center justify-between p-6 border-b border-dark-700">
-                      <h2 className="text-xl font-semibold text-white">Adicionar API Key</h2>
+                    <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                      <h2 className="text-xl font-semibold text-gray-900">Adicionar API Key</h2>
                       <button
                         onClick={() => setShowAddKeyModal(false)}
-                        className="p-2 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors"
+                        className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
                       >
                         <X className="w-5 h-5" />
                       </button>
@@ -1173,7 +1197,7 @@ export default function SettingsPage() {
                     <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)] space-y-4">
                       {/* Provider Selection */}
                       <div>
-                        <label className="block text-sm font-medium text-dark-300 mb-3">Provider</label>
+                        <label className="block text-sm font-medium text-gray-600 mb-3">Provider</label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[280px] overflow-y-auto pr-1">
                           {availableProviders.map((p) => {
                             const cfg = aiProviderConfig[p];
@@ -1184,15 +1208,15 @@ export default function SettingsPage() {
                                 onClick={() => setNewKeyProvider(p)}
                                 className={`p-4 rounded-xl border transition-all text-left ${
                                   newKeyProvider === p
-                                    ? 'border-primary-500 bg-primary-500/10'
-                                    : 'border-dark-700/50 hover:border-dark-600 hover:bg-dark-700/30'
+                                    ? 'border-primary-500 bg-brand-50'
+                                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-100/30'
                                 }`}
                               >
                                 <div className="flex items-start gap-3">
                                   <span className="text-2xl flex-shrink-0">{cfg.icon}</span>
                                   <div className="min-w-0 flex-1">
                                     <p className={`text-sm font-semibold ${cfg.color}`}>{cfg.name}</p>
-                                    <p className="text-xs text-dark-400 mt-0.5 line-clamp-2">{cfg.description}</p>
+                                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{cfg.description}</p>
                                   </div>
                                 </div>
                               </button>
@@ -1210,13 +1234,13 @@ export default function SettingsPage() {
                               <h3 className={`font-medium ${aiProviderConfig[newKeyProvider].color}`}>
                                 {aiProviderConfig[newKeyProvider].name}
                               </h3>
-                              <p className="text-sm text-dark-400 mt-1">{aiProviderConfig[newKeyProvider].description}</p>
+                              <p className="text-sm text-gray-500 mt-1">{aiProviderConfig[newKeyProvider].description}</p>
                               <div className="flex gap-3 mt-2">
                                 <a
                                   href={aiProviderConfig[newKeyProvider].createKeyUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                                  className="text-xs text-brand-600 hover:text-brand-500 flex items-center gap-1"
                                 >
                                   Criar API Key <ExternalLink className="w-3 h-3" />
                                 </a>
@@ -1224,7 +1248,7 @@ export default function SettingsPage() {
                                   href={aiProviderConfig[newKeyProvider].docsUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-xs text-dark-400 hover:text-white flex items-center gap-1"
+                                  className="text-xs text-gray-500 hover:text-white flex items-center gap-1"
                                 >
                                   Documentação <ExternalLink className="w-3 h-3" />
                                 </a>
@@ -1237,24 +1261,24 @@ export default function SettingsPage() {
                       {/* API Key Input */}
                       {newKeyProvider && (
                         <div>
-                          <label className="block text-sm font-medium text-dark-300 mb-2">API Key</label>
+                          <label className="block text-sm font-medium text-gray-600 mb-2">API Key</label>
                           <div className="relative">
                             <input
                               type={showNewKeyValue ? 'text' : 'password'}
                               value={newKeyValue}
                               onChange={(e) => setNewKeyValue(e.target.value)}
                               placeholder={`Cole sua ${aiProviderConfig[newKeyProvider]?.name || newKeyProvider} API key aqui`}
-                              className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 pr-12"
+                              className="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500 pr-12"
                             />
                             <button
                               type="button"
                               onClick={() => setShowNewKeyValue(!showNewKeyValue)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-dark-600 rounded"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-200 rounded"
                             >
                               {showNewKeyValue ? (
-                                <EyeOff className="w-4 h-4 text-dark-400" />
+                                <EyeOff className="w-4 h-4 text-gray-500" />
                               ) : (
-                                <Eye className="w-4 h-4 text-dark-400" />
+                                <Eye className="w-4 h-4 text-gray-500" />
                               )}
                             </button>
                           </div>
@@ -1271,7 +1295,7 @@ export default function SettingsPage() {
                     </div>
 
                     {/* Footer */}
-                    <div className="p-6 border-t border-dark-700 flex gap-3">
+                    <div className="p-6 border-t border-gray-200 flex gap-3">
                       <button
                         onClick={() => {
                           setShowAddKeyModal(false);
@@ -1279,7 +1303,7 @@ export default function SettingsPage() {
                           setNewKeyValue('');
                           setKeyError('');
                         }}
-                        className="flex-1 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+                        className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
                       >
                         Cancelar
                       </button>
@@ -1296,6 +1320,281 @@ export default function SettingsPage() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* E-mail Settings */}
+            {activeTab === 'email' && (
+              <motion.div
+                key="email"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Configurações de E-mail</h2>
+                  <p className="text-sm text-gray-500 mt-1">Gerencie domínios de envio e configurações de e-mail marketing</p>
+                </div>
+
+                {/* Sending Domains */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Domínios de Envio</h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-4 bg-white/50 rounded-lg border border-gray-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">mail.sualoja.com.br</p>
+                          <p className="text-xs text-gray-500">SPF, DKIM, DMARC configurados</p>
+                        </div>
+                      </div>
+                      <span className="text-xs px-2.5 py-1 rounded-full bg-green-500/10 text-green-400 font-medium">Verificado</span>
+                    </div>
+                  </div>
+                  <button className="mt-4 flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-gray-600 hover:text-white transition-colors">
+                    <Plus className="w-4 h-4" />
+                    Adicionar Domínio
+                  </button>
+                </div>
+
+                {/* Sender Settings */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Remetente Padrão</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1.5">Nome do Remetente</label>
+                      <input type="text" placeholder="Sua Loja" className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1.5">E-mail do Remetente</label>
+                      <input type="email" placeholder="contato@sualoja.com.br" className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
+                    </div>
+                  </div>
+                  <button className="mt-4 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-500 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity">
+                    Salvar
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* WhatsApp Settings */}
+            {activeTab === 'whatsapp' && (
+              <motion.div
+                key="whatsapp"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">WhatsApp Business API</h2>
+                  <p className="text-sm text-gray-500 mt-1">Gerencie a conexão com WhatsApp e configurações da IA</p>
+                </div>
+
+                {/* Connection Status */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Conexão</h3>
+                  <div className="flex items-center justify-between p-4 bg-white/50 rounded-lg border border-gray-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-[#25D366]/10 flex items-center justify-center">
+                        <Phone className="w-5 h-5 text-[#25D366]" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">+55 11 99999-0000</p>
+                        <p className="text-xs text-gray-500">WhatsApp Business API — Conectado</p>
+                      </div>
+                    </div>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-green-500/10 text-green-400 font-medium">Online</span>
+                  </div>
+                </div>
+
+                {/* IA Persona */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Persona da IA</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1.5">Nome do Agente</label>
+                      <input type="text" placeholder="Ex: Ana da Sua Loja" className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1.5">Tom de Voz</label>
+                      <select className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-primary-500/50 transition-colors">
+                        <option>Amigável e profissional</option>
+                        <option>Formal</option>
+                        <option>Casual e descontraído</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1.5">Limite máximo de desconto (%)</label>
+                      <input type="number" placeholder="15" className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 placeholder:text-gray-500 focus:outline-none focus:border-primary-500/50 transition-colors" />
+                    </div>
+                  </div>
+                  <button className="mt-4 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-500 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity">
+                    Salvar Configurações
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Data & Tracking Settings */}
+            {activeTab === 'tracking' && (
+              <motion.div
+                key="tracking"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Dados & Rastreamento</h2>
+                  <p className="text-sm text-gray-500 mt-1">Configure tracking, atribuição e consentimento</p>
+                </div>
+
+                {/* Tracking Settings */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+                  <h3 className="text-base font-semibold text-gray-900">Rastreamento</h3>
+                  {[
+                    { label: 'Tracking de visitantes anônimos', desc: 'Identifica visitantes antes do login/compra', enabled: true },
+                    { label: 'Eventos comportamentais', desc: 'Pageviews, product_viewed, add_to_cart', enabled: true },
+                    { label: 'Identificação estendida', desc: 'Fingerprinting + cookies first-party', enabled: false },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center justify-between p-4 bg-white/50 rounded-lg border border-gray-100">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{item.label}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
+                      </div>
+                      <button className={`w-11 h-6 rounded-full transition-colors ${item.enabled ? 'bg-primary-500' : 'bg-gray-200'}`}>
+                        <div className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform ${item.enabled ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Attribution */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+                  <h3 className="text-base font-semibold text-gray-900">Atribuição de Receita</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      { channel: 'E-mail', window: '5 dias' },
+                      { channel: 'WhatsApp', window: '3 dias' },
+                      { channel: 'SMS', window: '2 dias' },
+                      { channel: 'Chat Web', window: '1 dia' },
+                    ].map((item) => (
+                      <div key={item.channel} className="flex items-center justify-between p-3 bg-white/50 rounded-lg border border-gray-100">
+                        <span className="text-sm text-gray-600">{item.channel}</span>
+                        <select className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-600 focus:outline-none">
+                          <option>{item.window}</option>
+                          <option>1 dia</option>
+                          <option>3 dias</option>
+                          <option>5 dias</option>
+                          <option>7 dias</option>
+                          <option>14 dias</option>
+                          <option>30 dias</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* UTM Tracking */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Rastreamento UTM</h3>
+                  <p className="text-sm text-gray-500 mb-4">Parâmetros UTM são automaticamente capturados e vinculados aos perfis de clientes</p>
+                  <div className="flex flex-wrap gap-2">
+                    {['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].map((param) => (
+                      <span key={param} className="px-3 py-1.5 bg-gray-100 rounded-lg text-xs text-gray-600 font-mono">{param}</span>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Security Settings */}
+            {activeTab === 'security' && (
+              <motion.div
+                key="security"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Segurança</h2>
+                  <p className="text-sm text-gray-500 mt-1">Autenticação, permissões e auditoria</p>
+                </div>
+
+                {/* 2FA */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">Autenticação em Duas Etapas (2FA)</h3>
+                      <p className="text-sm text-gray-500 mt-1">Adicione uma camada extra de segurança à sua conta</p>
+                    </div>
+                    <button className="px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-500 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity">
+                      Ativar 2FA
+                    </button>
+                  </div>
+                </div>
+
+                {/* Users & Permissions */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Usuários & Permissões</h3>
+                  <div className="space-y-3">
+                    {[
+                      { name: 'Você', email: 'admin@loja.com', role: 'Admin', status: 'online' },
+                      { name: 'Maria Silva', email: 'maria@loja.com', role: 'Gerente', status: 'online' },
+                      { name: 'João Santos', email: 'joao@loja.com', role: 'Atendente', status: 'offline' },
+                    ].map((u) => (
+                      <div key={u.email} className="flex items-center justify-between p-4 bg-white/50 rounded-lg border border-gray-100">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600">
+                              {u.name.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-gray-200 ${u.status === 'online' ? 'bg-green-500' : 'bg-gray-200'}`} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{u.name}</p>
+                            <p className="text-xs text-gray-500">{u.email}</p>
+                          </div>
+                        </div>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                          u.role === 'Admin' ? 'bg-primary-500/10 text-primary-400' :
+                          u.role === 'Gerente' ? 'bg-blue-500/10 text-blue-400' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>
+                          {u.role}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="mt-4 flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-100 rounded-xl text-sm text-gray-600 hover:text-white transition-colors">
+                    <Plus className="w-4 h-4" />
+                    Convidar Usuário
+                  </button>
+                </div>
+
+                {/* Audit Log */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">Log de Auditoria</h3>
+                  <p className="text-sm text-gray-500 mb-4">Últimas ações realizadas na plataforma</p>
+                  <div className="space-y-2">
+                    {[
+                      { action: 'Login realizado', user: 'admin@loja.com', time: '2 min atrás' },
+                      { action: 'Campanha criada', user: 'maria@loja.com', time: '1h atrás' },
+                      { action: 'Contato importado (CSV)', user: 'admin@loja.com', time: '3h atrás' },
+                    ].map((log, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-white/30 rounded-lg">
+                        <div>
+                          <p className="text-sm text-gray-700">{log.action}</p>
+                          <p className="text-xs text-gray-500">{log.user}</p>
+                        </div>
+                        <span className="text-xs text-gray-500">{log.time}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
 
             {/* Other tabs - simplified */}
           </AnimatePresence>
@@ -1452,7 +1751,7 @@ function ProfileTab() {
   if (loading && !profile) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
       </div>
     );
   }
@@ -1490,8 +1789,8 @@ function ProfileTab() {
       </AnimatePresence>
 
       {/* Informações Pessoais */}
-      <div className="p-6 bg-dark-800/50 rounded-xl border border-dark-700/50">
-        <h2 className="text-lg font-semibold text-white mb-6">Informações Pessoais</h2>
+      <div className="p-6 bg-gray-50 rounded-xl border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-900 mb-6">Informações Pessoais</h2>
         
         {/* Avatar */}
         <div className="flex items-center gap-6 mb-6">
@@ -1500,7 +1799,7 @@ function ProfileTab() {
               <img 
                 src={profile.avatar_url} 
                 alt="Avatar"
-                className="w-20 h-20 rounded-full object-cover border-2 border-dark-600"
+                className="w-20 h-20 rounded-full object-cover border-2 border-gray-300"
               />
             ) : (
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-2xl font-bold">
@@ -1509,8 +1808,8 @@ function ProfileTab() {
             )}
             
             {uploadingAvatar && (
-              <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-white" />
+              <div className="absolute inset-0 bg-black/30 rounded-full flex items-center justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
               </div>
             )}
           </div>
@@ -1526,7 +1825,7 @@ function ProfileTab() {
             <button 
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingAvatar}
-              className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               <Camera className="w-4 h-4" />
               Alterar foto
@@ -1546,27 +1845,27 @@ function ProfileTab() {
         {/* Campos do formulário */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm text-dark-400 mb-2">Nome</label>
+            <label className="block text-sm text-gray-500 mb-2">Nome</label>
             <input
               type="text"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               placeholder="Seu nome"
-              className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-xl text-white focus:outline-none focus:border-primary-500 placeholder:text-dark-500"
+              className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500 placeholder:text-gray-400"
             />
           </div>
           <div>
-            <label className="block text-sm text-dark-400 mb-2">Sobrenome</label>
+            <label className="block text-sm text-gray-500 mb-2">Sobrenome</label>
             <input
               type="text"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               placeholder="Seu sobrenome"
-              className="w-full px-4 py-2 bg-dark-700 border border-dark-600 rounded-xl text-white focus:outline-none focus:border-primary-500 placeholder:text-dark-500"
+              className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500 placeholder:text-gray-400"
             />
           </div>
           <div>
-            <label className="block text-sm text-dark-400 mb-2">
+            <label className="block text-sm text-gray-500 mb-2">
               <Mail className="w-4 h-4 inline mr-1" />
               Email
             </label>
@@ -1574,12 +1873,12 @@ function ProfileTab() {
               type="email"
               value={profile?.email || user?.email || ''}
               disabled
-              className="w-full px-4 py-2 bg-dark-800 border border-dark-700 rounded-xl text-dark-400 cursor-not-allowed"
+              className="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-500 cursor-not-allowed"
             />
-            <p className="text-xs text-dark-500 mt-1">O email não pode ser alterado</p>
+            <p className="text-xs text-gray-400 mt-1">O email não pode ser alterado</p>
           </div>
           <div>
-            <label className="block text-sm text-dark-400 mb-2">
+            <label className="block text-sm text-gray-500 mb-2">
               <Phone className="w-4 h-4 inline mr-1" />
               Telefone
             </label>
@@ -1592,18 +1891,18 @@ function ProfileTab() {
         </div>
         
         {/* Cargo */}
-        <div className="mt-4 p-4 bg-dark-700/50 rounded-xl">
+        <div className="mt-4 p-4 bg-gray-100 rounded-xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Shield className="w-5 h-5 text-primary-400" />
+              <Shield className="w-5 h-5 text-brand-600" />
               <div>
-                <p className="text-sm text-dark-400">Cargo</p>
-                <p className="text-white font-medium">{getRoleLabel(profile?.role)}</p>
+                <p className="text-sm text-gray-500">Cargo</p>
+                <p className="text-gray-900 font-medium">{getRoleLabel(profile?.role)}</p>
               </div>
             </div>
             <span className={cn(
               'px-3 py-1 rounded-full text-xs font-medium',
-              profile?.role === 'admin' && 'bg-primary-500/20 text-primary-400',
+              profile?.role === 'admin' && 'bg-brand-100 text-brand-600',
               profile?.role === 'manager' && 'bg-blue-500/20 text-blue-400',
               profile?.role === 'agent' && 'bg-green-500/20 text-green-400',
             )}>
@@ -1632,21 +1931,21 @@ function ProfileTab() {
       </div>
 
       {/* Segurança */}
-      <div className="p-6 bg-dark-800/50 rounded-xl border border-dark-700/50">
-        <h2 className="text-lg font-semibold text-white mb-4">Segurança</h2>
+      <div className="p-6 bg-gray-50 rounded-xl border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Segurança</h2>
         
-        <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-xl">
+        <div className="flex items-center justify-between p-4 bg-gray-100 rounded-xl">
           <div className="flex items-center gap-3">
-            <Lock className="w-5 h-5 text-dark-400" />
+            <Lock className="w-5 h-5 text-gray-500" />
             <div>
-              <p className="text-white font-medium">Senha</p>
-              <p className="text-sm text-dark-400">Altere sua senha de acesso</p>
+              <p className="text-gray-900 font-medium">Senha</p>
+              <p className="text-sm text-gray-500">Altere sua senha de acesso</p>
             </div>
           </div>
           <button
             onClick={handlePasswordReset}
             disabled={sendingReset}
-            className="px-4 py-2 bg-dark-600 hover:bg-dark-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             {sendingReset ? (
               <>

@@ -138,17 +138,17 @@ export function EditStageModal({
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="w-full max-w-md bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden pointer-events-auto"
+              className="w-full max-w-md bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden pointer-events-auto"
             >
               <form onSubmit={handleSubmit}>
                 {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b border-dark-700">
+                <div className="flex items-center justify-between p-5 border-b border-gray-200">
                   <div className="flex items-center gap-3">
                     <div 
                       className="w-4 h-4 rounded-full"
                       style={{ backgroundColor: color }}
                     />
-                    <h2 className="text-lg font-semibold text-white">
+                    <h2 className="text-lg font-semibold text-gray-900">
                       Editar Estágio
                     </h2>
                   </div>
@@ -156,7 +156,7 @@ export function EditStageModal({
                     type="button"
                     onClick={handleClose}
                     disabled={loading}
-                    className="p-2 rounded-lg hover:bg-dark-800 text-dark-400 hover:text-white transition-colors disabled:opacity-50"
+                    className="p-2 rounded-lg hover:bg-white text-gray-500 hover:text-white transition-colors disabled:opacity-50"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -173,14 +173,14 @@ export function EditStageModal({
 
                   {/* Stage Name */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Nome do Estágio *
                     </label>
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
                       placeholder="Ex: Lead, Qualificado, Proposta"
                       required
                       autoFocus
@@ -189,13 +189,13 @@ export function EditStageModal({
 
                   {/* Stage Color */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Cor do Estágio
                     </label>
                     <div className="flex items-center gap-3">
                       {/* Color Preview */}
                       <div 
-                        className="w-10 h-10 rounded-lg border-2 border-dark-600 flex-shrink-0"
+                        className="w-10 h-10 rounded-lg border-2 border-gray-300 flex-shrink-0"
                         style={{ backgroundColor: color }}
                       />
                       {/* Color Grid */}
@@ -219,7 +219,7 @@ export function EditStageModal({
 
                   {/* Probability */}
                   <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 mb-2">
                       Probabilidade de Fechamento
                     </label>
                     <div className="space-y-3">
@@ -232,7 +232,7 @@ export function EditStageModal({
                           value={probability}
                           onChange={(e) => setProbability(Number(e.target.value))}
                           disabled={isWon || isLost}
-                          className="flex-1 h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500 disabled:opacity-50"
+                          className="flex-1 h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary-500 disabled:opacity-50"
                         />
                         <div className="flex items-center gap-1 min-w-[60px]">
                           <input
@@ -242,18 +242,18 @@ export function EditStageModal({
                             value={probability}
                             onChange={(e) => setProbability(Math.min(100, Math.max(0, Number(e.target.value))))}
                             disabled={isWon || isLost}
-                            className="w-14 px-2 py-1 bg-dark-800 border border-dark-700 rounded-lg text-white text-center text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50"
+                            className="w-14 px-2 py-1 bg-white border border-gray-200 rounded-lg text-white text-center text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50"
                           />
-                          <span className="text-dark-400 text-sm">%</span>
+                          <span className="text-gray-500 text-sm">%</span>
                         </div>
                       </div>
-                      <div className="flex justify-between text-xs text-dark-500">
+                      <div className="flex justify-between text-xs text-gray-400">
                         <span>0% (Perdido)</span>
                         <span>50% (Em aberto)</span>
                         <span>100% (Ganho)</span>
                       </div>
                     </div>
-                    <p className="text-xs text-dark-500 mt-2">
+                    <p className="text-xs text-gray-400 mt-2">
                       Usado para calcular o valor ponderado do pipeline (Forecast)
                     </p>
                   </div>
@@ -261,8 +261,8 @@ export function EditStageModal({
                   {/* ==========================================
                       STAGE TYPE - Is Won / Is Lost
                       ========================================== */}
-                  <div className="pt-4 border-t border-dark-700">
-                    <label className="block text-sm font-medium text-dark-300 mb-3">
+                  <div className="pt-4 border-t border-gray-200">
+                    <label className="block text-sm font-medium text-gray-600 mb-3">
                       Tipo de Estágio (Automação)
                     </label>
                     
@@ -271,20 +271,20 @@ export function EditStageModal({
                       <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                         isWon 
                           ? 'border-green-500/50 bg-green-500/10' 
-                          : 'border-dark-700 bg-dark-800/30 hover:border-dark-600'
+                          : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                       }`}>
                         <input
                           type="checkbox"
                           checked={isWon}
                           onChange={(e) => handleIsWonChange(e.target.checked)}
-                          className="w-5 h-5 rounded border-dark-600 bg-dark-700 text-green-500 focus:ring-green-500 focus:ring-offset-dark-900"
+                          className="w-5 h-5 rounded border-gray-300 bg-gray-100 text-green-500 focus:ring-green-500 focus:ring-offset-dark-900"
                         />
-                        <Trophy className={`w-5 h-5 ${isWon ? 'text-green-400' : 'text-dark-500'}`} />
+                        <Trophy className={`w-5 h-5 ${isWon ? 'text-green-400' : 'text-gray-400'}`} />
                         <div className="flex-1">
                           <span className={`font-medium ${isWon ? 'text-green-400' : 'text-white'}`}>
                             Estágio de Ganho
                           </span>
-                          <p className="text-xs text-dark-400 mt-0.5">
+                          <p className="text-xs text-gray-500 mt-0.5">
                             Deals movidos para cá serão marcados como "Ganho" automaticamente
                           </p>
                         </div>
@@ -294,20 +294,20 @@ export function EditStageModal({
                       <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                         isLost 
                           ? 'border-red-500/50 bg-red-500/10' 
-                          : 'border-dark-700 bg-dark-800/30 hover:border-dark-600'
+                          : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                       }`}>
                         <input
                           type="checkbox"
                           checked={isLost}
                           onChange={(e) => handleIsLostChange(e.target.checked)}
-                          className="w-5 h-5 rounded border-dark-600 bg-dark-700 text-red-500 focus:ring-red-500 focus:ring-offset-dark-900"
+                          className="w-5 h-5 rounded border-gray-300 bg-gray-100 text-red-500 focus:ring-red-500 focus:ring-offset-dark-900"
                         />
-                        <XCircle className={`w-5 h-5 ${isLost ? 'text-red-400' : 'text-dark-500'}`} />
+                        <XCircle className={`w-5 h-5 ${isLost ? 'text-red-400' : 'text-gray-400'}`} />
                         <div className="flex-1">
                           <span className={`font-medium ${isLost ? 'text-red-400' : 'text-white'}`}>
                             Estágio de Perda
                           </span>
-                          <p className="text-xs text-dark-400 mt-0.5">
+                          <p className="text-xs text-gray-500 mt-0.5">
                             Deals movidos para cá serão marcados como "Perdido" automaticamente
                           </p>
                         </div>
@@ -328,7 +328,7 @@ export function EditStageModal({
                   </div>
 
                   {/* Stage Info */}
-                  <div className="p-3 bg-dark-800/30 rounded-lg text-xs text-dark-400">
+                  <div className="p-3 bg-gray-50 rounded-lg text-xs text-gray-500">
                     <p><strong>Posição:</strong> {stage.position + 1}º estágio</p>
                     {stage.deal_count !== undefined && (
                       <p><strong>Deals:</strong> {stage.deal_count} deal(s) neste estágio</p>
@@ -337,7 +337,7 @@ export function EditStageModal({
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-between p-5 border-t border-dark-700 bg-dark-900/50">
+                <div className="flex items-center justify-between p-5 border-t border-gray-200 bg-gray-50">
                   {/* Delete Button */}
                   <button
                     type="button"
@@ -355,14 +355,14 @@ export function EditStageModal({
                       type="button"
                       onClick={handleClose}
                       disabled={loading}
-                      className="px-4 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-white transition-colors disabled:opacity-50"
+                      className="px-4 py-2.5 rounded-xl bg-white hover:bg-gray-100 text-white transition-colors disabled:opacity-50"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
                       disabled={loading || !name.trim()}
-                      className="px-5 py-2.5 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium transition-colors disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-primary-500/20"
+                      className="px-5 py-2.5 rounded-xl bg-primary-500 hover:bg-primary-600 text-gray-900 font-medium transition-colors disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-primary-500/20"
                     >
                       {loading ? (
                         <>

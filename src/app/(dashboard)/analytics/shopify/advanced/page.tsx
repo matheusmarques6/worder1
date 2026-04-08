@@ -76,10 +76,10 @@ export default function AdvancedAnalyticsPage() {
   if (!storeId) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-        <div className="w-16 h-16 bg-[#1a1a2e] rounded-2xl flex items-center justify-center mb-4">
+        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4">
           <Store className="w-8 h-8 text-gray-400" />
         </div>
-        <h2 className="text-xl font-semibold text-white mb-2">Nenhuma loja selecionada</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Nenhuma loja selecionada</h2>
         <p className="text-gray-400 mb-6 max-w-md">
           Selecione uma loja Shopify no menu lateral para ver as métricas avançadas.
         </p>
@@ -101,12 +101,12 @@ export default function AdvancedAnalyticsPage() {
         <div className="flex items-center gap-4">
           <Link
             href="/analytics/shopify"
-            className="p-2 rounded-lg bg-[#1a1a2e] hover:bg-[#252540] transition-colors"
+            className="p-2 rounded-lg bg-white hover:bg-gray-50 transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-gray-400" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-white">Métricas Avançadas</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Métricas Avançadas</h1>
             <p className="text-gray-400 mt-1">
               {currentStore?.name || 'Loja Shopify'} • Segmentação e Retenção
             </p>
@@ -115,7 +115,7 @@ export default function AdvancedAnalyticsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 bg-[#1a1a2e] p-1.5 rounded-xl">
+      <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl">
         {TABS.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
@@ -127,7 +127,7 @@ export default function AdvancedAnalyticsPage() {
               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
                 isActive
                   ? 'bg-violet-600 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-50'
               }`}
             >
               <Icon className="w-5 h-5" />
@@ -147,7 +147,7 @@ export default function AdvancedAnalyticsPage() {
           })()}
         </div>
         <div>
-          <h3 className="font-medium text-white">
+          <h3 className="font-medium text-gray-900">
             {TABS.find(t => t.id === activeTab)?.label}
           </h3>
           <p className="text-sm text-gray-400">
@@ -171,8 +171,8 @@ export default function AdvancedAnalyticsPage() {
       </AnimatePresence>
 
       {/* Help Section */}
-      <div className="bg-[#1a1a2e] rounded-xl p-6">
-        <h3 className="text-lg font-medium text-white mb-4">📚 O que significam essas métricas?</h3>
+      <div className="bg-white rounded-xl p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">📚 O que significam essas métricas?</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
           <div>
             <h4 className="font-medium text-violet-400 mb-2">Segmentação RFM</h4>

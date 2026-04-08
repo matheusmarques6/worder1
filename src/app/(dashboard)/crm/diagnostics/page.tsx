@@ -596,16 +596,16 @@ export default function CRMDiagnosticsPage() {
   const stats = getTestStats()
 
   return (
-    <div className="min-h-screen bg-dark-950 p-6">
+    <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-              <Terminal className="w-7 h-7 text-primary-400" />
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+              <Terminal className="w-7 h-7 text-brand-600" />
               CRM Diagnóstico
             </h1>
-            <p className="text-dark-400 mt-1">
+            <p className="text-gray-500 mt-1">
               Testes end-to-end das features avançadas
             </p>
           </div>
@@ -613,7 +613,7 @@ export default function CRMDiagnosticsPage() {
           <button
             onClick={runAllTests}
             disabled={running || !organizationId}
-            className="flex items-center gap-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-medium transition-colors"
+            className="flex items-center gap-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-gray-900 font-medium transition-colors"
           >
             {running ? (
               <>
@@ -631,21 +631,21 @@ export default function CRMDiagnosticsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4 mb-8">
-          <div className="bg-dark-900 border border-dark-800 rounded-xl p-4">
-            <p className="text-dark-400 text-sm">Total</p>
-            <p className="text-2xl font-bold text-white">{stats.total}</p>
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <p className="text-gray-500 text-sm">Total</p>
+            <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
           </div>
-          <div className="bg-dark-900 border border-dark-800 rounded-xl p-4">
-            <p className="text-dark-400 text-sm">Passou</p>
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <p className="text-gray-500 text-sm">Passou</p>
             <p className="text-2xl font-bold text-green-400">{stats.passed}</p>
           </div>
-          <div className="bg-dark-900 border border-dark-800 rounded-xl p-4">
-            <p className="text-dark-400 text-sm">Falhou</p>
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <p className="text-gray-500 text-sm">Falhou</p>
             <p className="text-2xl font-bold text-red-400">{stats.failed}</p>
           </div>
-          <div className="bg-dark-900 border border-dark-800 rounded-xl p-4">
-            <p className="text-dark-400 text-sm">Pendente</p>
-            <p className="text-2xl font-bold text-dark-400">{stats.pending}</p>
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <p className="text-gray-500 text-sm">Pendente</p>
+            <p className="text-2xl font-bold text-gray-500">{stats.pending}</p>
           </div>
         </div>
 
@@ -667,24 +667,24 @@ export default function CRMDiagnosticsPage() {
           {testGroups.map((group, groupIndex) => (
             <div
               key={group.name}
-              className="bg-dark-900 border border-dark-800 rounded-xl overflow-hidden"
+              className="bg-white border border-gray-200 rounded-xl overflow-hidden"
             >
               {/* Group Header */}
               <button
                 onClick={() => toggleGroup(groupIndex)}
-                className="w-full flex items-center justify-between p-4 hover:bg-dark-800/50 transition-colors"
+                className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <group.icon className="w-5 h-5 text-primary-400" />
-                  <span className="font-medium text-white">{group.name}</span>
-                  <span className="text-sm text-dark-500">
+                  <group.icon className="w-5 h-5 text-brand-600" />
+                  <span className="font-medium text-gray-900">{group.name}</span>
+                  <span className="text-sm text-gray-400">
                     ({group.tests.filter(t => t.status === 'passed').length}/{group.tests.length})
                   </span>
                 </div>
                 {group.expanded ? (
-                  <ChevronDown className="w-5 h-5 text-dark-400" />
+                  <ChevronDown className="w-5 h-5 text-gray-500" />
                 ) : (
-                  <ChevronRight className="w-5 h-5 text-dark-400" />
+                  <ChevronRight className="w-5 h-5 text-gray-500" />
                 )}
               </button>
 
@@ -695,20 +695,20 @@ export default function CRMDiagnosticsPage() {
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="border-t border-dark-800"
+                    className="border-t border-gray-200"
                   >
                     {group.tests.map((test, testIndex) => (
                       <div
                         key={test.name}
-                        className="flex items-start gap-3 p-4 border-b border-dark-800/50 last:border-0"
+                        className="flex items-start gap-3 p-4 border-b border-gray-200 last:border-0"
                       >
                         {/* Status Icon */}
                         <div className="flex-shrink-0 mt-0.5">
                           {test.status === 'pending' && (
-                            <div className="w-5 h-5 rounded-full border-2 border-dark-600" />
+                            <div className="w-5 h-5 rounded-full border-2 border-gray-300" />
                           )}
                           {test.status === 'running' && (
-                            <Loader2 className="w-5 h-5 text-primary-400 animate-spin" />
+                            <Loader2 className="w-5 h-5 text-brand-600 animate-spin" />
                           )}
                           {test.status === 'passed' && (
                             <CheckCircle className="w-5 h-5 text-green-400" />
@@ -723,7 +723,7 @@ export default function CRMDiagnosticsPage() {
                           <p className={`font-medium ${
                             test.status === 'failed' ? 'text-red-400' :
                             test.status === 'passed' ? 'text-white' :
-                            'text-dark-300'
+                            'text-gray-600'
                           }`}>
                             {test.name}
                           </p>
@@ -737,7 +737,7 @@ export default function CRMDiagnosticsPage() {
                           {test.details && test.details.length > 0 && (
                             <div className="mt-2 space-y-1">
                               {test.details.map((detail, i) => (
-                                <p key={i} className="text-dark-400 text-sm">
+                                <p key={i} className="text-gray-500 text-sm">
                                   • {detail}
                                 </p>
                               ))}
@@ -747,7 +747,7 @@ export default function CRMDiagnosticsPage() {
 
                         {/* Duration */}
                         {test.duration !== undefined && (
-                          <span className="text-dark-500 text-sm">
+                          <span className="text-gray-400 text-sm">
                             {test.duration}ms
                           </span>
                         )}
@@ -761,35 +761,35 @@ export default function CRMDiagnosticsPage() {
         </div>
 
         {/* Instructions */}
-        <div className="mt-8 bg-dark-900 border border-dark-800 rounded-xl p-6">
-          <h3 className="text-white font-medium mb-4">📋 Checklist Manual</h3>
-          <div className="space-y-3 text-dark-300 text-sm">
+        <div className="mt-8 bg-white border border-gray-200 rounded-xl p-6">
+          <h3 className="text-gray-900 font-medium mb-4">📋 Checklist Manual</h3>
+          <div className="space-y-3 text-gray-600 text-sm">
             <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" className="mt-1 rounded border-dark-600" />
+              <input type="checkbox" className="mt-1 rounded border-gray-300" />
               <span>Forecast: Acesse CRM → Forecast e verifique se os dados aparecem</span>
             </label>
             <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" className="mt-1 rounded border-dark-600" />
+              <input type="checkbox" className="mt-1 rounded border-gray-300" />
               <span>Probabilidade: Edite um stage e configure a probabilidade (0-100%)</span>
             </label>
             <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" className="mt-1 rounded border-dark-600" />
+              <input type="checkbox" className="mt-1 rounded border-gray-300" />
               <span>Commit Level: Abra um deal e defina o nível (Pipeline/Best Case/Commit)</span>
             </label>
             <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" className="mt-1 rounded border-dark-600" />
+              <input type="checkbox" className="mt-1 rounded border-gray-300" />
               <span>Histórico: Mova um deal de estágio e verifique a timeline no drawer</span>
             </label>
             <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" className="mt-1 rounded border-dark-600" />
+              <input type="checkbox" className="mt-1 rounded border-gray-300" />
               <span>Custom Fields: Crie um campo e verifique se aparece no ContactDrawer</span>
             </label>
             <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" className="mt-1 rounded border-dark-600" />
+              <input type="checkbox" className="mt-1 rounded border-gray-300" />
               <span>Import: Faça upload de um CSV de teste com 2-3 contatos</span>
             </label>
             <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" className="mt-1 rounded border-dark-600" />
+              <input type="checkbox" className="mt-1 rounded border-gray-300" />
               <span>Merge: Crie 2 contatos com mesmo email e teste a mesclagem</span>
             </label>
           </div>

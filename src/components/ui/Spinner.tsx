@@ -21,7 +21,7 @@ export const Spinner: React.FC<SpinnerProps> = ({
 
   return (
     <div className={cn('flex items-center justify-center', className)} {...props}>
-      <Loader2 className={cn('animate-spin text-primary-500', sizes[size])} />
+      <Loader2 className={cn('animate-spin text-brand-500', sizes[size])} />
     </div>
   )
 }

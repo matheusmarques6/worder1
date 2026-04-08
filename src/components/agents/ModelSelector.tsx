@@ -97,16 +97,16 @@ export default function ModelSelector({
 
   // Get current model info
   const currentModel = models.find(m => m.id === model)
-  const currentProviderInfo = providerConfig[provider] || { name: provider, color: 'text-dark-400', bg: 'bg-dark-700' }
+  const currentProviderInfo = providerConfig[provider] || { name: provider, color: 'text-gray-500', bg: 'bg-gray-100' }
 
   return (
     <div className={`space-y-4 ${className}`}>
       {/* Provider Selection */}
       <div>
-        <label className="block text-sm font-medium text-dark-300 mb-2">Provedor</label>
+        <label className="block text-sm font-medium text-gray-600 mb-2">Provedor</label>
         <div className="flex flex-wrap gap-2">
           {providers.map((p) => {
-            const info = providerConfig[p] || { name: p, color: 'text-dark-400', bg: 'bg-dark-700' }
+            const info = providerConfig[p] || { name: p, color: 'text-gray-500', bg: 'bg-gray-100' }
             const isSelected = provider === p
             
             return (
@@ -120,7 +120,7 @@ export default function ModelSelector({
                 className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                   isSelected
                     ? `${info.bg} ${info.color} border border-current/30`
-                    : 'bg-dark-800/50 text-dark-400 border border-dark-700/50 hover:text-white hover:bg-dark-800'
+                    : 'bg-gray-50 text-gray-500 border border-gray-200 hover:text-white hover:bg-white'
                 }`}
               >
                 <Sparkles className="w-3.5 h-3.5" />
@@ -133,30 +133,30 @@ export default function ModelSelector({
 
       {/* Model Selection */}
       <div>
-        <label className="block text-sm font-medium text-dark-300 mb-2">Modelo</label>
+        <label className="block text-sm font-medium text-gray-600 mb-2">Modelo</label>
         
         {loading ? (
           <div className="flex items-center justify-center py-4">
-            <Loader2 className="w-5 h-5 text-primary-400 animate-spin" />
+            <Loader2 className="w-5 h-5 text-brand-600 animate-spin" />
           </div>
         ) : (
           <div className="relative">
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white hover:bg-dark-800 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white hover:bg-white transition-colors"
             >
               <div className="flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-lg ${currentProviderInfo.bg} flex items-center justify-center`}>
                   <Brain className={`w-4 h-4 ${currentProviderInfo.color}`} />
                 </div>
                 <div className="text-left">
-                  <p className="text-sm text-white">{currentModel?.name || model}</p>
+                  <p className="text-sm text-gray-700">{currentModel?.name || model}</p>
                   {currentModel?.description && (
-                    <p className="text-xs text-dark-500">{currentModel.description}</p>
+                    <p className="text-xs text-gray-400">{currentModel.description}</p>
                   )}
                 </div>
               </div>
-              <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
             </button>
 
             <AnimatePresence>
@@ -165,7 +165,7 @@ export default function ModelSelector({
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="absolute z-20 w-full mt-2 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto"
+                  className="absolute z-20 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto"
                 >
                   {providerModels.map((m) => (
                     <button
@@ -176,22 +176,22 @@ export default function ModelSelector({
                       }}
                       className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
                         model === m.id
-                          ? 'bg-primary-500/10 border-l-2 border-primary-500'
-                          : 'hover:bg-dark-700/50 border-l-2 border-transparent'
+                          ? 'bg-brand-50 border-l-2 border-primary-500'
+                          : 'hover:bg-gray-100 border-l-2 border-transparent'
                       }`}
                     >
-                      <Brain className={`w-4 h-4 ${model === m.id ? 'text-primary-400' : 'text-dark-500'}`} />
+                      <Brain className={`w-4 h-4 ${model === m.id ? 'text-brand-600' : 'text-gray-400'}`} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white">{m.name}</p>
+                        <p className="text-sm text-gray-700">{m.name}</p>
                         {m.description && (
-                          <p className="text-xs text-dark-500 truncate">{m.description}</p>
+                          <p className="text-xs text-gray-400 truncate">{m.description}</p>
                         )}
                       </div>
                       {m.context_window && (
-                        <span className="text-xs text-dark-500">{(m.context_window / 1000).toFixed(0)}k</span>
+                        <span className="text-xs text-gray-400">{(m.context_window / 1000).toFixed(0)}k</span>
                       )}
                       {model === m.id && (
-                        <Check className="w-4 h-4 text-primary-400" />
+                        <Check className="w-4 h-4 text-brand-600" />
                       )}
                     </button>
                   ))}
@@ -206,8 +206,8 @@ export default function ModelSelector({
       {showTemperature && onTemperatureChange && (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-sm font-medium text-dark-300">Temperatura</label>
-            <span className="text-sm text-primary-400">{temperature}</span>
+            <label className="text-sm font-medium text-gray-600">Temperatura</label>
+            <span className="text-sm text-brand-600">{temperature}</span>
           </div>
           <input
             type="range"
@@ -216,9 +216,9 @@ export default function ModelSelector({
             step="0.1"
             value={temperature}
             onChange={(e) => onTemperatureChange(parseFloat(e.target.value))}
-            className="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
+            className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary-500"
           />
-          <div className="flex justify-between text-xs text-dark-500 mt-1">
+          <div className="flex justify-between text-xs text-gray-400 mt-1">
             <span>Preciso</span>
             <span>Criativo</span>
           </div>

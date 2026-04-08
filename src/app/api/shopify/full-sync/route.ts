@@ -4,8 +4,10 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
+import { getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { runFullSync, runIncrementalSync } from '@/lib/services/shopify/full-sync';
+import { runFullSyncGraphQL } from '@/lib/services/shopify/full-sync-graphql';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -19,8 +21,21 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthClient();
     if (!auth) return authError();
 
-    const { supabase, user } = auth;
-    const organizationId = user.organization_id;
+    const { user } = auth;
+    const userId = user.id;
+    const userOrgId = user.organization_id;
+    const supabaseAdmin = getSupabaseAdmin();
+
+    // Multi-org lookup
+    const { data: memberships } = await supabaseAdmin
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', userId);
+
+    const orgIds = [...new Set([
+      userOrgId,
+      ...(memberships?.map((m: any) => m.organization_id) || []),
+    ])];
 
     let storeId: string | null = null;
     let options = {
@@ -41,12 +56,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (!storeId) {
-      const { data: stores } = await supabase
+      const { data: stores } = await supabaseAdmin
         .from('shopify_stores')
         .select('id')
+        .in('organization_id', orgIds)
         .eq('is_active', true)
         .limit(1);
-      
+
       if (!stores || stores.length === 0) {
         return NextResponse.json(
           { success: false, error: 'Nenhuma loja conectada' },
@@ -64,18 +80,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validation = await validateStoreAccess(supabase, organizationId, storeId);
-    if (!validation.valid) {
-      return NextResponse.json(
-        { error: validation.error },
-        { status: validation.status || 403 }
-      );
-    }
-
-    const { data: store, error: storeError } = await supabase
+    // Validate store access via multi-org
+    const { data: store, error: storeError } = await supabaseAdmin
       .from('shopify_stores')
       .select('*')
       .eq('id', storeId)
+      .in('organization_id', orgIds)
       .single();
 
     if (storeError || !store) {
@@ -103,7 +113,17 @@ export async function POST(request: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let result: any;
-    if (options.incremental) {
+    const useGraphQL = (options as any).useGraphQL === true;
+
+    if (useGraphQL) {
+      // New GraphQL-based sync
+      result = await runFullSyncGraphQL(store, {
+        syncCustomers: options.syncCustomers,
+        syncOrders: options.syncOrders,
+        syncProducts: options.syncProducts,
+        ordersDaysBack: (options as any).ordersDaysBack || 90,
+      });
+    } else if (options.incremental) {
       const since = new Date();
       since.setDate(since.getDate() - 1); // Last 24 hours
       result = await runIncrementalSync(store, since, syncOptions);
@@ -161,12 +181,24 @@ export async function GET(request: NextRequest) {
     const auth = await getAuthClient();
     if (!auth) return authError();
 
-    const { supabase } = auth;
+    const { user } = auth;
+    const adminDb = getSupabaseAdmin();
+
+    // Multi-org lookup
+    const { data: memberships } = await adminDb
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id);
+
+    const orgIds = [...new Set([
+      user.organization_id,
+      ...(memberships?.map((m: any) => m.organization_id) || []),
+    ])];
 
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('storeId');
 
-    let query = supabase
+    let query = adminDb
       .from('shopify_stores')
       .select(`
         id,
@@ -179,6 +211,8 @@ export async function GET(request: NextRequest) {
         last_sync_at,
         metrics
       `);
+
+    query = query.in('organization_id', orgIds);
 
     if (storeId) {
       query = query.eq('id', storeId);

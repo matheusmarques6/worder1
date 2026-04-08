@@ -367,9 +367,9 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
       case 'error':
         return <XCircle className="w-4 h-4 text-red-400" />;
       case 'skipped':
-        return <SkipForward className="w-4 h-4 text-slate-400" />;
+        return <SkipForward className="w-4 h-4 text-gray-500" />;
       default:
-        return <Clock className="w-4 h-4 text-white/30" />;
+        return <Clock className="w-4 h-4 text-gray-400" />;
     }
   };
 
@@ -385,43 +385,43 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
       transition={{ type: 'spring', damping: 25, stiffness: 300 }}
       className={cn(
         'fixed right-0 top-0 bottom-0 z-50',
-        'w-[400px] bg-[#0d0d0d] border-l border-white/10',
+        'w-[400px] bg-white border-l border-gray-200',
         'flex flex-col shadow-2xl'
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-white/10">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-blue-500/20">
             <Beaker className="w-5 h-5 text-blue-400" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">Testar Automação</h2>
-            <p className="text-xs text-white/50">Simule a execução visualmente</p>
+            <h2 className="text-lg font-semibold text-gray-900">Testar Automação</h2>
+            <p className="text-xs text-gray-600/50">Simule a execução visualmente</p>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+          className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
       </div>
 
       {/* Config Section (Collapsible) */}
-      <div className="border-b border-white/10">
+      <div className="border-b border-gray-200">
         <button
           onClick={() => setShowConfig(!showConfig)}
-          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+          className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
         >
-          <div className="flex items-center gap-2 text-white/70">
+          <div className="flex items-center gap-2 text-gray-700">
             <Settings className="w-4 h-4" />
             <span className="text-sm font-medium">Configurações do Teste</span>
           </div>
           {showConfig ? (
-            <ChevronUp className="w-4 h-4 text-white/40" />
+            <ChevronUp className="w-4 h-4 text-gray-400" />
           ) : (
-            <ChevronDown className="w-4 h-4 text-white/40" />
+            <ChevronDown className="w-4 h-4 text-gray-400" />
           )}
         </button>
 
@@ -436,7 +436,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
               <div className="p-4 pt-0 space-y-4">
                 {/* Data Source */}
                 <div>
-                  <label className="text-xs font-medium text-white/50 block mb-2">
+                  <label className="text-xs font-medium text-gray-900/50 block mb-2">
                     Fonte de Dados
                   </label>
                   <div className="flex gap-2">
@@ -446,7 +446,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                         'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors',
                         useSampleData
                           ? 'bg-blue-600 text-white'
-                          : 'bg-white/5 text-white/60 hover:bg-white/10'
+                          : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
                       )}
                     >
                       Dados de Exemplo
@@ -457,7 +457,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                         'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors',
                         !useSampleData
                           ? 'bg-blue-600 text-white'
-                          : 'bg-white/5 text-white/60 hover:bg-white/10'
+                          : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
                       )}
                     >
                       Contato Real
@@ -468,7 +468,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                 {/* Contact Select */}
                 {!useSampleData && (
                   <div>
-                    <label className="text-xs font-medium text-white/50 block mb-2">
+                    <label className="text-xs font-medium text-gray-900/50 block mb-2">
                       Contato
                     </label>
                     <select
@@ -476,7 +476,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                       onChange={(e) => setSelectedContactId(e.target.value)}
                       className={cn(
                         'w-full px-3 py-2 rounded-lg',
-                        'bg-[#0a0a0a] border border-white/10 text-white text-sm',
+                        'bg-white border border-gray-200 text-gray-900 text-sm',
                         'focus:outline-none focus:border-blue-500/50'
                       )}
                     >
@@ -492,7 +492,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
 
                 {/* Speed */}
                 <div>
-                  <label className="text-xs font-medium text-white/50 block mb-2">
+                  <label className="text-xs font-medium text-gray-900/50 block mb-2">
                     Velocidade da Simulação
                   </label>
                   <div className="flex gap-2">
@@ -503,8 +503,8 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                         className={cn(
                           'flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors capitalize',
                           executionSpeed === speed
-                            ? 'bg-white/10 text-white border border-white/20'
-                            : 'bg-white/5 text-white/50 hover:bg-white/10'
+                            ? 'bg-gray-100 text-gray-700 border border-gray-300'
+                            : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
                         )}
                       >
                         {speed === 'slow' ? 'Lenta' : speed === 'normal' ? 'Normal' : 'Rápida'}
@@ -515,7 +515,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
 
                 {/* Trigger Data */}
                 <div>
-                  <label className="text-xs font-medium text-white/50 block mb-2">
+                  <label className="text-xs font-medium text-gray-900/50 block mb-2">
                     Dados do Gatilho (JSON)
                   </label>
                   <textarea
@@ -523,7 +523,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                     onChange={(e) => setTriggerData(e.target.value)}
                     className={cn(
                       'w-full h-24 px-3 py-2 rounded-lg font-mono text-xs',
-                      'bg-[#0a0a0a] border border-white/10 text-white',
+                      'bg-white border border-gray-200 text-gray-900',
                       'focus:outline-none focus:border-blue-500/50 resize-none'
                     )}
                   />
@@ -538,13 +538,13 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
       <div ref={stepsContainerRef} className="flex-1 overflow-y-auto p-4">
         {steps.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="p-4 rounded-full bg-white/5 mb-4">
-              <Zap className="w-8 h-8 text-white/30" />
+            <div className="p-4 rounded-full bg-gray-50 mb-4">
+              <Zap className="w-8 h-8 text-gray-400" />
             </div>
-            <p className="text-white/50 text-sm mb-2">
+            <p className="text-gray-500 text-sm mb-2">
               Clique em "Executar Teste" para simular
             </p>
-            <p className="text-white/30 text-xs">
+            <p className="text-gray-400 text-xs">
               Os nós serão executados em sequência com visualização em tempo real
             </p>
           </div>
@@ -571,7 +571,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                     step.status === 'success' && 'border-green-500/30 bg-green-500/5',
                     step.status === 'error' && 'border-red-500/30 bg-red-500/5',
                     step.status === 'skipped' && 'border-slate-500/30 bg-slate-500/5',
-                    step.status === 'pending' && 'border-white/10 bg-white/5',
+                    step.status === 'pending' && 'border-gray-200 bg-gray-50',
                     isCurrent && 'ring-2 ring-blue-500/50'
                   )}
                 >
@@ -581,31 +581,31 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                     disabled={!step.output && !step.error}
                     className={cn(
                       'w-full flex items-center gap-3 p-3 text-left',
-                      (step.output || step.error) && 'hover:bg-white/5 cursor-pointer'
+                      (step.output || step.error) && 'hover:bg-gray-50 cursor-pointer'
                     )}
                   >
                     <div className="flex-shrink-0">
                       {getStatusIcon(step.status)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">
+                      <p className="text-sm font-medium text-gray-900 truncate">
                         {step.nodeLabel}
                       </p>
-                      <p className="text-xs text-white/40">
+                      <p className="text-xs text-gray-600/40">
                         {(step.nodeType || '').replace('trigger_', '').replace('action_', '').replace('logic_', '')}
                       </p>
                     </div>
                     {step.duration !== undefined && (
-                      <span className="text-xs text-white/40 bg-white/5 px-2 py-0.5 rounded">
+                      <span className="text-xs text-gray-600/40 bg-gray-50 px-2 py-0.5 rounded">
                         {step.duration}ms
                       </span>
                     )}
                     {(step.output || step.error) && (
                       <div className="flex-shrink-0">
                         {isExpanded ? (
-                          <ChevronDown className="w-4 h-4 text-white/40" />
+                          <ChevronDown className="w-4 h-4 text-gray-400" />
                         ) : (
-                          <ChevronRight className="w-4 h-4 text-white/40" />
+                          <ChevronRight className="w-4 h-4 text-gray-400" />
                         )}
                       </div>
                     )}
@@ -618,9 +618,9 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        className="border-t border-white/10"
+                        className="border-t border-gray-200"
                       >
-                        <div className="p-3 bg-[#0a0a0a] space-y-2">
+                        <div className="p-3 bg-white space-y-2">
                           {step.error && (
                             <div className="p-2 rounded bg-red-500/20 text-red-300 text-xs flex items-start gap-2">
                               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -629,10 +629,10 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                           )}
                           {step.output && (
                             <div>
-                              <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">
+                              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">
                                 Output
                               </p>
-                              <pre className="text-xs text-white/60 overflow-x-auto bg-black/40 p-2 rounded max-h-40">
+                              <pre className="text-xs text-gray-600/60 overflow-x-auto bg-black/40 p-2 rounded max-h-40">
                                 {JSON.stringify(step.output, null, 2)}
                               </pre>
                             </div>
@@ -681,7 +681,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
                 <p className={cn('font-medium', success ? 'text-green-300' : 'text-red-300')}>
                   {success ? 'Teste concluído com sucesso!' : 'Teste falhou'}
                 </p>
-                <p className="text-sm text-white/50">
+                <p className="text-sm text-gray-700/50">
                   {steps.filter((s) => s.status === 'success').length}/{steps.length} passos • {totalDuration}ms
                 </p>
               </div>
@@ -691,14 +691,14 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-white/10 bg-[#0a0a0a]">
+      <div className="p-4 border-t border-gray-200 bg-white">
         <div className="flex gap-3">
           {steps.length > 0 && !isRunning && (
             <button
               onClick={resetExecution}
               className={cn(
                 'flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
-                'bg-white/5 hover:bg-white/10 text-white/70 hover:text-white',
+                'bg-gray-50 hover:bg-gray-100 text-gray-700 hover:text-gray-900',
                 'text-sm font-medium transition-colors'
               )}
             >

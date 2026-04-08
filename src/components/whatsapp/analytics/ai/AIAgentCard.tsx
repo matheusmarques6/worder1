@@ -22,8 +22,8 @@ export function AIAgentCard({ agent, onClick, delay = 0 }: AIAgentCardProps) {
       transition={{ duration: 0.3, delay }}
       onClick={onClick}
       className={`
-        relative bg-dark-800/60 rounded-xl border border-dark-700/50 p-5 
-        hover:border-dark-600 transition-all cursor-pointer group
+        relative bg-white rounded-xl border border-gray-200 p-5 
+        hover:border-gray-300 transition-all cursor-pointer group
         ${!agent.is_active ? 'opacity-60' : ''}
       `}
     >
@@ -37,8 +37,8 @@ export function AIAgentCard({ agent, onClick, delay = 0 }: AIAgentCardProps) {
             <Bot className="w-5 h-5" style={{ color: providerColor }} />
           </div>
           <div>
-            <h3 className="text-white font-medium">{agent.name}</h3>
-            <p className="text-xs text-dark-400">
+            <h3 className="text-gray-900 font-medium">{agent.name}</h3>
+            <p className="text-xs text-gray-500">
               {providerName} • {agent.model}
             </p>
           </div>
@@ -48,10 +48,10 @@ export function AIAgentCard({ agent, onClick, delay = 0 }: AIAgentCardProps) {
         <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${
           agent.is_active 
             ? 'bg-emerald-500/20 text-emerald-400' 
-            : 'bg-dark-600 text-dark-400'
+            : 'bg-gray-200 text-gray-500'
         }`}>
           <div className={`w-1.5 h-1.5 rounded-full ${
-            agent.is_active ? 'bg-emerald-400 animate-pulse' : 'bg-dark-400'
+            agent.is_active ? 'bg-emerald-400 animate-pulse' : 'bg-gray-300'
           }`} />
           {agent.is_active ? 'Ativo' : 'Inativo'}
         </div>
@@ -97,8 +97,8 @@ export function AIAgentCard({ agent, onClick, delay = 0 }: AIAgentCardProps) {
 
       {/* Last activity */}
       {agent.last_interaction_at && (
-        <div className="mt-4 pt-3 border-t border-dark-700/50">
-          <p className="text-xs text-dark-400">
+        <div className="mt-4 pt-3 border-t border-gray-200">
+          <p className="text-xs text-gray-500">
             Última interação: {formatTimeAgo(agent.last_interaction_at)}
           </p>
         </div>
@@ -106,7 +106,7 @@ export function AIAgentCard({ agent, onClick, delay = 0 }: AIAgentCardProps) {
 
       {/* Hover indicator */}
       <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-        <ExternalLink className="w-4 h-4 text-dark-400" />
+        <ExternalLink className="w-4 h-4 text-gray-500" />
       </div>
     </motion.div>
   );
@@ -120,8 +120,8 @@ interface StatItemProps {
 function StatItem({ label, value }: StatItemProps) {
   return (
     <div className="text-center">
-      <p className="text-sm font-medium text-white">{value}</p>
-      <p className="text-xs text-dark-400 mt-0.5">{label}</p>
+      <p className="text-sm font-medium text-gray-900">{value}</p>
+      <p className="text-xs text-gray-500 mt-0.5">{label}</p>
     </div>
   );
 }
@@ -150,12 +150,12 @@ function ProgressBar({ label, value, color }: ProgressBarProps) {
   return (
     <div>
       <div className="flex justify-between items-center mb-1">
-        <span className="text-xs text-dark-400">{label}</span>
+        <span className="text-xs text-gray-500">{label}</span>
         <span className={`text-xs font-medium ${textColorClasses[color]}`}>
           {value.toFixed(0)}%
         </span>
       </div>
-      <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${Math.min(value, 100)}%` }}
@@ -178,11 +178,11 @@ export function AIAgentsGrid({ agents, onAgentClick }: AIAgentsGridProps) {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="bg-dark-800/50 rounded-xl border border-dark-700/50 p-8 text-center"
+        className="bg-gray-50 rounded-xl border border-gray-200 p-8 text-center"
       >
-        <Bot className="w-12 h-12 text-dark-600 mx-auto mb-3" />
-        <h3 className="text-lg font-medium text-white mb-1">Nenhum agente configurado</h3>
-        <p className="text-dark-400 text-sm">
+        <Bot className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+        <h3 className="text-lg font-medium text-gray-900 mb-1">Nenhum agente configurado</h3>
+        <p className="text-gray-500 text-sm">
           Configure um agente de IA para começar a ver métricas aqui.
         </p>
       </motion.div>
@@ -194,11 +194,11 @@ export function AIAgentsGrid({ agents, onAgentClick }: AIAgentsGridProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.3 }}
-      className="bg-dark-800/50 rounded-xl border border-dark-700/50 p-6"
+      className="bg-gray-50 rounded-xl border border-gray-200 p-6"
     >
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Seus Agentes</h3>
-        <span className="text-sm text-dark-400">
+        <h3 className="text-lg font-semibold text-gray-900">Seus Agentes</h3>
+        <span className="text-sm text-gray-500">
           {agents.filter(a => a.is_active).length} de {agents.length} ativos
         </span>
       </div>

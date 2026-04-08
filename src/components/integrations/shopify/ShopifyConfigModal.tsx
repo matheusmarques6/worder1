@@ -202,37 +202,37 @@ export function ShopifyConfigModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           onClick={e => e.stopPropagation()}
-          className="w-full max-w-2xl bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+          className="w-full max-w-2xl bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-5 border-b border-dark-700">
+          <div className="flex items-center justify-between p-5 border-b border-gray-200">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-[#95BF47]/20 rounded-lg">
                 <ShoppingCart className="w-5 h-5 text-[#95BF47]" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-white">
+                <h2 className="text-lg font-semibold text-gray-900">
                   Configurar Shopify
                 </h2>
-                <p className="text-sm text-dark-400">{store.name}</p>
+                <p className="text-sm text-gray-500">{store.name}</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Tabs */}
-          <div className="flex border-b border-dark-700">
+          <div className="flex border-b border-gray-200">
             <button
               onClick={() => setActiveTab('status')}
               className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                 activeTab === 'status'
-                  ? 'text-primary-400 border-b-2 border-primary-500'
-                  : 'text-dark-400 hover:text-white'
+                  ? 'text-brand-600 border-b-2 border-primary-500'
+                  : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               Status
@@ -241,8 +241,8 @@ export function ShopifyConfigModal({
               onClick={() => setActiveTab('settings')}
               className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                 activeTab === 'settings'
-                  ? 'text-primary-400 border-b-2 border-primary-500'
-                  : 'text-dark-400 hover:text-white'
+                  ? 'text-brand-600 border-b-2 border-primary-500'
+                  : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               Configurações
@@ -254,7 +254,7 @@ export function ShopifyConfigModal({
             {activeTab === 'status' ? (
               <div className="space-y-6">
                 {/* Connection Status */}
-                <div className="p-4 bg-dark-900 border border-dark-700 rounded-xl">
+                <div className="p-4 bg-white border border-gray-200 rounded-xl">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       {store.connectionStatus === 'active' ? (
@@ -272,7 +272,7 @@ export function ShopifyConfigModal({
                         }`}>
                           {store.connectionStatus === 'active' ? 'Conectado' : 'Erro na conexão'}
                         </p>
-                        <p className="text-sm text-dark-400">
+                        <p className="text-sm text-gray-500">
                           {store.domain}.myshopify.com
                         </p>
                       </div>
@@ -280,40 +280,40 @@ export function ShopifyConfigModal({
                     <button
                       onClick={handleCheckHealth}
                       disabled={checkingHealth}
-                      className="flex items-center gap-2 px-3 py-2 bg-dark-800 hover:bg-dark-700 disabled:opacity-50 text-dark-300 rounded-lg text-sm transition-colors"
+                      className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-gray-100 disabled:opacity-50 text-gray-600 rounded-lg text-sm transition-colors"
                     >
                       <RefreshCw className={`w-4 h-4 ${checkingHealth ? 'animate-spin' : ''}`} />
                       Verificar
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4 pt-4 border-t border-dark-700">
+                  <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-200">
                     <div className="text-center">
                       <Package className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-                      <p className="text-lg font-semibold text-white">{store.totalOrders || 0}</p>
-                      <p className="text-xs text-dark-400">Pedidos</p>
+                      <p className="text-lg font-semibold text-gray-900">{store.totalOrders || 0}</p>
+                      <p className="text-xs text-gray-500">Pedidos</p>
                     </div>
                     <div className="text-center">
                       <Users className="w-5 h-5 text-green-400 mx-auto mb-1" />
-                      <p className="text-lg font-semibold text-white">{store.totalCustomers || 0}</p>
-                      <p className="text-xs text-dark-400">Clientes</p>
+                      <p className="text-lg font-semibold text-gray-900">{store.totalCustomers || 0}</p>
+                      <p className="text-xs text-gray-500">Clientes</p>
                     </div>
                     <div className="text-center">
                       <Zap className="w-5 h-5 text-amber-400 mx-auto mb-1" />
-                      <p className="text-sm text-white">
+                      <p className="text-sm text-gray-700">
                         {store.lastSyncAt
                           ? formatDistanceToNow(new Date(store.lastSyncAt), { addSuffix: true, locale: ptBR })
                           : '-'
                         }
                       </p>
-                      <p className="text-xs text-dark-400">Última sync</p>
+                      <p className="text-xs text-gray-500">Última sync</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Webhooks Status */}
                 <div>
-                  <h3 className="text-sm font-medium text-dark-300 mb-3">Webhooks Instalados</h3>
+                  <h3 className="text-sm font-medium text-gray-600 mb-3">Webhooks Instalados</h3>
                   <WebhookStatusTable
                     storeId={store.id}
                     organizationId={organizationId}
@@ -322,17 +322,17 @@ export function ShopifyConfigModal({
 
                 {/* Webhook URL */}
                 <div>
-                  <h3 className="text-sm font-medium text-dark-300 mb-3">URL do Webhook</h3>
-                  <div className="flex items-center gap-2 p-3 bg-dark-900 border border-dark-700 rounded-xl">
+                  <h3 className="text-sm font-medium text-gray-600 mb-3">URL do Webhook</h3>
+                  <div className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-xl">
                     <input
                       type="text"
                       value={webhookUrl}
                       readOnly
-                      className="flex-1 bg-transparent text-sm text-dark-300 font-mono truncate"
+                      className="flex-1 bg-transparent text-sm text-gray-600 font-mono truncate"
                     />
                     <button
                       onClick={handleCopyWebhook}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-dark-700 hover:bg-dark-600 text-white rounded-lg text-sm transition-colors"
+                      className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors"
                     >
                       {copied ? (
                         <>
@@ -347,7 +347,7 @@ export function ShopifyConfigModal({
                       )}
                     </button>
                   </div>
-                  <p className="text-xs text-dark-500 mt-2">
+                  <p className="text-xs text-gray-400 mt-2">
                     Configure esta URL nas configurações de webhook do Shopify
                   </p>
                 </div>
@@ -378,8 +378,8 @@ export function ShopifyConfigModal({
               <div className="space-y-6">
                 {/* Tags */}
                 <div>
-                  <h3 className="text-sm font-medium text-dark-300 mb-3">Tags Automáticas</h3>
-                  <p className="text-xs text-dark-500 mb-3">
+                  <h3 className="text-sm font-medium text-gray-600 mb-3">Tags Automáticas</h3>
+                  <p className="text-xs text-gray-400 mb-3">
                     Estas tags serão adicionadas automaticamente a todos os contatos do Shopify
                   </p>
                   
@@ -390,11 +390,11 @@ export function ShopifyConfigModal({
                       onChange={e => setNewTag(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleAddTag()}
                       placeholder="Nova tag..."
-                      className="flex-1 px-4 py-2 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                      className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors"
                     />
                     <button
                       onClick={handleAddTag}
-                      className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors"
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors"
                     >
                       Adicionar
                     </button>
@@ -402,12 +402,12 @@ export function ShopifyConfigModal({
 
                   <div className="flex flex-wrap gap-2">
                     {tags.length === 0 ? (
-                      <p className="text-sm text-dark-500">Nenhuma tag configurada</p>
+                      <p className="text-sm text-gray-400">Nenhuma tag configurada</p>
                     ) : (
                       tags.map(tag => (
                         <span
                           key={tag}
-                          className="inline-flex items-center gap-1 px-3 py-1 bg-primary-500/20 text-primary-400 rounded-full text-sm"
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-brand-100 text-brand-600 rounded-full text-sm"
                         >
                           {tag}
                           <button
@@ -424,9 +424,9 @@ export function ShopifyConfigModal({
 
                 {/* Import */}
                 <div>
-                  <h3 className="text-sm font-medium text-dark-300 mb-3">Importação</h3>
-                  <div className="p-4 bg-dark-900 border border-dark-700 rounded-xl">
-                    <p className="text-sm text-dark-300 mb-3">
+                  <h3 className="text-sm font-medium text-gray-600 mb-3">Importação</h3>
+                  <div className="p-4 bg-white border border-gray-200 rounded-xl">
+                    <p className="text-sm text-gray-600 mb-3">
                       Importe clientes existentes do Shopify para o CRM
                     </p>
                     <button className="flex items-center gap-2 px-4 py-2 bg-[#95BF47] hover:bg-[#7da03a] text-white rounded-xl font-medium transition-colors">
@@ -440,7 +440,7 @@ export function ShopifyConfigModal({
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between p-5 border-t border-dark-700">
+          <div className="flex items-center justify-between p-5 border-t border-gray-200">
             <button
               onClick={handleDisconnect}
               className="flex items-center gap-2 px-4 py-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
@@ -451,7 +451,7 @@ export function ShopifyConfigModal({
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="px-6 py-2 text-dark-300 hover:text-white transition-colors"
+                className="px-6 py-2 text-gray-600 hover:text-gray-700 transition-colors"
               >
                 Cancelar
               </button>

@@ -52,20 +52,26 @@ export async function PUT(
     }
 
     // Upsert campos
-    const fieldsToUpsert = fields.map((f: any, index: number) => ({
-      id: f.id && !f.id.startsWith('new-') ? f.id : undefined,
-      form_id: formId,
-      field_type: f.field_type,
-      label: f.label,
-      placeholder: f.placeholder || null,
-      description: f.description || null,
-      required: f.required || false,
-      position: index,
-      options: f.options || [],
-      validation: f.validation || {},
-      map_to_contact_field: f.map_to_contact_field || null,
-      conditional: f.conditional || null,
-    }))
+    const fieldsToUpsert = fields.map((f: any, index: number) => {
+      const field: any = {
+        form_id: formId,
+        field_type: f.field_type,
+        label: f.label,
+        placeholder: f.placeholder || null,
+        description: f.description || null,
+        required: f.required || false,
+        position: index,
+        options: f.options || [],
+        validation: f.validation || {},
+        map_to_contact_field: f.map_to_contact_field || null,
+        conditional: f.conditional || null,
+      }
+      // Só adiciona id se for um UUID válido existente
+      if (f.id && !f.id.startsWith('new-')) {
+        field.id = f.id
+      }
+      return field
+    })
 
     // Insert new fields (without id)
     const newFields = fieldsToUpsert.filter((f: any) => !f.id)

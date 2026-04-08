@@ -72,10 +72,10 @@ export function StatusTab({ store, organizationId }: StatusTabProps) {
   return (
     <div className="space-y-6">
       {/* Connection Status Card */}
-      <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-2xl">
+      <div className="p-5 bg-gray-50 border border-gray-200 rounded-2xl">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-            <Globe className="w-5 h-5 text-primary-400" />
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Globe className="w-5 h-5 text-brand-600" />
             Status da Conexão
           </h3>
           <div className="flex items-center gap-2">
@@ -95,8 +95,8 @@ export function StatusTab({ store, organizationId }: StatusTabProps) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-dark-900/50 rounded-xl">
-              <span className="text-dark-400 text-sm flex items-center gap-2">
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+              <span className="text-gray-500 text-sm flex items-center gap-2">
                 <Globe className="w-4 h-4" />
                 Domínio
               </span>
@@ -106,8 +106,8 @@ export function StatusTab({ store, organizationId }: StatusTabProps) {
             </div>
             
             {store.shop_email && (
-              <div className="flex items-center justify-between p-3 bg-dark-900/50 rounded-xl">
-                <span className="text-dark-400 text-sm flex items-center gap-2">
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <span className="text-gray-500 text-sm flex items-center gap-2">
                   <Mail className="w-4 h-4" />
                   Email
                 </span>
@@ -117,8 +117,8 @@ export function StatusTab({ store, organizationId }: StatusTabProps) {
               </div>
             )}
             
-            <div className="flex items-center justify-between p-3 bg-dark-900/50 rounded-xl">
-              <span className="text-dark-400 text-sm flex items-center gap-2">
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+              <span className="text-gray-500 text-sm flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
                 Conectado em
               </span>
@@ -132,7 +132,7 @@ export function StatusTab({ store, organizationId }: StatusTabProps) {
             <button
               onClick={handleCheckConnection}
               disabled={checkingConnection}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-dark-700 hover:bg-dark-600 disabled:opacity-50 rounded-xl text-white text-sm transition-colors"
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 rounded-xl text-white text-sm transition-colors"
             >
               <RefreshCw className={`w-4 h-4 ${checkingConnection ? 'animate-spin' : ''}`} />
               Verificar Conexão
@@ -166,40 +166,40 @@ export function StatusTab({ store, organizationId }: StatusTabProps) {
       </div>
 
       {/* Statistics Card */}
-      <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-2xl">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Package className="w-5 h-5 text-primary-400" />
+      <div className="p-5 bg-gray-50 border border-gray-200 rounded-2xl">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Package className="w-5 h-5 text-brand-600" />
           Estatísticas
         </h3>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="p-4 bg-dark-900/50 rounded-xl text-center">
+          <div className="p-4 bg-gray-50 rounded-xl text-center">
             <Users className="w-6 h-6 text-blue-400 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">
+            <p className="text-2xl font-bold text-gray-900">
               {store.total_customers_imported || 0}
             </p>
-            <p className="text-xs text-dark-400">Clientes Importados</p>
+            <p className="text-xs text-gray-500">Clientes Importados</p>
           </div>
           
-          <div className="p-4 bg-dark-900/50 rounded-xl text-center">
+          <div className="p-4 bg-gray-50 rounded-xl text-center">
             <ShoppingBag className="w-6 h-6 text-green-400 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">
+            <p className="text-2xl font-bold text-gray-900">
               {store.total_orders_imported || 0}
             </p>
-            <p className="text-xs text-dark-400">Pedidos Sincronizados</p>
+            <p className="text-xs text-gray-500">Pedidos Sincronizados</p>
           </div>
           
-          <div className="p-4 bg-dark-900/50 rounded-xl text-center">
+          <div className="p-4 bg-gray-50 rounded-xl text-center">
             <Package className="w-6 h-6 text-purple-400 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">
+            <p className="text-2xl font-bold text-gray-900">
               -
             </p>
-            <p className="text-xs text-dark-400">Deals Criados</p>
+            <p className="text-xs text-gray-500">Deals Criados</p>
           </div>
           
-          <div className="p-4 bg-dark-900/50 rounded-xl text-center">
+          <div className="p-4 bg-gray-50 rounded-xl text-center">
             <Calendar className="w-6 h-6 text-amber-400 mx-auto mb-2" />
-            <p className="text-sm font-medium text-white">
+            <p className="text-sm font-medium text-gray-900">
               {store.last_sync_at
                 ? formatDistanceToNow(new Date(store.last_sync_at), { 
                     addSuffix: true, 
@@ -208,40 +208,40 @@ export function StatusTab({ store, organizationId }: StatusTabProps) {
                 : 'Nunca'
               }
             </p>
-            <p className="text-xs text-dark-400">Última Sincronização</p>
+            <p className="text-xs text-gray-500">Última Sincronização</p>
           </div>
         </div>
       </div>
 
       {/* Webhook Info */}
-      <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-2xl">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <RefreshCw className="w-5 h-5 text-primary-400" />
+      <div className="p-5 bg-gray-50 border border-gray-200 rounded-2xl">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <RefreshCw className="w-5 h-5 text-brand-600" />
           Webhook
         </h3>
         
         <div className="space-y-3">
-          <div className="p-3 bg-dark-900/50 rounded-xl">
-            <label className="block text-sm text-dark-400 mb-2">URL do Webhook</label>
+          <div className="p-3 bg-gray-50 rounded-xl">
+            <label className="block text-sm text-gray-500 mb-2">URL do Webhook</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 readOnly
                 value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/shopify/${store.id}`}
-                className="flex-1 px-4 py-2 bg-dark-800 border border-dark-700 rounded-lg text-dark-300 text-sm font-mono"
+                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-600 text-sm font-mono"
               />
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/shopify/${store.id}`)
                 }}
-                className="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-white text-sm transition-colors"
               >
                 Copiar
               </button>
             </div>
           </div>
           
-          <p className="text-xs text-dark-500">
+          <p className="text-xs text-gray-400">
             Configure esta URL nas configurações de webhook do Shopify para receber eventos em tempo real.
           </p>
         </div>
@@ -251,14 +251,14 @@ export function StatusTab({ store, organizationId }: StatusTabProps) {
       <div className="flex gap-3">
         <a
           href={`/integrations/shopify/diagnostico?storeId=${store.id}`}
-          className="flex items-center gap-2 px-4 py-2.5 bg-dark-700 hover:bg-dark-600 rounded-xl text-white text-sm transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white text-sm transition-colors"
         >
           <ExternalLink className="w-4 h-4" />
           Ver Diagnóstico Completo
         </a>
         <a
           href="/crm"
-          className="flex items-center gap-2 px-4 py-2.5 bg-dark-700 hover:bg-dark-600 rounded-xl text-white text-sm transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-white text-sm transition-colors"
         >
           <Users className="w-4 h-4" />
           Ir para CRM

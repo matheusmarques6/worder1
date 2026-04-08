@@ -63,7 +63,7 @@ const INTEGRATION_CONFIG: Record<string, { icon: any; color: string; bgColor: st
 export function PipelineAutomationBadges({ rules, compact = false }: PipelineAutomationBadgesProps) {
   if (!rules || rules.length === 0) {
     return (
-      <span className="text-dark-600 text-xs">
+      <span className="text-gray-400 text-xs">
         Sem automações
       </span>
     )
@@ -81,7 +81,7 @@ export function PipelineAutomationBadges({ rules, compact = false }: PipelineAut
 
   if (Object.keys(rulesBySource).length === 0) {
     return (
-      <span className="text-dark-600 text-xs">
+      <span className="text-gray-400 text-xs">
         Automações inativas
       </span>
     )

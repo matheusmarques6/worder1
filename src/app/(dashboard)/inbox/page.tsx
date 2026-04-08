@@ -273,9 +273,9 @@ export default function AgentInboxPage() {
   const MessageStatus = ({ status }: { status: Message['status'] }) => {
     switch (status) {
       case 'sent':
-        return <Check className="w-3.5 h-3.5 text-dark-500" />
+        return <Check className="w-3.5 h-3.5 text-gray-400" />
       case 'delivered':
-        return <CheckCheck className="w-3.5 h-3.5 text-dark-500" />
+        return <CheckCheck className="w-3.5 h-3.5 text-gray-400" />
       case 'read':
         return <CheckCheck className="w-3.5 h-3.5 text-blue-400" />
       case 'failed':
@@ -296,26 +296,26 @@ export default function AgentInboxPage() {
   return (
     <div className="h-full flex">
       {/* Sidebar - Conversations List */}
-      <div className="w-80 border-r border-dark-800 flex flex-col bg-dark-900">
+      <div className="w-80 border-r border-gray-200 flex flex-col bg-white">
         {/* Header */}
-        <div className="p-4 border-b border-dark-800">
-          <h1 className="text-lg font-semibold text-white mb-3">Conversas</h1>
+        <div className="p-4 border-b border-gray-200">
+          <h1 className="text-lg font-semibold text-gray-900 mb-3">Conversas</h1>
           
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar conversa..."
-              className="w-full pl-9 pr-4 py-2 bg-dark-800 border border-dark-700 rounded-lg text-sm text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50"
+              className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-dark-500 focus:outline-none focus:border-brand-400"
             />
           </div>
         </div>
         
         {/* Filter Tabs */}
-        <div className="flex border-b border-dark-800">
+        <div className="flex border-b border-gray-200">
           {[
             { id: 'all', label: 'Todas', count: stats.total },
             { id: 'queue', label: 'Fila', count: stats.queue },
@@ -326,14 +326,14 @@ export default function AgentInboxPage() {
               onClick={() => setFilter(tab.id as typeof filter)}
               className={`flex-1 py-2.5 text-sm font-medium transition-colors relative ${
                 filter === tab.id
-                  ? 'text-primary-400 border-b-2 border-primary-500'
-                  : 'text-dark-400 hover:text-white'
+                  ? 'text-brand-600 border-b-2 border-primary-500'
+                  : 'text-gray-500 hover:text-white'
               }`}
             >
               {tab.label}
               {tab.count > 0 && (
                 <span className={`ml-1.5 px-1.5 py-0.5 text-xs rounded-full ${
-                  filter === tab.id ? 'bg-primary-500/20' : 'bg-dark-700'
+                  filter === tab.id ? 'bg-brand-100' : 'bg-gray-100'
                 }`}>
                   {tab.count}
                 </span>
@@ -350,34 +350,34 @@ export default function AgentInboxPage() {
             </div>
           ) : filteredConversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-              <MessageSquare className="w-10 h-10 text-dark-600 mb-3" />
-              <p className="text-dark-400 text-sm">Nenhuma conversa encontrada</p>
+              <MessageSquare className="w-10 h-10 text-gray-400 mb-3" />
+              <p className="text-gray-500 text-sm">Nenhuma conversa encontrada</p>
             </div>
           ) : (
             filteredConversations.map((conv) => (
               <button
                 key={conv.id}
                 onClick={() => setSelectedConversation(conv)}
-                className={`w-full p-3 flex items-start gap-3 border-b border-dark-800/50 hover:bg-dark-800/50 transition-colors text-left ${
-                  selectedConversation?.id === conv.id ? 'bg-dark-800' : ''
+                className={`w-full p-3 flex items-start gap-3 border-b border-gray-200 hover:bg-gray-50 transition-colors text-left ${
+                  selectedConversation?.id === conv.id ? 'bg-white' : ''
                 }`}
               >
                 {/* Avatar */}
-                <div className="w-10 h-10 rounded-full bg-dark-700 flex items-center justify-center flex-shrink-0">
-                  <User className="w-5 h-5 text-dark-400" />
+                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                  <User className="w-5 h-5 text-gray-500" />
                 </div>
                 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-0.5">
-                    <span className="font-medium text-white truncate">
+                    <span className="font-medium text-gray-900 truncate">
                       {conv.contact_name || conv.contact_phone}
                     </span>
-                    <span className="text-xs text-dark-500 flex-shrink-0">
+                    <span className="text-xs text-gray-400 flex-shrink-0">
                       {formatTime(conv.last_message_at)}
                     </span>
                   </div>
-                  <p className="text-sm text-dark-400 truncate">{conv.last_message}</p>
+                  <p className="text-sm text-gray-500 truncate">{conv.last_message}</p>
                   
                   {/* Tags */}
                   <div className="flex items-center gap-2 mt-1">
@@ -387,7 +387,7 @@ export default function AgentInboxPage() {
                       </span>
                     )}
                     {conv.assigned_agent_id === agentId && (
-                      <span className="text-xs bg-primary-500/20 text-primary-400 px-1.5 py-0.5 rounded">
+                      <span className="text-xs bg-brand-100 text-brand-600 px-1.5 py-0.5 rounded">
                         Minha
                       </span>
                     )}
@@ -404,11 +404,11 @@ export default function AgentInboxPage() {
         </div>
         
         {/* Refresh Button */}
-        <div className="p-3 border-t border-dark-800">
+        <div className="p-3 border-t border-gray-200">
           <button
             onClick={fetchConversations}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-2 text-sm text-dark-400 hover:text-white hover:bg-dark-800 rounded-lg transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-2 text-sm text-gray-500 hover:text-white hover:bg-white rounded-lg transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Atualizar
@@ -417,20 +417,20 @@ export default function AgentInboxPage() {
       </div>
       
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col bg-dark-950">
+      <div className="flex-1 flex flex-col bg-gray-50">
         {selectedConversation ? (
           <>
             {/* Chat Header */}
-            <div className="h-16 px-4 flex items-center justify-between border-b border-dark-800 bg-dark-900">
+            <div className="h-16 px-4 flex items-center justify-between border-b border-gray-200 bg-white">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-dark-700 flex items-center justify-center">
-                  <User className="w-5 h-5 text-dark-400" />
+                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                  <User className="w-5 h-5 text-gray-500" />
                 </div>
                 <div>
-                  <h2 className="font-medium text-white">
+                  <h2 className="font-medium text-gray-900">
                     {selectedConversation.contact_name || selectedConversation.contact_phone}
                   </h2>
-                  <p className="text-xs text-dark-400">{selectedConversation.contact_phone}</p>
+                  <p className="text-xs text-gray-500">{selectedConversation.contact_phone}</p>
                 </div>
               </div>
               
@@ -458,7 +458,7 @@ export default function AgentInboxPage() {
                 )}
                 
                 {/* More options */}
-                <button className="p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-lg transition-colors">
+                <button className="p-2 text-gray-500 hover:text-white hover:bg-white rounded-lg transition-colors">
                   <MoreVertical className="w-5 h-5" />
                 </button>
               </div>
@@ -472,8 +472,8 @@ export default function AgentInboxPage() {
                 </div>
               ) : messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <MessageSquare className="w-10 h-10 text-dark-600 mb-3" />
-                  <p className="text-dark-400 text-sm">Nenhuma mensagem ainda</p>
+                  <MessageSquare className="w-10 h-10 text-gray-400 mb-3" />
+                  <p className="text-gray-500 text-sm">Nenhuma mensagem ainda</p>
                 </div>
               ) : (
                 messages.map((msg) => (
@@ -485,12 +485,12 @@ export default function AgentInboxPage() {
                       className={`max-w-[70%] rounded-2xl px-4 py-2 ${
                         msg.direction === 'outbound'
                           ? 'bg-primary-500 text-white rounded-br-md'
-                          : 'bg-dark-800 text-white rounded-bl-md'
+                          : 'bg-white text-gray-900 rounded-bl-md'
                       }`}
                     >
                       <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                       <div className={`flex items-center justify-end gap-1 mt-1 ${
-                        msg.direction === 'outbound' ? 'text-primary-200' : 'text-dark-500'
+                        msg.direction === 'outbound' ? 'text-primary-200' : 'text-gray-400'
                       }`}>
                         <span className="text-xs">
                           {new Date(msg.created_at).toLocaleTimeString('pt-BR', {
@@ -509,9 +509,9 @@ export default function AgentInboxPage() {
             
             {/* Input */}
             {canSendMessages && selectedConversation.assigned_agent_id === agentId ? (
-              <div className="p-4 border-t border-dark-800 bg-dark-900">
+              <div className="p-4 border-t border-gray-200 bg-white">
                 <div className="flex items-end gap-3">
-                  <button className="p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-lg transition-colors">
+                  <button className="p-2 text-gray-500 hover:text-white hover:bg-white rounded-lg transition-colors">
                     <Paperclip className="w-5 h-5" />
                   </button>
                   
@@ -527,14 +527,14 @@ export default function AgentInboxPage() {
                       }}
                       placeholder="Digite sua mensagem..."
                       rows={1}
-                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 resize-none"
+                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-brand-400 resize-none"
                     />
                   </div>
                   
                   <button
                     onClick={handleSendMessage}
                     disabled={!newMessage.trim() || sending}
-                    className="p-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-700 text-white rounded-xl transition-colors"
+                    className="p-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-100 text-gray-900 rounded-xl transition-colors"
                   >
                     {sending ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
@@ -545,8 +545,8 @@ export default function AgentInboxPage() {
                 </div>
               </div>
             ) : (
-              <div className="p-4 border-t border-dark-800 bg-dark-900">
-                <div className="text-center py-2 text-dark-500 text-sm">
+              <div className="p-4 border-t border-gray-200 bg-white">
+                <div className="text-center py-2 text-gray-400 text-sm">
                   {!canSendMessages ? (
                     'Você não tem permissão para enviar mensagens'
                   ) : (
@@ -559,11 +559,11 @@ export default function AgentInboxPage() {
         ) : (
           /* Empty State */
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-            <div className="w-20 h-20 rounded-2xl bg-dark-800 flex items-center justify-center mb-4">
-              <MessageSquare className="w-10 h-10 text-dark-600" />
+            <div className="w-20 h-20 rounded-2xl bg-white flex items-center justify-center mb-4">
+              <MessageSquare className="w-10 h-10 text-gray-400" />
             </div>
-            <h2 className="text-xl font-semibold text-white mb-2">Selecione uma conversa</h2>
-            <p className="text-dark-400 max-w-sm">
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Selecione uma conversa</h2>
+            <p className="text-gray-500 max-w-sm">
               Escolha uma conversa da lista ao lado para começar a atender seus clientes.
             </p>
             
@@ -571,11 +571,11 @@ export default function AgentInboxPage() {
             <div className="flex gap-6 mt-8">
               <div className="text-center">
                 <div className="text-2xl font-bold text-yellow-400">{stats.queue}</div>
-                <div className="text-sm text-dark-400">Na fila</div>
+                <div className="text-sm text-gray-500">Na fila</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-primary-400">{stats.mine}</div>
-                <div className="text-sm text-dark-400">Minhas</div>
+                <div className="text-2xl font-bold text-brand-600">{stats.mine}</div>
+                <div className="text-sm text-gray-500">Minhas</div>
               </div>
             </div>
           </div>

@@ -26,13 +26,6 @@ export function useContacts(options: {
   const fetchContacts = useCallback(async (showLoading = true) => {
     if (!user?.organization_id) return;
 
-    if (!effectiveStoreId) {
-      setContacts([]);
-      setPagination(null);
-      setLoading(false);
-      return;
-    }
-
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -43,8 +36,10 @@ export function useContacts(options: {
       const params = new URLSearchParams({
         page: String(options.page || 1),
         limit: String(options.limit || 50),
-        storeId: effectiveStoreId,
       });
+      if (effectiveStoreId) {
+        params.set('storeId', effectiveStoreId);
+      }
       if (options.search) params.set('search', options.search);
       if (options.tags?.length) params.set('tags', options.tags.join(','));
 

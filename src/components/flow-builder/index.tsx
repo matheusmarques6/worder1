@@ -154,7 +154,7 @@ export function FlowBuilder({
 
   return (
     <ReactFlowProvider>
-      <div className="h-screen w-screen flex flex-col bg-dark-900 overflow-hidden">
+      <div className="h-screen w-screen flex flex-col bg-white overflow-hidden">
         {/* Toolbar */}
         <Toolbar
           onSave={handleSave}
@@ -169,7 +169,7 @@ export function FlowBuilder({
           {!isFullscreen && <Sidebar />}
 
           {/* Canvas */}
-          <div className="flex-1 relative bg-dark-800">
+          <div className="flex-1 relative bg-white">
             <Canvas />
           </div>
 
@@ -191,17 +191,17 @@ export function FlowBuilder({
         {/* Execution Panel - Fallback for unsaved automations */}
         {showTestModal && (!savedAutomationId || savedAutomationId === 'new' || !organizationId) && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-md shadow-xl">
-              <h3 className="text-lg font-semibold text-white mb-2">
+            <div className="bg-white border border-gray-300 rounded-xl p-6 max-w-md shadow-xl">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Salve a automação primeiro
               </h3>
-              <p className="text-dark-300 text-sm mb-4">
+              <p className="text-gray-600 text-sm mb-4">
                 Para testar a automação, você precisa salvá-la primeiro.
               </p>
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={handleCloseTestModal}
-                  className="px-4 py-2 rounded-lg text-dark-300 hover:text-white hover:bg-dark-700 transition-colors"
+                  className="px-4 py-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                 >
                   Fechar
                 </button>
@@ -231,17 +231,17 @@ export function FlowBuilder({
         {/* History Panel - Fallback for unsaved automations */}
         {showHistoryPanel && (!savedAutomationId || savedAutomationId === 'new' || !organizationId) && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-md shadow-xl">
-              <h3 className="text-lg font-semibold text-white mb-2">
+            <div className="bg-white border border-gray-300 rounded-xl p-6 max-w-md shadow-xl">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Automação não salva
               </h3>
-              <p className="text-dark-300 text-sm mb-4">
+              <p className="text-gray-600 text-sm mb-4">
                 O histórico de execuções só está disponível após salvar a automação.
               </p>
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={handleCloseHistoryPanel}
-                  className="px-4 py-2 rounded-lg text-dark-300 hover:text-white hover:bg-dark-700 transition-colors"
+                  className="px-4 py-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                 >
                   Fechar
                 </button>

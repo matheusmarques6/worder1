@@ -26,8 +26,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
   
   const searchParams = request.nextUrl.searchParams;
-  const limit = parseInt(searchParams.get('limit') || '30');
-  const offset = parseInt(searchParams.get('offset') || '0');
+  // ✅ CORREÇÃO: Validar parseInt e limitar valores
+  const limitParam = parseInt(searchParams.get('limit') || '30');
+  const offsetParam = parseInt(searchParams.get('offset') || '0');
+  const limit = isNaN(limitParam) ? 30 : Math.min(Math.max(limitParam, 1), 100);
+  const offset = isNaN(offsetParam) ? 0 : Math.max(offsetParam, 0);
   const type = searchParams.get('type');
   
   try {

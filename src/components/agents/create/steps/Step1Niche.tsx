@@ -48,10 +48,10 @@ export function Step1Niche({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-semibold text-white mb-2">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">
           Escolha o nicho do seu agente
         </h2>
-        <p className="text-zinc-400">
+        <p className="text-gray-500">
           Selecione o template que mais se aproxima do seu negócio. Você poderá personalizar tudo depois.
         </p>
       </div>
@@ -65,7 +65,7 @@ export function Step1Niche({
             p-4 rounded-xl border
             ${storeAnalysis 
               ? 'bg-green-500/10 border-green-500/30' 
-              : 'bg-zinc-800/50 border-zinc-700'
+              : 'bg-gray-50/50 border-gray-200'
             }
           `}
         >
@@ -84,31 +84,31 @@ export function Step1Niche({
             <div className="flex-1">
               {storeAnalysis ? (
                 <>
-                  <h3 className="font-medium text-white mb-1">
+                  <h3 className="font-medium text-gray-900 mb-1">
                     ✨ Análise concluída: {storeAnalysis.storeName}
                   </h3>
-                  <p className="text-sm text-zinc-400 mb-2">
+                  <p className="text-sm text-gray-500 mb-2">
                     Detectamos o nicho <strong className="text-white">{storeAnalysis.detectedNiche}</strong> com {storeAnalysis.nicheConfidence}% de confiança.
                     {storeAnalysis.products.total} produtos encontrados.
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    <span className="px-2 py-1 text-xs bg-zinc-700 rounded-full text-zinc-300">
+                    <span className="px-2 py-1 text-xs bg-gray-100 rounded-full text-gray-700">
                       {storeAnalysis.products.total} produtos
                     </span>
-                    <span className="px-2 py-1 text-xs bg-zinc-700 rounded-full text-zinc-300">
+                    <span className="px-2 py-1 text-xs bg-gray-100 rounded-full text-gray-700">
                       {storeAnalysis.categories.length} categorias
                     </span>
-                    <span className="px-2 py-1 text-xs bg-zinc-700 rounded-full text-zinc-300">
+                    <span className="px-2 py-1 text-xs bg-gray-100 rounded-full text-gray-700">
                       Score: {storeAnalysis.scores.overall}/100
                     </span>
                   </div>
                 </>
               ) : (
                 <>
-                  <h3 className="font-medium text-white mb-1">
+                  <h3 className="font-medium text-gray-900 mb-1">
                     🔍 Analisar sua loja automaticamente
                   </h3>
-                  <p className="text-sm text-zinc-400 mb-3">
+                  <p className="text-sm text-gray-500 mb-3">
                     Detectamos que você tem uma loja Shopify conectada. Podemos analisá-la para sugerir o melhor template e preencher informações automaticamente.
                   </p>
                   <button
@@ -137,20 +137,20 @@ export function Step1Niche({
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
         <input
           type="text"
           placeholder="Buscar nicho..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
+          className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-gray-200"
         />
       </div>
 
       {/* Suggested Template (from analysis) */}
       {storeAnalysis && storeAnalysis.suggestedTemplate && (
         <div className="space-y-2">
-          <p className="text-sm text-zinc-400 flex items-center gap-2">
+          <p className="text-sm text-gray-500 flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-yellow-400" />
             Recomendado para sua loja:
           </p>
@@ -175,7 +175,7 @@ export function Step1Niche({
 
       {/* Templates Grid */}
       <div className="space-y-3">
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-gray-500">
           {storeAnalysis ? 'Ou escolha outro nicho:' : 'Nichos disponíveis:'}
         </p>
         
@@ -210,8 +210,8 @@ export function Step1Niche({
 
       {/* Custom Template */}
       {customTemplate && (
-        <div className="pt-4 border-t border-zinc-700">
-          <p className="text-sm text-zinc-400 mb-3">
+        <div className="pt-4 border-t border-gray-200">
+          <p className="text-sm text-gray-500 mb-3">
             Ou comece do zero:
           </p>
           <NicheCard
@@ -231,7 +231,7 @@ export function Step1Niche({
         <button
           onClick={onNext}
           disabled={!selectedTemplate}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-medium rounded-lg transition-colors"
+          className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-500 text-gray-900 font-medium rounded-lg transition-colors"
         >
           {selectedTemplate 
             ? `Continuar com ${selectedTemplate.name}` 

@@ -126,26 +126,26 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg bg-dark-900 border border-dark-700 rounded-xl overflow-hidden shadow-2xl"
+        className="w-full max-w-lg bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-dark-700">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary-400" />
-            <h2 className="text-lg font-semibold text-white">Personalização</h2>
+            <Sparkles className="w-5 h-5 text-brand-600" />
+            <h2 className="text-lg font-semibold text-gray-900">Personalização</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Search */}
-        <div className="p-4 border-b border-dark-700">
+        <div className="p-4 border-b border-gray-200">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               type="text"
               placeholder="Buscar variável..."
@@ -153,8 +153,8 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
               onChange={(e) => setSearchQuery(e.target.value)}
               className={cn(
                 'w-full pl-10 pr-4 py-2.5 rounded-lg',
-                'bg-dark-800 border border-dark-600',
-                'text-white placeholder-dark-400',
+                'bg-white border border-gray-300',
+                'text-gray-900 placeholder-gray-400',
                 'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
                 'transition-all'
               )}
@@ -166,32 +166,32 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
         {/* Variable Categories */}
         <div className="max-h-[400px] overflow-y-auto">
           {filteredCategories.length === 0 ? (
-            <div className="p-8 text-center text-dark-400">
+            <div className="p-8 text-center text-gray-500">
               <p>Nenhuma variável encontrada</p>
             </div>
           ) : (
             filteredCategories.map((category) => (
-              <div key={category.id} className="border-b border-dark-700/50 last:border-b-0">
+              <div key={category.id} className="border-b border-gray-200 last:border-b-0">
                 {/* Category Header */}
                 <button
                   onClick={() => setExpandedCategory(expandedCategory === category.id ? null : category.id)}
                   className={cn(
                     'w-full flex items-center justify-between px-4 py-3',
-                    'hover:bg-dark-800 transition-colors'
+                    'hover:bg-white transition-colors'
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="p-1.5 rounded-lg bg-dark-700 text-primary-400">
+                    <div className="p-1.5 rounded-lg bg-gray-100 text-brand-600">
                       {getCategoryIcon(category.id)}
                     </div>
                     <div className="text-left">
-                      <span className="text-sm font-medium text-white">{category.icon} {category.label}</span>
-                      <span className="text-xs text-dark-400 ml-2">({category.variables.length})</span>
+                      <span className="text-sm font-medium text-gray-900">{category.icon} {category.label}</span>
+                      <span className="text-xs text-gray-500 ml-2">({category.variables.length})</span>
                     </div>
                   </div>
                   <ChevronRight
                     className={cn(
-                      'w-4 h-4 text-dark-400 transition-transform',
+                      'w-4 h-4 text-gray-500 transition-transform',
                       expandedCategory === category.id && 'rotate-90'
                     )}
                   />
@@ -237,9 +237,9 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-dark-700 bg-dark-800/50">
-          <p className="text-xs text-dark-400">
-            Clique em uma variável para inserir ou use o botão de copiar. Use <code className="text-primary-400 bg-dark-700 px-1 rounded">|default:'valor'</code> para valores padrão.
+        <div className="p-4 border-t border-gray-200 bg-gray-50">
+          <p className="text-xs text-gray-500">
+            Clique em uma variável para inserir ou use o botão de copiar. Use <code className="text-brand-600 bg-gray-100 px-1 rounded">|default:'valor'</code> para valores padrão.
           </p>
         </div>
       </motion.div>
@@ -283,15 +283,15 @@ function VariableItem({
       <div
         className={cn(
           'flex items-center justify-between p-3 rounded-lg',
-          'bg-dark-800/50 hover:bg-dark-700/70',
-          'border border-transparent hover:border-dark-600',
+          'bg-gray-50 hover:bg-gray-100/70',
+          'border border-transparent hover:border-gray-300',
           'cursor-pointer transition-all group'
         )}
         onClick={onSelect}
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-white">{variable.label}</span>
+            <span className="text-sm font-medium text-gray-900">{variable.label}</span>
             {variable.defaultValue && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
                 tem padrão
@@ -299,7 +299,7 @@ function VariableItem({
             )}
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <code className="text-xs text-primary-400 bg-dark-700/50 px-1.5 py-0.5 rounded font-mono">
+            <code className="text-xs text-brand-600 bg-gray-100 px-1.5 py-0.5 rounded font-mono">
               {`{{ ${variable.key} }}`}
             </code>
             {realValue && (
@@ -308,7 +308,7 @@ function VariableItem({
               </span>
             )}
           </div>
-          <p className="text-xs text-dark-400 mt-1">{variable.description}</p>
+          <p className="text-xs text-gray-500 mt-1">{variable.description}</p>
         </div>
 
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -318,7 +318,7 @@ function VariableItem({
                 e.stopPropagation();
                 onSelectWithDefault();
               }}
-              className="p-1.5 rounded-lg hover:bg-dark-600 text-amber-400 hover:text-amber-300 transition-colors"
+              className="p-1.5 rounded-lg hover:bg-gray-200 text-amber-400 hover:text-amber-300 transition-colors"
               title="Inserir com valor padrão"
             >
               <Sparkles className="w-4 h-4" />
@@ -329,7 +329,7 @@ function VariableItem({
               e.stopPropagation();
               onToggleDefault();
             }}
-            className="p-1.5 rounded-lg hover:bg-dark-600 text-dark-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-900 transition-colors"
             title="Definir valor padrão"
           >
             <span className="text-xs font-mono">|</span>
@@ -339,7 +339,7 @@ function VariableItem({
               e.stopPropagation();
               onCopy();
             }}
-            className="p-1.5 rounded-lg hover:bg-dark-600 text-dark-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-900 transition-colors"
             title="Copiar"
           >
             {copied ? <Check className="w-4 h-4 text-success-400" /> : <Copy className="w-4 h-4" />}
@@ -356,7 +356,7 @@ function VariableItem({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="flex items-center gap-2 p-2 bg-dark-700/30 rounded-b-lg mx-1">
+            <div className="flex items-center gap-2 p-2 bg-gray-100/30 rounded-b-lg mx-1">
               <input
                 type="text"
                 value={defaultValue}
@@ -364,8 +364,8 @@ function VariableItem({
                 placeholder="Valor padrão se vazio..."
                 className={cn(
                   'flex-1 px-3 py-2 rounded-lg',
-                  'bg-dark-800 border border-dark-600',
-                  'text-sm text-white placeholder-dark-400',
+                  'bg-white border border-gray-300',
+                  'text-sm text-gray-700 placeholder-gray-400',
                   'focus:outline-none focus:border-primary-500'
                 )}
                 onClick={(e) => e.stopPropagation()}

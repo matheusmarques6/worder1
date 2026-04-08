@@ -105,95 +105,95 @@ const OrderDetailsModal = ({ order, onClose }: { order: Order; onClose: () => vo
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="relative bg-dark-900 rounded-2xl border border-dark-700 p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto"
+        className="relative bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto"
       >
-        <button onClick={onClose} className="absolute top-4 right-4 text-dark-400 hover:text-white">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-white">
           <X className="w-5 h-5" />
         </button>
 
         <div className="flex items-center gap-4 mb-6">
-          <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center">
-            <ShoppingCart className="w-6 h-6 text-primary-400" />
+          <div className="w-12 h-12 rounded-xl bg-brand-100 flex items-center justify-center">
+            <ShoppingCart className="w-6 h-6 text-brand-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">Pedido {order.name}</h2>
-            <p className="text-dark-400 text-sm">{formatDate(order.created_at)}</p>
+            <h2 className="text-xl font-bold text-gray-900">Pedido {order.name}</h2>
+            <p className="text-gray-500 text-sm">{formatDate(order.created_at)}</p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="p-4 bg-dark-800/50 rounded-xl">
-            <p className="text-sm text-dark-400 mb-1">Status Pagamento</p>
+          <div className="p-4 bg-gray-50 rounded-xl">
+            <p className="text-sm text-gray-500 mb-1">Status Pagamento</p>
             <StatusBadge status={order.financial_status} type="financial" />
           </div>
-          <div className="p-4 bg-dark-800/50 rounded-xl">
-            <p className="text-sm text-dark-400 mb-1">Status Envio</p>
+          <div className="p-4 bg-gray-50 rounded-xl">
+            <p className="text-sm text-gray-500 mb-1">Status Envio</p>
             <StatusBadge status={order.fulfillment_status} type="fulfillment" />
           </div>
         </div>
 
         <div className="mb-6">
-          <h3 className="text-sm font-medium text-dark-400 mb-3">Cliente</h3>
-          <div className="p-4 bg-dark-800/50 rounded-xl">
-            <p className="text-white font-medium">{order.customer.name}</p>
-            <p className="text-dark-400 text-sm">{order.customer.email}</p>
+          <h3 className="text-sm font-medium text-gray-500 mb-3">Cliente</h3>
+          <div className="p-4 bg-gray-50 rounded-xl">
+            <p className="text-gray-900 font-medium">{order.customer.name}</p>
+            <p className="text-gray-500 text-sm">{order.customer.email}</p>
             {order.customer.phone && (
-              <p className="text-dark-400 text-sm">{order.customer.phone}</p>
+              <p className="text-gray-500 text-sm">{order.customer.phone}</p>
             )}
           </div>
         </div>
 
         <div className="mb-6">
-          <h3 className="text-sm font-medium text-dark-400 mb-3">Itens ({order.line_items_count})</h3>
+          <h3 className="text-sm font-medium text-gray-500 mb-3">Itens ({order.line_items_count})</h3>
           <div className="space-y-2">
             {order.line_items?.map((item: any) => (
-              <div key={item.id} className="flex items-center justify-between p-3 bg-dark-800/50 rounded-xl">
+              <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                 <div className="flex-1">
-                  <p className="text-white font-medium text-sm">{item.title}</p>
+                  <p className="text-gray-900 font-medium text-sm">{item.title}</p>
                   {item.variant_title && item.variant_title !== 'Default Title' && (
-                    <p className="text-dark-400 text-xs">{item.variant_title}</p>
+                    <p className="text-gray-500 text-xs">{item.variant_title}</p>
                   )}
-                  {item.sku && <p className="text-dark-500 text-xs">SKU: {item.sku}</p>}
+                  {item.sku && <p className="text-gray-400 text-xs">SKU: {item.sku}</p>}
                 </div>
                 <div className="text-right">
-                  <p className="text-white text-sm">{item.quantity}x {formatCurrency(item.price)}</p>
-                  <p className="text-dark-400 text-xs">{formatCurrency(item.quantity * item.price)}</p>
+                  <p className="text-gray-700 text-sm">{item.quantity}x {formatCurrency(item.price)}</p>
+                  <p className="text-gray-500 text-xs">{formatCurrency(item.quantity * item.price)}</p>
                 </div>
               </div>
             ))}
             {order.line_items_count > 3 && (
-              <p className="text-center text-dark-400 text-sm py-2">
+              <p className="text-center text-gray-500 text-sm py-2">
                 +{order.line_items_count - 3} outros itens
               </p>
             )}
           </div>
         </div>
 
-        <div className="border-t border-dark-700 pt-4">
+        <div className="border-t border-gray-200 pt-4">
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-dark-400">Subtotal</span>
-              <span className="text-white">{formatCurrency(order.subtotal_price)}</span>
+              <span className="text-gray-500">Subtotal</span>
+              <span className="text-gray-900">{formatCurrency(order.subtotal_price)}</span>
             </div>
             {order.total_discounts > 0 && (
               <div className="flex justify-between">
-                <span className="text-dark-400">Descontos</span>
+                <span className="text-gray-500">Descontos</span>
                 <span className="text-green-400">-{formatCurrency(order.total_discounts)}</span>
               </div>
             )}
             <div className="flex justify-between">
-              <span className="text-dark-400">Frete</span>
-              <span className="text-white">{formatCurrency(order.total_shipping)}</span>
+              <span className="text-gray-500">Frete</span>
+              <span className="text-gray-900">{formatCurrency(order.total_shipping)}</span>
             </div>
             {order.total_tax > 0 && (
               <div className="flex justify-between">
-                <span className="text-dark-400">Impostos</span>
-                <span className="text-white">{formatCurrency(order.total_tax)}</span>
+                <span className="text-gray-500">Impostos</span>
+                <span className="text-gray-900">{formatCurrency(order.total_tax)}</span>
               </div>
             )}
-            <div className="flex justify-between pt-2 border-t border-dark-700">
-              <span className="text-white font-semibold">Total</span>
-              <span className="text-white font-semibold text-lg">{formatCurrency(order.total_price)}</span>
+            <div className="flex justify-between pt-2 border-t border-gray-200">
+              <span className="text-gray-900 font-semibold">Total</span>
+              <span className="text-gray-900 font-semibold text-lg">{formatCurrency(order.total_price)}</span>
             </div>
           </div>
         </div>
@@ -254,14 +254,14 @@ export default function OrdersPage() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Pedidos</h1>
-          <p className="text-dark-400 mt-1">Gerencie os pedidos da sua loja</p>
+          <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
+          <p className="text-gray-500 mt-1">Gerencie os pedidos da sua loja</p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={fetchOrders}
-            className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 hover:bg-dark-700/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-600 hover:text-white transition-all"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             Atualizar
@@ -271,50 +271,50 @@ export default function OrdersPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 bg-dark-800/40 rounded-xl border border-dark-700/30">
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200/30">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary-500/20">
-              <ShoppingCart className="w-5 h-5 text-primary-400" />
+            <div className="p-2 rounded-lg bg-brand-100">
+              <ShoppingCart className="w-5 h-5 text-brand-600" />
             </div>
             <div>
-              <p className="text-sm text-dark-400">Total Pedidos</p>
-              <p className="text-xl font-bold text-white">{orders.length}</p>
+              <p className="text-sm text-gray-500">Total Pedidos</p>
+              <p className="text-xl font-bold text-gray-900">{orders.length}</p>
             </div>
           </div>
         </div>
 
-        <div className="p-4 bg-dark-800/40 rounded-xl border border-dark-700/30">
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200/30">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-green-500/20">
               <DollarSign className="w-5 h-5 text-green-400" />
             </div>
             <div>
-              <p className="text-sm text-dark-400">Receita Total</p>
-              <p className="text-xl font-bold text-white">{formatCurrency(totalRevenue)}</p>
+              <p className="text-sm text-gray-500">Receita Total</p>
+              <p className="text-xl font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
             </div>
           </div>
         </div>
 
-        <div className="p-4 bg-dark-800/40 rounded-xl border border-dark-700/30">
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200/30">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-green-500/20">
               <CheckCircle className="w-5 h-5 text-green-400" />
             </div>
             <div>
-              <p className="text-sm text-dark-400">Pagos</p>
-              <p className="text-xl font-bold text-white">{paidOrders}</p>
+              <p className="text-sm text-gray-500">Pagos</p>
+              <p className="text-xl font-bold text-gray-900">{paidOrders}</p>
             </div>
           </div>
         </div>
 
-        <div className="p-4 bg-dark-800/40 rounded-xl border border-dark-700/30">
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200/30">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-yellow-500/20">
               <Clock className="w-5 h-5 text-yellow-400" />
             </div>
             <div>
-              <p className="text-sm text-dark-400">Pendentes</p>
-              <p className="text-xl font-bold text-white">{pendingOrders}</p>
+              <p className="text-sm text-gray-500">Pendentes</p>
+              <p className="text-xl font-bold text-gray-900">{pendingOrders}</p>
             </div>
           </div>
         </div>
@@ -323,20 +323,20 @@ export default function OrdersPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
           <input
             type="text"
             placeholder="Buscar por número, cliente ou email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-primary-500"
           />
         </div>
 
         <select
           value={selectedStatus}
           onChange={(e) => setSelectedStatus(e.target.value)}
-          className="px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500"
+          className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
         >
           <option value="">Todos os status</option>
           <option value="paid">Pago</option>
@@ -346,21 +346,21 @@ export default function OrdersPage() {
       </div>
 
       {/* Orders List */}
-      <div className="bg-dark-800/40 rounded-2xl border border-dark-700/30 overflow-hidden">
+      <div className="bg-gray-50 rounded-2xl border border-gray-200/30 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 animate-spin text-dark-400" />
+            <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
           </div>
         ) : orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16">
-            <ShoppingCart className="w-12 h-12 text-dark-500 mb-4" />
-            <p className="text-dark-400">Nenhum pedido encontrado</p>
+            <ShoppingCart className="w-12 h-12 text-gray-400 mb-4" />
+            <p className="text-gray-500">Nenhum pedido encontrado</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="text-left text-sm text-dark-400 border-b border-dark-700/50">
+                <tr className="text-left text-sm text-gray-500 border-b border-gray-200">
                   <th className="px-6 py-4 font-medium">Pedido</th>
                   <th className="px-6 py-4 font-medium">Cliente</th>
                   <th className="px-6 py-4 font-medium">Status</th>
@@ -373,19 +373,19 @@ export default function OrdersPage() {
                 {orders.map((order) => (
                   <tr
                     key={order.id}
-                    className="border-b border-dark-700/30 hover:bg-dark-700/20 transition-colors cursor-pointer"
+                    className="border-b border-gray-200/30 hover:bg-gray-100/20 transition-colors cursor-pointer"
                     onClick={() => setSelectedOrder(order)}
                   >
                     <td className="px-6 py-4">
                       <div>
-                        <p className="font-medium text-white">{order.name}</p>
-                        <p className="text-xs text-dark-400">{formatDate(order.created_at)}</p>
+                        <p className="font-medium text-gray-900">{order.name}</p>
+                        <p className="text-xs text-gray-500">{formatDate(order.created_at)}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div>
-                        <p className="text-white">{order.customer.name}</p>
-                        <p className="text-xs text-dark-400">{order.customer.email}</p>
+                        <p className="text-gray-900">{order.customer.name}</p>
+                        <p className="text-xs text-gray-500">{order.customer.email}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -395,15 +395,15 @@ export default function OrdersPage() {
                       <StatusBadge status={order.fulfillment_status} type="fulfillment" />
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <p className="font-medium text-white">{formatCurrency(order.total_price)}</p>
-                      <p className="text-xs text-dark-400">{order.line_items_count} itens</p>
+                      <p className="font-medium text-gray-900">{formatCurrency(order.total_price)}</p>
+                      <p className="text-xs text-gray-500">{order.line_items_count} itens</p>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}
-                        className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                       >
-                        <Eye className="w-4 h-4 text-dark-400" />
+                        <Eye className="w-4 h-4 text-gray-500" />
                       </button>
                     </td>
                   </tr>

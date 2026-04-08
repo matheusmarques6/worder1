@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useStoreStore } from '@/stores'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Settings, Smartphone, Key, QrCode, Check, X, Loader2, Eye, EyeOff,
@@ -32,6 +33,7 @@ interface Instance {
 }
 
 export default function WhatsAppSettingsPage() {
+  const { currentStore } = useStoreStore()
   const [activeTab, setActiveTab] = useState<'meta' | 'instances'>('meta')
   
   // Meta API State
@@ -120,6 +122,7 @@ export default function WhatsAppSettingsPage() {
         body: JSON.stringify({
           action: 'create',
           organization_id: 'default',
+          store_id: currentStore?.id,
           title: newInstanceTitle,
           api_type: 'EVOLUTION',
           api_url: evolutionUrl,
@@ -144,7 +147,7 @@ export default function WhatsAppSettingsPage() {
       const res = await fetch('/api/whatsapp/instances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'qr', id: instanceId })
+        body: JSON.stringify({ action: 'qr', instance_id: instanceId })
       })
       const data = await res.json()
       
@@ -168,7 +171,7 @@ export default function WhatsAppSettingsPage() {
     if (!confirm('Tem certeza que deseja excluir esta instância?')) return
 
     try {
-      await fetch(`/api/whatsapp/instances?id=${instanceId}`, { method: 'DELETE' })
+      await fetch(`/api/whatsapp/instances?id=${instanceId}&organization_id=default`, { method: 'DELETE' })
       setInstances(instances.filter(i => i.id !== instanceId))
     } catch (e) {
       console.error('Error deleting instance:', e)
@@ -181,15 +184,15 @@ export default function WhatsAppSettingsPage() {
     : ''
 
   return (
-    <div className="min-h-screen bg-slate-950 p-6">
+    <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
             <Settings className="w-7 h-7 text-violet-400" />
             Configurações WhatsApp
           </h1>
-          <p className="text-slate-400 mt-1">Configure suas integrações e automações</p>
+          <p className="text-gray-500 mt-1">Configure suas integrações e automações</p>
         </div>
 
         {/* Tabs */}
@@ -204,7 +207,7 @@ export default function WhatsAppSettingsPage() {
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
                 activeTab === tab.id
                   ? 'bg-violet-600 text-white'
-                  : 'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-800'
+                  : 'bg-gray-50 text-gray-500 hover:text-white hover:bg-gray-100'
               }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -222,54 +225,54 @@ export default function WhatsAppSettingsPage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="bg-slate-900/50 rounded-2xl border border-slate-800/50 p-6"
+              className="bg-white rounded-2xl border border-slate-800/50 p-6"
             >
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-3 bg-green-500/20 rounded-xl">
                   <Globe className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Meta WhatsApp Business API</h2>
-                  <p className="text-sm text-slate-400">Conexão oficial via Meta Business Suite</p>
+                  <h2 className="text-lg font-semibold text-gray-900">Meta WhatsApp Business API</h2>
+                  <p className="text-sm text-gray-500">Conexão oficial via Meta Business Suite</p>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Phone Number ID</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Phone Number ID</label>
                   <input
                     type="text"
                     value={metaConfig.phone_number_id}
                     onChange={e => setMetaConfig({ ...metaConfig, phone_number_id: e.target.value })}
                     placeholder="Ex: 123456789012345"
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
+                    className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">WABA ID (Business Account)</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">WABA ID (Business Account)</label>
                   <input
                     type="text"
                     value={metaConfig.waba_id}
                     onChange={e => setMetaConfig({ ...metaConfig, waba_id: e.target.value })}
                     placeholder="Ex: 123456789012345"
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
+                    className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Access Token</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Access Token</label>
                   <div className="relative">
                     <input
                       type={showToken ? 'text' : 'password'}
                       value={metaConfig.access_token}
                       onChange={e => setMetaConfig({ ...metaConfig, access_token: e.target.value })}
                       placeholder="EAAxxxxxxxx..."
-                      className="w-full px-4 py-3 pr-12 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
+                      className="w-full px-4 py-3 pr-12 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
                     />
                     <button
                       onClick={() => setShowToken(!showToken)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
                     >
                       {showToken ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
@@ -277,28 +280,28 @@ export default function WhatsAppSettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Webhook URL</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Webhook URL</label>
                   <div className="flex gap-2">
                     <input
                       type="text"
                       value={webhookUrl}
                       readOnly
-                      className="flex-1 px-4 py-3 bg-slate-800/30 border border-slate-700/50 rounded-xl text-slate-400"
+                      className="flex-1 px-4 py-3 bg-gray-100/30 border border-slate-700/50 rounded-xl text-gray-500"
                     />
                     <button
                       onClick={() => navigator.clipboard.writeText(webhookUrl)}
-                      className="px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-slate-400 hover:text-white"
+                      className="px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-500 hover:text-white"
                     >
                       <Copy className="w-5 h-5" />
                     </button>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">Configure este URL no Meta Business Suite</p>
+                  <p className="text-xs text-gray-400 mt-1">Configure este URL no Meta Business Suite</p>
                 </div>
 
                 <button
                   onClick={saveMetaConfig}
                   disabled={metaLoading}
-                  className="w-full py-3 bg-green-600 text-white font-medium rounded-xl hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-green-600 text-gray-900 font-medium rounded-xl hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {metaLoading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -328,55 +331,55 @@ export default function WhatsAppSettingsPage() {
               {!showNewInstance ? (
                 <button
                   onClick={() => setShowNewInstance(true)}
-                  className="w-full p-4 border-2 border-dashed border-slate-700/50 rounded-2xl text-slate-400 hover:text-white hover:border-violet-500/50 flex items-center justify-center gap-2 transition-colors"
+                  className="w-full p-4 border-2 border-dashed border-slate-700/50 rounded-2xl text-gray-500 hover:text-white hover:border-violet-500/50 flex items-center justify-center gap-2 transition-colors"
                 >
                   <Plus className="w-5 h-5" />
                   Adicionar Conexão QR Code
                 </button>
               ) : (
-                <div className="bg-slate-900/50 rounded-2xl border border-slate-800/50 p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">Nova Conexão</h3>
+                <div className="bg-white rounded-2xl border border-slate-800/50 p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Nova Conexão</h3>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Nome da Instância</label>
+                      <label className="block text-sm font-medium text-gray-600 mb-2">Nome da Instância</label>
                       <input
                         type="text"
                         value={newInstanceTitle}
                         onChange={e => setNewInstanceTitle(e.target.value)}
                         placeholder="Ex: WhatsApp Principal"
-                        className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
+                        className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Evolution API URL</label>
+                      <label className="block text-sm font-medium text-gray-600 mb-2">Evolution API URL</label>
                       <input
                         type="text"
                         value={evolutionUrl}
                         onChange={e => setEvolutionUrl(e.target.value)}
                         placeholder="Ex: https://evolution.seudominio.com"
-                        className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
+                        className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Evolution API Key</label>
+                      <label className="block text-sm font-medium text-gray-600 mb-2">Evolution API Key</label>
                       <input
                         type="password"
                         value={evolutionKey}
                         onChange={e => setEvolutionKey(e.target.value)}
                         placeholder="Sua API Key"
-                        className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
+                        className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
                       />
                     </div>
                     <div className="flex gap-2">
                       <button
                         onClick={() => setShowNewInstance(false)}
-                        className="flex-1 py-3 bg-slate-800/50 text-slate-300 font-medium rounded-xl hover:bg-slate-800"
+                        className="flex-1 py-3 bg-gray-50 text-gray-600 font-medium rounded-xl hover:bg-gray-100"
                       >
                         Cancelar
                       </button>
                       <button
                         onClick={createInstance}
-                        className="flex-1 py-3 bg-violet-600 text-white font-medium rounded-xl hover:bg-violet-700"
+                        className="flex-1 py-3 bg-violet-600 text-gray-900 font-medium rounded-xl hover:bg-violet-700"
                       >
                         Criar Instância
                       </button>
@@ -391,25 +394,25 @@ export default function WhatsAppSettingsPage() {
                   <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
                 </div>
               ) : instances.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-gray-400">
                   <QrCode className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p>Nenhuma instância configurada</p>
                 </div>
               ) : (
                 instances.map(instance => (
-                  <div key={instance.id} className="bg-slate-900/50 rounded-2xl border border-slate-800/50 p-6">
+                  <div key={instance.id} className="bg-white rounded-2xl border border-slate-800/50 p-6">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <div className={`p-3 rounded-xl ${instance.status === 'ACTIVE' ? 'bg-green-500/20' : 'bg-slate-800/50'}`}>
+                        <div className={`p-3 rounded-xl ${instance.status === 'ACTIVE' ? 'bg-green-500/20' : 'bg-gray-50'}`}>
                           {instance.status === 'ACTIVE' ? (
                             <Wifi className="w-6 h-6 text-green-400" />
                           ) : (
-                            <WifiOff className="w-6 h-6 text-slate-400" />
+                            <WifiOff className="w-6 h-6 text-gray-500" />
                           )}
                         </div>
                         <div>
-                          <h3 className="font-semibold text-white">{instance.title}</h3>
-                          <p className="text-sm text-slate-400">
+                          <h3 className="font-semibold text-gray-900">{instance.title}</h3>
+                          <p className="text-sm text-gray-500">
                             {instance.phone_number || instance.unique_id}
                           </p>
                         </div>
@@ -420,13 +423,13 @@ export default function WhatsAppSettingsPage() {
                             ? 'bg-green-500/20 text-green-400' 
                             : instance.status === 'GENERATING'
                               ? 'bg-yellow-500/20 text-yellow-400'
-                              : 'bg-slate-700/50 text-slate-400'
+                              : 'bg-gray-200/50 text-gray-500'
                         }`}>
                           {instance.status}
                         </span>
                         <button
                           onClick={() => deleteInstance(instance.id)}
-                          className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg"
+                          className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -449,7 +452,7 @@ export default function WhatsAppSettingsPage() {
                           <button
                             onClick={() => generateQR(instance.id)}
                             disabled={qrLoading === instance.id}
-                            className="w-full py-3 bg-violet-600 text-white font-medium rounded-xl hover:bg-violet-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="w-full py-3 bg-violet-600 text-gray-900 font-medium rounded-xl hover:bg-violet-700 disabled:opacity-50 flex items-center justify-center gap-2"
                           >
                             {qrLoading === instance.id ? (
                               <Loader2 className="w-5 h-5 animate-spin" />

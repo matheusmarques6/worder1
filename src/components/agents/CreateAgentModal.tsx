@@ -520,8 +520,8 @@ export default function CreateAgentModal({
         return (
           <div className="space-y-4">
             <div>
-              <h4 className="text-white font-medium mb-1">Escolha um template</h4>
-              <p className="text-sm text-dark-400">Comece com uma configuração pré-definida ou personalize do zero</p>
+              <h4 className="text-gray-900 font-medium mb-1">Escolha um template</h4>
+              <p className="text-sm text-gray-500">Comece com uma configuração pré-definida ou personalize do zero</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               {templates.map((template) => (
@@ -530,13 +530,13 @@ export default function CreateAgentModal({
                   onClick={() => handleSelectTemplate(template.id)}
                   className={`flex flex-col items-start p-4 rounded-xl border transition-all text-left ${
                     selectedTemplate === template.id
-                      ? 'bg-primary-500/10 border-primary-500/50'
-                      : 'bg-dark-900/50 border-dark-700/50 hover:bg-dark-900 hover:border-dark-600'
+                      ? 'bg-brand-50 border-brand-400'
+                      : 'bg-gray-50 border-gray-200 hover:bg-white hover:border-gray-300'
                   }`}
                 >
                   <span className="text-2xl mb-2">{template.icon}</span>
-                  <span className="text-white font-medium">{template.name}</span>
-                  <span className="text-xs text-dark-400 mt-1">{template.description}</span>
+                  <span className="text-gray-900 font-medium">{template.name}</span>
+                  <span className="text-xs text-gray-500 mt-1">{template.description}</span>
                 </button>
               ))}
             </div>
@@ -548,21 +548,21 @@ export default function CreateAgentModal({
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">Nome do Agente *</label>
+                <label className="block text-sm font-medium text-gray-600 mb-2">Nome do Agente *</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ex: Assistente de Vendas"
-                  className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-brand-400"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">Idioma</label>
+                <label className="block text-sm font-medium text-gray-600 mb-2">Idioma</label>
                 <select
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white focus:outline-none focus:border-primary-500/50"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-brand-400"
                 >
                   <option value="pt-BR">Português (Brasil)</option>
                   <option value="en">English</option>
@@ -572,22 +572,22 @@ export default function CreateAgentModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Papel e Personalidade
-                <span className="text-dark-500 font-normal ml-2">({roleDescription.length}/1500)</span>
+                <span className="text-gray-400 font-normal ml-2">({roleDescription.length}/1500)</span>
               </label>
               <textarea
                 value={roleDescription}
                 onChange={(e) => setRoleDescription(e.target.value.slice(0, 1500))}
                 placeholder="Descreva quem é o agente, sua função e personalidade..."
                 rows={4}
-                className="w-full px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder:text-dark-500 resize-none focus:outline-none focus:border-primary-500/50"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 resize-none focus:outline-none focus:border-brand-400"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">Tom de Voz</label>
+                <label className="block text-sm font-medium text-gray-600 mb-2">Tom de Voz</label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { value: 'casual', label: 'Casual', desc: 'Relaxado' },
@@ -599,8 +599,8 @@ export default function CreateAgentModal({
                       onClick={() => setTone(t.value as any)}
                       className={`p-3 rounded-xl border text-center transition-all ${
                         tone === t.value
-                          ? 'bg-primary-500/10 border-primary-500/50 text-primary-400'
-                          : 'bg-dark-900/50 border-dark-700/50 text-dark-400 hover:text-white'
+                          ? 'bg-brand-50 border-brand-400 text-brand-600'
+                          : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-white'
                       }`}
                     >
                       <div className="text-sm font-medium">{t.label}</div>
@@ -610,7 +610,7 @@ export default function CreateAgentModal({
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">Tamanho das Respostas</label>
+                <label className="block text-sm font-medium text-gray-600 mb-2">Tamanho das Respostas</label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { value: 'short', label: 'Curto', desc: '100-200' },
@@ -622,8 +622,8 @@ export default function CreateAgentModal({
                       onClick={() => setResponseLength(r.value as any)}
                       className={`p-3 rounded-xl border text-center transition-all ${
                         responseLength === r.value
-                          ? 'bg-primary-500/10 border-primary-500/50 text-primary-400'
-                          : 'bg-dark-900/50 border-dark-700/50 text-dark-400 hover:text-white'
+                          ? 'bg-brand-50 border-brand-400 text-brand-600'
+                          : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-white'
                       }`}
                     >
                       <div className="text-sm font-medium">{r.label}</div>
@@ -636,11 +636,11 @@ export default function CreateAgentModal({
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-dark-300 flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-600 flex items-center gap-2">
                   <Clock className="w-4 h-4" />
                   Pausa antes de responder
                 </label>
-                <span className="text-sm text-primary-400">{replyDelay}s</span>
+                <span className="text-sm text-brand-600">{replyDelay}s</span>
               </div>
               <input
                 type="range"
@@ -648,20 +648,20 @@ export default function CreateAgentModal({
                 max="30"
                 value={replyDelay}
                 onChange={(e) => setReplyDelay(parseInt(e.target.value))}
-                className="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary-500"
               />
-              <p className="text-xs text-dark-500 mt-1">Aguarda novas mensagens antes de responder</p>
+              <p className="text-xs text-gray-400 mt-1">Aguarda novas mensagens antes de responder</p>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-dark-300">
+                <label className="text-sm font-medium text-gray-600">
                   Diretrizes ({guidelines.filter(g => g.trim()).length}/50)
                 </label>
                 <button
                   onClick={addGuideline}
                   disabled={guidelines.length >= 50}
-                  className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                  className="text-xs text-brand-600 hover:text-brand-500 flex items-center gap-1"
                 >
                   <Plus className="w-3 h-3" />
                   Adicionar
@@ -675,11 +675,11 @@ export default function CreateAgentModal({
                       value={g}
                       onChange={(e) => updateGuideline(i, e.target.value)}
                       placeholder={`Diretriz ${i + 1}...`}
-                      className="flex-1 px-3 py-2 bg-dark-900/50 border border-dark-700/50 rounded-lg text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50"
+                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-brand-400"
                     />
                     <button
                       onClick={() => removeGuideline(i)}
-                      className="p-2 text-dark-500 hover:text-red-400"
+                      className="p-2 text-gray-400 hover:text-red-400"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -694,7 +694,7 @@ export default function CreateAgentModal({
         return (
           <div className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">Provedor de IA</label>
+              <label className="block text-sm font-medium text-gray-600 mb-2">Provedor de IA</label>
               <div className="flex gap-2 flex-wrap">
                 {providers.map((p) => (
                   <button
@@ -706,8 +706,8 @@ export default function CreateAgentModal({
                     }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium capitalize border transition-colors ${
                       provider === p
-                        ? providerColors[p] || 'bg-primary-500/20 text-primary-400 border-primary-500/30'
-                        : 'bg-dark-900/50 text-dark-400 border-dark-700/50 hover:text-white'
+                        ? providerColors[p] || 'bg-brand-100 text-brand-600 border-brand-300'
+                        : 'bg-gray-50 text-gray-500 border-gray-200 hover:text-white'
                     }`}
                   >
                     {p}
@@ -724,10 +724,10 @@ export default function CreateAgentModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">Modelo</label>
+              <label className="block text-sm font-medium text-gray-600 mb-2">Modelo</label>
               {loadingModels ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-primary-400 animate-spin" />
+                  <Loader2 className="w-6 h-6 text-brand-600 animate-spin" />
                 </div>
               ) : (
                 <div className="grid gap-2 max-h-40 overflow-y-auto">
@@ -736,8 +736,8 @@ export default function CreateAgentModal({
                       key={m.id}
                       className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
                         model === m.id
-                          ? 'bg-primary-500/10 border border-primary-500/30'
-                          : 'bg-dark-900/50 border border-transparent hover:bg-dark-900'
+                          ? 'bg-brand-50 border border-brand-300'
+                          : 'bg-gray-50 border border-transparent hover:bg-white'
                       }`}
                     >
                       <input
@@ -748,12 +748,12 @@ export default function CreateAgentModal({
                         onChange={() => setModel(m.id)}
                         className="sr-only"
                       />
-                      <Brain className={`w-4 h-4 ${model === m.id ? 'text-primary-400' : 'text-dark-500'}`} />
+                      <Brain className={`w-4 h-4 ${model === m.id ? 'text-brand-600' : 'text-gray-400'}`} />
                       <div className="flex-1">
-                        <p className="text-sm text-white">{m.display_name || m.name}</p>
-                        {m.description && <p className="text-xs text-dark-500">{m.description}</p>}
+                        <p className="text-sm text-gray-700">{m.display_name || m.name}</p>
+                        {m.description && <p className="text-xs text-gray-400">{m.description}</p>}
                       </div>
-                      {model === m.id && <Check className="w-4 h-4 text-primary-400" />}
+                      {model === m.id && <Check className="w-4 h-4 text-brand-600" />}
                     </label>
                   ))}
                 </div>
@@ -762,8 +762,8 @@ export default function CreateAgentModal({
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-dark-300">Temperatura</label>
-                <span className="text-sm text-primary-400">{temperature}</span>
+                <label className="text-sm font-medium text-gray-600">Temperatura</label>
+                <span className="text-sm text-brand-600">{temperature}</span>
               </div>
               <input
                 type="range"
@@ -772,16 +772,16 @@ export default function CreateAgentModal({
                 step="0.1"
                 value={temperature}
                 onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                className="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary-500"
               />
-              <div className="flex justify-between text-xs text-dark-500 mt-1">
+              <div className="flex justify-between text-xs text-gray-400 mt-1">
                 <span>Preciso</span>
                 <span>Criativo</span>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Prompt do Sistema (opcional)
               </label>
               <textarea
@@ -789,7 +789,7 @@ export default function CreateAgentModal({
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 placeholder="Instruções adicionais para o modelo..."
                 rows={3}
-                className="w-full px-4 py-3 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder:text-dark-500 resize-none focus:outline-none focus:border-primary-500/50"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 resize-none focus:outline-none focus:border-brand-400"
               />
             </div>
           </div>
@@ -799,11 +799,11 @@ export default function CreateAgentModal({
         return (
           <div className="space-y-4">
             <div>
-              <h4 className="text-white font-medium mb-1">Base de Conhecimento</h4>
-              <p className="text-sm text-dark-400">Adicione informações que o agente usará para responder</p>
+              <h4 className="text-gray-900 font-medium mb-1">Base de Conhecimento</h4>
+              <p className="text-sm text-gray-500">Adicione informações que o agente usará para responder</p>
             </div>
 
-            <div className="p-4 bg-dark-900/50 border border-dark-700/50 rounded-xl space-y-3">
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
               <div className="flex gap-2">
                 {[
                   { type: 'text', label: 'Texto', icon: Type },
@@ -815,8 +815,8 @@ export default function CreateAgentModal({
                     onClick={() => setNewSourceType(t.type as any)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
                       newSourceType === t.type
-                        ? 'bg-primary-500/20 text-primary-400'
-                        : 'text-dark-400 hover:text-white'
+                        ? 'bg-brand-100 text-brand-600'
+                        : 'text-gray-500 hover:text-white'
                     }`}
                   >
                     <t.icon className="w-4 h-4" />
@@ -830,7 +830,7 @@ export default function CreateAgentModal({
                 value={newSourceName}
                 onChange={(e) => setNewSourceName(e.target.value)}
                 placeholder="Nome da fonte (ex: FAQ, Produtos, Políticas)"
-                className="w-full px-3 py-2 bg-dark-800 border border-dark-700/50 rounded-lg text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50"
+                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-brand-400"
               />
 
               {newSourceType === 'text' && (
@@ -840,7 +840,7 @@ export default function CreateAgentModal({
                   placeholder="Cole o texto aqui (até 5.000 caracteres)"
                   rows={3}
                   maxLength={5000}
-                  className="w-full px-3 py-2 bg-dark-800 border border-dark-700/50 rounded-lg text-sm text-white placeholder:text-dark-500 resize-none focus:outline-none focus:border-primary-500/50"
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 placeholder:text-gray-400 resize-none focus:outline-none focus:border-brand-400"
                 />
               )}
 
@@ -850,7 +850,7 @@ export default function CreateAgentModal({
                   value={newSourceContent}
                   onChange={(e) => setNewSourceContent(e.target.value)}
                   placeholder="https://exemplo.com/pagina"
-                  className="w-full px-3 py-2 bg-dark-800 border border-dark-700/50 rounded-lg text-sm text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50"
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-brand-400"
                 />
               )}
 
@@ -865,7 +865,7 @@ export default function CreateAgentModal({
                   />
                   <label
                     htmlFor="source-file"
-                    className="flex items-center gap-2 px-4 py-2 bg-dark-800 border border-dashed border-dark-600 rounded-lg cursor-pointer hover:border-primary-500/50 text-sm text-dark-400"
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-brand-400 text-sm text-gray-500"
                   >
                     <Upload className="w-4 h-4" />
                     {newSourceFile ? newSourceFile.name : 'Selecionar arquivo (PDF, DOC, DOCX)'}
@@ -876,7 +876,7 @@ export default function CreateAgentModal({
               <button
                 onClick={addSource}
                 disabled={!newSourceName.trim() || (newSourceType !== 'file' && !newSourceContent.trim())}
-                className="w-full py-2 bg-primary-500/20 hover:bg-primary-500/30 disabled:bg-dark-700 text-primary-400 disabled:text-dark-500 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2 bg-brand-100 hover:bg-primary-500/30 disabled:bg-gray-100 text-brand-600 disabled:text-gray-400 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 Adicionar Fonte
@@ -885,19 +885,19 @@ export default function CreateAgentModal({
 
             {sources.length > 0 && (
               <div className="space-y-2">
-                <p className="text-sm text-dark-400">{sources.length} fonte(s) adicionada(s)</p>
+                <p className="text-sm text-gray-500">{sources.length} fonte(s) adicionada(s)</p>
                 {sources.map((source) => (
                   <div
                     key={source.id}
-                    className="flex items-center justify-between p-3 bg-dark-900/50 border border-dark-700/50 rounded-lg"
+                    className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg"
                   >
                     <div className="flex items-center gap-3">
                       {source.type === 'text' && <Type className="w-4 h-4 text-blue-400" />}
                       {source.type === 'url' && <Globe className="w-4 h-4 text-green-400" />}
                       {source.type === 'file' && <FileText className="w-4 h-4 text-orange-400" />}
                       <div>
-                        <p className="text-sm text-white">{source.name}</p>
-                        <p className="text-xs text-dark-500">
+                        <p className="text-sm text-gray-700">{source.name}</p>
+                        <p className="text-xs text-gray-400">
                           {source.type === 'text' && `${source.content.length} caracteres`}
                           {source.type === 'url' && source.content}
                           {source.type === 'file' && source.content}
@@ -906,7 +906,7 @@ export default function CreateAgentModal({
                     </div>
                     <button
                       onClick={() => removeSource(source.id)}
-                      className="p-2 text-dark-500 hover:text-red-400"
+                      className="p-2 text-gray-400 hover:text-red-400"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -916,7 +916,7 @@ export default function CreateAgentModal({
             )}
 
             {sources.length === 0 && (
-              <div className="text-center py-8 text-dark-500">
+              <div className="text-center py-8 text-gray-400">
                 <Database className="w-12 h-12 mx-auto mb-2 opacity-30" />
                 <p className="text-sm">Nenhuma fonte adicionada ainda</p>
                 <p className="text-xs">Adicione textos, URLs ou arquivos</p>
@@ -929,14 +929,14 @@ export default function CreateAgentModal({
         return (
           <div className="space-y-4">
             <div>
-              <h4 className="text-white font-medium mb-1">Ações Condicionais</h4>
-              <p className="text-sm text-dark-400">Configure comportamentos automáticos (When → Do)</p>
+              <h4 className="text-gray-900 font-medium mb-1">Ações Condicionais</h4>
+              <p className="text-sm text-gray-500">Configure comportamentos automáticos (When → Do)</p>
             </div>
 
             <button
               onClick={addAction}
               disabled={actions.length >= 20}
-              className="w-full py-3 border-2 border-dashed border-dark-600 hover:border-primary-500/50 rounded-xl text-dark-400 hover:text-primary-400 transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3 border-2 border-dashed border-gray-300 hover:border-brand-400 rounded-xl text-gray-500 hover:text-brand-600 transition-colors flex items-center justify-center gap-2"
             >
               <Plus className="w-5 h-5" />
               Adicionar Ação ({actions.length}/20)
@@ -947,12 +947,12 @@ export default function CreateAgentModal({
                 {actions.map((action) => (
                   <div
                     key={action.id}
-                    className="p-4 bg-dark-900/50 border border-dark-700/50 rounded-xl"
+                    className="p-4 bg-gray-50 border border-gray-200 rounded-xl"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <Zap className={`w-4 h-4 ${action.is_active ? 'text-green-400' : 'text-dark-500'}`} />
-                        <span className="text-white font-medium">{action.name}</span>
+                        <Zap className={`w-4 h-4 ${action.is_active ? 'text-green-400' : 'text-gray-400'}`} />
+                        <span className="text-gray-900 font-medium">{action.name}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
@@ -960,19 +960,19 @@ export default function CreateAgentModal({
                             setEditingAction(action)
                             setShowActionModal(true)
                           }}
-                          className="text-xs text-primary-400 hover:underline"
+                          className="text-xs text-brand-600 hover:underline"
                         >
                           Editar
                         </button>
                         <button
                           onClick={() => removeAction(action.id)}
-                          className="text-dark-500 hover:text-red-400"
+                          className="text-gray-400 hover:text-red-400"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
-                    <div className="text-xs text-dark-400">
+                    <div className="text-xs text-gray-500">
                       <span>{action.conditions.length} condição(ões)</span>
                       <span className="mx-2">→</span>
                       <span>{action.actions.length} ação(ões)</span>
@@ -983,7 +983,7 @@ export default function CreateAgentModal({
             )}
 
             {actions.length === 0 && (
-              <div className="text-center py-8 text-dark-500">
+              <div className="text-center py-8 text-gray-400">
                 <Zap className="w-12 h-12 mx-auto mb-2 opacity-30" />
                 <p className="text-sm">Nenhuma ação configurada</p>
                 <p className="text-xs">Adicione regras de comportamento</p>
@@ -996,60 +996,60 @@ export default function CreateAgentModal({
         return (
           <div className="space-y-4">
             <div>
-              <h4 className="text-white font-medium mb-1">Revisar Configurações</h4>
-              <p className="text-sm text-dark-400">Confira os detalhes antes de criar o agente</p>
+              <h4 className="text-gray-900 font-medium mb-1">Revisar Configurações</h4>
+              <p className="text-sm text-gray-500">Confira os detalhes antes de criar o agente</p>
             </div>
 
             <div className="space-y-3">
-              <div className="p-4 bg-dark-900/50 border border-dark-700/50 rounded-xl">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center">
-                    <Bot className="w-5 h-5 text-primary-400" />
+                    <Bot className="w-5 h-5 text-brand-600" />
                   </div>
                   <div>
-                    <h3 className="font-medium text-white">{name || 'Sem nome'}</h3>
-                    <p className="text-xs text-dark-400">{provider} / {model}</p>
+                    <h3 className="font-medium text-gray-900">{name || 'Sem nome'}</h3>
+                    <p className="text-xs text-gray-500">{provider} / {model}</p>
                   </div>
                 </div>
                 {roleDescription && (
-                  <p className="text-sm text-dark-400 line-clamp-2">{roleDescription}</p>
+                  <p className="text-sm text-gray-500 line-clamp-2">{roleDescription}</p>
                 )}
               </div>
 
-              <div className="p-4 bg-dark-900/50 border border-dark-700/50 rounded-xl">
-                <h4 className="text-sm font-medium text-dark-300 mb-2 flex items-center gap-2">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                <h4 className="text-sm font-medium text-gray-600 mb-2 flex items-center gap-2">
                   <User className="w-4 h-4" />
                   Persona
                 </h4>
                 <div className="flex flex-wrap gap-2">
-                  <span className="text-xs bg-dark-700 text-dark-300 px-2 py-1 rounded-full capitalize">
+                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full capitalize">
                     Tom: {tone}
                   </span>
-                  <span className="text-xs bg-dark-700 text-dark-300 px-2 py-1 rounded-full capitalize">
+                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full capitalize">
                     Respostas: {responseLength}
                   </span>
-                  <span className="text-xs bg-dark-700 text-dark-300 px-2 py-1 rounded-full">
+                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
                     {guidelines.filter(g => g.trim()).length} diretrizes
                   </span>
                 </div>
               </div>
 
-              <div className="p-4 bg-dark-900/50 border border-dark-700/50 rounded-xl">
-                <h4 className="text-sm font-medium text-dark-300 mb-2 flex items-center gap-2">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                <h4 className="text-sm font-medium text-gray-600 mb-2 flex items-center gap-2">
                   <Database className="w-4 h-4" />
                   Conhecimento
                 </h4>
-                <p className="text-sm text-white">
+                <p className="text-sm text-gray-700">
                   {sources.length > 0 ? `${sources.length} fonte(s) configurada(s)` : 'Nenhuma fonte adicionada'}
                 </p>
               </div>
 
-              <div className="p-4 bg-dark-900/50 border border-dark-700/50 rounded-xl">
-                <h4 className="text-sm font-medium text-dark-300 mb-2 flex items-center gap-2">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                <h4 className="text-sm font-medium text-gray-600 mb-2 flex items-center gap-2">
                   <Zap className="w-4 h-4" />
                   Ações
                 </h4>
-                <p className="text-sm text-white">
+                <p className="text-sm text-gray-700">
                   {actions.length > 0 ? `${actions.length} ação(ões) configurada(s)` : 'Nenhuma ação configurada'}
                 </p>
               </div>
@@ -1080,29 +1080,29 @@ export default function CreateAgentModal({
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
           onClick={(e) => e.stopPropagation()}
-          className="bg-dark-800 rounded-2xl w-full max-w-2xl border border-dark-700/50 overflow-hidden flex flex-col max-h-[90vh]"
+          className="bg-white rounded-2xl w-full max-w-2xl border border-gray-200 overflow-hidden flex flex-col max-h-[90vh]"
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-dark-700/50">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center">
-                <Bot className="w-5 h-5 text-primary-400" />
+                <Bot className="w-5 h-5 text-brand-600" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-white">Criar Novo Agente de IA</h2>
-                <p className="text-xs text-dark-400">Passo {currentTabIndex + 1} de {tabs.length}</p>
+                <h2 className="text-lg font-semibold text-gray-900">Criar Novo Agente de IA</h2>
+                <p className="text-xs text-gray-500">Passo {currentTabIndex + 1} de {tabs.length}</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-2 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Progress/Tabs */}
-          <div className="flex items-center gap-1 px-4 py-3 bg-dark-900/50 overflow-x-auto">
+          <div className="flex items-center gap-1 px-4 py-3 bg-gray-50 overflow-x-auto">
             {tabs.map((tab, index) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
@@ -1116,14 +1116,14 @@ export default function CreateAgentModal({
                   disabled={!isClickable}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
                     isActive
-                      ? 'bg-primary-500/20 text-primary-400'
+                      ? 'bg-brand-100 text-brand-600'
                       : isPast
-                      ? 'text-green-400 hover:bg-dark-700'
-                      : 'text-dark-500'
+                      ? 'text-green-400 hover:bg-gray-100'
+                      : 'text-gray-400'
                   }`}
                 >
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
-                    isActive ? 'bg-primary-500 text-white' : isPast ? 'bg-green-500 text-white' : 'bg-dark-700'
+                    isActive ? 'bg-primary-500 text-white' : isPast ? 'bg-green-500 text-white' : 'bg-gray-100'
                   }`}>
                     {isPast ? <Check className="w-3 h-3" /> : index + 1}
                   </div>
@@ -1145,11 +1145,11 @@ export default function CreateAgentModal({
           </div>
 
           {/* Footer */}
-          <div className="flex gap-3 p-4 border-t border-dark-700/50">
+          <div className="flex gap-3 p-4 border-t border-gray-200">
             {currentTabIndex > 0 && (
               <button
                 onClick={goBack}
-                className="flex items-center gap-2 px-4 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
                 Voltar
@@ -1160,7 +1160,7 @@ export default function CreateAgentModal({
               <button
                 onClick={goNext}
                 disabled={!canGoNext()}
-                className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+                className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-200 text-white rounded-xl font-medium transition-colors"
               >
                 Próximo
                 <ChevronRight className="w-4 h-4" />
@@ -1252,36 +1252,36 @@ function ActionModal({ action, onSave, onClose }: ActionModalProps) {
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-dark-800 rounded-2xl w-full max-w-lg border border-dark-700/50 overflow-hidden flex flex-col max-h-[85vh]"
+        className="bg-white rounded-2xl w-full max-w-lg border border-gray-200 overflow-hidden flex flex-col max-h-[85vh]"
       >
-        <div className="flex items-center justify-between p-4 border-b border-dark-700/50">
-          <h3 className="text-lg font-semibold text-white">Configurar Ação</h3>
-          <button onClick={onClose} className="p-2 hover:bg-dark-700 rounded-lg text-dark-400">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Configurar Ação</h3>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">Nome da Ação</label>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Nome da Ação</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ex: Transferir se frustrado"
-              className="w-full px-4 py-2.5 bg-dark-900/50 border border-dark-700/50 rounded-xl text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50"
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-brand-400"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">Quando executar</label>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Quando executar</label>
             <div className="flex gap-2">
               <button
                 onClick={() => setMatchType('all')}
                 className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
                   matchType === 'all'
-                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                    : 'bg-dark-900/50 text-dark-400 border border-dark-700/50'
+                    ? 'bg-brand-100 text-brand-600 border border-brand-300'
+                    : 'bg-gray-50 text-gray-500 border border-gray-200'
                 }`}
               >
                 TODAS as condições
@@ -1290,8 +1290,8 @@ function ActionModal({ action, onSave, onClose }: ActionModalProps) {
                 onClick={() => setMatchType('any')}
                 className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
                   matchType === 'any'
-                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                    : 'bg-dark-900/50 text-dark-400 border border-dark-700/50'
+                    ? 'bg-brand-100 text-brand-600 border border-brand-300'
+                    : 'bg-gray-50 text-gray-500 border border-gray-200'
                 }`}
               >
                 QUALQUER condição
@@ -1300,11 +1300,11 @@ function ActionModal({ action, onSave, onClose }: ActionModalProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">Quando (Condições)</label>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Quando (Condições)</label>
             <div className="space-y-2 mb-2">
               {conditions.map((c, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <span className="text-xs text-dark-500 w-6">{i + 1}.</span>
+                  <span className="text-xs text-gray-400 w-6">{i + 1}.</span>
                   <select
                     value={c.type}
                     onChange={(e) => {
@@ -1312,7 +1312,7 @@ function ActionModal({ action, onSave, onClose }: ActionModalProps) {
                       updated[i].type = e.target.value
                       setConditions(updated)
                     }}
-                    className="flex-1 px-3 py-2 bg-dark-900/50 border border-dark-700/50 rounded-lg text-sm text-white"
+                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700"
                   >
                     <option value="">Selecione...</option>
                     {conditionPresets.map((p) => (
@@ -1330,10 +1330,10 @@ function ActionModal({ action, onSave, onClose }: ActionModalProps) {
                         setConditions(updated)
                       }}
                       placeholder="Valor..."
-                      className="flex-1 px-3 py-2 bg-dark-900/50 border border-dark-700/50 rounded-lg text-sm text-white"
+                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700"
                     />
                   )}
-                  <button onClick={() => removeCondition(i)} className="p-2 text-dark-500 hover:text-red-400">
+                  <button onClick={() => removeCondition(i)} className="p-2 text-gray-400 hover:text-red-400">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -1342,7 +1342,7 @@ function ActionModal({ action, onSave, onClose }: ActionModalProps) {
             <button
               onClick={() => addCondition('')}
               disabled={conditions.length >= 5}
-              className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+              className="text-xs text-brand-600 hover:text-brand-500 flex items-center gap-1"
             >
               <Plus className="w-3 h-3" />
               Adicionar Condição ({conditions.length}/5)
@@ -1350,11 +1350,11 @@ function ActionModal({ action, onSave, onClose }: ActionModalProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-dark-300 mb-2">Então (Ações)</label>
+            <label className="block text-sm font-medium text-gray-600 mb-2">Então (Ações)</label>
             <div className="space-y-2 mb-2">
               {actionsDo.map((a, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <span className="text-xs text-dark-500 w-6">{i + 1}.</span>
+                  <span className="text-xs text-gray-400 w-6">{i + 1}.</span>
                   <select
                     value={a.type}
                     onChange={(e) => {
@@ -1362,7 +1362,7 @@ function ActionModal({ action, onSave, onClose }: ActionModalProps) {
                       updated[i].type = e.target.value
                       setActionsDo(updated)
                     }}
-                    className="flex-1 px-3 py-2 bg-dark-900/50 border border-dark-700/50 rounded-lg text-sm text-white"
+                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700"
                   >
                     <option value="">Selecione...</option>
                     {actionPresets.map((p) => (
@@ -1379,10 +1379,10 @@ function ActionModal({ action, onSave, onClose }: ActionModalProps) {
                         setActionsDo(updated)
                       }}
                       placeholder="Conteúdo..."
-                      className="flex-1 px-3 py-2 bg-dark-900/50 border border-dark-700/50 rounded-lg text-sm text-white"
+                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700"
                     />
                   )}
-                  <button onClick={() => removeActionDo(i)} className="p-2 text-dark-500 hover:text-red-400">
+                  <button onClick={() => removeActionDo(i)} className="p-2 text-gray-400 hover:text-red-400">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -1391,7 +1391,7 @@ function ActionModal({ action, onSave, onClose }: ActionModalProps) {
             <button
               onClick={() => addActionDo('')}
               disabled={actionsDo.length >= 5}
-              className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+              className="text-xs text-brand-600 hover:text-brand-500 flex items-center gap-1"
             >
               <Plus className="w-3 h-3" />
               Adicionar Ação ({actionsDo.length}/5)
@@ -1399,17 +1399,17 @@ function ActionModal({ action, onSave, onClose }: ActionModalProps) {
           </div>
         </div>
 
-        <div className="flex gap-3 p-4 border-t border-dark-700/50">
+        <div className="flex gap-3 p-4 border-t border-gray-200">
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+            className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={handleSave}
             disabled={!name.trim()}
-            className="flex-1 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+            className="flex-1 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-200 text-white rounded-xl font-medium transition-colors"
           >
             Salvar Ação
           </button>

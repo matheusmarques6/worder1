@@ -105,7 +105,7 @@ export default function ChangePasswordPage() {
         {/* Back Link */}
         <Link
           href="/profile"
-          className="inline-flex items-center gap-2 text-dark-400 hover:text-white transition-colors"
+          className="inline-flex items-center gap-2 text-gray-500 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span className="text-sm">Voltar ao Perfil</span>
@@ -113,12 +113,12 @@ export default function ChangePasswordPage() {
 
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-white">Trocar Senha</h1>
-          <p className="text-dark-400 mt-1">Altere sua senha de acesso</p>
+          <h1 className="text-2xl font-bold text-gray-900">Trocar Senha</h1>
+          <p className="text-gray-500 mt-1">Altere sua senha de acesso</p>
         </div>
 
         {/* Form Card */}
-        <div className="bg-dark-900/50 backdrop-blur-xl border border-dark-800 rounded-2xl p-6">
+        <div className="bg-gray-50 backdrop-blur-xl border border-gray-200 rounded-2xl p-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Success Message */}
             {success && (
@@ -146,22 +146,22 @@ export default function ChangePasswordPage() {
 
             {/* Current Password */}
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Senha Atual
               </label>
               <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-500" />
+                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type={showPasswords.current ? 'text' : 'password'}
                   value={formData.currentPassword}
                   onChange={(e) => setFormData({ ...formData, currentPassword: e.target.value })}
-                  className="w-full pl-11 pr-11 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-11 pr-11 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPasswords({ ...showPasswords, current: !showPasswords.current })}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-500 hover:text-dark-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   {showPasswords.current ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -170,22 +170,22 @@ export default function ChangePasswordPage() {
 
             {/* New Password */}
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Nova Senha
               </label>
               <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-500" />
+                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type={showPasswords.new ? 'text' : 'password'}
                   value={formData.newPassword}
                   onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
-                  className="w-full pl-11 pr-11 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                  className="w-full pl-11 pr-11 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-500 hover:text-dark-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   {showPasswords.new ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -199,28 +199,28 @@ export default function ChangePasswordPage() {
 
             {/* Confirm Password */}
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Confirmar Nova Senha
               </label>
               <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-500" />
+                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type={showPasswords.confirm ? 'text' : 'password'}
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className={`w-full pl-11 pr-11 py-3 bg-dark-800 border rounded-xl text-white placeholder-dark-500 focus:outline-none focus:ring-2 transition-all ${
+                  className={`w-full pl-11 pr-11 py-3 bg-white border rounded-xl text-gray-900 placeholder-dark-500 focus:outline-none focus:ring-2 transition-all ${
                     formData.confirmPassword && formData.confirmPassword !== formData.newPassword
                       ? 'border-red-500/50 focus:border-red-500/50 focus:ring-red-500/20'
                       : formData.confirmPassword && formData.confirmPassword === formData.newPassword
                         ? 'border-green-500/50 focus:border-green-500/50 focus:ring-green-500/20'
-                        : 'border-dark-700 focus:border-primary-500/50 focus:ring-primary-500/20'
+                        : 'border-gray-200 focus:border-brand-400 focus:ring-primary-500/20'
                   }`}
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-500 hover:text-dark-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   {showPasswords.confirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -254,9 +254,9 @@ export default function ChangePasswordPage() {
         </div>
 
         {/* Security Tips */}
-        <div className="bg-dark-900/30 border border-dark-800 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-white mb-2">Dicas de Segurança</h3>
-          <ul className="text-xs text-dark-400 space-y-1">
+        <div className="bg-white/30 border border-gray-200 rounded-xl p-4">
+          <h3 className="text-sm font-medium text-gray-900 mb-2">Dicas de Segurança</h3>
+          <ul className="text-xs text-gray-500 space-y-1">
             <li>• Use pelo menos 8 caracteres</li>
             <li>• Combine letras maiúsculas e minúsculas</li>
             <li>• Inclua números e símbolos</li>

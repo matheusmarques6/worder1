@@ -44,14 +44,14 @@ function getRetentionColor(retention: number): string {
   if (retention >= 30) return 'bg-primary-400'
   if (retention >= 20) return 'bg-accent-500'
   if (retention >= 10) return 'bg-accent-400/70'
-  if (retention > 0) return 'bg-dark-500'
-  return 'bg-dark-700'
+  if (retention > 0) return 'bg-gray-300'
+  return 'bg-gray-100'
 }
 
 function getRetentionTextColor(retention: number): string {
   if (retention >= 20) return 'text-white'
-  if (retention > 0) return 'text-dark-300'
-  return 'text-dark-500'
+  if (retention > 0) return 'text-gray-600'
+  return 'text-gray-400'
 }
 
 // =============================================
@@ -79,41 +79,41 @@ export function CohortSection({ data }: CohortSectionProps) {
     <div className="space-y-6">
       {/* KPIs Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 bg-dark-700/30 rounded-xl border border-dark-600/50">
-          <div className="flex items-center gap-2 text-dark-400 text-sm mb-1">
+        <div className="p-4 bg-gray-100/30 rounded-xl border border-gray-300/50">
+          <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
             <Percent className="w-4 h-4" />
             Retenção Mês 1
           </div>
-          <p className="text-2xl font-bold text-white">{summary.avgRetentionMonth1}%</p>
+          <p className="text-2xl font-bold text-gray-900">{summary.avgRetentionMonth1}%</p>
         </div>
         
-        <div className="p-4 bg-dark-700/30 rounded-xl border border-dark-600/50">
-          <div className="flex items-center gap-2 text-dark-400 text-sm mb-1">
+        <div className="p-4 bg-gray-100/30 rounded-xl border border-gray-300/50">
+          <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
             <Percent className="w-4 h-4" />
             Retenção Mês 3
           </div>
-          <p className="text-2xl font-bold text-white">{summary.avgRetentionMonth3}%</p>
+          <p className="text-2xl font-bold text-gray-900">{summary.avgRetentionMonth3}%</p>
         </div>
 
         {summary.bestCohort && (
-          <div className="p-4 bg-primary-500/10 rounded-xl border border-primary-500/30">
-            <div className="flex items-center gap-2 text-primary-400 text-sm mb-1">
+          <div className="p-4 bg-brand-50 rounded-xl border border-brand-300">
+            <div className="flex items-center gap-2 text-brand-600 text-sm mb-1">
               <TrendingUp className="w-4 h-4" />
               Melhor Cohort
             </div>
-            <p className="text-2xl font-bold text-primary-400">
+            <p className="text-2xl font-bold text-brand-600">
               {formatMonth(summary.bestCohort)}
             </p>
           </div>
         )}
 
         {summary.worstCohort && (
-          <div className="p-4 bg-dark-700/30 rounded-xl border border-dark-600/50">
-            <div className="flex items-center gap-2 text-dark-400 text-sm mb-1">
+          <div className="p-4 bg-gray-100/30 rounded-xl border border-gray-300/50">
+            <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
               <TrendingDown className="w-4 h-4" />
               Pior Cohort
             </div>
-            <p className="text-2xl font-bold text-dark-300">
+            <p className="text-2xl font-bold text-gray-600">
               {formatMonth(summary.worstCohort)}
             </p>
           </div>
@@ -121,13 +121,13 @@ export function CohortSection({ data }: CohortSectionProps) {
       </div>
 
       {/* Retention Curve */}
-      <div className="p-4 bg-dark-700/30 rounded-xl border border-dark-600/50">
-        <h4 className="text-sm font-medium text-dark-300 mb-4">Curva de Retenção Média</h4>
+      <div className="p-4 bg-gray-100/30 rounded-xl border border-gray-300/50">
+        <h4 className="text-sm font-medium text-gray-600 mb-4">Curva de Retenção Média</h4>
         <div className="flex items-end gap-2 h-32">
           {retentionCurve.map((retention, index) => (
             <div key={index} className="flex-1 flex flex-col items-center gap-2">
               <div className="w-full flex flex-col items-center">
-                <span className="text-xs text-dark-400 mb-1">
+                <span className="text-xs text-gray-500 mb-1">
                   {retention > 0 ? `${retention.toFixed(0)}%` : '-'}
                 </span>
                 <motion.div
@@ -145,7 +145,7 @@ export function CohortSection({ data }: CohortSectionProps) {
                   }}
                 />
               </div>
-              <span className="text-xs text-dark-500">M{index}</span>
+              <span className="text-xs text-gray-400">M{index}</span>
             </div>
           ))}
         </div>
@@ -154,19 +154,19 @@ export function CohortSection({ data }: CohortSectionProps) {
       {/* Cohort Matrix */}
       {displayMonths.length > 0 && (
         <div>
-          <h4 className="text-sm font-medium text-dark-300 mb-3">Matriz de Retenção</h4>
+          <h4 className="text-sm font-medium text-gray-600 mb-3">Matriz de Retenção</h4>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-left text-xs text-dark-500 uppercase pb-3 pr-4">
+                  <th className="text-left text-xs text-gray-400 uppercase pb-3 pr-4">
                     Cohort
                   </th>
-                  <th className="text-center text-xs text-dark-500 uppercase pb-3 px-2">
+                  <th className="text-center text-xs text-gray-400 uppercase pb-3 px-2">
                     Total
                   </th>
                   {periods.map(period => (
-                    <th key={period} className="text-center text-xs text-dark-500 uppercase pb-3 px-2">
+                    <th key={period} className="text-center text-xs text-gray-400 uppercase pb-3 px-2">
                       M{period}
                     </th>
                   ))}
@@ -178,11 +178,11 @@ export function CohortSection({ data }: CohortSectionProps) {
                   const totalCustomers = cohortData?.[0]?.total || 0
 
                   return (
-                    <tr key={month} className="border-t border-dark-700/30">
-                      <td className="py-2 pr-4 text-dark-300 whitespace-nowrap">
+                    <tr key={month} className="border-t border-gray-200/30">
+                      <td className="py-2 pr-4 text-gray-600 whitespace-nowrap">
                         {formatMonth(month)}
                       </td>
-                      <td className="py-2 px-2 text-center text-dark-400">
+                      <td className="py-2 px-2 text-center text-gray-500">
                         {totalCustomers}
                       </td>
                       {periods.map((period, colIndex) => {
@@ -214,7 +214,7 @@ export function CohortSection({ data }: CohortSectionProps) {
                         if (period > monthsSinceCohort) {
                           return (
                             <td key={period} className="py-2 px-2 text-center">
-                              <div className="inline-flex items-center justify-center w-12 h-8 rounded bg-dark-700/30 text-dark-600 text-xs">
+                              <div className="inline-flex items-center justify-center w-12 h-8 rounded bg-gray-100/30 text-gray-400 text-xs">
                                 -
                               </div>
                             </td>
@@ -249,19 +249,19 @@ export function CohortSection({ data }: CohortSectionProps) {
           <div className="flex items-center justify-center gap-4 mt-4 text-xs">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-primary-500" />
-              <span className="text-dark-400">&gt; 30%</span>
+              <span className="text-gray-500">&gt; 30%</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-accent-500" />
-              <span className="text-dark-400">20-30%</span>
+              <span className="text-gray-500">20-30%</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-accent-400/70" />
-              <span className="text-dark-400">10-20%</span>
+              <span className="text-gray-500">10-20%</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-dark-500" />
-              <span className="text-dark-400">&lt; 10%</span>
+              <div className="w-4 h-4 rounded bg-gray-300" />
+              <span className="text-gray-500">&lt; 10%</span>
             </div>
           </div>
         </div>
@@ -269,32 +269,32 @@ export function CohortSection({ data }: CohortSectionProps) {
 
       {/* Insights */}
       <div className="p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/5 rounded-xl border border-primary-500/20">
-        <h4 className="text-sm font-medium text-white mb-3">💡 Insights</h4>
+        <h4 className="text-sm font-medium text-gray-900 mb-3">💡 Insights</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div className="flex items-start gap-2">
-            <span className="text-primary-400 mt-0.5">→</span>
-            <p className="text-dark-300">
+            <span className="text-brand-600 mt-0.5">→</span>
+            <p className="text-gray-600">
               <strong className="text-white">Retenção no 1º mês</strong> é crítica. 
               Foque em campanhas de segunda compra.
             </p>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-primary-400 mt-0.5">→</span>
-            <p className="text-dark-300">
+            <span className="text-brand-600 mt-0.5">→</span>
+            <p className="text-gray-600">
               <strong className="text-white">Compare cohorts</strong> para identificar 
               o impacto de campanhas ou mudanças.
             </p>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-primary-400 mt-0.5">→</span>
-            <p className="text-dark-300">
+            <span className="text-brand-600 mt-0.5">→</span>
+            <p className="text-gray-600">
               <strong className="text-white">Retenção estável</strong> após 3 meses 
               indica clientes leais.
             </p>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-primary-400 mt-0.5">→</span>
-            <p className="text-dark-300">
+            <span className="text-brand-600 mt-0.5">→</span>
+            <p className="text-gray-600">
               <strong className="text-white">Queda brusca</strong> entre meses indica 
               problema de experiência.
             </p>
@@ -305,13 +305,13 @@ export function CohortSection({ data }: CohortSectionProps) {
       {/* Empty state */}
       {displayMonths.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
-          <div className="p-4 rounded-full bg-dark-700/50 mb-4">
-            <Calendar className="w-8 h-8 text-dark-500" />
+          <div className="p-4 rounded-full bg-gray-100 mb-4">
+            <Calendar className="w-8 h-8 text-gray-400" />
           </div>
-          <p className="text-dark-400">
+          <p className="text-gray-500">
             Dados insuficientes para análise de cohort.
           </p>
-          <p className="text-sm text-dark-500 mt-2">
+          <p className="text-sm text-gray-400 mt-2">
             É necessário ter pedidos de pelo menos 2 meses.
           </p>
         </div>

@@ -237,23 +237,23 @@ export default function PermissionsEditor({
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-white border border-gray-200 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-dark-700">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary-500/20 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-primary-400" />
+            <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-brand-600" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Permissões</h2>
-              <p className="text-sm text-dark-400">{agent.name}</p>
+              <h2 className="text-lg font-semibold text-gray-900">Permissões</h2>
+              <p className="text-sm text-gray-500">{agent.name}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-dark-700 text-dark-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -263,13 +263,13 @@ export default function PermissionsEditor({
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {loading ? (
             <div className="flex items-center justify-center h-48">
-              <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+              <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
             </div>
           ) : (
             <>
               {/* Access Level */}
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-3">
+                <label className="block text-sm font-medium text-gray-600 mb-3">
                   Nível de Acesso
                 </label>
                 <div className="grid grid-cols-3 gap-3">
@@ -288,17 +288,17 @@ export default function PermissionsEditor({
                           isSelected
                             ? `border-primary-500 ${config.bgColor}`
                             : isDisabled
-                            ? 'border-dark-700/50 opacity-50 cursor-not-allowed'
-                            : 'border-dark-700/50 hover:border-dark-600'
+                            ? 'border-gray-200 opacity-50 cursor-not-allowed'
+                            : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
                         <div className="flex items-center gap-2 mb-1">
                           <Icon className={`w-4 h-4 ${config.color}`} />
-                          <span className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-dark-300'}`}>
+                          <span className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-gray-600'}`}>
                             {config.label}
                           </span>
                         </div>
-                        <p className="text-xs text-dark-500">{config.description}</p>
+                        <p className="text-xs text-gray-400">{config.description}</p>
                       </button>
                     )
                   })}
@@ -321,18 +321,18 @@ export default function PermissionsEditor({
 
               {/* WhatsApp Permissions */}
               {permissions.access_level === 'agent' && (
-                <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
                   <button
                     onClick={() => toggleSection('whatsapp')}
-                    className="w-full flex items-center justify-between p-4 hover:bg-dark-700/30 transition-colors"
+                    className="w-full flex items-center justify-between p-4 hover:bg-gray-100/30 transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
                         <Phone className="w-4 h-4 text-green-400" />
                       </div>
                       <div className="text-left">
-                        <h3 className="text-white font-medium">WhatsApp</h3>
-                        <p className="text-xs text-dark-400">
+                        <h3 className="text-gray-900 font-medium">WhatsApp</h3>
+                        <p className="text-xs text-gray-500">
                           {permissions.whatsapp_access_all
                             ? 'Acesso a todos os números'
                             : `${permissions.whatsapp_allowed_numbers?.length || 0} números selecionados`}
@@ -340,9 +340,9 @@ export default function PermissionsEditor({
                       </div>
                     </div>
                     {expandedSections.whatsapp ? (
-                      <ChevronDown className="w-5 h-5 text-dark-400" />
+                      <ChevronDown className="w-5 h-5 text-gray-500" />
                     ) : (
-                      <ChevronRight className="w-5 h-5 text-dark-400" />
+                      <ChevronRight className="w-5 h-5 text-gray-500" />
                     )}
                   </button>
 
@@ -352,18 +352,18 @@ export default function PermissionsEditor({
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        className="border-t border-dark-700/50"
+                        className="border-t border-gray-200"
                       >
                         <div className="p-4 space-y-4">
                           {/* Access All Toggle */}
-                          <label className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg cursor-pointer">
+                          <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
                             <div className="flex items-center gap-3">
                               {permissions.whatsapp_access_all ? (
                                 <Unlock className="w-4 h-4 text-green-400" />
                               ) : (
-                                <Lock className="w-4 h-4 text-dark-400" />
+                                <Lock className="w-4 h-4 text-gray-500" />
                               )}
-                              <span className="text-sm text-white">Acesso a todos os números</span>
+                              <span className="text-sm text-gray-700">Acesso a todos os números</span>
                             </div>
                             <input
                               type="checkbox"
@@ -372,16 +372,16 @@ export default function PermissionsEditor({
                                 ...prev,
                                 whatsapp_access_all: e.target.checked,
                               }))}
-                              className="w-5 h-5 rounded bg-dark-700 border-dark-600 text-primary-500 focus:ring-primary-500/50"
+                              className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-primary-500 focus:ring-primary-500/50"
                             />
                           </label>
 
                           {/* Numbers Selection */}
                           {!permissions.whatsapp_access_all && (
                             <div className="space-y-2">
-                              <p className="text-xs text-dark-400 mb-2">Selecione os números que este agente pode acessar:</p>
+                              <p className="text-xs text-gray-500 mb-2">Selecione os números que este agente pode acessar:</p>
                               {whatsappNumbers.length === 0 ? (
-                                <p className="text-sm text-dark-500 text-center py-4">
+                                <p className="text-sm text-gray-400 text-center py-4">
                                   Nenhum número conectado
                                 </p>
                               ) : (
@@ -394,20 +394,20 @@ export default function PermissionsEditor({
                                         className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
                                           isSelected
                                             ? 'bg-green-500/10 border border-green-500/30'
-                                            : 'bg-dark-900/50 border border-transparent hover:bg-dark-900'
+                                            : 'bg-gray-50 border border-transparent hover:bg-white'
                                         }`}
                                       >
                                         <input
                                           type="checkbox"
                                           checked={isSelected}
                                           onChange={() => toggleWhatsAppNumber(number.id)}
-                                          className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-green-500 focus:ring-green-500/50"
+                                          className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-green-500 focus:ring-green-500/50"
                                         />
                                         <div className="flex-1">
-                                          <p className="text-sm text-white">
+                                          <p className="text-sm text-gray-700">
                                             {number.display_name || number.phone_number}
                                           </p>
-                                          <p className="text-xs text-dark-500">
+                                          <p className="text-xs text-gray-400">
                                             {number.phone_number} • {number.provider === 'meta_cloud' ? 'API Oficial' : 'Evolution'}
                                           </p>
                                         </div>
@@ -423,8 +423,8 @@ export default function PermissionsEditor({
                           )}
 
                           {/* Additional Permissions */}
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dark-700/50">
-                            <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer">
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200">
+                            <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={permissions.whatsapp_can_send}
@@ -432,12 +432,12 @@ export default function PermissionsEditor({
                                   ...prev,
                                   whatsapp_can_send: e.target.checked,
                                 }))}
-                                className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                                className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                               />
-                              <Send className="w-4 h-4 text-dark-400" />
-                              <span className="text-sm text-dark-300">Enviar mensagens</span>
+                              <Send className="w-4 h-4 text-gray-500" />
+                              <span className="text-sm text-gray-600">Enviar mensagens</span>
                             </label>
-                            <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer">
+                            <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={permissions.whatsapp_can_transfer}
@@ -445,10 +445,10 @@ export default function PermissionsEditor({
                                   ...prev,
                                   whatsapp_can_transfer: e.target.checked,
                                 }))}
-                                className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                                className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                               />
-                              <ArrowLeftRight className="w-4 h-4 text-dark-400" />
-                              <span className="text-sm text-dark-300">Transferir chats</span>
+                              <ArrowLeftRight className="w-4 h-4 text-gray-500" />
+                              <span className="text-sm text-gray-600">Transferir chats</span>
                             </label>
                           </div>
                         </div>
@@ -460,26 +460,26 @@ export default function PermissionsEditor({
 
               {/* CRM & Pipelines Permissions */}
               {permissions.access_level === 'agent' && (
-                <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
                   <button
                     onClick={() => toggleSection('crm')}
-                    className="w-full flex items-center justify-between p-4 hover:bg-dark-700/30 transition-colors"
+                    className="w-full flex items-center justify-between p-4 hover:bg-gray-100/30 transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
                         <Users className="w-4 h-4 text-purple-400" />
                       </div>
                       <div className="text-left">
-                        <h3 className="text-white font-medium">CRM & Pipelines</h3>
-                        <p className="text-xs text-dark-400">
+                        <h3 className="text-gray-900 font-medium">CRM & Pipelines</h3>
+                        <p className="text-xs text-gray-500">
                           {permissions.can_access_crm ? 'Acesso ao CRM liberado' : 'Sem acesso ao CRM'}
                         </p>
                       </div>
                     </div>
                     {expandedSections.crm ? (
-                      <ChevronDown className="w-5 h-5 text-dark-400" />
+                      <ChevronDown className="w-5 h-5 text-gray-500" />
                     ) : (
-                      <ChevronRight className="w-5 h-5 text-dark-400" />
+                      <ChevronRight className="w-5 h-5 text-gray-500" />
                     )}
                   </button>
 
@@ -489,14 +489,14 @@ export default function PermissionsEditor({
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        className="border-t border-dark-700/50"
+                        className="border-t border-gray-200"
                       >
                         <div className="p-4 space-y-4">
                           {/* CRM Access Toggle */}
-                          <label className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg cursor-pointer">
+                          <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
                             <div className="flex items-center gap-3">
                               <Users className="w-4 h-4 text-purple-400" />
-                              <span className="text-sm text-white">Pode acessar o CRM</span>
+                              <span className="text-sm text-gray-700">Pode acessar o CRM</span>
                             </div>
                             <input
                               type="checkbox"
@@ -505,7 +505,7 @@ export default function PermissionsEditor({
                                 ...prev,
                                 can_access_crm: e.target.checked,
                               }))}
-                              className="w-5 h-5 rounded bg-dark-700 border-dark-600 text-primary-500 focus:ring-primary-500/50"
+                              className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-primary-500 focus:ring-primary-500/50"
                             />
                           </label>
 
@@ -513,7 +513,7 @@ export default function PermissionsEditor({
                             <>
                               {/* CRM Sub-permissions */}
                               <div className="space-y-2 pl-4 border-l-2 border-purple-500/30">
-                                <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer">
+                                <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={permissions.can_access_pipelines}
@@ -521,13 +521,13 @@ export default function PermissionsEditor({
                                       ...prev,
                                       can_access_pipelines: e.target.checked,
                                     }))}
-                                    className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                                    className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                                   />
-                                  <Layers className="w-4 h-4 text-dark-400" />
-                                  <span className="text-sm text-dark-300">Pode acessar Pipelines</span>
+                                  <Layers className="w-4 h-4 text-gray-500" />
+                                  <span className="text-sm text-gray-600">Pode acessar Pipelines</span>
                                 </label>
 
-                                <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer">
+                                <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={permissions.can_create_deals}
@@ -535,13 +535,13 @@ export default function PermissionsEditor({
                                       ...prev,
                                       can_create_deals: e.target.checked,
                                     }))}
-                                    className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                                    className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                                   />
-                                  <Edit className="w-4 h-4 text-dark-400" />
-                                  <span className="text-sm text-dark-300">Pode criar deals</span>
+                                  <Edit className="w-4 h-4 text-gray-500" />
+                                  <span className="text-sm text-gray-600">Pode criar deals</span>
                                 </label>
 
-                                <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer">
+                                <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={permissions.can_manage_tags}
@@ -549,25 +549,25 @@ export default function PermissionsEditor({
                                       ...prev,
                                       can_manage_tags: e.target.checked,
                                     }))}
-                                    className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                                    className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                                   />
-                                  <span className="text-sm text-dark-300">Pode gerenciar tags</span>
+                                  <span className="text-sm text-gray-600">Pode gerenciar tags</span>
                                 </label>
                               </div>
 
                               {/* Pipelines Access */}
                               {permissions.can_access_pipelines && (
-                                <div className="space-y-3 mt-4 pt-4 border-t border-dark-700/50">
-                                  <p className="text-xs text-dark-400">Selecionar pipelines específicas:</p>
+                                <div className="space-y-3 mt-4 pt-4 border-t border-gray-200">
+                                  <p className="text-xs text-gray-500">Selecionar pipelines específicas:</p>
                                   
-                                  <label className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg cursor-pointer">
+                                  <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
                                     <div className="flex items-center gap-3">
                                       {permissions.pipeline_access_all ? (
                                         <Unlock className="w-4 h-4 text-purple-400" />
                                       ) : (
-                                        <Lock className="w-4 h-4 text-dark-400" />
+                                        <Lock className="w-4 h-4 text-gray-500" />
                                       )}
-                                      <span className="text-sm text-white">Acesso a todas as pipelines</span>
+                                      <span className="text-sm text-gray-700">Acesso a todas as pipelines</span>
                                     </div>
                                     <input
                                       type="checkbox"
@@ -576,14 +576,14 @@ export default function PermissionsEditor({
                                         ...prev,
                                         pipeline_access_all: e.target.checked,
                                       }))}
-                                      className="w-5 h-5 rounded bg-dark-700 border-dark-600 text-primary-500 focus:ring-primary-500/50"
+                                      className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-primary-500 focus:ring-primary-500/50"
                                     />
                                   </label>
 
                                   {!permissions.pipeline_access_all && (
                                     <div className="space-y-2">
                                       {pipelines.length === 0 ? (
-                                        <p className="text-sm text-dark-500 text-center py-4">
+                                        <p className="text-sm text-gray-400 text-center py-4">
                                           Nenhuma pipeline criada
                                         </p>
                                       ) : (
@@ -596,19 +596,19 @@ export default function PermissionsEditor({
                                                 className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
                                                   isSelected
                                                     ? 'bg-purple-500/10 border border-purple-500/30'
-                                                    : 'bg-dark-900/50 border border-transparent hover:bg-dark-900'
+                                                    : 'bg-gray-50 border border-transparent hover:bg-white'
                                                 }`}
                                               >
                                                 <input
                                                   type="checkbox"
                                                   checked={isSelected}
                                                   onChange={() => togglePipeline(pipeline.id)}
-                                                  className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-purple-500 focus:ring-purple-500/50"
+                                                  className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-purple-500 focus:ring-purple-500/50"
                                                 />
                                                 <div className="flex-1">
-                                                  <p className="text-sm text-white">{pipeline.name}</p>
+                                                  <p className="text-sm text-gray-700">{pipeline.name}</p>
                                                   {pipeline.stages_count && (
-                                                    <p className="text-xs text-dark-500">
+                                                    <p className="text-xs text-gray-400">
                                                       {pipeline.stages_count} etapas
                                                     </p>
                                                   )}
@@ -621,7 +621,7 @@ export default function PermissionsEditor({
                                     </div>
                                   )}
 
-                                  <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer">
+                                  <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
                                     <input
                                       type="checkbox"
                                       checked={permissions.pipeline_can_edit}
@@ -629,10 +629,10 @@ export default function PermissionsEditor({
                                         ...prev,
                                         pipeline_can_edit: e.target.checked,
                                       }))}
-                                      className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                                      className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                                     />
-                                    <Edit className="w-4 h-4 text-dark-400" />
-                                    <span className="text-sm text-dark-300">Pode editar deals e mover entre etapas</span>
+                                    <Edit className="w-4 h-4 text-gray-500" />
+                                    <span className="text-sm text-gray-600">Pode editar deals e mover entre etapas</span>
                                   </label>
                                 </div>
                               )}
@@ -647,26 +647,26 @@ export default function PermissionsEditor({
 
               {/* Analytics Permissions */}
               {permissions.access_level === 'agent' && (
-                <div className="border border-dark-700/50 rounded-xl overflow-hidden">
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
                   <button
                     onClick={() => toggleSection('analytics')}
-                    className="w-full flex items-center justify-between p-4 hover:bg-dark-700/30 transition-colors"
+                    className="w-full flex items-center justify-between p-4 hover:bg-gray-100/30 transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
                         <Eye className="w-4 h-4 text-blue-400" />
                       </div>
                       <div className="text-left">
-                        <h3 className="text-white font-medium">Analytics</h3>
-                        <p className="text-xs text-dark-400">
+                        <h3 className="text-gray-900 font-medium">Analytics</h3>
+                        <p className="text-xs text-gray-500">
                           {permissions.can_view_analytics ? 'Pode ver relatórios' : 'Sem acesso a analytics'}
                         </p>
                       </div>
                     </div>
                     {expandedSections.analytics ? (
-                      <ChevronDown className="w-5 h-5 text-dark-400" />
+                      <ChevronDown className="w-5 h-5 text-gray-500" />
                     ) : (
-                      <ChevronRight className="w-5 h-5 text-dark-400" />
+                      <ChevronRight className="w-5 h-5 text-gray-500" />
                     )}
                   </button>
 
@@ -676,13 +676,13 @@ export default function PermissionsEditor({
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        className="border-t border-dark-700/50"
+                        className="border-t border-gray-200"
                       >
                         <div className="p-4 space-y-3">
-                          <label className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg cursor-pointer">
+                          <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
                             <div className="flex items-center gap-3">
                               <Eye className="w-4 h-4 text-blue-400" />
-                              <span className="text-sm text-white">Pode ver Analytics</span>
+                              <span className="text-sm text-gray-700">Pode ver Analytics</span>
                             </div>
                             <input
                               type="checkbox"
@@ -691,12 +691,12 @@ export default function PermissionsEditor({
                                 ...prev,
                                 can_view_analytics: e.target.checked,
                               }))}
-                              className="w-5 h-5 rounded bg-dark-700 border-dark-600 text-primary-500 focus:ring-primary-500/50"
+                              className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-primary-500 focus:ring-primary-500/50"
                             />
                           </label>
 
                           {permissions.can_view_analytics && (
-                            <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-dark-900/50 cursor-pointer pl-4 border-l-2 border-blue-500/30">
+                            <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer pl-4 border-l-2 border-blue-500/30">
                               <input
                                 type="checkbox"
                                 checked={permissions.can_view_reports}
@@ -704,9 +704,9 @@ export default function PermissionsEditor({
                                   ...prev,
                                   can_view_reports: e.target.checked,
                                 }))}
-                                className="w-4 h-4 rounded bg-dark-700 border-dark-600 text-primary-500"
+                                className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-primary-500"
                               />
-                              <span className="text-sm text-dark-300">Pode ver relatórios detalhados</span>
+                              <span className="text-sm text-gray-600">Pode ver relatórios detalhados</span>
                             </label>
                           )}
                         </div>
@@ -727,10 +727,10 @@ export default function PermissionsEditor({
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 p-6 border-t border-dark-700">
+        <div className="flex gap-3 p-6 border-t border-gray-200">
           <button
             onClick={onClose}
-            className="flex-1 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl font-medium transition-colors"
+            className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
           >
             Cancelar
           </button>

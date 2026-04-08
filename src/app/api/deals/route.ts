@@ -191,13 +191,13 @@ export async function GET(request: NextRequest) {
     if (contactIds.length > 0) {
       const { data: contacts } = await supabase
         .from('contacts')
-        .select('id, email, first_name, last_name, full_name, avatar_url, company, phone, whatsapp')
+        .select('id, email, first_name, last_name, full_name, avatar_url, company, phone, whatsapp, position, source, lifetime_value, total_spent, total_orders, average_order_value, last_order_at, score, status, type, city, country, tags, is_subscribed_email, is_subscribed_sms, is_subscribed_whatsapp, created_at')
         .in('id', contactIds);
-      contacts?.forEach(c => { 
+      contacts?.forEach(c => {
         contactsMap[c.id] = {
           ...c,
           name: c.full_name || `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email
-        }; 
+        };
       });
     }
 
