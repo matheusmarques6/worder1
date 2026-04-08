@@ -20,6 +20,8 @@ interface PopupDesign {
   formType: 'popup' | 'flyout' | 'fullpage' | 'embed' | 'banner'
   steps: Step[]
   successStep: Step
+  /** Global field styles applied to new inputs and updatable via "Apply to all inputs" */
+  fieldStyles?: Record<string, any>
   styles: {
     width: number; backgroundColor: string; borderRadius: number; padding: number; fontFamily: string
     overlay: { enabled: boolean; color: string; opacity: number; closeOnClick: boolean }
@@ -322,7 +324,7 @@ function BlockPreview({ block }: { block: Block }) {
 }
 
 // ── Block Props Editor (Omnisend-style per-block panels) ──────────────────────
-function BlockEditor({ block, onChange, onDelete, onOpenMedia }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void }) {
+function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void }) {
   const up = (key: string, val: any) => onChange({ ...block, props: { ...block.props, [key]: val } })
   const p = block.props
   const [tab, setTab] = useState<'props' | 'fields' | 'layout'>('props')
@@ -426,7 +428,19 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia }: { block: Block;
         {label}
       </button>
     )
+    const handleApplyToAll = () => {
+      if (!onApplyToAllInputs) return
+      if (confirm('Aplicar estes estilos a TODOS os campos de input do popup? Esta acao nao pode ser desfeita facilmente.')) {
+        onApplyToAllInputs(block)
+      }
+    }
     return <>
+      {onApplyToAllInputs && (
+        <button onClick={handleApplyToAll}
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg transition-colors">
+          Aplicar estes estilos a todos os inputs
+        </button>
+      )}
       <Field label="Estilo">
         <div className="grid grid-cols-2 gap-1.5">
           <button onClick={() => up('inputStyle', 'solid')}
@@ -1148,7 +1162,13 @@ export default function PopupEditorPage() {
   }
 
   const addBlock = (type: string) => {
-    const b: Block = { id: uid(), type, props: { ...(defaultProps[type] || {}) } }
+    // If adding an input and design has global fieldStyles, merge them as seed
+    const INPUT_TYPES = ['email', 'phone', 'name-input', 'text-input', 'date-input']
+    const base = { ...(defaultProps[type] || {}) }
+    if (INPUT_TYPES.includes(type) && design.fieldStyles) {
+      Object.assign(base, design.fieldStyles)
+    }
+    const b: Block = { id: uid(), type, props: base }
     updateBlocks([...activeStep.blocks, b])
     setSelectedBlockId(b.id)
     setRightTab('block')
@@ -1167,6 +1187,35 @@ export default function PopupEditorPage() {
 
   const updateBlock = (block: Block) => updateBlocks(activeStep.blocks.map(b => b.id === block.id ? block : b))
   const deleteBlock = (id: string) => { updateBlocks(activeStep.blocks.filter(b => b.id !== id)); if (selectedBlockId === id) setSelectedBlockId(null) }
+
+  // Apply a source input block's visual styles to all other input blocks across ALL steps
+  const applyStylesToAllInputs = useCallback((sourceBlock: Block) => {
+    const INPUT_TYPES = ['email', 'phone', 'name-input', 'text-input', 'date-input']
+    const STYLE_KEYS = [
+      'inputStyle', 'corners', 'cornerRadius', 'backgroundColor', 'errorColor',
+      'fontFamily', 'fontSize', 'bold', 'italic', 'underline',
+      'textColor', 'placeholderColor', 'labelColor', 'textAlign',
+      'borderWidth', 'borderStyle', 'borderColor',
+      'inputPadTop', 'inputPadRight', 'inputPadBottom', 'inputPadLeft',
+    ]
+    const stylePayload: Record<string, any> = {}
+    for (const k of STYLE_KEYS) {
+      if (sourceBlock.props[k] !== undefined) stylePayload[k] = sourceBlock.props[k]
+    }
+    const patchBlocks = (blocks: Block[]) =>
+      blocks.map(b => INPUT_TYPES.includes(b.type) ? { ...b, props: { ...b.props, ...stylePayload } } : b)
+
+    setDesign(d => {
+      const newDesign = {
+        ...d,
+        steps: d.steps.map(s => ({ ...s, blocks: patchBlocks(s.blocks) })),
+        successStep: { ...d.successStep, blocks: patchBlocks(d.successStep.blocks) },
+        fieldStyles: stylePayload, // store as global defaults for future inputs
+      }
+      pushHistory(newDesign)
+      return newDesign
+    })
+  }, [])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1346,7 +1395,7 @@ export default function PopupEditorPage() {
           </div>
           <div className="flex-1 overflow-y-auto">
             {rightTab === 'block' && selectedBlock && (
-              <div className="p-4"><BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} /></div>
+              <div className="p-4"><BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} /></div>
             )}
             {rightTab === 'block' && !selectedBlock && (
               <div className="p-8 text-center text-sm text-gray-400">Selecione um bloco no canvas</div>
