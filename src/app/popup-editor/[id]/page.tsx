@@ -358,192 +358,289 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
   )
 
   const Toggle = ({ label, checked, onChange: oc }: { label: string; checked: boolean; onChange: (v: boolean) => void }) => (
-    <label className="flex items-center gap-2.5 cursor-pointer py-0.5">
-      <div className={`relative w-9 h-5 rounded-full transition-colors ${checked ? 'bg-emerald-500' : 'bg-gray-200'}`} onClick={() => oc(!checked)}>
+    <label className="flex items-center justify-between gap-3 cursor-pointer py-0.5 w-full">
+      <span className="text-[13px] text-gray-800">{label}</span>
+      <div className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-emerald-500' : 'bg-gray-200'}`} onClick={() => oc(!checked)}>
         <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
       </div>
-      <span className="text-sm text-gray-700">{label}</span>
     </label>
   )
 
-  // Unified input "Input" tab renderer (Omnisend-style)
+  // Labeled field with helper text below — Klaviyo style
+  const LabeledField = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
+    <div>
+      <label className="block text-[12px] font-medium text-gray-800">{label}</label>
+      {hint && <p className="text-[11px] text-gray-400 mt-0.5 mb-1.5 leading-snug">{hint}</p>}
+      <div className={hint ? '' : 'mt-1'}>{children}</div>
+    </div>
+  )
+
+  // Collapsible section with title (plus/chevron icon) — Klaviyo style
+  const Group = ({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) => {
+    const [open, setOpen] = useState(defaultOpen)
+    return (
+      <div className="border-t border-gray-100 first:border-t-0">
+        <button onClick={() => setOpen(!open)} className="flex items-center justify-between w-full py-3 text-[13px] font-semibold text-gray-800 hover:text-gray-900">
+          <span>{title}</span>
+          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? '' : '-rotate-90'}`} />
+        </button>
+        {open && <div className="pb-4 space-y-3">{children}</div>}
+      </div>
+    )
+  }
+
+  // Klaviyo-style clean color field (hex input with color square on right)
+  const CleanColor = ({ label, value, onChange: oc }: { label: string; value: string; onChange: (v: string) => void }) => (
+    <LabeledField label={label}>
+      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500/20">
+        <input type="text" className="flex-1 px-3 py-2 text-[13px] font-mono text-gray-800 outline-none" value={value || ''} onChange={e => oc(e.target.value)} placeholder="#000000" />
+        <label className="relative w-9 h-9 border-l border-gray-200 cursor-pointer flex items-center justify-center flex-shrink-0" style={{ backgroundColor: value || '#FFFFFF' }}>
+          <input type="color" value={value || '#000000'} onChange={e => oc(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+        </label>
+      </div>
+    </LabeledField>
+  )
+
+  // 4-side padding control (compact top/right/bottom/left grid)
+  const PaddingControl = ({ prefix, defaults }: { prefix: 'padding' | 'inputPad'; defaults?: { t?: number; r?: number; b?: number; l?: number } }) => {
+    const keyT = prefix === 'padding' ? 'paddingTop' : 'inputPadTop'
+    const keyR = prefix === 'padding' ? 'paddingRight' : 'inputPadRight'
+    const keyB = prefix === 'padding' ? 'paddingBottom' : 'inputPadBottom'
+    const keyL = prefix === 'padding' ? 'paddingLeft' : 'inputPadLeft'
+    const d = defaults || {}
+    const Num = ({ k, def }: { k: string; def: number }) => (
+      <div className="relative">
+        <input type="number" min={0} max={80}
+          className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-gray-800 text-center outline-none focus:border-brand-500"
+          value={p[k] ?? def} onChange={e => up(k, +e.target.value)} />
+        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span>
+      </div>
+    )
+    return (
+      <div className="grid grid-cols-3 gap-1.5 max-w-[220px] mx-auto">
+        <div />
+        <Num k={keyT} def={d.t ?? 0} />
+        <div />
+        <Num k={keyL} def={d.l ?? 0} />
+        <div className="flex items-center justify-center">
+          <div className="w-6 h-6 rounded-sm bg-gray-100 border border-gray-200" />
+        </div>
+        <Num k={keyR} def={d.r ?? 0} />
+        <div />
+        <Num k={keyB} def={d.b ?? 0} />
+        <div />
+      </div>
+    )
+  }
+
+  // Unified input "Input" tab renderer (Klaviyo-style clean layout)
   const renderInputConfig = () => {
     // Lock email/phone mapping since the type implies the target
     const lockedMap = block.type === 'email' ? 'email' : block.type === 'phone' ? 'phone' : null
-    return <>
-      <Field label="Mapear para campo do perfil">
-        <select className={sel} value={lockedMap || p.mapTo || ''} disabled={!!lockedMap} onChange={e => up('mapTo', e.target.value)}>
-          <option value="">Nao mapear</option>
-          {PROFILE_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-        </select>
-      </Field>
-      {(p.mapTo === 'custom' && !lockedMap) && (
-        <Field label="Nome do campo personalizado">
-          <input className={inp} value={p.mapToCustom || ''} onChange={e => up('mapToCustom', e.target.value)} placeholder="ex: favoriteColor" />
-        </Field>
-      )}
-      <Field label="Placeholder">
-        <input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} />
-      </Field>
-      {block.type === 'phone' && (
-        <Field label="Pais padrao">
-          <select className={sel} value={p.countryCode || '+55'} onChange={e => up('countryCode', e.target.value)}>
-            <option value="+55">Brasil (+55)</option>
-            <option value="+1">EUA (+1)</option>
-            <option value="+351">Portugal (+351)</option>
-            <option value="+44">Reino Unido (+44)</option>
-            <option value="+34">Espanha (+34)</option>
-            <option value="+49">Alemanha (+49)</option>
-            <option value="+33">Franca (+33)</option>
-          </select>
-        </Field>
-      )}
-      <Toggle label="Adicionar label" checked={p.showLabel || false} onChange={v => up('showLabel', v)} />
-      {p.showLabel && <Field label="Texto do label"><input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} /></Field>}
-      <Toggle label="Campo obrigatorio" checked={p.required !== false && block.type === 'email' ? true : !!p.required} onChange={v => up('required', v)} />
-      {p.required && <Field label="Mensagem quando vazio"><input className={inp} value={p.requiredMsg || 'Este campo e obrigatorio'} onChange={e => up('requiredMsg', e.target.value)} /></Field>}
-      {(block.type === 'email' || block.type === 'phone') && (
-        <Field label="Mensagem quando invalido">
-          <input className={inp} value={p.errorMsg || (block.type === 'email' ? 'Email invalido' : 'Telefone invalido')} onChange={e => up('errorMsg', e.target.value)} />
-        </Field>
-      )}
-      <Field label="Alinhamento do bloco"><AlignButtons value={p.align || 'full'} onChange={v => up('align', v)} /></Field>
-      <div className="pt-2 border-t border-gray-100">
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Padding do bloco</p>
-        <div className="grid grid-cols-4 gap-1.5">
-          <Field label="Topo"><input type="number" className={inp} value={p.paddingTop ?? 0} onChange={e => up('paddingTop', +e.target.value)} /></Field>
-          <Field label="Dir"><input type="number" className={inp} value={p.paddingRight ?? 0} onChange={e => up('paddingRight', +e.target.value)} /></Field>
-          <Field label="Baixo"><input type="number" className={inp} value={p.paddingBottom ?? 8} onChange={e => up('paddingBottom', +e.target.value)} /></Field>
-          <Field label="Esq"><input type="number" className={inp} value={p.paddingLeft ?? 0} onChange={e => up('paddingLeft', +e.target.value)} /></Field>
+    return (
+      <div className="space-y-4">
+        {/* Conteudo section */}
+        <div className="space-y-3">
+          <p className="text-[13px] font-semibold text-gray-900">Conteudo</p>
+
+          <LabeledField label="Campo do perfil" hint="Onde o valor deste campo sera salvo no perfil do contato.">
+            <select className={sel} value={lockedMap || p.mapTo || ''} disabled={!!lockedMap} onChange={e => up('mapTo', e.target.value)}>
+              <option value="">Nao mapear</option>
+              {PROFILE_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          </LabeledField>
+
+          {(p.mapTo === 'custom' && !lockedMap) && (
+            <LabeledField label="Nome do campo personalizado" hint="Identificador tecnico salvo em custom_fields.">
+              <input className={inp} value={p.mapToCustom || ''} onChange={e => up('mapToCustom', e.target.value)} placeholder="ex: favoriteColor" />
+            </LabeledField>
+          )}
+
+          <LabeledField label="Placeholder">
+            <input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} placeholder="Texto exibido quando vazio" />
+          </LabeledField>
+
+          {block.type === 'phone' && (
+            <LabeledField label="Pais padrao">
+              <select className={sel} value={p.countryCode || '+55'} onChange={e => up('countryCode', e.target.value)}>
+                <option value="+55">Brasil (+55)</option>
+                <option value="+1">EUA (+1)</option>
+                <option value="+351">Portugal (+351)</option>
+                <option value="+44">Reino Unido (+44)</option>
+                <option value="+34">Espanha (+34)</option>
+                <option value="+49">Alemanha (+49)</option>
+                <option value="+33">Franca (+33)</option>
+              </select>
+            </LabeledField>
+          )}
+
+          <div className="pt-1"><Toggle label="Mostrar label no formulario" checked={p.showLabel || false} onChange={v => up('showLabel', v)} /></div>
+          {p.showLabel && (
+            <LabeledField label="Texto do label">
+              <input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} />
+            </LabeledField>
+          )}
+        </div>
+
+        {/* Validacao section */}
+        <div className="pt-4 border-t border-gray-100 space-y-3">
+          <p className="text-[13px] font-semibold text-gray-900">Validacao</p>
+
+          <Toggle label="Campo obrigatorio" checked={block.type === 'email' ? true : !!p.required} onChange={v => up('required', v)} />
+          {p.required && (
+            <LabeledField label="Mensagem quando vazio" hint="Exibida quando o usuario nao preenche o campo.">
+              <input className={inp} value={p.requiredMsg || 'Este campo e obrigatorio'} onChange={e => up('requiredMsg', e.target.value)} />
+            </LabeledField>
+          )}
+          {(block.type === 'email' || block.type === 'phone') && (
+            <LabeledField label="Mensagem quando invalido" hint="Exibida quando o formato nao corresponde ao esperado.">
+              <input className={inp} value={p.errorMsg || (block.type === 'email' ? 'Email invalido' : 'Telefone invalido')} onChange={e => up('errorMsg', e.target.value)} />
+            </LabeledField>
+          )}
+        </div>
+
+        {/* Layout section */}
+        <div className="pt-4 border-t border-gray-100 space-y-3">
+          <p className="text-[13px] font-semibold text-gray-900">Layout do bloco</p>
+          <LabeledField label="Alinhamento">
+            <AlignButtons value={p.align || 'full'} onChange={v => up('align', v)} />
+          </LabeledField>
+
+          <Group title="Espacamento externo" defaultOpen={false}>
+            <PaddingControl prefix="padding" defaults={{ b: 8 }} />
+          </Group>
         </div>
       </div>
-    </>
+    )
   }
 
-  // Unified "Fields" tab renderer (visual style)
+  // Unified "Fields" tab renderer (Klaviyo-style grouped sections)
   const renderInputFields = () => {
     const CornerBtn = ({ value, label }: { value: string; label: string }) => (
       <button onClick={() => up('corners', value)}
-        className={`flex-1 py-1.5 text-[10px] font-medium ${p.corners === value ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+        className={`flex-1 py-2 text-[11px] font-medium transition-colors ${p.corners === value ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
         {label}
       </button>
     )
     const handleApplyToAll = () => {
       if (!onApplyToAllInputs) return
-      if (confirm('Aplicar estes estilos a TODOS os campos de input do popup? Esta acao nao pode ser desfeita facilmente.')) {
+      if (confirm('Aplicar estes estilos a TODOS os campos de input do popup?')) {
         onApplyToAllInputs(block)
       }
     }
-    return <>
-      {onApplyToAllInputs && (
-        <button onClick={handleApplyToAll}
-          className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg transition-colors">
-          Aplicar estes estilos a todos os inputs
-        </button>
-      )}
-      <Field label="Estilo">
-        <div className="grid grid-cols-2 gap-1.5">
-          <button onClick={() => up('inputStyle', 'solid')}
-            className={`py-2.5 rounded-lg border-2 ${p.inputStyle !== 'underline' ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
-            <div className="w-12 h-4 mx-auto rounded border border-gray-700" />
+    return (
+      <div>
+        {onApplyToAllInputs && (
+          <button onClick={handleApplyToAll}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg transition-colors mb-4">
+            Aplicar estes estilos a todos os inputs
           </button>
-          <button onClick={() => up('inputStyle', 'underline')}
-            className={`py-2.5 rounded-lg border-2 ${p.inputStyle === 'underline' ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
-            <div className="w-12 h-4 mx-auto border-b-2 border-dashed border-gray-700" />
-          </button>
-        </div>
-      </Field>
+        )}
 
-      {p.inputStyle !== 'underline' && (
-        <Field label="Cantos">
-          <div className="flex border border-gray-200 rounded-lg overflow-hidden">
-            <CornerBtn value="none" label="Reto" />
-            <CornerBtn value="small" label="Pequeno" />
-            <CornerBtn value="medium" label="Medio" />
-            <CornerBtn value="large" label="Grande" />
-          </div>
-          {p.corners === 'custom' && (
-            <input type="number" className={inp + ' mt-1'} value={p.cornerRadius || 8} onChange={e => up('cornerRadius', +e.target.value)} min={0} max={50} placeholder="px" />
+        <Group title="Estilo" defaultOpen={true}>
+          <LabeledField label="Tipo de borda">
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => up('inputStyle', 'solid')}
+                className={`py-3 rounded-lg border-2 transition-colors ${p.inputStyle !== 'underline' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                <div className="w-12 h-4 mx-auto rounded border border-gray-700" />
+              </button>
+              <button onClick={() => up('inputStyle', 'underline')}
+                className={`py-3 rounded-lg border-2 transition-colors ${p.inputStyle === 'underline' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                <div className="w-12 h-4 mx-auto border-b-2 border-dashed border-gray-700" />
+              </button>
+            </div>
+          </LabeledField>
+
+          {p.inputStyle !== 'underline' && (
+            <LabeledField label="Cantos">
+              <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+                <CornerBtn value="none" label="Reto" />
+                <CornerBtn value="small" label="Peq" />
+                <CornerBtn value="medium" label="Med" />
+                <CornerBtn value="large" label="Grd" />
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <input type="number" className="flex-1 px-2 py-1.5 border border-gray-200 rounded-md text-[12px] outline-none focus:border-brand-500"
+                  value={p.cornerRadius ?? 8} onChange={e => { up('cornerRadius', +e.target.value); up('corners', 'custom') }} min={0} max={50} placeholder="Personalizado" />
+                <span className="text-[11px] text-gray-400">px</span>
+              </div>
+            </LabeledField>
           )}
-          <button onClick={() => up('corners', 'custom')} className={`mt-1 w-full text-[10px] ${p.corners === 'custom' ? 'text-brand-600 font-semibold' : 'text-gray-400'}`}>
-            Personalizado
-          </button>
-        </Field>
-      )}
+        </Group>
 
-      <ColorField label="Cor de fundo" value={p.backgroundColor || '#FFFFFF'} onChange={v => up('backgroundColor', v)} />
-      <ColorField label="Cor de erro" value={p.errorColor || '#EF4444'} onChange={v => up('errorColor', v)} />
+        <Group title="Cores" defaultOpen={true}>
+          <CleanColor label="Cor de fundo" value={p.backgroundColor || '#FFFFFF'} onChange={v => up('backgroundColor', v)} />
+          <CleanColor label="Cor do texto" value={p.textColor || '#111827'} onChange={v => up('textColor', v)} />
+          <CleanColor label="Cor do placeholder" value={p.placeholderColor || '#9CA3AF'} onChange={v => up('placeholderColor', v)} />
+          <CleanColor label="Cor do label" value={p.labelColor || '#374151'} onChange={v => up('labelColor', v)} />
+          <CleanColor label="Cor de erro" value={p.errorColor || '#EF4444'} onChange={v => up('errorColor', v)} />
+        </Group>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Fonte">
-          <select className={sel} value={p.fontFamily || 'inherit'} onChange={e => up('fontFamily', e.target.value)}>
-            <option value="inherit">Padrao</option>
-            <option value="Arial, sans-serif">Arial</option>
-            <option value="'Helvetica Neue', sans-serif">Helvetica</option>
-            <option value="Georgia, serif">Georgia</option>
-            <option value="'Times New Roman', serif">Times</option>
-            <option value="'Inter', sans-serif">Inter</option>
-            <option value="'Montserrat', sans-serif">Montserrat</option>
-            <option value="'Poppins', sans-serif">Poppins</option>
-            <option value="'Roboto', sans-serif">Roboto</option>
-            <option value="'Open Sans', sans-serif">Open Sans</option>
-          </select>
-        </Field>
-        <Field label="Tamanho">
-          <input type="number" className={inp} value={p.fontSize || 14} onChange={e => up('fontSize', +e.target.value)} min={10} max={32} />
-        </Field>
+        <Group title="Tipografia" defaultOpen={false}>
+          <div className="grid grid-cols-[1fr_70px] gap-2">
+            <LabeledField label="Fonte">
+              <select className={sel} value={p.fontFamily || 'inherit'} onChange={e => up('fontFamily', e.target.value)}>
+                <option value="inherit">Padrao</option>
+                <option value="Arial, sans-serif">Arial</option>
+                <option value="'Helvetica Neue', sans-serif">Helvetica</option>
+                <option value="Georgia, serif">Georgia</option>
+                <option value="'Times New Roman', serif">Times</option>
+                <option value="'Inter', sans-serif">Inter</option>
+                <option value="'Montserrat', sans-serif">Montserrat</option>
+                <option value="'Poppins', sans-serif">Poppins</option>
+                <option value="'Roboto', sans-serif">Roboto</option>
+                <option value="'Open Sans', sans-serif">Open Sans</option>
+              </select>
+            </LabeledField>
+            <LabeledField label="Tamanho">
+              <input type="number" className={inp} value={p.fontSize || 14} onChange={e => up('fontSize', +e.target.value)} min={10} max={32} />
+            </LabeledField>
+          </div>
+
+          <LabeledField label="Decoracao">
+            <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-1 w-fit">
+              <button onClick={() => up('bold', !p.bold)} className={`px-3 py-1 text-sm font-bold rounded ${p.bold ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'}`}>B</button>
+              <button onClick={() => up('italic', !p.italic)} className={`px-3 py-1 text-sm italic rounded ${p.italic ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'}`}>I</button>
+              <button onClick={() => up('underline', !p.underline)} className={`px-3 py-1 text-sm underline rounded ${p.underline ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'}`}>U</button>
+            </div>
+          </LabeledField>
+
+          <LabeledField label="Alinhamento do texto">
+            <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+              {['left', 'center', 'right'].map(a => (
+                <button key={a} onClick={() => up('textAlign', a)}
+                  className={`flex-1 py-1.5 text-xs font-medium transition-colors ${p.textAlign === a ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+                  {a === 'left' ? 'Esq' : a === 'center' ? 'Centro' : 'Dir'}
+                </button>
+              ))}
+            </div>
+          </LabeledField>
+        </Group>
+
+        <Group title="Borda" defaultOpen={false}>
+          <div className="grid grid-cols-2 gap-2">
+            <LabeledField label="Largura">
+              <div className="relative">
+                <input type="number" className={inp + ' pr-7'} value={p.borderWidth ?? 1} onChange={e => up('borderWidth', +e.target.value)} min={0} max={10} />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span>
+              </div>
+            </LabeledField>
+            <LabeledField label="Estilo">
+              <select className={sel} value={p.borderStyle || 'solid'} onChange={e => up('borderStyle', e.target.value)}>
+                <option value="solid">Solido</option>
+                <option value="dashed">Tracejado</option>
+                <option value="dotted">Pontilhado</option>
+              </select>
+            </LabeledField>
+          </div>
+          <CleanColor label="Cor da borda" value={p.borderColor || '#E5E7EB'} onChange={v => up('borderColor', v)} />
+        </Group>
+
+        <Group title="Espacamento interno" defaultOpen={false}>
+          <PaddingControl prefix="inputPad" defaults={{ t: 12, r: 16, b: 12, l: 16 }} />
+        </Group>
       </div>
-
-      <Field label="Decoracao">
-        <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-1">
-          <button onClick={() => up('bold', !p.bold)} className={`px-3 py-1 text-sm font-bold rounded ${p.bold ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>B</button>
-          <button onClick={() => up('italic', !p.italic)} className={`px-3 py-1 text-sm italic rounded ${p.italic ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>I</button>
-          <button onClick={() => up('underline', !p.underline)} className={`px-3 py-1 text-sm underline rounded ${p.underline ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>U</button>
-        </div>
-      </Field>
-
-      <ColorField label="Cor do texto" value={p.textColor || '#111827'} onChange={v => up('textColor', v)} />
-      <ColorField label="Cor do placeholder" value={p.placeholderColor || '#9CA3AF'} onChange={v => up('placeholderColor', v)} />
-      <ColorField label="Cor do label" value={p.labelColor || '#374151'} onChange={v => up('labelColor', v)} />
-
-      <Field label="Alinhamento do texto">
-        <div className="flex border border-gray-200 rounded-lg overflow-hidden">
-          {['left', 'center', 'right'].map(a => (
-            <button key={a} onClick={() => up('textAlign', a)}
-              className={`flex-1 py-1.5 text-xs font-medium ${p.textAlign === a ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
-              {a === 'left' ? 'Esq' : a === 'center' ? 'Centro' : 'Dir'}
-            </button>
-          ))}
-        </div>
-      </Field>
-
-      <div className="pt-2 border-t border-gray-100">
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Borda</p>
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          <Field label="Largura">
-            <input type="number" className={inp} value={p.borderWidth ?? 1} onChange={e => up('borderWidth', +e.target.value)} min={0} max={10} />
-          </Field>
-          <Field label="Estilo">
-            <select className={sel} value={p.borderStyle || 'solid'} onChange={e => up('borderStyle', e.target.value)}>
-              <option value="solid">Solido</option>
-              <option value="dashed">Tracejado</option>
-              <option value="dotted">Pontilhado</option>
-            </select>
-          </Field>
-        </div>
-        <ColorField label="Cor da borda" value={p.borderColor || '#E5E7EB'} onChange={v => up('borderColor', v)} />
-      </div>
-
-      <div className="pt-2 border-t border-gray-100">
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Padding interno</p>
-        <div className="grid grid-cols-4 gap-1.5">
-          <Field label="Topo"><input type="number" className={inp} value={p.inputPadTop ?? 12} onChange={e => up('inputPadTop', +e.target.value)} /></Field>
-          <Field label="Dir"><input type="number" className={inp} value={p.inputPadRight ?? 16} onChange={e => up('inputPadRight', +e.target.value)} /></Field>
-          <Field label="Baixo"><input type="number" className={inp} value={p.inputPadBottom ?? 12} onChange={e => up('inputPadBottom', +e.target.value)} /></Field>
-          <Field label="Esq"><input type="number" className={inp} value={p.inputPadLeft ?? 16} onChange={e => up('inputPadLeft', +e.target.value)} /></Field>
-        </div>
-      </div>
-    </>
+    )
   }
 
   const renderProps = () => {
@@ -730,28 +827,28 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
   }
 
   return (
-    <div>
-      {/* Block type tabs like Omnisend: "Input | Fields | Layout" for inputs, "Props | Layout" for others */}
-      <div className="flex border-b border-gray-200 mb-4">
-        <button onClick={() => setTab('props')} className={`flex-1 py-2.5 text-xs font-semibold ${tab === 'props' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}>
+    <div className="px-4 pt-3 pb-6">
+      {/* Tab switcher (Input | Fields | Layout for inputs, Props | Layout for others) */}
+      <div className="flex border-b border-gray-200 mb-4 -mx-4 px-4">
+        <button onClick={() => setTab('props')} className={`px-4 py-2 text-[12px] font-semibold transition-colors ${tab === 'props' ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>
           {isInputBlock ? 'Input' : (blockLabel[block.type] || block.type)}
         </button>
         {isInputBlock && (
-          <button onClick={() => setTab('fields')} className={`flex-1 py-2.5 text-xs font-semibold ${tab === 'fields' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}>
+          <button onClick={() => setTab('fields')} className={`px-4 py-2 text-[12px] font-semibold transition-colors ${tab === 'fields' ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>
             Fields
           </button>
         )}
-        <button onClick={() => setTab('layout')} className={`flex-1 py-2.5 text-xs font-semibold ${tab === 'layout' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}>
+        <button onClick={() => setTab('layout')} className={`px-4 py-2 text-[12px] font-semibold transition-colors ${tab === 'layout' ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>
           Layout
         </button>
       </div>
 
       {tab === 'props' ? (
-        <div className="space-y-3 px-1">{renderProps()}</div>
+        <div>{renderProps()}</div>
       ) : tab === 'fields' && isInputBlock ? (
-        <div className="space-y-3 px-1">{renderInputFields()}</div>
+        <div>{renderInputFields()}</div>
       ) : (
-        <div className="space-y-1 px-1">
+        <div className="space-y-1">
           {/* Fill */}
           <div className="border border-gray-100 rounded-lg p-3">
             <div className="flex items-center justify-between mb-2">
@@ -1082,7 +1179,7 @@ export default function PopupEditorPage() {
   const [activeStepIdx, setActiveStepIdx] = useState(0)
   const [showSuccess, setShowSuccess] = useState(false)
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
-  const [rightTab, setRightTab] = useState<'block' | 'behavior' | 'theme'>('theme')
+  const [rightTab, setRightTab] = useState<'behavior' | 'theme'>('theme')
   const [showPreview, setShowPreview] = useState(false)
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
@@ -1171,7 +1268,6 @@ export default function PopupEditorPage() {
     const b: Block = { id: uid(), type, props: base }
     updateBlocks([...activeStep.blocks, b])
     setSelectedBlockId(b.id)
-    setRightTab('block')
   }
 
   const duplicateBlock = (id: string) => {
@@ -1278,18 +1374,53 @@ export default function PopupEditorPage() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Left sidebar — palette */}
-        <aside className="w-[240px] bg-white border-r border-gray-200 overflow-y-auto shrink-0">
-          <p className="px-4 pt-4 pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">Blocos</p>
-          <div className="grid grid-cols-2 gap-1.5 px-3 pb-4">
-            {BLOCK_TYPES.map(bt => (
-              <button key={bt.type} onClick={() => addBlock(bt.type)}
-                className="flex flex-col items-center gap-1 p-2.5 rounded-lg border border-gray-100 hover:border-orange-300 hover:bg-orange-50 transition text-gray-600 hover:text-orange-600 cursor-grab active:cursor-grabbing">
-                <bt.icon className="w-5 h-5" />
-                <span className="text-[11px] leading-tight">{bt.label}</span>
-              </button>
-            ))}
-          </div>
+        {/* Left sidebar — block editor when selected, palette otherwise (Klaviyo-style) */}
+        <aside className="w-[320px] bg-white border-r border-gray-200 flex flex-col shrink-0">
+          {selectedBlock ? (
+            <>
+              {/* Header with back button */}
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 shrink-0">
+                <button onClick={() => setSelectedBlockId(null)}
+                  className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors">
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <h2 className="text-[13px] font-semibold text-gray-900 flex-1">
+                  {(() => {
+                    const labels: Record<string, string> = {
+                      email: 'Email input', phone: 'Telefone', 'name-input': 'Nome',
+                      'text-input': 'Campo de texto', 'date-input': 'Data',
+                      dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
+                      'legal-consent': 'Consentimento', text: 'Texto', button: 'Botao', image: 'Imagem',
+                      spacer: 'Espacador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem',
+                    }
+                    return labels[selectedBlock.type] || selectedBlock.type
+                  })()}
+                </h2>
+                <button onClick={() => deleteBlock(selectedBlock.id)}
+                  title="Excluir bloco"
+                  className="p-1 text-gray-400 hover:text-red-500 rounded hover:bg-red-50 transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              {/* Block editor body */}
+              <div className="flex-1 overflow-y-auto">
+                <BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} />
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 overflow-y-auto">
+              <p className="px-4 pt-4 pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">Blocos</p>
+              <div className="grid grid-cols-2 gap-1.5 px-3 pb-4">
+                {BLOCK_TYPES.map(bt => (
+                  <button key={bt.type} onClick={() => addBlock(bt.type)}
+                    className="flex flex-col items-center gap-1 p-2.5 rounded-lg border border-gray-100 hover:border-brand-300 hover:bg-brand-50 transition text-gray-600 hover:text-brand-600 cursor-grab active:cursor-grabbing">
+                    <bt.icon className="w-5 h-5" />
+                    <span className="text-[11px] leading-tight">{bt.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </aside>
 
         {/* Center canvas */}
@@ -1326,7 +1457,7 @@ export default function PopupEditorPage() {
                     <div className="space-y-2 min-h-[100px]">
                       {activeStep.blocks.map(block => (
                         <SortablePopupBlock key={block.id} block={block} isSelected={selectedBlockId === block.id}
-                          onSelect={() => { setSelectedBlockId(block.id); setRightTab('block') }}
+                          onSelect={() => setSelectedBlockId(block.id)}
                           onDelete={() => deleteBlock(block.id)}
                           onDuplicate={() => duplicateBlock(block.id)} />
                       ))}
@@ -1386,22 +1517,15 @@ export default function PopupEditorPage() {
           </div>
         </main>
 
-        {/* Right sidebar */}
+        {/* Right sidebar — popup-level settings only (Theme + Behavior) */}
         <aside className="w-[320px] bg-white border-l border-gray-200 flex flex-col shrink-0">
           <div className="flex border-b border-gray-200">
-            {selectedBlock && <button onClick={() => setRightTab('block')} className={`flex-1 py-2.5 text-xs font-medium ${rightTab === 'block' ? 'text-orange-600 border-b-2 border-orange-500' : 'text-gray-500'}`}>Bloco</button>}
-            <button onClick={() => setRightTab('behavior')} className={`flex-1 py-2.5 text-xs font-medium flex items-center justify-center gap-1 ${rightTab === 'behavior' ? 'text-orange-600 border-b-2 border-orange-500' : 'text-gray-500'}`}><Settings className="w-3.5 h-3.5" />Comportamento</button>
-            <button onClick={() => setRightTab('theme')} className={`flex-1 py-2.5 text-xs font-medium flex items-center justify-center gap-1 ${rightTab === 'theme' ? 'text-orange-600 border-b-2 border-orange-500' : 'text-gray-500'}`}><Palette className="w-3.5 h-3.5" />Tema</button>
+            <button onClick={() => setRightTab('theme')} className={`flex-1 py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 ${rightTab === 'theme' ? 'text-brand-600 border-b-2 border-brand-500' : 'text-gray-500 hover:text-gray-700'}`}><Palette className="w-3.5 h-3.5" />Tema</button>
+            <button onClick={() => setRightTab('behavior')} className={`flex-1 py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 ${rightTab === 'behavior' ? 'text-brand-600 border-b-2 border-brand-500' : 'text-gray-500 hover:text-gray-700'}`}><Settings className="w-3.5 h-3.5" />Comportamento</button>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {rightTab === 'block' && selectedBlock && (
-              <div className="p-4"><BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} /></div>
-            )}
-            {rightTab === 'block' && !selectedBlock && (
-              <div className="p-8 text-center text-sm text-gray-400">Selecione um bloco no canvas</div>
-            )}
-            {rightTab === 'behavior' && <BehaviorPanel beh={design.behavior} onChange={b => setDesign(d => ({ ...d, behavior: b }))} />}
             {rightTab === 'theme' && <ThemePanel design={design} onChange={setDesign} onOpenMedia={openMediaLibrary} />}
+            {rightTab === 'behavior' && <BehaviorPanel beh={design.behavior} onChange={b => setDesign(d => ({ ...d, behavior: b }))} />}
           </div>
         </aside>
       </div>
