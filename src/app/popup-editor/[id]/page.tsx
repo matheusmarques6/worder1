@@ -58,12 +58,64 @@ const BLOCK_TYPES = [
   { type: 'countdown', label: 'Contagem', icon: Clock },
 ]
 
+// Profile fields available for mapping (destinos no contato)
+const PROFILE_FIELDS = [
+  { value: 'first_name', label: 'Primeiro nome' },
+  { value: 'last_name', label: 'Sobrenome' },
+  { value: 'full_name', label: 'Nome completo' },
+  { value: 'email', label: 'Email' },
+  { value: 'phone', label: 'Telefone' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'birthday', label: 'Data de nascimento' },
+  { value: 'gender', label: 'Genero' },
+  { value: 'company', label: 'Empresa' },
+  { value: 'position', label: 'Cargo' },
+  { value: 'city', label: 'Cidade' },
+  { value: 'state', label: 'Estado' },
+  { value: 'country', label: 'Pais' },
+  { value: 'zip', label: 'CEP' },
+  { value: 'address', label: 'Endereco' },
+  { value: 'custom', label: 'Campo personalizado' },
+]
+
+// Defaults compartilhados por inputs (estilos + layout)
+const INPUT_BASE_DEFAULTS = {
+  // Input config
+  required: false,
+  requiredMsg: 'Este campo e obrigatorio',
+  showLabel: false,
+  mapTo: '',
+  mapToCustom: '',
+  // Block layout
+  align: 'full' as 'left' | 'center' | 'right' | 'full',
+  paddingTop: 0, paddingRight: 0, paddingBottom: 8, paddingLeft: 0,
+  // Input visual (Fields tab)
+  inputStyle: 'solid' as 'solid' | 'underline',
+  corners: 'medium' as 'none' | 'small' | 'medium' | 'large' | 'custom',
+  cornerRadius: 8,
+  backgroundColor: '#FFFFFF',
+  errorColor: '#EF4444',
+  fontFamily: 'inherit',
+  fontSize: 14,
+  bold: false,
+  italic: false,
+  underline: false,
+  textColor: '#111827',
+  placeholderColor: '#9CA3AF',
+  labelColor: '#374151',
+  textAlign: 'left' as 'left' | 'center' | 'right',
+  borderWidth: 1,
+  borderStyle: 'solid' as 'solid' | 'dashed' | 'dotted',
+  borderColor: '#E5E7EB',
+  inputPadTop: 12, inputPadRight: 16, inputPadBottom: 12, inputPadLeft: 16,
+}
+
 const defaultProps: Record<string, Record<string, any>> = {
-  email: { placeholder: 'Seu email', label: 'Email', required: true, showLabel: false },
-  phone: { placeholder: 'WhatsApp', label: 'Telefone', countryCode: '+55', showLabel: false },
-  'name-input': { placeholder: 'Seu nome', label: 'Nome', showLabel: false },
-  'text-input': { placeholder: 'Digite aqui...', label: 'Campo', showLabel: true },
-  'date-input': { label: 'Data de nascimento', showLabel: true },
+  email: { ...INPUT_BASE_DEFAULTS, placeholder: 'Seu email', label: 'Email', required: true, mapTo: 'email' },
+  phone: { ...INPUT_BASE_DEFAULTS, placeholder: 'WhatsApp', label: 'Telefone', countryCode: '+55', mapTo: 'phone' },
+  'name-input': { ...INPUT_BASE_DEFAULTS, placeholder: 'Seu nome', label: 'Nome', mapTo: 'first_name' },
+  'text-input': { ...INPUT_BASE_DEFAULTS, placeholder: 'Digite aqui...', label: 'Campo', showLabel: true, mapTo: 'custom' },
+  'date-input': { ...INPUT_BASE_DEFAULTS, label: 'Data de nascimento', showLabel: true, mapTo: 'birthday' },
   dropdown: { label: 'Selecione', options: ['Opção 1', 'Opção 2'], placeholder: 'Escolha...' },
   radio: { label: 'Escolha', options: ['Opção 1', 'Opção 2'], layout: 'vertical' },
   checkbox: { label: 'Escolha', options: ['Opção 1', 'Opção 2'] },
@@ -124,6 +176,98 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inp = "w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400"
 const sel = inp + " bg-white"
 
+// Helper: compute input styles from props (used by preview AND public script logic)
+function cornerPx(corners: string, cornerRadius: number) {
+  if (corners === 'none') return 0
+  if (corners === 'small') return 4
+  if (corners === 'medium') return 8
+  if (corners === 'large') return 16
+  if (corners === 'custom') return cornerRadius || 0
+  return 8
+}
+
+function buildInputStyle(p: any): React.CSSProperties {
+  const radius = cornerPx(p.corners || 'medium', p.cornerRadius || 8)
+  const isUnderline = p.inputStyle === 'underline'
+  return {
+    width: '100%',
+    boxSizing: 'border-box',
+    paddingTop: p.inputPadTop ?? 12,
+    paddingRight: p.inputPadRight ?? 16,
+    paddingBottom: p.inputPadBottom ?? 12,
+    paddingLeft: p.inputPadLeft ?? 16,
+    backgroundColor: isUnderline ? 'transparent' : (p.backgroundColor || '#FFFFFF'),
+    color: p.textColor || '#111827',
+    fontFamily: p.fontFamily && p.fontFamily !== 'inherit' ? p.fontFamily : 'inherit',
+    fontSize: p.fontSize || 14,
+    fontWeight: p.bold ? 700 : 400,
+    fontStyle: p.italic ? 'italic' : 'normal',
+    textDecoration: p.underline ? 'underline' : 'none',
+    textAlign: (p.textAlign || 'left') as any,
+    borderTop: isUnderline ? 'none' : `${p.borderWidth ?? 1}px ${p.borderStyle || 'solid'} ${p.borderColor || '#E5E7EB'}`,
+    borderLeft: isUnderline ? 'none' : `${p.borderWidth ?? 1}px ${p.borderStyle || 'solid'} ${p.borderColor || '#E5E7EB'}`,
+    borderRight: isUnderline ? 'none' : `${p.borderWidth ?? 1}px ${p.borderStyle || 'solid'} ${p.borderColor || '#E5E7EB'}`,
+    borderBottom: `${p.borderWidth ?? 1}px ${p.borderStyle || 'solid'} ${p.borderColor || '#E5E7EB'}`,
+    borderRadius: isUnderline ? 0 : radius,
+    outline: 'none',
+  }
+}
+
+function buildBlockWrapperStyle(p: any): React.CSSProperties {
+  const align = p.align || 'full'
+  const justify = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start'
+  const width = align === 'full' ? '100%' : 'auto'
+  const innerMaxWidth = align === 'full' ? '100%' : '80%'
+  return {
+    display: 'flex',
+    justifyContent: justify,
+    paddingTop: p.paddingTop ?? 0,
+    paddingRight: p.paddingRight ?? 0,
+    paddingBottom: p.paddingBottom ?? 8,
+    paddingLeft: p.paddingLeft ?? 0,
+    width: '100%',
+    marginTop: p.marginTop || 0,
+    marginBottom: p.marginBottom ?? 0,
+    // Legacy block wrapper styles
+    backgroundColor: p.blockBg || undefined,
+    borderRadius: p.blockRadius || 0,
+    boxShadow: p.shadow || undefined,
+    opacity: p.opacity != null ? p.opacity / 100 : undefined,
+    ['--worder-input-width' as any]: innerMaxWidth,
+  }
+}
+
+// CSS injected once for placeholder color on preview inputs
+function InputPreviewStyles() {
+  return (
+    <style dangerouslySetInnerHTML={{ __html: `
+      .worder-input::placeholder { color: var(--worder-ph-color, #9CA3AF) !important; opacity: 1; }
+      .worder-input-wrap { width: var(--worder-input-width, 100%); max-width: 100%; }
+    ` }} />
+  )
+}
+
+function InputBlockPreview({ block, children }: { block: Block; children?: React.ReactNode }) {
+  const p = block.props
+  const wrapper = buildBlockWrapperStyle(p)
+  const labelStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: 13,
+    fontWeight: 500,
+    color: p.labelColor || '#374151',
+    marginBottom: 4,
+    textAlign: (p.textAlign || 'left') as any,
+  }
+  return (
+    <div style={wrapper}>
+      <div className="worder-input-wrap">
+        {p.showLabel && p.label && <label style={labelStyle}>{p.label}</label>}
+        {children}
+      </div>
+    </div>
+  )
+}
+
 // ── Block Renderer (canvas) ────────────────────────────────────────────────────
 function BlockPreview({ block }: { block: Block }) {
   const p = block.props
@@ -131,23 +275,27 @@ function BlockPreview({ block }: { block: Block }) {
     marginTop: p.marginTop || 0, marginBottom: p.marginBottom ?? 8,
     padding: p.blockPadding || 0, backgroundColor: p.blockBg || undefined,
     borderRadius: p.blockRadius || 0,
-    border: p.borderWidth ? `${p.borderWidth}px ${p.borderStyle || 'solid'} ${p.borderColor || '#E5E7EB'}` : undefined,
+    border: p.borderWidth && !['email','phone','name-input','text-input','date-input'].includes(block.type) ? `${p.borderWidth}px ${p.borderStyle || 'solid'} ${p.borderColor || '#E5E7EB'}` : undefined,
     boxShadow: p.shadow || undefined,
     opacity: p.opacity != null ? p.opacity / 100 : undefined,
   }
   const inputStyle = "w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white placeholder-gray-400 outline-none"
+  const phCssVar = { ['--worder-ph-color' as any]: p.placeholderColor || '#9CA3AF' } as React.CSSProperties
   switch (block.type) {
     case 'text': return <div contentEditable suppressContentEditableWarning
       onBlur={e => { const newText = e.currentTarget.textContent || ''; if (newText !== p.content) { block.props.content = newText } }}
       style={{ ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit', outline: 'none', cursor: 'text', minHeight: '1em' }}>{p.content}</div>
     case 'email':
-      return <div style={blockStyle}>{p.showLabel && <label className="block text-sm font-medium text-gray-700 mb-1">{p.label}</label>}<input readOnly placeholder={p.placeholder || 'Seu email'} className={inputStyle} /></div>
+      return <InputBlockPreview block={block}><><InputPreviewStyles /><input readOnly placeholder={p.placeholder || 'Seu email'} className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
     case 'phone':
-      return <div style={blockStyle}>{p.showLabel && <label className="block text-sm font-medium text-gray-700 mb-1">{p.label}</label>}<div className="flex gap-2"><span className="flex items-center px-3 border border-gray-200 rounded-lg text-sm text-gray-500 bg-gray-50">{p.countryCode || '+55'}</span><input readOnly placeholder={p.placeholder || 'Telefone'} className={inputStyle} /></div></div>
+      return <InputBlockPreview block={block}><><InputPreviewStyles /><div style={{ display: 'flex', gap: 8, width: '100%' }}>
+        <span style={{ display: 'flex', alignItems: 'center', padding: '0 12px', border: `${p.borderWidth ?? 1}px ${p.borderStyle || 'solid'} ${p.borderColor || '#E5E7EB'}`, borderRadius: cornerPx(p.corners || 'medium', p.cornerRadius || 8), fontSize: p.fontSize || 14, color: p.textColor || '#111827', background: p.backgroundColor || '#F9FAFB', whiteSpace: 'nowrap' }}>{p.countryCode || '+55'}</span>
+        <input readOnly placeholder={p.placeholder || 'Telefone'} className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} />
+      </div></></InputBlockPreview>
     case 'name-input': case 'text-input':
-      return <div style={blockStyle}>{p.showLabel && <label className="block text-sm font-medium text-gray-700 mb-1">{p.label}</label>}<input readOnly placeholder={p.placeholder} className={inputStyle} /></div>
+      return <InputBlockPreview block={block}><><InputPreviewStyles /><input readOnly placeholder={p.placeholder || ''} className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
     case 'date-input':
-      return <div style={blockStyle}>{p.showLabel && <label className="block text-sm font-medium text-gray-700 mb-1">{p.label}</label>}<input type="date" className={inputStyle} /></div>
+      return <InputBlockPreview block={block}><><InputPreviewStyles /><input type="date" className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
     case 'button':
       return <div style={{ ...blockStyle, textAlign: p.fullWidth ? undefined : (p.align || 'center') as any }}><button style={{ backgroundColor: p.bgColor || '#F97316', color: p.textColor || '#fff', borderRadius: p.borderRadius || 8, width: p.fullWidth ? '100%' : 'auto', fontSize: p.fontSize || 15, fontWeight: 700, padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`, border: 'none', cursor: 'pointer' }}>{p.text || 'Enviar'}</button></div>
     case 'image':
@@ -177,7 +325,8 @@ function BlockPreview({ block }: { block: Block }) {
 function BlockEditor({ block, onChange, onDelete, onOpenMedia }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void }) {
   const up = (key: string, val: any) => onChange({ ...block, props: { ...block.props, [key]: val } })
   const p = block.props
-  const [tab, setTab] = useState<'props' | 'layout'>('props')
+  const [tab, setTab] = useState<'props' | 'fields' | 'layout'>('props')
+  const isInputBlock = ['email', 'phone', 'name-input', 'text-input', 'date-input'].includes(block.type)
 
   const blockLabel: Record<string, string> = {
     email: 'Email', phone: 'Telefone', 'name-input': 'Nome', 'text-input': 'Campo',
@@ -215,34 +364,180 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia }: { block: Block;
     </label>
   )
 
-  const renderProps = () => {
-    switch (block.type) {
-      case 'email':
-        return <>
-          <Field label="Placeholder"><input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} /></Field>
-          <Toggle label="Adicionar label" checked={p.showLabel || false} onChange={v => up('showLabel', v)} />
-          {p.showLabel && <Field label="Texto do label"><input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} /></Field>}
-          <Toggle label="Campo obrigatório" checked={p.required !== false} onChange={v => up('required', v)} />
-          {p.required !== false && <Field label="Mensagem obrigatório"><input className={inp} value={p.requiredMsg || 'Este campo é obrigatório'} onChange={e => up('requiredMsg', e.target.value)} /></Field>}
-          <Field label="Mensagem de erro"><input className={inp} value={p.errorMsg || 'Email deve conter @ e domínio'} onChange={e => up('errorMsg', e.target.value)} /></Field>
-          <Field label="Alinhamento"><AlignButtons value={p.align || 'full'} onChange={v => up('align', v)} /></Field>
-        </>
+  // Unified input "Input" tab renderer (Omnisend-style)
+  const renderInputConfig = () => {
+    // Lock email/phone mapping since the type implies the target
+    const lockedMap = block.type === 'email' ? 'email' : block.type === 'phone' ? 'phone' : null
+    return <>
+      <Field label="Mapear para campo do perfil">
+        <select className={sel} value={lockedMap || p.mapTo || ''} disabled={!!lockedMap} onChange={e => up('mapTo', e.target.value)}>
+          <option value="">Nao mapear</option>
+          {PROFILE_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+        </select>
+      </Field>
+      {(p.mapTo === 'custom' && !lockedMap) && (
+        <Field label="Nome do campo personalizado">
+          <input className={inp} value={p.mapToCustom || ''} onChange={e => up('mapToCustom', e.target.value)} placeholder="ex: favoriteColor" />
+        </Field>
+      )}
+      <Field label="Placeholder">
+        <input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} />
+      </Field>
+      {block.type === 'phone' && (
+        <Field label="Pais padrao">
+          <select className={sel} value={p.countryCode || '+55'} onChange={e => up('countryCode', e.target.value)}>
+            <option value="+55">Brasil (+55)</option>
+            <option value="+1">EUA (+1)</option>
+            <option value="+351">Portugal (+351)</option>
+            <option value="+44">Reino Unido (+44)</option>
+            <option value="+34">Espanha (+34)</option>
+            <option value="+49">Alemanha (+49)</option>
+            <option value="+33">Franca (+33)</option>
+          </select>
+        </Field>
+      )}
+      <Toggle label="Adicionar label" checked={p.showLabel || false} onChange={v => up('showLabel', v)} />
+      {p.showLabel && <Field label="Texto do label"><input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} /></Field>}
+      <Toggle label="Campo obrigatorio" checked={p.required !== false && block.type === 'email' ? true : !!p.required} onChange={v => up('required', v)} />
+      {p.required && <Field label="Mensagem quando vazio"><input className={inp} value={p.requiredMsg || 'Este campo e obrigatorio'} onChange={e => up('requiredMsg', e.target.value)} /></Field>}
+      {(block.type === 'email' || block.type === 'phone') && (
+        <Field label="Mensagem quando invalido">
+          <input className={inp} value={p.errorMsg || (block.type === 'email' ? 'Email invalido' : 'Telefone invalido')} onChange={e => up('errorMsg', e.target.value)} />
+        </Field>
+      )}
+      <Field label="Alinhamento do bloco"><AlignButtons value={p.align || 'full'} onChange={v => up('align', v)} /></Field>
+      <div className="pt-2 border-t border-gray-100">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Padding do bloco</p>
+        <div className="grid grid-cols-4 gap-1.5">
+          <Field label="Topo"><input type="number" className={inp} value={p.paddingTop ?? 0} onChange={e => up('paddingTop', +e.target.value)} /></Field>
+          <Field label="Dir"><input type="number" className={inp} value={p.paddingRight ?? 0} onChange={e => up('paddingRight', +e.target.value)} /></Field>
+          <Field label="Baixo"><input type="number" className={inp} value={p.paddingBottom ?? 8} onChange={e => up('paddingBottom', +e.target.value)} /></Field>
+          <Field label="Esq"><input type="number" className={inp} value={p.paddingLeft ?? 0} onChange={e => up('paddingLeft', +e.target.value)} /></Field>
+        </div>
+      </div>
+    </>
+  }
 
-      case 'phone':
-        return <>
-          <Field label="Placeholder"><input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} /></Field>
-          <Field label="País padrão">
-            <select className={sel} value={p.countryCode || '+55'} onChange={e => up('countryCode', e.target.value)}>
-              <option value="+55">Brasil (+55)</option><option value="+1">EUA (+1)</option><option value="+351">Portugal (+351)</option>
+  // Unified "Fields" tab renderer (visual style)
+  const renderInputFields = () => {
+    const CornerBtn = ({ value, label }: { value: string; label: string }) => (
+      <button onClick={() => up('corners', value)}
+        className={`flex-1 py-1.5 text-[10px] font-medium ${p.corners === value ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+        {label}
+      </button>
+    )
+    return <>
+      <Field label="Estilo">
+        <div className="grid grid-cols-2 gap-1.5">
+          <button onClick={() => up('inputStyle', 'solid')}
+            className={`py-2.5 rounded-lg border-2 ${p.inputStyle !== 'underline' ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
+            <div className="w-12 h-4 mx-auto rounded border border-gray-700" />
+          </button>
+          <button onClick={() => up('inputStyle', 'underline')}
+            className={`py-2.5 rounded-lg border-2 ${p.inputStyle === 'underline' ? 'border-brand-500 bg-brand-50' : 'border-gray-200'}`}>
+            <div className="w-12 h-4 mx-auto border-b-2 border-dashed border-gray-700" />
+          </button>
+        </div>
+      </Field>
+
+      {p.inputStyle !== 'underline' && (
+        <Field label="Cantos">
+          <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+            <CornerBtn value="none" label="Reto" />
+            <CornerBtn value="small" label="Pequeno" />
+            <CornerBtn value="medium" label="Medio" />
+            <CornerBtn value="large" label="Grande" />
+          </div>
+          {p.corners === 'custom' && (
+            <input type="number" className={inp + ' mt-1'} value={p.cornerRadius || 8} onChange={e => up('cornerRadius', +e.target.value)} min={0} max={50} placeholder="px" />
+          )}
+          <button onClick={() => up('corners', 'custom')} className={`mt-1 w-full text-[10px] ${p.corners === 'custom' ? 'text-brand-600 font-semibold' : 'text-gray-400'}`}>
+            Personalizado
+          </button>
+        </Field>
+      )}
+
+      <ColorField label="Cor de fundo" value={p.backgroundColor || '#FFFFFF'} onChange={v => up('backgroundColor', v)} />
+      <ColorField label="Cor de erro" value={p.errorColor || '#EF4444'} onChange={v => up('errorColor', v)} />
+
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Fonte">
+          <select className={sel} value={p.fontFamily || 'inherit'} onChange={e => up('fontFamily', e.target.value)}>
+            <option value="inherit">Padrao</option>
+            <option value="Arial, sans-serif">Arial</option>
+            <option value="'Helvetica Neue', sans-serif">Helvetica</option>
+            <option value="Georgia, serif">Georgia</option>
+            <option value="'Times New Roman', serif">Times</option>
+            <option value="'Inter', sans-serif">Inter</option>
+            <option value="'Montserrat', sans-serif">Montserrat</option>
+            <option value="'Poppins', sans-serif">Poppins</option>
+            <option value="'Roboto', sans-serif">Roboto</option>
+            <option value="'Open Sans', sans-serif">Open Sans</option>
+          </select>
+        </Field>
+        <Field label="Tamanho">
+          <input type="number" className={inp} value={p.fontSize || 14} onChange={e => up('fontSize', +e.target.value)} min={10} max={32} />
+        </Field>
+      </div>
+
+      <Field label="Decoracao">
+        <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-1">
+          <button onClick={() => up('bold', !p.bold)} className={`px-3 py-1 text-sm font-bold rounded ${p.bold ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>B</button>
+          <button onClick={() => up('italic', !p.italic)} className={`px-3 py-1 text-sm italic rounded ${p.italic ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>I</button>
+          <button onClick={() => up('underline', !p.underline)} className={`px-3 py-1 text-sm underline rounded ${p.underline ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>U</button>
+        </div>
+      </Field>
+
+      <ColorField label="Cor do texto" value={p.textColor || '#111827'} onChange={v => up('textColor', v)} />
+      <ColorField label="Cor do placeholder" value={p.placeholderColor || '#9CA3AF'} onChange={v => up('placeholderColor', v)} />
+      <ColorField label="Cor do label" value={p.labelColor || '#374151'} onChange={v => up('labelColor', v)} />
+
+      <Field label="Alinhamento do texto">
+        <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+          {['left', 'center', 'right'].map(a => (
+            <button key={a} onClick={() => up('textAlign', a)}
+              className={`flex-1 py-1.5 text-xs font-medium ${p.textAlign === a ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+              {a === 'left' ? 'Esq' : a === 'center' ? 'Centro' : 'Dir'}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <div className="pt-2 border-t border-gray-100">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Borda</p>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <Field label="Largura">
+            <input type="number" className={inp} value={p.borderWidth ?? 1} onChange={e => up('borderWidth', +e.target.value)} min={0} max={10} />
+          </Field>
+          <Field label="Estilo">
+            <select className={sel} value={p.borderStyle || 'solid'} onChange={e => up('borderStyle', e.target.value)}>
+              <option value="solid">Solido</option>
+              <option value="dashed">Tracejado</option>
+              <option value="dotted">Pontilhado</option>
             </select>
           </Field>
-          <Toggle label="Adicionar label" checked={p.showLabel || false} onChange={v => up('showLabel', v)} />
-          {p.showLabel && <Field label="Texto do label"><input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} /></Field>}
-          <Toggle label="Campo obrigatório" checked={p.required || false} onChange={v => up('required', v)} />
-          {p.required && <Field label="Mensagem obrigatório"><input className={inp} value={p.requiredMsg || 'Este campo é obrigatório'} onChange={e => up('requiredMsg', e.target.value)} /></Field>}
-          <Field label="Mensagem de erro"><input className={inp} value={p.errorMsg || 'Telefone inválido'} onChange={e => up('errorMsg', e.target.value)} /></Field>
-          <Field label="Alinhamento"><AlignButtons value={p.align || 'full'} onChange={v => up('align', v)} /></Field>
-        </>
+        </div>
+        <ColorField label="Cor da borda" value={p.borderColor || '#E5E7EB'} onChange={v => up('borderColor', v)} />
+      </div>
+
+      <div className="pt-2 border-t border-gray-100">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Padding interno</p>
+        <div className="grid grid-cols-4 gap-1.5">
+          <Field label="Topo"><input type="number" className={inp} value={p.inputPadTop ?? 12} onChange={e => up('inputPadTop', +e.target.value)} /></Field>
+          <Field label="Dir"><input type="number" className={inp} value={p.inputPadRight ?? 16} onChange={e => up('inputPadRight', +e.target.value)} /></Field>
+          <Field label="Baixo"><input type="number" className={inp} value={p.inputPadBottom ?? 12} onChange={e => up('inputPadBottom', +e.target.value)} /></Field>
+          <Field label="Esq"><input type="number" className={inp} value={p.inputPadLeft ?? 16} onChange={e => up('inputPadLeft', +e.target.value)} /></Field>
+        </div>
+      </div>
+    </>
+  }
+
+  const renderProps = () => {
+    // Unified editor for all input types (email, phone, name-input, text-input, date-input)
+    if (isInputBlock) {
+      return renderInputConfig()
+    }
+    switch (block.type) {
 
       case 'text':
         return <>
@@ -347,18 +642,9 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia }: { block: Block;
           <Field label="Padding (px)"><input type="number" className={inp} value={p.padding ?? 0} onChange={e => up('padding', +e.target.value)} /></Field>
         </>
 
-      case 'name-input': case 'text-input': case 'date-input':
+      case '__unused__':
         return <>
-          <Field label="Placeholder"><input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} /></Field>
-          <Toggle label="Adicionar label" checked={p.showLabel || false} onChange={v => up('showLabel', v)} />
-          {p.showLabel && <Field label="Texto do label"><input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} /></Field>}
-          <Toggle label="Campo obrigatório" checked={p.required || false} onChange={v => up('required', v)} />
-          <Field label="Mapear para contato">
-            <select className={sel} value={p.mapTo || ''} onChange={e => up('mapTo', e.target.value)}>
-              <option value="">Nenhum</option><option value="first_name">Nome</option><option value="last_name">Sobrenome</option><option value="company">Empresa</option><option value="city">Cidade</option>
-            </select>
-          </Field>
-          <Field label="Alinhamento"><AlignButtons value={p.align || 'full'} onChange={v => up('align', v)} /></Field>
+          {/* Input blocks handled above via renderInputConfig */}
         </>
 
       case 'dropdown': case 'radio': case 'checkbox':
@@ -431,11 +717,16 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia }: { block: Block;
 
   return (
     <div>
-      {/* Block type tabs like Omnisend: "Email | Layout" */}
+      {/* Block type tabs like Omnisend: "Input | Fields | Layout" for inputs, "Props | Layout" for others */}
       <div className="flex border-b border-gray-200 mb-4">
         <button onClick={() => setTab('props')} className={`flex-1 py-2.5 text-xs font-semibold ${tab === 'props' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}>
-          {blockLabel[block.type] || block.type}
+          {isInputBlock ? 'Input' : (blockLabel[block.type] || block.type)}
         </button>
+        {isInputBlock && (
+          <button onClick={() => setTab('fields')} className={`flex-1 py-2.5 text-xs font-semibold ${tab === 'fields' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}>
+            Fields
+          </button>
+        )}
         <button onClick={() => setTab('layout')} className={`flex-1 py-2.5 text-xs font-semibold ${tab === 'layout' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}>
           Layout
         </button>
@@ -443,6 +734,8 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia }: { block: Block;
 
       {tab === 'props' ? (
         <div className="space-y-3 px-1">{renderProps()}</div>
+      ) : tab === 'fields' && isInputBlock ? (
+        <div className="space-y-3 px-1">{renderInputFields()}</div>
       ) : (
         <div className="space-y-1 px-1">
           {/* Fill */}

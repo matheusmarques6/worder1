@@ -25,6 +25,40 @@ var FID="${params.id}",BU="${baseUrl}",D=${JSON.stringify(design)},B=${JSON.stri
 var shown=false,ck="_wf_"+FID;
 function gc(n){var m=document.cookie.match("(^|;)\\\\s*"+n+"=([^;]*)");return m?m[2]:null}
 function sc(n,v,d){var e=new Date();e.setDate(e.getDate()+d);document.cookie=n+"="+v+";path=/;expires="+e.toUTCString()+";SameSite=Lax"}
+function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+function cornerPx(c,r){return c==="none"?0:c==="small"?4:c==="medium"?8:c==="large"?16:c==="custom"?(r||0):8}
+function inputStyleStr(p){
+  var r=cornerPx(p.corners||"medium",p.cornerRadius||8);
+  var und=p.inputStyle==="underline";
+  var bw=p.borderWidth==null?1:p.borderWidth;
+  var bs=p.borderStyle||"solid";
+  var bc=p.borderColor||"#E5E7EB";
+  var bg=und?"transparent":(p.backgroundColor||"#FFFFFF");
+  var fam=p.fontFamily&&p.fontFamily!=="inherit"?p.fontFamily:"inherit";
+  var s="width:100%;box-sizing:border-box;outline:none;";
+  s+="padding:"+(p.inputPadTop==null?12:p.inputPadTop)+"px "+(p.inputPadRight==null?16:p.inputPadRight)+"px "+(p.inputPadBottom==null?12:p.inputPadBottom)+"px "+(p.inputPadLeft==null?16:p.inputPadLeft)+"px;";
+  s+="background:"+bg+";color:"+(p.textColor||"#111827")+";";
+  s+="font-family:"+fam+";font-size:"+(p.fontSize||14)+"px;";
+  s+="font-weight:"+(p.bold?"700":"400")+";font-style:"+(p.italic?"italic":"normal")+";text-decoration:"+(p.underline?"underline":"none")+";";
+  s+="text-align:"+(p.textAlign||"left")+";";
+  if(und){s+="border:none;border-bottom:"+bw+"px "+bs+" "+bc+";border-radius:0;"}
+  else{s+="border:"+bw+"px "+bs+" "+bc+";border-radius:"+r+"px;"}
+  return s;
+}
+function wrapStyleStr(p){
+  var a=p.align||"full";
+  var jc=a==="center"?"center":(a==="right"?"flex-end":"flex-start");
+  var s="display:flex;justify-content:"+jc+";width:100%;";
+  s+="padding:"+(p.paddingTop||0)+"px "+(p.paddingRight||0)+"px "+(p.paddingBottom==null?8:p.paddingBottom)+"px "+(p.paddingLeft||0)+"px;";
+  return s;
+}
+function innerWrapStyleStr(p){
+  var a=p.align||"full";
+  return "width:"+(a==="full"?"100%":"auto")+";max-width:100%;";
+}
+function labelStyleStr(p){
+  return "display:block;font-size:13px;font-weight:500;color:"+(p.labelColor||"#374151")+";margin-bottom:4px;text-align:"+(p.textAlign||"left")+";";
+}
 if(gc(ck))return;
 var freq=B.frequency||{};
 var vis=B.visibility||{};
@@ -53,10 +87,23 @@ function renderBlock(b){
   switch(b.type){
     case"text":h='<div style="font-size:'+((p.fontSize||16))+'px;color:'+(p.color||"#111827")+';font-weight:'+(p.fontWeight||"normal")+';text-align:'+(p.align||"left")+';margin:0 0 8px;line-height:1.3">'+((p.content||""))+'</div>';break;
     case"image":h=p.src?'<img src="'+p.src+'" alt="'+(p.alt||"")+'" style="width:'+(p.width||"100%")+';border-radius:'+(p.borderRadius||0)+'px;display:block;margin:0 0 12px" />':'';break;
-    case"email":h='<input name="email" type="email" placeholder="'+(p.placeholder||"Seu email")+'" '+(p.required?"required":"")+' style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;margin:0 0 8px" />';break;
-    case"phone":h='<input name="phone" type="tel" placeholder="'+(p.placeholder||"Telefone")+'" style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;margin:0 0 8px" />';break;
-    case"name-input":h='<input name="name" placeholder="'+(p.placeholder||"Seu nome")+'" style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;margin:0 0 8px" />';break;
-    case"text-input":h='<input name="'+(p.mapTo||p.label||"field")+'" placeholder="'+(p.placeholder||"")+'" '+(p.required?"required":"")+' style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;margin:0 0 8px" />';break;
+    case"email":case"phone":case"name-input":case"text-input":case"date-input":{
+      var nm=p.mapTo==="custom"?("custom:"+(p.mapToCustom||p.label||"field")):(p.mapTo||(b.type==="email"?"email":b.type==="phone"?"phone":b.type==="name-input"?"first_name":"field"));
+      var itype=b.type==="email"?"email":b.type==="phone"?"tel":b.type==="date-input"?"date":"text";
+      var req=p.required||b.type==="email"?' required':'';
+      var phc=p.placeholderColor||"#9CA3AF";
+      var iid="wi_"+b.id;
+      var lbl=(p.showLabel&&p.label)?'<label for="'+iid+'" style="'+labelStyleStr(p)+'">'+esc(p.label)+'</label>':'';
+      var inputHtml='<input id="'+iid+'" name="'+esc(nm)+'" type="'+itype+'" placeholder="'+esc(p.placeholder||"")+'"'+req+' style="'+inputStyleStr(p)+'" />';
+      var customCss='<style>#'+iid+'::placeholder{color:'+phc+';opacity:1}</style>';
+      if(b.type==="phone"&&p.countryCode){
+        var cc=esc(p.countryCode||"+55");
+        var ccStyle="display:flex;align-items:center;padding:0 12px;border:"+(p.borderWidth==null?1:p.borderWidth)+"px "+(p.borderStyle||"solid")+" "+(p.borderColor||"#E5E7EB")+";border-radius:"+cornerPx(p.corners||"medium",p.cornerRadius||8)+"px;font-size:"+(p.fontSize||14)+"px;color:"+(p.textColor||"#111827")+";background:"+(p.backgroundColor||"#F9FAFB")+";white-space:nowrap;font-family:"+(p.fontFamily||"inherit")+";";
+        inputHtml='<div style="display:flex;gap:8px;width:100%;"><span style="'+ccStyle+'">'+cc+'</span>'+inputHtml+'</div>';
+      }
+      h=customCss+'<div style="'+wrapStyleStr(p)+'"><div style="'+innerWrapStyleStr(p)+'">'+lbl+inputHtml+'</div></div>';
+      break;
+    }
     case"dropdown":var opts=(p.options||[]).map(function(o){return'<option value="'+o+'">'+o+'</option>'}).join("");h='<select name="'+(p.label||"select")+'" style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;box-sizing:border-box;margin:0 0 8px"><option value="">'+(p.placeholder||"Selecione")+'</option>'+opts+'</select>';break;
     case"radio":var ri=(p.options||[]).map(function(o,i){return'<label style="display:'+(p.layout==="horizontal"?"inline-flex":"flex")+';align-items:center;gap:6px;margin:0 12px 6px 0;font-size:14px;cursor:pointer"><input type="radio" name="'+(p.label||"radio")+'" value="'+o+'" style="margin:0" />'+o+'</label>'}).join("");h='<div style="margin:0 0 8px">'+ri+'</div>';break;
     case"checkbox":var ci=(p.options||[]).map(function(o){return'<label style="display:flex;align-items:center;gap:6px;margin:0 0 6px;font-size:14px;cursor:pointer"><input type="checkbox" name="'+(p.label||"check")+'" value="'+o+'" style="margin:0" />'+o+'</label>'}).join("");h='<div style="margin:0 0 8px">'+ci+'</div>';break;
@@ -65,7 +112,6 @@ function renderBlock(b){
     case"spacer":h='<div style="height:'+(p.height||16)+'px"></div>';break;
     case"line":h='<hr style="border:none;border-top:'+(p.thickness||1)+'px solid '+(p.color||"#E5E7EB")+';margin:8px 0" />';break;
     case"coupon":h='<div style="margin:8px 0;padding:12px 16px;border:2px dashed '+(p.borderColor||"#F97316")+';border-radius:8px;text-align:center;background:'+(p.bgColor||"#FFF7ED")+'"><p style="font-size:11px;color:#6B7280;margin:0 0 4px">'+(p.description||"Seu cupom:")+'</p><p style="font-size:'+(p.fontSize||20)+'px;font-weight:bold;color:#F97316;letter-spacing:2px;margin:0;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent)">'+(p.code||"CODIGO")+'</p></div>';break;
-    case"date-input":h='<input name="'+(p.label||"date")+'" type="date" style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;box-sizing:border-box;margin:0 0 8px" />';break;
   }
   return h;
 }
