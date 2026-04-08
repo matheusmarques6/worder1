@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Copy, Settings, ChevronDown, Sparkles, MessageCircle, ExternalLink, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -690,6 +690,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               <EmailActionConfig
                 config={selectedNode.data.config || {}}
                 onUpdate={handleUpdate}
+                onLabelChange={handleLabelChange}
                 triggerType={triggerType}
                 organizationId={organizationId}
               />
@@ -2081,7 +2082,7 @@ function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionC
 // ============================================
 // EMAIL ACTION CONFIG (template selector, not credentials)
 // ============================================
-function EmailActionConfig({ config, onUpdate, triggerType, organizationId }: { config: Record<string, any>; onUpdate: (key: string, value: any) => void; triggerType: string; organizationId?: string }) {
+function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organizationId }: { config: Record<string, any>; onUpdate: (key: string, value: any) => void; onLabelChange?: (label: string) => void; triggerType: string; organizationId?: string }) {
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; thumbnail_url?: string }>>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [showSubjectEdit, setShowSubjectEdit] = useState(false)
@@ -2090,15 +2091,22 @@ function EmailActionConfig({ config, onUpdate, triggerType, organizationId }: { 
   const [showEmailEditor, setShowEmailEditor] = useState(false)
   const storeId = useFlowStore.getState().automationConfig?.storeId;
 
+  const fetchTemplates = useCallback(async () => {
+    setLoadingTemplates(true);
+    try {
+      const url = storeId ? `/api/email/templates?storeId=${storeId}` : '/api/email/templates';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setTemplates(data.templates || data || []);
+      }
+    } catch {}
+    setLoadingTemplates(false);
+  }, [storeId]);
+
   useEffect(() => {
-    setLoadingTemplates(true)
-    const url = storeId ? `/api/email/templates?storeId=${storeId}` : '/api/email/templates';
-    fetch(url)
-      .then(r => r.json())
-      .then(data => setTemplates(data.templates || data || []))
-      .catch(() => {})
-      .finally(() => setLoadingTemplates(false))
-  }, [storeId])
+    fetchTemplates();
+  }, [fetchTemplates]);
 
   const inputCls = 'w-full px-3 py-2.5 rounded-md bg-white border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500';
 
@@ -2106,20 +2114,33 @@ function EmailActionConfig({ config, onUpdate, triggerType, organizationId }: { 
     <div className="space-y-0">
 
       {/* === SECTION: Email name + Status (Klaviyo style) === */}
-      <div className="flex items-start gap-3 pb-5">
-        <div className="flex-1 space-y-1">
-          <label className="text-xs font-medium text-gray-500">Email name</label>
-          <input type="text" value={config.emailName || ''} onChange={(e) => onUpdate('emailName', e.target.value)}
-            placeholder="Email #01 Carrinho Abandonado" className={inputCls} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500">Status</label>
-          <select value={config.emailStatus || 'draft'} onChange={(e) => onUpdate('emailStatus', e.target.value)}
-            className="px-3 py-2.5 rounded-md bg-white border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
-            <option value="draft">Draft</option>
-            <option value="live">Live</option>
-            <option value="manual">Manual</option>
-          </select>
+      <div className="pb-5">
+        <div className="flex items-end gap-3">
+          <div className="flex-1 space-y-1">
+            <label className="text-xs font-medium text-gray-500">Email name</label>
+            <input
+              type="text"
+              value={config.emailName || ''}
+              onChange={(e) => {
+                onUpdate('emailName', e.target.value);
+                onLabelChange?.(e.target.value || 'Enviar E-mail');
+              }}
+              placeholder="Email #01 Carrinho Abandonado"
+              className={inputCls}
+            />
+          </div>
+          <div className="space-y-1 shrink-0">
+            <label className="text-xs font-medium text-gray-500">Status</label>
+            <select
+              value={config.emailStatus || 'draft'}
+              onChange={(e) => onUpdate('emailStatus', e.target.value)}
+              className="h-[42px] px-3 rounded-md bg-white border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="draft">Draft</option>
+              <option value="live">Live</option>
+              <option value="manual">Manual</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -2364,7 +2385,10 @@ function EmailActionConfig({ config, onUpdate, triggerType, organizationId }: { 
       {showEmailEditor && config.templateId && config.templateId !== '__new__' && (
         <EmailEditorOverlay
           templateId={config.templateId}
-          onClose={() => setShowEmailEditor(false)}
+          onClose={async () => {
+            await fetchTemplates();
+            setShowEmailEditor(false);
+          }}
         />
       )}
     </div>
