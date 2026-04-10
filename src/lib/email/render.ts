@@ -291,6 +291,9 @@ export function prepareEmailHtml({
 }): string {
   let result = html;
 
+  // 0. Replace countdown base URL placeholder
+  result = result.replace(/\{\{countdown_base_url\}\}/g, baseUrl);
+
   // 1. Replace merge tags
   result = renderMergeTags(result, mergeData);
 

@@ -56,12 +56,14 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
   const linkUnderline = ts?.link?.underline !== false
 
   // Device visibility: wrap any block in a visibility class
-  const visAttr = p.visibility === 'desktop' ? ' class="worder-desktop-only"' : p.visibility === 'mobile' ? ' class="worder-mobile-only"' : ''
+  const visClass = p.visibility === 'desktop' ? 'worder-desktop-only' : p.visibility === 'mobile' ? 'worder-mobile-only' : ''
 
-  // Helper: apply visibility to the <tr> wrapper
+  // Helper: wrap entire block in a visibility row (wraps around the block's own <tr>)
   const wrapVis = (html: string): string => {
-    if (!visAttr) return html
-    return html.replace(/<tr/, `<tr${visAttr}`)
+    if (!visClass || !html) return html
+    // Each block returns <tr>...</tr>. We replace the outermost <tr with <tr class="vis"
+    // Using a targeted regex that only matches the FIRST opening <tr
+    return html.replace(/^(<tr)/, `$1 class="${visClass}"`)
   }
 
   const _render = (): string => {

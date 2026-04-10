@@ -923,7 +923,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     try {
       const html = renderDocumentToHtml(doc)
       const success = await onSave(doc as any, html)
-      if (success) showToast('Template salvo com sucesso!')
+      if (success) { showToast('Template salvo com sucesso!'); setHasUnsavedChanges(false) }
     } catch (err: any) { showToast('Erro: ' + err.message, 'error') }
     setSaving(false)
   }, [doc, onSave, showToast])
@@ -978,6 +978,17 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [handleSave, undo, redo, selectedBlockId, removeBlock, clearSelection])
+
+  // ── Unsaved changes warning ──
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  useEffect(() => { if (historyIdx > 0) setHasUnsavedChanges(true) }, [historyIdx])
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) { e.preventDefault(); e.returnValue = '' }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [hasUnsavedChanges])
 
   const canvasWidth = device === 'mobile' ? 375 : doc.settings.contentWidth
   const isSaved = toast?.type === 'success' && toast.msg.includes('salvo')

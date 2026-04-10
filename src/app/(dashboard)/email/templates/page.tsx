@@ -208,7 +208,14 @@ export default function EmailTemplatesPage() {
                 {template.html ? (
                   <div className="absolute inset-0 flex items-start justify-center">
                     <iframe
-                      srcDoc={template.html}
+                      srcDoc={template.html
+                        .replace(/\{\{countdown_base_url\}\}/g, window.location.origin)
+                        .replace(/\{\{first_name\}\}/g, 'Cliente')
+                        .replace(/\{\{store_name\}\}/g, 'Loja')
+                        .replace(/\{\{store_url\}\}/g, '#')
+                        .replace(/\{\{checkout_url\}\}/g, '#')
+                        .replace(/\{\{[^}]+\}\}/g, '')
+                      }
                       title={template.name}
                       className="border-0 pointer-events-none select-none"
                       style={{ width: 600, height: 900, transform: 'scale(var(--preview-scale))', transformOrigin: 'top center' }}
