@@ -1609,17 +1609,22 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
     }
   }, [organizationId]);
 
+  const [storeError, setStoreError] = useState(false);
+
   const fetchStores = async () => {
     if (!organizationId) return;
     setLoadingStores(true);
+    setStoreError(false);
     try {
       const res = await fetch(`/api/stores?organizationId=${organizationId}`);
       if (res.ok) {
         const data = await res.json();
         setStores(data.stores || []);
+      } else {
+        setStoreError(true);
       }
-    } catch (e) {
-      console.error('Error fetching stores:', e);
+    } catch {
+      setStoreError(true);
     } finally {
       setLoadingStores(false);
     }
@@ -1652,9 +1657,11 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
         </div>
-        <p className="text-[10px] text-gray-400">
-          Filtre por loja específica ou deixe vazio para todas
-        </p>
+        {storeError ? (
+          <p className="text-[10px] text-red-500">Erro ao carregar lojas</p>
+        ) : (
+          <p className="text-[10px] text-gray-400">Filtre por loja especifica ou deixe vazio para todas</p>
+        )}
       </div>
 
       {/* Minimum Value Filter */}
@@ -1878,14 +1885,16 @@ interface AbandonedCartConfigProps {
 function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCartConfigProps) {
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
   const [loadingStores, setLoadingStores] = useState(false);
+  const [storeLoadError, setStoreLoadError] = useState(false);
 
   useEffect(() => {
     if (organizationId) {
       setLoadingStores(true);
+      setStoreLoadError(false);
       fetch(`/api/stores?organizationId=${organizationId}`)
         .then(r => r.ok ? r.json() : { stores: [] })
         .then(data => setStores(data.stores || []))
-        .catch(() => {})
+        .catch(() => setStoreLoadError(true))
         .finally(() => setLoadingStores(false));
     }
   }, [organizationId]);
@@ -1920,6 +1929,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
             <option key={store.id} value={store.id}>{store.name}</option>
           ))}
         </select>
+        {storeLoadError && <p className="text-[10px] text-red-500 mt-1">Erro ao carregar lojas</p>}
       </div>
 
       {/* Minimum cart value */}
@@ -2266,7 +2276,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       name: config.emailName || 'Novo Email',
-                      store_id: storeId,
+                      ...(storeId ? { store_id: storeId } : {}),
                     }),
                   });
                   if (res.ok) {
@@ -2774,8 +2784,19 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
                     <option value="">Campo...</option>
                     {AUDIENCE_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                   </select>
-                  <input type="text" value={cond.value || ''} onChange={(e) => updateExitCondition(idx, { value: e.target.value })}
-                    placeholder="Novo valor" className={inputCls} />
+                  <select value={cond.operator || 'equals'} onChange={(e) => updateExitCondition(idx, { operator: e.target.value })} className={inputCls}>
+                    <option value="equals">Igual a</option>
+                    <option value="not_equals">Diferente de</option>
+                    <option value="is_set">Esta definido</option>
+                    <option value="is_not_set">Nao esta definido</option>
+                    <option value="contains">Contem</option>
+                    <option value="greater_than">Maior que</option>
+                    <option value="less_than">Menor que</option>
+                  </select>
+                  {!['is_set', 'is_not_set'].includes(cond.operator || '') && (
+                    <input type="text" value={cond.value || ''} onChange={(e) => updateExitCondition(idx, { value: e.target.value })}
+                      placeholder="Valor" className={inputCls} />
+                  )}
                 </>
               )}
             </div>

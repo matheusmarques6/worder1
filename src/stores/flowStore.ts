@@ -678,6 +678,33 @@ export const useFlowStore = create<FlowStore>()(
           }
         }
 
+        // Check WhatsApp nodes have credential
+        const whatsappNodes = nodes.filter((n) => n.data.nodeType === 'action_whatsapp');
+        for (const waNode of whatsappNodes) {
+          const cfg = waNode.data.config || {};
+          if (!cfg.credentialId && !cfg.message && !cfg.templateName) {
+            errors.push(`WhatsApp "${waNode.data.label}" precisa de mensagem ou template configurado`);
+          }
+        }
+
+        // Check SMS nodes have message
+        const smsNodes = nodes.filter((n) => n.data.nodeType === 'action_sms');
+        for (const smsNode of smsNodes) {
+          const cfg = smsNode.data.config || {};
+          if (!cfg.message) {
+            errors.push(`SMS "${smsNode.data.label}" precisa de uma mensagem`);
+          }
+        }
+
+        // Check delay nodes have value
+        const delayNodes = nodes.filter((n) => n.data.nodeType === 'control_delay');
+        for (const delayNode of delayNodes) {
+          const cfg = delayNode.data.config || {};
+          if (!cfg.value || cfg.value <= 0) {
+            errors.push(`Delay "${delayNode.data.label}" precisa de um tempo configurado`);
+          }
+        }
+
         // Check condition nodes have both outputs connected
         for (const condNode of nodes.filter((n) => n.data.category === 'condition')) {
           const outEdges = edges.filter((e) => e.source === condNode.id);
