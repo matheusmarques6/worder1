@@ -1003,7 +1003,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
 
   // ── Render ──
   return (
-    <div className="flex flex-col h-screen w-screen bg-gray-100 overflow-hidden">
+    <div className="flex flex-col h-screen w-screen bg-zinc-200 overflow-hidden">
       {/* ── Toast ── */}
       {toast && (
         <div className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-sm font-medium transition-all ${toast.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
@@ -1012,7 +1012,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       )}
 
       {/* ── Toolbar ── */}
-      <div className="flex items-center justify-between px-4 h-[52px] bg-white border-b border-gray-200 flex-shrink-0 z-20">
+      <div className="flex items-center justify-between px-4 h-[52px] bg-zinc-900 flex-shrink-0 z-20">
         <div className="flex items-center gap-3">
           {onNameChange ? (
             <input
@@ -1020,39 +1020,39 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
               defaultValue={templateName}
               onBlur={e => { const v = e.target.value.trim(); if (v && v !== templateName) onNameChange(v) }}
               onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-              className="text-sm font-semibold text-gray-900 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-zinc-900 focus:outline-none truncate max-w-[250px] px-1 py-0.5 -ml-1 rounded"
+              className="text-sm font-semibold text-white bg-transparent border-b border-transparent hover:border-zinc-500 focus:border-white focus:outline-none truncate max-w-[250px] px-1 py-0.5 -ml-1 rounded"
               title="Clique para editar o nome"
             />
           ) : (
-            <span className="text-sm font-semibold text-gray-900 truncate max-w-[250px]">{templateName}</span>
+            <span className="text-sm font-semibold text-white truncate max-w-[250px]">{templateName}</span>
           )}
-          <span className="text-[9px] px-1.5 py-0.5 bg-zinc-100 text-zinc-900 rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
+          <span className="text-[9px] px-1.5 py-0.5 bg-zinc-700 text-zinc-300 rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
         </div>
 
         <div className="flex items-center gap-1">
-          <button onClick={undo} disabled={historyIdx <= 0} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Desfazer"><Undo2 size={15} /></button>
-          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Refazer"><Redo2 size={15} /></button>
-          <div className="w-px h-4 bg-gray-200 mx-1" />
-          <button onClick={() => setDevice('desktop')} className={`p-1.5 rounded transition-colors ${device === 'desktop' ? 'text-zinc-900 bg-zinc-50' : 'text-gray-400 hover:text-gray-700'}`}><Monitor size={15} /></button>
-          <button onClick={() => setDevice('mobile')} className={`p-1.5 rounded transition-colors ${device === 'mobile' ? 'text-zinc-900 bg-zinc-50' : 'text-gray-400 hover:text-gray-700'}`}><Smartphone size={15} /></button>
+          <button onClick={undo} disabled={historyIdx <= 0} className="p-1.5 text-zinc-500 hover:text-white rounded disabled:opacity-30" title="Desfazer"><Undo2 size={15} /></button>
+          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-1.5 text-zinc-500 hover:text-white rounded disabled:opacity-30" title="Refazer"><Redo2 size={15} /></button>
+          <div className="w-px h-4 bg-zinc-700 mx-1" />
+          <button onClick={() => setDevice('desktop')} className={`p-1.5 rounded transition-colors ${device === 'desktop' ? 'text-white bg-zinc-700' : 'text-zinc-500 hover:text-white'}`}><Monitor size={15} /></button>
+          <button onClick={() => setDevice('mobile')} className={`p-1.5 rounded transition-colors ${device === 'mobile' ? 'text-white bg-zinc-700' : 'text-zinc-500 hover:text-white'}`}><Smartphone size={15} /></button>
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowMergeTags(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors" title="Merge Tags">
+          <button onClick={() => setShowMergeTags(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors" title="Merge Tags">
             <Tag size={14} /> Tags
           </button>
-          <button onClick={handlePreview} disabled={previewLoading || showPreview} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50">
+          <button onClick={handlePreview} disabled={previewLoading || showPreview} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors disabled:opacity-50">
             {previewLoading ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />} Preview
           </button>
-          <button onClick={() => setShowSendTest(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+          <button onClick={() => setShowSendTest(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors">
             <Send size={14} /> Teste
           </button>
-          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800 disabled:opacity-50 transition-colors">
+          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-zinc-900 text-xs font-semibold rounded-lg hover:bg-zinc-100 disabled:opacity-50 transition-colors">
             {saving ? <Loader2 size={14} className="animate-spin" /> : isSaved ? <CheckCircle size={14} /> : <Save size={14} />}
             {saving ? 'Salvando...' : isSaved ? 'Salvo!' : 'Salvar'}
           </button>
           <button onClick={() => { if (confirm('Sair do editor? Alteracoes nao salvas serao perdidas.')) onBack() }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 text-xs font-medium text-zinc-600 rounded-lg hover:bg-zinc-50 transition-colors">
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-400 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors">
             Sair
           </button>
         </div>
@@ -1061,7 +1061,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       {/* ── Main Layout ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left Sidebar ── */}
-        <div className="w-[320px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+        <div className="w-[320px] bg-zinc-50 border-r border-zinc-200 flex flex-col flex-shrink-0">
           {/* Tabs only visible when NO block/section is selected */}
           {!selectedBlock && !selectedSection && (
             <div className="flex border-b border-zinc-200 flex-shrink-0">
