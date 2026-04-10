@@ -10,6 +10,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendCampaignEmail } from '@/lib/email/send-campaign-email';
+import { resolveSavedBlocks } from '@/lib/email/render';
+import { renderDocumentToHtml } from '@/lib/email/render-html';
 
 export const maxDuration = 300; // 5 minutes for batch processing
 
@@ -49,6 +51,17 @@ export async function POST(req: NextRequest) {
     if (!template) {
       console.error('[SendBatch] Template not found for campaign:', campaign_id);
       return NextResponse.json({ error: 'Campaign template not found' }, { status: 404 });
+    }
+
+    // Resolve universal/saved blocks — re-render HTML if design_json has linked blocks
+    if (template.design_json) {
+      try {
+        const hasLinkedBlocks = JSON.stringify(template.design_json).includes('_savedBlockId')
+        if (hasLinkedBlocks) {
+          const resolvedDoc = await resolveSavedBlocks(template.design_json, organizationId)
+          template.html = renderDocumentToHtml(resolvedDoc)
+        }
+      } catch (e) { console.error('[SendBatch] Failed to resolve saved blocks:', e) }
     }
 
     // Get contacts for this batch

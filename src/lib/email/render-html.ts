@@ -58,11 +58,16 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
   // Device visibility: wrap any block in a visibility class
   const visClass = p.visibility === 'desktop' ? 'worder-desktop-only' : p.visibility === 'mobile' ? 'worder-mobile-only' : ''
 
-  // Helper: wrap entire block in a visibility row (wraps around the block's own <tr>)
+  // Conditional logic: emit markers if block has condition
+  const conditionEnabled = p._condition_enabled && p._condition_field
+  const conditionMarker = conditionEnabled
+    ? `<!-- WORDER_CONDITION:${encodeURIComponent(JSON.stringify({ field: p._condition_field, operator: p._condition_op || 'equals', value: p._condition_value || '' }))} -->`
+    : ''
+  const conditionEndMarker = conditionEnabled ? '<!-- /WORDER_CONDITION -->' : ''
+
+  // Helper: wrap entire block in a visibility row
   const wrapVis = (html: string): string => {
     if (!visClass || !html) return html
-    // Each block returns <tr>...</tr>. We replace the outermost <tr with <tr class="vis"
-    // Using a targeted regex that only matches the FIRST opening <tr
     return html.replace(/^(<tr)/, `$1 class="${visClass}"`)
   }
 
@@ -290,7 +295,8 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       return ''
   }
   } // end _render
-  return wrapVis(_render())
+  const rendered = wrapVis(_render())
+  return conditionMarker ? conditionMarker + rendered + conditionEndMarker : rendered
 }
 
 function renderSection(section: EmailSection, font: string, contentWidth: number, contentBg: string, settings?: EmailDocument['settings'], isFirst = false, isLast = false): string {

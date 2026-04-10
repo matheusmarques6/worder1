@@ -6,6 +6,61 @@
 // unsubscribe link, and full pipeline.
 // =============================================
 
+import { supabaseAdmin } from '@/lib/supabase-admin'
+
+/**
+ * Resolve saved/universal blocks in an EmailDocument.
+ * For each block with _savedBlockId, fetches the latest version from saved_blocks
+ * and merges its props (keeping the local block's id and _savedBlockId).
+ */
+export async function resolveSavedBlocks(doc: any, orgId: string): Promise<any> {
+  // Collect all unique savedBlockIds
+  const ids = new Set<string>()
+  for (const section of doc.sections || []) {
+    for (const col of section.columns || []) {
+      for (const block of col.blocks || []) {
+        if (block._savedBlockId) ids.add(block._savedBlockId)
+      }
+    }
+  }
+  if (ids.size === 0) return doc
+
+  // Fetch all saved blocks in one query
+  const { data: savedBlocks } = await supabaseAdmin
+    .from('saved_blocks')
+    .select('id, block_json')
+    .eq('organization_id', orgId)
+    .in('id', Array.from(ids))
+
+  if (!savedBlocks || savedBlocks.length === 0) return doc
+
+  const savedMap = new Map(savedBlocks.map(sb => [sb.id, sb.block_json]))
+
+  // Replace block props with latest saved version
+  const resolved = JSON.parse(JSON.stringify(doc))
+  for (const section of resolved.sections || []) {
+    for (const col of section.columns || []) {
+      for (let i = 0; i < (col.blocks || []).length; i++) {
+        const block = col.blocks[i]
+        if (block._savedBlockId && savedMap.has(block._savedBlockId)) {
+          const savedJson = savedMap.get(block._savedBlockId)
+          if (savedJson && savedJson.props) {
+            // Merge: saved props override, keep local id + meta
+            col.blocks[i] = {
+              ...block,
+              type: savedJson.type || block.type,
+              props: { ...savedJson.props },
+              _savedBlockId: block._savedBlockId,
+              _savedBlockName: block._savedBlockName,
+            }
+          }
+        }
+      }
+    }
+  }
+  return resolved
+}
+
 /**
  * Evaluate a block's conditional visibility.
  * Returns true if the block should be shown, false if hidden.
@@ -350,7 +405,21 @@ export function prepareEmailHtml({
 }): string {
   let result = html;
 
-  // 0. Replace countdown base URL placeholder
+  // 0. Evaluate conditional blocks — remove blocks that fail condition check
+  result = result.replace(
+    /<!-- WORDER_CONDITION:(.*?) -->([\s\S]*?)<!-- \/WORDER_CONDITION -->/g,
+    (_, condJson: string, content: string) => {
+      try {
+        const condition = JSON.parse(decodeURIComponent(condJson))
+        const shouldShow = evaluateBlockCondition(condition, mergeData)
+        return shouldShow ? content : ''
+      } catch {
+        return content // On error, show the block
+      }
+    }
+  );
+
+  // 0b. Replace countdown base URL placeholder
   result = result.replace(/\{\{countdown_base_url\}\}/g, baseUrl);
 
   // 1. Replace merge tags

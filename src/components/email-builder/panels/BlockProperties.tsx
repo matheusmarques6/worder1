@@ -171,15 +171,22 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
         <div className="space-y-2 p-2 bg-gray-50 rounded-md">
           <SelectInput value={p._condition_field || ''} onChange={v => onChange('_condition_field', v)} options={[
             { value: '', label: 'Selecionar campo...' },
-            { value: 'first_name', label: 'Nome' }, { value: 'email', label: 'Email' },
+            { value: 'first_name', label: 'Nome' }, { value: 'last_name', label: 'Sobrenome' },
+            { value: 'email', label: 'Email' }, { value: 'phone', label: 'Telefone' },
             { value: 'tags', label: 'Tags' }, { value: 'city', label: 'Cidade' },
-            { value: 'total_orders', label: 'Total Pedidos' }, { value: 'source', label: 'Origem' },
+            { value: 'state', label: 'Estado' }, { value: 'country', label: 'Pais' },
+            { value: 'company', label: 'Empresa' }, { value: 'gender', label: 'Genero' },
+            { value: 'total_orders', label: 'Total Pedidos' },
+            { value: 'total_spent', label: 'Total Gasto' },
+            { value: 'source', label: 'Origem' },
           ]} />
           <SelectInput value={p._condition_op || ''} onChange={v => onChange('_condition_op', v)} options={[
             { value: '', label: 'Operador...' },
-            { value: 'equals', label: 'É igual a' }, { value: 'not_equals', label: 'Não é igual a' },
-            { value: 'contains', label: 'Contém' }, { value: 'is_set', label: 'Está preenchido' },
-            { value: 'is_not_set', label: 'Está vazio' },
+            { value: 'equals', label: 'E igual a' }, { value: 'not_equals', label: 'Nao e igual a' },
+            { value: 'contains', label: 'Contem' }, { value: 'not_contains', label: 'Nao contem' },
+            { value: 'greater_than', label: 'Maior que' }, { value: 'less_than', label: 'Menor que' },
+            { value: 'is_set', label: 'Esta preenchido' }, { value: 'is_not_set', label: 'Esta vazio' },
+            { value: 'starts_with', label: 'Comeca com' }, { value: 'ends_with', label: 'Termina com' },
           ]} />
           {!['is_set', 'is_not_set'].includes(p._condition_op || '') && (
             <TextInput value={p._condition_value || ''} onChange={v => onChange('_condition_value', v)} placeholder="Valor" />
