@@ -13,13 +13,57 @@ export async function POST(request: NextRequest) {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
   const body = await request.json();
-  const { templateId, contactId, triggerType, organizationId } = body;
+  const { templateId, contactId, triggerType, organizationId, action } = body;
 
-  if (!templateId || !contactId || !organizationId) {
-    return NextResponse.json({ error: 'templateId, contactId, organizationId required' }, { status: 400 });
+  if (!templateId || !organizationId) {
+    return NextResponse.json({ error: 'templateId, organizationId required' }, { status: 400 });
   }
 
   try {
+    // If action is list_events, return recent events matching the trigger
+    if (action === 'list_events') {
+      const eventTypeMap: Record<string, string> = {
+        trigger_abandon: 'cart_abandoned',
+        trigger_checkout_abandoned: 'checkout_started',
+        trigger_order: 'order',
+        trigger_order_paid: 'order',
+        trigger_fulfilled_order: 'fulfilled_order',
+        trigger_cancelled_order: 'cancelled_order',
+        trigger_viewed_product: 'viewed_product',
+        trigger_added_to_cart: 'add_to_cart',
+        trigger_signup: 'contact_created',
+        trigger_form_submitted: 'form_submitted',
+      };
+      const eventType = eventTypeMap[triggerType || ''] || 'order';
+
+      const { data: events } = await supabase
+        .from('contact_events')
+        .select('id, contact_id, event_type, properties, occurred_at')
+        .eq('organization_id', organizationId)
+        .eq('event_type', eventType)
+        .order('occurred_at', { ascending: false })
+        .limit(10);
+
+      if (events && events.length > 0) {
+        return NextResponse.json({ events });
+      }
+
+      // Fallback: get any recent events
+      const { data: anyEvents } = await supabase
+        .from('contact_events')
+        .select('id, contact_id, event_type, properties, occurred_at')
+        .eq('organization_id', organizationId)
+        .order('occurred_at', { ascending: false })
+        .limit(10);
+
+      return NextResponse.json({ events: anyEvents || [] });
+    }
+
+    // Need contactId for preview rendering
+    if (!contactId) {
+      return NextResponse.json({ error: 'contactId required for preview' }, { status: 400 });
+    }
+
     // 1. Fetch template
     const { data: template } = await supabase
       .from('email_templates')
