@@ -158,7 +158,13 @@ function renderBlock(b){
   var p=b.props||{},h="";
   switch(b.type){
     case"text":h='<div style="font-size:'+((p.fontSize||16))+'px;color:'+(p.color||"#111827")+';font-weight:'+(p.fontWeight||"normal")+';text-align:'+(p.align||"left")+';margin:0 0 8px;line-height:1.3">'+((p.content||""))+'</div>';break;
-    case"image":h=p.src?'<img src="'+p.src+'" alt="'+(p.alt||"")+'" style="width:'+(p.width||"100%")+';border-radius:'+(p.borderRadius||0)+'px;display:block;margin:0 0 12px" />':'';break;
+    case"image":{
+      if(!p.src){h="";break}
+      var imgTag='<img src="'+esc(p.src)+'" alt="'+esc(p.alt||"")+'" style="width:'+(p.imgWidth?p.imgWidth+"%":(p.width||"100%"))+';max-height:'+(p.maxHeight||300)+'px;object-fit:contain;border-radius:'+(p.borderRadius||0)+'px;display:inline-block" />';
+      if(p.href)imgTag='<a href="'+esc(p.href)+'" target="_blank" rel="noopener noreferrer" style="display:inline-block">'+imgTag+'</a>';
+      h='<div style="text-align:'+(p.align||"center")+';margin:0 0 8px;padding:'+(p.padding||0)+'px">'+imgTag+'</div>';
+      break;
+    }
     case"email":case"phone":case"name-input":case"text-input":case"date-input":{
       var nm=p.mapTo==="custom"?("custom:"+(p.mapToCustom||p.label||"field")):(p.mapTo||(b.type==="email"?"email":b.type==="phone"?"phone":b.type==="name-input"?"first_name":"field"));
       var itype=b.type==="email"?"email":b.type==="phone"?"tel":b.type==="date-input"?"date":"text";
@@ -176,14 +182,46 @@ function renderBlock(b){
       h=customCss+'<div style="'+wrapStyleStr(p)+'"><div style="'+innerWrapStyleStr(p)+'">'+lbl+inputHtml+'</div></div>';
       break;
     }
-    case"dropdown":var opts=(p.options||[]).map(function(o){return'<option value="'+o+'">'+o+'</option>'}).join("");h='<select name="'+(p.label||"select")+'" style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;box-sizing:border-box;margin:0 0 8px"><option value="">'+(p.placeholder||"Selecione")+'</option>'+opts+'</select>';break;
-    case"radio":var ri=(p.options||[]).map(function(o,i){return'<label style="display:'+(p.layout==="horizontal"?"inline-flex":"flex")+';align-items:center;gap:6px;margin:0 12px 6px 0;font-size:14px;cursor:pointer"><input type="radio" name="'+(p.label||"radio")+'" value="'+o+'" style="margin:0" />'+o+'</label>'}).join("");h='<div style="margin:0 0 8px">'+ri+'</div>';break;
-    case"checkbox":var ci=(p.options||[]).map(function(o){return'<label style="display:flex;align-items:center;gap:6px;margin:0 0 6px;font-size:14px;cursor:pointer"><input type="checkbox" name="'+(p.label||"check")+'" value="'+o+'" style="margin:0" />'+o+'</label>'}).join("");h='<div style="margin:0 0 8px">'+ci+'</div>';break;
-    case"legal-consent":h='<label style="display:flex;align-items:flex-start;gap:8px;font-size:'+(p.fontSize||12)+'px;color:#6B7280;margin:0 0 8px;cursor:pointer;line-height:1.4"><input type="checkbox" name="consent" '+(p.required?"required":"")+' style="margin-top:2px;flex-shrink:0" /><span>'+(p.text||"Concordo com a política de privacidade")+'</span></label>';break;
-    case"button":var act=p.action||"submit";h='<button type="'+(act==="submit"?"submit":"button")+'" data-action="'+act+'" style="width:'+(p.fullWidth?"100%":"auto")+';padding:14px 28px;background:'+(p.bgColor||"#111827")+';color:'+(p.textColor||"#fff")+';font-size:'+(p.fontSize||15)+'px;font-weight:700;border-radius:'+(p.borderRadius||8)+'px;border:none;cursor:pointer;margin:0 0 8px;display:block">'+(p.text||"Enviar")+'</button>';break;
+    case"dropdown":{
+      var ddName=p.mapTo==="custom"?("custom:"+(p.mapToCustom||p.label||"select")):(p.mapTo||p.label||"select");
+      var opts=(p.options||[]).map(function(o){return'<option value="'+esc(o)+'">'+esc(o)+'</option>'}).join("");
+      var ddLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:4px">'+esc(p.label)+'</label>':"";
+      h=ddLabel+'<select name="'+esc(ddName)+'" style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;box-sizing:border-box;margin:0 0 8px"><option value="">'+(p.placeholder||"Escolha...")+'</option>'+opts+'</select>';
+      break;
+    }
+    case"radio":{
+      var rName=p.mapTo==="custom"?("custom:"+(p.mapToCustom||p.label||"radio")):(p.mapTo||p.label||"radio");
+      var rLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px">'+esc(p.label)+'</label>':"";
+      var ri=(p.options||[]).map(function(o){return'<label style="display:'+(p.layout==="horizontal"?"inline-flex":"flex")+';align-items:center;gap:8px;margin:0 12px 8px 0;font-size:14px;cursor:pointer"><input type="radio" name="'+esc(rName)+'" value="'+esc(o)+'" style="margin:0;accent-color:#F97316" />'+esc(o)+'</label>'}).join("");
+      h=rLabel+'<div style="margin:0 0 8px">'+ri+'</div>';
+      break;
+    }
+    case"checkbox":{
+      var cbName=p.mapTo==="custom"?("custom:"+(p.mapToCustom||p.label||"check")):(p.mapTo||p.label||"check");
+      var cbLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px">'+esc(p.label)+'</label>':"";
+      var ci=(p.options||[]).map(function(o){return'<label style="display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:14px;cursor:pointer"><input type="checkbox" name="'+esc(cbName)+'" value="'+esc(o)+'" style="margin:0;accent-color:#F97316" />'+esc(o)+'</label>'}).join("");
+      h=cbLabel+'<div style="margin:0 0 8px">'+ci+'</div>';
+      break;
+    }
+    case"legal-consent":{
+      var lcText=(p.text||"Concordo com a politica de privacidade").replace(/<a /g,'<a style="color:'+(p.linkColor||"#F97316")+';text-decoration:underline" ');
+      h='<label style="display:flex;align-items:flex-start;gap:8px;font-size:'+(p.fontSize||12)+'px;color:'+(p.color||"#6B7280")+';margin:0 0 8px;cursor:pointer;line-height:'+(p.lineHeight||1.4)+'"><input type="checkbox" name="consent" '+(p.required?"required":"")+' style="margin-top:2px;flex-shrink:0" /><span>'+lcText+'</span></label>';
+      break;
+    }
+    case"button":{
+      var act=p.action||"submit";
+      var btnBorder=p.btnBorderWidth?"border:"+p.btnBorderWidth+"px solid "+(p.btnBorderColor||"#E5E7EB"):"border:none";
+      var btnId="wb_"+b.id;
+      var hoverCss=p.hoverColor?'<style>#'+btnId+':hover{background:'+(p.hoverColor)+'!important}</style>':"";
+      h=hoverCss+'<button id="'+btnId+'" type="'+(act==="submit"?"submit":"button")+'" data-action="'+act+'"'+(p.url?' data-url="'+esc(p.url)+'"':"")+' style="width:'+(p.fullWidth?"100%":"auto")+';padding:'+(p.paddingV||14)+'px '+(p.paddingH||28)+'px;background:'+(p.bgColor||"#F97316")+';color:'+(p.textColor||"#fff")+';font-size:'+(p.fontSize||15)+'px;font-weight:700;border-radius:'+(p.borderRadius||8)+'px;'+btnBorder+';cursor:pointer;margin:0 0 8px;display:block;transition:background 0.2s">'+(p.text||"Enviar")+'</button>';
+      break;
+    }
     case"spacer":h='<div style="height:'+(p.height||16)+'px"></div>';break;
     case"line":h='<hr style="border:none;border-top:'+(p.thickness||1)+'px solid '+(p.color||"#E5E7EB")+';margin:8px 0" />';break;
-    case"coupon":h='<div style="margin:8px 0;padding:12px 16px;border:2px dashed '+(p.borderColor||"#F97316")+';border-radius:8px;text-align:center;background:'+(p.bgColor||"#FFF7ED")+'"><p style="font-size:11px;color:#6B7280;margin:0 0 4px">'+(p.description||"Seu cupom:")+'</p><p style="font-size:'+(p.fontSize||20)+'px;font-weight:bold;color:#F97316;letter-spacing:2px;margin:0;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent)">'+(p.code||"CODIGO")+'</p></div>';break;
+    case"coupon":{
+      h='<div style="margin:8px 0;padding:12px 16px;border:2px dashed '+(p.borderColor||"#F97316")+';border-radius:'+(p.borderRadius||8)+'px;text-align:center;background:'+(p.bgColor||"#FFF7ED")+'"><p style="font-size:11px;color:#6B7280;margin:0 0 4px">'+esc(p.description||"Seu cupom:")+'</p><p style="font-size:'+(p.fontSize||20)+'px;font-weight:bold;color:'+(p.codeColor||"#F97316")+';letter-spacing:2px;margin:0;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent)">'+esc(p.code||"CODIGO")+'</p></div>';
+      break;
+    }
   }
   return h;
 }
@@ -251,7 +289,14 @@ function show(){
     f.addEventListener("submit",function(e){
       e.preventDefault();
       var fd=new FormData(f);
-      fd.forEach(function(v,k){allData[k]=v});
+      fd.forEach(function(v,k){
+        if(allData[k]!==undefined){
+          // Aggregate multiple values (checkboxes) into comma-separated string
+          allData[k]=allData[k]+","+v;
+        } else {
+          allData[k]=v;
+        }
+      });
       var payload={answers:allData};
       if(currentUtms.utm_source)payload.utm_source=currentUtms.utm_source;
       if(currentUtms.utm_medium)payload.utm_medium=currentUtms.utm_medium;

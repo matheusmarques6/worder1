@@ -162,9 +162,9 @@ const defaultProps: Record<string, Record<string, any>> = {
   'name-input': { ...INPUT_BASE_DEFAULTS, placeholder: 'Seu nome', label: 'Nome', mapTo: 'first_name' },
   'text-input': { ...INPUT_BASE_DEFAULTS, placeholder: 'Digite aqui...', label: 'Campo', showLabel: true, mapTo: 'custom' },
   'date-input': { ...INPUT_BASE_DEFAULTS, label: 'Data de nascimento', showLabel: true, mapTo: 'birthday' },
-  dropdown: { label: 'Selecione', options: ['Opção 1', 'Opção 2'], placeholder: 'Escolha...' },
-  radio: { label: 'Escolha', options: ['Opção 1', 'Opção 2'], layout: 'vertical' },
-  checkbox: { label: 'Escolha', options: ['Opção 1', 'Opção 2'] },
+  dropdown: { label: 'Selecione', options: ['Opcao 1', 'Opcao 2'], placeholder: 'Escolha...', showLabel: true, mapTo: 'custom', mapToCustom: '' },
+  radio: { label: 'Escolha', options: ['Opcao 1', 'Opcao 2'], layout: 'vertical', showLabel: true, mapTo: 'custom', mapToCustom: '' },
+  checkbox: { label: 'Escolha', options: ['Opcao 1', 'Opcao 2'], showLabel: true, mapTo: 'custom', mapToCustom: '' },
   'legal-consent': { text: 'Aceito receber comunicações e concordo com a política de privacidade.', required: true, fontSize: 12, color: '#6B7280' },
   text: { content: 'Ganhe 10% de desconto!', fontSize: 28, color: '#111827', fontWeight: 'bold', align: 'center', tag: 'h2', lineHeight: 1.3 },
   button: { text: 'QUERO MEU DESCONTO', bgColor: '#F97316', textColor: '#fff', fontSize: 15, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 14, paddingH: 28 },
@@ -379,9 +379,8 @@ function BlockPreview({ block }: { block: Block }) {
   const inputStyle = "w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white placeholder-gray-400 outline-none"
   const phCssVar = { ['--worder-ph-color' as any]: p.placeholderColor || '#9CA3AF' } as React.CSSProperties
   switch (block.type) {
-    case 'text': return <div contentEditable suppressContentEditableWarning
-      onBlur={e => { const newText = e.currentTarget.textContent || ''; if (newText !== p.content) { block.props.content = newText } }}
-      style={{ ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit', outline: 'none', cursor: 'text', minHeight: '1em' }}>{p.content}</div>
+    case 'text': return <div
+      style={{ ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textDecoration: p.textDecoration || 'none', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit', minHeight: '1em' }}>{p.content}</div>
     case 'email':
       return <InputBlockPreview block={block}><><InputPreviewStyles /><input readOnly placeholder={p.placeholder || 'Seu email'} className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
     case 'phone':
@@ -394,26 +393,65 @@ function BlockPreview({ block }: { block: Block }) {
     case 'date-input':
       return <InputBlockPreview block={block}><><InputPreviewStyles /><input type="date" className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
     case 'button':
-      return <div style={{ ...blockStyle, textAlign: p.fullWidth ? undefined : (p.align || 'center') as any }}><button style={{ backgroundColor: p.bgColor || '#F97316', color: p.textColor || '#fff', borderRadius: p.borderRadius || 8, width: p.fullWidth ? '100%' : 'auto', fontSize: p.fontSize || 15, fontWeight: 700, padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`, border: 'none', cursor: 'pointer' }}>{p.text || 'Enviar'}</button></div>
-    case 'image':
-      return <div style={{ ...blockStyle, textAlign: (p.align || 'center') as any, padding: p.padding || 0 }}>{p.src ? <img src={p.src} alt={p.alt} style={{ width: `${p.imgWidth || 100}%`, maxHeight: p.maxHeight || 300, objectFit: 'contain', borderRadius: p.borderRadius || 0, display: 'inline-block' }} /> : <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-300"><ImageIcon className="w-10 h-10" /></div>}</div>
+      return <div style={{ ...blockStyle, textAlign: p.fullWidth ? undefined : (p.align || 'center') as any }}>
+        <button
+          onMouseEnter={e => { if (p.hoverColor) (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.hoverColor }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.bgColor || '#F97316' }}
+          style={{
+            backgroundColor: p.bgColor || '#F97316', color: p.textColor || '#fff',
+            borderRadius: p.borderRadius || 8, width: p.fullWidth ? '100%' : 'auto',
+            fontSize: p.fontSize || 15, fontWeight: 700,
+            padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`,
+            border: p.btnBorderWidth ? `${p.btnBorderWidth}px solid ${p.btnBorderColor || '#E5E7EB'}` : 'none',
+            cursor: 'pointer', transition: 'background-color 0.2s',
+          }}>{p.text || 'Enviar'}</button>
+      </div>
+    case 'image': {
+      const imgEl = p.src
+        ? <img src={p.src} alt={p.alt || ''} style={{ width: `${p.imgWidth || 100}%`, maxHeight: p.maxHeight || 300, objectFit: 'contain', borderRadius: p.borderRadius || 0, display: 'inline-block' }} />
+        : <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-300"><ImageIcon className="w-10 h-10" /></div>
+      return <div style={{ ...blockStyle, textAlign: (p.align || 'center') as any, padding: p.padding || 0 }}>
+        {p.href ? <a href={p.href} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block' }}>{imgEl}</a> : imgEl}
+      </div>
+    }
     case 'spacer': return <div style={{ ...blockStyle, height: p.height || 24 }} />
     case 'line': return <div style={blockStyle}><hr style={{ border: 'none', borderTop: `${p.thickness || 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'}`, margin: 0 }} /></div>
     case 'coupon':
-      return <div style={{ ...blockStyle, padding: '16px', border: `2px dashed ${p.borderColor || '#F97316'}`, borderRadius: 8, textAlign: 'center', background: p.bgColor || '#FFF7ED' }}><p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 4px' }}>{p.description}</p><p style={{ fontSize: p.fontSize || 20, fontWeight: 700, color: '#F97316', letterSpacing: 2, margin: 0 }}>{p.code}</p></div>
+      return <div style={{ ...blockStyle, padding: '16px', border: `2px dashed ${p.borderColor || '#F97316'}`, borderRadius: p.borderRadius ?? 8, textAlign: 'center', background: p.bgColor || '#FFF7ED' }}>
+        <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 4px' }}>{p.description}</p>
+        <p onClick={() => { navigator.clipboard?.writeText(p.code || ''); }}
+          style={{ fontSize: p.fontSize || 20, fontWeight: 700, color: p.codeColor || '#F97316', letterSpacing: 2, margin: 0, cursor: 'pointer' }}
+          title="Clique para copiar">{p.code}</p>
+      </div>
     case 'countdown': {
       const vals = ['03', '12', '45', '30']
       const lbls = p.labels || { days: 'DIAS', hours: 'HORAS', minutes: 'MIN', seconds: 'SEG' }
       return <div style={{ ...blockStyle, textAlign: 'center', padding: '16px', backgroundColor: p.boxColor || '#1F2937', borderRadius: 8 }}><div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>{vals.map((v, i) => (<span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{i > 0 && <span style={{ color: p.labelColor || '#9CA3AF', fontSize: 20, fontWeight: 700 }}>:</span>}<span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}><span style={{ fontSize: p.fontSize || 28, fontWeight: 800, color: p.numberColor || '#FFFFFF', lineHeight: 1 }}>{v}</span><span style={{ fontSize: 9, color: p.labelColor || '#9CA3AF', marginTop: 4, letterSpacing: 1 }}>{[lbls.days, lbls.hours, lbls.minutes, lbls.seconds][i]}</span></span></span>))}</div></div>
     }
     case 'legal-consent':
-      return <div style={blockStyle}><label className="flex items-start gap-2" style={{ fontSize: p.fontSize || 12, color: p.color || '#6B7280', lineHeight: 1.4 }}><input type="checkbox" className="mt-0.5 flex-shrink-0" /><span>{p.text}</span></label></div>
+      return <div style={blockStyle}><label className="flex items-start gap-2" style={{ fontSize: p.fontSize || 12, color: p.color || '#6B7280', lineHeight: p.lineHeight || 1.4 }}><input type="checkbox" className="mt-0.5 flex-shrink-0" /><span dangerouslySetInnerHTML={{ __html: (p.text || '').replace(/<a /g, `<a style="color:${p.linkColor || '#F97316'};text-decoration:underline;" `) }} /></label></div>
     case 'dropdown':
-      return <div style={blockStyle}><select className={inputStyle}><option>{p.placeholder || p.label}</option>{(p.options || []).map((o: string) => <option key={o}>{o}</option>)}</select></div>
+      return <div style={blockStyle}>
+        {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1">{p.label}</label>}
+        <select className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white text-gray-600 outline-none">
+          <option>{p.placeholder || 'Escolha...'}</option>
+          {(p.options || []).map((o: string) => <option key={o}>{o}</option>)}
+        </select>
+      </div>
     case 'radio':
-      return <div style={blockStyle}><div style={{ display: 'flex', flexDirection: p.layout === 'horizontal' ? 'row' : 'column', gap: p.layout === 'horizontal' ? 12 : 6 }}>{(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="text-brand-500" />{o}</label>)}</div></div>
+      return <div style={blockStyle}>
+        {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1.5">{p.label}</label>}
+        <div style={{ display: 'flex', flexDirection: p.layout === 'horizontal' ? 'row' : 'column', gap: p.layout === 'horizontal' ? 12 : 8 }}>
+          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="accent-brand-500" />{o}</label>)}
+        </div>
+      </div>
     case 'checkbox':
-      return <div style={blockStyle}><div className="space-y-2">{(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="rounded text-brand-500" />{o}</label>)}</div></div>
+      return <div style={blockStyle}>
+        {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1.5">{p.label}</label>}
+        <div className="space-y-2">
+          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="checkbox" className="rounded accent-brand-500" />{o}</label>)}
+        </div>
+      </div>
     default: return <div className="text-xs text-gray-400 p-2">[{block.type}]</div>
   }
 }
@@ -782,27 +820,35 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 
       case 'button':
         return <>
-          <Field label="Ação do botão">
+          <Field label="Acao do botao">
             <select className={sel} value={p.action || 'submit'} onChange={e => up('action', e.target.value)}>
-              <option value="submit">Enviar formulário</option><option value="url">Abrir link</option><option value="next-step">Próxima etapa</option><option value="close">Fechar popup</option>
+              <option value="submit">Enviar formulario</option><option value="url">Abrir link</option><option value="next-step">Proxima etapa</option><option value="close">Fechar popup</option>
             </select>
           </Field>
           {p.action === 'url' && <Field label="URL"><input className={inp} value={p.url || ''} onChange={e => up('url', e.target.value)} placeholder="https://" /></Field>}
-          <Field label="Texto do botão"><input className={inp} value={p.text || ''} onChange={e => up('text', e.target.value)} /></Field>
+          <Field label="Texto do botao"><input className={inp} value={p.text || ''} onChange={e => up('text', e.target.value)} /></Field>
+
+          <PanelColorField label="Cor de fundo" value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
+          <PanelColorField label="Cor do texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
+          <PanelColorField label="Cor ao passar o mouse" value={p.hoverColor || ''} onChange={v => up('hoverColor', v)} />
+
           <div className="grid grid-cols-2 gap-2">
-            <ColorField label="Cor fundo" value={p.bgColor || '#111827'} onChange={v => up('bgColor', v)} />
-            <ColorField label="Cor texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
+            <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 15} onChange={e => up('fontSize', +e.target.value)} min={10} max={30} /></Field>
+            <Field label="Raio borda"><input type="number" className={inp} value={p.borderRadius || 8} onChange={e => up('borderRadius', +e.target.value)} min={0} max={50} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 15} onChange={e => up('fontSize', +e.target.value)} /></Field>
-            <Field label="Raio borda"><input type="number" className={inp} value={p.borderRadius || 8} onChange={e => up('borderRadius', +e.target.value)} /></Field>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Padding V"><input type="number" className={inp} value={p.paddingV || 14} onChange={e => up('paddingV', +e.target.value)} min={4} max={40} /></Field>
-            <Field label="Padding H"><input type="number" className={inp} value={p.paddingH || 28} onChange={e => up('paddingH', +e.target.value)} min={4} max={60} /></Field>
+            <Field label="Padding vertical"><input type="number" className={inp} value={p.paddingV || 14} onChange={e => up('paddingV', +e.target.value)} min={4} max={40} /></Field>
+            <Field label="Padding horizontal"><input type="number" className={inp} value={p.paddingH || 28} onChange={e => up('paddingH', +e.target.value)} min={4} max={60} /></Field>
           </div>
           <Field label="Alinhamento"><AlignButtons value={p.fullWidth ? 'full' : (p.align || 'full')} onChange={v => { up('fullWidth', v === 'full'); if (v !== 'full') up('align', v) }} /></Field>
-          <ColorField label="Cor hover" value={p.hoverColor || ''} onChange={v => up('hoverColor', v)} />
+
+          <div className="pt-2 border-t border-gray-100">
+            <p className="text-[12px] font-medium text-gray-700 mb-2">Borda do botao</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Largura"><input type="number" className={inp} value={p.btnBorderWidth ?? 0} onChange={e => up('btnBorderWidth', +e.target.value)} min={0} max={5} /></Field>
+              <PanelColorField label="Cor" value={p.btnBorderColor || '#E5E7EB'} onChange={v => up('btnBorderColor', v)} />
+            </div>
+          </div>
         </>
 
       case 'image':
@@ -855,10 +901,46 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 
       case 'dropdown': case 'radio': case 'checkbox':
         return <>
+          <Field label="Campo do perfil" hint="Onde salvar a resposta no contato.">
+            <select className={sel} value={p.mapTo || 'custom'} onChange={e => up('mapTo', e.target.value)}>
+              <option value="custom">Campo personalizado</option>
+              {PROFILE_FIELDS.filter(f => f.value !== 'custom').map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          </Field>
+          {p.mapTo === 'custom' && (
+            <Field label="Nome do campo"><input className={inp} value={p.mapToCustom || p.label || ''} onChange={e => up('mapToCustom', e.target.value)} placeholder="ex: preferencia" /></Field>
+          )}
+          {block.type === 'dropdown' && (
+            <Field label="Placeholder"><input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} placeholder="Escolha uma opcao..." /></Field>
+          )}
           <Field label="Label"><input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} /></Field>
-          <Field label="Opções (uma por linha)"><textarea className={inp} rows={4} value={(p.options || []).join('\n')} onChange={e => up('options', e.target.value.split('\n').filter(Boolean))} /></Field>
-          <Toggle label="Campo obrigatório" checked={p.required || false} onChange={v => up('required', v)} />
-          {block.type === 'radio' && <Field label="Direção">
+          <ToggleRow label="Mostrar label" checked={p.showLabel !== false} onChange={v => up('showLabel', v)} />
+          <Field label="Opcoes" hint="Uma opcao por linha. Arraste para reordenar.">
+            <div className="space-y-1">
+              {(p.options || []).map((opt: string, i: number) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-gray-300 w-4 text-center flex-shrink-0">{i + 1}</span>
+                  <input className={inp + ' flex-1'} value={opt} onChange={e => {
+                    const next = [...(p.options || [])]; next[i] = e.target.value; up('options', next)
+                  }} />
+                  <button onClick={() => { const next = [...(p.options || [])]; if (i > 0) { [next[i-1], next[i]] = [next[i], next[i-1]]; up('options', next) } }}
+                    className="p-1 text-gray-300 hover:text-gray-600" title="Mover para cima">
+                    <ChevronDown className="w-3 h-3 rotate-180" />
+                  </button>
+                  <button onClick={() => up('options', (p.options || []).filter((_: any, j: number) => j !== i))}
+                    className="p-1 text-gray-300 hover:text-red-500" title="Remover">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              <button onClick={() => up('options', [...(p.options || []), `Opcao ${(p.options || []).length + 1}`])}
+                className="w-full py-1.5 text-[11px] font-medium text-brand-600 border border-dashed border-brand-300 rounded-lg hover:bg-brand-50">
+                + Adicionar opcao
+              </button>
+            </div>
+          </Field>
+          <ToggleRow label="Campo obrigatorio" checked={p.required || false} onChange={v => up('required', v)} />
+          {block.type === 'radio' && <Field label="Direcao">
             <select className={sel} value={p.layout || 'vertical'} onChange={e => up('layout', e.target.value)}>
               <option value="vertical">Vertical</option><option value="horizontal">Horizontal</option>
             </select>
@@ -867,25 +949,38 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 
       case 'legal-consent':
         return <>
-          <Field label="Texto de consentimento"><textarea className={inp} rows={3} value={p.text || ''} onChange={e => up('text', e.target.value)} /></Field>
-          <Toggle label="Obrigatório" checked={p.required !== false} onChange={v => up('required', v)} />
-          <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 12} onChange={e => up('fontSize', +e.target.value)} /></Field>
-          <ColorField label="Cor do texto" value={p.color || '#6B7280'} onChange={v => up('color', v)} />
+          <Field label="Texto de consentimento" hint="Suporta HTML basico. Use &lt;a href=&quot;url&quot;&gt;link&lt;/a&gt; para links.">
+            <textarea className={inp} rows={4} value={p.text || ''} onChange={e => up('text', e.target.value)}
+              placeholder='Aceito receber comunicacoes e concordo com a <a href="/politica">politica de privacidade</a>.' />
+          </Field>
+          <ToggleRow label="Obrigatorio" checked={p.required !== false} onChange={v => up('required', v)} />
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 12} onChange={e => up('fontSize', +e.target.value)} min={10} max={18} /></Field>
+            <Field label="Altura linha">
+              <select className={sel} value={String(p.lineHeight || 1.4)} onChange={e => up('lineHeight', +e.target.value)}>
+                <option value="1.2">1.2</option><option value="1.4">1.4</option><option value="1.6">1.6</option><option value="1.8">1.8</option>
+              </select>
+            </Field>
+          </div>
+          <PanelColorField label="Cor do texto" value={p.color || '#6B7280'} onChange={v => up('color', v)} />
+          <PanelColorField label="Cor dos links" value={p.linkColor || '#F97316'} onChange={v => up('linkColor', v)} />
         </>
 
       case 'coupon':
         return <>
-          <Field label="Código do cupom"><input className={inp} value={p.code || ''} onChange={e => up('code', e.target.value)} /></Field>
-          <Field label="Descrição"><input className={inp} value={p.description || ''} onChange={e => up('description', e.target.value)} /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <ColorField label="Cor fundo" value={p.bgColor || '#FFF7ED'} onChange={v => up('bgColor', v)} />
-            <ColorField label="Cor borda" value={p.borderColor || '#F97316'} onChange={v => up('borderColor', v)} />
-          </div>
-          <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 20} onChange={e => up('fontSize', +e.target.value)} /></Field>
+          <Field label="Codigo do cupom"><input className={inp} value={p.code || ''} onChange={e => up('code', e.target.value)} /></Field>
+          <Field label="Descricao"><input className={inp} value={p.description || ''} onChange={e => up('description', e.target.value)} /></Field>
+          <PanelColorField label="Cor do fundo" value={p.bgColor || '#FFF7ED'} onChange={v => up('bgColor', v)} />
+          <PanelColorField label="Cor da borda" value={p.borderColor || '#F97316'} onChange={v => up('borderColor', v)} />
+          <PanelColorField label="Cor do codigo" value={p.codeColor || '#F97316'} onChange={v => up('codeColor', v)} />
+          <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 20} onChange={e => up('fontSize', +e.target.value)} min={14} max={36} /></Field>
+          <Field label="Raio borda"><input type="number" className={inp} value={p.borderRadius ?? 8} onChange={e => up('borderRadius', +e.target.value)} min={0} max={20} /></Field>
         </>
 
       case 'spacer':
-        return <Field label="Altura (px)"><input type="range" min={4} max={80} value={p.height || 16} onChange={e => up('height', +e.target.value)} className="w-full" /><span className="text-xs text-gray-400">{p.height || 16}px</span></Field>
+        return <Field label={`Altura: ${p.height || 16}px`}>
+          <input type="range" min={4} max={120} value={p.height || 16} onChange={e => up('height', +e.target.value)} className="w-full accent-brand-500" />
+        </Field>
 
       case 'line':
         return <>
