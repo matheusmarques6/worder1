@@ -10,6 +10,8 @@ interface BlockPreviewProps {
   onSelect: () => void
   onClone: () => void
   onDelete: () => void
+  selectedSubElement?: string | null
+  onSelectSubElement?: (subEl: string | null) => void
 }
 
 const DYNAMIC_TYPES = new Set(['product-grid', 'abandoned-cart', 'coupon'])
@@ -47,6 +49,8 @@ export function BlockPreview({
   onSelect,
   onClone,
   onDelete,
+  selectedSubElement,
+  onSelectSubElement,
 }: BlockPreviewProps) {
   const p = block.props
   const pad = parsePadding(p.padding)
@@ -570,65 +574,18 @@ export function BlockPreview({
           { name: 'Product name', desc: 'Product description', price: 'R$0.00', oldPrice: 'R$0.00' },
         ]
         const btnAlign = p.buttonAlign || 'left'
+        // Sub-element click handler (compound block)
+        const subClick = (el: string) => (e: React.MouseEvent) => {
+          e.stopPropagation()
+          onSelectSubElement?.(el)
+        }
+        const subRing = (el: string) => selectedSubElement === el ? 'outline outline-2 outline-zinc-900 outline-offset-1 rounded-sm' : 'hover:outline hover:outline-1 hover:outline-zinc-300 hover:outline-offset-1 rounded-sm cursor-pointer'
+        // Show only first product for compact preview, but render all
         return (
           <div style={{ ...pad, backgroundColor: p.backgroundColor || undefined }}>
             <div>
               {Array.from({ length: maxItems }).map((_, i) => {
                 const prod = sampleProducts[i % sampleProducts.length]
-                const imgBox = p.showImage !== false && (
-                  <div style={{
-                    width: isVertical ? '100%' : imgW,
-                    height: isVertical ? imgW * 0.8 : imgW,
-                    flexShrink: 0,
-                    background: '#F3F4F6',
-                    borderRadius: imgR,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#9CA3AF', fontSize: 12,
-                  }}>
-                    Product image
-                  </div>
-                )
-                const details = (
-                  <div style={{ flex: 1, minWidth: 0, padding: isVertical ? '12px 0 0' : '0' }}>
-                    {p.showName !== false && (
-                      <p style={{ margin: 0, fontWeight: p.nameWeight || '600', fontSize: p.nameFontSize || 14, color: p.nameColor || '#111827', fontFamily: p.nameFontFamily || 'inherit' }}>
-                        {prod.name}
-                      </p>
-                    )}
-                    {p.showDescription !== false && (
-                      <p style={{ margin: '4px 0 0', fontSize: p.descFontSize || 13, color: p.descColor || '#6B7280', fontWeight: p.descWeight || '400' }}>
-                        {prod.desc}
-                      </p>
-                    )}
-                    <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                      {p.showPrice !== false && (
-                        <span style={{ fontWeight: p.priceWeight || '600', fontSize: p.priceFontSize || 14, color: p.priceColor || '#111827' }}>
-                          {prod.price}
-                        </span>
-                      )}
-                      {p.showOldPrice !== false && (
-                        <span style={{ fontSize: (p.priceFontSize || 14) - 1, color: p.oldPriceColor || '#9CA3AF', textDecoration: 'line-through' }}>
-                          {prod.oldPrice}
-                        </span>
-                      )}
-                    </div>
-                    {p.showButton !== false && (
-                      <div style={{ marginTop: 10, textAlign: btnAlign === 'full' ? undefined : btnAlign as any }}>
-                        <a href="#" onClick={preventDefault} style={{
-                          display: btnAlign === 'full' ? 'block' : 'inline-block',
-                          padding: `${p.buttonPaddingV || 10}px ${p.buttonPaddingH || 24}px`,
-                          background: p.buttonColor || '#111827',
-                          color: p.buttonTextColor || '#FFFFFF',
-                          borderRadius: p.buttonRadius ?? 4,
-                          fontSize: p.buttonFontSize || 14,
-                          fontWeight: 600, textDecoration: 'none', textAlign: 'center',
-                        }}>
-                          {p.buttonText || 'Shop now'}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                )
                 return (
                   <div key={i}>
                     <div style={{
@@ -637,8 +594,66 @@ export function BlockPreview({
                       flexDirection: layout === 'image-right' ? 'row-reverse' : 'row',
                       padding: '16px 0',
                     }}>
-                      {imgBox}
-                      {details}
+                      {/* Image — clickable */}
+                      {p.showImage !== false && (
+                        <div onClick={subClick('image')} className={subRing('image')} style={{
+                          width: isVertical ? '100%' : imgW,
+                          height: isVertical ? imgW * 0.8 : imgW,
+                          flexShrink: 0, background: '#F3F4F6', borderRadius: imgR,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: '#9CA3AF', fontSize: 12, transition: 'outline-color 0.15s',
+                        }}>
+                          Product image
+                        </div>
+                      )}
+                      {/* Details column */}
+                      <div style={{ flex: 1, minWidth: 0, padding: isVertical ? '12px 0 0' : '0' }}>
+                        {/* Name — clickable */}
+                        {p.showName !== false && (
+                          <div onClick={subClick('name')} className={subRing('name')}>
+                            <p style={{ margin: 0, fontWeight: p.nameWeight || '600', fontSize: p.nameFontSize || 14, color: p.nameColor || '#111827', fontFamily: p.nameFontFamily || 'inherit', padding: '2px 0' }}>
+                              {prod.name}
+                            </p>
+                          </div>
+                        )}
+                        {/* Description — clickable */}
+                        {p.showDescription !== false && (
+                          <div onClick={subClick('description')} className={subRing('description')}>
+                            <p style={{ margin: '4px 0 0', fontSize: p.descFontSize || 13, color: p.descColor || '#6B7280', fontWeight: p.descWeight || '400', padding: '2px 0' }}>
+                              {prod.desc}
+                            </p>
+                          </div>
+                        )}
+                        {/* Price — clickable */}
+                        {(p.showPrice !== false || p.showOldPrice !== false) && (
+                          <div onClick={subClick('price')} className={subRing('price')} style={{ marginTop: 8, display: 'inline-flex', alignItems: 'baseline', gap: 6, padding: '2px 0' }}>
+                            {p.showPrice !== false && (
+                              <span style={{ fontWeight: p.priceWeight || '600', fontSize: p.priceFontSize || 14, color: p.priceColor || '#111827' }}>
+                                {prod.price}
+                              </span>
+                            )}
+                            {p.showOldPrice !== false && (
+                              <span style={{ fontSize: (p.priceFontSize || 14) - 1, color: p.oldPriceColor || '#9CA3AF', textDecoration: 'line-through' }}>
+                                {prod.oldPrice}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {/* Button — clickable */}
+                        {p.showButton !== false && (
+                          <div onClick={subClick('button')} className={subRing('button')} style={{ marginTop: 10, textAlign: btnAlign === 'full' ? undefined : btnAlign as any }}>
+                            <a href="#" onClick={e => e.preventDefault()} style={{
+                              display: btnAlign === 'full' ? 'block' : 'inline-block',
+                              padding: `${p.buttonPaddingV || 10}px ${p.buttonPaddingH || 24}px`,
+                              background: p.buttonColor || '#111827', color: p.buttonTextColor || '#FFFFFF',
+                              borderRadius: p.buttonRadius ?? 4, fontSize: p.buttonFontSize || 14,
+                              fontWeight: 600, textDecoration: 'none', textAlign: 'center',
+                            }}>
+                              {p.buttonText || 'Shop now'}
+                            </a>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     {p.separator !== false && i < maxItems - 1 && (
                       <hr style={{ border: 'none', borderTop: `1px solid ${p.separatorColor || '#E5E7EB'}`, margin: 0 }} />

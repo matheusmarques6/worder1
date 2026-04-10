@@ -232,6 +232,156 @@ function DropIndicatorLine({ colRef, index, blockCount }: { colRef: React.RefObj
 // ── Inline Color Picker (click to open, doesn't close on drag) ──
 // Use shared ColorPicker
 import { ColorPicker as InlineColorPicker } from './ui/ColorPicker'
+import { ColorPicker } from './ui/ColorPicker'
+
+// ── Compound Sub-Element Panel (for abandoned-cart, product-grid) ──
+function CompoundSubElementPanel({ subElement, block, onChange }: {
+  subElement: string
+  block: { type: string; props: Record<string, any> }
+  onChange: (key: string, value: any) => void
+}) {
+  const p = block.props
+  const inp = "w-full border border-zinc-200 rounded-lg px-3 py-2 text-[13px] text-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-400 transition-colors"
+  const sel = inp + " bg-white cursor-pointer"
+
+  switch (subElement) {
+    case 'name':
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+            <p className="text-[11px] text-zinc-500 leading-snug">O nome do produto sera preenchido automaticamente a partir dos dados do carrinho.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Tamanho</label>
+              <input type="number" className={inp} value={p.nameFontSize || 14} onChange={e => onChange('nameFontSize', +e.target.value)} min={10} max={32} />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Peso</label>
+              <select className={sel} value={p.nameWeight || '600'} onChange={e => onChange('nameWeight', e.target.value)}>
+                <option value="400">Normal</option><option value="500">Medium</option><option value="600">Semibold</option><option value="700">Bold</option>
+              </select>
+            </div>
+          </div>
+          <ColorPicker label="Cor do texto" value={p.nameColor || '#111827'} onChange={v => onChange('nameColor', v)} />
+          <div>
+            <label className="block text-[12px] font-medium text-zinc-700 mb-1">Fonte</label>
+            <select className={sel} value={p.nameFontFamily || 'inherit'} onChange={e => onChange('nameFontFamily', e.target.value)}>
+              <option value="inherit">Padrao</option><option value="Arial, sans-serif">Arial</option><option value="Georgia, serif">Georgia</option>
+              <option value="'Inter', sans-serif">Inter</option><option value="'Montserrat', sans-serif">Montserrat</option>
+            </select>
+          </div>
+        </div>
+      )
+
+    case 'description':
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+            <p className="text-[11px] text-zinc-500 leading-snug">A descricao sera preenchida com os detalhes da variante (cor, tamanho, etc.).</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Tamanho</label>
+              <input type="number" className={inp} value={p.descFontSize || 13} onChange={e => onChange('descFontSize', +e.target.value)} min={10} max={24} />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Peso</label>
+              <select className={sel} value={p.descWeight || '400'} onChange={e => onChange('descWeight', e.target.value)}>
+                <option value="400">Normal</option><option value="500">Medium</option><option value="600">Semibold</option>
+              </select>
+            </div>
+          </div>
+          <ColorPicker label="Cor do texto" value={p.descColor || '#6B7280'} onChange={v => onChange('descColor', v)} />
+        </div>
+      )
+
+    case 'price':
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+            <p className="text-[11px] text-zinc-500 leading-snug">Os precos serao preenchidos automaticamente a partir do carrinho.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Tamanho</label>
+              <input type="number" className={inp} value={p.priceFontSize || 14} onChange={e => onChange('priceFontSize', +e.target.value)} min={10} max={32} />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Peso</label>
+              <select className={sel} value={p.priceWeight || '600'} onChange={e => onChange('priceWeight', e.target.value)}>
+                <option value="400">Normal</option><option value="600">Semibold</option><option value="700">Bold</option>
+              </select>
+            </div>
+          </div>
+          <ColorPicker label="Cor do preco" value={p.priceColor || '#111827'} onChange={v => onChange('priceColor', v)} />
+          <ColorPicker label="Cor do preco antigo" value={p.oldPriceColor || '#9CA3AF'} onChange={v => onChange('oldPriceColor', v)} />
+        </div>
+      )
+
+    case 'button':
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+            <p className="text-[11px] text-zinc-500 leading-snug">O link do botao usara <code className="bg-zinc-100 px-1 rounded text-[10px]">{'{{checkout_url}}'}</code> para redirecionar ao checkout.</p>
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-zinc-700 mb-1">Texto do botao</label>
+            <input className={inp} value={p.buttonText || 'Shop now'} onChange={e => onChange('buttonText', e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-zinc-700 mb-1">Link</label>
+            <input className={inp} value={p.buttonHref || '{{checkout_url}}'} onChange={e => onChange('buttonHref', e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <ColorPicker label="Cor de fundo" value={p.buttonColor || '#111827'} onChange={v => onChange('buttonColor', v)} />
+            <ColorPicker label="Cor do texto" value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Raio da borda</label>
+              <input type="number" className={inp} value={p.buttonRadius ?? 4} onChange={e => onChange('buttonRadius', +e.target.value)} min={0} max={32} />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Tamanho fonte</label>
+              <input type="number" className={inp} value={p.buttonFontSize || 14} onChange={e => onChange('buttonFontSize', +e.target.value)} min={10} max={24} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-zinc-700 mb-1">Alinhamento</label>
+            <div className="flex border border-zinc-200 rounded-md overflow-hidden">
+              {(['left', 'center', 'right', 'full'] as const).map(a => (
+                <button key={a} onClick={() => onChange('buttonAlign', a)}
+                  className={`flex-1 h-[28px] text-[11px] font-medium transition-all ${(p.buttonAlign || 'left') === a ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
+                  {a === 'left' ? 'Esq' : a === 'center' ? 'Centro' : a === 'right' ? 'Dir' : 'Total'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )
+
+    case 'image':
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+            <p className="text-[11px] text-zinc-500 leading-snug">A imagem do produto sera carregada automaticamente do catalogo.</p>
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-zinc-700 mb-1">Largura (px)</label>
+            <input type="number" className={inp} value={p.imageWidth || 200} onChange={e => onChange('imageWidth', +e.target.value)} min={60} max={400} />
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-zinc-700 mb-1">Raio da borda</label>
+            <input type="number" className={inp} value={p.imageBorderRadius ?? 0} onChange={e => onChange('imageBorderRadius', +e.target.value)} min={0} max={24} />
+          </div>
+        </div>
+      )
+
+    default:
+      return <p className="text-[12px] text-zinc-400">Selecione um elemento</p>
+  }
+}
 
 // ── Styles Tab ──
 function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch<React.SetStateAction<EmailDocument>> }) {
@@ -432,6 +582,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   })
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
+  const [selectedSubElement, setSelectedSubElement] = useState<string | null>(null) // e.g. 'name', 'price', 'button', 'image', 'description'
   const [lastDroppedBlockId, setLastDroppedBlockId] = useState<string | null>(null)
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [saving, setSaving] = useState(false)
@@ -484,16 +635,19 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const selectBlock = useCallback((blockId: string) => {
     setSelectedBlockId(blockId)
     setSelectedSectionId(null)
+    setSelectedSubElement(null)
   }, [])
 
   const selectSection = useCallback((sectionId: string) => {
     setSelectedSectionId(sectionId)
     setSelectedBlockId(null)
+    setSelectedSubElement(null)
   }, [])
 
   const clearSelection = useCallback(() => {
     setSelectedBlockId(null)
     setSelectedSectionId(null)
+    setSelectedSubElement(null)
   }, [])
 
   // ── Section Operations ──
@@ -900,18 +1054,42 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
             {/* Block properties (Klaviyo-style — replaces entire sidebar) */}
             {selectedBlock ? (
               <div className="flex flex-col h-full">
+                {/* Header: show sub-element name if selected, or block name */}
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-100 shrink-0">
-                  <button onClick={clearSelection} className="p-1.5 text-zinc-400 hover:text-zinc-700 rounded-md hover:bg-zinc-100 transition-colors" title="Voltar para blocos">
-                    <X size={14} strokeWidth={2} />
-                  </button>
-                  <span className="text-[13px] font-semibold text-zinc-900 flex-1">{BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}</span>
+                  {selectedSubElement ? (
+                    <>
+                      <button onClick={() => setSelectedSubElement(null)} className="p-1.5 text-zinc-400 hover:text-zinc-700 rounded-md hover:bg-zinc-100 transition-colors" title="Voltar para bloco">
+                        <ArrowLeft size={14} strokeWidth={2} />
+                      </button>
+                      <span className="text-[13px] font-semibold text-zinc-900 flex-1">
+                        {selectedSubElement === 'name' ? 'Nome do produto' : selectedSubElement === 'description' ? 'Descricao' : selectedSubElement === 'price' ? 'Preco' : selectedSubElement === 'button' ? 'Botao' : selectedSubElement === 'image' ? 'Imagem' : selectedSubElement}
+                      </span>
+                      <span className="text-[10px] text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded">Carrinho</span>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={clearSelection} className="p-1.5 text-zinc-400 hover:text-zinc-700 rounded-md hover:bg-zinc-100 transition-colors" title="Voltar para blocos">
+                        <X size={14} strokeWidth={2} />
+                      </button>
+                      <span className="text-[13px] font-semibold text-zinc-900 flex-1">{BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}</span>
+                    </>
+                  )}
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
-                  <BlockProperties
-                    block={selectedBlock}
-                    onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
-                    onSaveAsReusable={() => { setSaveBlockName(''); setShowSaveBlockModal(true) }}
-                  />
+                  {/* Sub-element properties for compound blocks */}
+                  {selectedSubElement && selectedBlock.type === 'abandoned-cart' ? (
+                    <CompoundSubElementPanel
+                      subElement={selectedSubElement}
+                      block={selectedBlock}
+                      onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
+                    />
+                  ) : (
+                    <BlockProperties
+                      block={selectedBlock}
+                      onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
+                      onSaveAsReusable={() => { setSaveBlockName(''); setShowSaveBlockModal(true) }}
+                    />
+                  )}
                 </div>
               </div>
             ) : selectedSection ? (
@@ -1082,6 +1260,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                         onSelect={() => selectBlock(block.id)}
                                         onClone={() => cloneBlock(block.id)}
                                         onDelete={() => removeBlock(block.id)}
+                                        selectedSubElement={selectedBlockId === block.id ? selectedSubElement : null}
+                                        onSelectSubElement={(sub) => { selectBlock(block.id); setSelectedSubElement(sub) }}
                                       />
                                       </div>
                                     </SortableBlock>
