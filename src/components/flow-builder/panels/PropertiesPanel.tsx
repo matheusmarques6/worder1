@@ -113,7 +113,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 320, opacity: 0 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="w-[400px] bg-white border-r border-gray-200 flex flex-col h-full shrink-0 overflow-hidden"
+        className="w-[440px] bg-white border-r border-gray-200 flex flex-col h-full shrink-0 overflow-hidden"
       >
         {/* Header — Klaviyo style with icon */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">

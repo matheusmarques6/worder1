@@ -1,6 +1,6 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import {
   ShoppingCart, CreditCard, ShoppingBag, UserPlus, Tag, Briefcase,
@@ -155,6 +155,9 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
   const nodeMetrics = showAnalytics ? analyticsData[id] : null;
   const summary = getNodeSummary(nodeType, nodeConfig || {});
   const typeLabel = nodeTypeLabels[nodeType] || cat.label;
+  const removeNode = useFlowStore((s) => s.removeNode);
+  const duplicateNode = useFlowStore((s) => s.duplicateNode);
+  const [showMenu, setShowMenu] = useState(false);
 
   return (
     <div
@@ -176,7 +179,7 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
       {/* Card */}
       <div
         className={cn(
-          'w-[270px] bg-white rounded-xl border overflow-hidden',
+          'w-[290px] bg-white rounded-xl border overflow-hidden',
           'transition-shadow duration-150',
           selected
             ? 'border-2 border-blue-500 shadow-lg shadow-blue-100'
@@ -184,8 +187,15 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
         )}
       >
         <div className="p-4 flex items-start gap-3">
-          <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0', cat.iconBg)}>
-            <IconComponent className={cn('w-[18px] h-[18px]', cat.iconColor)} />
+          <div className={cn(
+            'rounded-lg flex items-center justify-center shrink-0',
+            category === 'trigger' ? 'w-10 h-10' : 'w-9 h-9',
+            cat.iconBg,
+          )}>
+            <IconComponent className={cn(
+              category === 'trigger' ? 'w-5 h-5' : 'w-[18px] h-[18px]',
+              cat.iconColor,
+            )} />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-gray-900 leading-snug">
@@ -202,9 +212,38 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
               </p>
             )}
           </div>
-          <button className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-gray-100 transition-opacity shrink-0">
-            <MoreVertical className="w-4 h-4 text-gray-400" />
-          </button>
+          {/* 3-dot menu — functional */}
+          <div className="relative shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+              className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-gray-100 transition-opacity"
+            >
+              <MoreVertical className="w-4 h-4 text-gray-400" />
+            </button>
+            {showMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                <div className="absolute right-0 top-8 z-50 w-36 bg-white rounded-lg border border-gray-200 shadow-lg py-1">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); duplicateNode(id); setShowMenu(false); }}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Duplicar
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm('Excluir este bloco?')) { removeNode(id); }
+                      setShowMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                  >
+                    Excluir
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Metrics — shown when analytics toggle is ON */}
