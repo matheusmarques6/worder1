@@ -700,45 +700,75 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
     case 'abandoned-cart':
       return (
         <div className="space-y-3">
-          {/* Textos */}
-          <span className="text-[10px] font-semibold text-gray-400 uppercase">Textos</span>
-          <Field label="Título"><TextInput value={p.title} onChange={v => onChange('title', v)} /></Field>
+          {/* Titulo */}
+          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Titulo do bloco</span>
+          <Field label="Titulo"><TextInput value={p.title} onChange={v => onChange('title', v)} /></Field>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Tamanho Título"><NumberInput value={p.titleFontSize || 18} onChange={v => onChange('titleFontSize', v)} min={12} max={36} /></Field>
-            <Field label="Cor Título"><ColorInput value={p.titleColor || '#111827'} onChange={v => onChange('titleColor', v)} /></Field>
+            <Field label="Tamanho"><NumberInput value={p.titleFontSize || 18} onChange={v => onChange('titleFontSize', v)} min={12} max={36} /></Field>
+            <Field label="Cor"><ColorInput value={p.titleColor || '#111827'} onChange={v => onChange('titleColor', v)} /></Field>
           </div>
-          <Field label="Subtítulo"><TextInput value={p.subtitle} onChange={v => onChange('subtitle', v)} /></Field>
+
+          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Subtitulo</span>
+          <Field label="Subtitulo"><TextInput value={p.subtitle} onChange={v => onChange('subtitle', v)} /></Field>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Tamanho Subtítulo"><NumberInput value={p.subtitleFontSize || 14} onChange={v => onChange('subtitleFontSize', v)} min={10} max={24} /></Field>
-            <Field label="Cor Subtítulo"><ColorInput value={p.subtitleColor || '#6B7280'} onChange={v => onChange('subtitleColor', v)} /></Field>
+            <Field label="Tamanho"><NumberInput value={p.subtitleFontSize || 14} onChange={v => onChange('subtitleFontSize', v)} min={10} max={24} /></Field>
+            <Field label="Cor"><ColorInput value={p.subtitleColor || '#6B7280'} onChange={v => onChange('subtitleColor', v)} /></Field>
           </div>
-          {/* Botão */}
-          <span className="text-[10px] font-semibold text-gray-400 uppercase">Botão</span>
-          <Field label="Texto do Botão"><TextInput value={p.buttonText} onChange={v => onChange('buttonText', v)} /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Cor do Botão"><ColorInput value={p.buttonColor} onChange={v => onChange('buttonColor', v)} /></Field>
-            <Field label="Cor Texto Botão"><ColorInput value={p.buttonTextColor} onChange={v => onChange('buttonTextColor', v)} /></Field>
+
+          {/* Layout */}
+          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Layout dos itens</span>
+          <div className="flex border border-zinc-200 rounded-md overflow-hidden">
+            <button onClick={() => onChange('itemLayout', 'compact')}
+              className={`flex-1 h-[28px] text-[12px] font-medium transition-all ${p.itemLayout !== 'cards' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
+              Lista compacta
+            </button>
+            <button onClick={() => onChange('itemLayout', 'cards')}
+              className={`flex-1 h-[28px] text-[12px] font-medium transition-all ${p.itemLayout === 'cards' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
+              Cards
+            </button>
           </div>
-          <Field label="Raio do Botão"><NumberInput value={p.buttonRadius ?? 8} onChange={v => onChange('buttonRadius', v)} min={0} max={32} /></Field>
-          <Field label="Tamanho Fonte Botão"><NumberInput value={p.buttonFontSize || 15} onChange={v => onChange('buttonFontSize', v)} min={10} max={24} /></Field>
-          {/* Items */}
-          <span className="text-[10px] font-semibold text-gray-400 uppercase">Itens</span>
-          <Field label="Máx. de Itens"><NumberInput value={p.maxItems} onChange={v => onChange('maxItems', v)} min={1} max={10} /></Field>
           <div className="space-y-1">
             <Toggle value={p.showImage !== false} onChange={v => onChange('showImage', v)} label="Mostrar imagem" />
-            <Toggle value={p.showPrice !== false} onChange={v => onChange('showPrice', v)} label="Mostrar preço" />
+            <Toggle value={p.showPrice !== false} onChange={v => onChange('showPrice', v)} label="Mostrar preco" />
             <Toggle value={p.showQuantity !== false} onChange={v => onChange('showQuantity', v)} label="Mostrar quantidade" />
+            <Toggle value={p.showVariant !== false} onChange={v => onChange('showVariant', v)} label="Mostrar variacao do produto" />
           </div>
-          <details className="group border border-gray-100 rounded-lg">
-            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[11px] font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
-              Cores dos Itens <span className="text-gray-300 group-open:rotate-90 transition-transform">▸</span>
+          <Field label="Max. de itens"><NumberInput value={p.maxItems || 3} onChange={v => onChange('maxItems', v)} min={1} max={10} /></Field>
+
+          {/* Subtotal */}
+          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Subtotal</span>
+          <Toggle value={p.showSubtotal !== false} onChange={v => onChange('showSubtotal', v)} label="Mostrar subtotal" />
+          {p.showSubtotal !== false && (
+            <div className="space-y-2">
+              <Field label="Texto label"><TextInput value={p.subtotalLabel || 'Total:'} onChange={v => onChange('subtotalLabel', v)} /></Field>
+              <Field label="Cor do valor"><ColorInput value={p.subtotalColor || '#111827'} onChange={v => onChange('subtotalColor', v)} /></Field>
+            </div>
+          )}
+
+          {/* Botao CTA */}
+          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Botao CTA</span>
+          <Field label="Texto do botao"><TextInput value={p.buttonText} onChange={v => onChange('buttonText', v)} /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Cor fundo"><ColorInput value={p.buttonColor || '#F97316'} onChange={v => onChange('buttonColor', v)} /></Field>
+            <Field label="Cor texto"><ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Raio borda"><NumberInput value={p.buttonRadius ?? 8} onChange={v => onChange('buttonRadius', v)} min={0} max={32} /></Field>
+            <Field label="Tamanho fonte"><NumberInput value={p.buttonFontSize || 15} onChange={v => onChange('buttonFontSize', v)} min={10} max={24} /></Field>
+          </div>
+          <Toggle value={p.buttonFullWidth !== false} onChange={v => onChange('buttonFullWidth', v)} label="Botao largura total" />
+
+          {/* Cores dos itens */}
+          <details className="group border border-zinc-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-medium text-zinc-700 hover:bg-zinc-50 rounded-lg transition-colors">
+              Cores dos itens <span className="text-zinc-400 group-open:rotate-180 transition-transform"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></span>
             </summary>
             <div className="px-3 pb-3 space-y-2">
-              <Field label="Cor Nome Produto"><ColorInput value={p.itemNameColor || '#111827'} onChange={v => onChange('itemNameColor', v)} /></Field>
-              <Field label="Tamanho Nome"><NumberInput value={p.itemNameFontSize || 14} onChange={v => onChange('itemNameFontSize', v)} min={10} max={20} /></Field>
-              <Field label="Cor do Preço"><ColorInput value={p.itemPriceColor || '#111827'} onChange={v => onChange('itemPriceColor', v)} /></Field>
-              <Field label="Cor Card"><ColorInput value={p.itemCardBg || '#FFFFFF'} onChange={v => onChange('itemCardBg', v)} /></Field>
-              <Field label="Cor Borda Card"><ColorInput value={p.itemBorderColor || '#E5E7EB'} onChange={v => onChange('itemBorderColor', v)} /></Field>
+              <Field label="Cor nome produto"><ColorInput value={p.itemNameColor || '#111827'} onChange={v => onChange('itemNameColor', v)} /></Field>
+              <Field label="Tamanho nome"><NumberInput value={p.itemNameFontSize || 14} onChange={v => onChange('itemNameFontSize', v)} min={10} max={20} /></Field>
+              <Field label="Cor do preco"><ColorInput value={p.itemPriceColor || '#111827'} onChange={v => onChange('itemPriceColor', v)} /></Field>
+              <Field label="Fundo do card"><ColorInput value={p.itemCardBg || '#FFFFFF'} onChange={v => onChange('itemCardBg', v)} /></Field>
+              <Field label="Borda do card"><ColorInput value={p.itemBorderColor || '#E5E7EB'} onChange={v => onChange('itemBorderColor', v)} /></Field>
             </div>
           </details>
           {commonTail()}
@@ -1400,28 +1430,63 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
 
       {/* ── Layout ── */}
       <div>
-        <p className="text-[12px] font-medium text-gray-700 mb-2">Layout</p>
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          <Field label="Produtos por linha">
-            <SelectInput value={String(p.columns || 2)} onChange={v => onChange('columns', Number(v))} options={[
-              { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
-            ]} />
-          </Field>
-          <Field label="Número de linhas">
-            <SelectInput value={String(p.rows || 2)} onChange={v => onChange('rows', Number(v))} options={[
-              { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
-            ]} />
-          </Field>
+        <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">Layout</p>
+        <div className="flex border border-zinc-200 rounded-md overflow-hidden mb-3">
+          {([
+            { value: 'list' as const, label: 'Lista' },
+            { value: 'grid' as const, label: 'Grade' },
+          ]).map(opt => (
+            <button key={opt.value} onClick={() => onChange('layout', opt.value)}
+              className={`flex-1 h-[28px] text-[12px] font-medium transition-all ${(p.layout || 'grid') === opt.value ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
+              {opt.label}
+            </button>
+          ))}
         </div>
-        <Field label="Altura máx. da imagem">
-          <div className="flex items-center gap-1.5">
-            <NumberInput value={p.maxImageHeight || 300} onChange={v => onChange('maxImageHeight', v)} min={50} max={600} />
-            <span className="text-xs text-gray-400">px</span>
+        {(p.layout || 'grid') === 'grid' && (
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <Field label="Colunas">
+              <SelectInput value={String(p.columns || 2)} onChange={v => onChange('columns', Number(v))} options={[
+                { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
+              ]} />
+            </Field>
+            <Field label="Linhas">
+              <SelectInput value={String(p.rows || 2)} onChange={v => onChange('rows', Number(v))} options={[
+                { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
+              ]} />
+            </Field>
           </div>
-        </Field>
-        <div className="mt-2">
-          <Toggle value={p.stackOnMobile !== false} onChange={v => onChange('stackOnMobile', v)} label="Empilhar no mobile" />
+        )}
+        {(p.layout || 'grid') === 'list' && (
+          <Field label="Numero de produtos">
+            <NumberInput value={(p.columns || 2) * (p.rows || 2)} onChange={v => { onChange('columns', 1); onChange('rows', v) }} min={1} max={12} />
+          </Field>
+        )}
+        <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mt-3 mb-2">Imagem</p>
+        <div className="flex border border-zinc-200 rounded-md overflow-hidden mb-2">
+          {([
+            { value: 'square' as const, label: 'Quadrado' },
+            { value: 'portrait' as const, label: 'Retrato' },
+            { value: 'landscape' as const, label: 'Paisagem' },
+          ]).map(opt => (
+            <button key={opt.value} onClick={() => onChange('imageRatio', opt.value)}
+              className={`flex-1 h-[28px] text-[12px] font-medium transition-all ${(p.imageRatio || 'square') === opt.value ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
+              {opt.label}
+            </button>
+          ))}
         </div>
+        <Field label="Raio da imagem">
+          <NumberInput value={p.productBorderRadius || 8} onChange={v => onChange('productBorderRadius', v)} min={0} max={24} />
+        </Field>
+        <div className="mt-2 space-y-1">
+          <Toggle value={p.stackOnMobile !== false} onChange={v => onChange('stackOnMobile', v)} label="Empilhar no mobile" />
+          <Toggle value={p.showSeparator || false} onChange={v => onChange('showSeparator', v)} label="Mostrar separador entre produtos" />
+          {p.showSeparator && (
+            <Field label="Cor do separador"><ColorInput value={p.separatorColor || '#E5E7EB'} onChange={v => onChange('separatorColor', v)} /></Field>
+          )}
+        </div>
+        <Field label="Espaco entre produtos (px)">
+          <NumberInput value={p.productPadding || 12} onChange={v => onChange('productPadding', v)} min={0} max={32} />
+        </Field>
       </div>
 
       {/* ── Borda do produto (+) ── */}
