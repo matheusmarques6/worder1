@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // If action is list_events, return recent events matching the trigger
+    // If action is list_events, return recent UNIQUE CONTACTS that had this event
     if (action === 'list_events') {
       const eventTypeMap: Record<string, string> = {
         trigger_abandon: 'cart_abandoned',
@@ -36,16 +36,44 @@ export async function POST(request: NextRequest) {
       };
       const eventType = eventTypeMap[triggerType || ''] || 'order';
 
-      const { data: events } = await supabase
+      // Get recent events of this type, then deduplicate by contact_id
+      const { data: rawEvents } = await supabase
         .from('contact_events')
         .select('id, contact_id, event_type, properties, occurred_at')
         .eq('organization_id', organizationId)
         .eq('event_type', eventType)
         .order('occurred_at', { ascending: false })
-        .limit(10);
+        .limit(50);
 
-      if (events && events.length > 0) {
-        return NextResponse.json({ events });
+      // Deduplicate: keep only the most recent event per contact
+      const seenContacts = new Set<string>();
+      const uniqueEvents = (rawEvents || []).filter(e => {
+        if (!e.contact_id || seenContacts.has(e.contact_id)) return false;
+        seenContacts.add(e.contact_id);
+        return true;
+      }).slice(0, 10);
+
+      // Fetch contact emails for each unique event
+      const contactIds = uniqueEvents.map(e => e.contact_id).filter(Boolean);
+      let contactMap: Record<string, string> = {};
+      if (contactIds.length > 0) {
+        const { data: contacts } = await supabase
+          .from('contacts')
+          .select('id, email, first_name')
+          .in('id', contactIds);
+        for (const c of contacts || []) {
+          contactMap[c.id] = c.email || c.first_name || c.id;
+        }
+      }
+
+      // Enrich events with contact email
+      const enrichedEvents = uniqueEvents.map(e => ({
+        ...e,
+        contact_email: contactMap[e.contact_id] || e.contact_id,
+      }));
+
+      if (enrichedEvents.length > 0) {
+        return NextResponse.json({ events: enrichedEvents, eventType });
       }
 
       // Fallback: get any recent events

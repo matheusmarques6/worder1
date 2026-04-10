@@ -293,10 +293,10 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
 
         {/* ── Right panel ── */}
         <div className="w-[360px] border-l border-gray-200 flex flex-col bg-white shrink-0">
-          {/* Event selector header */}
+          {/* Lead selector header */}
           <div className="px-5 py-4 border-b border-gray-100">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Evento selecionado</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Lead selecionado</p>
               <span className="text-xs text-gray-400">
                 {events.length > 0 ? `${selectedIdx + 1} de ${events.length}` : '—'}
               </span>
@@ -310,7 +310,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
               <div className="flex-1">
                 {currentEvent ? (
                   <div className="p-3 rounded-lg border border-gray-200">
-                    <p className="text-sm font-medium text-gray-900">{contact?.email || '...'}</p>
+                    <p className="text-sm font-medium text-gray-900">{(currentEvent as any).contact_email || contact?.email || '...'}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{currentEvent.event_type}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5">
                       {new Date(currentEvent.occurred_at).toLocaleString('pt-BR')}
