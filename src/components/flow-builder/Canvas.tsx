@@ -123,12 +123,13 @@ export function Canvas() {
         onPaneClick={onPaneClick}
         fitView
         fitViewOptions={{
-          padding: 0.3,
-          maxZoom: 1,
+          padding: 0.15,
+          maxZoom: 1.2,
+          nodes: nodes.filter(n => n.data?.category === 'trigger').map(n => ({ id: n.id })),
         }}
         minZoom={0.3}
         maxZoom={2}
-        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+        defaultViewport={{ x: 0, y: 0, zoom: 1.1 }}
         snapToGrid
         snapGrid={[16, 16]}
         defaultEdgeOptions={{
