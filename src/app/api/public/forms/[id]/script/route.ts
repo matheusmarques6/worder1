@@ -157,7 +157,11 @@ var allData={};
 function renderBlock(b){
   var p=b.props||{},h="";
   switch(b.type){
-    case"text":h='<div style="font-size:'+((p.fontSize||16))+'px;color:'+(p.color||"#111827")+';font-weight:'+(p.fontWeight||"normal")+';text-align:'+(p.align||"left")+';margin:0 0 8px;line-height:1.3">'+((p.content||""))+'</div>';break;
+    case"text":{
+      var tag=p.tag||"p";
+      h='<'+tag+' style="font-size:'+(p.fontSize||16)+'px;color:'+(p.color||"#111827")+';font-weight:'+(p.fontWeight||"normal")+';font-style:'+(p.fontStyle||"normal")+';text-decoration:'+(p.textDecoration||"none")+';text-align:'+(p.align||"left")+';margin:0 0 8px;line-height:'+(p.lineHeight||1.4)+';font-family:'+(p.fontFamily||"inherit")+'">'+((p.content||""))+'</'+tag+'>';
+      break;
+    }
     case"image":{
       if(!p.src){h="";break}
       var imgTag='<img src="'+esc(p.src)+'" alt="'+esc(p.alt||"")+'" style="width:'+(p.imgWidth?p.imgWidth+"%":(p.width||"100%"))+';max-height:'+(p.maxHeight||300)+'px;object-fit:contain;border-radius:'+(p.borderRadius||0)+'px;display:inline-block" />';
@@ -184,22 +188,25 @@ function renderBlock(b){
     }
     case"dropdown":{
       var ddName=p.mapTo==="custom"?("custom:"+(p.mapToCustom||p.label||"select")):(p.mapTo||p.label||"select");
+      var ff=st.fontFamily||"inherit";
       var opts=(p.options||[]).map(function(o){return'<option value="'+esc(o)+'">'+esc(o)+'</option>'}).join("");
-      var ddLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:4px">'+esc(p.label)+'</label>':"";
-      h=ddLabel+'<select name="'+esc(ddName)+'" style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;box-sizing:border-box;margin:0 0 8px"><option value="">'+(p.placeholder||"Escolha...")+'</option>'+opts+'</select>';
+      var ddLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:4px;font-family:'+ff+'">'+esc(p.label)+'</label>':"";
+      h=ddLabel+'<select name="'+esc(ddName)+'" style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;box-sizing:border-box;margin:0 0 8px;font-family:'+ff+'"><option value="">'+(p.placeholder||"Escolha...")+'</option>'+opts+'</select>';
       break;
     }
     case"radio":{
       var rName=p.mapTo==="custom"?("custom:"+(p.mapToCustom||p.label||"radio")):(p.mapTo||p.label||"radio");
-      var rLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px">'+esc(p.label)+'</label>':"";
-      var ri=(p.options||[]).map(function(o){return'<label style="display:'+(p.layout==="horizontal"?"inline-flex":"flex")+';align-items:center;gap:8px;margin:0 12px 8px 0;font-size:14px;cursor:pointer"><input type="radio" name="'+esc(rName)+'" value="'+esc(o)+'" style="margin:0;accent-color:#F97316" />'+esc(o)+'</label>'}).join("");
+      var rff=st.fontFamily||"inherit";
+      var rLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px;font-family:'+rff+'">'+esc(p.label)+'</label>':"";
+      var ri=(p.options||[]).map(function(o){return'<label style="display:'+(p.layout==="horizontal"?"inline-flex":"flex")+';align-items:center;gap:8px;margin:0 12px 8px 0;font-size:14px;cursor:pointer;font-family:'+rff+'"><input type="radio" name="'+esc(rName)+'" value="'+esc(o)+'" style="margin:0;accent-color:#F97316" />'+esc(o)+'</label>'}).join("");
       h=rLabel+'<div style="margin:0 0 8px">'+ri+'</div>';
       break;
     }
     case"checkbox":{
       var cbName=p.mapTo==="custom"?("custom:"+(p.mapToCustom||p.label||"check")):(p.mapTo||p.label||"check");
-      var cbLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px">'+esc(p.label)+'</label>':"";
-      var ci=(p.options||[]).map(function(o){return'<label style="display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:14px;cursor:pointer"><input type="checkbox" name="'+esc(cbName)+'" value="'+esc(o)+'" style="margin:0;accent-color:#F97316" />'+esc(o)+'</label>'}).join("");
+      var cbff=st.fontFamily||"inherit";
+      var cbLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px;font-family:'+cbff+'">'+esc(p.label)+'</label>':"";
+      var ci=(p.options||[]).map(function(o){return'<label style="display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:14px;cursor:pointer;font-family:'+cbff+'"><input type="checkbox" name="'+esc(cbName)+'" value="'+esc(o)+'" style="margin:0;accent-color:#F97316" />'+esc(o)+'</label>'}).join("");
       h=cbLabel+'<div style="margin:0 0 8px">'+ci+'</div>';
       break;
     }
@@ -220,6 +227,35 @@ function renderBlock(b){
     case"line":h='<hr style="border:none;border-top:'+(p.thickness||1)+'px solid '+(p.color||"#E5E7EB")+';margin:8px 0" />';break;
     case"coupon":{
       h='<div style="margin:8px 0;padding:12px 16px;border:2px dashed '+(p.borderColor||"#F97316")+';border-radius:'+(p.borderRadius||8)+'px;text-align:center;background:'+(p.bgColor||"#FFF7ED")+'"><p style="font-size:11px;color:#6B7280;margin:0 0 4px">'+esc(p.description||"Seu cupom:")+'</p><p style="font-size:'+(p.fontSize||20)+'px;font-weight:bold;color:'+(p.codeColor||"#F97316")+';letter-spacing:2px;margin:0;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent)">'+esc(p.code||"CODIGO")+'</p></div>';
+      break;
+    }
+    case"countdown":{
+      var cdId="wcd_"+b.id;
+      var lbls=p.labels||{days:"DIAS",hours:"HORAS",minutes:"MIN",seconds:"SEG"};
+      var fs=p.fontSize||28;
+      var nc=p.numberColor||"#FFFFFF";
+      var lc=p.labelColor||"#9CA3AF";
+      var bc=p.boxColor||"#1F2937";
+      function cdCell(id,lbl){return'<span style="display:flex;flex-direction:column;align-items:center"><span id="'+id+'" style="font-size:'+fs+'px;font-weight:800;color:'+nc+';line-height:1">00</span><span style="font-size:9px;color:'+lc+';margin-top:4px;letter-spacing:1px">'+esc(lbl)+'</span></span>'}
+      var sep='<span style="color:'+lc+';font-size:20px;font-weight:700;padding:0 4px">:</span>';
+      h='<div style="text-align:center;padding:16px;background:'+bc+';border-radius:8px;margin:0 0 8px"><div style="display:inline-flex;align-items:center;gap:4px">'+cdCell(cdId+"_d",lbls.days)+sep+cdCell(cdId+"_h",lbls.hours)+sep+cdCell(cdId+"_m",lbls.minutes)+sep+cdCell(cdId+"_s",lbls.seconds)+'</div></div>';
+      // Register live timer (executed after DOM insert via setTimeout)
+      var endDate=p.endDate;
+      if(endDate){
+        setTimeout(function(){
+          var end=new Date(endDate).getTime();
+          function tick(){
+            var now=Date.now();var diff=Math.max(0,end-now);
+            var d=Math.floor(diff/86400000);var hh=Math.floor((diff%86400000)/3600000);var mm=Math.floor((diff%3600000)/60000);var ss=Math.floor((diff%60000)/1000);
+            var ed=document.getElementById(cdId+"_d");if(ed)ed.textContent=String(d).padStart(2,"0");
+            var eh=document.getElementById(cdId+"_h");if(eh)eh.textContent=String(hh).padStart(2,"0");
+            var em=document.getElementById(cdId+"_m");if(em)em.textContent=String(mm).padStart(2,"0");
+            var es=document.getElementById(cdId+"_s");if(es)es.textContent=String(ss).padStart(2,"0");
+            if(diff>0)setTimeout(tick,1000);
+          }
+          tick();
+        },100);
+      }
       break;
     }
   }
