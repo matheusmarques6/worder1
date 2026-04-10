@@ -27,9 +27,9 @@ interface WorderEmailEditorProps {
 }
 
 // ── Sortable Block Wrapper (drag from anywhere on the block) ──
-function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDelete, isHidden }: {
+function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDelete, onSaveReusable, isHidden }: {
   blockId: string; children: React.ReactNode; isSelected: boolean;
-  onSelect: () => void; onClone: () => void; onDelete: () => void; isHidden?: boolean
+  onSelect: () => void; onClone: () => void; onDelete: () => void; onSaveReusable?: () => void; isHidden?: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: blockId,
@@ -52,6 +52,7 @@ function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDel
       {isSelected && (
         <div className="absolute -right-10 top-0 flex flex-col gap-0.5 bg-zinc-900 rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-0.5 z-20">
           <button onClick={e => { e.stopPropagation(); onClone() }} className="p-1.5 text-white hover:bg-zinc-700 rounded transition-colors" title="Duplicar"><Copy className="w-3.5 h-3.5" strokeWidth={1.5} /></button>
+          {onSaveReusable && <button onClick={e => { e.stopPropagation(); onSaveReusable() }} className="p-1.5 text-white hover:bg-emerald-500/20 hover:text-emerald-400 rounded transition-colors" title="Salvar como reutilizavel"><Star className="w-3.5 h-3.5" strokeWidth={1.5} /></button>}
           <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 text-white hover:bg-red-500/20 hover:text-red-400 rounded transition-colors" title="Excluir"><Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} /></button>
         </div>
       )}
@@ -1255,8 +1256,19 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                               className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Duplicar">
                               <Copy className="w-3 h-3" />
                             </button>
-                            <button onClick={e => { e.stopPropagation(); showToast('Seção salva!') }}
-                              className="p-1 text-gray-400 hover:text-amber-500 hover:bg-amber-50 rounded" title="Salvar">
+                            <button onClick={e => {
+                              e.stopPropagation()
+                              const name = prompt('Nome da secao reutilizavel:')
+                              if (!name?.trim()) return
+                              // Save all blocks in this section as a reusable block group
+                              const allBlocks = section.columns.flatMap(c => c.blocks)
+                              if (allBlocks.length === 0) { showToast('Secao vazia', 'error'); return }
+                              fetch('/api/email/saved-blocks', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: name.trim(), category: 'section', block_json: { type: allBlocks[0].type, props: allBlocks[0].props, _sectionBlocks: allBlocks } }),
+                              }).then(() => showToast('Secao salva como reutilizavel!')).catch(() => showToast('Erro', 'error'))
+                            }}
+                              className="p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="Salvar como reutilizavel">
                               <Star className="w-3 h-3" />
                             </button>
                             <button onClick={e => { e.stopPropagation(); removeSection(section.id) }}
@@ -1306,6 +1318,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                       onSelect={() => selectBlock(block.id)}
                                       onClone={() => cloneBlock(block.id)}
                                       onDelete={() => removeBlock(block.id)}
+                                      onSaveReusable={() => { selectBlock(block.id); setSaveBlockName(''); setShowSaveBlockModal(true) }}
                                       isHidden={(device === 'desktop' && block.props.visibility === 'mobile') || (device === 'mobile' && block.props.visibility === 'desktop')}
                                     >
                                       <div className={lastDroppedBlockId === block.id ? 'email-block-dropped' : ''}>
@@ -1393,8 +1406,15 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
               <button disabled={!saveBlockName.trim()} onClick={() => {
                 fetch('/api/email/saved-blocks', {
                   method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ name: saveBlockName.trim(), block_json: selectedBlock }),
-                }).then(() => { showToast('Bloco salvo!'); setShowSaveBlockModal(false) }).catch(() => showToast('Erro', 'error'))
+                  body: JSON.stringify({ name: saveBlockName.trim(), block_json: { type: selectedBlock.type, props: selectedBlock.props } }),
+                }).then(r => r.json()).then(data => {
+                  // Auto-link block as universal after saving
+                  if (data.block?.id) {
+                    updateProp(selectedBlock.id, '_savedBlockId' as any, data.block.id)
+                    updateProp(selectedBlock.id, '_savedBlockName' as any, saveBlockName.trim())
+                  }
+                  showToast('Bloco salvo como reutilizavel!'); setShowSaveBlockModal(false)
+                }).catch(() => showToast('Erro', 'error'))
               }} className="px-4 py-2 bg-zinc-900 text-white text-sm font-semibold rounded-lg hover:bg-zinc-800 disabled:opacity-50">
                 Salvar
               </button>
