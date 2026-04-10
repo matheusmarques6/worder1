@@ -93,7 +93,7 @@ function DroppableColumn({ columnId, sectionId, children }: { columnId: string; 
     data: { type: 'column', columnId, sectionId },
   })
   return (
-    <div ref={setNodeRef} className={`${isOver ? 'ring-2 ring-brand-400 ring-inset bg-brand-50/30' : ''}`}>
+    <div ref={setNodeRef} className={`${isOver ? 'ring-2 ring-zinc-400 ring-inset bg-zinc-50/30' : ''}`}>
       {children}
     </div>
   )
@@ -412,12 +412,12 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
             <div>
               <label className="block text-[11px] font-medium text-gray-500 mb-1">Largura (px)</label>
               <input type="number" value={s.contentWidth} onChange={e => update('contentWidth', Number(e.target.value))} min={400} max={800}
-                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all" />
+                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-500/20 focus:outline-none transition-all" />
             </div>
             <div>
               <label className="block text-[11px] font-medium text-gray-500 mb-1">Bordas</label>
               <input type="number" value={s.borderRadius} onChange={e => update('borderRadius', Number(e.target.value))} min={0} max={24}
-                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all" />
+                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-500/20 focus:outline-none transition-all" />
             </div>
           </div>
         </div>
@@ -429,7 +429,7 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
         <div>
           <label className="block text-[11px] font-medium text-gray-500 mb-1.5">Fonte Global</label>
           <select value={s.fontFamily} onChange={e => update('fontFamily', e.target.value)}
-            className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all"
+            className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-500/20 focus:outline-none transition-all"
             style={{ fontFamily: s.fontFamily }}>
             {FONTS.map(f => <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>)}
           </select>
@@ -463,12 +463,12 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
                     <div>
                       <label className="text-[10px] text-gray-400">Tamanho</label>
                       <input type="number" value={ts.fontSize} onChange={e => updateTS('fontSize', Number(e.target.value))} min={8} max={72}
-                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                     </div>
                     <div>
                       <label className="text-[10px] text-gray-400">Altura</label>
                       <input type="number" value={ts.lineHeight} onChange={e => updateTS('lineHeight', Number(e.target.value))} min={0.8} max={3} step={0.1}
-                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                     </div>
                     <div>
                       <label className="text-[10px] text-gray-400">Cor</label>
@@ -480,7 +480,7 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
                           input.click()
                         }} className="w-8 h-[30px] rounded-lg border border-gray-200 cursor-pointer flex-shrink-0" style={{ backgroundColor: ts.color }} />
                         <input type="text" value={ts.color} onChange={e => updateTS('color', e.target.value)}
-                          className="flex-1 min-w-0 px-1.5 py-1.5 border border-gray-200 rounded-lg text-[10px] font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
+                          className="flex-1 min-w-0 px-1.5 py-1.5 border border-gray-200 rounded-lg text-[10px] font-mono text-gray-900 focus:border-zinc-900 focus:outline-none" />
                       </div>
                     </div>
                   </div>
@@ -500,7 +500,7 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
           update('textStyles', textStyles)
         }} />
         <label className="flex items-center gap-2.5 cursor-pointer">
-          <div className={`relative w-9 h-5 rounded-full transition-colors ${s.textStyles?.link?.underline !== false ? 'bg-brand-500' : 'bg-gray-200'}`}>
+          <div className={`relative w-9 h-5 rounded-full transition-colors ${s.textStyles?.link?.underline !== false ? 'bg-zinc-900' : 'bg-gray-200'}`}>
             <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${s.textStyles?.link?.underline !== false ? 'translate-x-4' : 'translate-x-0.5'}`} />
           </div>
           <span className="text-[12px] text-gray-700">Sublinhado</span>
@@ -536,12 +536,12 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
                   <div>
                     <label className="text-[10px] text-gray-400">Raio</label>
                     <input type="number" value={bs.borderRadius} onChange={e => updateBS('borderRadius', Number(e.target.value))} min={0} max={50}
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-400">Peso</label>
                     <select value={bs.fontWeight} onChange={e => updateBS('fontWeight', e.target.value)}
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 bg-white focus:border-zinc-900 focus:outline-none">
                       <option value="normal">Normal</option>
                       <option value="600">Semibold</option>
                       <option value="bold">Bold</option>
@@ -1019,21 +1019,21 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
               defaultValue={templateName}
               onBlur={e => { const v = e.target.value.trim(); if (v && v !== templateName) onNameChange(v) }}
               onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-              className="text-sm font-semibold text-gray-900 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-brand-500 focus:outline-none truncate max-w-[250px] px-1 py-0.5 -ml-1 rounded"
+              className="text-sm font-semibold text-gray-900 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-zinc-900 focus:outline-none truncate max-w-[250px] px-1 py-0.5 -ml-1 rounded"
               title="Clique para editar o nome"
             />
           ) : (
             <span className="text-sm font-semibold text-gray-900 truncate max-w-[250px]">{templateName}</span>
           )}
-          <span className="text-[9px] px-1.5 py-0.5 bg-brand-100 text-brand-700 rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
+          <span className="text-[9px] px-1.5 py-0.5 bg-zinc-100 text-zinc-900 rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
         </div>
 
         <div className="flex items-center gap-1">
           <button onClick={undo} disabled={historyIdx <= 0} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Desfazer"><Undo2 size={15} /></button>
           <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Refazer"><Redo2 size={15} /></button>
           <div className="w-px h-4 bg-gray-200 mx-1" />
-          <button onClick={() => setDevice('desktop')} className={`p-1.5 rounded transition-colors ${device === 'desktop' ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-gray-700'}`}><Monitor size={15} /></button>
-          <button onClick={() => setDevice('mobile')} className={`p-1.5 rounded transition-colors ${device === 'mobile' ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-gray-700'}`}><Smartphone size={15} /></button>
+          <button onClick={() => setDevice('desktop')} className={`p-1.5 rounded transition-colors ${device === 'desktop' ? 'text-zinc-900 bg-zinc-50' : 'text-gray-400 hover:text-gray-700'}`}><Monitor size={15} /></button>
+          <button onClick={() => setDevice('mobile')} className={`p-1.5 rounded transition-colors ${device === 'mobile' ? 'text-zinc-900 bg-zinc-50' : 'text-gray-400 hover:text-gray-700'}`}><Smartphone size={15} /></button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -1046,7 +1046,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           <button onClick={() => setShowSendTest(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
             <Send size={14} /> Teste
           </button>
-          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-500 text-white text-xs font-semibold rounded-lg hover:bg-brand-600 disabled:opacity-50 transition-colors">
+          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-900 text-white text-xs font-semibold rounded-lg hover:bg-zinc-800 disabled:opacity-50 transition-colors">
             {saving ? <Loader2 size={14} className="animate-spin" /> : isSaved ? <CheckCircle size={14} /> : <Save size={14} />}
             {saving ? 'Salvando...' : isSaved ? 'Salvo!' : 'Salvar'}
           </button>
@@ -1187,12 +1187,12 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Layout</p>
                   <div className="grid grid-cols-2 gap-1.5">
                     <button onClick={() => setShowColumnModal(true)}
-                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
+                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-zinc-400 hover:shadow-sm transition-all cursor-pointer">
                       <Columns className="w-5 h-5 text-gray-500" />
                       <span className="text-[10px] font-medium text-gray-600">Colunas</span>
                     </button>
                     <button onClick={() => addSection([100])}
-                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
+                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-zinc-400 hover:shadow-sm transition-all cursor-pointer">
                       <LayoutGrid className="w-5 h-5 text-gray-500" />
                       <span className="text-[10px] font-medium text-gray-600">Seção</span>
                     </button>
@@ -1386,7 +1386,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Salvar Bloco Reutilizável</h3>
             <input type="text" value={saveBlockName} onChange={e => setSaveBlockName(e.target.value)}
               placeholder="Nome do bloco..." autoFocus
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none mb-3" />
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-zinc-900 focus:ring-2 focus:ring-zinc-500/20 outline-none mb-3" />
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowSaveBlockModal(false)}
                 className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
@@ -1395,7 +1395,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   method: 'POST', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ name: saveBlockName.trim(), block_json: selectedBlock }),
                 }).then(() => { showToast('Bloco salvo!'); setShowSaveBlockModal(false) }).catch(() => showToast('Erro', 'error'))
-              }} className="px-4 py-2 bg-brand-500 text-white text-sm font-semibold rounded-lg hover:bg-brand-600 disabled:opacity-50">
+              }} className="px-4 py-2 bg-zinc-900 text-white text-sm font-semibold rounded-lg hover:bg-zinc-800 disabled:opacity-50">
                 Salvar
               </button>
             </div>
@@ -1450,10 +1450,10 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                     const isActive = JSON.stringify(columnModalLayout) === JSON.stringify(opt.cols)
                     return (
                       <button key={opt.label} onClick={() => setColumnModalLayout(opt.cols)}
-                        className={`p-3 border-2 rounded-lg text-center transition-all ${isActive ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                        className={`p-3 border-2 rounded-lg text-center transition-all ${isActive ? 'border-zinc-900 bg-zinc-50' : 'border-gray-200 hover:border-gray-300'}`}>
                         <div className="flex gap-0.5 justify-center mb-1">
                           {opt.cols.map((w, i) => (
-                            <div key={i} className={`h-5 rounded-sm ${isActive ? 'bg-brand-500' : 'bg-gray-300'}`} style={{ width: `${w * 0.6}px` }} />
+                            <div key={i} className={`h-5 rounded-sm ${isActive ? 'bg-zinc-900' : 'bg-gray-300'}`} style={{ width: `${w * 0.6}px` }} />
                           ))}
                         </div>
                         <span className="text-[10px] text-gray-600">{opt.label}</span>

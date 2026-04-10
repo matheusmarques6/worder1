@@ -189,13 +189,13 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddPrebuiltSection
                 <button
                   key={section.type}
                   onClick={() => onAddPrebuiltSection?.(section.type)}
-                  className="flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-brand-400 hover:shadow-md transition-all group text-left"
+                  className="flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-zinc-400 hover:shadow-md transition-all group text-left"
                 >
                   <div className="p-2 bg-gray-50 border-b border-gray-100 flex items-center justify-center min-h-[72px]">
                     {section.preview}
                   </div>
                   <div className="p-2">
-                    <p className="text-[11px] font-semibold text-gray-800 group-hover:text-brand-600 transition-colors">{section.label}</p>
+                    <p className="text-[11px] font-semibold text-gray-800 group-hover:text-zinc-900 transition-colors">{section.label}</p>
                     <p className="text-[9px] text-gray-400 mt-0.5 leading-tight">{section.description}</p>
                   </div>
                 </button>
