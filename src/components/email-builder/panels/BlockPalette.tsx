@@ -111,7 +111,7 @@ const PREBUILT_SECTIONS = [
 
 interface BlockPaletteProps {
   onAddBlock: (type: string) => void
-  onAddSavedBlock?: (block: EmailBlock) => void
+  onAddSavedBlock?: (block: EmailBlock, savedBlockId?: string, savedBlockName?: string) => void
   onAddPrebuiltSection?: (type: string) => void
 }
 
@@ -219,13 +219,13 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddPrebuiltSection
                 {savedBlocks.map((sb: any) => (
                   <div key={sb.id}
                     draggable
-                    onDragStart={(e) => { e.dataTransfer.setData('savedBlockJson', JSON.stringify(sb.block_json)); e.dataTransfer.effectAllowed = 'copy' }}
+                    onDragStart={(e) => { e.dataTransfer.setData('savedBlockJson', JSON.stringify(sb.block_json)); e.dataTransfer.setData('savedBlockId', sb.id); e.dataTransfer.setData('savedBlockName', sb.name); e.dataTransfer.effectAllowed = 'copy' }}
                     className="flex items-center gap-2.5 p-3 bg-white border border-zinc-200 rounded-lg hover:border-zinc-400 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing group"
                   >
                     <div className="w-8 h-8 rounded-md bg-zinc-100 flex items-center justify-center flex-shrink-0">
                       <Package className="w-4 h-4 text-zinc-500" />
                     </div>
-                    <div className="flex-1 min-w-0" onClick={() => onAddSavedBlock?.(sb.block_json)}>
+                    <div className="flex-1 min-w-0" onClick={() => onAddSavedBlock?.(sb.block_json, sb.id, sb.name)}>
                       <p className="text-[12px] font-medium text-zinc-900 truncate cursor-pointer hover:text-zinc-700">{sb.name}</p>
                       <p className="text-[10px] text-zinc-400">{sb.category || 'Personalizado'}</p>
                     </div>

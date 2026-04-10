@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     // Get contacts for this batch
     const { data: contacts, error: contactsError } = await supabaseAdmin
       .from('contacts')
-      .select('id, email, first_name, last_name, phone')
+      .select('*')
       .in('id', contact_ids);
 
     if (contactsError || !contacts || contacts.length === 0) {
@@ -88,15 +88,34 @@ export async function POST(req: NextRequest) {
     let failed = 0;
 
     for (const contact of contacts) {
+      // Build comprehensive merge data from ALL contact fields
       const mergeData: Record<string, string> = {
+        // Core fields
         first_name: contact.first_name || '',
         last_name: contact.last_name || '',
         email: contact.email || '',
         phone: contact.phone || '',
+        // Dotted aliases
         'contact.first_name': contact.first_name || '',
         'contact.last_name': contact.last_name || '',
         'contact.email': contact.email || '',
         'contact.phone': contact.phone || '',
+        // Profile fields
+        company: contact.company || '',
+        position: contact.position || '',
+        city: contact.city || '',
+        state: contact.state || '',
+        country: contact.country || '',
+        birthday: contact.birthday ? new Date(contact.birthday).toLocaleDateString('pt-BR') : '',
+        gender: contact.gender || '',
+        source: contact.source || '',
+        tags: Array.isArray(contact.tags) ? contact.tags.join(', ') : (contact.tags || ''),
+        // Metrics
+        total_orders: String(contact.total_orders || 0),
+        total_spent: contact.total_spent ? `R$ ${Number(contact.total_spent).toFixed(2)}` : 'R$ 0,00',
+        average_order_value: contact.average_order_value ? `R$ ${Number(contact.average_order_value).toFixed(2)}` : 'R$ 0,00',
+        last_order_at: contact.last_order_at ? new Date(contact.last_order_at).toLocaleDateString('pt-BR') : '',
+        // Store
         store_name: storeName,
         store_url: storeUrl,
         store_email: storeEmail,
@@ -106,6 +125,13 @@ export async function POST(req: NextRequest) {
         'store.email': storeEmail,
         'store.phone': storePhone,
       };
+      // Inject custom_fields as custom.* merge tags
+      if (contact.custom_fields && typeof contact.custom_fields === 'object') {
+        for (const [k, v] of Object.entries(contact.custom_fields)) {
+          mergeData[`custom.${k}`] = String(v ?? '')
+          mergeData[`custom_${k}`] = String(v ?? '')
+        }
+      }
 
       const result = await sendCampaignEmail({
         campaignId: campaign_id,

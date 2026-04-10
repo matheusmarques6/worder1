@@ -786,9 +786,14 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     setTimeout(() => setLastDroppedBlockId(null), 400)
   }, [doc, updateDoc, selectBlock])
 
-  const addSavedBlock = useCallback((blockJson: any) => {
+  const addSavedBlock = useCallback((blockJson: any, savedBlockId?: string, savedBlockName?: string) => {
     if (!blockJson) return
-    const restored: EmailBlock = { ...blockJson, id: 'b_' + Math.random().toString(36).substring(2, 9) }
+    const restored: EmailBlock = {
+      ...blockJson,
+      id: 'b_' + Math.random().toString(36).substring(2, 9),
+      // Link to universal block if ID provided
+      ...(savedBlockId ? { _savedBlockId: savedBlockId, _savedBlockName: savedBlockName } : {}),
+    }
     const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
     if (sections.length === 0) {
       const section = createSection([100])
@@ -909,7 +914,9 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     if (savedJson) {
       try {
         const blockData = JSON.parse(savedJson)
-        addSavedBlock(blockData)
+        const savedId = e.dataTransfer.getData('savedBlockId')
+        const savedName = e.dataTransfer.getData('savedBlockName')
+        addSavedBlock(blockData, savedId || undefined, savedName || undefined)
       } catch {}
       return
     }
@@ -1083,10 +1090,47 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                         <X size={14} strokeWidth={2} />
                       </button>
                       <span className="text-[13px] font-semibold text-zinc-900 flex-1">{BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}</span>
+                      {selectedBlock._savedBlockId && <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-semibold">SYNC</span>}
                     </>
                   )}
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
+                  {/* Universal block sync banner */}
+                  {selectedBlock._savedBlockId && !selectedSubElement && (
+                    <div className="mb-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Sincronizado</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-700 leading-snug mb-2.5">
+                        Alteracoes neste bloco serao aplicadas em todos os emails que o utilizam.
+                      </p>
+                      <div className="flex gap-2">
+                        <button onClick={async () => {
+                          // Save current block props back to the universal block
+                          try {
+                            await fetch(`/api/email/saved-blocks/${selectedBlock._savedBlockId}`, {
+                              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ block_json: { type: selectedBlock.type, props: selectedBlock.props } }),
+                            })
+                            showToast('Bloco universal atualizado!')
+                          } catch { showToast('Erro ao salvar', 'error') }
+                        }}
+                          className="flex-1 py-1.5 text-[11px] font-semibold text-white bg-emerald-600 rounded-md hover:bg-emerald-700 transition-colors text-center">
+                          Salvar no universal
+                        </button>
+                        <button onClick={() => {
+                          // Unlink: remove the savedBlockId reference
+                          updateProp(selectedBlock.id, '_savedBlockId' as any, undefined)
+                          updateProp(selectedBlock.id, '_savedBlockName' as any, undefined)
+                          showToast('Bloco desvinculado — agora e independente')
+                        }}
+                          className="flex-1 py-1.5 text-[11px] font-medium text-zinc-700 bg-white border border-zinc-200 rounded-md hover:bg-zinc-50 transition-colors text-center">
+                          Desvincular
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   {/* Sub-element properties for compound blocks */}
                   {selectedSubElement && selectedBlock.type === 'abandoned-cart' ? (
                     <CompoundSubElementPanel

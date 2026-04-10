@@ -23,6 +23,9 @@ export interface EmailBlock {
   id: string
   type: BlockType
   props: Record<string, any>
+  /** If set, this block is linked to a universal/saved block. Props sync from saved_blocks table. */
+  _savedBlockId?: string
+  _savedBlockName?: string
 }
 
 // ── Column (contains blocks) ──

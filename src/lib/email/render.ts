@@ -7,17 +7,72 @@
 // =============================================
 
 /**
+ * Evaluate a block's conditional visibility.
+ * Returns true if the block should be shown, false if hidden.
+ */
+export function evaluateBlockCondition(
+  condition: { field: string; operator: string; value: string; logic?: 'and' | 'or'; rules?: Array<{ field: string; operator: string; value: string }> } | undefined,
+  data: Record<string, string>
+): boolean {
+  if (!condition || !condition.field) return true // No condition = always show
+
+  const evalRule = (rule: { field: string; operator: string; value: string }): boolean => {
+    const actual = (data[rule.field] ?? '').toLowerCase()
+    const expected = (rule.value ?? '').toLowerCase()
+    switch (rule.operator) {
+      case 'equals': return actual === expected
+      case 'not_equals': return actual !== expected
+      case 'contains': return actual.includes(expected)
+      case 'not_contains': return !actual.includes(expected)
+      case 'greater_than': return parseFloat(actual) > parseFloat(expected)
+      case 'less_than': return parseFloat(actual) < parseFloat(expected)
+      case 'is_set': return actual.length > 0
+      case 'is_not_set': return actual.length === 0
+      case 'starts_with': return actual.startsWith(expected)
+      case 'ends_with': return actual.endsWith(expected)
+      default: return true
+    }
+  }
+
+  // Single rule
+  const mainResult = evalRule(condition)
+
+  // Multiple rules with AND/OR
+  if (condition.rules && condition.rules.length > 0) {
+    const allResults = [mainResult, ...condition.rules.map(evalRule)]
+    return condition.logic === 'and'
+      ? allResults.every(Boolean)
+      : allResults.some(Boolean)
+  }
+
+  return mainResult
+}
+
+/**
  * Replace {{tag}} and {{tag|fallback}} in HTML with data values.
  */
 export function renderMergeTags(
   html: string,
   data: Record<string, string>
 ): string {
+  // Inject date tags
+  const now = new Date()
+  const dateData: Record<string, string> = {
+    ...data,
+    current_date: now.toLocaleDateString('pt-BR'),
+    current_year: String(now.getFullYear()),
+  }
+
   // Replace {{tag|fallback}} first (with fallback)
   let result = html.replace(
     /\{\{([a-zA-Z0-9_.]+)\|([^}]*)\}\}/g,
     (_, tag: string, fallback: string) => {
-      return data[tag] ?? fallback;
+      // Support custom.* prefix for custom_fields
+      if (tag.startsWith('custom.')) {
+        const customKey = tag.slice(7)
+        return dateData[`custom_${customKey}`] ?? dateData[`custom.${customKey}`] ?? fallback;
+      }
+      return dateData[tag] ?? fallback;
     }
   );
 
@@ -25,7 +80,11 @@ export function renderMergeTags(
   result = result.replace(
     /\{\{([a-zA-Z0-9_.]+)\}\}/g,
     (_, tag: string) => {
-      return data[tag] ?? '';
+      if (tag.startsWith('custom.')) {
+        const customKey = tag.slice(7)
+        return dateData[`custom_${customKey}`] ?? dateData[`custom.${customKey}`] ?? '';
+      }
+      return dateData[tag] ?? '';
     }
   );
 
