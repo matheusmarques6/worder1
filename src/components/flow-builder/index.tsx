@@ -369,12 +369,21 @@ export function getFlowDataForSave() {
 
   // Extract trigger info from trigger node
   const triggerNode = legacyNodes.find((n) => n.type?.startsWith('trigger_'));
+  const triggerConfig = triggerNode?.data.config || {};
 
   return {
     name: state.automationName,
     status: state.automationStatus,
     trigger_type: triggerNode?.type || 'manual',
-    trigger_config: triggerNode?.data.config || {},
+    trigger_config: triggerConfig,
+    trigger_filters: triggerConfig.triggerFilters || [],
+    audience_filters: triggerConfig.audienceFilters || [],
+    exit_conditions: triggerConfig.exitConditions || [],
+    frequency_config: {
+      type: triggerConfig.frequencyType || 'once',
+      value: triggerConfig.frequencyValue,
+      unit: triggerConfig.frequencyUnit,
+    },
     nodes: legacyNodes,
     edges: legacyEdges,
   };

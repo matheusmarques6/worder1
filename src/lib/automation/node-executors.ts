@@ -283,19 +283,31 @@ const actionExecutors: Record<string, NodeExecutor> = {
           html = config.html || config.body || '<p>Email sem conteúdo</p>';
         }
 
-        // 2. Resolve merge tags in subject and html
-        const resolveTags = (text: string): string => {
-          return text.replace(/\{\{([\w.]+)\}\}/g, (match: string, path: string) => {
-            const parts = path.split('.');
-            if (parts[0] === 'contact') return (context.contact as Record<string, any>)?.[parts[1]] || '';
-            if (parts[0] === 'event') return context.trigger?.data?.[parts[1]] || '';
-            if (parts[0] === 'store') return (context as Record<string, any>).store?.[parts[1]] || '';
-            return match;
-          });
-        };
+        // 2. Resolve merge tags using the variable engine
+        let resolvedHtml = html;
+        let resolvedSubject = config.subject || '';
 
-        let subject = resolveTags(config.subject || '');
-        html = resolveTags(html);
+        try {
+          const { variableEngine } = await import('./variable-engine');
+          resolvedHtml = variableEngine.process(html, context);
+          resolvedSubject = variableEngine.process(resolvedSubject, context);
+        } catch {
+          // Fallback: simple regex replacement
+          const resolveTags = (text: string): string => {
+            return text.replace(/\{\{([\w.]+)\}\}/g, (match: string, path: string) => {
+              const parts = path.split('.');
+              if (parts[0] === 'contact') return (context.contact as Record<string, any>)?.[parts[1]] || '';
+              if (parts[0] === 'event') return context.trigger?.data?.[parts[1]] || '';
+              if (parts[0] === 'store') return (context as Record<string, any>).store?.[parts[1]] || '';
+              return match;
+            });
+          };
+          resolvedHtml = resolveTags(html);
+          resolvedSubject = resolveTags(resolvedSubject);
+        }
+
+        let subject = resolvedSubject;
+        html = resolvedHtml;
 
         // Annotate test emails
         if (isTest) {
@@ -1034,10 +1046,38 @@ const controlExecutors: Record<string, NodeExecutor> = {
         minutes: 60 * 1000,
         hours: 60 * 60 * 1000,
         days: 24 * 60 * 60 * 1000,
+        weeks: 7 * 24 * 60 * 60 * 1000,
       };
 
       const delayMs = value * (multipliers[unit] || multipliers.hours);
-      const resumeAt = new Date(Date.now() + delayMs);
+      let resumeAt = new Date(Date.now() + delayMs);
+
+      // Apply day-of-week restrictions
+      if (config.restrictDays && config.allowedDays?.length > 0) {
+        const allowedDays: number[] = config.allowedDays;
+        while (!allowedDays.includes(resumeAt.getDay() === 0 ? 6 : resumeAt.getDay() - 1)) {
+          resumeAt = new Date(resumeAt.getTime() + 24 * 60 * 60 * 1000);
+        }
+      }
+
+      // Apply time window restrictions
+      if (config.restrictTime && config.timeFrom && config.timeTo) {
+        const [fromH, fromM] = config.timeFrom.split(':').map(Number);
+        const [toH, toM] = config.timeTo.split(':').map(Number);
+        const hour = resumeAt.getHours();
+        const min = resumeAt.getMinutes();
+        const current = hour * 60 + min;
+        const from = fromH * 60 + fromM;
+        const to = toH * 60 + toM;
+
+        if (current < from) {
+          resumeAt.setHours(fromH, fromM, 0, 0);
+        } else if (current > to) {
+          // Move to next day at fromH:fromM
+          resumeAt = new Date(resumeAt.getTime() + 24 * 60 * 60 * 1000);
+          resumeAt.setHours(fromH, fromM, 0, 0);
+        }
+      }
 
       if (isTest) {
         return {

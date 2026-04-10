@@ -254,3 +254,25 @@ CREATE POLICY IF NOT EXISTS "org_read_shopify_orders" ON shopify_orders FOR SELE
 
 CREATE POLICY IF NOT EXISTS "org_read_shopify_checkouts" ON shopify_checkouts FOR SELECT TO authenticated
   USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()));
+
+-- =============================================
+-- 11. Fix automations: add filter/exit/frequency columns
+-- =============================================
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'automations' AND column_name = 'trigger_filters') THEN
+    ALTER TABLE automations ADD COLUMN trigger_filters JSONB DEFAULT '[]';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'automations' AND column_name = 'audience_filters') THEN
+    ALTER TABLE automations ADD COLUMN audience_filters JSONB DEFAULT '[]';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'automations' AND column_name = 'exit_conditions') THEN
+    ALTER TABLE automations ADD COLUMN exit_conditions JSONB DEFAULT '[]';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'automations' AND column_name = 'frequency_config') THEN
+    ALTER TABLE automations ADD COLUMN frequency_config JSONB DEFAULT '{"type": "once"}';
+  END IF;
+END $$;
