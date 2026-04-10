@@ -664,6 +664,9 @@ export const useFlowStore = create<FlowStore>()(
           if (!cfg.subject && !cfg.templateId) {
             errors.push(`Email "${emailNode.data.label}" precisa de um assunto ou template`);
           }
+          if (cfg.templateId === '__new__') {
+            errors.push(`Email "${emailNode.data.label}" tem template pendente — abra o editor`);
+          }
         }
 
         // Check condition nodes have field configured

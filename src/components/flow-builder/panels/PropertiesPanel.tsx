@@ -872,7 +872,9 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 </div>
                 {!['is_set', 'is_not_set'].includes(selectedNode.data.config?.operator || '') && (
                   <div className="space-y-2">
-                    <label className="text-xs text-gray-600/60">Valor</label>
+                    <label className="text-xs text-gray-600/60">
+                      {selectedNode.data.config?.operator === 'between' ? 'Valor minimo' : 'Valor'}
+                    </label>
                     <input
                       type="text"
                       value={selectedNode.data.config?.value || ''}
@@ -2407,14 +2409,16 @@ function ListActionConfig({ config, onUpdate, organizationId, isRemove }: {
 }) {
   const [lists, setLists] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     if (!organizationId) return;
     setLoading(true);
+    setLoadError(false);
     fetch(`/api/lists?organizationId=${organizationId}`)
       .then(r => r.json())
       .then(data => setLists(data.lists || data || []))
-      .catch(() => {})
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }, [organizationId]);
 
@@ -2440,6 +2444,7 @@ function ListActionConfig({ config, onUpdate, organizationId, isRemove }: {
           ))}
         </select>
         {loading && <p className="text-[10px] text-gray-400">Carregando listas...</p>}
+        {loadError && <p className="text-[10px] text-red-500">Erro ao carregar listas. Tente novamente.</p>}
       </div>
       <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
         <p className="text-[11px] text-gray-600">
@@ -2661,8 +2666,10 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
       <div>
         <div className="flex items-center justify-between mb-2">
           <h4 className="text-sm font-semibold text-gray-900">Trigger filters</h4>
-          {triggerFilters.length < 5 && (
+          {triggerFilters.length < 5 ? (
             <button onClick={addTriggerFilter} className="text-xs font-medium text-blue-600 hover:text-blue-800">Add</button>
+          ) : (
+            <span className="text-[10px] text-gray-400">max 5</span>
           )}
         </div>
         <p className="text-xs text-gray-500 mb-3">Limitar o fluxo quando condicoes especificas sao atendidas.</p>
@@ -2697,8 +2704,10 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
       <div>
         <div className="flex items-center justify-between mb-2">
           <h4 className="text-sm font-semibold text-gray-900">Profile filters</h4>
-          {audienceFilters.length < 5 && (
+          {audienceFilters.length < 5 ? (
             <button onClick={addAudienceFilter} className="text-xs font-medium text-blue-600 hover:text-blue-800">Edit</button>
+          ) : (
+            <span className="text-[10px] text-gray-400">max 5</span>
           )}
         </div>
         <p className="text-xs text-gray-500 mb-3">Limitar o fluxo por condicoes do perfil do contato.</p>
@@ -2733,8 +2742,10 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
       <div>
         <div className="flex items-center justify-between mb-2">
           <h4 className="text-sm font-semibold text-gray-900">Exit conditions</h4>
-          {exitConditions.length < 4 && (
+          {exitConditions.length < 4 ? (
             <button onClick={addExitCondition} className="text-xs font-medium text-blue-600 hover:text-blue-800">Add</button>
+          ) : (
+            <span className="text-[10px] text-gray-400">max 4</span>
           )}
         </div>
         <p className="text-xs text-gray-500 mb-3">Cancelam o fluxo quando satisfeitas.</p>
