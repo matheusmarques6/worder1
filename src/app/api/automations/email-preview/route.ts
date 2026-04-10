@@ -59,6 +59,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ events: anyEvents || [] });
     }
 
+    // Send test email action
+    if (action === 'send_test') {
+      const { testEmail } = body;
+      if (!testEmail) {
+        return NextResponse.json({ error: 'testEmail required' }, { status: 400 });
+      }
+
+      // Fetch template
+      const { data: tpl } = await supabase
+        .from('email_templates')
+        .select('html, name')
+        .eq('id', templateId)
+        .single();
+
+      if (!tpl?.html) {
+        return NextResponse.json({ error: 'Template not found' }, { status: 404 });
+      }
+
+      let html = tpl.html;
+
+      // Resolve merge tags with contact data if contactId provided
+      if (contactId) {
+        const { data: c } = await supabase.from('contacts').select('*').eq('id', contactId).single();
+        if (c) {
+          html = html.replace(/\{\{contact\.(\w+)\}\}/g, (_: string, k: string) => (c as Record<string, any>)[k] || '');
+        }
+      }
+
+      // Send via Resend
+      try {
+        const resendKey = process.env.RESEND_API_KEY;
+        if (!resendKey) {
+          return NextResponse.json({ error: 'Resend not configured' }, { status: 500 });
+        }
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: 'Worder <noreply@worder.app>',
+            to: testEmail,
+            subject: `[TESTE] ${tpl.name || 'Preview'}`,
+            html,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          return NextResponse.json({ error: err.message || 'Send failed' }, { status: 500 });
+        }
+        return NextResponse.json({ sent: true });
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message }, { status: 500 });
+      }
+    }
+
     // Need contactId for preview rendering
     if (!contactId) {
       return NextResponse.json({ error: 'contactId required for preview' }, { status: 400 });
