@@ -185,6 +185,97 @@ export async function resolveProductBlocks(
 }
 
 /**
+ * Resolves <!-- WORDER_CART_BLOCK:{json} --> placeholders with real cart product HTML.
+ * Uses Omnisend-style layout (image-left/right/vertical) with full styling from editor config.
+ */
+export async function resolveCartBlocks(
+  html: string,
+  orgId: string,
+  contactId?: string
+): Promise<string> {
+  const regex = /<!-- WORDER_CART_BLOCK:([^ ]*?) -->/g
+  let result = html
+  const matches: RegExpExecArray[] = []
+  let m: RegExpExecArray | null
+  while ((m = regex.exec(html)) !== null) matches.push(m)
+
+  for (const match of matches) {
+    let cfg: any = {}
+    try { cfg = JSON.parse(decodeURIComponent(match[1])) } catch { continue }
+
+    // Fetch cart items for this contact
+    let products: any[] = []
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+      const res = await fetch(`${baseUrl}/api/email/product-feeds/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feed_type: 'cart_items', contact_id: contactId, organization_id: orgId, max_products: cfg.maxItems || 2 }),
+      })
+      const data = await res.json()
+      products = data.products || []
+    } catch {}
+
+    if (products.length === 0) {
+      result = result.replace(match[0], '')
+      continue
+    }
+
+    const isVert = cfg.layoutType === 'vertical'
+    const isRight = cfg.layoutType === 'image-right'
+    const font = cfg.font || 'Arial, sans-serif'
+    const imgW = cfg.imageWidth || 200
+    const imgR = cfg.imageBorderRadius || 0
+    const btnAlign = cfg.buttonAlign || 'left'
+    const btnDisplay = btnAlign === 'full' ? 'display:block;width:100%;text-align:center;' : `display:inline-block;`
+    const sepHtml = cfg.separator ? `<tr><td style="border-top:1px solid ${cfg.separatorColor || '#E5E7EB'};font-size:1px;line-height:1px;" colspan="2">&nbsp;</td></tr>` : ''
+
+    let cartHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:${font};">`
+
+    products.forEach((prod: any, i: number) => {
+      const title = prod.title || prod.name || 'Produto'
+      const desc = prod.description || prod.variant_title || ''
+      const price = typeof prod.price === 'number' ? `R$ ${prod.price.toFixed(2)}` : (prod.price || 'R$ 0,00')
+      const oldPrice = prod.compare_at_price ? `R$ ${prod.compare_at_price}` : (prod.compare_price ? `R$ ${prod.compare_price}` : '')
+      const imgUrl = prod.image_url || prod.images?.[0]?.src || ''
+      const prodUrl = prod.url || (prod.handle ? `/products/${prod.handle}` : '#')
+      const checkoutUrl = cfg.buttonHref || '{{checkout_url}}'
+
+      const imgCell = cfg.showImage ? `<td width="${isVert ? '100%' : imgW}" style="vertical-align:top;${isVert ? 'padding-bottom:12px;' : ''}"><a href="${prodUrl}" style="display:block;text-decoration:none;">${imgUrl ? `<img src="${imgUrl}" alt="${title}" width="${isVert ? '100%' : imgW}" style="display:block;border-radius:${imgR}px;max-width:100%;height:auto;" />` : `<div style="width:${isVert ? '100%' : imgW + 'px'};height:${isVert ? '150px' : imgW + 'px'};background:#F3F4F6;border-radius:${imgR}px;"></div>`}</a></td>` : ''
+
+      const detailParts: string[] = []
+      if (cfg.showName) detailParts.push(`<p style="margin:0;font-size:${cfg.nameFontSize}px;font-weight:${cfg.nameWeight};color:${cfg.nameColor};">${title}</p>`)
+      if (cfg.showDescription && desc) detailParts.push(`<p style="margin:4px 0 0;font-size:${cfg.descFontSize}px;color:${cfg.descColor};">${desc}</p>`)
+      if (cfg.showPrice) {
+        let priceHtml = `<span style="font-size:${cfg.priceFontSize}px;font-weight:${cfg.priceWeight};color:${cfg.priceColor};">${price}</span>`
+        if (cfg.showOldPrice && oldPrice) {
+          priceHtml += ` <span style="font-size:${cfg.priceFontSize - 1}px;color:${cfg.oldPriceColor};text-decoration:line-through;">${oldPrice}</span>`
+        }
+        detailParts.push(`<p style="margin:8px 0 0;">${priceHtml}</p>`)
+      }
+      if (cfg.showButton) {
+        detailParts.push(`<p style="margin:10px 0 0;text-align:${btnAlign === 'full' ? 'center' : btnAlign};"><a href="${checkoutUrl}" style="${btnDisplay}padding:${cfg.buttonPaddingV}px ${cfg.buttonPaddingH}px;background:${cfg.buttonColor};color:${cfg.buttonTextColor};border-radius:${cfg.buttonRadius}px;font-size:${cfg.buttonFontSize}px;font-weight:600;text-decoration:none;box-sizing:border-box;">${cfg.buttonText}</a></p>`)
+      }
+      const detailsCell = `<td style="vertical-align:top;${isVert ? '' : 'padding-left:16px;'}">${detailParts.join('')}</td>`
+
+      if (isVert) {
+        cartHtml += `<tr>${imgCell}</tr><tr>${detailsCell}</tr>`
+      } else {
+        cartHtml += `<tr>${isRight ? detailsCell + imgCell : imgCell + detailsCell}</tr>`
+      }
+
+      if (cfg.separator && i < products.length - 1) {
+        cartHtml += sepHtml
+      }
+    })
+
+    cartHtml += '</table>'
+    result = result.replace(match[0], cartHtml)
+  }
+  return result
+}
+
+/**
  * Full email preparation pipeline.
  */
 export function prepareEmailHtml({

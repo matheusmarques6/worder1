@@ -33,10 +33,11 @@ export const MERGE_TAGS: MergeTagGroup[] = [
   {
     name: 'Carrinho', icon: 'ShoppingCart',
     tags: [
+      { name: 'Link de Recuperacao (Shopify)', value: '{{checkout_url}}', sample: 'https://loja.myshopify.com/checkouts/recover/...' },
       { name: 'Link do Carrinho', value: '{{cart_url}}', sample: 'https://loja.com/cart' },
       { name: 'Total', value: '{{cart_total}}', sample: 'R$ 299,90' },
-      { name: '1º Produto', value: '{{cart_first_item}}', sample: 'Camiseta Premium' },
-      { name: '1º Preço', value: '{{cart_first_item_price}}', sample: 'R$ 89,90' },
+      { name: '1o Produto', value: '{{cart_first_item}}', sample: 'Camiseta Premium' },
+      { name: '1o Preco', value: '{{cart_first_item_price}}', sample: 'R$ 89,90' },
     ],
   },
   {

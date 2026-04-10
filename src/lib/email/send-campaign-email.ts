@@ -8,7 +8,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendEmail } from '@/lib/email/resend';
-import { prepareEmailHtml, resolveProductBlocks } from '@/lib/email/render';
+import { prepareEmailHtml, resolveProductBlocks, resolveCartBlocks } from '@/lib/email/render';
 
 export interface SendCampaignEmailParams {
   campaignId: string;
@@ -60,8 +60,27 @@ export async function sendCampaignEmail({
 
     emailSendId = emailSend.id;
 
-    // 2. Resolve dynamic product blocks
-    const htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, contactId);
+    // 2. Resolve checkout_url merge tag from contact's latest abandoned cart (if not provided)
+    if (!mergeData.checkout_url || mergeData.checkout_url === '{{checkout_url}}') {
+      try {
+        const { data: cart } = await supabaseAdmin
+          .from('shopify_checkouts')
+          .select('recovery_url')
+          .eq('status', 'abandoned')
+          .or(`email.eq.${contactEmail},contact_id.eq.${contactId}`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (cart?.recovery_url) {
+          mergeData.checkout_url = cart.recovery_url
+          mergeData['checkout.url'] = cart.recovery_url
+        }
+      } catch {} // Table may not exist
+    }
+
+    // 3. Resolve dynamic product blocks + cart blocks
+    let htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, contactId);
+    htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, contactId);
 
     // 3. Prepare HTML with merge tags, tracking, unsubscribe
     const finalHtml = prepareEmailHtml({

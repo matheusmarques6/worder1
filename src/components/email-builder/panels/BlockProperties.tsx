@@ -810,6 +810,10 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
               </summary>
               <div className="px-3 pb-3 space-y-2">
                 <Field label="Texto"><TextInput value={p.buttonText || 'Shop now'} onChange={v => onChange('buttonText', v)} /></Field>
+                <Field label="Link do botao">
+                  <TextInput value={p.buttonHref || '{{checkout_url}}'} onChange={v => onChange('buttonHref', v)} placeholder="{{checkout_url}}" />
+                  <p className="text-[10px] text-zinc-400 mt-1">Use <code className="bg-zinc-100 px-1 rounded text-[9px]">{'{{checkout_url}}'}</code> para o link de recuperacao do Shopify</p>
+                </Field>
                 <div className="grid grid-cols-2 gap-2">
                   <Field label="Cor fundo"><ColorInput value={p.buttonColor || '#111827'} onChange={v => onChange('buttonColor', v)} /></Field>
                   <Field label="Cor texto"><ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} /></Field>

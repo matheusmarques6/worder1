@@ -239,6 +239,7 @@ export const BLOCK_DEFS: BlockDef[] = [
       oldPriceColor: '#9CA3AF',
       // Button styling
       buttonText: 'Shop now',
+      buttonHref: '{{checkout_url}}',
       buttonColor: '#111827', buttonTextColor: '#FFFFFF',
       buttonRadius: 4, buttonFontSize: 14,
       buttonAlign: 'left' as 'left' | 'center' | 'right' | 'full',

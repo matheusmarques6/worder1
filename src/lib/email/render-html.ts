@@ -170,8 +170,35 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${p.title ? `<p style="margin:0 0 16px;font-size:18px;font-weight:bold;color:#111827;text-align:center;font-family:${font};">${p.title}</p>` : ''}${productsHtml}</td></tr>`
     }
 
-    case 'abandoned-cart':
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#FFFBEB'};font-family:${font};"><p style="margin:0 0 4px;font-size:${p.titleFontSize || 22}px;font-weight:bold;color:${p.titleColor || '#111827'};text-align:center;">${p.title || ''}</p><p style="margin:0 0 20px;font-size:${p.subtitleFontSize || 14}px;color:${p.subtitleColor || '#6B7280'};text-align:center;">${p.subtitle || ''}</p><!-- WORDER_PRODUCT_BLOCK:cart_items:${p.maxItems || 3}:1:${p.showPrice !== false}:false:true:${encodeURIComponent(p.buttonText || 'Finalizar Compra')} --></td></tr>`
+    case 'abandoned-cart': {
+      // Encode all styling props as JSON for the resolver to generate styled HTML
+      const cartConfig = {
+        type: 'abandoned-cart',
+        layoutType: p.layoutType || 'image-left',
+        maxItems: p.maxItems || 2,
+        showImage: p.showImage !== false,
+        showName: p.showName !== false,
+        showDescription: p.showDescription !== false,
+        showPrice: p.showPrice !== false,
+        showOldPrice: p.showOldPrice !== false,
+        showButton: p.showButton !== false,
+        nameFontSize: p.nameFontSize || 14, nameColor: p.nameColor || '#111827', nameWeight: p.nameWeight || '600',
+        descFontSize: p.descFontSize || 13, descColor: p.descColor || '#6B7280',
+        priceFontSize: p.priceFontSize || 14, priceColor: p.priceColor || '#111827', priceWeight: p.priceWeight || '600',
+        oldPriceColor: p.oldPriceColor || '#9CA3AF',
+        buttonText: p.buttonText || 'Shop now', buttonHref: p.buttonHref || '{{checkout_url}}',
+        buttonColor: p.buttonColor || '#111827', buttonTextColor: p.buttonTextColor || '#FFFFFF',
+        buttonRadius: p.buttonRadius ?? 4, buttonFontSize: p.buttonFontSize || 14,
+        buttonAlign: p.buttonAlign || 'left',
+        buttonPaddingV: p.buttonPaddingV || 10, buttonPaddingH: p.buttonPaddingH || 24,
+        imageWidth: p.imageWidth || 200, imageBorderRadius: p.imageBorderRadius ?? 0,
+        separator: p.separator !== false, separatorColor: p.separatorColor || '#E5E7EB',
+        stackOnMobile: p.stackOnMobile !== false,
+        font,
+      }
+      const configJson = encodeURIComponent(JSON.stringify(cartConfig))
+      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}font-family:${font};"><!-- WORDER_CART_BLOCK:${configJson} --></td></tr>`
+    }
 
     case 'coupon': {
       const cpv = p.codePaddingV ?? 10
