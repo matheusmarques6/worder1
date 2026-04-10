@@ -2409,6 +2409,8 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
       {showEmailEditor && config.templateId && config.templateId !== '__new__' && (
         <EmailEditorOverlay
           templateId={config.templateId}
+          triggerType={triggerType}
+          organizationId={organizationId}
           onClose={async () => {
             await fetchTemplates();
             setShowEmailEditor(false);

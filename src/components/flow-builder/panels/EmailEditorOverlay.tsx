@@ -8,14 +8,17 @@ const WorderEditor = dynamic(() => import('@/components/email-builder/WorderEmai
 
 interface EmailEditorOverlayProps {
   templateId: string;
+  triggerType?: string;
+  organizationId?: string;
   onClose: () => void;
 }
 
 /**
  * Opens the email editor FULLSCREEN inside the flow builder.
  * When user clicks Exit/Back, returns to the flow at the same node.
+ * Passes flowContext so Preview uses real event data.
  */
-export function EmailEditorOverlay({ templateId, onClose }: EmailEditorOverlayProps) {
+export function EmailEditorOverlay({ templateId, triggerType, organizationId, onClose }: EmailEditorOverlayProps) {
   const [template, setTemplate] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -82,6 +85,11 @@ export function EmailEditorOverlay({ templateId, onClose }: EmailEditorOverlayPr
         design={template.design_json || template.design}
         onSave={handleSave}
         onBack={onClose}
+        flowContext={triggerType && organizationId ? {
+          templateId,
+          triggerType,
+          organizationId,
+        } : undefined}
       />
     </div>
   );

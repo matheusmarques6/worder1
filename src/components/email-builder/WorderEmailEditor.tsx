@@ -11,6 +11,7 @@ import { BlockProperties } from './panels/BlockProperties'
 import { MergeTagPicker } from './modals/MergeTagPicker'
 import { SendTestModal } from './modals/SendTestModal'
 import { PreviewModal } from './modals/PreviewModal'
+import { EmailPreviewMode } from '../flow-builder/panels/EmailPreviewMode'
 import { SectionProperties } from './panels/SectionProperties'
 import {
   BLOCK_DEFS, SECTION_LAYOUTS, createBlock, createSection, migrateV1toV2, DEFAULT_DOCUMENT,
@@ -23,6 +24,12 @@ interface WorderEmailEditorProps {
   design?: EmailDocument | Record<string, any>
   onSave: (design: Record<string, any>, html: string) => Promise<boolean>
   onBack: () => void
+  // Flow context — when editing inside a flow, enables real data preview
+  flowContext?: {
+    templateId: string
+    triggerType: string
+    organizationId: string
+  }
 }
 
 // ── Sortable Block Wrapper (drag from anywhere on the block) ──
@@ -311,7 +318,7 @@ function allBlocks(doc: EmailDocument): EmailBlock[] {
 
 const LAYOUT_ICONS: Record<string, typeof Square> = { Square, Columns, PanelLeft, PanelRight, LayoutGrid }
 
-export default function WorderEmailEditor({ templateName, design, onSave, onBack }: WorderEmailEditorProps) {
+export default function WorderEmailEditor({ templateName, design, onSave, onBack, flowContext }: WorderEmailEditorProps) {
   // ── State ──
   const [doc, setDoc] = useState<EmailDocument>(() => {
     if (design) return migrateV1toV2(design)
@@ -325,6 +332,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const [leftTab, setLeftTab] = useState<'content' | 'styles'>('content')
   const [previewHtml, setPreviewHtml] = useState('')
   const [showPreview, setShowPreview] = useState(false)
+  const [showFlowPreview, setShowFlowPreview] = useState(false)
   const [showMergeTags, setShowMergeTags] = useState(false)
   const [showSendTest, setShowSendTest] = useState(false)
   const [showSaveBlockModal, setShowSaveBlockModal] = useState(false)
@@ -579,6 +587,14 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
 
   // ── Preview ──
   const handlePreview = useCallback(async () => {
+    // When inside a flow, use the flow preview mode with real data
+    if (flowContext) {
+      // Save first so the template HTML is up to date
+      const html = renderDocumentToHtml(doc)
+      await onSave(doc as Record<string, any>, html)
+      setShowFlowPreview(true)
+      return
+    }
     // Resolve dynamic product blocks before rendering
     let resolvedDoc = doc
     const hasDynamicProducts = doc.sections?.some((s: any) =>
@@ -889,6 +905,16 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         subject={templateName}
         onSendTest={() => { setShowPreview(false); setShowSendTest(true) }}
       />
+
+      {/* ── Flow Preview Mode (real data from automation) ── */}
+      {showFlowPreview && flowContext && (
+        <EmailPreviewMode
+          templateId={flowContext.templateId}
+          triggerType={flowContext.triggerType}
+          organizationId={flowContext.organizationId}
+          onClose={() => setShowFlowPreview(false)}
+        />
+      )}
 
       {/* ── Send Test Modal ── */}
       <SendTestModal
