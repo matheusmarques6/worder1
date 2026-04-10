@@ -1847,7 +1847,10 @@ export default function PopupEditorPage() {
               {/* Popup body */}
               <div style={{
                 backgroundColor: s.backgroundColor,
-                padding: s.padding,
+                paddingTop: s.paddingTop ?? s.padding ?? 32,
+                paddingRight: s.paddingRight ?? s.padding ?? 32,
+                paddingBottom: s.paddingBottom ?? s.padding ?? 32,
+                paddingLeft: s.paddingLeft ?? s.padding ?? 32,
                 fontFamily: s.fontFamily,
                 flexGrow: 1,
                 minHeight: 200,
@@ -1973,7 +1976,7 @@ export default function PopupEditorPage() {
                     <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
                   </div>
                 )}
-                <div style={{ backgroundColor: s.backgroundColor, padding: s.padding, fontFamily: s.fontFamily, flexGrow: 1, minHeight: 200 }}>
+                <div style={{ backgroundColor: s.backgroundColor, paddingTop: s.paddingTop ?? s.padding ?? 32, paddingRight: s.paddingRight ?? s.padding ?? 32, paddingBottom: s.paddingBottom ?? s.padding ?? 32, paddingLeft: s.paddingLeft ?? s.padding ?? 32, fontFamily: s.fontFamily, flexGrow: 1, minHeight: 200 }}>
                   {activeStep.blocks.map(block => <BlockPreview key={block.id} block={block} />)}
                 </div>
                 {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && previewDevice !== 'mobile' && (
