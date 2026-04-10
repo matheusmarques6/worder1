@@ -24,6 +24,7 @@ interface EmailTemplate {
   updated_at: string
   created_at: string
   thumbnail_url?: string
+  html?: string
 }
 
 const categoryColors: Record<string, string> = {
@@ -202,9 +203,18 @@ export default function EmailTemplatesPage() {
               transition={{ delay: i * 0.05 }}
               className="group bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow relative"
             >
-              {/* Thumbnail */}
-              <div className="h-40 bg-gray-100 flex items-center justify-center relative">
-                {template.thumbnail_url ? (
+              {/* Thumbnail / HTML Preview */}
+              <div className="h-44 bg-gray-50 flex items-center justify-center relative overflow-hidden">
+                {template.html ? (
+                  <iframe
+                    srcDoc={template.html}
+                    title={template.name}
+                    className="w-[600px] h-[600px] border-0 pointer-events-none select-none"
+                    style={{ transform: 'scale(0.38)', transformOrigin: 'top left', position: 'absolute', top: 0, left: 0 }}
+                    sandbox=""
+                    loading="lazy"
+                  />
+                ) : template.thumbnail_url ? (
                   <img
                     src={template.thumbnail_url}
                     alt={template.name}
