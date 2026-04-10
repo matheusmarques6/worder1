@@ -2202,7 +2202,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
           <h4 className="text-sm font-semibold text-gray-900">Assunto e remetente</h4>
           <button onClick={() => setShowSubjectEdit(!showSubjectEdit)}
             className="px-3 py-1 rounded-md border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50">
-            {showSubjectEdit ? 'Done' : 'Edit'}
+            {showSubjectEdit ? 'Pronto' : 'Editar'}
           </button>
         </div>
 

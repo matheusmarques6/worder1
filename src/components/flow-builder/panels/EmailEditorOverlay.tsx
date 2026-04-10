@@ -23,7 +23,7 @@ export function EmailEditorOverlay({ templateId, onClose }: EmailEditorOverlayPr
   const fetchTemplate = useCallback(async () => {
     try {
       const res = await fetch(`/api/email/templates/${templateId}`);
-      if (!res.ok) throw new Error('Template nao encontrado');
+      if (!res.ok) throw new Error('Template não encontrado');
       const data = await res.json();
       setTemplate(data.template || data);
     } catch (err: any) {
@@ -66,7 +66,7 @@ export function EmailEditorOverlay({ templateId, onClose }: EmailEditorOverlayPr
     return (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white">
         <div className="text-center">
-          <p className="text-base font-medium text-gray-500 mb-3">{error || 'Template nao encontrado'}</p>
+          <p className="text-base font-medium text-gray-500 mb-3">{error || 'Template não encontrado'}</p>
           <button onClick={onClose} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
             Voltar ao flow
           </button>
