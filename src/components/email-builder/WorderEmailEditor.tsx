@@ -841,6 +841,20 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     }))
   }, [])
 
+  // Update block-level properties (not props, but top-level like _savedBlockId)
+  const updateBlockMeta = useCallback((id: string, meta: Record<string, any>) => {
+    setDoc(prev => ({
+      ...prev,
+      sections: prev.sections.map(s => ({
+        ...s,
+        columns: s.columns.map(c => ({
+          ...c,
+          blocks: c.blocks.map(b => b.id === id ? { ...b, ...meta } : b),
+        })),
+      })),
+    }))
+  }, [])
+
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
 
   // ── DnD: supports reorder within column, cross-column, cross-section, and section reordering ──
@@ -1122,8 +1136,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                         </button>
                         <button onClick={() => {
                           // Unlink: remove the savedBlockId reference
-                          updateProp(selectedBlock.id, '_savedBlockId' as any, undefined)
-                          updateProp(selectedBlock.id, '_savedBlockName' as any, undefined)
+                          updateBlockMeta(selectedBlock.id, { _savedBlockId: undefined, _savedBlockName: undefined })
+                          
                           showToast('Bloco desvinculado — agora e independente')
                         }}
                           className="flex-1 py-1.5 text-[11px] font-medium text-zinc-700 bg-white border border-zinc-200 rounded-md hover:bg-zinc-50 transition-colors text-center">
@@ -1410,8 +1424,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                 }).then(r => r.json()).then(data => {
                   // Auto-link block as universal after saving
                   if (data.block?.id) {
-                    updateProp(selectedBlock.id, '_savedBlockId' as any, data.block.id)
-                    updateProp(selectedBlock.id, '_savedBlockName' as any, saveBlockName.trim())
+                    updateBlockMeta(selectedBlock.id, { _savedBlockId: data.block.id, _savedBlockName: saveBlockName.trim() })
+                    
                   }
                   showToast('Bloco salvo como reutilizavel!'); setShowSaveBlockModal(false)
                 }).catch(() => showToast('Erro', 'error'))

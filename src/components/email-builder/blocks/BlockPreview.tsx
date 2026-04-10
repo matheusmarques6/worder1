@@ -1077,7 +1077,7 @@ export function BlockPreview({
           : 'hover:ring-1 hover:ring-zinc-400'
       }`}
     >
-      {renderBlock()}
+      {(() => { try { return renderBlock() } catch (err) { return <div className="p-4 text-center text-red-400 text-xs">Erro ao renderizar bloco: {block.type}</div> } })()}
 
       {/* Floating toolbar — compact, no arrows (drag to reorder) */}
       {selected && (

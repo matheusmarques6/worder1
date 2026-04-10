@@ -100,7 +100,7 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddPrebuiltSection
     }
   }, [tab])
 
-  const categories = ['Conteudo', 'E-commerce', 'Estrutura']
+  const categories = ['Conteúdo', 'E-commerce', 'Estrutura']
 
   const handleDragStart = (e: React.DragEvent, def: BlockDef) => {
     e.dataTransfer.setData('blockType', def.type)
@@ -130,11 +130,11 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddPrebuiltSection
         {tab === 'blocks' && (
           <div className="space-y-5">
             {categories.map(cat => {
-              const blocks = BLOCK_DEFS.filter(b => (b.category === cat || b.category === 'Conteúdo' && cat === 'Conteudo'))
+              const blocks = BLOCK_DEFS.filter(b => b.category === cat)
               if (blocks.length === 0) return null
               return (
                 <div key={cat}>
-                  <p className="text-[11px] font-semibold text-zinc-900 mb-2.5">{cat === 'Conteudo' ? 'Blocos' : cat}</p>
+                  <p className="text-[11px] font-semibold text-zinc-900 mb-2.5">{cat === 'Conteúdo' ? 'Blocos' : cat}</p>
                   <div className="grid grid-cols-3 gap-2">
                     {blocks.map(def => (
                       <button key={def.type} onClick={() => onAddBlock(def.type)} draggable onDragStart={(e) => handleDragStart(e, def)}
