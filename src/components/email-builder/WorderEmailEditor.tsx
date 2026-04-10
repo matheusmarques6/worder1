@@ -42,7 +42,7 @@ function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDel
       {...listeners}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isHidden ? 0.3 : (isDragging ? 0.3 : 1), zIndex: isDragging ? 50 : 'auto' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
-      className={`relative group cursor-grab active:cursor-grabbing transition-all ${isSelected ? 'outline outline-2 outline-[#F97316] outline-offset-1 shadow-[0_0_0_4px_rgba(249,115,22,0.15)]' : 'hover:outline hover:outline-2 hover:outline-[#F97316] hover:outline-offset-1'}`}
+      className={`relative group cursor-grab active:cursor-grabbing transition-all ${isSelected ? 'outline outline-2 outline-zinc-900 outline-offset-1 shadow-[0_0_0_4px_rgba(0,0,0,0.08)]' : 'hover:outline hover:outline-2 hover:outline-zinc-400 hover:outline-offset-1'}`}
     >
       {isHidden && (
         <div className="absolute top-1 right-1 z-20 px-1.5 py-0.5 bg-red-100 text-red-600 text-[9px] font-semibold rounded border border-red-200">
@@ -750,9 +750,18 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   // ── Drop from palette ──
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
+    // Check for saved block drop first
+    const savedJson = e.dataTransfer.getData('savedBlockJson')
+    if (savedJson) {
+      try {
+        const blockData = JSON.parse(savedJson)
+        addSavedBlock(blockData)
+      } catch {}
+      return
+    }
     const type = e.dataTransfer.getData('blockType')
     if (type) addBlock(type)
-  }, [addBlock])
+  }, [addBlock, addSavedBlock])
 
   // ── Save ──
   const handleSave = useCallback(async () => {
@@ -883,8 +892,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           {/* Tabs only visible when NO block/section is selected */}
           {!selectedBlock && !selectedSection && (
             <div className="flex border-b border-zinc-200 flex-shrink-0">
-              <button onClick={() => setLeftTab('content')} className={`flex-1 h-10 text-[12px] font-medium transition-colors ${leftTab === 'content' ? 'text-zinc-900 border-b-2 border-[#F97316] -mb-px' : 'text-zinc-500 hover:text-zinc-700'}`}>Conteudo</button>
-              <button onClick={() => setLeftTab('styles')} className={`flex-1 h-10 text-[12px] font-medium transition-colors ${leftTab === 'styles' ? 'text-zinc-900 border-b-2 border-[#F97316] -mb-px' : 'text-zinc-500 hover:text-zinc-700'}`}>Estilos</button>
+              <button onClick={() => setLeftTab('content')} className={`flex-1 h-10 text-[12px] font-medium transition-colors ${leftTab === 'content' ? 'text-zinc-900 border-b-2 border-zinc-900 -mb-px' : 'text-zinc-500 hover:text-zinc-700'}`}>Conteudo</button>
+              <button onClick={() => setLeftTab('styles')} className={`flex-1 h-10 text-[12px] font-medium transition-colors ${leftTab === 'styles' ? 'text-zinc-900 border-b-2 border-zinc-900 -mb-px' : 'text-zinc-500 hover:text-zinc-700'}`}>Estilos</button>
             </div>
           )}
           <div className="flex-1 overflow-hidden">

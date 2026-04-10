@@ -204,26 +204,46 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddPrebuiltSection
           </div>
         )}
 
-        {/* Saved blocks */}
+        {/* Saved / Universal blocks */}
         {tab === 'saved' && (
           <div>
+            <p className="text-[10px] text-zinc-400 mb-3 leading-snug">Blocos universais sao reutilizaveis em qualquer email. Arraste para adicionar, ou clique para inserir.</p>
             {savedBlocks.length === 0 ? (
               <div className="text-center py-10">
-                <span className="mb-2 block"><Package className="w-8 h-8 text-gray-400 mx-auto" /></span>
-                <p className="text-xs text-gray-500 font-medium">Nenhum bloco salvo</p>
-                <p className="text-[10px] text-gray-400 mt-1">Selecione um bloco e salve como reutilizavel</p>
+                <Package className="w-8 h-8 text-zinc-300 mx-auto mb-2" />
+                <p className="text-[12px] text-zinc-500 font-medium">Nenhum bloco salvo</p>
+                <p className="text-[10px] text-zinc-400 mt-1">Selecione um bloco no canvas e clique em<br/>"Salvar como reutilizavel" no menu do bloco</p>
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {savedBlocks.map((sb: any) => (
-                  <button key={sb.id} onClick={() => onAddSavedBlock?.(sb.block_json)}
-                    className="w-full flex items-center gap-2.5 p-3 bg-white border border-gray-200 rounded-lg hover:border-brand-400 transition-all text-left">
-                    <span className="text-base"><Package className="w-4 h-4 text-gray-500" /></span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-gray-900 truncate">{sb.name}</p>
-                      <p className="text-[10px] text-gray-400">{sb.category}</p>
+                  <div key={sb.id}
+                    draggable
+                    onDragStart={(e) => { e.dataTransfer.setData('savedBlockJson', JSON.stringify(sb.block_json)); e.dataTransfer.effectAllowed = 'copy' }}
+                    className="flex items-center gap-2.5 p-3 bg-white border border-zinc-200 rounded-lg hover:border-zinc-400 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing group"
+                  >
+                    <div className="w-8 h-8 rounded-md bg-zinc-100 flex items-center justify-center flex-shrink-0">
+                      <Package className="w-4 h-4 text-zinc-500" />
                     </div>
-                  </button>
+                    <div className="flex-1 min-w-0" onClick={() => onAddSavedBlock?.(sb.block_json)}>
+                      <p className="text-[12px] font-medium text-zinc-900 truncate cursor-pointer hover:text-zinc-700">{sb.name}</p>
+                      <p className="text-[10px] text-zinc-400">{sb.category || 'Personalizado'}</p>
+                    </div>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        if (!confirm(`Excluir bloco "${sb.name}"? Esta acao nao pode ser desfeita.`)) return
+                        try {
+                          await fetch(`/api/email/saved-blocks/${sb.id}`, { method: 'DELETE' })
+                          setSavedBlocks(prev => prev.filter(b => b.id !== sb.id))
+                        } catch {}
+                      }}
+                      className="p-1 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                      title="Excluir bloco"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                    </button>
+                  </div>
                 ))}
               </div>
             )}

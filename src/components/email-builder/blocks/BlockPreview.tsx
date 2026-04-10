@@ -571,12 +571,8 @@ export function BlockPreview({
         ]
         const btnAlign = p.buttonAlign || 'left'
         return (
-          <div style={{ ...pad, backgroundColor: p.backgroundColor || undefined, position: 'relative' }}>
-            {/* Dynamic badge */}
-            <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 10, background: 'rgba(249,115,22,0.1)', color: '#F97316', border: '1px solid rgba(249,115,22,0.25)', borderRadius: 4, fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', padding: '2px 6px', textTransform: 'uppercase' }}>
-              Abandoned products
-            </div>
-            <div style={{ paddingTop: 28 }}>
+          <div style={{ ...pad, backgroundColor: p.backgroundColor || undefined }}>
+            <div>
               {Array.from({ length: maxItems }).map((_, i) => {
                 const prod = sampleProducts[i % sampleProducts.length]
                 const imgBox = p.showImage !== false && (
@@ -1057,28 +1053,16 @@ export function BlockPreview({
     }
   }
 
-  const isDynamic = DYNAMIC_TYPES.has(block.type)
-
   return (
     <div
       onClick={onSelect}
       className={`relative group transition-all cursor-pointer ${
         selected
-          ? 'ring-2 ring-brand-500 ring-offset-1'
-          : 'hover:ring-1 hover:ring-gray-300'
+          ? 'ring-2 ring-zinc-900 ring-offset-1'
+          : 'hover:ring-1 hover:ring-zinc-400'
       }`}
     >
       {renderBlock()}
-
-      {/* Dynamic badge */}
-      {isDynamic && (
-        <div
-          className="absolute top-1 left-1 flex items-center gap-1 bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 text-[10px] font-semibold pointer-events-none"
-        >
-          <Zap size={10} />
-          <span>Dinâmico</span>
-        </div>
-      )}
 
       {/* Floating toolbar — compact, no arrows (drag to reorder) */}
       {selected && (
