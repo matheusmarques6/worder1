@@ -699,78 +699,198 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
 
     case 'abandoned-cart':
       return (
-        <div className="space-y-3">
-          {/* Titulo */}
-          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Titulo do bloco</span>
-          <Field label="Titulo"><TextInput value={p.title} onChange={v => onChange('title', v)} /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Tamanho"><NumberInput value={p.titleFontSize || 18} onChange={v => onChange('titleFontSize', v)} min={12} max={36} /></Field>
-            <Field label="Cor"><ColorInput value={p.titleColor || '#111827'} onChange={v => onChange('titleColor', v)} /></Field>
-          </div>
-
-          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Subtitulo</span>
-          <Field label="Subtitulo"><TextInput value={p.subtitle} onChange={v => onChange('subtitle', v)} /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Tamanho"><NumberInput value={p.subtitleFontSize || 14} onChange={v => onChange('subtitleFontSize', v)} min={10} max={24} /></Field>
-            <Field label="Cor"><ColorInput value={p.subtitleColor || '#6B7280'} onChange={v => onChange('subtitleColor', v)} /></Field>
-          </div>
-
-          {/* Layout */}
-          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Layout dos itens</span>
-          <div className="flex border border-zinc-200 rounded-md overflow-hidden">
-            <button onClick={() => onChange('itemLayout', 'compact')}
-              className={`flex-1 h-[28px] text-[12px] font-medium transition-all ${p.itemLayout !== 'cards' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
-              Lista compacta
-            </button>
-            <button onClick={() => onChange('itemLayout', 'cards')}
-              className={`flex-1 h-[28px] text-[12px] font-medium transition-all ${p.itemLayout === 'cards' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
-              Cards
-            </button>
-          </div>
-          <div className="space-y-1">
-            <Toggle value={p.showImage !== false} onChange={v => onChange('showImage', v)} label="Mostrar imagem" />
-            <Toggle value={p.showPrice !== false} onChange={v => onChange('showPrice', v)} label="Mostrar preco" />
-            <Toggle value={p.showQuantity !== false} onChange={v => onChange('showQuantity', v)} label="Mostrar quantidade" />
-            <Toggle value={p.showVariant !== false} onChange={v => onChange('showVariant', v)} label="Mostrar variacao do produto" />
-          </div>
-          <Field label="Max. de itens"><NumberInput value={p.maxItems || 3} onChange={v => onChange('maxItems', v)} min={1} max={10} /></Field>
-
-          {/* Subtotal */}
-          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Subtotal</span>
-          <Toggle value={p.showSubtotal !== false} onChange={v => onChange('showSubtotal', v)} label="Mostrar subtotal" />
-          {p.showSubtotal !== false && (
-            <div className="space-y-2">
-              <Field label="Texto label"><TextInput value={p.subtotalLabel || 'Total:'} onChange={v => onChange('subtotalLabel', v)} /></Field>
-              <Field label="Cor do valor"><ColorInput value={p.subtotalColor || '#111827'} onChange={v => onChange('subtotalColor', v)} /></Field>
+        <div className="space-y-4">
+          {/* Info banner */}
+          <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+            <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#71717a" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3h-8l-2 4h12z"/></svg>
             </div>
-          )}
-
-          {/* Botao CTA */}
-          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Botao CTA</span>
-          <Field label="Texto do botao"><TextInput value={p.buttonText} onChange={v => onChange('buttonText', v)} /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Cor fundo"><ColorInput value={p.buttonColor || '#F97316'} onChange={v => onChange('buttonColor', v)} /></Field>
-            <Field label="Cor texto"><ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} /></Field>
+            <p className="text-[12px] text-zinc-600 leading-relaxed">Os detalhes dos produtos serao preenchidos automaticamente a partir do carrinho do cliente.</p>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Raio borda"><NumberInput value={p.buttonRadius ?? 8} onChange={v => onChange('buttonRadius', v)} min={0} max={32} /></Field>
-            <Field label="Tamanho fonte"><NumberInput value={p.buttonFontSize || 15} onChange={v => onChange('buttonFontSize', v)} min={10} max={24} /></Field>
-          </div>
-          <Toggle value={p.buttonFullWidth !== false} onChange={v => onChange('buttonFullWidth', v)} label="Botao largura total" />
 
-          {/* Cores dos itens */}
-          <details className="group border border-zinc-100 rounded-lg">
-            <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-medium text-zinc-700 hover:bg-zinc-50 rounded-lg transition-colors">
-              Cores dos itens <span className="text-zinc-400 group-open:rotate-180 transition-transform"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></span>
+          {/* Layout Type */}
+          <div>
+            <p className="text-[12px] font-medium text-zinc-700 mb-2">Tipo de layout</p>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { value: 'image-left', icon: <><rect x="2" y="4" width="8" height="16" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/><line x1="13" y1="7" x2="22" y2="7" stroke="currentColor" strokeWidth="1.5"/><line x1="13" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1.5"/><line x1="13" y1="17" x2="18" y2="17" stroke="currentColor" strokeWidth="1.5"/></> },
+                { value: 'image-right', icon: <><rect x="14" y="4" width="8" height="16" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/><line x1="2" y1="7" x2="11" y2="7" stroke="currentColor" strokeWidth="1.5"/><line x1="2" y1="12" x2="9" y2="12" stroke="currentColor" strokeWidth="1.5"/><line x1="2" y1="17" x2="7" y2="17" stroke="currentColor" strokeWidth="1.5"/></> },
+                { value: 'vertical', icon: <><rect x="5" y="2" width="14" height="10" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/><line x1="5" y1="15" x2="19" y2="15" stroke="currentColor" strokeWidth="1.5"/><line x1="5" y1="19" x2="15" y2="19" stroke="currentColor" strokeWidth="1.5"/></> },
+              ].map(opt => (
+                <button key={opt.value} onClick={() => onChange('layoutType', opt.value)}
+                  className={`flex items-center justify-center p-3 border-2 rounded-lg transition-all ${(p.layoutType || 'image-left') === opt.value ? 'border-brand-500 bg-brand-50' : 'border-zinc-200 hover:border-zinc-300'}`}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" className={`${(p.layoutType || 'image-left') === opt.value ? 'text-brand-600' : 'text-zinc-400'}`}>{opt.icon}</svg>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Number of products */}
+          <div>
+            <p className="text-[12px] font-medium text-zinc-700 mb-2">Numero de produtos</p>
+            <div className="flex items-center gap-3">
+              <input type="range" min={1} max={6} value={p.maxItems || 2} onChange={e => onChange('maxItems', +e.target.value)}
+                className="flex-1 accent-brand-500" />
+              <input type="number" min={1} max={6} value={p.maxItems || 2} onChange={e => onChange('maxItems', +e.target.value)}
+                className="w-14 text-center border border-zinc-200 rounded-md px-2 py-1 text-[13px] focus:border-brand-500 focus:outline-none" />
+            </div>
+          </div>
+
+          {/* Product details checkboxes */}
+          <details className="group border border-zinc-100 rounded-lg" open>
+            <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+              Detalhes do produto <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
             </summary>
             <div className="px-3 pb-3 space-y-2">
-              <Field label="Cor nome produto"><ColorInput value={p.itemNameColor || '#111827'} onChange={v => onChange('itemNameColor', v)} /></Field>
-              <Field label="Tamanho nome"><NumberInput value={p.itemNameFontSize || 14} onChange={v => onChange('itemNameFontSize', v)} min={10} max={20} /></Field>
-              <Field label="Cor do preco"><ColorInput value={p.itemPriceColor || '#111827'} onChange={v => onChange('itemPriceColor', v)} /></Field>
-              <Field label="Fundo do card"><ColorInput value={p.itemCardBg || '#FFFFFF'} onChange={v => onChange('itemCardBg', v)} /></Field>
-              <Field label="Borda do card"><ColorInput value={p.itemBorderColor || '#E5E7EB'} onChange={v => onChange('itemBorderColor', v)} /></Field>
+              {[
+                { key: 'showImage', label: 'Imagem' },
+                { key: 'showName', label: 'Nome' },
+                { key: 'showDescription', label: 'Descricao' },
+                { key: 'showPrice', label: 'Preco' },
+                { key: 'showOldPrice', label: 'Preco antigo' },
+                { key: 'showButton', label: 'Botao' },
+              ].map(item => (
+                <label key={item.key} className="flex items-center gap-2.5 cursor-pointer py-0.5">
+                  <input type="checkbox" checked={p[item.key] !== false} onChange={e => onChange(item.key, e.target.checked)}
+                    className="w-4 h-4 rounded border-zinc-300 text-brand-500 focus:ring-brand-500" />
+                  <span className="text-[13px] text-zinc-700">{item.label}</span>
+                </label>
+              ))}
             </div>
           </details>
+
+          {/* Name styling */}
+          {p.showName !== false && (
+            <details className="group border border-zinc-100 rounded-lg">
+              <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+                Estilo do nome <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+              </summary>
+              <div className="px-3 pb-3 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Tamanho"><NumberInput value={p.nameFontSize || 14} onChange={v => onChange('nameFontSize', v)} min={10} max={24} /></Field>
+                  <Field label="Peso">
+                    <SelectInput value={p.nameWeight || '600'} onChange={v => onChange('nameWeight', v)} options={[
+                      { value: '400', label: 'Normal' }, { value: '500', label: 'Medium' }, { value: '600', label: 'Semibold' }, { value: '700', label: 'Bold' },
+                    ]} />
+                  </Field>
+                </div>
+                <Field label="Cor"><ColorInput value={p.nameColor || '#111827'} onChange={v => onChange('nameColor', v)} /></Field>
+              </div>
+            </details>
+          )}
+
+          {/* Price styling */}
+          {p.showPrice !== false && (
+            <details className="group border border-zinc-100 rounded-lg">
+              <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+                Estilo do preco <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+              </summary>
+              <div className="px-3 pb-3 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Tamanho"><NumberInput value={p.priceFontSize || 14} onChange={v => onChange('priceFontSize', v)} min={10} max={24} /></Field>
+                  <Field label="Peso">
+                    <SelectInput value={p.priceWeight || '600'} onChange={v => onChange('priceWeight', v)} options={[
+                      { value: '400', label: 'Normal' }, { value: '600', label: 'Semibold' }, { value: '700', label: 'Bold' },
+                    ]} />
+                  </Field>
+                </div>
+                <Field label="Cor do preco"><ColorInput value={p.priceColor || '#111827'} onChange={v => onChange('priceColor', v)} /></Field>
+                {p.showOldPrice !== false && (
+                  <Field label="Cor do preco antigo"><ColorInput value={p.oldPriceColor || '#9CA3AF'} onChange={v => onChange('oldPriceColor', v)} /></Field>
+                )}
+              </div>
+            </details>
+          )}
+
+          {/* Button styling */}
+          {p.showButton !== false && (
+            <details className="group border border-zinc-100 rounded-lg">
+              <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+                Estilo do botao <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+              </summary>
+              <div className="px-3 pb-3 space-y-2">
+                <Field label="Texto"><TextInput value={p.buttonText || 'Shop now'} onChange={v => onChange('buttonText', v)} /></Field>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Cor fundo"><ColorInput value={p.buttonColor || '#111827'} onChange={v => onChange('buttonColor', v)} /></Field>
+                  <Field label="Cor texto"><ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} /></Field>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Raio"><NumberInput value={p.buttonRadius ?? 4} onChange={v => onChange('buttonRadius', v)} min={0} max={32} /></Field>
+                  <Field label="Tamanho fonte"><NumberInput value={p.buttonFontSize || 14} onChange={v => onChange('buttonFontSize', v)} min={10} max={20} /></Field>
+                </div>
+                <Field label="Alinhamento">
+                  <div className="flex border border-zinc-200 rounded-md overflow-hidden">
+                    {(['left', 'center', 'right', 'full'] as const).map(a => (
+                      <button key={a} onClick={() => onChange('buttonAlign', a)}
+                        className={`flex-1 h-[28px] text-[11px] font-medium transition-all ${(p.buttonAlign || 'left') === a ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
+                        {a === 'left' ? 'Esq' : a === 'center' ? 'Centro' : a === 'right' ? 'Dir' : 'Total'}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              </div>
+            </details>
+          )}
+
+          {/* Image settings */}
+          {p.showImage !== false && (
+            <details className="group border border-zinc-100 rounded-lg">
+              <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+                Imagem <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+              </summary>
+              <div className="px-3 pb-3 space-y-2">
+                <Field label="Largura (px)"><NumberInput value={p.imageWidth || 200} onChange={v => onChange('imageWidth', v)} min={60} max={400} /></Field>
+                <Field label="Raio da borda"><NumberInput value={p.imageBorderRadius ?? 0} onChange={v => onChange('imageBorderRadius', v)} min={0} max={24} /></Field>
+              </div>
+            </details>
+          )}
+
+          {/* Products display */}
+          <details className="group border border-zinc-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+              Exibicao <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <Toggle value={p.showOutOfStock || false} onChange={v => onChange('showOutOfStock', v)} label="Mostrar itens fora de estoque" />
+              <Toggle value={p.separator !== false} onChange={v => onChange('separator', v)} label="Separador entre produtos" />
+              {p.separator !== false && (
+                <Field label="Cor do separador"><ColorInput value={p.separatorColor || '#E5E7EB'} onChange={v => onChange('separatorColor', v)} /></Field>
+              )}
+            </div>
+          </details>
+
+          {/* Mobile stacking */}
+          <details className="group border border-zinc-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+              Mobile <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+            </summary>
+            <div className="px-3 pb-3">
+              <Toggle value={p.stackOnMobile !== false} onChange={v => onChange('stackOnMobile', v)} label="Empilhar no mobile" />
+            </div>
+          </details>
+
+          {/* Visibility on devices */}
+          <details className="group border border-zinc-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+              Visibilidade <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+            </summary>
+            <div className="px-3 pb-3">
+              <p className="text-[11px] text-zinc-400 mb-2">Selecione em quais dispositivos exibir.</p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: 'all', label: 'Todos' },
+                  { value: 'mobile', label: 'Mobile' },
+                  { value: 'desktop', label: 'Desktop' },
+                ].map(opt => (
+                  <button key={opt.value} onClick={() => onChange('visibility', opt.value)}
+                    className={`flex flex-col items-center gap-1 p-2.5 border-2 rounded-lg transition-all ${(p.visibility || 'all') === opt.value ? 'border-brand-500 bg-brand-50' : 'border-zinc-200 hover:border-zinc-300'}`}>
+                    <span className={`text-[11px] font-medium ${(p.visibility || 'all') === opt.value ? 'text-brand-600' : 'text-zinc-500'}`}>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </details>
+
           {commonTail()}
         </div>
       )

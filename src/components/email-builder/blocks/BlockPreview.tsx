@@ -559,81 +559,97 @@ export function BlockPreview({
 
       // ── Abandoned Cart ──
       case 'abandoned-cart': {
-        const maxItems = p.maxItems || 3
-        const isCards = p.itemLayout === 'cards'
-        const sampleItems = [
-          { name: 'Camiseta Premium', variant: 'Cor: Azul', qty: 1, price: 'R$ 89,90' },
-          { name: 'Tenis Running', variant: 'Tamanho: 42', qty: 2, price: 'R$ 299,90' },
-          { name: 'Moletom Oversized', variant: 'Cor: Preto | M', qty: 1, price: 'R$ 149,90' },
+        const maxItems = p.maxItems || 2
+        const layout = p.layoutType || 'image-left'
+        const isVertical = layout === 'vertical'
+        const imgW = p.imageWidth || 200
+        const imgR = p.imageBorderRadius ?? 0
+        const sampleProducts = [
+          { name: 'Product name', desc: 'Product description', price: 'R$0.00', oldPrice: 'R$0.00' },
+          { name: 'Product name', desc: 'Product description', price: 'R$0.00', oldPrice: 'R$0.00' },
+          { name: 'Product name', desc: 'Product description', price: 'R$0.00', oldPrice: 'R$0.00' },
         ]
+        const btnAlign = p.buttonAlign || 'left'
         return (
-          <div style={{ ...pad, backgroundColor: p.backgroundColor || '#FFFBEB', position: 'relative' }}>
+          <div style={{ ...pad, backgroundColor: p.backgroundColor || undefined, position: 'relative' }}>
             {/* Dynamic badge */}
             <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 10, background: 'rgba(249,115,22,0.1)', color: '#F97316', border: '1px solid rgba(249,115,22,0.25)', borderRadius: 4, fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', padding: '2px 6px', textTransform: 'uppercase' }}>
-              DINAMICO
+              Abandoned products
             </div>
-            {p.title && (
-              <p style={{ margin: '0 0 4px', fontSize: p.titleFontSize || 18, fontWeight: 'bold', color: p.titleColor || '#111827', textAlign: 'center' }}>
-                {p.title}
-              </p>
-            )}
-            {p.subtitle && (
-              <p style={{ margin: '0 0 16px', fontSize: p.subtitleFontSize || 14, color: p.subtitleColor || '#6B7280', textAlign: 'center' }}>
-                {p.subtitle}
-              </p>
-            )}
-            <div style={{ display: 'flex', flexDirection: isCards ? 'row' : 'column', gap: isCards ? 12 : 8, flexWrap: isCards ? 'wrap' : undefined }}>
+            <div style={{ paddingTop: 28 }}>
               {Array.from({ length: maxItems }).map((_, i) => {
-                const item = sampleItems[i % sampleItems.length]
-                return isCards ? (
-                  <div key={i} style={{ flex: '1 1 120px', background: p.itemCardBg || '#fff', borderRadius: 8, overflow: 'hidden', border: `1px solid ${p.itemBorderColor || '#E5E7EB'}`, textAlign: 'center' }}>
-                    {p.showImage !== false && (
-                      <div style={{ height: 100, background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: 11 }}>
-                        Img {i + 1}
-                      </div>
-                    )}
-                    <div style={{ padding: 8 }}>
-                      <p style={{ margin: 0, fontWeight: 600, fontSize: p.itemNameFontSize || 14, color: p.itemNameColor || '#111827' }}>{item.name}</p>
-                      {p.showVariant !== false && <p style={{ margin: '2px 0 0', fontSize: 11, color: '#9CA3AF' }}>{item.variant}</p>}
-                      {p.showPrice !== false && <p style={{ margin: '4px 0 0', fontWeight: 600, fontSize: 14, color: p.itemPriceColor || '#111827' }}>{item.price}</p>}
-                    </div>
+                const prod = sampleProducts[i % sampleProducts.length]
+                const imgBox = p.showImage !== false && (
+                  <div style={{
+                    width: isVertical ? '100%' : imgW,
+                    height: isVertical ? imgW * 0.8 : imgW,
+                    flexShrink: 0,
+                    background: '#F3F4F6',
+                    borderRadius: imgR,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#9CA3AF', fontSize: 12,
+                  }}>
+                    Product image
                   </div>
-                ) : (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, background: p.itemCardBg || '#fff', borderRadius: 6, padding: 10, border: `1px solid ${p.itemBorderColor || '#E5E7EB'}` }}>
-                    {p.showImage !== false && (
-                      <div style={{ width: 60, height: 60, flexShrink: 0, background: '#F3F4F6', borderRadius: 4, border: '1px solid #F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: 10 }}>
-                        Img
+                )
+                const details = (
+                  <div style={{ flex: 1, minWidth: 0, padding: isVertical ? '12px 0 0' : '0' }}>
+                    {p.showName !== false && (
+                      <p style={{ margin: 0, fontWeight: p.nameWeight || '600', fontSize: p.nameFontSize || 14, color: p.nameColor || '#111827', fontFamily: p.nameFontFamily || 'inherit' }}>
+                        {prod.name}
+                      </p>
+                    )}
+                    {p.showDescription !== false && (
+                      <p style={{ margin: '4px 0 0', fontSize: p.descFontSize || 13, color: p.descColor || '#6B7280', fontWeight: p.descWeight || '400' }}>
+                        {prod.desc}
+                      </p>
+                    )}
+                    <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                      {p.showPrice !== false && (
+                        <span style={{ fontWeight: p.priceWeight || '600', fontSize: p.priceFontSize || 14, color: p.priceColor || '#111827' }}>
+                          {prod.price}
+                        </span>
+                      )}
+                      {p.showOldPrice !== false && (
+                        <span style={{ fontSize: (p.priceFontSize || 14) - 1, color: p.oldPriceColor || '#9CA3AF', textDecoration: 'line-through' }}>
+                          {prod.oldPrice}
+                        </span>
+                      )}
+                    </div>
+                    {p.showButton !== false && (
+                      <div style={{ marginTop: 10, textAlign: btnAlign === 'full' ? undefined : btnAlign as any }}>
+                        <a href="#" onClick={preventDefault} style={{
+                          display: btnAlign === 'full' ? 'block' : 'inline-block',
+                          padding: `${p.buttonPaddingV || 10}px ${p.buttonPaddingH || 24}px`,
+                          background: p.buttonColor || '#111827',
+                          color: p.buttonTextColor || '#FFFFFF',
+                          borderRadius: p.buttonRadius ?? 4,
+                          fontSize: p.buttonFontSize || 14,
+                          fontWeight: 600, textDecoration: 'none', textAlign: 'center',
+                        }}>
+                          {p.buttonText || 'Shop now'}
+                        </a>
                       </div>
                     )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontWeight: 500, fontSize: p.itemNameFontSize || 14, color: p.itemNameColor || '#111827' }}>{item.name}</p>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 2, fontSize: 12, color: '#9CA3AF' }}>
-                        {p.showVariant !== false && <span>{item.variant}</span>}
-                        {p.showQuantity !== false && <span>Qtd: {item.qty}</span>}
-                      </div>
+                  </div>
+                )
+                return (
+                  <div key={i}>
+                    <div style={{
+                      display: isVertical ? 'block' : 'flex',
+                      gap: isVertical ? 0 : 20,
+                      flexDirection: layout === 'image-right' ? 'row-reverse' : 'row',
+                      padding: '16px 0',
+                    }}>
+                      {imgBox}
+                      {details}
                     </div>
-                    {p.showPrice !== false && (
-                      <span style={{ fontWeight: 600, fontSize: 14, color: p.itemPriceColor || '#111827', flexShrink: 0 }}>{item.price}</span>
+                    {p.separator !== false && i < maxItems - 1 && (
+                      <hr style={{ border: 'none', borderTop: `1px solid ${p.separatorColor || '#E5E7EB'}`, margin: 0 }} />
                     )}
                   </div>
                 )
               })}
-            </div>
-            {/* Subtotal */}
-            {p.showSubtotal !== false && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: `1px solid ${p.itemBorderColor || '#E5E7EB'}` }}>
-                <span style={{ fontSize: 14, color: '#6B7280' }}>{p.subtotalLabel || 'Total:'}</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: p.subtotalColor || '#111827' }}>R$ 539,70</span>
-              </div>
-            )}
-            <div style={{ textAlign: 'center', marginTop: 16 }}>
-              <a href="#" onClick={preventDefault} style={{
-                display: p.buttonFullWidth !== false ? 'block' : 'inline-block',
-                padding: '12px 32px', background: p.buttonColor || '#F97316', color: p.buttonTextColor || '#FFFFFF',
-                borderRadius: p.buttonRadius ?? 8, fontSize: p.buttonFontSize || 15, fontWeight: 'bold', textDecoration: 'none',
-              }}>
-                {p.buttonText || 'Finalizar Compra'}
-              </a>
             </div>
           </div>
         )

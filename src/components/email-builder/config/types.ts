@@ -216,25 +216,43 @@ export const BLOCK_DEFS: BlockDef[] = [
       backgroundColor: '',
     } },
 
-  // ── Carrinho Abandonado: 20px padding, fundo amarelo suave ──
+  // ── Carrinho Abandonado (Omnisend-style) ──
   { type: 'abandoned-cart', label: 'Carrinho', icon: 'ShoppingCart', category: 'E-commerce',
     defaultProps: {
-      title: 'Voce esqueceu algo!', subtitle: 'Seus itens estao esperando',
-      buttonText: 'Finalizar Compra',
-      buttonColor: '#F97316', buttonTextColor: '#FFFFFF',
-      buttonRadius: 8, buttonFontSize: 15, buttonFullWidth: true,
-      maxItems: 3, showImage: true, showPrice: true, showQuantity: true,
-      showVariant: true,
-      showSubtotal: true, subtotalLabel: 'Total:',
-      subtotalColor: '#111827',
-      itemLayout: 'compact' as 'compact' | 'cards',
-      titleFontSize: 18, titleColor: '#111827',
-      subtitleFontSize: 14, subtitleColor: '#6B7280',
-      itemNameColor: '#111827', itemNameFontSize: 14,
-      itemPriceColor: '#111827',
-      itemCardBg: '#FFFFFF', itemBorderColor: '#E5E7EB',
-      padding: { top: 20, right: 24, bottom: 20, left: 24 },
-      backgroundColor: '#FFFBEB',
+      // Layout
+      layoutType: 'image-left' as 'image-left' | 'image-right' | 'vertical',
+      maxItems: 2,
+      // Element visibility
+      showImage: true,
+      showName: true,
+      showDescription: true,
+      showPrice: true,
+      showOldPrice: true,
+      showButton: true,
+      // Name styling
+      nameFontSize: 14, nameColor: '#111827', nameWeight: '600',
+      nameFontFamily: 'inherit',
+      // Description styling
+      descFontSize: 13, descColor: '#6B7280', descWeight: '400',
+      // Price styling
+      priceFontSize: 14, priceColor: '#111827', priceWeight: '600',
+      oldPriceColor: '#9CA3AF',
+      // Button styling
+      buttonText: 'Shop now',
+      buttonColor: '#111827', buttonTextColor: '#FFFFFF',
+      buttonRadius: 4, buttonFontSize: 14,
+      buttonAlign: 'left' as 'left' | 'center' | 'right' | 'full',
+      buttonPaddingV: 10, buttonPaddingH: 24,
+      // Image
+      imageWidth: 200, imageBorderRadius: 0,
+      // Display
+      showOutOfStock: false,
+      stackOnMobile: true,
+      separator: true, separatorColor: '#E5E7EB',
+      // Block
+      padding: { top: 24, right: 24, bottom: 24, left: 24 },
+      backgroundColor: '',
+      visibility: 'all',
     } },
 
   // ── Cupom: 32px padding, fundo laranja suave, código grande ──
