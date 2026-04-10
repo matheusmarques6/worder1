@@ -18,6 +18,7 @@ import {
   Trash2,
   Edit,
   CheckCircle,
+  Copy,
   ShoppingCart,
   UserPlus,
   Package,
@@ -270,6 +271,21 @@ export default function AutomationsPage() {
   // Handle back
   const handleBack = () => {
     setEditingAutomation(null);
+  };
+
+  // Handle duplicate
+  const handleDuplicate = async (id: string) => {
+    try {
+      const res = await fetch(`/api/automations/${id}/duplicate`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.automation) {
+          setAutomations((prev) => [data.automation, ...prev]);
+        }
+      }
+    } catch (e) {
+      console.error('Error duplicating:', e);
+    }
   };
 
   // Handle delete
@@ -670,8 +686,16 @@ export default function AutomationsPage() {
                     {automation.status === 'active' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                   </button>
                   <button
+                    onClick={() => handleDuplicate(automation.id)}
+                    className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                    title="Duplicar"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                  <button
                     onClick={() => handleDelete(automation.id)}
                     className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500"
+                    title="Excluir"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

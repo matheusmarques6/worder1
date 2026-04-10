@@ -314,6 +314,42 @@ const actionExecutors: Record<string, NodeExecutor> = {
           subject = `[TESTE] ${subject}`;
         }
 
+        // 2b. Smart Sending — skip if contact received email recently
+        if (config.smartSending && !isTest) {
+          const skipHours = config.smartSendingHours || 16;
+          const cutoff = new Date(Date.now() - skipHours * 60 * 60 * 1000).toISOString();
+          const { data: recentSends } = await supabase
+            .from('email_sends')
+            .select('id')
+            .eq('contact_id', context.contact?.id)
+            .gte('created_at', cutoff)
+            .limit(1);
+
+          if (recentSends && recentSends.length > 0) {
+            return {
+              status: 'success',
+              output: { skipped: true, reason: `Smart Sending: contato recebeu email nas últimas ${skipHours}h` },
+            };
+          }
+        }
+
+        // 2c. UTM Tracking — append UTM params to all links
+        if (config.utmTracking) {
+          const utmSource = config.utmSource || 'worder';
+          const utmMedium = config.utmMedium || 'email';
+          const utmCampaign = config.utmCampaign || '';
+          const utmParams = `utm_source=${encodeURIComponent(utmSource)}&utm_medium=${encodeURIComponent(utmMedium)}${utmCampaign ? `&utm_campaign=${encodeURIComponent(utmCampaign)}` : ''}`;
+
+          html = html.replace(
+            /(<a\s[^>]*href=["'])([^"'#][^"']*)(["'][^>]*>)/gi,
+            (match: string, before: string, url: string, after: string) => {
+              if (url.includes('utm_source') || url.includes('unsubscribe') || url.includes('mailto:')) return match;
+              const separator = url.includes('?') ? '&' : '?';
+              return `${before}${url}${separator}${utmParams}${after}`;
+            }
+          );
+        }
+
         // 3. Build sender info
         const senderName = config.senderName || (context as any).store?.name || 'Worder';
         const senderEmail = config.senderEmail || credentials?.defaultFrom || 'noreply@example.com';
