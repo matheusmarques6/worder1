@@ -6,7 +6,7 @@ import TextAlign from '@tiptap/extension-text-align'
 import LinkExtension from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Link, AlignLeft, AlignCenter, AlignRight, Type, Tag } from 'lucide-react'
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Link, Type, Tag } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 
 interface RichTextEditorProps {
@@ -86,18 +86,6 @@ export function RichTextEditor({ content, onChange, onInsertMergeTag, placeholde
         </ToolbarButton>
         <ToolbarButton active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()} title="Tachado">
           <Strikethrough className="w-3.5 h-3.5" />
-        </ToolbarButton>
-
-        <div className="w-px h-4 bg-gray-200 mx-0.5" />
-
-        <ToolbarButton active={editor.isActive({ textAlign: 'left' })} onClick={() => editor.chain().focus().setTextAlign('left').run()} title="Esquerda">
-          <AlignLeft className="w-3.5 h-3.5" />
-        </ToolbarButton>
-        <ToolbarButton active={editor.isActive({ textAlign: 'center' })} onClick={() => editor.chain().focus().setTextAlign('center').run()} title="Centro">
-          <AlignCenter className="w-3.5 h-3.5" />
-        </ToolbarButton>
-        <ToolbarButton active={editor.isActive({ textAlign: 'right' })} onClick={() => editor.chain().focus().setTextAlign('right').run()} title="Direita">
-          <AlignRight className="w-3.5 h-3.5" />
         </ToolbarButton>
 
         <div className="w-px h-4 bg-gray-200 mx-0.5" />

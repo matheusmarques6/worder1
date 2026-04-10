@@ -6,6 +6,7 @@ import type { EmailBlock } from '../config/types'
 import { ViewFeedsModal, CreateFeedModal } from '../modals/ProductFeedModal'
 import { BrowseProductsModal, StaticProductsEditor } from '../modals/BrowseProductsModal'
 import { MediaLibraryModal } from '@/components/shared/MediaLibraryModal'
+import { ColorPicker } from '../ui/ColorPicker'
 
 const RichTextEditor = dynamic(() => import('../blocks/RichTextEditor').then(m => ({ default: m.RichTextEditor })), { ssr: false, loading: () => <div className="h-20 bg-gray-50 rounded-lg animate-pulse" /> })
 
@@ -41,14 +42,7 @@ function NumberInput({ value, onChange, min, max }: { value: number; onChange: (
 }
 
 function ColorInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="flex items-center gap-2">
-      <input type="color" value={value || '#000000'} onChange={e => onChange(e.target.value)}
-        className="w-8 h-8 rounded border border-gray-200 cursor-pointer p-0.5" />
-      <input type="text" value={value || ''} onChange={e => onChange(e.target.value)}
-        className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-md text-xs font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
-    </div>
-  )
+  return <ColorPicker value={value || '#000000'} onChange={onChange} />
 }
 
 function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
@@ -143,6 +137,7 @@ const ALIGN_OPTIONS = [
 export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockPropertiesProps) {
   const p = block.props
   const [showConditions, setShowConditions] = useState(!!p._condition_enabled)
+  const [showMediaLib, setShowMediaLib] = useState(false)
 
   /* ── Common Tail Sections ── */
 
@@ -234,7 +229,6 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
 
     case 'image': {
       const [imgTab, setImgTab] = useState<'styles' | 'display'>('styles')
-      const [showMediaLib, setShowMediaLib] = useState(false)
       return (
         <div className="space-y-0">
           {/* Tabs: Styles | Display */}
@@ -615,23 +609,35 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
       return (
         <div className="space-y-3">
           {/* Logo */}
-          <span className="text-[10px] font-semibold text-gray-400 uppercase">Logo</span>
-          <Field label="URL do Logo"><TextInput value={p.logoSrc} onChange={v => onChange('logoSrc', v)} placeholder="https://..." /></Field>
-          {!p.logoSrc && (
-            <label className="block border-2 border-dashed border-gray-200 rounded-lg p-3 text-center bg-gray-50 hover:border-brand-400 cursor-pointer">
-              <span className="text-xs text-gray-500">Upload logo</span>
-              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                const file = e.target.files?.[0]; if (!file) return
-                const form = new FormData(); form.append('file', file)
-                try { const res = await fetch('/api/images/upload', { method: 'POST', body: form }); const data = await res.json(); if (data.url) onChange('logoSrc', data.url) } catch { alert('Erro no upload') }
-              }} />
-            </label>
+          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Logo</span>
+          {p.logoSrc && !p.logoSrc.includes('placehold.co') ? (
+            <div className="space-y-2">
+              <div className="relative bg-zinc-50 border border-zinc-200 rounded-lg p-3 flex items-center justify-center min-h-[60px]">
+                <img src={p.logoSrc} alt="Logo" style={{ maxWidth: p.logoWidth || 160, maxHeight: p.logoMaxHeight || 80, objectFit: 'contain' }} />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setShowMediaLib(true)} className="flex-1 py-1.5 text-[12px] font-medium text-zinc-700 bg-white border border-zinc-200 rounded-md hover:bg-zinc-50 transition-colors">Trocar</button>
+                <button onClick={() => onChange('logoSrc', '')} className="flex-1 py-1.5 text-[12px] font-medium text-red-600 bg-white border border-zinc-200 rounded-md hover:bg-red-50 transition-colors">Remover</button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <button onClick={() => setShowMediaLib(true)}
+                className="w-full border-2 border-dashed border-zinc-200 rounded-lg p-5 text-center bg-zinc-50 hover:border-brand-400 hover:bg-brand-50/30 transition-all cursor-pointer">
+                <svg className="w-6 h-6 text-zinc-300 mx-auto mb-1.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                <p className="text-[12px] font-medium text-zinc-600">Clique para fazer upload</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">ou arraste a imagem aqui</p>
+                <p className="text-[10px] text-zinc-400 mt-1">PNG, JPG, SVG — Max 2MB</p>
+              </button>
+              <Field label="Ou inserir URL"><TextInput value={p.logoSrc || ''} onChange={v => onChange('logoSrc', v)} placeholder="https://..." /></Field>
+            </div>
           )}
+          {showMediaLib && <MediaLibraryModal onSelect={(url) => { onChange('logoSrc', url); setShowMediaLib(false) }} onClose={() => setShowMediaLib(false)} />}
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Largura (px)"><NumberInput value={p.logoWidth} onChange={v => onChange('logoWidth', v)} min={40} max={400} /></Field>
-            <Field label="Altura máx (px)"><NumberInput value={p.logoMaxHeight || 80} onChange={v => onChange('logoMaxHeight', v)} min={20} max={200} /></Field>
+            <Field label="Largura (px)"><NumberInput value={p.logoWidth || 160} onChange={v => onChange('logoWidth', v)} min={40} max={400} /></Field>
+            <Field label="Altura max (px)"><NumberInput value={p.logoMaxHeight || 80} onChange={v => onChange('logoMaxHeight', v)} min={20} max={200} /></Field>
           </div>
-          <Field label="Link do Logo"><TextInput value={p.logoHref} onChange={v => onChange('logoHref', v)} placeholder="https://..." /></Field>
+          <Field label="Link do Logo"><TextInput value={p.logoHref || ''} onChange={v => onChange('logoHref', v)} placeholder="{{store_url}}" /></Field>
           {/* Links */}
           <Toggle value={p.showLinks} onChange={v => onChange('showLinks', v)} label="Mostrar links de navegação" />
           {p.showLinks && (

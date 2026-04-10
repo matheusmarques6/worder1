@@ -42,12 +42,12 @@ function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDel
       {...listeners}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1, zIndex: isDragging ? 50 : 'auto' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
-      className={`relative group cursor-grab active:cursor-grabbing ${isSelected ? 'ring-2 ring-brand-500 ring-offset-1' : 'hover:ring-1 hover:ring-brand-300'}`}
+      className={`relative group cursor-grab active:cursor-grabbing transition-all ${isSelected ? 'outline outline-2 outline-[#F97316] outline-offset-1 shadow-[0_0_0_4px_rgba(249,115,22,0.15)]' : 'hover:outline hover:outline-2 hover:outline-[#F97316] hover:outline-offset-1'}`}
     >
       {isSelected && (
-        <div className="absolute -right-9 top-0 flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5 z-20">
-          <button onClick={e => { e.stopPropagation(); onClone() }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Duplicar"><Copy className="w-3.5 h-3.5" /></button>
-          <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
+        <div className="absolute -right-10 top-0 flex flex-col gap-0.5 bg-zinc-900 rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-0.5 z-20">
+          <button onClick={e => { e.stopPropagation(); onClone() }} className="p-1.5 text-white hover:bg-zinc-700 rounded transition-colors" title="Duplicar"><Copy className="w-3.5 h-3.5" strokeWidth={1.5} /></button>
+          <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 text-white hover:bg-red-500/20 hover:text-red-400 rounded transition-colors" title="Excluir"><Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} /></button>
         </div>
       )}
       {children}
@@ -225,31 +225,8 @@ function DropIndicatorLine({ colRef, index, blockCount }: { colRef: React.RefObj
 }
 
 // ── Inline Color Picker (click to open, doesn't close on drag) ──
-function InlineColorPicker({ value, onChange, label }: { value: string; onChange: (v: string) => void; label?: string }) {
-  const [open, setOpen] = useState(false)
-  const ref = useCallback((node: HTMLDivElement | null) => {
-    if (!node) return
-    const handler = (e: MouseEvent) => { if (!node.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-  return (
-    <div ref={ref} className="relative">
-      {label && <label className="block text-[11px] font-medium text-gray-500 mb-1">{label}</label>}
-      <div className="flex items-center gap-1.5">
-        <button onClick={() => setOpen(!open)} className="w-8 h-8 rounded-lg border-2 border-gray-200 cursor-pointer flex-shrink-0 hover:border-gray-400 transition-colors" style={{ backgroundColor: value || '#ffffff' }} />
-        <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} placeholder="#000000"
-          className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
-      </div>
-      {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 bg-white rounded-xl shadow-xl border border-gray-200 p-3" onMouseDown={e => e.stopPropagation()}>
-          <input type="color" value={value || '#ffffff'} onChange={e => onChange(e.target.value)}
-            className="w-48 h-36 rounded-lg cursor-pointer border-0 p-0 block" />
-        </div>
-      )}
-    </div>
-  )
-}
+// Use shared ColorPicker
+import { ColorPicker as InlineColorPicker } from './ui/ColorPicker'
 
 // ── Styles Tab ──
 function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch<React.SetStateAction<EmailDocument>> }) {
@@ -900,16 +877,16 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         {/* ── Left Sidebar ── */}
         <div className="w-[320px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
           <div className="flex border-b border-gray-200 flex-shrink-0">
-            <button onClick={() => setLeftTab('content')} className={`flex-1 py-2.5 text-[12px] font-semibold transition-colors ${leftTab === 'content' ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Conteúdo</button>
-            <button onClick={() => setLeftTab('styles')} className={`flex-1 py-2.5 text-[12px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Estilos</button>
+            <button onClick={() => setLeftTab('content')} className={`flex-1 h-10 text-[12px] font-medium transition-colors ${leftTab === 'content' ? 'text-zinc-900 border-b-2 border-[#F97316] -mb-px' : 'text-zinc-500 hover:text-zinc-700'}`}>Conteudo</button>
+            <button onClick={() => setLeftTab('styles')} className={`flex-1 h-10 text-[12px] font-medium transition-colors ${leftTab === 'styles' ? 'text-zinc-900 border-b-2 border-[#F97316] -mb-px' : 'text-zinc-500 hover:text-zinc-700'}`}>Estilos</button>
           </div>
           <div className="flex-1 overflow-hidden">
             {/* Block properties on the LEFT (Klaviyo-style) */}
             {selectedBlock ? (
               <div className="flex flex-col h-full">
-                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-200">
-                  <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-700 rounded"><ArrowLeft size={16} /></button>
-                  <span className="text-sm font-semibold text-gray-900">{BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}</span>
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-100">
+                  <button onClick={clearSelection} className="p-1 text-zinc-500 hover:text-zinc-900 rounded hover:bg-zinc-100 transition-colors"><ArrowLeft size={16} strokeWidth={2} /></button>
+                  <span className="text-[14px] font-semibold text-zinc-900">{BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
                   <BlockProperties
@@ -921,9 +898,9 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
               </div>
             ) : selectedSection ? (
               <div className="flex flex-col h-full">
-                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-200">
-                  <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-700 rounded"><ArrowLeft size={16} /></button>
-                  <span className="text-sm font-semibold text-gray-900">Seção</span>
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-100">
+                  <button onClick={clearSelection} className="p-1 text-zinc-500 hover:text-zinc-900 rounded hover:bg-zinc-100 transition-colors"><ArrowLeft size={16} strokeWidth={2} /></button>
+                  <span className="text-[14px] font-semibold text-zinc-900">Secao</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
                   <SectionProperties
