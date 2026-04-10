@@ -59,18 +59,90 @@ function innerWrapStyleStr(p){
 function labelStyleStr(p){
   return "display:block;font-size:13px;font-weight:500;color:"+(p.labelColor||"#374151")+";margin-bottom:4px;text-align:"+(p.textAlign||"left")+";";
 }
-if(gc(ck))return;
 var freq=B.frequency||{};
 var vis=B.visibility||{};
 var isMob=window.innerWidth<768;
+// Device gate
 if(vis.devices==="desktop"&&isMob)return;
 if(vis.devices==="mobile"&&!isMob)return;
+// Subscriber gate
 if(vis.hideFromSubscribers&&gc("_wf_sub"))return;
+// Visitor type gate (new vs returning based on first-seen cookie)
+var firstSeenCk="_wf_seen";
+var isReturning=!!gc(firstSeenCk);
+if(vis.visitorType==="new"&&isReturning)return;
+if(vis.visitorType==="returning"&&!isReturning)return;
+sc(firstSeenCk,"1",365);
+// Frequency gate: closed form cookie (skip if custom trigger — manual open always works)
+var useCustomTrigger=!!B.customTrigger;
+if(gc(ck)&&!useCustomTrigger)return;
+// URL include/exclude (wildcard: *)
+function matchUrl(pattern,url){
+  if(!pattern)return false;
+  var re=new RegExp("^"+pattern.replace(/[-\\/\\\\^$+?.()|[\\]{}]/g,"\\\\$&").replace(/\\*/g,".*")+"$");
+  return re.test(url);
+}
+var pagePath=location.pathname;
+var urls=B.urls||{};
+if(urls.includeEnabled&&urls.includeUrls&&urls.includeUrls.length>0){
+  if(!urls.includeUrls.some(function(p){return matchUrl(p,pagePath)||pagePath.indexOf(p)>=0}))return;
+}
+if(urls.excludeEnabled&&urls.excludeUrls&&urls.excludeUrls.length>0){
+  if(urls.excludeUrls.some(function(p){return matchUrl(p,pagePath)||pagePath.indexOf(p)>=0}))return;
+}
+// Legacy targeting.pageUrls still supported for old popups
 var tgt=B.targeting||{};
 if(tgt.pages==="specific"&&tgt.pageUrls&&tgt.pageUrls.length>0){
-  var u=location.pathname;
-  if(!tgt.pageUrls.some(function(p){return u.indexOf(p)>=0}))return;
+  if(!tgt.pageUrls.some(function(p){return pagePath.indexOf(p)>=0}))return;
 }
+// Location gate (async best-effort via fetch to ipapi — fails open)
+var locCfg=B.location||{};
+function runLocationGate(cb){
+  var needs=(locCfg.includeEnabled&&locCfg.includeCountries&&locCfg.includeCountries.length>0)||
+            (locCfg.excludeEnabled&&locCfg.excludeCountries&&locCfg.excludeCountries.length>0);
+  if(!needs){cb(true);return}
+  var cached=localStorage.getItem("_wf_country");
+  function check(cc){
+    cc=(cc||"").toUpperCase();
+    if(locCfg.includeEnabled&&locCfg.includeCountries.length>0&&locCfg.includeCountries.indexOf(cc)<0){cb(false);return}
+    if(locCfg.excludeEnabled&&locCfg.excludeCountries.length>0&&locCfg.excludeCountries.indexOf(cc)>=0){cb(false);return}
+    cb(true);
+  }
+  if(cached){check(cached);return}
+  fetch("https://ipapi.co/json/").then(function(r){return r.json()}).then(function(j){
+    var cc=j&&j.country_code||"";
+    if(cc)localStorage.setItem("_wf_country",cc);
+    check(cc);
+  }).catch(function(){cb(true)});
+}
+// UTM parameter gate
+var utmCfg=B.utm||{};
+function getUtms(){
+  var qs=new URLSearchParams(location.search);
+  var out={};
+  ["utm_source","utm_medium","utm_campaign","utm_term","utm_content"].forEach(function(k){
+    var v=qs.get(k);
+    if(v){out[k]=v;localStorage.setItem("_wf_"+k,v)}
+    else{var stored=localStorage.getItem("_wf_"+k);if(stored)out[k]=stored}
+  });
+  return out;
+}
+var currentUtms=getUtms();
+if(utmCfg.filterEnabled&&utmCfg.filters&&utmCfg.filters.length>0){
+  var utmOk=utmCfg.filters.every(function(f){
+    if(!f.param||!f.value)return true;
+    return(currentUtms[f.param]||"").toLowerCase().indexOf(f.value.toLowerCase())>=0;
+  });
+  if(!utmOk)return;
+}
+// Page view count gate
+function incPv(){
+  var n=parseInt(sessionStorage.getItem("_wf_pv")||"0",10)+1;
+  sessionStorage.setItem("_wf_pv",String(n));
+  return n;
+}
+var pvCount=incPv();
+// Scheduling window
 var sched=B.scheduling||{};
 if(sched.enabled){
   var now=Date.now();
@@ -123,15 +195,28 @@ function show(){
   if(shown)return;shown=true;
   var ov=document.createElement("div");ov.id="wf-ov-"+FID;
   var ovBg=st.overlay||{};
-  ov.style.cssText="position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,"+(ovBg.opacity!=null?ovBg.opacity/100:0.5)+");animation:wfFade .3s ease";
-  if(ovBg.closeOnClick!==false)ov.addEventListener("click",function(e){if(e.target===ov)close()});
+  var ovOn=ovBg.enabled!==false;
+  var ovColor=ovBg.color||"#000000";
+  function hexRgba(hex,a){hex=hex.replace("#","");if(hex.length===3)hex=hex.split("").map(function(c){return c+c}).join("");var r=parseInt(hex.substr(0,2),16),g=parseInt(hex.substr(2,2),16),b=parseInt(hex.substr(4,2),16);return"rgba("+r+","+g+","+b+","+a+")"}
+  var ovBgStr=ovOn?hexRgba(ovColor,(ovBg.opacity!=null?ovBg.opacity/100:0.5)):"transparent";
+  ov.style.cssText="position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:"+ovBgStr+";animation:wfFade .3s ease";
+  // Click-outside-to-close: per-device
+  var cox=B.clickOutsideClose||{desktop:true,mobile:true};
+  var coxEnabled=isMob?cox.mobile!==false:cox.desktop!==false;
+  if(coxEnabled)ov.addEventListener("click",function(e){if(e.target===ov)close()});
   var w=isMob?Math.min(st.width||480,window.innerWidth-32):(st.width||480);
   var hasSide=st.sideImage&&st.sideImage.enabled&&st.sideImage.src&&!isMob;
-  var popW=hasSide?w+w*(st.sideImage.width||50)/100:w;
+  var popW=hasSide?w+(st.sideImage.width||200):w;
   var pop=document.createElement("div");pop.id="wf-pop-"+FID;
-  pop.style.cssText="position:relative;display:flex;max-width:"+popW+"px;width:calc(100% - 32px);border-radius:"+(st.borderRadius||16)+"px;overflow:hidden;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);animation:wfSlide .3s ease";
+  pop.style.cssText="position:relative;display:flex;max-width:"+popW+"px;width:calc(100% - 32px);border-radius:"+(st.borderRadius||16)+"px;overflow:hidden;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);animation:"+(st.animation==="slide-up"?"wfSlide":"wfFade")+" .3s ease";
+  // Per-side padding with fallback to single value
+  var padT=st.paddingTop!=null?st.paddingTop:(typeof st.padding==="number"?st.padding:32);
+  var padR=st.paddingRight!=null?st.paddingRight:(typeof st.padding==="number"?st.padding:32);
+  var padB=st.paddingBottom!=null?st.paddingBottom:(typeof st.padding==="number"?st.padding:32);
+  var padL=st.paddingLeft!=null?st.paddingLeft:(typeof st.padding==="number"?st.padding:32);
+  var fontFam=st.fontFamily||"Inter, sans-serif";
   var content=document.createElement("div");
-  content.style.cssText="flex:1;background:"+(st.backgroundColor||"#fff")+";padding:"+(st.padding&&typeof st.padding==="object"?(st.padding.top||32)+"px "+(st.padding.right||32)+"px "+(st.padding.bottom||32)+"px "+(st.padding.left||32)+"px":(st.padding||32)+"px")+";overflow-y:auto;max-height:90vh";
+  content.style.cssText="flex:1;background:"+(st.backgroundColor||"#fff")+";padding:"+padT+"px "+padR+"px "+padB+"px "+padL+"px;overflow-y:auto;max-height:90vh;font-family:"+fontFam;
   if(st.closeButton&&st.closeButton.show!==false){
     var cb=document.createElement("button");cb.innerHTML="&times;";cb.onclick=close;
     cb.style.cssText="position:absolute;top:12px;right:12px;z-index:2;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,0.06);border:none;font-size:20px;color:"+(st.closeButton.color||"#6B7280")+";cursor:pointer;display:flex;align-items:center;justify-content:center";
@@ -167,7 +252,13 @@ function show(){
       e.preventDefault();
       var fd=new FormData(f);
       fd.forEach(function(v,k){allData[k]=v});
-      fetch(BU+"/api/public/forms/"+FID+"/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({answers:allData})})
+      var payload={answers:allData};
+      if(currentUtms.utm_source)payload.utm_source=currentUtms.utm_source;
+      if(currentUtms.utm_medium)payload.utm_medium=currentUtms.utm_medium;
+      if(currentUtms.utm_campaign)payload.utm_campaign=currentUtms.utm_campaign;
+      if(currentUtms.utm_term)payload.utm_term=currentUtms.utm_term;
+      if(currentUtms.utm_content)payload.utm_content=currentUtms.utm_content;
+      fetch(BU+"/api/public/forms/"+FID+"/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .then(function(){
         content.innerHTML=renderStep(-1);
         sc(ck,"1",freq.showAfterDays||30);
@@ -179,13 +270,73 @@ function show(){
   }
 }
 function close(){var o=document.getElementById("wf-ov-"+FID);if(o)o.remove();sc(ck,"1",freq.showAfterDays||1)}
+// Expose custom trigger API (always available)
+window._worderOnsite=window._worderOnsite||[];
+var _origPush=window._worderOnsite.push;
+function processCmd(cmd){
+  if(Array.isArray(cmd)&&cmd[0]==="openForm"&&cmd[1]===FID){show()}
+}
+// Process any commands already queued
+for(var _i=0;_i<window._worderOnsite.length;_i++){processCmd(window._worderOnsite[_i])}
+window._worderOnsite.push=function(cmd){_origPush.call(window._worderOnsite,cmd);processCmd(cmd);return window._worderOnsite.length};
+
+// Determine triggers to evaluate (Klaviyo-style multi-condition with AND/OR)
 var disp=B.display||{};
-var trigger=disp.trigger||"time";
-if(trigger==="time")setTimeout(show,(disp.delay||5)*1000);
-else if(trigger==="scroll"){var sp=disp.scrollPercent||50;window.addEventListener("scroll",function(){if((window.scrollY/(document.body.scrollHeight-window.innerHeight))*100>=sp)show()})}
-else if(trigger==="exit-intent")document.addEventListener("mouseout",function(e){if(e.clientY<5)show()});
-else if(trigger==="immediate")show();
-else if(trigger==="click"&&disp.clickSelector){document.querySelectorAll(disp.clickSelector).forEach(function(el){el.addEventListener("click",function(e){e.preventDefault();show()})})}
+var useExit=disp.exitEnabled===true;
+var useTime=disp.timeEnabled===true;
+var useScroll=disp.scrollEnabled===true;
+var usePageView=disp.pageViewEnabled===true;
+var matchAll=disp.matchAll===true;
+var anyEnabled=useExit||useTime||useScroll||usePageView;
+
+// Run location gate first (async), then trigger setup
+runLocationGate(function(locOk){
+  if(!locOk)return;
+  if(!anyEnabled&&!useCustomTrigger){
+    // No rules enabled at all: default to time delay 5s
+    setTimeout(show,5000);
+    return;
+  }
+  if(!anyEnabled&&useCustomTrigger){
+    // Only custom trigger — don't auto-show, wait for explicit openForm
+    return;
+  }
+
+  var satisfied={exit:false,time:false,scroll:false,pv:false};
+  function tryShow(which){
+    satisfied[which]=true;
+    if(matchAll){
+      // AND: require all ENABLED rules to be satisfied
+      if((!useExit||satisfied.exit)&&(!useTime||satisfied.time)&&(!useScroll||satisfied.scroll)&&(!usePageView||satisfied.pv))show();
+    } else {
+      // OR: any single rule triggers
+      show();
+    }
+  }
+
+  if(useTime)setTimeout(function(){tryShow("time")},(disp.delay||5)*1000);
+
+  if(useScroll){
+    var sp=disp.scrollPercent||30;
+    function onScroll(){
+      var max=document.body.scrollHeight-window.innerHeight;
+      if(max<=0)return;
+      var pct=(window.scrollY/max)*100;
+      if(pct>=sp){window.removeEventListener("scroll",onScroll);tryShow("scroll")}
+    }
+    window.addEventListener("scroll",onScroll,{passive:true});
+  }
+
+  if(useExit){
+    function onLeave(e){if(e.clientY<10){document.removeEventListener("mouseout",onLeave);tryShow("exit")}}
+    document.addEventListener("mouseout",onLeave);
+  }
+
+  if(usePageView){
+    var need=disp.pageViewCount||3;
+    if(pvCount>=need)tryShow("pv");
+  }
+});
 var s=document.createElement("style");s.textContent="@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}";document.head.appendChild(s);
 })();`
 
