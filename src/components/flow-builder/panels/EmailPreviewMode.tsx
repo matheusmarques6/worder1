@@ -78,12 +78,12 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
     <div className="fixed inset-0 z-[9999] bg-white flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-        <h1 className="text-lg font-semibold text-gray-900">Preview mode</h1>
+        <h1 className="text-lg font-semibold text-gray-900">Modo de visualização</h1>
         <button
           onClick={onClose}
           className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
-          Done
+          Pronto
         </button>
       </div>
 
@@ -153,12 +153,12 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
           </div>
         </div>
 
-        {/* Right: Event & Profile properties panel */}
+        {/* Right: Event & Propriedades do perfil panel */}
         <div className="w-[380px] border-l border-gray-200 flex flex-col overflow-hidden bg-white shrink-0">
           {/* Contact selector */}
           <div className="px-5 py-4 border-b border-gray-100">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-gray-500">Select a recent event for the preview</p>
+              <p className="text-sm text-gray-500">Selecione um evento recente para o preview</p>
               <div className="flex items-center gap-1 text-xs text-gray-400">
                 <span>{selectedContactIdx + 1} of {contacts.length}</span>
               </div>
@@ -171,7 +171,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
               </button>
 
               <div className="flex-1">
-                <p className="text-xs text-gray-400">Previewing as</p>
+                <p className="text-xs text-gray-400">Visualizando como</p>
                 {previewData?.contact ? (
                   <div className="mt-1 p-3 rounded-lg border border-gray-200 bg-gray-50">
                     <div className="flex items-center justify-between">
@@ -205,15 +205,15 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
               className="flex items-center gap-1 text-sm font-medium text-gray-900 mb-4"
             >
               <ChevronDown className={cn('w-4 h-4 transition-transform', !showAllProps && '-rotate-90')} />
-              All properties
+              Todas as propriedades
             </button>
 
             {showAllProps && previewData && (
               <div className="space-y-6">
-                {/* Event properties */}
+                {/* Propriedades do evento */}
                 {previewData.eventProperties && Object.keys(previewData.eventProperties).length > 0 && (
                   <div>
-                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Event properties</h4>
+                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Propriedades do evento</h4>
                     <div className="space-y-2">
                       {Object.entries(previewData.eventProperties).map(([key, value]) => (
                         <div key={key} className="flex items-start gap-3">
@@ -234,9 +234,9 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
                   </div>
                 )}
 
-                {/* Profile properties */}
+                {/* Propriedades do perfil */}
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Profile properties</h4>
+                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Propriedades do perfil</h4>
                   <div className="space-y-2">
                     {previewData.contact && Object.entries(previewData.contact).map(([key, value]) => (
                       <div key={key} className="flex items-start gap-3">

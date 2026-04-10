@@ -195,7 +195,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           {/* Dirty indicator */}
           {isDirty && (
             <span className="text-[10px] sm:text-xs text-amber-700 bg-amber-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-amber-200 flex-shrink-0 whitespace-nowrap">
-              Nao salvo
+              Não salvo
             </span>
           )}
         </div>
@@ -213,7 +213,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
             disabled={!canUndo()}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              canUndo() ? 'hover:bg-gray-100 text-gray-500 hover:text-gray-900' : 'text-gray-300 cursor-not-allowed'
+              canUndo() ? 'hover:bg-gray-100 text-gray-500 hover:text-gray-900' : 'text-gray-300 cursor-not-allowed opacity-40'
             )}
             title="Desfazer (Ctrl+Z)"
           >
@@ -224,7 +224,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
             disabled={!canRedo()}
             className={cn(
               'p-2 rounded-lg transition-colors',
-              canRedo() ? 'hover:bg-gray-100 text-gray-500 hover:text-gray-900' : 'text-gray-300 cursor-not-allowed'
+              canRedo() ? 'hover:bg-gray-100 text-gray-500 hover:text-gray-900' : 'text-gray-300 cursor-not-allowed opacity-40'
             )}
             title="Refazer (Ctrl+Shift+Z)"
           >
@@ -322,7 +322,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           </div>
         )}
 
-        {/* Save & Close */}
+        {/* Salvar e Fechar */}
         <button
           onClick={handleSaveAndClose}
           disabled={isSaving}
@@ -334,7 +334,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         >
-          Save & Close
+          Salvar e Fechar
         </button>
       </div>
     </div>

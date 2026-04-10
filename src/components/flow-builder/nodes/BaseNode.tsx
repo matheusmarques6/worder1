@@ -169,7 +169,7 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
         <Handle
           type="target"
           position={Position.Top}
-          className="!w-3 !h-3 !border-2 !border-gray-300 !bg-white !-top-1.5 hover:!border-blue-500 !transition-colors"
+          className="!w-3.5 !h-3.5 !border-2 !border-gray-300 !bg-white !-top-[7px] hover:!border-blue-500 !transition-colors"
         />
       )}
 
@@ -179,8 +179,8 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
           'w-[270px] bg-white rounded-xl border overflow-hidden',
           'transition-shadow duration-150',
           selected
-            ? 'border-blue-500 shadow-lg shadow-blue-100'
-            : 'border-gray-200 shadow-sm hover:shadow-md',
+            ? 'border-2 border-blue-500 shadow-lg shadow-blue-100'
+            : 'border border-gray-200 shadow-sm hover:shadow-md',
         )}
       >
         <div className="p-4 flex items-start gap-3">
@@ -242,7 +242,7 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
               <span className="text-xs font-medium text-emerald-600">Sim</span>
             </div>
             <div className="flex-1 py-2 text-center">
-              <span className="text-xs font-medium text-red-500">Nao</span>
+              <span className="text-xs font-medium text-red-500">Não</span>
             </div>
           </div>
         )}
@@ -255,20 +255,20 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
             type="source"
             position={Position.Bottom}
             id="true"
-            className="!w-3 !h-3 !border-2 !border-emerald-400 !bg-white !-bottom-1.5 !left-[30%] hover:!border-emerald-600 !transition-colors"
+            className="!w-3.5 !h-3.5 !border-2 !border-emerald-400 !bg-white !-bottom-[7px] !left-[30%] hover:!border-emerald-600 !transition-colors"
           />
           <Handle
             type="source"
             position={Position.Bottom}
             id="false"
-            className="!w-3 !h-3 !border-2 !border-red-400 !bg-white !-bottom-1.5 !left-[70%] hover:!border-red-600 !transition-colors"
+            className="!w-3.5 !h-3.5 !border-2 !border-red-400 !bg-white !-bottom-[7px] !left-[70%] hover:!border-red-600 !transition-colors"
           />
         </>
       ) : (
         <Handle
           type="source"
           position={Position.Bottom}
-          className="!w-3 !h-3 !border-2 !border-gray-300 !bg-white !-bottom-1.5 hover:!border-blue-500 !transition-colors"
+          className="!w-3.5 !h-3.5 !border-2 !border-gray-300 !bg-white !-bottom-[7px] hover:!border-blue-500 !transition-colors"
         />
       )}
     </div>

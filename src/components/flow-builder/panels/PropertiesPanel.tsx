@@ -164,7 +164,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'trigger_date' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Campo de Data</label>
+                  <label className="text-xs text-gray-500">Campo de Data</label>
                   <SelectField
                     value={selectedNode.data.config?.dateField || 'birth_date'}
                     onChange={(v) => handleUpdate('dateField', v)}
@@ -178,7 +178,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
 
                 {selectedNode.data.config?.dateField === 'custom_date' && (
                   <div className="space-y-2">
-                    <label className="text-xs text-gray-600/60">Nome do Campo</label>
+                    <label className="text-xs text-gray-500">Nome do Campo</label>
                     <input
                       type="text"
                       value={selectedNode.data.config?.customFieldName || ''}
@@ -195,7 +195,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 )}
 
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Quando Disparar?</label>
+                  <label className="text-xs text-gray-500">Quando Disparar?</label>
                   <SelectField
                     value={selectedNode.data.config?.timing || 'on_date'}
                     onChange={(v) => handleUpdate('timing', v)}
@@ -209,7 +209,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Horário de Disparo</label>
+                  <label className="text-xs text-gray-500">Horário de Disparo</label>
                   <input
                     type="time"
                     value={selectedNode.data.config?.triggerTime || '09:00'}
@@ -236,7 +236,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'trigger_whatsapp' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Tipo de Mensagem</label>
+                  <label className="text-xs text-gray-500">Tipo de Mensagem</label>
                   <SelectField
                     value={selectedNode.data.config?.messageType || 'any'}
                     onChange={(v) => handleUpdate('messageType', v)}
@@ -251,7 +251,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Contém Palavra-chave (opcional)</label>
+                  <label className="text-xs text-gray-500">Contém Palavra-chave (opcional)</label>
                   <input
                     type="text"
                     value={selectedNode.data.config?.keyword || ''}
@@ -277,7 +277,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                       onChange={(e) => handleUpdate('onlyFirstMessage', e.target.checked)}
                       className="w-4 h-4 rounded border-gray-300 bg-transparent text-green-500"
                     />
-                    <span className="text-xs text-gray-600/60">
+                    <span className="text-xs text-gray-500">
                       Apenas primeira mensagem (novo contato)
                     </span>
                   </label>
@@ -324,7 +324,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'trigger_deal_stage' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Pipeline</label>
+                  <label className="text-xs text-gray-500">Pipeline</label>
                   <SelectField
                     value={selectedNode.data.config?.pipelineId || ''}
                     onChange={(v) => {
@@ -343,7 +343,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 {selectedPipeline && (
                   <>
                     <div className="space-y-2">
-                      <label className="text-xs text-gray-600/60">De qual estágio? (opcional)</label>
+                      <label className="text-xs text-gray-500">De qual estágio? (opcional)</label>
                       <SelectField
                         value={selectedNode.data.config?.fromStageId || ''}
                         onChange={(v) => handleUpdate('fromStageId', v)}
@@ -358,7 +358,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     </div>
                     
                     <div className="space-y-2">
-                      <label className="text-xs text-gray-600/60">Para qual estágio?</label>
+                      <label className="text-xs text-gray-500">Para qual estágio?</label>
                       <SelectField
                         value={selectedNode.data.config?.stageId || ''}
                         onChange={(v) => handleUpdate('stageId', v)}
@@ -388,7 +388,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               selectedNode.data.nodeType === 'action_remove_tag' ||
               selectedNode.data.nodeType === 'condition_has_tag') && (
               <div className="space-y-2">
-                <label className="text-xs text-gray-600/60">Nome da Tag</label>
+                <label className="text-xs text-gray-500">Nome da Tag</label>
                 <input
                   type="text"
                   value={selectedNode.data.config?.tagName || ''}
@@ -407,7 +407,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {/* TRIGGER: DEAL CREATED - Pipeline Filter */}
             {selectedNode.data.nodeType === 'trigger_deal_created' && (
               <div className="space-y-2">
-                <label className="text-xs text-gray-600/60">Pipeline (opcional)</label>
+                <label className="text-xs text-gray-500">Pipeline (opcional)</label>
                 <SelectField
                   value={selectedNode.data.config?.pipelineId || ''}
                   onChange={(v) => handleUpdate('pipelineId', v)}
@@ -426,7 +426,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {/* TRIGGER: DEAL WON - Pipeline Filter */}
             {selectedNode.data.nodeType === 'trigger_deal_won' && (
               <div className="space-y-2">
-                <label className="text-xs text-gray-600/60">Pipeline (opcional)</label>
+                <label className="text-xs text-gray-500">Pipeline (opcional)</label>
                 <SelectField
                   value={selectedNode.data.config?.pipelineId || ''}
                   onChange={(v) => handleUpdate('pipelineId', v)}
@@ -446,7 +446,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'trigger_deal_lost' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Pipeline (opcional)</label>
+                  <label className="text-xs text-gray-500">Pipeline (opcional)</label>
                   <SelectField
                     value={selectedNode.data.config?.pipelineId || ''}
                     onChange={(v) => handleUpdate('pipelineId', v)}
@@ -458,7 +458,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Motivo da Perda (opcional)</label>
+                  <label className="text-xs text-gray-500">Motivo da Perda (opcional)</label>
                   <input
                     type="text"
                     value={selectedNode.data.config?.lostReason || ''}
@@ -525,7 +525,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <label className="text-xs text-gray-600/60">Duração</label>
+                    <label className="text-xs text-gray-500">Duração</label>
                     <input
                       type="number"
                       min="1"
@@ -540,7 +540,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs text-gray-600/60">Unidade</label>
+                    <label className="text-xs text-gray-500">Unidade</label>
                     <SelectField
                       value={selectedNode.data.config?.unit || 'hours'}
                       onChange={(v) => handleUpdate('unit', v)}
@@ -630,7 +630,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'control_delay_until' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Tipo de Espera</label>
+                  <label className="text-xs text-gray-500">Tipo de Espera</label>
                   <SelectField
                     value={selectedNode.data.config?.waitType || 'datetime'}
                     onChange={(v) => handleUpdate('waitType', v)}
@@ -643,7 +643,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
 
                 {selectedNode.data.config?.waitType === 'time' ? (
                   <div className="space-y-2">
-                    <label className="text-xs text-gray-600/60">Horário</label>
+                    <label className="text-xs text-gray-500">Horário</label>
                     <input
                       type="time"
                       value={selectedNode.data.config?.time || '09:00'}
@@ -661,7 +661,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <label className="text-xs text-gray-600/60">Data e Hora</label>
+                    <label className="text-xs text-gray-500">Data e Hora</label>
                     <input
                       type="datetime-local"
                       value={selectedNode.data.config?.datetime || ''}
@@ -711,7 +711,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               selectedNode.data.nodeType === 'trigger_deal_stage') && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Pipeline</label>
+                  <label className="text-xs text-gray-500">Pipeline</label>
                   <SelectField
                     value={selectedNode.data.config?.pipelineId || ''}
                     onChange={(v) => handleUpdate('pipelineId', v)}
@@ -725,7 +725,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 
                 {selectedPipeline && (
                   <div className="space-y-2">
-                    <label className="text-xs text-gray-600/60">Estágio</label>
+                    <label className="text-xs text-gray-500">Estágio</label>
                     <SelectField
                       value={selectedNode.data.config?.stageId || ''}
                       onChange={(v) => handleUpdate('stageId', v)}
@@ -743,7 +743,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 {selectedNode.data.nodeType === 'action_create_deal' && (
                   <>
                     <div className="space-y-2">
-                      <label className="text-xs text-gray-600/60">Título do Deal</label>
+                      <label className="text-xs text-gray-500">Título do Deal</label>
                       <input
                         type="text"
                         value={selectedNode.data.config?.title || ''}
@@ -758,7 +758,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs text-gray-600/60">Valor</label>
+                      <label className="text-xs text-gray-500">Valor</label>
                       <input
                         type="number"
                         value={selectedNode.data.config?.value || 0}
@@ -781,7 +781,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'condition_field' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Nome da Condição</label>
+                  <label className="text-xs text-gray-500">Nome da Condição</label>
                   <input
                     type="text"
                     value={selectedNode.data.config?.conditionName || ''}
@@ -796,7 +796,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Tipo</label>
+                  <label className="text-xs text-gray-500">Tipo</label>
                   <SelectField
                     value={selectedNode.data.config?.conditionType || 'contact'}
                     onChange={(v) => handleUpdate('conditionType', v)}
@@ -808,7 +808,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Campo</label>
+                  <label className="text-xs text-gray-500">Campo</label>
                   <SelectField
                     value={selectedNode.data.config?.field || ''}
                     onChange={(v) => handleUpdate('field', v)}
@@ -842,7 +842,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Operador</label>
+                  <label className="text-xs text-gray-500">Operador</label>
                   <SelectField
                     value={selectedNode.data.config?.operator || 'equals'}
                     onChange={(v) => handleUpdate('operator', v)}
@@ -872,7 +872,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 </div>
                 {!['is_set', 'is_not_set'].includes(selectedNode.data.config?.operator || '') && (
                   <div className="space-y-2">
-                    <label className="text-xs text-gray-600/60">
+                    <label className="text-xs text-gray-500">
                       {selectedNode.data.config?.operator === 'between' ? 'Valor minimo' : 'Valor'}
                     </label>
                     <input
@@ -891,7 +891,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 )}
                 {selectedNode.data.config?.operator === 'between' && (
                   <div className="space-y-2">
-                    <label className="text-xs text-gray-600/60">Valor Máximo</label>
+                    <label className="text-xs text-gray-500">Valor Máximo</label>
                     <input
                       type="text"
                       value={selectedNode.data.config?.valueTo || ''}
@@ -907,7 +907,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   </div>
                 )}
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Conector Lógico</label>
+                  <label className="text-xs text-gray-500">Conector Lógico</label>
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleUpdate('logicConnector', 'and')}
@@ -940,7 +940,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'condition_order_value' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Operador</label>
+                  <label className="text-xs text-gray-500">Operador</label>
                   <SelectField
                     value={selectedNode.data.config?.operator || 'greater_than'}
                     onChange={(v) => handleUpdate('operator', v)}
@@ -955,7 +955,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Valor (R$)</label>
+                  <label className="text-xs text-gray-500">Valor (R$)</label>
                   <input
                     type="number"
                     min="0"
@@ -983,7 +983,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'condition_deal_value' && (
               <>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Operador</label>
+                  <label className="text-xs text-gray-500">Operador</label>
                   <SelectField
                     value={selectedNode.data.config?.operator || 'greater_than'}
                     onChange={(v) => handleUpdate('operator', v)}
@@ -998,7 +998,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Valor (R$)</label>
+                  <label className="text-xs text-gray-500">Valor (R$)</label>
                   <input
                     type="number"
                     min="0"
@@ -1036,7 +1036,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             {selectedNode.data.nodeType === 'logic_split' && (
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Proporção</label>
+                  <label className="text-xs text-gray-500">Proporção</label>
                   <input
                     type="range"
                     min="5"
@@ -1052,7 +1052,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Nome do Caminho A</label>
+                  <label className="text-xs text-gray-500">Nome do Caminho A</label>
                   <input
                     type="text"
                     value={selectedNode.data.config?.labelA || ''}
@@ -1067,7 +1067,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Nome do Caminho B</label>
+                  <label className="text-xs text-gray-500">Nome do Caminho B</label>
                   <input
                     type="text"
                     value={selectedNode.data.config?.labelB || ''}
@@ -1108,7 +1108,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   label="Autenticação (opcional)"
                 />
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">URL</label>
+                  <label className="text-xs text-gray-500">URL</label>
                   <input
                     type="url"
                     value={selectedNode.data.config?.url || ''}
@@ -1123,7 +1123,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Método</label>
+                  <label className="text-xs text-gray-500">Método</label>
                   <SelectField
                     value={selectedNode.data.config?.method || 'POST'}
                     onChange={(v) => handleUpdate('method', v)}
@@ -1137,7 +1137,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Headers (JSON)</label>
+                  <label className="text-xs text-gray-500">Headers (JSON)</label>
                   <textarea
                     value={selectedNode.data.config?.headers || '{}'}
                     onChange={(e) => handleUpdate('headers', e.target.value)}
@@ -1152,7 +1152,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-gray-600/60">Body (JSON)</label>
+                  <label className="text-xs text-gray-500">Body (JSON)</label>
                   <textarea
                     value={selectedNode.data.config?.body || ''}
                     onChange={(e) => handleUpdate('body', e.target.value)}
@@ -1375,7 +1375,7 @@ function ContactFieldsEditor({ fields, onFieldsChange }: ContactFieldsEditorProp
               onChange={() => handleFieldToggle(field.key)}
               className="w-4 h-4 rounded border-gray-300 bg-transparent text-blue-500 focus:ring-blue-500/30"
             />
-            <span className="text-xs text-gray-600/60">{field.label}</span>
+            <span className="text-xs text-gray-500">{field.label}</span>
           </label>
           
           {selectedFields.includes(field.key) && (
@@ -1490,7 +1490,7 @@ function FilterConditionsEditor({
     <div className="space-y-3">
       {/* Logic Operator */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-600/60">Combinar condições com:</span>
+        <span className="text-xs text-gray-500">Combinar condições com:</span>
         <div className="flex gap-1">
           <button
             onClick={() => onLogicOperatorChange('and')}
@@ -1646,7 +1646,7 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
     <div className="space-y-4">
       {/* Store Filter */}
       <div className="space-y-2">
-        <label className="text-xs text-gray-600/60">Loja (opcional)</label>
+        <label className="text-xs text-gray-500">Loja (opcional)</label>
         <div className="relative">
           <select
             value={config.storeId || ''}
@@ -1678,7 +1678,7 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
 
       {/* Minimum Value Filter */}
       <div className="space-y-2">
-        <label className="text-xs text-gray-600/60">Valor Mínimo (opcional)</label>
+        <label className="text-xs text-gray-500">Valor Mínimo (opcional)</label>
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-700/40">R$</span>
           <input
@@ -1704,7 +1704,7 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
       {/* Status Filter for Order Paid */}
       {label === 'Pedido Pago' && (
         <div className="space-y-2">
-          <label className="text-xs text-gray-600/60">Status de Pagamento</label>
+          <label className="text-xs text-gray-500">Status de Pagamento</label>
           <div className="relative">
             <select
               value={config.paymentStatus || 'paid'}
@@ -1791,7 +1791,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
     <div className="space-y-4">
       {/* Title */}
       <div className="space-y-2">
-        <label className="text-xs text-gray-600/60">Título da Notificação</label>
+        <label className="text-xs text-gray-500">Título da Notificação</label>
         <input
           type="text"
           value={config.title || ''}
@@ -1808,7 +1808,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
 
       {/* Message */}
       <div className="space-y-2">
-        <label className="text-xs text-gray-600/60">Mensagem</label>
+        <label className="text-xs text-gray-500">Mensagem</label>
         <textarea
           value={config.message || ''}
           onChange={(e) => onUpdate('message', e.target.value)}
@@ -1826,7 +1826,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
       {/* User Selection */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-xs text-gray-600/60">Notificar Usuários</label>
+          <label className="text-xs text-gray-500">Notificar Usuários</label>
           <div className="flex gap-2">
             <button
               type="button"
@@ -1983,7 +1983,7 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
             onChange={(e) => onUpdate('excludeRecovered', e.target.checked)}
             className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
-          <span className="text-sm text-gray-700">Nao disparar se carrinho ja foi recuperado</span>
+          <span className="text-sm text-gray-700">Não disparar se carrinho ja foi recuperado</span>
         </label>
       </div>
     </div>
@@ -2025,7 +2025,7 @@ function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionC
 
       {/* Message Preview / Editor Button */}
       <div className="space-y-2">
-        <label className="text-xs text-gray-600/60">Mensagem WhatsApp</label>
+        <label className="text-xs text-gray-500">Mensagem WhatsApp</label>
 
         {hasMessage ? (
           <div
@@ -2137,11 +2137,11 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
   return (
     <div className="space-y-0">
 
-      {/* === SECTION: Email name + Status (Klaviyo style) === */}
+      {/* === SECTION: Nome do email + Status (Klaviyo style) === */}
       <div className="pb-5">
         <div className="flex items-end gap-3">
           <div className="flex-1 space-y-1">
-            <label className="text-xs font-medium text-gray-500">Email name</label>
+            <label className="text-xs font-medium text-gray-500">Nome do email</label>
             <input
               type="text"
               value={config.emailName || ''}
@@ -2170,25 +2170,25 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
 
       <hr className="border-gray-200" />
 
-      {/* === SECTION: Performance (Klaviyo style) === */}
+      {/* === SECTION: Desempenho (Klaviyo style) === */}
       <div className="py-5">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h4 className="text-sm font-semibold text-gray-900">Performance</h4>
-            <p className="text-xs text-gray-400">Based on the last 30 days</p>
+            <h4 className="text-sm font-semibold text-gray-900">Desempenho</h4>
+            <p className="text-xs text-gray-400">Últimos 30 dias</p>
           </div>
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Open rate</span>
+            <span className="text-sm text-gray-600">Taxa de abertura</span>
             <span className="text-sm text-gray-400">--</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Click rate</span>
+            <span className="text-sm text-gray-600">Taxa de cliques</span>
             <span className="text-sm text-gray-400">--</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Revenue</span>
+            <span className="text-sm text-gray-600">Receita</span>
             <span className="text-sm text-gray-400">--</span>
           </div>
         </div>
@@ -2196,10 +2196,10 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
 
       <hr className="border-gray-200" />
 
-      {/* === SECTION: Subject and sender (Klaviyo style) === */}
+      {/* === SECTION: Assunto e remetente (Klaviyo style) === */}
       <div className="py-5">
         <div className="flex items-center justify-between mb-4">
-          <h4 className="text-sm font-semibold text-gray-900">Subject and sender</h4>
+          <h4 className="text-sm font-semibold text-gray-900">Assunto e remetente</h4>
           <button onClick={() => setShowSubjectEdit(!showSubjectEdit)}
             className="px-3 py-1 rounded-md border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50">
             {showSubjectEdit ? 'Done' : 'Edit'}
@@ -2209,7 +2209,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
         {showSubjectEdit ? (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Subject line</label>
+              <label className="text-sm font-medium text-gray-700">Assunto</label>
               <div className="relative">
                 <input type="text" value={config.subject || ''} onChange={(e) => onUpdate('subject', e.target.value)}
                   placeholder="Voce esqueceu algo no carrinho" className={inputCls} />
@@ -2219,17 +2219,17 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Preview text</label>
+              <label className="text-sm font-medium text-gray-700">Texto de preview</label>
               <input type="text" value={config.preheader || ''} onChange={(e) => onUpdate('preheader', e.target.value)}
                 placeholder="Aproveite! Seu desconto espera por voce!" className={inputCls} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Sender name</label>
+              <label className="text-sm font-medium text-gray-700">Nome do remetente</label>
               <input type="text" value={config.senderName || ''} onChange={(e) => onUpdate('senderName', e.target.value)}
                 placeholder="Minha Loja" className={inputCls} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Sender email address</label>
+              <label className="text-sm font-medium text-gray-700">Email do remetente</label>
               <input type="email" value={config.senderEmail || ''} onChange={(e) => onUpdate('senderEmail', e.target.value)}
                 placeholder="contato@minhaloja.com.br" className={inputCls} />
             </div>
@@ -2237,20 +2237,20 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
         ) : (
           <div className="space-y-3">
             <div className="flex items-start justify-between">
-              <span className="text-sm text-gray-500 w-24 shrink-0">Subject line</span>
-              <span className="text-sm text-gray-900 text-right">{config.subject || <span className="text-gray-400 italic">Not set</span>}</span>
+              <span className="text-sm text-gray-500 w-24 shrink-0">Assunto</span>
+              <span className="text-sm text-gray-900 text-right">{config.subject || <span className="text-gray-400 italic">Não definido</span>}</span>
             </div>
             <div className="flex items-start justify-between">
-              <span className="text-sm text-gray-500 w-24 shrink-0">Preview text</span>
-              <span className="text-sm text-gray-900 text-right">{config.preheader || <span className="text-gray-400 italic">Not set</span>}</span>
+              <span className="text-sm text-gray-500 w-24 shrink-0">Texto de preview</span>
+              <span className="text-sm text-gray-900 text-right">{config.preheader || <span className="text-gray-400 italic">Não definido</span>}</span>
             </div>
             <div className="flex items-start justify-between">
-              <span className="text-sm text-gray-500 w-24 shrink-0">Sender name</span>
-              <span className="text-sm text-gray-900 text-right">{config.senderName || <span className="text-gray-400 italic">Not set</span>}</span>
+              <span className="text-sm text-gray-500 w-24 shrink-0">Nome do remetente</span>
+              <span className="text-sm text-gray-900 text-right">{config.senderName || <span className="text-gray-400 italic">Não definido</span>}</span>
             </div>
             <div className="flex items-start justify-between">
-              <span className="text-sm text-gray-500 w-24 shrink-0">Sender email</span>
-              <span className="text-sm text-gray-900 text-right">{config.senderEmail || <span className="text-gray-400 italic">Not set</span>}</span>
+              <span className="text-sm text-gray-500 w-24 shrink-0">Email do remetente</span>
+              <span className="text-sm text-gray-900 text-right">{config.senderEmail || <span className="text-gray-400 italic">Não definido</span>}</span>
             </div>
           </div>
         )}
@@ -2326,9 +2326,9 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
 
       <hr className="border-gray-200" />
 
-      {/* === SECTION: Settings (Klaviyo style) === */}
+      {/* === SECTION: Configurações (Klaviyo style) === */}
       <div className="py-5">
-        <h4 className="text-sm font-semibold text-gray-900 mb-4">Settings</h4>
+        <h4 className="text-sm font-semibold text-gray-900 mb-4">Configurações</h4>
 
         <div className="space-y-4">
           {/* Smart Sending */}
@@ -2336,7 +2336,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
             <input type="checkbox" checked={config.smartSending || false} onChange={(e) => onUpdate('smartSending', e.target.checked)}
               className="w-4 h-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
             <div>
-              <p className="text-sm text-gray-900">Skip recently emailed profiles</p>
+              <p className="text-sm text-gray-900">Pular perfis contatados recentemente</p>
               <p className="text-xs text-gray-500 mt-0.5">
                 <span className="text-blue-600">Smart Sending</span> will skip anyone who received an email within the last {config.smartSendingHours || 16} hours.
               </p>
@@ -2356,7 +2356,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
             <input type="checkbox" checked={config.utmTracking || false} onChange={(e) => onUpdate('utmTracking', e.target.checked)}
               className="w-4 h-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
             <div>
-              <p className="text-sm text-gray-900">Enable UTM Tracking</p>
+              <p className="text-sm text-gray-900">Ativar rastreamento UTM</p>
               <p className="text-xs text-gray-500 mt-0.5">
                 Links will include additional tracking information, called <span className="text-blue-600">UTM parameters</span>.
               </p>
@@ -2382,7 +2382,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
             onClick={() => setShowPreviewMode(true)}
             className="px-4 py-2 rounded-md border border-blue-200 bg-blue-50 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
           >
-            Preview & Test
+            Visualizar
           </button>
         )}
         <div className="flex items-center gap-3 ml-auto">
@@ -2447,7 +2447,7 @@ function ListActionConfig({ config, onUpdate, organizationId, isRemove }: {
   return (
     <div className="space-y-3">
       <div className="space-y-2">
-        <label className="text-xs text-gray-600/60">
+        <label className="text-xs text-gray-500">
           {isRemove ? 'Remover da Lista' : 'Adicionar à Lista'}
         </label>
         <select
@@ -2800,7 +2800,7 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
                     <option value="equals">Igual a</option>
                     <option value="not_equals">Diferente de</option>
                     <option value="is_set">Esta definido</option>
-                    <option value="is_not_set">Nao esta definido</option>
+                    <option value="is_not_set">Não está definido</option>
                     <option value="contains">Contem</option>
                     <option value="greater_than">Maior que</option>
                     <option value="less_than">Menor que</option>

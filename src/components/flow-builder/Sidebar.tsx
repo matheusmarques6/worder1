@@ -478,7 +478,7 @@ function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNod
         onClick={onToggle}
         className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 transition-colors"
       >
-        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
           {section.label}
         </span>
         <ChevronDown
@@ -547,10 +547,10 @@ function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
       >
         <Icon className="w-4 h-4" style={{ color: node.color }} />
       </div>
-      <span className="text-[13px] text-gray-700 group-hover:text-gray-900 flex-1 truncate">
+      <span className="text-[13px] text-gray-700 group-hover:text-gray-900 flex-1 truncate" title={node.label}>
         {node.label}
       </span>
-      <GripVertical className="w-3.5 h-3.5 text-gray-300 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
+      <GripVertical className="w-3.5 h-3.5 text-gray-300 opacity-40 group-hover:opacity-100 shrink-0 transition-opacity" />
     </button>
   );
 }
