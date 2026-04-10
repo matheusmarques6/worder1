@@ -114,10 +114,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Need contactId for preview rendering
-    if (!contactId) {
-      return NextResponse.json({ error: 'contactId required for preview' }, { status: 400 });
-    }
-
     // 1. Fetch template
     const { data: template } = await supabase
       .from('email_templates')
@@ -129,16 +125,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Template not found or has no HTML' }, { status: 404 });
     }
 
-    // 2. Fetch contact
-    const { data: contact } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('id', contactId)
-      .eq('organization_id', organizationId)
-      .single();
+    // 2. Fetch contact (optional — preview works without it)
+    let contact: Record<string, any> | null = null;
+    if (contactId) {
+      const { data: c } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('id', contactId)
+        .maybeSingle();
+      contact = c;
+    }
 
+    // If no contact found by ID, try to get any contact from org
     if (!contact) {
-      return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
+      const { data: anyContact } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .limit(1)
+        .maybeSingle();
+      contact = anyContact;
     }
 
     // 3. Fetch most recent event matching trigger type
@@ -158,14 +164,20 @@ export async function POST(request: NextRequest) {
     const eventType = eventTypeMap[triggerType || ''] || 'order';
     let eventData: Record<string, any> = {};
 
-    const { data: recentEvent } = await supabase
+    // Try to find event for this contact, fallback to any event of this type
+    let eventQuery = supabase
       .from('contact_events')
       .select('*')
-      .eq('contact_id', contactId)
       .eq('event_type', eventType)
+      .eq('organization_id', organizationId)
       .order('occurred_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+
+    if (contactId) {
+      eventQuery = eventQuery.eq('contact_id', contactId);
+    }
+
+    const { data: recentEvent } = await eventQuery.maybeSingle();
 
     if (recentEvent) {
       eventData = recentEvent.properties || {};
@@ -173,7 +185,7 @@ export async function POST(request: NextRequest) {
 
     // 4. Resolve merge tags in HTML
     let html = template.html;
-    const contactProps: Record<string, string> = {
+    const contactProps: Record<string, string> = contact ? {
       first_name: contact.first_name || '',
       last_name: contact.last_name || '',
       email: contact.email || '',
@@ -184,7 +196,7 @@ export async function POST(request: NextRequest) {
       company: contact.company || '',
       total_orders: String(contact.total_orders || 0),
       total_spent: String(contact.total_spent || 0),
-    };
+    } : {};
 
     // Replace {{contact.*}} tags
     html = html.replace(/\{\{contact\.(\w+)\}\}/g, (_match: string, key: string) => {
@@ -196,11 +208,11 @@ export async function POST(request: NextRequest) {
       return String(eventData[key] || '');
     });
 
-    // 5. Build response with all properties for the side panel
+    // 5. Build response
     return NextResponse.json({
       html,
       subject: template.name,
-      contact: {
+      contact: contact ? {
         id: contact.id,
         email: contact.email,
         first_name: contact.first_name,
@@ -214,7 +226,7 @@ export async function POST(request: NextRequest) {
         total_orders: contact.total_orders,
         total_spent: contact.total_spent,
         created_at: contact.created_at,
-      },
+      } : null,
       event: recentEvent ? {
         id: recentEvent.id,
         type: recentEvent.event_type,

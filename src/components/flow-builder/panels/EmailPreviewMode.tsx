@@ -50,8 +50,12 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
       const data = await res.json();
       const eventList: EventItem[] = data.events || [];
       setEvents(eventList);
+      // Always render preview — API handles missing contactId gracefully
       if (eventList.length > 0) {
-        await renderPreview(eventList[0].contact_id);
+        await renderPreview(eventList[0].contact_id || '');
+      } else {
+        // No events — still render template without merge tags
+        await renderPreview('');
       }
     } catch {
       // silent
@@ -60,12 +64,17 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
   }, [templateId, triggerType, organizationId]);
 
   // 2. Render preview for a specific contact
-  const renderPreview = async (contactId: string) => {
+  const renderPreview = async (contactId?: string) => {
     try {
       const res = await fetch('/api/automations/email-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId, contactId, triggerType, organizationId }),
+        body: JSON.stringify({
+          templateId,
+          ...(contactId ? { contactId } : {}),
+          triggerType,
+          organizationId,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
