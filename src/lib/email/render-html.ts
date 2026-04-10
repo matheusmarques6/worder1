@@ -55,6 +55,16 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
   const linkColor = ts?.link?.color || '#F97316'
   const linkUnderline = ts?.link?.underline !== false
 
+  // Device visibility: wrap any block in a visibility class
+  const visAttr = p.visibility === 'desktop' ? ' class="worder-desktop-only"' : p.visibility === 'mobile' ? ' class="worder-mobile-only"' : ''
+
+  // Helper: apply visibility to the <tr> wrapper
+  const wrapVis = (html: string): string => {
+    if (!visAttr) return html
+    return html.replace(/<tr/, `<tr${visAttr}`)
+  }
+
+  const _render = (): string => {
   switch (block.type) {
     case 'text': {
       const bodyTs = ts?.body
@@ -71,8 +81,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       const linked = p.href ? `<a href="${p.href}" target="_blank" style="text-decoration:none;display:block;line-height:0;font-size:0;">${img}</a>` : img
       const blockBg = p.blockBgColor ? `background-color:${p.blockBgColor};` : ''
       const blockPadStyle = p.blockPadding ? `padding:${p.blockPadding.top || 0}px ${p.blockPadding.right || 0}px ${p.blockPadding.bottom || 0}px ${p.blockPadding.left || 0}px;` : ''
-      const vis = p.visibility === 'desktop' ? ' class="worder-desktop-only"' : p.visibility === 'mobile' ? ' class="worder-mobile-only"' : ''
-      return `<tr${vis}><td style="padding:${blockPad};text-align:${p.align || 'center'};line-height:0;font-size:0;${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}${blockBg}${blockPadStyle}">${linked}</td></tr>`
+      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};line-height:0;font-size:0;${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}${blockBg}${blockPadStyle}">${linked}</td></tr>`
     }
 
     case 'button':
@@ -251,6 +260,8 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     default:
       return ''
   }
+  } // end _render
+  return wrapVis(_render())
 }
 
 function renderSection(section: EmailSection, font: string, contentWidth: number, contentBg: string, settings?: EmailDocument['settings'], isFirst = false, isLast = false): string {

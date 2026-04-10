@@ -27,9 +27,9 @@ interface WorderEmailEditorProps {
 }
 
 // ── Sortable Block Wrapper (drag from anywhere on the block) ──
-function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDelete }: {
+function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDelete, isHidden }: {
   blockId: string; children: React.ReactNode; isSelected: boolean;
-  onSelect: () => void; onClone: () => void; onDelete: () => void
+  onSelect: () => void; onClone: () => void; onDelete: () => void; isHidden?: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: blockId,
@@ -40,10 +40,15 @@ function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDel
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1, zIndex: isDragging ? 50 : 'auto' }}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isHidden ? 0.3 : (isDragging ? 0.3 : 1), zIndex: isDragging ? 50 : 'auto' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
       className={`relative group cursor-grab active:cursor-grabbing transition-all ${isSelected ? 'outline outline-2 outline-[#F97316] outline-offset-1 shadow-[0_0_0_4px_rgba(249,115,22,0.15)]' : 'hover:outline hover:outline-2 hover:outline-[#F97316] hover:outline-offset-1'}`}
     >
+      {isHidden && (
+        <div className="absolute top-1 right-1 z-20 px-1.5 py-0.5 bg-red-100 text-red-600 text-[9px] font-semibold rounded border border-red-200">
+          Oculto
+        </div>
+      )}
       {isSelected && (
         <div className="absolute -right-10 top-0 flex flex-col gap-0.5 bg-zinc-900 rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-0.5 z-20">
           <button onClick={e => { e.stopPropagation(); onClone() }} className="p-1.5 text-white hover:bg-zinc-700 rounded transition-colors" title="Duplicar"><Copy className="w-3.5 h-3.5" strokeWidth={1.5} /></button>
@@ -827,11 +832,6 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       {/* ── Toolbar ── */}
       <div className="flex items-center justify-between px-4 h-[52px] bg-white border-b border-gray-200 flex-shrink-0 z-20">
         <div className="flex items-center gap-3">
-          <button onClick={() => { if (confirm('Sair sem salvar? Alterações não salvas serão perdidas.')) onBack() }}
-            className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors" title="Voltar para templates">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="h-5 w-px bg-gray-200" />
           {onNameChange ? (
             <input
               type="text"
@@ -869,6 +869,10 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
             {saving ? <Loader2 size={14} className="animate-spin" /> : isSaved ? <CheckCircle size={14} /> : <Save size={14} />}
             {saving ? 'Salvando...' : isSaved ? 'Salvo!' : 'Salvar'}
           </button>
+          <button onClick={() => { if (confirm('Sair do editor? Alteracoes nao salvas serao perdidas.')) onBack() }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 text-xs font-medium text-zinc-600 rounded-lg hover:bg-zinc-50 transition-colors">
+            Sair
+          </button>
         </div>
       </div>
 
@@ -876,17 +880,22 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left Sidebar ── */}
         <div className="w-[320px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
-          <div className="flex border-b border-gray-200 flex-shrink-0">
-            <button onClick={() => setLeftTab('content')} className={`flex-1 h-10 text-[12px] font-medium transition-colors ${leftTab === 'content' ? 'text-zinc-900 border-b-2 border-[#F97316] -mb-px' : 'text-zinc-500 hover:text-zinc-700'}`}>Conteudo</button>
-            <button onClick={() => setLeftTab('styles')} className={`flex-1 h-10 text-[12px] font-medium transition-colors ${leftTab === 'styles' ? 'text-zinc-900 border-b-2 border-[#F97316] -mb-px' : 'text-zinc-500 hover:text-zinc-700'}`}>Estilos</button>
-          </div>
+          {/* Tabs only visible when NO block/section is selected */}
+          {!selectedBlock && !selectedSection && (
+            <div className="flex border-b border-zinc-200 flex-shrink-0">
+              <button onClick={() => setLeftTab('content')} className={`flex-1 h-10 text-[12px] font-medium transition-colors ${leftTab === 'content' ? 'text-zinc-900 border-b-2 border-[#F97316] -mb-px' : 'text-zinc-500 hover:text-zinc-700'}`}>Conteudo</button>
+              <button onClick={() => setLeftTab('styles')} className={`flex-1 h-10 text-[12px] font-medium transition-colors ${leftTab === 'styles' ? 'text-zinc-900 border-b-2 border-[#F97316] -mb-px' : 'text-zinc-500 hover:text-zinc-700'}`}>Estilos</button>
+            </div>
+          )}
           <div className="flex-1 overflow-hidden">
-            {/* Block properties on the LEFT (Klaviyo-style) */}
+            {/* Block properties (Klaviyo-style — replaces entire sidebar) */}
             {selectedBlock ? (
               <div className="flex flex-col h-full">
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-100">
-                  <button onClick={clearSelection} className="p-1 text-zinc-500 hover:text-zinc-900 rounded hover:bg-zinc-100 transition-colors"><ArrowLeft size={16} strokeWidth={2} /></button>
-                  <span className="text-[14px] font-semibold text-zinc-900">{BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}</span>
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-100 shrink-0">
+                  <button onClick={clearSelection} className="p-1.5 text-zinc-400 hover:text-zinc-700 rounded-md hover:bg-zinc-100 transition-colors" title="Voltar para blocos">
+                    <X size={14} strokeWidth={2} />
+                  </button>
+                  <span className="text-[13px] font-semibold text-zinc-900 flex-1">{BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
                   <BlockProperties
@@ -898,9 +907,11 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
               </div>
             ) : selectedSection ? (
               <div className="flex flex-col h-full">
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-100">
-                  <button onClick={clearSelection} className="p-1 text-zinc-500 hover:text-zinc-900 rounded hover:bg-zinc-100 transition-colors"><ArrowLeft size={16} strokeWidth={2} /></button>
-                  <span className="text-[14px] font-semibold text-zinc-900">Secao</span>
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-100 shrink-0">
+                  <button onClick={clearSelection} className="p-1.5 text-zinc-400 hover:text-zinc-700 rounded-md hover:bg-zinc-100 transition-colors" title="Voltar para blocos">
+                    <X size={14} strokeWidth={2} />
+                  </button>
+                  <span className="text-[13px] font-semibold text-zinc-900 flex-1">Secao</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
                   <SectionProperties
@@ -1053,6 +1064,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                       onSelect={() => selectBlock(block.id)}
                                       onClone={() => cloneBlock(block.id)}
                                       onDelete={() => removeBlock(block.id)}
+                                      isHidden={(device === 'desktop' && block.props.visibility === 'mobile') || (device === 'mobile' && block.props.visibility === 'desktop')}
                                     >
                                       <div className={lastDroppedBlockId === block.id ? 'email-block-dropped' : ''}>
                                       <BlockPreview
