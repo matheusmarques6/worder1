@@ -1027,7 +1027,10 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
 
       {/* ── Toolbar ── */}
       <div className="flex items-center justify-between px-4 h-[52px] bg-zinc-900 flex-shrink-0 z-20">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/worder favicon.svg" alt="Worder" className="w-7 h-7 flex-shrink-0" />
+          <div className="h-5 w-px bg-zinc-700" />
           {onNameChange ? (
             <input
               type="text"
@@ -1040,7 +1043,6 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           ) : (
             <span className="text-sm font-semibold text-white truncate max-w-[250px]">{templateName}</span>
           )}
-          <span className="text-[9px] px-1.5 py-0.5 bg-zinc-700 text-zinc-300 rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
         </div>
 
         <div className="flex items-center gap-1">
