@@ -1243,7 +1243,19 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
         {/* Footer Actions */}
         <div className="p-4 border-t border-gray-200 flex items-center gap-2">
           <button
-            onClick={() => navigator.clipboard.writeText(selectedNode.id)}
+            onClick={() => {
+              try {
+                navigator.clipboard.writeText(selectedNode.id);
+              } catch {
+                // Fallback for insecure contexts
+                const ta = document.createElement('textarea');
+                ta.value = selectedNode.id;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+              }
+            }}
             className={cn(
               'flex-1 flex items-center justify-center gap-2 py-2 rounded-lg',
               'bg-gray-50 hover:bg-gray-100',

@@ -293,6 +293,18 @@ export default function AutomationsPage() {
   const handleToggleStatus = async (automation: Automation) => {
     const newStatus = automation.status === 'active' ? 'paused' : 'active';
 
+    // Validate before activating
+    if (newStatus === 'active') {
+      if (!automation.trigger_type || automation.trigger_type === 'manual') {
+        alert('Configure um gatilho antes de ativar a automacao.');
+        return;
+      }
+      if (!automation.nodes || automation.nodes.length < 2) {
+        alert('Adicione pelo menos uma acao ao fluxo antes de ativar.');
+        return;
+      }
+    }
+
     try {
       const res = await fetch('/api/automations', {
         method: 'PUT',

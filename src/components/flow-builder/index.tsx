@@ -344,8 +344,7 @@ export function FlowBuilder({
 
 export function getFlowDataForSave() {
   const state = useFlowStore.getState();
-  
-  // Convert back to legacy format
+
   const legacyNodes = state.nodes.map((node) => ({
     id: node.id,
     type: node.type,
@@ -353,6 +352,9 @@ export function getFlowDataForSave() {
     data: {
       label: node.data.label,
       description: node.data.description,
+      category: node.data.category,
+      nodeType: node.data.nodeType,
+      icon: node.data.icon,
       config: node.data.config,
     },
   }));
@@ -365,9 +367,14 @@ export function getFlowDataForSave() {
     targetHandle: edge.targetHandle,
   }));
 
+  // Extract trigger info from trigger node
+  const triggerNode = legacyNodes.find((n) => n.type?.startsWith('trigger_'));
+
   return {
     name: state.automationName,
     status: state.automationStatus,
+    trigger_type: triggerNode?.type || 'manual',
+    trigger_config: triggerNode?.data.config || {},
     nodes: legacyNodes,
     edges: legacyEdges,
   };
