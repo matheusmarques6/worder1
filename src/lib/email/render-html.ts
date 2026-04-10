@@ -255,6 +255,14 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
 
 function renderSection(section: EmailSection, font: string, contentWidth: number, contentBg: string, settings?: EmailDocument['settings'], isFirst = false, isLast = false): string {
   const s = section.styles
+  // Device visibility: if both hidden, skip section entirely
+  const showDesktop = (s as any).showOnDesktop !== false
+  const showMobile = (s as any).showOnMobile !== false
+  if (!showDesktop && !showMobile) return ''
+
+  // Add visibility CSS class to section wrapper
+  const visClass = !showDesktop ? ' class="worder-desktop-hide"' : !showMobile ? ' class="worder-mobile-hide"' : ''
+
   const sectionPad = pad(s.padding)
   const sectionBg = s.backgroundColor || ''
   // Respect contentColorMode: 'auto' uses doc default, 'custom' uses section color, 'none' = transparent
@@ -282,7 +290,7 @@ function renderSection(section: EmailSection, font: string, contentWidth: number
   // Content = centered table with content bg
   return `
 <!-- Section -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"${sectionBg ? ` style="background-color:${sectionBg};"` : ''}>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"${visClass}${sectionBg ? ` style="background-color:${sectionBg};"` : ''}>
   <tr>
     <td align="center" style="padding:0;">
       <!--[if mso]><table role="presentation" cellspacing="0" cellpadding="0" border="0" width="${contentWidth}" align="center"><tr><td><![endif]-->
@@ -320,9 +328,13 @@ img{-ms-interpolation-mode:bicubic;border:0;height:auto;line-height:100%;outline
 body{margin:0;padding:0;width:100%!important}
 a{color:${s.textStyles?.link?.color || '#F97316'};${s.textStyles?.link?.underline !== false ? 'text-decoration:underline;' : 'text-decoration:none;'}}
 .worder-mobile-only{display:none!important;max-height:0;overflow:hidden}
+.worder-mobile-hide{} /* visible on desktop by default */
+.worder-desktop-hide{display:none!important;mso-hide:all;max-height:0;overflow:hidden}
 @media only screen and (max-width:620px){
   .worder-desktop-only{display:none!important;max-height:0;overflow:hidden}
   .worder-mobile-only{display:table-row!important;max-height:none!important}
+  .worder-mobile-hide{display:none!important;max-height:0;overflow:hidden}
+  .worder-desktop-hide{display:table!important;max-height:none!important}
   .email-container{width:100%!important;max-width:100%!important}
   .worder-section-stack td{display:block!important;width:100%!important}
   .worder-countdown-wrap td{padding:2px!important}

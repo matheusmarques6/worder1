@@ -981,9 +981,18 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   {/* Section = FULL WIDTH with section color */}
                   <div
                     className={`relative group/section ${selectedSectionId === section.id ? 'ring-2 ring-indigo-400 ring-inset' : 'hover:ring-1 hover:ring-indigo-200 hover:ring-inset'}`}
-                    style={{ backgroundColor: section.styles.backgroundColor || undefined }}
+                    style={{
+                      backgroundColor: section.styles.backgroundColor || undefined,
+                      opacity: ((device === 'desktop' && (section.styles as any).showOnDesktop === false) || (device === 'mobile' && (section.styles as any).showOnMobile === false)) ? 0.3 : 1,
+                    }}
                     onClick={e => { e.stopPropagation(); selectSection(section.id) }}
                   >
+                    {/* Hidden indicator badge */}
+                    {((device === 'desktop' && (section.styles as any).showOnDesktop === false) || (device === 'mobile' && (section.styles as any).showOnMobile === false)) && (
+                      <div className="absolute top-2 right-2 z-20 px-2 py-0.5 bg-red-100 text-red-600 text-[10px] font-semibold rounded border border-red-200">
+                        Oculto no {device === 'desktop' ? 'desktop' : 'mobile'}
+                      </div>
+                    )}
                       {/* Section toolbar INSIDE the section - always visible */}
                       {selectedSectionId === section.id && (
                         <div className="absolute left-1 top-1 z-20 flex items-center gap-1">
