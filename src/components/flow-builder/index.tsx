@@ -137,7 +137,7 @@ export function FlowBuilder({
           description: node.data?.description || definition?.description || '',
           category,
           nodeType: node.type,
-          icon: node.data?.icon || definition?.icon?.name || '',
+          icon: node.data?.icon || definition?.icon?.displayName || '',
           config: node.data?.config || {},
           status: node.data?.status,
         },

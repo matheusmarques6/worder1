@@ -315,13 +315,13 @@ const actionExecutors: Record<string, NodeExecutor> = {
         }
 
         // 2b. Smart Sending — skip if contact received email recently
-        if (config.smartSending && !isTest) {
+        if (config.smartSending && !isTest && context.contact?.id) {
           const skipHours = config.smartSendingHours || 16;
           const cutoff = new Date(Date.now() - skipHours * 60 * 60 * 1000).toISOString();
           const { data: recentSends } = await supabase
             .from('email_sends')
             .select('id')
-            .eq('contact_id', context.contact?.id)
+            .eq('contact_id', context.contact.id)
             .gte('created_at', cutoff)
             .limit(1);
 
@@ -357,12 +357,17 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
         // 4. Send via Resend (default provider)
         const provider = credentials?.type || 'resend';
+        const apiKey = credentials?.apiKey || process.env.RESEND_API_KEY;
+
+        if (!apiKey) {
+          return { status: 'error', output: null, error: 'API key de email não configurada (Resend/SendGrid)' };
+        }
 
         if (provider === 'emailSendgrid' || provider === 'sendgrid') {
           const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${credentials?.apiKey}`,
+              'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -383,7 +388,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           const response = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${credentials?.apiKey}`,
+              'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -1088,11 +1093,14 @@ const controlExecutors: Record<string, NodeExecutor> = {
       const delayMs = value * (multipliers[unit] || multipliers.hours);
       let resumeAt = new Date(Date.now() + delayMs);
 
-      // Apply day-of-week restrictions
+      // Apply day-of-week restrictions (allowedDays: 0=Mon, 1=Tue, ..., 6=Sun)
       if (config.restrictDays && config.allowedDays?.length > 0) {
         const allowedDays: number[] = config.allowedDays;
-        while (!allowedDays.includes(resumeAt.getDay() === 0 ? 6 : resumeAt.getDay() - 1)) {
+        // JS getDay(): 0=Sun, 1=Mon... → convert to 0=Mon, 6=Sun
+        let guard = 0;
+        while (!allowedDays.includes(resumeAt.getDay() === 0 ? 6 : resumeAt.getDay() - 1) && guard < 8) {
           resumeAt = new Date(resumeAt.getTime() + 24 * 60 * 60 * 1000);
+          guard++;
         }
       }
 

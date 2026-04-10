@@ -194,7 +194,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
             description: trigger.description,
             category: 'trigger',
             nodeType: trigger.type,
-            icon: trigger.icon?.name || 'Zap',
+            icon: trigger.icon?.displayName || 'Zap',
             config: {},
           },
         };
@@ -248,7 +248,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
                   label: newTrigger.label,
                   description: newTrigger.description,
                   nodeType: newTrigger.type,
-                  icon: newTrigger.icon?.name || 'Zap',
+                  icon: newTrigger.icon?.displayName || 'Zap',
                   config: {},
                 },
               }
@@ -265,7 +265,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
           description: newTrigger.description,
           category: 'trigger',
           nodeType: newTrigger.type,
-          icon: newTrigger.icon?.name || 'Zap',
+          icon: newTrigger.icon?.displayName || 'Zap',
           config: {},
         },
       };
@@ -303,7 +303,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
       label: node.label,
       description: node.description,
       category: node.category,
-      icon: node.icon?.name || 'Zap',
+      icon: node.icon?.displayName || 'Zap',
       color: node.color,
       defaultConfig: {},
     };
@@ -322,7 +322,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
         description: nodeDef.description,
         category: nodeDef.category,
         nodeType: nodeDef.type,
-        icon: nodeDef.icon?.name || 'Zap',
+        icon: nodeDef.icon?.displayName || 'Zap',
         config: {},
       },
     };
