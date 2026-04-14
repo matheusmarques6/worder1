@@ -230,23 +230,15 @@ export async function updateConversationStatus(
 
   // Decrement agent active conversations if resolved
   if (status === 'resolved' && data?.assigned_agent_id) {
-    await supabaseAdmin
-      .from('whatsapp_agent_status')
-      .update({
-        active_conversations: supabaseAdmin.rpc
-          ? undefined
-          : undefined,
-      })
-      .eq('agent_id', data.assigned_agent_id)
-      .eq('organization_id', organizationId)
-
     // Use raw SQL for decrement
-    await supabaseAdmin.rpc('decrement_agent_conversations', {
-      p_agent_id: data.assigned_agent_id,
-      p_org_id: organizationId,
-    }).catch(() => {
+    try {
+      await supabaseAdmin.rpc('decrement_agent_conversations', {
+        p_agent_id: data.assigned_agent_id,
+        p_org_id: organizationId,
+      })
+    } catch {
       // Fallback: just update if RPC doesn't exist
-    })
+    }
   }
 
   return { data }
