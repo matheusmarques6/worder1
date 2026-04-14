@@ -20,7 +20,7 @@ function ColorRow({ label, value, onChange }: { label: string; value: string; on
         <input type="color" value={value || '#ffffff'} onChange={e => onChange(e.target.value)}
           className="w-7 h-7 rounded border border-gray-200 cursor-pointer p-0.5 flex-shrink-0" />
         <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} placeholder="Transparente"
-          className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-md text-xs font-mono text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none" />
+          className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-md text-xs font-mono text-gray-900 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-500/20 focus:outline-none" />
       </div>
     </div>
   )
@@ -65,7 +65,7 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
             <div className="space-y-2">
               <input type="text" value={s.backgroundImage || ''} onChange={e => onStyleChange('backgroundImage', e.target.value)}
                 placeholder="URL da imagem de fundo"
-                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-md text-xs text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none" />
+                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-md text-xs text-gray-900 placeholder-gray-400 focus:border-zinc-900 focus:outline-none" />
               {s.backgroundImage && (
                 <div className="grid grid-cols-2 gap-2">
                   <select value={s.backgroundRepeat || 'no-repeat'} onChange={e => onStyleChange('backgroundRepeat', e.target.value)}
@@ -127,17 +127,17 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
                 <div>
                   <label className="text-[10px] text-gray-500">Largura</label>
                   <input type="number" value={s.border?.width || 0} onChange={e => onStyleChange('border', { ...(s.border || {}), width: Number(e.target.value) })}
-                    min={0} max={10} className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                    min={0} max={10} className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                 </div>
                 <div>
                   <label className="text-[10px] text-gray-500">Raio</label>
                   <input type="number" value={s.border?.radius || 0} onChange={e => onStyleChange('border', { ...(s.border || {}), radius: Number(e.target.value) })}
-                    min={0} max={50} className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                    min={0} max={50} className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                 </div>
               </div>
               <ColorRow label="Cor" value={s.border?.color || '#E5E7EB'} onChange={v => onStyleChange('border', { ...(s.border || {}), color: v })} />
               <select value={s.border?.style || 'solid'} onChange={e => onStyleChange('border', { ...(s.border || {}), style: e.target.value })}
-                className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
+                className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-gray-900 bg-white focus:border-zinc-900 focus:outline-none">
                 <option value="none">Nenhuma</option>
                 <option value="solid">Sólida</option>
                 <option value="dashed">Tracejada</option>
@@ -155,13 +155,13 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
               <div className="flex items-center gap-1.5 flex-1">
                 <span className="text-[10px] text-gray-400 w-4">↕</span>
                 <input type="number" value={s.padding.top} onChange={e => onStyleChange('padding', { ...s.padding, top: Number(e.target.value), bottom: Number(e.target.value) })}
-                  className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-center text-gray-900 focus:border-brand-500 focus:outline-none" min={0} />
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-center text-gray-900 focus:border-zinc-900 focus:outline-none" min={0} />
                 <span className="text-[10px] text-gray-400">px</span>
               </div>
               <div className="flex items-center gap-1.5 flex-1">
                 <span className="text-[10px] text-gray-400 w-4">↔</span>
                 <input type="number" value={s.padding.left} onChange={e => onStyleChange('padding', { ...s.padding, left: Number(e.target.value), right: Number(e.target.value) })}
-                  className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-center text-gray-900 focus:border-brand-500 focus:outline-none" min={0} />
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-center text-gray-900 focus:border-zinc-900 focus:outline-none" min={0} />
                 <span className="text-[10px] text-gray-400">px</span>
               </div>
               <button className="p-1.5 border border-gray-200 rounded-md text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors" title="Editar 4 lados">
@@ -210,7 +210,7 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
                       onStyleChange('mobileStackOrder', opt.value)
                       onStyleChange('stackOnMobile', opt.value !== 'none')
                     }}
-                    className="w-4 h-4 text-brand-500 border-gray-300 focus:ring-brand-500" />
+                    className="w-4 h-4 text-zinc-700 border-gray-300 focus:ring-zinc-500" />
                   <span className="text-lg leading-none">{opt.icon}</span>
                   <span className="text-xs text-gray-700">{opt.label}</span>
                 </label>
@@ -230,11 +230,11 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
                 return (
                   <button key={i} onClick={() => onColumnLayoutChange(layout.columns)}
                     className={`p-2.5 border rounded-lg text-center transition-all ${
-                      isActive ? 'border-brand-500 bg-brand-50 shadow-sm' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      isActive ? 'border-zinc-900 bg-zinc-50 shadow-sm' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                     }`}>
                     <div className="flex gap-0.5 justify-center mb-1">
                       {layout.columns.map((w, j) => (
-                        <div key={j} className={`h-4 rounded-sm ${isActive ? 'bg-brand-500' : 'bg-gray-300'}`}
+                        <div key={j} className={`h-4 rounded-sm ${isActive ? 'bg-zinc-900' : 'bg-gray-300'}`}
                           style={{ width: `${Math.max(w * 0.28, 6)}px` }} />
                       ))}
                     </div>
@@ -255,14 +255,14 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
             <div className="space-y-2">
               <label className="flex items-center justify-between p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
                 <span className="text-xs text-gray-700">Mostrar no Desktop</span>
-                <div className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${(s as any).showOnDesktop !== false ? 'bg-brand-500' : 'bg-gray-200'}`}
+                <div className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${(s as any).showOnDesktop !== false ? 'bg-zinc-900' : 'bg-gray-200'}`}
                   onClick={() => onStyleChange('showOnDesktop', (s as any).showOnDesktop === false)}>
                   <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${(s as any).showOnDesktop !== false ? 'translate-x-4' : 'translate-x-0.5'}`} />
                 </div>
               </label>
               <label className="flex items-center justify-between p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
                 <span className="text-xs text-gray-700">Mostrar no Mobile</span>
-                <div className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${(s as any).showOnMobile !== false ? 'bg-brand-500' : 'bg-gray-200'}`}
+                <div className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${(s as any).showOnMobile !== false ? 'bg-zinc-900' : 'bg-gray-200'}`}
                   onClick={() => onStyleChange('showOnMobile', (s as any).showOnMobile === false)}>
                   <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${(s as any).showOnMobile !== false ? 'translate-x-4' : 'translate-x-0.5'}`} />
                 </div>
@@ -270,83 +270,7 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
             </div>
           </div>
 
-          {/* Lógica mostrar/ocultar */}
-          <div className="border-t border-gray-100 pt-4">
-            <p className="text-[12px] font-medium text-gray-700 mb-1">Lógica condicional</p>
-            <p className="text-[11px] text-gray-400 mb-3">Mostrar ou ocultar baseado em propriedades do contato.</p>
-            <div className="space-y-2">
-              <label className="flex items-center justify-between p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
-                <span className="text-xs text-gray-700">Ativar condição</span>
-                <div className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${(s as any).conditionEnabled ? 'bg-brand-500' : 'bg-gray-200'}`}
-                  onClick={() => onStyleChange('conditionEnabled', !(s as any).conditionEnabled)}>
-                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${(s as any).conditionEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                </div>
-              </label>
-              {(s as any).conditionEnabled && (
-                <div className="space-y-2 p-3 bg-gray-50 rounded-lg">
-                  <select value={(s as any).conditionField || ''} onChange={e => onStyleChange('conditionField', e.target.value)}
-                    className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
-                    <option value="">Selecionar campo...</option>
-                    <option value="first_name">Nome</option>
-                    <option value="email">Email</option>
-                    <option value="tags">Tags</option>
-                    <option value="city">Cidade</option>
-                    <option value="total_orders">Total de Pedidos</option>
-                    <option value="source">Origem</option>
-                    <option value="custom">Campo personalizado</option>
-                  </select>
-                  <select value={(s as any).conditionOp || ''} onChange={e => onStyleChange('conditionOp', e.target.value)}
-                    className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
-                    <option value="">Operador...</option>
-                    <option value="equals">É igual a</option>
-                    <option value="not_equals">Não é igual a</option>
-                    <option value="contains">Contém</option>
-                    <option value="not_contains">Não contém</option>
-                    <option value="greater_than">Maior que</option>
-                    <option value="less_than">Menor que</option>
-                    <option value="is_set">Está preenchido</option>
-                    <option value="is_not_set">Está vazio</option>
-                  </select>
-                  {!['is_set', 'is_not_set'].includes((s as any).conditionOp || '') && (
-                    <input type="text" value={(s as any).conditionValue || ''} onChange={e => onStyleChange('conditionValue', e.target.value)}
-                      placeholder="Valor"
-                      className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* Repetição de conteúdo */}
-          <div className="border-t border-gray-100 pt-4">
-            <p className="text-[12px] font-medium text-gray-700 mb-1">Repetição de conteúdo</p>
-            <p className="text-[11px] text-gray-400 mb-3">Repetir esta seção para cada item de uma coleção.</p>
-            <div className="space-y-2">
-              <label className="flex items-center justify-between p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
-                <span className="text-xs text-gray-700">Ativar repetição</span>
-                <div className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${(s as any).repeatEnabled ? 'bg-brand-500' : 'bg-gray-200'}`}
-                  onClick={() => onStyleChange('repeatEnabled', !(s as any).repeatEnabled)}>
-                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${(s as any).repeatEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                </div>
-              </label>
-              {(s as any).repeatEnabled && (
-                <div className="space-y-2 p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <label className="text-[10px] text-gray-500 mb-1 block">Variável da coleção</label>
-                    <input type="text" value={(s as any).repeatVariable || ''} onChange={e => onStyleChange('repeatVariable', e.target.value)}
-                      placeholder="Ex: items, products, order.line_items"
-                      className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-500 mb-1 block">Máximo de repetições</label>
-                    <input type="number" value={(s as any).repeatMax || 10} onChange={e => onStyleChange('repeatMax', Number(e.target.value))}
-                      min={1} max={50}
-                      className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       )}
     </div>

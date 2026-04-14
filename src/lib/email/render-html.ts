@@ -55,6 +55,23 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
   const linkColor = ts?.link?.color || '#F97316'
   const linkUnderline = ts?.link?.underline !== false
 
+  // Device visibility: wrap any block in a visibility class
+  const visClass = p.visibility === 'desktop' ? 'worder-desktop-only' : p.visibility === 'mobile' ? 'worder-mobile-only' : ''
+
+  // Conditional logic: emit markers if block has condition
+  const conditionEnabled = p._condition_enabled && p._condition_field
+  const conditionMarker = conditionEnabled
+    ? `<!-- WORDER_CONDITION:${encodeURIComponent(JSON.stringify({ field: p._condition_field, operator: p._condition_op || 'equals', value: p._condition_value || '' }))} -->`
+    : ''
+  const conditionEndMarker = conditionEnabled ? '<!-- /WORDER_CONDITION -->' : ''
+
+  // Helper: wrap entire block in a visibility row
+  const wrapVis = (html: string): string => {
+    if (!visClass || !html) return html
+    return html.replace(/^(<tr)/, `$1 class="${visClass}"`)
+  }
+
+  const _render = (): string => {
   switch (block.type) {
     case 'text': {
       const bodyTs = ts?.body
@@ -71,8 +88,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       const linked = p.href ? `<a href="${p.href}" target="_blank" style="text-decoration:none;display:block;line-height:0;font-size:0;">${img}</a>` : img
       const blockBg = p.blockBgColor ? `background-color:${p.blockBgColor};` : ''
       const blockPadStyle = p.blockPadding ? `padding:${p.blockPadding.top || 0}px ${p.blockPadding.right || 0}px ${p.blockPadding.bottom || 0}px ${p.blockPadding.left || 0}px;` : ''
-      const vis = p.visibility === 'desktop' ? ' class="worder-desktop-only"' : p.visibility === 'mobile' ? ' class="worder-mobile-only"' : ''
-      return `<tr${vis}><td style="padding:${blockPad};text-align:${p.align || 'center'};line-height:0;font-size:0;${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}${blockBg}${blockPadStyle}">${linked}</td></tr>`
+      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};line-height:0;font-size:0;${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}${blockBg}${blockPadStyle}">${linked}</td></tr>`
     }
 
     case 'button':
@@ -161,8 +177,35 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${p.title ? `<p style="margin:0 0 16px;font-size:18px;font-weight:bold;color:#111827;text-align:center;font-family:${font};">${p.title}</p>` : ''}${productsHtml}</td></tr>`
     }
 
-    case 'abandoned-cart':
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#FFFBEB'};font-family:${font};"><p style="margin:0 0 4px;font-size:${p.titleFontSize || 22}px;font-weight:bold;color:${p.titleColor || '#111827'};text-align:center;">${p.title || ''}</p><p style="margin:0 0 20px;font-size:${p.subtitleFontSize || 14}px;color:${p.subtitleColor || '#6B7280'};text-align:center;">${p.subtitle || ''}</p><!-- WORDER_PRODUCT_BLOCK:cart_items:${p.maxItems || 3}:1:${p.showPrice !== false}:false:true:${encodeURIComponent(p.buttonText || 'Finalizar Compra')} --></td></tr>`
+    case 'abandoned-cart': {
+      // Encode all styling props as JSON for the resolver to generate styled HTML
+      const cartConfig = {
+        type: 'abandoned-cart',
+        layoutType: p.layoutType || 'image-left',
+        maxItems: p.maxItems || 2,
+        showImage: p.showImage !== false,
+        showName: p.showName !== false,
+        showDescription: p.showDescription !== false,
+        showPrice: p.showPrice !== false,
+        showOldPrice: p.showOldPrice !== false,
+        showButton: p.showButton !== false,
+        nameFontSize: p.nameFontSize || 14, nameColor: p.nameColor || '#111827', nameWeight: p.nameWeight || '600',
+        descFontSize: p.descFontSize || 13, descColor: p.descColor || '#6B7280',
+        priceFontSize: p.priceFontSize || 14, priceColor: p.priceColor || '#111827', priceWeight: p.priceWeight || '600',
+        oldPriceColor: p.oldPriceColor || '#9CA3AF',
+        buttonText: p.buttonText || 'Shop now', buttonHref: p.buttonHref || '{{checkout_url}}',
+        buttonColor: p.buttonColor || '#111827', buttonTextColor: p.buttonTextColor || '#FFFFFF',
+        buttonRadius: p.buttonRadius ?? 4, buttonFontSize: p.buttonFontSize || 14,
+        buttonAlign: p.buttonAlign || 'left',
+        buttonPaddingV: p.buttonPaddingV || 10, buttonPaddingH: p.buttonPaddingH || 24,
+        imageWidth: p.imageWidth || 200, imageBorderRadius: p.imageBorderRadius ?? 0,
+        separator: p.separator !== false, separatorColor: p.separatorColor || '#E5E7EB',
+        stackOnMobile: p.stackOnMobile !== false,
+        font,
+      }
+      const configJson = encodeURIComponent(JSON.stringify(cartConfig))
+      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}font-family:${font};"><!-- WORDER_CART_BLOCK:${configJson} --></td></tr>`
+    }
 
     case 'coupon': {
       const cpv = p.codePaddingV ?? 10
@@ -251,10 +294,21 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     default:
       return ''
   }
+  } // end _render
+  const rendered = wrapVis(_render())
+  return conditionMarker ? conditionMarker + rendered + conditionEndMarker : rendered
 }
 
 function renderSection(section: EmailSection, font: string, contentWidth: number, contentBg: string, settings?: EmailDocument['settings'], isFirst = false, isLast = false): string {
   const s = section.styles
+  // Device visibility: if both hidden, skip section entirely
+  const showDesktop = (s as any).showOnDesktop !== false
+  const showMobile = (s as any).showOnMobile !== false
+  if (!showDesktop && !showMobile) return ''
+
+  // Add visibility CSS class to section wrapper
+  const visClass = !showDesktop ? ' class="worder-desktop-hide"' : !showMobile ? ' class="worder-mobile-hide"' : ''
+
   const sectionPad = pad(s.padding)
   const sectionBg = s.backgroundColor || ''
   // Respect contentColorMode: 'auto' uses doc default, 'custom' uses section color, 'none' = transparent
@@ -282,7 +336,7 @@ function renderSection(section: EmailSection, font: string, contentWidth: number
   // Content = centered table with content bg
   return `
 <!-- Section -->
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"${sectionBg ? ` style="background-color:${sectionBg};"` : ''}>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"${visClass}${sectionBg ? ` style="background-color:${sectionBg};"` : ''}>
   <tr>
     <td align="center" style="padding:0;">
       <!--[if mso]><table role="presentation" cellspacing="0" cellpadding="0" border="0" width="${contentWidth}" align="center"><tr><td><![endif]-->
@@ -320,9 +374,13 @@ img{-ms-interpolation-mode:bicubic;border:0;height:auto;line-height:100%;outline
 body{margin:0;padding:0;width:100%!important}
 a{color:${s.textStyles?.link?.color || '#F97316'};${s.textStyles?.link?.underline !== false ? 'text-decoration:underline;' : 'text-decoration:none;'}}
 .worder-mobile-only{display:none!important;max-height:0;overflow:hidden}
+.worder-mobile-hide{} /* visible on desktop by default */
+.worder-desktop-hide{display:none!important;mso-hide:all;max-height:0;overflow:hidden}
 @media only screen and (max-width:620px){
   .worder-desktop-only{display:none!important;max-height:0;overflow:hidden}
   .worder-mobile-only{display:table-row!important;max-height:none!important}
+  .worder-mobile-hide{display:none!important;max-height:0;overflow:hidden}
+  .worder-desktop-hide{display:table!important;max-height:none!important}
   .email-container{width:100%!important;max-width:100%!important}
   .worder-section-stack td{display:block!important;width:100%!important}
   .worder-countdown-wrap td{padding:2px!important}

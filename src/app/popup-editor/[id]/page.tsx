@@ -10,7 +10,7 @@ import {
   ChevronDown, ChevronRight, GripVertical, Users, CalendarDays, Target, Power,
   AtSign, ShieldCheck, Phone, TextCursorInput, User, Calendar,
   CircleDot, CheckSquare, Type, MousePointerClick, ImageIcon, Minus,
-  GripHorizontal, Tag, Clock, Eye, Settings, Palette, Upload,
+  GripHorizontal, Tag, Clock, Eye, Settings, Palette, Upload, LayoutGrid,
 } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -24,18 +24,62 @@ interface PopupDesign {
   fieldStyles?: Record<string, any>
   styles: {
     width: number; backgroundColor: string; borderRadius: number; padding: number; fontFamily: string
+    paddingTop?: number; paddingRight?: number; paddingBottom?: number; paddingLeft?: number
     overlay: { enabled: boolean; color: string; opacity: number; closeOnClick: boolean }
     closeButton: { show: boolean; color: string; size: number }
     sideImage: { enabled: boolean; src: string; position: 'left' | 'right'; width: number }
     animation: 'fade' | 'slide-up' | 'none'
   }
   behavior: {
-    display: { trigger: 'time_delay' | 'scroll' | 'exit_intent' | 'click'; delay: number; scrollPercent: number }
-    visibility: { devices: 'all' | 'desktop' | 'mobile'; visitorType: 'all' | 'new' | 'returning'; hideFromSubscribers: boolean }
-    frequency: { showAfterDays: number; stopAfterSubmission: boolean }
-    targeting: { pages: 'all' | 'specific'; pageUrls: string[]; excludeUrls: string[] }
+    display: {
+      // Legacy kept for backwards compat
+      trigger?: 'time_delay' | 'scroll' | 'exit_intent' | 'click'
+      // New Klaviyo-style independent toggles
+      exitEnabled?: boolean
+      timeEnabled?: boolean
+      delay: number
+      scrollEnabled?: boolean
+      scrollPercent: number
+      pageViewEnabled?: boolean
+      pageViewCount?: number
+      matchAll?: boolean // true = AND, false = OR
+    }
+    visibility: {
+      devices: 'all' | 'desktop' | 'mobile'
+      visitorType: 'all' | 'new' | 'returning'
+      hideFromSubscribers: boolean
+    }
+    frequency: {
+      showAfterDays: number
+      stopAfterSubmission: boolean
+    }
+    targeting: {
+      pages: 'all' | 'specific'
+      pageUrls: string[]
+      excludeUrls: string[]
+    }
     scheduling: { enabled: boolean; startDate: string; endDate: string }
     audience: { tags: string[]; listId: string; doubleOptIn: boolean }
+    // NEW Klaviyo-style targeting extensions
+    urls?: {
+      includeEnabled: boolean
+      includeUrls: string[]
+      excludeEnabled: boolean
+      excludeUrls: string[]
+    }
+    location?: {
+      includeEnabled: boolean
+      includeCountries: string[]
+      excludeEnabled: boolean
+      excludeCountries: string[]
+    }
+    utm?: {
+      storeOnConsent: boolean
+      filterEnabled: boolean
+      filters: Array<{ param: string; value: string }>
+    }
+    clickOutsideClose?: { desktop: boolean; mobile: boolean }
+    customTrigger?: boolean
   }
 }
 
@@ -118,9 +162,9 @@ const defaultProps: Record<string, Record<string, any>> = {
   'name-input': { ...INPUT_BASE_DEFAULTS, placeholder: 'Seu nome', label: 'Nome', mapTo: 'first_name' },
   'text-input': { ...INPUT_BASE_DEFAULTS, placeholder: 'Digite aqui...', label: 'Campo', showLabel: true, mapTo: 'custom' },
   'date-input': { ...INPUT_BASE_DEFAULTS, label: 'Data de nascimento', showLabel: true, mapTo: 'birthday' },
-  dropdown: { label: 'Selecione', options: ['Opção 1', 'Opção 2'], placeholder: 'Escolha...' },
-  radio: { label: 'Escolha', options: ['Opção 1', 'Opção 2'], layout: 'vertical' },
-  checkbox: { label: 'Escolha', options: ['Opção 1', 'Opção 2'] },
+  dropdown: { label: 'Selecione', options: ['Opcao 1', 'Opcao 2'], placeholder: 'Escolha...', showLabel: true, mapTo: 'custom', mapToCustom: '' },
+  radio: { label: 'Escolha', options: ['Opcao 1', 'Opcao 2'], layout: 'vertical', showLabel: true, mapTo: 'custom', mapToCustom: '' },
+  checkbox: { label: 'Escolha', options: ['Opcao 1', 'Opcao 2'], showLabel: true, mapTo: 'custom', mapToCustom: '' },
   'legal-consent': { text: 'Aceito receber comunicações e concordo com a política de privacidade.', required: true, fontSize: 12, color: '#6B7280' },
   text: { content: 'Ganhe 10% de desconto!', fontSize: 28, color: '#111827', fontWeight: 'bold', align: 'center', tag: 'h2', lineHeight: 1.3 },
   button: { text: 'QUERO MEU DESCONTO', bgColor: '#F97316', textColor: '#fff', fontSize: 15, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 14, paddingH: 28 },
@@ -149,34 +193,85 @@ const defaultDesign: PopupDesign = {
     animation: 'fade',
   },
   behavior: {
-    display: { trigger: 'time_delay', delay: 5, scrollPercent: 50 },
+    display: {
+      exitEnabled: false,
+      timeEnabled: true,
+      delay: 5,
+      scrollEnabled: false,
+      scrollPercent: 30,
+      pageViewEnabled: false,
+      pageViewCount: 3,
+      matchAll: false,
+    },
     visibility: { devices: 'all', visitorType: 'all', hideFromSubscribers: false },
     frequency: { showAfterDays: 1, stopAfterSubmission: true },
     targeting: { pages: 'all', pageUrls: [], excludeUrls: [] },
     scheduling: { enabled: false, startDate: '', endDate: '' },
     audience: { tags: [], listId: '', doubleOptIn: false },
+    urls: { includeEnabled: false, includeUrls: [], excludeEnabled: false, excludeUrls: [] },
+    location: { includeEnabled: false, includeCountries: [], excludeEnabled: false, excludeCountries: [] },
+    utm: { storeOnConsent: false, filterEnabled: false, filters: [] },
+    clickOutsideClose: { desktop: true, mobile: true },
+    customTrigger: false,
   },
 }
 
 // ── Small helpers ──────────────────────────────────────────────────────────────
-function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+function Section({ title, children, defaultOpen = false, noPadding = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean; noPadding?: boolean }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="border-b border-gray-100">
-      <button onClick={() => setOpen(!open)} className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
-        {title} {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+    <div className="border-b border-gray-100 last:border-b-0">
+      <button onClick={() => setOpen(!open)} className="flex items-center justify-between w-full px-4 py-3.5 text-[13px] font-semibold text-gray-900 hover:bg-gray-50 transition-colors">
+        <span>{title}</span>
+        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? '' : '-rotate-90'}`} />
       </button>
-      {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
+      {open && <div className={noPadding ? 'pb-3' : 'px-4 pb-4 space-y-3'}>{children}</div>}
     </div>
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block text-xs text-gray-500"><span className="mb-1 block">{label}</span>{children}</label>
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+  return (
+    <div>
+      <label className="block text-[12px] font-medium text-gray-700">{label}</label>
+      {hint && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{hint}</p>}
+      <div className="mt-1">{children}</div>
+    </div>
+  )
 }
 
-const inp = "w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400"
-const sel = inp + " bg-white"
+// Klaviyo-style toggle (label left, switch right)
+function ToggleRow({ label, checked, onChange, hint }: { label: string; checked: boolean; onChange: (v: boolean) => void; hint?: string }) {
+  return (
+    <div className="flex items-start gap-3 py-1">
+      <div className="flex-1 min-w-0">
+        <p className="text-[13px] text-gray-800 leading-tight">{label}</p>
+        {hint && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{hint}</p>}
+      </div>
+      <button type="button" onClick={() => onChange(!checked)}
+        className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-brand-500' : 'bg-gray-200'}`}>
+        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+      </button>
+    </div>
+  )
+}
+
+// Panel-level color field
+function PanelColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <Field label={label}>
+      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500/20">
+        <input type="text" className="flex-1 px-3 py-2 text-[13px] font-mono text-gray-800 outline-none" value={value || ''} onChange={e => onChange(e.target.value)} placeholder="#000000" />
+        <label className="relative w-9 h-9 border-l border-gray-200 cursor-pointer flex-shrink-0" style={{ backgroundColor: value || '#FFFFFF' }}>
+          <input type="color" value={value || '#000000'} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+        </label>
+      </div>
+    </Field>
+  )
+}
+
+const inp = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-colors"
+const sel = inp + " bg-white cursor-pointer"
 
 // Helper: compute input styles from props (used by preview AND public script logic)
 function cornerPx(corners: string, cornerRadius: number) {
@@ -284,9 +379,11 @@ function BlockPreview({ block }: { block: Block }) {
   const inputStyle = "w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white placeholder-gray-400 outline-none"
   const phCssVar = { ['--worder-ph-color' as any]: p.placeholderColor || '#9CA3AF' } as React.CSSProperties
   switch (block.type) {
-    case 'text': return <div contentEditable suppressContentEditableWarning
-      onBlur={e => { const newText = e.currentTarget.textContent || ''; if (newText !== p.content) { block.props.content = newText } }}
-      style={{ ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit', outline: 'none', cursor: 'text', minHeight: '1em' }}>{p.content}</div>
+    case 'text': {
+      const Tag = (p.tag === 'h1' || p.tag === 'h2' || p.tag === 'h3') ? p.tag : 'p' as any
+      return <Tag
+        style={{ ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textDecoration: p.textDecoration || 'none', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit', minHeight: '1em', margin: 0, marginBottom: blockStyle.marginBottom ?? 8 }}>{p.content}</Tag>
+    }
     case 'email':
       return <InputBlockPreview block={block}><><InputPreviewStyles /><input readOnly placeholder={p.placeholder || 'Seu email'} className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
     case 'phone':
@@ -299,26 +396,65 @@ function BlockPreview({ block }: { block: Block }) {
     case 'date-input':
       return <InputBlockPreview block={block}><><InputPreviewStyles /><input type="date" className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
     case 'button':
-      return <div style={{ ...blockStyle, textAlign: p.fullWidth ? undefined : (p.align || 'center') as any }}><button style={{ backgroundColor: p.bgColor || '#F97316', color: p.textColor || '#fff', borderRadius: p.borderRadius || 8, width: p.fullWidth ? '100%' : 'auto', fontSize: p.fontSize || 15, fontWeight: 700, padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`, border: 'none', cursor: 'pointer' }}>{p.text || 'Enviar'}</button></div>
-    case 'image':
-      return <div style={{ ...blockStyle, textAlign: (p.align || 'center') as any, padding: p.padding || 0 }}>{p.src ? <img src={p.src} alt={p.alt} style={{ width: `${p.imgWidth || 100}%`, maxHeight: p.maxHeight || 300, objectFit: 'contain', borderRadius: p.borderRadius || 0, display: 'inline-block' }} /> : <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-300"><ImageIcon className="w-10 h-10" /></div>}</div>
+      return <div style={{ ...blockStyle, textAlign: p.fullWidth ? undefined : (p.align || 'center') as any }}>
+        <button
+          onMouseEnter={e => { if (p.hoverColor) (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.hoverColor }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.bgColor || '#F97316' }}
+          style={{
+            backgroundColor: p.bgColor || '#F97316', color: p.textColor || '#fff',
+            borderRadius: p.borderRadius || 8, width: p.fullWidth ? '100%' : 'auto',
+            fontSize: p.fontSize || 15, fontWeight: 700,
+            padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`,
+            border: p.btnBorderWidth ? `${p.btnBorderWidth}px solid ${p.btnBorderColor || '#E5E7EB'}` : 'none',
+            cursor: 'pointer', transition: 'background-color 0.2s',
+          }}>{p.text || 'Enviar'}</button>
+      </div>
+    case 'image': {
+      const imgEl = p.src
+        ? <img src={p.src} alt={p.alt || ''} style={{ width: `${p.imgWidth || 100}%`, maxHeight: p.maxHeight || 300, objectFit: 'contain', borderRadius: p.borderRadius || 0, display: 'inline-block' }} />
+        : <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-300"><ImageIcon className="w-10 h-10" /></div>
+      return <div style={{ ...blockStyle, textAlign: (p.align || 'center') as any, padding: p.padding || 0 }}>
+        {p.href ? <a href={p.href} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block' }}>{imgEl}</a> : imgEl}
+      </div>
+    }
     case 'spacer': return <div style={{ ...blockStyle, height: p.height || 24 }} />
     case 'line': return <div style={blockStyle}><hr style={{ border: 'none', borderTop: `${p.thickness || 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'}`, margin: 0 }} /></div>
     case 'coupon':
-      return <div style={{ ...blockStyle, padding: '16px', border: `2px dashed ${p.borderColor || '#F97316'}`, borderRadius: 8, textAlign: 'center', background: p.bgColor || '#FFF7ED' }}><p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 4px' }}>{p.description}</p><p style={{ fontSize: p.fontSize || 20, fontWeight: 700, color: '#F97316', letterSpacing: 2, margin: 0 }}>{p.code}</p></div>
+      return <div style={{ ...blockStyle, padding: '16px', border: `2px dashed ${p.borderColor || '#F97316'}`, borderRadius: p.borderRadius ?? 8, textAlign: 'center', background: p.bgColor || '#FFF7ED' }}>
+        <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 4px' }}>{p.description}</p>
+        <p onClick={() => { navigator.clipboard?.writeText(p.code || ''); }}
+          style={{ fontSize: p.fontSize || 20, fontWeight: 700, color: p.codeColor || '#F97316', letterSpacing: 2, margin: 0, cursor: 'pointer' }}
+          title="Clique para copiar">{p.code}</p>
+      </div>
     case 'countdown': {
       const vals = ['03', '12', '45', '30']
       const lbls = p.labels || { days: 'DIAS', hours: 'HORAS', minutes: 'MIN', seconds: 'SEG' }
       return <div style={{ ...blockStyle, textAlign: 'center', padding: '16px', backgroundColor: p.boxColor || '#1F2937', borderRadius: 8 }}><div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>{vals.map((v, i) => (<span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{i > 0 && <span style={{ color: p.labelColor || '#9CA3AF', fontSize: 20, fontWeight: 700 }}>:</span>}<span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}><span style={{ fontSize: p.fontSize || 28, fontWeight: 800, color: p.numberColor || '#FFFFFF', lineHeight: 1 }}>{v}</span><span style={{ fontSize: 9, color: p.labelColor || '#9CA3AF', marginTop: 4, letterSpacing: 1 }}>{[lbls.days, lbls.hours, lbls.minutes, lbls.seconds][i]}</span></span></span>))}</div></div>
     }
     case 'legal-consent':
-      return <div style={blockStyle}><label className="flex items-start gap-2" style={{ fontSize: p.fontSize || 12, color: p.color || '#6B7280', lineHeight: 1.4 }}><input type="checkbox" className="mt-0.5 flex-shrink-0" /><span>{p.text}</span></label></div>
+      return <div style={blockStyle}><label className="flex items-start gap-2" style={{ fontSize: p.fontSize || 12, color: p.color || '#6B7280', lineHeight: p.lineHeight || 1.4 }}><input type="checkbox" className="mt-0.5 flex-shrink-0" /><span dangerouslySetInnerHTML={{ __html: (p.text || '').replace(/<a /g, `<a style="color:${p.linkColor || '#F97316'};text-decoration:underline;" `) }} /></label></div>
     case 'dropdown':
-      return <div style={blockStyle}><select className={inputStyle}><option>{p.placeholder || p.label}</option>{(p.options || []).map((o: string) => <option key={o}>{o}</option>)}</select></div>
+      return <div style={blockStyle}>
+        {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1">{p.label}</label>}
+        <select className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white text-gray-600 outline-none">
+          <option>{p.placeholder || 'Escolha...'}</option>
+          {(p.options || []).map((o: string) => <option key={o}>{o}</option>)}
+        </select>
+      </div>
     case 'radio':
-      return <div style={blockStyle}><div style={{ display: 'flex', flexDirection: p.layout === 'horizontal' ? 'row' : 'column', gap: p.layout === 'horizontal' ? 12 : 6 }}>{(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="text-brand-500" />{o}</label>)}</div></div>
+      return <div style={blockStyle}>
+        {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1.5">{p.label}</label>}
+        <div style={{ display: 'flex', flexDirection: p.layout === 'horizontal' ? 'row' : 'column', gap: p.layout === 'horizontal' ? 12 : 8 }}>
+          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="accent-brand-500" />{o}</label>)}
+        </div>
+      </div>
     case 'checkbox':
-      return <div style={blockStyle}><div className="space-y-2">{(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="rounded text-brand-500" />{o}</label>)}</div></div>
+      return <div style={blockStyle}>
+        {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1.5">{p.label}</label>}
+        <div className="space-y-2">
+          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="checkbox" className="rounded accent-brand-500" />{o}</label>)}
+        </div>
+      </div>
     default: return <div className="text-xs text-gray-400 p-2">[{block.type}]</div>
   }
 }
@@ -687,27 +823,35 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 
       case 'button':
         return <>
-          <Field label="Ação do botão">
+          <Field label="Acao do botao">
             <select className={sel} value={p.action || 'submit'} onChange={e => up('action', e.target.value)}>
-              <option value="submit">Enviar formulário</option><option value="url">Abrir link</option><option value="next-step">Próxima etapa</option><option value="close">Fechar popup</option>
+              <option value="submit">Enviar formulario</option><option value="url">Abrir link</option><option value="next-step">Proxima etapa</option><option value="close">Fechar popup</option>
             </select>
           </Field>
           {p.action === 'url' && <Field label="URL"><input className={inp} value={p.url || ''} onChange={e => up('url', e.target.value)} placeholder="https://" /></Field>}
-          <Field label="Texto do botão"><input className={inp} value={p.text || ''} onChange={e => up('text', e.target.value)} /></Field>
+          <Field label="Texto do botao"><input className={inp} value={p.text || ''} onChange={e => up('text', e.target.value)} /></Field>
+
+          <PanelColorField label="Cor de fundo" value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
+          <PanelColorField label="Cor do texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
+          <PanelColorField label="Cor ao passar o mouse" value={p.hoverColor || ''} onChange={v => up('hoverColor', v)} />
+
           <div className="grid grid-cols-2 gap-2">
-            <ColorField label="Cor fundo" value={p.bgColor || '#111827'} onChange={v => up('bgColor', v)} />
-            <ColorField label="Cor texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
+            <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 15} onChange={e => up('fontSize', +e.target.value)} min={10} max={30} /></Field>
+            <Field label="Raio borda"><input type="number" className={inp} value={p.borderRadius || 8} onChange={e => up('borderRadius', +e.target.value)} min={0} max={50} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 15} onChange={e => up('fontSize', +e.target.value)} /></Field>
-            <Field label="Raio borda"><input type="number" className={inp} value={p.borderRadius || 8} onChange={e => up('borderRadius', +e.target.value)} /></Field>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Padding V"><input type="number" className={inp} value={p.paddingV || 14} onChange={e => up('paddingV', +e.target.value)} min={4} max={40} /></Field>
-            <Field label="Padding H"><input type="number" className={inp} value={p.paddingH || 28} onChange={e => up('paddingH', +e.target.value)} min={4} max={60} /></Field>
+            <Field label="Padding vertical"><input type="number" className={inp} value={p.paddingV || 14} onChange={e => up('paddingV', +e.target.value)} min={4} max={40} /></Field>
+            <Field label="Padding horizontal"><input type="number" className={inp} value={p.paddingH || 28} onChange={e => up('paddingH', +e.target.value)} min={4} max={60} /></Field>
           </div>
           <Field label="Alinhamento"><AlignButtons value={p.fullWidth ? 'full' : (p.align || 'full')} onChange={v => { up('fullWidth', v === 'full'); if (v !== 'full') up('align', v) }} /></Field>
-          <ColorField label="Cor hover" value={p.hoverColor || ''} onChange={v => up('hoverColor', v)} />
+
+          <div className="pt-2 border-t border-gray-100">
+            <p className="text-[12px] font-medium text-gray-700 mb-2">Borda do botao</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Largura"><input type="number" className={inp} value={p.btnBorderWidth ?? 0} onChange={e => up('btnBorderWidth', +e.target.value)} min={0} max={5} /></Field>
+              <PanelColorField label="Cor" value={p.btnBorderColor || '#E5E7EB'} onChange={v => up('btnBorderColor', v)} />
+            </div>
+          </div>
         </>
 
       case 'image':
@@ -760,10 +904,46 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 
       case 'dropdown': case 'radio': case 'checkbox':
         return <>
+          <Field label="Campo do perfil" hint="Onde salvar a resposta no contato.">
+            <select className={sel} value={p.mapTo || 'custom'} onChange={e => up('mapTo', e.target.value)}>
+              <option value="custom">Campo personalizado</option>
+              {PROFILE_FIELDS.filter(f => f.value !== 'custom').map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          </Field>
+          {p.mapTo === 'custom' && (
+            <Field label="Nome do campo"><input className={inp} value={p.mapToCustom || p.label || ''} onChange={e => up('mapToCustom', e.target.value)} placeholder="ex: preferencia" /></Field>
+          )}
+          {block.type === 'dropdown' && (
+            <Field label="Placeholder"><input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} placeholder="Escolha uma opcao..." /></Field>
+          )}
           <Field label="Label"><input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} /></Field>
-          <Field label="Opções (uma por linha)"><textarea className={inp} rows={4} value={(p.options || []).join('\n')} onChange={e => up('options', e.target.value.split('\n').filter(Boolean))} /></Field>
-          <Toggle label="Campo obrigatório" checked={p.required || false} onChange={v => up('required', v)} />
-          {block.type === 'radio' && <Field label="Direção">
+          <ToggleRow label="Mostrar label" checked={p.showLabel !== false} onChange={v => up('showLabel', v)} />
+          <Field label="Opcoes" hint="Uma opcao por linha. Arraste para reordenar.">
+            <div className="space-y-1">
+              {(p.options || []).map((opt: string, i: number) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-gray-300 w-4 text-center flex-shrink-0">{i + 1}</span>
+                  <input className={inp + ' flex-1'} value={opt} onChange={e => {
+                    const next = [...(p.options || [])]; next[i] = e.target.value; up('options', next)
+                  }} />
+                  <button onClick={() => { const next = [...(p.options || [])]; if (i > 0) { [next[i-1], next[i]] = [next[i], next[i-1]]; up('options', next) } }}
+                    className="p-1 text-gray-300 hover:text-gray-600" title="Mover para cima">
+                    <ChevronDown className="w-3 h-3 rotate-180" />
+                  </button>
+                  <button onClick={() => up('options', (p.options || []).filter((_: any, j: number) => j !== i))}
+                    className="p-1 text-gray-300 hover:text-red-500" title="Remover">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              <button onClick={() => up('options', [...(p.options || []), `Opcao ${(p.options || []).length + 1}`])}
+                className="w-full py-1.5 text-[11px] font-medium text-brand-600 border border-dashed border-brand-300 rounded-lg hover:bg-brand-50">
+                + Adicionar opcao
+              </button>
+            </div>
+          </Field>
+          <ToggleRow label="Campo obrigatorio" checked={p.required || false} onChange={v => up('required', v)} />
+          {block.type === 'radio' && <Field label="Direcao">
             <select className={sel} value={p.layout || 'vertical'} onChange={e => up('layout', e.target.value)}>
               <option value="vertical">Vertical</option><option value="horizontal">Horizontal</option>
             </select>
@@ -772,25 +952,38 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 
       case 'legal-consent':
         return <>
-          <Field label="Texto de consentimento"><textarea className={inp} rows={3} value={p.text || ''} onChange={e => up('text', e.target.value)} /></Field>
-          <Toggle label="Obrigatório" checked={p.required !== false} onChange={v => up('required', v)} />
-          <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 12} onChange={e => up('fontSize', +e.target.value)} /></Field>
-          <ColorField label="Cor do texto" value={p.color || '#6B7280'} onChange={v => up('color', v)} />
+          <Field label="Texto de consentimento" hint="Suporta HTML basico. Use &lt;a href=&quot;url&quot;&gt;link&lt;/a&gt; para links.">
+            <textarea className={inp} rows={4} value={p.text || ''} onChange={e => up('text', e.target.value)}
+              placeholder='Aceito receber comunicacoes e concordo com a <a href="/politica">politica de privacidade</a>.' />
+          </Field>
+          <ToggleRow label="Obrigatorio" checked={p.required !== false} onChange={v => up('required', v)} />
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 12} onChange={e => up('fontSize', +e.target.value)} min={10} max={18} /></Field>
+            <Field label="Altura linha">
+              <select className={sel} value={String(p.lineHeight || 1.4)} onChange={e => up('lineHeight', +e.target.value)}>
+                <option value="1.2">1.2</option><option value="1.4">1.4</option><option value="1.6">1.6</option><option value="1.8">1.8</option>
+              </select>
+            </Field>
+          </div>
+          <PanelColorField label="Cor do texto" value={p.color || '#6B7280'} onChange={v => up('color', v)} />
+          <PanelColorField label="Cor dos links" value={p.linkColor || '#F97316'} onChange={v => up('linkColor', v)} />
         </>
 
       case 'coupon':
         return <>
-          <Field label="Código do cupom"><input className={inp} value={p.code || ''} onChange={e => up('code', e.target.value)} /></Field>
-          <Field label="Descrição"><input className={inp} value={p.description || ''} onChange={e => up('description', e.target.value)} /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <ColorField label="Cor fundo" value={p.bgColor || '#FFF7ED'} onChange={v => up('bgColor', v)} />
-            <ColorField label="Cor borda" value={p.borderColor || '#F97316'} onChange={v => up('borderColor', v)} />
-          </div>
-          <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 20} onChange={e => up('fontSize', +e.target.value)} /></Field>
+          <Field label="Codigo do cupom"><input className={inp} value={p.code || ''} onChange={e => up('code', e.target.value)} /></Field>
+          <Field label="Descricao"><input className={inp} value={p.description || ''} onChange={e => up('description', e.target.value)} /></Field>
+          <PanelColorField label="Cor do fundo" value={p.bgColor || '#FFF7ED'} onChange={v => up('bgColor', v)} />
+          <PanelColorField label="Cor da borda" value={p.borderColor || '#F97316'} onChange={v => up('borderColor', v)} />
+          <PanelColorField label="Cor do codigo" value={p.codeColor || '#F97316'} onChange={v => up('codeColor', v)} />
+          <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 20} onChange={e => up('fontSize', +e.target.value)} min={14} max={36} /></Field>
+          <Field label="Raio borda"><input type="number" className={inp} value={p.borderRadius ?? 8} onChange={e => up('borderRadius', +e.target.value)} min={0} max={20} /></Field>
         </>
 
       case 'spacer':
-        return <Field label="Altura (px)"><input type="range" min={4} max={80} value={p.height || 16} onChange={e => up('height', +e.target.value)} className="w-full" /><span className="text-xs text-gray-400">{p.height || 16}px</span></Field>
+        return <Field label={`Altura: ${p.height || 16}px`}>
+          <input type="range" min={4} max={120} value={p.height || 16} onChange={e => up('height', +e.target.value)} className="w-full accent-brand-500" />
+        </Field>
 
       case 'line':
         return <>
@@ -955,107 +1148,253 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 }
 
 // ── Behavior Panel ─────────────────────────────────────────────────────────────
-function BehaviorPanel({ beh, onChange }: { beh: PopupDesign['behavior']; onChange: (b: PopupDesign['behavior']) => void }) {
-  const set = (key: string, val: any) =>
-    onChange({ ...beh, [key]: { ...(beh as any)[key], ...val } })
-  const d = beh.display as any
-  const timeOn = d.trigger === 'time_delay' || d.timeEnabled || false
-  const scrollOn = d.trigger === 'scroll' || d.scrollEnabled || false
-  const exitOn = d.trigger === 'exit_intent' || d.exitEnabled || false
+function BehaviorPanel({ beh, onChange, formId }: { beh: PopupDesign['behavior']; onChange: (b: PopupDesign['behavior']) => void; formId: string }) {
+  const [tab, setTab] = useState<'display' | 'targeting'>('display')
+  const setG = (key: keyof PopupDesign['behavior'], val: any) =>
+    onChange({ ...beh, [key]: { ...((beh as any)[key] || {}), ...val } })
+
+  const d: any = beh.display || {}
+  const freq = beh.frequency
+  const vis = beh.visibility
+  const urls = beh.urls || { includeEnabled: false, includeUrls: [], excludeEnabled: false, excludeUrls: [] }
+  const loc = beh.location || { includeEnabled: false, includeCountries: [], excludeEnabled: false, excludeCountries: [] }
+  const utm = beh.utm || { storeOnConsent: false, filterEnabled: false, filters: [] }
+  const cox = beh.clickOutsideClose || { desktop: true, mobile: true }
+  const sched = beh.scheduling
+
+  const timeOn = d.timeEnabled ?? (d.trigger === 'time_delay')
+  const scrollOn = d.scrollEnabled ?? (d.trigger === 'scroll')
+  const exitOn = d.exitEnabled ?? (d.trigger === 'exit_intent')
+  const pvOn = d.pageViewEnabled || false
+
+  const [copiedSnippet, setCopiedSnippet] = useState(false)
+  const snippet = `window._worderOnsite = window._worderOnsite || [];\nwindow._worderOnsite.push(['openForm', '${formId}']);`
+
   return (
     <div>
-      <Section title="Exibição" defaultOpen>
-        <p className="text-xs text-gray-500 mb-3">Decidir quando mostrar este formulário ao visitante:</p>
-        <div className="space-y-3">
-          <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 hover:border-gray-300 cursor-pointer transition-colors">
-            <input type="checkbox" checked={timeOn}
-              onChange={e => set('display', { timeEnabled: e.target.checked, trigger: e.target.checked ? 'time_delay' : beh.display.trigger })}
-              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-800">Tempo na página</p>
-              <p className="text-xs text-gray-400 mt-0.5">Tempo que o visitante precisa permanecer.</p>
+      {/* Sub-tabs: Display | Targeting */}
+      <div className="flex border-b border-gray-200">
+        <button onClick={() => setTab('display')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${tab === 'display' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
+          Exibicao
+        </button>
+        <button onClick={() => setTab('targeting')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${tab === 'targeting' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
+          Segmentacao
+        </button>
+      </div>
+
+      {tab === 'display' ? (
+        <div>
+          <Section title="Quando exibir" defaultOpen>
+            <ToggleRow label="Quando o visitante estiver saindo da pagina" hint="Detecta movimento do mouse em direcao a barra de enderecos."
+              checked={exitOn} onChange={v => setG('display', { exitEnabled: v })} />
+
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="Apos tempo decorrido" hint="Tempo que o visitante precisa permanecer na pagina."
+                checked={timeOn} onChange={v => setG('display', { timeEnabled: v })} />
               {timeOn && (
-                <div className="flex items-center gap-2 mt-2">
-                  <input type="number" className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none" value={beh.display.delay} onChange={e => set('display', { delay: +e.target.value })} />
-                  <span className="text-xs text-gray-400">segundos</span>
+                <div className="flex items-center gap-2 mt-2 ml-0">
+                  <input type="number" min={0} max={300} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                    value={d.delay ?? 5} onChange={e => setG('display', { delay: +e.target.value })} />
+                  <span className="text-[12px] text-gray-500">segundos</span>
                 </div>
               )}
             </div>
-          </label>
-          <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 hover:border-gray-300 cursor-pointer transition-colors">
-            <input type="checkbox" checked={scrollOn}
-              onChange={e => set('display', { scrollEnabled: e.target.checked, trigger: e.target.checked ? 'scroll' : beh.display.trigger })}
-              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-800">Profundidade do scroll</p>
-              <p className="text-xs text-gray-400 mt-0.5">O quanto o visitante precisa rolar.</p>
+
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="Apos rolar uma certa quantidade" hint="Percentual de rolagem da pagina."
+                checked={scrollOn} onChange={v => setG('display', { scrollEnabled: v })} />
               {scrollOn && (
                 <div className="flex items-center gap-2 mt-2">
-                  <input type="number" className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none" value={beh.display.scrollPercent} onChange={e => set('display', { scrollPercent: +e.target.value })} />
-                  <span className="text-xs text-gray-400">%</span>
+                  <input type="number" min={0} max={100} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                    value={d.scrollPercent ?? 30} onChange={e => setG('display', { scrollPercent: +e.target.value })} />
+                  <span className="text-[12px] text-gray-500">% da pagina</span>
                 </div>
               )}
             </div>
-          </label>
-          <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 hover:border-gray-300 cursor-pointer transition-colors">
-            <input type="checkbox" checked={exitOn}
-              onChange={e => set('display', { exitEnabled: e.target.checked, trigger: e.target.checked ? 'exit_intent' : beh.display.trigger })}
-              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500" />
-            <div>
-              <p className="text-sm font-medium text-gray-800">Intenção de saída</p>
-              <p className="text-xs text-gray-400 mt-0.5">Exibir quando o visitante está prestes a sair da página.</p>
+
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="Apos visitar X paginas" hint="Numero minimo de paginas visitadas antes de exibir."
+                checked={pvOn} onChange={v => setG('display', { pageViewEnabled: v })} />
+              {pvOn && (
+                <div className="flex items-center gap-2 mt-2">
+                  <input type="number" min={1} max={50} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                    value={d.pageViewCount ?? 3} onChange={e => setG('display', { pageViewCount: +e.target.value })} />
+                  <span className="text-[12px] text-gray-500">paginas</span>
+                </div>
+              )}
             </div>
-          </label>
+
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="Exibir somente se TODAS as condicoes forem atendidas"
+                hint={d.matchAll ? 'Modo AND: todas as condicoes ativas precisam ser satisfeitas.' : 'Modo OR: qualquer condicao ativa dispara o popup.'}
+                checked={!!d.matchAll} onChange={v => setG('display', { matchAll: v })} />
+            </div>
+          </Section>
+
+          <Section title="Frequencia">
+            <ToggleRow label="Nao mostrar novamente se o formulario foi enviado"
+              checked={freq.stopAfterSubmission} onChange={v => setG('frequency', { stopAfterSubmission: v })} />
+            <div className="pt-2">
+              <Field label="Se o visitante fechar, mostrar novamente apos" hint="Numero de dias ate reaparecer.">
+                <div className="flex items-center gap-2">
+                  <input type="number" min={0} max={365} className={inp + ' w-24'}
+                    value={freq.showAfterDays} onChange={e => setG('frequency', { showAfterDays: +e.target.value })} />
+                  <span className="text-[12px] text-gray-500">dias</span>
+                </div>
+              </Field>
+            </div>
+          </Section>
+
+          <Section title="Dispositivos">
+            <div className="space-y-2">
+              {[
+                { value: 'all', label: 'Todos os dispositivos', icon: Monitor },
+                { value: 'desktop', label: 'Somente desktop', icon: Monitor },
+                { value: 'mobile', label: 'Somente mobile', icon: Smartphone },
+              ].map(opt => (
+                <label key={opt.value} className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${vis.devices === opt.value ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <input type="radio" name="devices" value={opt.value} checked={vis.devices === opt.value}
+                    onChange={() => setG('visibility', { devices: opt.value })}
+                    className="accent-brand-500" />
+                  <opt.icon className="w-4 h-4 text-gray-500" />
+                  <span className="text-[13px] text-gray-800">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+          </Section>
+
+          <Section title="Fechar ao clicar fora">
+            <ToggleRow label="No desktop" checked={cox.desktop} onChange={v => setG('clickOutsideClose', { desktop: v })} />
+            <ToggleRow label="No mobile" checked={cox.mobile} onChange={v => setG('clickOutsideClose', { mobile: v })} />
+          </Section>
+
+          <Section title="Agendamento">
+            <ToggleRow label="Agendar periodo de exibicao" checked={sched.enabled} onChange={v => setG('scheduling', { enabled: v })} />
+            {sched.enabled && (
+              <div className="space-y-3 mt-3">
+                <Field label="Inicio">
+                  <input type="datetime-local" className={inp} value={sched.startDate} onChange={e => setG('scheduling', { startDate: e.target.value })} />
+                </Field>
+                <Field label="Fim">
+                  <input type="datetime-local" className={inp} value={sched.endDate} onChange={e => setG('scheduling', { endDate: e.target.value })} />
+                </Field>
+              </div>
+            )}
+          </Section>
+
+          <Section title="Gatilho personalizado">
+            <ToggleRow label="Permitir abrir via JavaScript" hint="Chame window._worderOnsite.push(['openForm', '...']) no seu site."
+              checked={!!beh.customTrigger} onChange={v => onChange({ ...beh, customTrigger: v })} />
+            {beh.customTrigger && (
+              <div className="mt-3">
+                <div className="relative">
+                  <pre className="bg-gray-900 text-gray-100 text-[11px] font-mono p-3 rounded-lg overflow-x-auto leading-relaxed">{snippet}</pre>
+                  <button onClick={() => { navigator.clipboard?.writeText(snippet).catch(() => {}); setCopiedSnippet(true); setTimeout(() => setCopiedSnippet(false), 2000) }}
+                    className="absolute top-2 right-2 px-2 py-1 text-[10px] font-medium text-white bg-gray-700 hover:bg-gray-600 rounded">
+                    {copiedSnippet ? 'Copiado' : 'Copiar'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </Section>
         </div>
-        <div className="mt-3 p-3 bg-brand-50 rounded-xl border border-brand-100">
-          <p className="text-xs text-brand-700">O formulário aparecerá quando <strong>qualquer</strong> condição ativada for atendida.</p>
+      ) : (
+        <div>
+          <Section title="Visitantes" defaultOpen>
+            <Field label="Quem deve ver o formulario">
+              <select className={sel} value={vis.visitorType} onChange={e => setG('visibility', { visitorType: e.target.value as any })}>
+                <option value="all">Todos os visitantes</option>
+                <option value="new">Somente visitantes novos</option>
+                <option value="returning">Somente visitantes retornantes</option>
+              </select>
+            </Field>
+            <ToggleRow label="Nao mostrar a inscritos existentes" hint="Oculta para visitantes ja cadastrados."
+              checked={vis.hideFromSubscribers} onChange={v => setG('visibility', { hideFromSubscribers: v })} />
+          </Section>
+
+          <Section title="URLs">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">Use <code className="px-1 bg-gray-100 rounded text-[10px]">*</code> como coringa. Uma URL por linha.</p>
+
+            <ToggleRow label="Exibir somente em certas URLs" checked={urls.includeEnabled} onChange={v => setG('urls', { includeEnabled: v })} />
+            {urls.includeEnabled && (
+              <textarea rows={3} className={inp + ' font-mono text-[11px] mt-2'}
+                placeholder="/produtos/*&#10;/promocao"
+                value={urls.includeUrls.join('\n')}
+                onChange={e => setG('urls', { includeUrls: e.target.value.split('\n').map(u => u.trim()).filter(Boolean) })} />
+            )}
+
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="Nao exibir em certas URLs" checked={urls.excludeEnabled} onChange={v => setG('urls', { excludeEnabled: v })} />
+              {urls.excludeEnabled && (
+                <textarea rows={3} className={inp + ' font-mono text-[11px] mt-2'}
+                  placeholder="/checkout&#10;/admin/*"
+                  value={urls.excludeUrls.join('\n')}
+                  onChange={e => setG('urls', { excludeUrls: e.target.value.split('\n').map(u => u.trim()).filter(Boolean) })} />
+              )}
+            </div>
+          </Section>
+
+          <Section title="Localizacao">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">Codigo do pais ISO (BR, US, PT). Um por linha.</p>
+
+            <ToggleRow label="Exibir em certos paises" checked={loc.includeEnabled} onChange={v => setG('location', { includeEnabled: v })} />
+            {loc.includeEnabled && (
+              <textarea rows={2} className={inp + ' font-mono text-[11px] mt-2 uppercase'}
+                placeholder="BR&#10;PT"
+                value={loc.includeCountries.join('\n')}
+                onChange={e => setG('location', { includeCountries: e.target.value.split('\n').map(c => c.trim().toUpperCase()).filter(Boolean) })} />
+            )}
+
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="Nao exibir em certos paises" checked={loc.excludeEnabled} onChange={v => setG('location', { excludeEnabled: v })} />
+              {loc.excludeEnabled && (
+                <textarea rows={2} className={inp + ' font-mono text-[11px] mt-2 uppercase'}
+                  placeholder="US"
+                  value={loc.excludeCountries.join('\n')}
+                  onChange={e => setG('location', { excludeCountries: e.target.value.split('\n').map(c => c.trim().toUpperCase()).filter(Boolean) })} />
+              )}
+            </div>
+          </Section>
+
+          <Section title="Parametros UTM">
+            <ToggleRow label="Salvar UTMs no perfil do contato ao confirmar"
+              hint="Quando o visitante enviar o formulario, os parametros UTM serao salvos em contacts.utm_data."
+              checked={utm.storeOnConsent} onChange={v => setG('utm', { storeOnConsent: v })} />
+
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="Exibir com base em parametros UTM" checked={utm.filterEnabled} onChange={v => setG('utm', { filterEnabled: v })} />
+              {utm.filterEnabled && (
+                <div className="mt-3 space-y-2">
+                  {utm.filters.map((f, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <select className={sel + ' flex-[1.2]'} value={f.param} onChange={e => {
+                        const next = [...utm.filters]; next[i] = { ...f, param: e.target.value }; setG('utm', { filters: next })
+                      }}>
+                        <option value="utm_source">utm_source</option>
+                        <option value="utm_medium">utm_medium</option>
+                        <option value="utm_campaign">utm_campaign</option>
+                        <option value="utm_term">utm_term</option>
+                        <option value="utm_content">utm_content</option>
+                      </select>
+                      <input className={inp + ' flex-1'} placeholder="valor" value={f.value} onChange={e => {
+                        const next = [...utm.filters]; next[i] = { ...f, value: e.target.value }; setG('utm', { filters: next })
+                      }} />
+                      <button onClick={() => setG('utm', { filters: utm.filters.filter((_, j) => j !== i) })}
+                        className="p-1.5 text-gray-400 hover:text-red-500 flex-shrink-0">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button onClick={() => setG('utm', { filters: [...utm.filters, { param: 'utm_source', value: '' }] })}
+                    className="w-full py-2 text-[12px] font-medium text-brand-600 border border-dashed border-brand-300 rounded-lg hover:bg-brand-50 transition-colors">
+                    + Adicionar filtro UTM
+                  </button>
+                </div>
+              )}
+            </div>
+          </Section>
         </div>
-      </Section>
-      <Section title="Visibilidade">
-        <Field label="Dispositivos">
-          <select className={sel} value={beh.visibility.devices} onChange={e => set('visibility', { devices: e.target.value as any })}>
-            <option value="all">Todos</option><option value="desktop">Desktop</option><option value="mobile">Mobile</option>
-          </select>
-        </Field>
-        <Field label="Tipo visitante">
-          <select className={sel} value={beh.visibility.visitorType} onChange={e => set('visibility', { visitorType: e.target.value as any })}>
-            <option value="all">Todos</option><option value="new">Novos</option><option value="returning">Retornantes</option>
-          </select>
-        </Field>
-        <label className="flex items-center gap-2 text-xs text-gray-600">
-          <input type="checkbox" checked={beh.visibility.hideFromSubscribers} onChange={e => set('visibility', { hideFromSubscribers: e.target.checked })} /> Ocultar de inscritos
-        </label>
-      </Section>
-      <Section title="Frequência">
-        <Field label="Exibir novamente após (dias)"><input type="number" className={inp} value={beh.frequency.showAfterDays} onChange={e => set('frequency', { showAfterDays: +e.target.value })} /></Field>
-        <label className="flex items-center gap-2 text-xs text-gray-600">
-          <input type="checkbox" checked={beh.frequency.stopAfterSubmission} onChange={e => set('frequency', { stopAfterSubmission: e.target.checked })} /> Parar após envio
-        </label>
-      </Section>
-      <Section title="Segmentação">
-        <Field label="Páginas">
-          <select className={sel} value={beh.targeting.pages} onChange={e => set('targeting', { pages: e.target.value as any })}>
-            <option value="all">Todas</option><option value="specific">Específicas</option>
-          </select>
-        </Field>
-        {beh.targeting.pages === 'specific' && <Field label="URLs (uma por linha)"><textarea className={inp} rows={3} value={beh.targeting.pageUrls.join('\n')} onChange={e => set('targeting', { pageUrls: e.target.value.split('\n').filter(Boolean) })} /></Field>}
-      </Section>
-      <Section title="Agendamento">
-        <label className="flex items-center gap-2 text-xs text-gray-600">
-          <input type="checkbox" checked={beh.scheduling.enabled} onChange={e => set('scheduling', { enabled: e.target.checked })} /> Ativar agendamento
-        </label>
-        {beh.scheduling.enabled && <>
-          <Field label="Início"><input type="datetime-local" className={inp} value={beh.scheduling.startDate} onChange={e => set('scheduling', { startDate: e.target.value })} /></Field>
-          <Field label="Fim"><input type="datetime-local" className={inp} value={beh.scheduling.endDate} onChange={e => set('scheduling', { endDate: e.target.value })} /></Field>
-        </>}
-      </Section>
-      <Section title="Audiência">
-        <Field label="ID da Lista"><input className={inp} value={beh.audience.listId} onChange={e => set('audience', { listId: e.target.value })} /></Field>
-        <Field label="Tags (separadas por vírgula)"><input className={inp} value={beh.audience.tags.join(', ')} onChange={e => set('audience', { tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })} /></Field>
-        <label className="flex items-center gap-2 text-xs text-gray-600">
-          <input type="checkbox" checked={beh.audience.doubleOptIn} onChange={e => set('audience', { doubleOptIn: e.target.checked })} /> Double Opt-in
-        </label>
-      </Section>
+      )}
     </div>
   )
 }
@@ -1067,75 +1406,128 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
   const setOv = (val: Partial<PopupDesign['styles']['overlay']>) => onChange({ ...design, styles: { ...s, overlay: { ...s.overlay, ...val } } })
   const setSi = (val: Partial<PopupDesign['styles']['sideImage']>) => onChange({ ...design, styles: { ...s, sideImage: { ...s.sideImage, ...val } } })
   const setCb = (val: Partial<PopupDesign['styles']['closeButton']>) => onChange({ ...design, styles: { ...s, closeButton: { ...s.closeButton, ...val } } })
+
+  // Resolve per-side padding (fallback to legacy single value)
+  const pt = s.paddingTop ?? s.padding ?? 32
+  const pr = s.paddingRight ?? s.padding ?? 32
+  const pb = s.paddingBottom ?? s.padding ?? 32
+  const pl = s.paddingLeft ?? s.padding ?? 32
+
   return (
     <div>
       <Section title="Layout" defaultOpen>
-        <Field label="Tipo formulário">
+        <Field label="Tipo de formulario">
           <select className={sel} value={design.formType} onChange={e => onChange({ ...design, formType: e.target.value as any })}>
-            <option value="popup">Popup</option><option value="flyout">Flyout</option><option value="fullpage">Página Inteira</option><option value="embed">Embed</option><option value="banner">Banner</option>
+            <option value="popup">Popup</option>
+            <option value="flyout">Flyout</option>
+            <option value="fullpage">Pagina inteira</option>
+            <option value="embed">Embed</option>
+            <option value="banner">Banner</option>
           </select>
         </Field>
-        <Field label="Largura (px)"><input type="number" className={inp} value={s.width} onChange={e => setS({ width: +e.target.value })} /></Field>
-        <Field label="Borda arredondada"><input type="number" className={inp} value={s.borderRadius} onChange={e => setS({ borderRadius: +e.target.value })} /></Field>
-        <Field label="Padding"><input type="number" className={inp} value={s.padding} onChange={e => setS({ padding: +e.target.value })} /></Field>
-        <Field label="Animação">
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Largura"><div className="relative"><input type="number" className={inp + ' pr-8'} value={s.width} onChange={e => setS({ width: +e.target.value })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span></div></Field>
+          <Field label="Borda"><div className="relative"><input type="number" className={inp + ' pr-8'} value={s.borderRadius} onChange={e => setS({ borderRadius: +e.target.value })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span></div></Field>
+        </div>
+        <Field label="Fonte">
+          <select className={sel} value={s.fontFamily || 'Inter, sans-serif'} onChange={e => setS({ fontFamily: e.target.value })}>
+            <option value="Inter, sans-serif">Inter</option>
+            <option value="'Helvetica Neue', sans-serif">Helvetica</option>
+            <option value="Arial, sans-serif">Arial</option>
+            <option value="Georgia, serif">Georgia</option>
+            <option value="'Montserrat', sans-serif">Montserrat</option>
+            <option value="'Poppins', sans-serif">Poppins</option>
+            <option value="'Roboto', sans-serif">Roboto</option>
+            <option value="'Open Sans', sans-serif">Open Sans</option>
+          </select>
+        </Field>
+        <Field label="Animacao">
           <select className={sel} value={s.animation} onChange={e => setS({ animation: e.target.value as any })}>
-            <option value="fade">Fade</option><option value="slide-up">Slide Up</option><option value="none">Nenhuma</option>
+            <option value="fade">Fade</option>
+            <option value="slide-up">Slide up</option>
+            <option value="none">Nenhuma</option>
           </select>
         </Field>
-      </Section>
-      <Section title="Cores">
-        <Field label="Fundo"><input type="color" value={s.backgroundColor} onChange={e => setS({ backgroundColor: e.target.value })} className="w-full h-8 rounded cursor-pointer" /></Field>
-        <label className="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={s.overlay.enabled} onChange={e => setOv({ enabled: e.target.checked })} /> Overlay</label>
-        {s.overlay.enabled && <>
-          <Field label="Cor overlay"><input type="color" value={s.overlay.color} onChange={e => setOv({ color: e.target.value })} className="w-full h-8 rounded cursor-pointer" /></Field>
-          <Field label="Opacidade (%)"><input type="number" className={inp} value={s.overlay.opacity} onChange={e => setOv({ opacity: +e.target.value })} /></Field>
-        </>}
-      </Section>
-      <Section title="Imagem Lateral">
-        <label className="flex items-center gap-2.5 text-sm text-gray-700 cursor-pointer">
-          <div className={`relative w-9 h-5 rounded-full transition-colors ${s.sideImage.enabled ? 'bg-emerald-500' : 'bg-gray-200'}`} onClick={() => setSi({ enabled: !s.sideImage.enabled })}>
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${s.sideImage.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+
+        <div>
+          <p className="text-[12px] font-medium text-gray-700 mb-2">Padding interno</p>
+          <div className="grid grid-cols-3 gap-1.5 max-w-[220px] mx-auto">
+            <div />
+            <div className="relative"><input type="number" min={0} max={100} className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-center outline-none focus:border-brand-500" value={pt} onChange={e => setS({ paddingTop: +e.target.value })} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span></div>
+            <div />
+            <div className="relative"><input type="number" min={0} max={100} className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-center outline-none focus:border-brand-500" value={pl} onChange={e => setS({ paddingLeft: +e.target.value })} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span></div>
+            <div className="flex items-center justify-center"><div className="w-6 h-6 rounded-sm bg-gray-100 border border-gray-200" /></div>
+            <div className="relative"><input type="number" min={0} max={100} className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-center outline-none focus:border-brand-500" value={pr} onChange={e => setS({ paddingRight: +e.target.value })} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span></div>
+            <div />
+            <div className="relative"><input type="number" min={0} max={100} className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-center outline-none focus:border-brand-500" value={pb} onChange={e => setS({ paddingBottom: +e.target.value })} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span></div>
+            <div />
           </div>
-          Ativar imagem lateral
-        </label>
-        {s.sideImage.enabled && <div className="mt-3 space-y-3">
-          <p className="text-xs text-gray-400">JPG, PNG e GIF. Máximo 2000px.</p>
-          {s.sideImage.src ? (
-            <div className="space-y-2">
-              <img src={s.sideImage.src} alt="" className="w-full h-24 object-cover rounded-lg border" />
-              <div className="flex gap-2">
-                <button onClick={() => onOpenMedia?.(url => setSi({ src: url }))}
-                  className="flex-1 py-1.5 text-xs font-medium text-center text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                  Trocar
-                </button>
-                <button onClick={() => setSi({ src: '' })} className="flex-1 py-1.5 text-xs font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">Remover</button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => onOpenMedia?.(url => setSi({ src: url }))}
-              className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-brand-400">
-              <Upload className="w-6 h-6 text-gray-300 mx-auto mb-2" />
-              <span className="text-xs text-gray-500">Clique para escolher imagem</span>
-            </button>
-          )}
-          <Field label="Posição">
-            <div className="flex border border-gray-200 rounded-lg overflow-hidden">
-              <button onClick={() => setSi({ position: 'left' })} className={`flex-1 py-1.5 text-xs font-medium ${s.sideImage.position === 'left' ? 'bg-gray-900 text-white' : 'text-gray-500'}`}>Esquerda</button>
-              <button onClick={() => setSi({ position: 'right' })} className={`flex-1 py-1.5 text-xs font-medium ${s.sideImage.position === 'right' ? 'bg-gray-900 text-white' : 'text-gray-500'}`}>Direita</button>
-            </div>
-          </Field>
-          <Field label="Largura">
-            <div className="flex items-center gap-2">
-              <input type="range" min={100} max={400} value={s.sideImage.width} onChange={e => setSi({ width: +e.target.value })} className="flex-1" />
-              <span className="text-xs text-gray-500 w-12 text-right">{s.sideImage.width}px</span>
-            </div>
-          </Field>
-        </div>}
+        </div>
       </Section>
-      <Section title="Botão Fechar">
-        <label className="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={s.closeButton.show} onChange={e => setCb({ show: e.target.checked })} /> Mostrar</label>
-        {s.closeButton.show && <Field label="Cor"><input type="color" value={s.closeButton.color} onChange={e => setCb({ color: e.target.value })} className="w-full h-8 rounded cursor-pointer" /></Field>}
+
+      <Section title="Cores">
+        <PanelColorField label="Cor de fundo do popup" value={s.backgroundColor} onChange={v => setS({ backgroundColor: v })} />
+
+        <div className="pt-2 border-t border-gray-100">
+          <ToggleRow label="Exibir overlay de fundo" checked={s.overlay.enabled} onChange={v => setOv({ enabled: v })} hint="Fundo escurecido atras do popup" />
+          {s.overlay.enabled && (
+            <div className="space-y-3 mt-3">
+              <PanelColorField label="Cor do overlay" value={s.overlay.color} onChange={v => setOv({ color: v })} />
+              <Field label={`Opacidade: ${s.overlay.opacity}%`}>
+                <input type="range" min={0} max={100} value={s.overlay.opacity} onChange={e => setOv({ opacity: +e.target.value })} className="w-full accent-brand-500" />
+              </Field>
+            </div>
+          )}
+        </div>
+      </Section>
+
+      <Section title="Imagem lateral">
+        <ToggleRow label="Ativar imagem lateral" checked={s.sideImage.enabled} onChange={v => setSi({ enabled: v })} />
+        {s.sideImage.enabled && (
+          <div className="mt-3 space-y-3">
+            {s.sideImage.src ? (
+              <div className="space-y-2">
+                <img src={s.sideImage.src} alt="" className="w-full h-28 object-cover rounded-lg border border-gray-200" />
+                <div className="flex gap-2">
+                  <button onClick={() => onOpenMedia?.(url => setSi({ src: url }))}
+                    className="flex-1 py-2 text-[12px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                    Trocar
+                  </button>
+                  <button onClick={() => setSi({ src: '' })} className="flex-1 py-2 text-[12px] font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">
+                    Remover
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => onOpenMedia?.(url => setSi({ src: url }))}
+                className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center hover:border-brand-400 hover:bg-brand-50/30 transition-colors">
+                <Upload className="w-6 h-6 text-gray-300 mx-auto mb-2" />
+                <span className="text-[12px] text-gray-500">Escolher imagem da biblioteca</span>
+              </button>
+            )}
+            <Field label="Posicao">
+              <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+                <button onClick={() => setSi({ position: 'left' })} className={`flex-1 py-2 text-[12px] font-medium transition-colors ${s.sideImage.position === 'left' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Esquerda</button>
+                <button onClick={() => setSi({ position: 'right' })} className={`flex-1 py-2 text-[12px] font-medium transition-colors ${s.sideImage.position === 'right' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Direita</button>
+              </div>
+            </Field>
+            <Field label={`Largura: ${s.sideImage.width}px`}>
+              <input type="range" min={100} max={600} value={s.sideImage.width} onChange={e => setSi({ width: +e.target.value })} className="w-full accent-brand-500" />
+            </Field>
+          </div>
+        )}
+      </Section>
+
+      <Section title="Botao fechar">
+        <ToggleRow label="Mostrar botao fechar" checked={s.closeButton.show} onChange={v => setCb({ show: v })} />
+        {s.closeButton.show && (
+          <div className="mt-3 space-y-3">
+            <PanelColorField label="Cor" value={s.closeButton.color} onChange={v => setCb({ color: v })} />
+            <Field label={`Tamanho: ${s.closeButton.size || 24}px`}>
+              <input type="range" min={16} max={48} value={s.closeButton.size || 24} onChange={e => setCb({ size: +e.target.value })} className="w-full accent-brand-500" />
+            </Field>
+          </div>
+        )}
       </Section>
     </div>
   )
@@ -1179,7 +1571,8 @@ export default function PopupEditorPage() {
   const [activeStepIdx, setActiveStepIdx] = useState(0)
   const [showSuccess, setShowSuccess] = useState(false)
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
-  const [rightTab, setRightTab] = useState<'behavior' | 'theme'>('theme')
+  // Left sidebar view: 'hub' (overview with Styles/Targeting/Blocks cards) | 'styles' | 'targeting' | 'blocks'
+  const [leftView, setLeftView] = useState<'hub' | 'styles' | 'targeting' | 'blocks'>('hub')
   const [showPreview, setShowPreview] = useState(false)
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
@@ -1220,7 +1613,34 @@ export default function PopupEditorPage() {
   useEffect(() => {
     fetch(`/api/forms/${formId}`).then(r => r.json()).then(data => {
       const form = data.form || data
-      if (form.design_json && Object.keys(form.design_json).length > 0) setDesign({ ...defaultDesign, ...form.design_json })
+      if (form.design_json && Object.keys(form.design_json).length > 0) {
+        // Deep-merge to preserve new default fields (styles/behavior sub-objects)
+        const saved = form.design_json
+        const merged: PopupDesign = {
+          ...defaultDesign,
+          ...saved,
+          styles: { ...defaultDesign.styles, ...(saved.styles || {}),
+            overlay: { ...defaultDesign.styles.overlay, ...(saved.styles?.overlay || {}) },
+            closeButton: { ...defaultDesign.styles.closeButton, ...(saved.styles?.closeButton || {}) },
+            sideImage: { ...defaultDesign.styles.sideImage, ...(saved.styles?.sideImage || {}) },
+          },
+          behavior: {
+            ...defaultDesign.behavior,
+            ...(saved.behavior || {}),
+            display: { ...defaultDesign.behavior.display, ...((saved.behavior || {}).display || {}) },
+            visibility: { ...defaultDesign.behavior.visibility, ...((saved.behavior || {}).visibility || {}) },
+            frequency: { ...defaultDesign.behavior.frequency, ...((saved.behavior || {}).frequency || {}) },
+            targeting: { ...defaultDesign.behavior.targeting, ...((saved.behavior || {}).targeting || {}) },
+            scheduling: { ...defaultDesign.behavior.scheduling, ...((saved.behavior || {}).scheduling || {}) },
+            audience: { ...defaultDesign.behavior.audience, ...((saved.behavior || {}).audience || {}) },
+            urls: { ...defaultDesign.behavior.urls!, ...((saved.behavior || {}).urls || {}) },
+            location: { ...defaultDesign.behavior.location!, ...((saved.behavior || {}).location || {}) },
+            utm: { ...defaultDesign.behavior.utm!, ...((saved.behavior || {}).utm || {}) },
+            clickOutsideClose: { ...defaultDesign.behavior.clickOutsideClose!, ...((saved.behavior || {}).clickOutsideClose || {}) },
+          },
+        }
+        setDesign(merged)
+      }
       if (form.status) setFormStatus(form.status === 'published' ? 'published' : 'draft')
     }).catch(() => {}).finally(() => setLoading(false))
   }, [formId])
@@ -1374,8 +1794,8 @@ export default function PopupEditorPage() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Left sidebar — block editor when selected, palette otherwise (Klaviyo-style) */}
-        <aside className="w-[320px] bg-white border-r border-gray-200 flex flex-col shrink-0">
+        {/* Left sidebar — all controls (Klaviyo-style hub + drill-down panels) */}
+        <aside className="w-[340px] bg-white border-r border-gray-200 flex flex-col shrink-0">
           {selectedBlock ? (
             <>
               {/* Header with back button */}
@@ -1402,24 +1822,102 @@ export default function PopupEditorPage() {
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-              {/* Block editor body */}
               <div className="flex-1 overflow-y-auto">
                 <BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} />
               </div>
             </>
-          ) : (
-            <div className="flex-1 overflow-y-auto">
-              <p className="px-4 pt-4 pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">Blocos</p>
-              <div className="grid grid-cols-2 gap-1.5 px-3 pb-4">
-                {BLOCK_TYPES.map(bt => (
-                  <button key={bt.type} onClick={() => addBlock(bt.type)}
-                    className="flex flex-col items-center gap-1 p-2.5 rounded-lg border border-gray-100 hover:border-brand-300 hover:bg-brand-50 transition text-gray-600 hover:text-brand-600 cursor-grab active:cursor-grabbing">
-                    <bt.icon className="w-5 h-5" />
-                    <span className="text-[11px] leading-tight">{bt.label}</span>
-                  </button>
-                ))}
+          ) : leftView === 'hub' ? (
+            <>
+              {/* Hub view: 3 big cards (Styles, Targeting, Blocks) */}
+              <div className="flex items-center px-4 py-3.5 border-b border-gray-100 shrink-0">
+                <h2 className="text-[14px] font-semibold text-gray-900">Visao geral</h2>
               </div>
-            </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+                <button onClick={() => setLeftView('styles')}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-all text-left group">
+                  <div className="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
+                    <Palette className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-gray-900">Estilos</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">Layout, cores, imagem lateral</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
+                </button>
+
+                <button onClick={() => setLeftView('targeting')}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-all text-left group">
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <Target className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-gray-900">Segmentacao e comportamento</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">Quando e para quem exibir</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
+                </button>
+
+                <button onClick={() => setLeftView('blocks')}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-all text-left group">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                    <LayoutGrid className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-gray-900">Adicionar blocos</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">Inputs, texto, botoes, imagens</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
+                </button>
+              </div>
+            </>
+          ) : leftView === 'styles' ? (
+            <>
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 shrink-0">
+                <button onClick={() => setLeftView('hub')}
+                  className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors">
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <h2 className="text-[13px] font-semibold text-gray-900 flex-1">Estilos</h2>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <ThemePanel design={design} onChange={setDesign} onOpenMedia={openMediaLibrary} />
+              </div>
+            </>
+          ) : leftView === 'targeting' ? (
+            <>
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 shrink-0">
+                <button onClick={() => setLeftView('hub')}
+                  className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors">
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <h2 className="text-[13px] font-semibold text-gray-900 flex-1">Segmentacao e comportamento</h2>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <BehaviorPanel beh={design.behavior} onChange={b => setDesign(d => ({ ...d, behavior: b }))} formId={formId} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 shrink-0">
+                <button onClick={() => setLeftView('hub')}
+                  className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors">
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <h2 className="text-[13px] font-semibold text-gray-900 flex-1">Adicionar blocos</h2>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <p className="px-4 pt-4 pb-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Blocos</p>
+                <div className="grid grid-cols-2 gap-1.5 px-3 pb-4">
+                  {BLOCK_TYPES.map(bt => (
+                    <button key={bt.type} onClick={() => addBlock(bt.type)}
+                      className="flex flex-col items-center gap-1 p-2.5 rounded-lg border border-gray-100 hover:border-brand-300 hover:bg-brand-50 transition text-gray-600 hover:text-brand-600 cursor-grab active:cursor-grabbing">
+                      <bt.icon className="w-5 h-5" />
+                      <span className="text-[11px] leading-tight">{bt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
         </aside>
 
@@ -1447,7 +1945,10 @@ export default function PopupEditorPage() {
               {/* Popup body */}
               <div style={{
                 backgroundColor: s.backgroundColor,
-                padding: s.padding,
+                paddingTop: s.paddingTop ?? s.padding ?? 32,
+                paddingRight: s.paddingRight ?? s.padding ?? 32,
+                paddingBottom: s.paddingBottom ?? s.padding ?? 32,
+                paddingLeft: s.paddingLeft ?? s.padding ?? 32,
                 fontFamily: s.fontFamily,
                 flexGrow: 1,
                 minHeight: 200,
@@ -1517,17 +2018,6 @@ export default function PopupEditorPage() {
           </div>
         </main>
 
-        {/* Right sidebar — popup-level settings only (Theme + Behavior) */}
-        <aside className="w-[320px] bg-white border-l border-gray-200 flex flex-col shrink-0">
-          <div className="flex border-b border-gray-200">
-            <button onClick={() => setRightTab('theme')} className={`flex-1 py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 ${rightTab === 'theme' ? 'text-brand-600 border-b-2 border-brand-500' : 'text-gray-500 hover:text-gray-700'}`}><Palette className="w-3.5 h-3.5" />Tema</button>
-            <button onClick={() => setRightTab('behavior')} className={`flex-1 py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 ${rightTab === 'behavior' ? 'text-brand-600 border-b-2 border-brand-500' : 'text-gray-500 hover:text-gray-700'}`}><Settings className="w-3.5 h-3.5" />Comportamento</button>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {rightTab === 'theme' && <ThemePanel design={design} onChange={setDesign} onOpenMedia={openMediaLibrary} />}
-            {rightTab === 'behavior' && <BehaviorPanel beh={design.behavior} onChange={b => setDesign(d => ({ ...d, behavior: b }))} />}
-          </div>
-        </aside>
       </div>
 
       {/* Preview Mode Overlay */}
@@ -1584,7 +2074,7 @@ export default function PopupEditorPage() {
                     <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
                   </div>
                 )}
-                <div style={{ backgroundColor: s.backgroundColor, padding: s.padding, fontFamily: s.fontFamily, flexGrow: 1, minHeight: 200 }}>
+                <div style={{ backgroundColor: s.backgroundColor, paddingTop: s.paddingTop ?? s.padding ?? 32, paddingRight: s.paddingRight ?? s.padding ?? 32, paddingBottom: s.paddingBottom ?? s.padding ?? 32, paddingLeft: s.paddingLeft ?? s.padding ?? 32, fontFamily: s.fontFamily, flexGrow: 1, minHeight: 200 }}>
                   {activeStep.blocks.map(block => <BlockPreview key={block.id} block={block} />)}
                 </div>
                 {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && previewDevice !== 'mobile' && (

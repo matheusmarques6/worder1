@@ -52,18 +52,18 @@ export default function EditTemplatePage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-white">
-        <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+      <div className="flex items-center justify-center h-screen bg-zinc-50">
+        <Loader2 className="w-8 h-8 text-zinc-900 animate-spin" />
       </div>
     )
   }
 
   if (error || !template) {
     return (
-      <div className="flex items-center justify-center h-screen bg-white">
+      <div className="flex items-center justify-center h-screen bg-zinc-50">
         <div className="text-center">
-          <p className="text-base font-medium text-gray-500 mb-2">{error || 'Template não encontrado'}</p>
-          <button onClick={() => router.push('/email/templates')} className="text-sm text-brand-500 hover:text-brand-600 font-medium">Voltar</button>
+          <p className="text-base font-medium text-zinc-500 mb-2">{error || 'Template nao encontrado'}</p>
+          <button onClick={() => router.push('/email/templates')} className="text-sm text-zinc-900 hover:text-zinc-700 font-medium">Voltar</button>
         </div>
       </div>
     )

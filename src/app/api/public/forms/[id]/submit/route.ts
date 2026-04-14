@@ -241,6 +241,22 @@ export async function POST(
     }
     const contactData = extractContactData(answers, form.fields || [], designBlocks)
 
+    // UTM data for contact profile (if behavior.utm.storeOnConsent is true)
+    const popupBehavior = (form.behavior as any) || (designJson.behavior as any) || {}
+    const storeUtmOnConsent = popupBehavior?.utm?.storeOnConsent === true
+    const utmPayload: Record<string, any> = {}
+    if (storeUtmOnConsent) {
+      if (utm_source) utmPayload.utm_source = utm_source
+      if (utm_medium) utmPayload.utm_medium = utm_medium
+      if (utm_campaign) utmPayload.utm_campaign = utm_campaign
+      if (utm_term) utmPayload.utm_term = utm_term
+      if (utm_content) utmPayload.utm_content = utm_content
+      if (Object.keys(utmPayload).length > 0) {
+        utmPayload.captured_at = new Date().toISOString()
+        utmPayload.form_id = formId
+      }
+    }
+
     // 4. Criar ou encontrar contato (sempre criar se tiver algum dado)
     let contactId: string | null = null
     const hasContactData = contactData.email || contactData.phone || contactData.first_name
@@ -269,6 +285,9 @@ export async function POST(
           if (contactData.custom_fields) {
             updatePayload.custom_fields = contactData.custom_fields
           }
+          if (storeUtmOnConsent && Object.keys(utmPayload).length > 0) {
+            updatePayload.utm_data = utmPayload
+          }
           await supabase.from('contacts').update(updatePayload).eq('id', contactId)
           console.log('[Form Submit] Updated existing contact:', contactId)
         }
@@ -294,6 +313,9 @@ export async function POST(
           if (contactData[f] !== undefined) insertPayload[f] = contactData[f]
         }
         if (contactData.custom_fields) insertPayload.custom_fields = contactData.custom_fields
+        if (storeUtmOnConsent && Object.keys(utmPayload).length > 0) {
+          insertPayload.utm_data = utmPayload
+        }
 
         const { data: newContact, error: contactError } = await supabase
           .from('contacts')

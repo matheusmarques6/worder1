@@ -27,9 +27,9 @@ interface WorderEmailEditorProps {
 }
 
 // ── Sortable Block Wrapper (drag from anywhere on the block) ──
-function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDelete }: {
+function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDelete, onSaveReusable, isHidden }: {
   blockId: string; children: React.ReactNode; isSelected: boolean;
-  onSelect: () => void; onClone: () => void; onDelete: () => void
+  onSelect: () => void; onClone: () => void; onDelete: () => void; onSaveReusable?: () => void; isHidden?: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: blockId,
@@ -40,14 +40,20 @@ function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDel
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1, zIndex: isDragging ? 50 : 'auto' }}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isHidden ? 0.3 : (isDragging ? 0.3 : 1), zIndex: isDragging ? 50 : 'auto' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
-      className={`relative group cursor-grab active:cursor-grabbing ${isSelected ? 'ring-2 ring-brand-500 ring-offset-1' : 'hover:ring-1 hover:ring-brand-300'}`}
+      className={`relative group cursor-grab active:cursor-grabbing transition-all ${isSelected ? 'outline outline-2 outline-zinc-900 outline-offset-1 shadow-[0_0_0_4px_rgba(0,0,0,0.08)]' : 'hover:outline hover:outline-2 hover:outline-zinc-400 hover:outline-offset-1'}`}
     >
+      {isHidden && (
+        <div className="absolute top-1 right-1 z-20 px-1.5 py-0.5 bg-red-100 text-red-600 text-[9px] font-semibold rounded border border-red-200">
+          Oculto
+        </div>
+      )}
       {isSelected && (
-        <div className="absolute -right-9 top-0 flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5 z-20">
-          <button onClick={e => { e.stopPropagation(); onClone() }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Duplicar"><Copy className="w-3.5 h-3.5" /></button>
-          <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
+        <div className="absolute -right-10 top-0 flex flex-col gap-0.5 bg-zinc-900 rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-0.5 z-20">
+          <button onClick={e => { e.stopPropagation(); onClone() }} className="p-1.5 text-white hover:bg-zinc-700 rounded transition-colors" title="Duplicar"><Copy className="w-3.5 h-3.5" strokeWidth={1.5} /></button>
+          {onSaveReusable && <button onClick={e => { e.stopPropagation(); onSaveReusable() }} className="p-1.5 text-white hover:bg-emerald-500/20 hover:text-emerald-400 rounded transition-colors" title="Salvar como reutilizavel"><Star className="w-3.5 h-3.5" strokeWidth={1.5} /></button>}
+          <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 text-white hover:bg-red-500/20 hover:text-red-400 rounded transition-colors" title="Excluir"><Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} /></button>
         </div>
       )}
       {children}
@@ -88,7 +94,7 @@ function DroppableColumn({ columnId, sectionId, children }: { columnId: string; 
     data: { type: 'column', columnId, sectionId },
   })
   return (
-    <div ref={setNodeRef} className={`${isOver ? 'ring-2 ring-brand-400 ring-inset bg-brand-50/30' : ''}`}>
+    <div ref={setNodeRef} className={`${isOver ? 'ring-2 ring-zinc-400 ring-inset bg-zinc-50/30' : ''}`}>
       {children}
     </div>
   )
@@ -225,30 +231,157 @@ function DropIndicatorLine({ colRef, index, blockCount }: { colRef: React.RefObj
 }
 
 // ── Inline Color Picker (click to open, doesn't close on drag) ──
-function InlineColorPicker({ value, onChange, label }: { value: string; onChange: (v: string) => void; label?: string }) {
-  const [open, setOpen] = useState(false)
-  const ref = useCallback((node: HTMLDivElement | null) => {
-    if (!node) return
-    const handler = (e: MouseEvent) => { if (!node.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-  return (
-    <div ref={ref} className="relative">
-      {label && <label className="block text-[11px] font-medium text-gray-500 mb-1">{label}</label>}
-      <div className="flex items-center gap-1.5">
-        <button onClick={() => setOpen(!open)} className="w-8 h-8 rounded-lg border-2 border-gray-200 cursor-pointer flex-shrink-0 hover:border-gray-400 transition-colors" style={{ backgroundColor: value || '#ffffff' }} />
-        <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} placeholder="#000000"
-          className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
-      </div>
-      {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 bg-white rounded-xl shadow-xl border border-gray-200 p-3" onMouseDown={e => e.stopPropagation()}>
-          <input type="color" value={value || '#ffffff'} onChange={e => onChange(e.target.value)}
-            className="w-48 h-36 rounded-lg cursor-pointer border-0 p-0 block" />
+// Use shared ColorPicker
+import { ColorPicker as InlineColorPicker } from './ui/ColorPicker'
+import { ColorPicker } from './ui/ColorPicker'
+
+// ── Compound Sub-Element Panel (for abandoned-cart, product-grid) ──
+function CompoundSubElementPanel({ subElement, block, onChange }: {
+  subElement: string
+  block: { type: string; props: Record<string, any> }
+  onChange: (key: string, value: any) => void
+}) {
+  const p = block.props
+  const inp = "w-full border border-zinc-200 rounded-lg px-3 py-2 text-[13px] text-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-400 transition-colors"
+  const sel = inp + " bg-white cursor-pointer"
+
+  switch (subElement) {
+    case 'name':
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+            <p className="text-[11px] text-zinc-500 leading-snug">O nome do produto sera preenchido automaticamente a partir dos dados do carrinho.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Tamanho</label>
+              <input type="number" className={inp} value={p.nameFontSize || 14} onChange={e => onChange('nameFontSize', +e.target.value)} min={10} max={32} />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Peso</label>
+              <select className={sel} value={p.nameWeight || '600'} onChange={e => onChange('nameWeight', e.target.value)}>
+                <option value="400">Normal</option><option value="500">Medium</option><option value="600">Semibold</option><option value="700">Bold</option>
+              </select>
+            </div>
+          </div>
+          <ColorPicker label="Cor do texto" value={p.nameColor || '#111827'} onChange={v => onChange('nameColor', v)} />
+          <div>
+            <label className="block text-[12px] font-medium text-zinc-700 mb-1">Fonte</label>
+            <select className={sel} value={p.nameFontFamily || 'inherit'} onChange={e => onChange('nameFontFamily', e.target.value)}>
+              <option value="inherit">Padrao</option><option value="Arial, sans-serif">Arial</option><option value="Georgia, serif">Georgia</option>
+              <option value="'Inter', sans-serif">Inter</option><option value="'Montserrat', sans-serif">Montserrat</option>
+            </select>
+          </div>
         </div>
-      )}
-    </div>
-  )
+      )
+
+    case 'description':
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+            <p className="text-[11px] text-zinc-500 leading-snug">A descricao sera preenchida com os detalhes da variante (cor, tamanho, etc.).</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Tamanho</label>
+              <input type="number" className={inp} value={p.descFontSize || 13} onChange={e => onChange('descFontSize', +e.target.value)} min={10} max={24} />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Peso</label>
+              <select className={sel} value={p.descWeight || '400'} onChange={e => onChange('descWeight', e.target.value)}>
+                <option value="400">Normal</option><option value="500">Medium</option><option value="600">Semibold</option>
+              </select>
+            </div>
+          </div>
+          <ColorPicker label="Cor do texto" value={p.descColor || '#6B7280'} onChange={v => onChange('descColor', v)} />
+        </div>
+      )
+
+    case 'price':
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+            <p className="text-[11px] text-zinc-500 leading-snug">Os precos serao preenchidos automaticamente a partir do carrinho.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Tamanho</label>
+              <input type="number" className={inp} value={p.priceFontSize || 14} onChange={e => onChange('priceFontSize', +e.target.value)} min={10} max={32} />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Peso</label>
+              <select className={sel} value={p.priceWeight || '600'} onChange={e => onChange('priceWeight', e.target.value)}>
+                <option value="400">Normal</option><option value="600">Semibold</option><option value="700">Bold</option>
+              </select>
+            </div>
+          </div>
+          <ColorPicker label="Cor do preco" value={p.priceColor || '#111827'} onChange={v => onChange('priceColor', v)} />
+          <ColorPicker label="Cor do preco antigo" value={p.oldPriceColor || '#9CA3AF'} onChange={v => onChange('oldPriceColor', v)} />
+        </div>
+      )
+
+    case 'button':
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+            <p className="text-[11px] text-zinc-500 leading-snug">O link do botao usara <code className="bg-zinc-100 px-1 rounded text-[10px]">{'{{checkout_url}}'}</code> para redirecionar ao checkout.</p>
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-zinc-700 mb-1">Texto do botao</label>
+            <input className={inp} value={p.buttonText || 'Shop now'} onChange={e => onChange('buttonText', e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-zinc-700 mb-1">Link</label>
+            <input className={inp} value={p.buttonHref || '{{checkout_url}}'} onChange={e => onChange('buttonHref', e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <ColorPicker label="Cor de fundo" value={p.buttonColor || '#111827'} onChange={v => onChange('buttonColor', v)} />
+            <ColorPicker label="Cor do texto" value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Raio da borda</label>
+              <input type="number" className={inp} value={p.buttonRadius ?? 4} onChange={e => onChange('buttonRadius', +e.target.value)} min={0} max={32} />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-zinc-700 mb-1">Tamanho fonte</label>
+              <input type="number" className={inp} value={p.buttonFontSize || 14} onChange={e => onChange('buttonFontSize', +e.target.value)} min={10} max={24} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-zinc-700 mb-1">Alinhamento</label>
+            <div className="flex border border-zinc-200 rounded-md overflow-hidden">
+              {(['left', 'center', 'right', 'full'] as const).map(a => (
+                <button key={a} onClick={() => onChange('buttonAlign', a)}
+                  className={`flex-1 h-[28px] text-[11px] font-medium transition-all ${(p.buttonAlign || 'left') === a ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
+                  {a === 'left' ? 'Esq' : a === 'center' ? 'Centro' : a === 'right' ? 'Dir' : 'Total'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )
+
+    case 'image':
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+            <p className="text-[11px] text-zinc-500 leading-snug">A imagem do produto sera carregada automaticamente do catalogo.</p>
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-zinc-700 mb-1">Largura (px)</label>
+            <input type="number" className={inp} value={p.imageWidth || 200} onChange={e => onChange('imageWidth', +e.target.value)} min={60} max={400} />
+          </div>
+          <div>
+            <label className="block text-[12px] font-medium text-zinc-700 mb-1">Raio da borda</label>
+            <input type="number" className={inp} value={p.imageBorderRadius ?? 0} onChange={e => onChange('imageBorderRadius', +e.target.value)} min={0} max={24} />
+          </div>
+        </div>
+      )
+
+    default:
+      return <p className="text-[12px] text-zinc-400">Selecione um elemento</p>
+  }
 }
 
 // ── Styles Tab ──
@@ -280,12 +413,12 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
             <div>
               <label className="block text-[11px] font-medium text-gray-500 mb-1">Largura (px)</label>
               <input type="number" value={s.contentWidth} onChange={e => update('contentWidth', Number(e.target.value))} min={400} max={800}
-                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all" />
+                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-500/20 focus:outline-none transition-all" />
             </div>
             <div>
               <label className="block text-[11px] font-medium text-gray-500 mb-1">Bordas</label>
               <input type="number" value={s.borderRadius} onChange={e => update('borderRadius', Number(e.target.value))} min={0} max={24}
-                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all" />
+                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-500/20 focus:outline-none transition-all" />
             </div>
           </div>
         </div>
@@ -297,7 +430,7 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
         <div>
           <label className="block text-[11px] font-medium text-gray-500 mb-1.5">Fonte Global</label>
           <select value={s.fontFamily} onChange={e => update('fontFamily', e.target.value)}
-            className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all"
+            className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-500/20 focus:outline-none transition-all"
             style={{ fontFamily: s.fontFamily }}>
             {FONTS.map(f => <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>)}
           </select>
@@ -331,12 +464,12 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
                     <div>
                       <label className="text-[10px] text-gray-400">Tamanho</label>
                       <input type="number" value={ts.fontSize} onChange={e => updateTS('fontSize', Number(e.target.value))} min={8} max={72}
-                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                     </div>
                     <div>
                       <label className="text-[10px] text-gray-400">Altura</label>
                       <input type="number" value={ts.lineHeight} onChange={e => updateTS('lineHeight', Number(e.target.value))} min={0.8} max={3} step={0.1}
-                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                     </div>
                     <div>
                       <label className="text-[10px] text-gray-400">Cor</label>
@@ -348,7 +481,7 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
                           input.click()
                         }} className="w-8 h-[30px] rounded-lg border border-gray-200 cursor-pointer flex-shrink-0" style={{ backgroundColor: ts.color }} />
                         <input type="text" value={ts.color} onChange={e => updateTS('color', e.target.value)}
-                          className="flex-1 min-w-0 px-1.5 py-1.5 border border-gray-200 rounded-lg text-[10px] font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
+                          className="flex-1 min-w-0 px-1.5 py-1.5 border border-gray-200 rounded-lg text-[10px] font-mono text-gray-900 focus:border-zinc-900 focus:outline-none" />
                       </div>
                     </div>
                   </div>
@@ -368,7 +501,7 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
           update('textStyles', textStyles)
         }} />
         <label className="flex items-center gap-2.5 cursor-pointer">
-          <div className={`relative w-9 h-5 rounded-full transition-colors ${s.textStyles?.link?.underline !== false ? 'bg-brand-500' : 'bg-gray-200'}`}>
+          <div className={`relative w-9 h-5 rounded-full transition-colors ${s.textStyles?.link?.underline !== false ? 'bg-zinc-900' : 'bg-gray-200'}`}>
             <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${s.textStyles?.link?.underline !== false ? 'translate-x-4' : 'translate-x-0.5'}`} />
           </div>
           <span className="text-[12px] text-gray-700">Sublinhado</span>
@@ -404,12 +537,12 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
                   <div>
                     <label className="text-[10px] text-gray-400">Raio</label>
                     <input type="number" value={bs.borderRadius} onChange={e => updateBS('borderRadius', Number(e.target.value))} min={0} max={50}
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-400">Peso</label>
                     <select value={bs.fontWeight} onChange={e => updateBS('fontWeight', e.target.value)}
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 bg-white focus:border-zinc-900 focus:outline-none">
                       <option value="normal">Normal</option>
                       <option value="600">Semibold</option>
                       <option value="bold">Bold</option>
@@ -450,6 +583,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   })
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
+  const [selectedSubElement, setSelectedSubElement] = useState<string | null>(null) // e.g. 'name', 'price', 'button', 'image', 'description'
   const [lastDroppedBlockId, setLastDroppedBlockId] = useState<string | null>(null)
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [saving, setSaving] = useState(false)
@@ -502,16 +636,19 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const selectBlock = useCallback((blockId: string) => {
     setSelectedBlockId(blockId)
     setSelectedSectionId(null)
+    setSelectedSubElement(null)
   }, [])
 
   const selectSection = useCallback((sectionId: string) => {
     setSelectedSectionId(sectionId)
     setSelectedBlockId(null)
+    setSelectedSubElement(null)
   }, [])
 
   const clearSelection = useCallback(() => {
     setSelectedBlockId(null)
     setSelectedSectionId(null)
+    setSelectedSubElement(null)
   }, [])
 
   // ── Section Operations ──
@@ -650,9 +787,14 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     setTimeout(() => setLastDroppedBlockId(null), 400)
   }, [doc, updateDoc, selectBlock])
 
-  const addSavedBlock = useCallback((blockJson: any) => {
+  const addSavedBlock = useCallback((blockJson: any, savedBlockId?: string, savedBlockName?: string) => {
     if (!blockJson) return
-    const restored: EmailBlock = { ...blockJson, id: 'b_' + Math.random().toString(36).substring(2, 9) }
+    const restored: EmailBlock = {
+      ...blockJson,
+      id: 'b_' + Math.random().toString(36).substring(2, 9),
+      // Link to universal block if ID provided
+      ...(savedBlockId ? { _savedBlockId: savedBlockId, _savedBlockName: savedBlockName } : {}),
+    }
     const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
     if (sections.length === 0) {
       const section = createSection([100])
@@ -694,6 +836,20 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         columns: s.columns.map(c => ({
           ...c,
           blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, [key]: value } } : b),
+        })),
+      })),
+    }))
+  }, [])
+
+  // Update block-level properties (not props, but top-level like _savedBlockId)
+  const updateBlockMeta = useCallback((id: string, meta: Record<string, any>) => {
+    setDoc(prev => ({
+      ...prev,
+      sections: prev.sections.map(s => ({
+        ...s,
+        columns: s.columns.map(c => ({
+          ...c,
+          blocks: c.blocks.map(b => b.id === id ? { ...b, ...meta } : b),
         })),
       })),
     }))
@@ -768,9 +924,20 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   // ── Drop from palette ──
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
+    // Check for saved block drop first
+    const savedJson = e.dataTransfer.getData('savedBlockJson')
+    if (savedJson) {
+      try {
+        const blockData = JSON.parse(savedJson)
+        const savedId = e.dataTransfer.getData('savedBlockId')
+        const savedName = e.dataTransfer.getData('savedBlockName')
+        addSavedBlock(blockData, savedId || undefined, savedName || undefined)
+      } catch {}
+      return
+    }
     const type = e.dataTransfer.getData('blockType')
     if (type) addBlock(type)
-  }, [addBlock])
+  }, [addBlock, addSavedBlock])
 
   // ── Save ──
   const handleSave = useCallback(async () => {
@@ -778,7 +945,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     try {
       const html = renderDocumentToHtml(doc)
       const success = await onSave(doc as any, html)
-      if (success) showToast('Template salvo com sucesso!')
+      if (success) { showToast('Template salvo com sucesso!'); setHasUnsavedChanges(false) }
     } catch (err: any) { showToast('Erro: ' + err.message, 'error') }
     setSaving(false)
   }, [doc, onSave, showToast])
@@ -834,12 +1001,23 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     return () => window.removeEventListener('keydown', handler)
   }, [handleSave, undo, redo, selectedBlockId, removeBlock, clearSelection])
 
+  // ── Unsaved changes warning ──
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  useEffect(() => { if (historyIdx > 0) setHasUnsavedChanges(true) }, [historyIdx])
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) { e.preventDefault(); e.returnValue = '' }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [hasUnsavedChanges])
+
   const canvasWidth = device === 'mobile' ? 375 : doc.settings.contentWidth
   const isSaved = toast?.type === 'success' && toast.msg.includes('salvo')
 
   // ── Render ──
   return (
-    <div className="flex flex-col h-screen w-screen bg-gray-100 overflow-hidden">
+    <div className="flex flex-col h-screen w-screen bg-zinc-200 overflow-hidden">
       {/* ── Toast ── */}
       {toast && (
         <div className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-sm font-medium transition-all ${toast.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
@@ -848,49 +1026,50 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       )}
 
       {/* ── Toolbar ── */}
-      <div className="flex items-center justify-between px-4 h-[52px] bg-white border-b border-gray-200 flex-shrink-0 z-20">
-        <div className="flex items-center gap-3">
-          <button onClick={() => { if (confirm('Sair sem salvar? Alterações não salvas serão perdidas.')) onBack() }}
-            className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors" title="Voltar para templates">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="h-5 w-px bg-gray-200" />
+      <div className="flex items-center justify-between px-4 h-[52px] bg-zinc-900 flex-shrink-0 z-20">
+        <div className="flex items-center gap-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/worder-favicon.svg" alt="Worder" className="w-7 h-7 flex-shrink-0" />
+          <div className="h-5 w-px bg-zinc-700" />
           {onNameChange ? (
             <input
               type="text"
               defaultValue={templateName}
               onBlur={e => { const v = e.target.value.trim(); if (v && v !== templateName) onNameChange(v) }}
               onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-              className="text-sm font-semibold text-gray-900 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-brand-500 focus:outline-none truncate max-w-[250px] px-1 py-0.5 -ml-1 rounded"
+              className="text-sm font-semibold text-white bg-transparent border-b border-transparent hover:border-zinc-500 focus:border-white focus:outline-none truncate max-w-[250px] px-1 py-0.5 -ml-1 rounded"
               title="Clique para editar o nome"
             />
           ) : (
-            <span className="text-sm font-semibold text-gray-900 truncate max-w-[250px]">{templateName}</span>
+            <span className="text-sm font-semibold text-white truncate max-w-[250px]">{templateName}</span>
           )}
-          <span className="text-[9px] px-1.5 py-0.5 bg-brand-100 text-brand-700 rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
         </div>
 
         <div className="flex items-center gap-1">
-          <button onClick={undo} disabled={historyIdx <= 0} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Desfazer"><Undo2 size={15} /></button>
-          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Refazer"><Redo2 size={15} /></button>
-          <div className="w-px h-4 bg-gray-200 mx-1" />
-          <button onClick={() => setDevice('desktop')} className={`p-1.5 rounded transition-colors ${device === 'desktop' ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-gray-700'}`}><Monitor size={15} /></button>
-          <button onClick={() => setDevice('mobile')} className={`p-1.5 rounded transition-colors ${device === 'mobile' ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-gray-700'}`}><Smartphone size={15} /></button>
+          <button onClick={undo} disabled={historyIdx <= 0} className="p-1.5 text-zinc-500 hover:text-white rounded disabled:opacity-30" title="Desfazer"><Undo2 size={15} /></button>
+          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-1.5 text-zinc-500 hover:text-white rounded disabled:opacity-30" title="Refazer"><Redo2 size={15} /></button>
+          <div className="w-px h-4 bg-zinc-700 mx-1" />
+          <button onClick={() => setDevice('desktop')} className={`p-1.5 rounded transition-colors ${device === 'desktop' ? 'text-white bg-zinc-700' : 'text-zinc-500 hover:text-white'}`}><Monitor size={15} /></button>
+          <button onClick={() => setDevice('mobile')} className={`p-1.5 rounded transition-colors ${device === 'mobile' ? 'text-white bg-zinc-700' : 'text-zinc-500 hover:text-white'}`}><Smartphone size={15} /></button>
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowMergeTags(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors" title="Merge Tags">
+          <button onClick={() => setShowMergeTags(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors" title="Merge Tags">
             <Tag size={14} /> Tags
           </button>
-          <button onClick={handlePreview} disabled={previewLoading || showPreview} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50">
+          <button onClick={handlePreview} disabled={previewLoading || showPreview} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors disabled:opacity-50">
             {previewLoading ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />} Preview
           </button>
-          <button onClick={() => setShowSendTest(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+          <button onClick={() => setShowSendTest(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors">
             <Send size={14} /> Teste
           </button>
-          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-500 text-white text-xs font-semibold rounded-lg hover:bg-brand-600 disabled:opacity-50 transition-colors">
+          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-zinc-900 text-xs font-semibold rounded-lg hover:bg-zinc-100 disabled:opacity-50 transition-colors">
             {saving ? <Loader2 size={14} className="animate-spin" /> : isSaved ? <CheckCircle size={14} /> : <Save size={14} />}
             {saving ? 'Salvando...' : isSaved ? 'Salvo!' : 'Salvar'}
+          </button>
+          <button onClick={() => { if (confirm('Sair do editor? Alteracoes nao salvas serao perdidas.')) onBack() }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-400 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors">
+            Sair
           </button>
         </div>
       </div>
@@ -898,32 +1077,100 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       {/* ── Main Layout ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left Sidebar ── */}
-        <div className="w-[320px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
-          <div className="flex border-b border-gray-200 flex-shrink-0">
-            <button onClick={() => setLeftTab('content')} className={`flex-1 py-2.5 text-[12px] font-semibold transition-colors ${leftTab === 'content' ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Conteúdo</button>
-            <button onClick={() => setLeftTab('styles')} className={`flex-1 py-2.5 text-[12px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Estilos</button>
-          </div>
+        <div className="w-[320px] bg-zinc-50 border-r border-zinc-200 flex flex-col flex-shrink-0">
+          {/* Tabs only visible when NO block/section is selected */}
+          {!selectedBlock && !selectedSection && (
+            <div className="flex border-b border-zinc-200 flex-shrink-0">
+              <button onClick={() => setLeftTab('content')} className={`flex-1 h-10 text-[12px] font-medium transition-colors ${leftTab === 'content' ? 'text-zinc-900 border-b-2 border-zinc-900 -mb-px' : 'text-zinc-500 hover:text-zinc-700'}`}>Conteudo</button>
+              <button onClick={() => setLeftTab('styles')} className={`flex-1 h-10 text-[12px] font-medium transition-colors ${leftTab === 'styles' ? 'text-zinc-900 border-b-2 border-zinc-900 -mb-px' : 'text-zinc-500 hover:text-zinc-700'}`}>Estilos</button>
+            </div>
+          )}
           <div className="flex-1 overflow-hidden">
-            {/* Block properties on the LEFT (Klaviyo-style) */}
+            {/* Block properties (Klaviyo-style — replaces entire sidebar) */}
             {selectedBlock ? (
               <div className="flex flex-col h-full">
-                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-200">
-                  <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-700 rounded"><ArrowLeft size={16} /></button>
-                  <span className="text-sm font-semibold text-gray-900">{BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}</span>
+                {/* Header: show sub-element name if selected, or block name */}
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-100 shrink-0">
+                  {selectedSubElement ? (
+                    <>
+                      <button onClick={() => setSelectedSubElement(null)} className="p-1.5 text-zinc-400 hover:text-zinc-700 rounded-md hover:bg-zinc-100 transition-colors" title="Voltar para bloco">
+                        <ArrowLeft size={14} strokeWidth={2} />
+                      </button>
+                      <span className="text-[13px] font-semibold text-zinc-900 flex-1">
+                        {selectedSubElement === 'name' ? 'Nome do produto' : selectedSubElement === 'description' ? 'Descricao' : selectedSubElement === 'price' ? 'Preco' : selectedSubElement === 'button' ? 'Botao' : selectedSubElement === 'image' ? 'Imagem' : selectedSubElement}
+                      </span>
+                      <span className="text-[10px] text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded">Carrinho</span>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={clearSelection} className="p-1.5 text-zinc-400 hover:text-zinc-700 rounded-md hover:bg-zinc-100 transition-colors" title="Voltar para blocos">
+                        <X size={14} strokeWidth={2} />
+                      </button>
+                      <span className="text-[13px] font-semibold text-zinc-900 flex-1">{BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}</span>
+                      {selectedBlock._savedBlockId && <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-semibold">SYNC</span>}
+                    </>
+                  )}
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
-                  <BlockProperties
-                    block={selectedBlock}
-                    onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
-                    onSaveAsReusable={() => { setSaveBlockName(''); setShowSaveBlockModal(true) }}
-                  />
+                  {/* Universal block sync banner */}
+                  {selectedBlock._savedBlockId && !selectedSubElement && (
+                    <div className="mb-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Sincronizado</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-700 leading-snug mb-2.5">
+                        Alteracoes neste bloco serao aplicadas em todos os emails que o utilizam.
+                      </p>
+                      <div className="flex gap-2">
+                        <button onClick={async () => {
+                          // Save current block props back to the universal block
+                          try {
+                            await fetch(`/api/email/saved-blocks/${selectedBlock._savedBlockId}`, {
+                              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ block_json: { type: selectedBlock.type, props: selectedBlock.props } }),
+                            })
+                            showToast('Bloco universal atualizado!')
+                          } catch { showToast('Erro ao salvar', 'error') }
+                        }}
+                          className="flex-1 py-1.5 text-[11px] font-semibold text-white bg-emerald-600 rounded-md hover:bg-emerald-700 transition-colors text-center">
+                          Salvar no universal
+                        </button>
+                        <button onClick={() => {
+                          // Unlink: remove the savedBlockId reference
+                          updateBlockMeta(selectedBlock.id, { _savedBlockId: undefined, _savedBlockName: undefined })
+                          
+                          showToast('Bloco desvinculado — agora e independente')
+                        }}
+                          className="flex-1 py-1.5 text-[11px] font-medium text-zinc-700 bg-white border border-zinc-200 rounded-md hover:bg-zinc-50 transition-colors text-center">
+                          Desvincular
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {/* Sub-element properties for compound blocks */}
+                  {selectedSubElement && selectedBlock.type === 'abandoned-cart' ? (
+                    <CompoundSubElementPanel
+                      subElement={selectedSubElement}
+                      block={selectedBlock}
+                      onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
+                    />
+                  ) : (
+                    <BlockProperties
+                      block={selectedBlock}
+                      onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
+                      onSaveAsReusable={() => { setSaveBlockName(''); setShowSaveBlockModal(true) }}
+                    />
+                  )}
                 </div>
               </div>
             ) : selectedSection ? (
               <div className="flex flex-col h-full">
-                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray-200">
-                  <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-700 rounded"><ArrowLeft size={16} /></button>
-                  <span className="text-sm font-semibold text-gray-900">Seção</span>
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-100 shrink-0">
+                  <button onClick={clearSelection} className="p-1.5 text-zinc-400 hover:text-zinc-700 rounded-md hover:bg-zinc-100 transition-colors" title="Voltar para blocos">
+                    <X size={14} strokeWidth={2} />
+                  </button>
+                  <span className="text-[13px] font-semibold text-zinc-900 flex-1">Secao</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
                   <SectionProperties
@@ -957,12 +1204,12 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Layout</p>
                   <div className="grid grid-cols-2 gap-1.5">
                     <button onClick={() => setShowColumnModal(true)}
-                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
+                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-zinc-400 hover:shadow-sm transition-all cursor-pointer">
                       <Columns className="w-5 h-5 text-gray-500" />
                       <span className="text-[10px] font-medium text-gray-600">Colunas</span>
                     </button>
                     <button onClick={() => addSection([100])}
-                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
+                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-zinc-400 hover:shadow-sm transition-all cursor-pointer">
                       <LayoutGrid className="w-5 h-5 text-gray-500" />
                       <span className="text-[10px] font-medium text-gray-600">Seção</span>
                     </button>
@@ -1004,9 +1251,18 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   {/* Section = FULL WIDTH with section color */}
                   <div
                     className={`relative group/section ${selectedSectionId === section.id ? 'ring-2 ring-indigo-400 ring-inset' : 'hover:ring-1 hover:ring-indigo-200 hover:ring-inset'}`}
-                    style={{ backgroundColor: section.styles.backgroundColor || undefined }}
+                    style={{
+                      backgroundColor: section.styles.backgroundColor || undefined,
+                      opacity: ((device === 'desktop' && (section.styles as any).showOnDesktop === false) || (device === 'mobile' && (section.styles as any).showOnMobile === false)) ? 0.3 : 1,
+                    }}
                     onClick={e => { e.stopPropagation(); selectSection(section.id) }}
                   >
+                    {/* Hidden indicator badge */}
+                    {((device === 'desktop' && (section.styles as any).showOnDesktop === false) || (device === 'mobile' && (section.styles as any).showOnMobile === false)) && (
+                      <div className="absolute top-2 right-2 z-20 px-2 py-0.5 bg-red-100 text-red-600 text-[10px] font-semibold rounded border border-red-200">
+                        Oculto no {device === 'desktop' ? 'desktop' : 'mobile'}
+                      </div>
+                    )}
                       {/* Section toolbar INSIDE the section - always visible */}
                       {selectedSectionId === section.id && (
                         <div className="absolute left-1 top-1 z-20 flex items-center gap-1">
@@ -1016,8 +1272,19 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                               className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Duplicar">
                               <Copy className="w-3 h-3" />
                             </button>
-                            <button onClick={e => { e.stopPropagation(); showToast('Seção salva!') }}
-                              className="p-1 text-gray-400 hover:text-amber-500 hover:bg-amber-50 rounded" title="Salvar">
+                            <button onClick={e => {
+                              e.stopPropagation()
+                              const name = prompt('Nome da secao reutilizavel:')
+                              if (!name?.trim()) return
+                              // Save all blocks in this section as a reusable block group
+                              const allBlocks = section.columns.flatMap(c => c.blocks)
+                              if (allBlocks.length === 0) { showToast('Secao vazia', 'error'); return }
+                              fetch('/api/email/saved-blocks', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: name.trim(), category: 'section', block_json: { type: allBlocks[0].type, props: allBlocks[0].props, _sectionBlocks: allBlocks } }),
+                              }).then(() => showToast('Secao salva como reutilizavel!')).catch(() => showToast('Erro', 'error'))
+                            }}
+                              className="p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="Salvar como reutilizavel">
                               <Star className="w-3 h-3" />
                             </button>
                             <button onClick={e => { e.stopPropagation(); removeSection(section.id) }}
@@ -1067,6 +1334,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                       onSelect={() => selectBlock(block.id)}
                                       onClone={() => cloneBlock(block.id)}
                                       onDelete={() => removeBlock(block.id)}
+                                      onSaveReusable={() => { selectBlock(block.id); setSaveBlockName(''); setShowSaveBlockModal(true) }}
+                                      isHidden={(device === 'desktop' && block.props.visibility === 'mobile') || (device === 'mobile' && block.props.visibility === 'desktop')}
                                     >
                                       <div className={lastDroppedBlockId === block.id ? 'email-block-dropped' : ''}>
                                       <BlockPreview
@@ -1075,6 +1344,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                         onSelect={() => selectBlock(block.id)}
                                         onClone={() => cloneBlock(block.id)}
                                         onDelete={() => removeBlock(block.id)}
+                                        selectedSubElement={selectedBlockId === block.id ? selectedSubElement : null}
+                                        onSelectSubElement={(sub) => { selectBlock(block.id); setSelectedSubElement(sub) }}
                                       />
                                       </div>
                                     </SortableBlock>
@@ -1144,16 +1415,23 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Salvar Bloco Reutilizável</h3>
             <input type="text" value={saveBlockName} onChange={e => setSaveBlockName(e.target.value)}
               placeholder="Nome do bloco..." autoFocus
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none mb-3" />
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-zinc-900 focus:ring-2 focus:ring-zinc-500/20 outline-none mb-3" />
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowSaveBlockModal(false)}
                 className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
               <button disabled={!saveBlockName.trim()} onClick={() => {
                 fetch('/api/email/saved-blocks', {
                   method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ name: saveBlockName.trim(), block_json: selectedBlock }),
-                }).then(() => { showToast('Bloco salvo!'); setShowSaveBlockModal(false) }).catch(() => showToast('Erro', 'error'))
-              }} className="px-4 py-2 bg-brand-500 text-white text-sm font-semibold rounded-lg hover:bg-brand-600 disabled:opacity-50">
+                  body: JSON.stringify({ name: saveBlockName.trim(), block_json: { type: selectedBlock.type, props: selectedBlock.props } }),
+                }).then(r => r.json()).then(data => {
+                  // Auto-link block as universal after saving
+                  if (data.block?.id) {
+                    updateBlockMeta(selectedBlock.id, { _savedBlockId: data.block.id, _savedBlockName: saveBlockName.trim() })
+                    
+                  }
+                  showToast('Bloco salvo como reutilizavel!'); setShowSaveBlockModal(false)
+                }).catch(() => showToast('Erro', 'error'))
+              }} className="px-4 py-2 bg-zinc-900 text-white text-sm font-semibold rounded-lg hover:bg-zinc-800 disabled:opacity-50">
                 Salvar
               </button>
             </div>
@@ -1208,10 +1486,10 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                     const isActive = JSON.stringify(columnModalLayout) === JSON.stringify(opt.cols)
                     return (
                       <button key={opt.label} onClick={() => setColumnModalLayout(opt.cols)}
-                        className={`p-3 border-2 rounded-lg text-center transition-all ${isActive ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                        className={`p-3 border-2 rounded-lg text-center transition-all ${isActive ? 'border-zinc-900 bg-zinc-50' : 'border-gray-200 hover:border-gray-300'}`}>
                         <div className="flex gap-0.5 justify-center mb-1">
                           {opt.cols.map((w, i) => (
-                            <div key={i} className={`h-5 rounded-sm ${isActive ? 'bg-brand-500' : 'bg-gray-300'}`} style={{ width: `${w * 0.6}px` }} />
+                            <div key={i} className={`h-5 rounded-sm ${isActive ? 'bg-zinc-900' : 'bg-gray-300'}`} style={{ width: `${w * 0.6}px` }} />
                           ))}
                         </div>
                         <span className="text-[10px] text-gray-600">{opt.label}</span>

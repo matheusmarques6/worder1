@@ -33,10 +33,11 @@ export const MERGE_TAGS: MergeTagGroup[] = [
   {
     name: 'Carrinho', icon: 'ShoppingCart',
     tags: [
+      { name: 'Link de Recuperacao (Shopify)', value: '{{checkout_url}}', sample: 'https://loja.myshopify.com/checkouts/recover/...' },
       { name: 'Link do Carrinho', value: '{{cart_url}}', sample: 'https://loja.com/cart' },
       { name: 'Total', value: '{{cart_total}}', sample: 'R$ 299,90' },
-      { name: '1º Produto', value: '{{cart_first_item}}', sample: 'Camiseta Premium' },
-      { name: '1º Preço', value: '{{cart_first_item_price}}', sample: 'R$ 89,90' },
+      { name: '1o Produto', value: '{{cart_first_item}}', sample: 'Camiseta Premium' },
+      { name: '1o Preco', value: '{{cart_first_item_price}}', sample: 'R$ 89,90' },
     ],
   },
   {
@@ -64,10 +65,37 @@ export const MERGE_TAGS: MergeTagGroup[] = [
     ],
   },
   {
+    name: 'Perfil', icon: 'User',
+    tags: [
+      { name: 'Empresa', value: '{{company}}', sample: 'Acme Corp' },
+      { name: 'Cargo', value: '{{position}}', sample: 'Gerente' },
+      { name: 'Cidade', value: '{{city}}', sample: 'Sao Paulo' },
+      { name: 'Estado', value: '{{state}}', sample: 'SP' },
+      { name: 'Pais', value: '{{country}}', sample: 'Brasil' },
+      { name: 'Aniversario', value: '{{birthday}}', sample: '15/03' },
+      { name: 'Genero', value: '{{gender}}', sample: 'Feminino' },
+      { name: 'Total Pedidos', value: '{{total_orders}}', sample: '5' },
+      { name: 'Total Gasto', value: '{{total_spent}}', sample: 'R$ 1.250,00' },
+      { name: 'Valor Medio Pedido', value: '{{average_order_value}}', sample: 'R$ 250,00' },
+      { name: 'Ultimo Pedido', value: '{{last_order_at}}', sample: '05/04/2026' },
+      { name: 'Origem', value: '{{source}}', sample: 'shopify' },
+      { name: 'Tags', value: '{{tags}}', sample: 'VIP, Recorrente' },
+    ],
+  },
+  {
+    name: 'Personalizado', icon: 'Tag',
+    tags: [
+      { name: 'Campo Custom 1', value: '{{custom.campo1|valor padrao}}', sample: 'valor padrao' },
+      { name: 'Campo Custom 2', value: '{{custom.campo2|}}', sample: '' },
+    ],
+  },
+  {
     name: 'Sistema', icon: 'Link',
     tags: [
       { name: 'Descadastrar', value: '{{unsubscribe_url}}', sample: '#' },
       { name: 'Ver no Navegador', value: '{{view_in_browser_url}}', sample: '#' },
+      { name: 'Data Atual', value: '{{current_date}}', sample: '10/04/2026' },
+      { name: 'Ano Atual', value: '{{current_year}}', sample: '2026' },
     ],
   },
 ]
