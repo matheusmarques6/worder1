@@ -230,15 +230,7 @@ export async function updateConversationStatus(
 
   // Decrement agent active conversations if resolved
   if (status === 'resolved' && data?.assigned_agent_id) {
-    // Use raw SQL for decrement
-    try {
-      await supabaseAdmin.rpc('decrement_agent_conversations', {
-        p_agent_id: data.assigned_agent_id,
-        p_org_id: organizationId,
-      })
-    } catch {
-      // Fallback: just update if RPC doesn't exist
-    }
+    await decrementAgentConversations(data.assigned_agent_id, organizationId)
   }
 
   return { data }
