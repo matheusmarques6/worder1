@@ -332,6 +332,22 @@ export async function calculateRFMScores(
       calculated_at: new Date().toISOString(),
     }));
 
+    // Snapshot PREVIOUS segments before overwrite (for automation event emission)
+    const { data: previousScores } = await supabase
+      .from('shopify_rfm_scores')
+      .select('shopify_customer_id, customer_email, segment')
+      .eq('store_id', storeId);
+
+    const previousByCustomer = new Map<string, { segment: string; email: string | null }>();
+    for (const ps of previousScores || []) {
+      if (ps.shopify_customer_id) {
+        previousByCustomer.set(String(ps.shopify_customer_id), {
+          segment: ps.segment,
+          email: ps.customer_email,
+        });
+      }
+    }
+
     // Delete existing scores for this store
     await supabase
       .from('shopify_rfm_scores')
@@ -349,6 +365,53 @@ export async function calculateRFMScores(
       if (insertError) {
         errors.push(`Batch ${Math.floor(i / batchSize)}: ${insertError.message}`);
       }
+    }
+
+    // Emit rfm_segment_change events for customers whose segment changed
+    try {
+      const changedEvents: any[] = [];
+      for (const score of rfmScores) {
+        const prev = previousByCustomer.get(String(score.shopify_customer_id));
+        if (prev && prev.segment !== score.segment) {
+          // Find contact by email to attach event to CRM contact
+          let contactId: string | null = null;
+          if (score.customer_email) {
+            const { data: contact } = await supabase
+              .from('contacts')
+              .select('id')
+              .eq('organization_id', organizationId)
+              .eq('email', score.customer_email)
+              .limit(1)
+              .maybeSingle();
+            contactId = contact?.id || null;
+          }
+
+          changedEvents.push({
+            organization_id: organizationId,
+            event_type: 'rfm_segment_change',
+            contact_id: contactId,
+            payload: {
+              shopify_customer_id: score.shopify_customer_id,
+              customer_email: score.customer_email,
+              from_segment: prev.segment,
+              to_segment: score.segment,
+              store_id: storeId,
+            },
+            source: 'rfm_recalc',
+            processed: false,
+          });
+        }
+      }
+
+      if (changedEvents.length > 0) {
+        // Insert in batches to avoid oversized single requests
+        for (let i = 0; i < changedEvents.length; i += 200) {
+          await supabase.from('event_logs').insert(changedEvents.slice(i, i + 200));
+        }
+        console.log(`[RFM] Emitted ${changedEvents.length} rfm_segment_change events`);
+      }
+    } catch (eventErr: any) {
+      console.error('[RFM] Failed to emit segment change events:', eventErr?.message);
     }
 
     // 7. Create sync log

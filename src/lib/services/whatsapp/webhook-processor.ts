@@ -244,9 +244,127 @@ async function processIncomingMessage(
         { onConflict: 'organization_id,phone', ignoreDuplicates: true }
       )
 
+    // 8. Emit automation events (event_logs) — fires flow triggers
+    try {
+      await emitAutomationEventsForInboundMessage({
+        organizationId: instance.organization_id,
+        contactId,
+        contactPhone,
+        messageText: messageText || '',
+        messageType,
+        conversationId: conversation.id,
+        hasReferral: !!message.referral,
+        referral: message.referral as any,
+      })
+    } catch (emitErr) {
+      logger.error(LOG_PREFIX, 'Failed to emit automation events', emitErr)
+    }
+
     logger.info(LOG_PREFIX, `Message processed: ${message.id}`)
   } catch (err) {
     logger.error(LOG_PREFIX, 'Error processing message', err)
+  }
+}
+
+// =============================================
+// EMIT AUTOMATION EVENTS
+// =============================================
+// Inserts event_logs so the EventProcessor (cron + queue) can pick them up
+// and fire matching flow automations.
+async function emitAutomationEventsForInboundMessage(args: {
+  organizationId: string
+  contactId: string | null | undefined
+  contactPhone: string
+  messageText: string
+  messageType: string
+  conversationId: string
+  hasReferral: boolean
+  referral?: { source_id?: string; source_type?: string; source_url?: string; headline?: string; body?: string; ctwa_clid?: string }
+}): Promise<void> {
+  const {
+    organizationId,
+    contactId,
+    contactPhone,
+    messageText,
+    messageType,
+    conversationId,
+    hasReferral,
+    referral,
+  } = args
+
+  const basePayload = {
+    contact_phone: contactPhone,
+    conversation_id: conversationId,
+    message_text: messageText,
+    message_type: messageType,
+  }
+
+  // 1. whatsapp_received (always)
+  const events: Array<{ event_type: string; payload: Record<string, any> }> = [
+    {
+      event_type: 'whatsapp_received',
+      payload: basePayload,
+    },
+  ]
+
+  // 2. whatsapp_keyword (for keyword-matching automations; filter applied at match time)
+  if (messageText && messageText.trim().length > 0) {
+    events.push({
+      event_type: 'whatsapp_keyword',
+      payload: basePayload,
+    })
+  }
+
+  // 3. whatsapp_first_message — only if this is the contact's first inbound message
+  if (contactId) {
+    const { count } = await supabaseAdmin
+      .from('whatsapp_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+      .eq('conversation_id', conversationId)
+      .eq('direction', 'inbound')
+    // We just inserted the current message, so count === 1 means first
+    if (count === 1) {
+      events.push({
+        event_type: 'whatsapp_first_message',
+        payload: basePayload,
+      })
+    }
+  }
+
+  // 4. ctwa_ad — only if message has referral (click-to-WhatsApp ad)
+  if (hasReferral && referral) {
+    events.push({
+      event_type: 'ctwa_ad',
+      payload: {
+        ...basePayload,
+        ad_id: referral.source_id,
+        source_type: referral.source_type,
+        source_url: referral.source_url,
+        ctwa_clid: referral.ctwa_clid,
+        headline: referral.headline,
+        body: referral.body,
+      },
+    })
+  }
+
+  // Insert all events in a single call
+  const rows = events.map((e) => ({
+    organization_id: organizationId,
+    event_type: e.event_type,
+    contact_id: contactId ?? null,
+    payload: e.payload,
+    source: 'whatsapp_webhook',
+    processed: false,
+  }))
+
+  if (rows.length > 0) {
+    const { error } = await supabaseAdmin.from('event_logs').insert(rows)
+    if (error) {
+      logger.error(LOG_PREFIX, `Failed to insert event_logs: ${error.message}`)
+    } else {
+      logger.info(LOG_PREFIX, `Emitted ${rows.length} automation event(s) for msg from ${contactPhone}`)
+    }
   }
 }
 

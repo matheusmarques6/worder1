@@ -56,6 +56,24 @@ export async function POST(request: NextRequest) {
         productTitle: variant.product_title,
       })
 
+      // Emit event_log so flow automations with trigger_back_in_stock fire
+      await supabaseAdmin.from('event_logs').insert({
+        organization_id: store.organization_id,
+        event_type: 'back_in_stock',
+        contact_id: null,
+        payload: {
+          product_id: String(variant.product_id),
+          variant_id: String(variant.variant_id),
+          product_title: variant.product_title,
+          store_id: store.id,
+          inventory_item_id,
+          available,
+          location_id,
+        },
+        source: 'shopify_webhook',
+        processed: false,
+      })
+
       return NextResponse.json({ status: 'processed', notified: result.data?.notified || 0 })
     }
 
@@ -73,6 +91,22 @@ export async function POST(request: NextRequest) {
       variantId,
       productTitle,
       productUrl,
+    })
+
+    // Emit event_log so flow automations with trigger_back_in_stock fire
+    await supabaseAdmin.from('event_logs').insert({
+      organization_id: organizationId,
+      event_type: 'back_in_stock',
+      contact_id: null,
+      payload: {
+        product_id: productId,
+        variant_id: variantId,
+        product_title: productTitle,
+        product_url: productUrl,
+        store_id: storeId,
+      },
+      source: 'manual',
+      processed: false,
     })
 
     if (result.error) {
