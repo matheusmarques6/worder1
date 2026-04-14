@@ -448,6 +448,14 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
             onDeleteInvoice={deleteInvoice}
             onAddComment={addComment}
             onRefreshContact={handleRefreshContact}
+            organizationId={organizationId}
+            lastInboundMessage={messages.filter((m: any) => m.direction === 'inbound' && m.content).slice(-1)[0]?.content}
+            onInsertCopilotSuggestion={(text: string) => {
+              // Copy to clipboard as fallback; ChatPanel will pick it up via paste
+              if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                navigator.clipboard.writeText(text).catch(() => {})
+              }
+            }}
           />
         </div>
       )}

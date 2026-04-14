@@ -11,6 +11,8 @@ import { ServiceWindowBar } from './ServiceWindowBar'
 import { QuickRepliesPicker } from './QuickRepliesPicker'
 import { CSATModal } from './modals/CSATModal'
 import { TransferModal } from './modals/TransferModal'
+import { PaymentLinkModal } from './modals/PaymentLinkModal'
+import { CreditCard, ShoppingBag } from 'lucide-react'
 import type { InboxConversation, InboxMessage } from '@/types/inbox'
 
 interface ChatPanelProps {
@@ -286,6 +288,7 @@ export function ChatPanel({
   // Module A: Modals and pickers
   const [showCSATModal, setShowCSATModal] = useState(false)
   const [showTransferModal, setShowTransferModal] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
@@ -388,6 +391,28 @@ export function ChatPanel({
   const lastInboundMessage = messages
     .filter(m => m.direction === 'inbound' && m.content)
     .slice(-1)[0]?.content
+
+  async function handleSendPaymentLink(data: { amount: number; description: string; paymentUrl?: string }) {
+    if (!organizationId) return
+    await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/payment-link?organizationId=${organizationId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+  }
+
+  async function handleSendCatalog() {
+    if (!organizationId) return
+    // Prompt for product ids (simple approach, no selector UI for brevity)
+    const ids = prompt('IDs dos produtos Shopify separados por virgula:')
+    if (!ids) return
+    const productIds = ids.split(',').map(s => s.trim()).filter(Boolean)
+    await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/catalog?organizationId=${organizationId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productIds, bodyText: 'Confira nossos produtos' }),
+    })
+  }
 
   const handleFileTypeSelect = (type: 'image' | 'video' | 'document') => {
     setSelectedMediaType(type)
@@ -577,6 +602,14 @@ export function ChatPanel({
         />
       )}
 
+      {showPaymentModal && organizationId && (
+        <PaymentLinkModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          onSend={handleSendPaymentLink}
+        />
+      )}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isLoading ? (
@@ -658,8 +691,30 @@ export function ChatPanel({
                     <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
                       <FileText className="w-4 h-4 text-blue-400" />
                     </div>
-                    <span className="text-white">Documento</span>
+                    <span className="text-gray-900">Documento</span>
                   </button>
+                  {organizationId && (
+                    <>
+                      <button
+                        onClick={() => { setShowAttachMenu(false); handleSendCatalog() }}
+                        className="flex items-center gap-3 w-full px-4 py-3 hover:bg-gray-100 text-left border-t"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                        </div>
+                        <span className="text-gray-900">Enviar catalogo</span>
+                      </button>
+                      <button
+                        onClick={() => { setShowAttachMenu(false); setShowPaymentModal(true) }}
+                        className="flex items-center gap-3 w-full px-4 py-3 hover:bg-gray-100 text-left"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                          <CreditCard className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <span className="text-gray-900">Link de pagamento</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </>
             )}
