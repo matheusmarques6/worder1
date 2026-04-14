@@ -312,11 +312,56 @@ export default function AutomationsPage() {
     // Validate before activating
     if (newStatus === 'active') {
       if (!automation.trigger_type || automation.trigger_type === 'manual') {
-        alert('Configure um gatilho antes de ativar a automacao.');
+        alert('Configure um gatilho antes de ativar a automação.');
         return;
       }
       if (!automation.nodes || automation.nodes.length < 2) {
-        alert('Adicione pelo menos uma acao ao fluxo antes de ativar.');
+        alert('Adicione pelo menos uma ação ao fluxo antes de ativar.');
+        return;
+      }
+
+      // Validate each action node has required config
+      const errors: string[] = [];
+      for (const node of automation.nodes) {
+        const cfg = node.data?.config || {};
+        const label = node.data?.label || node.type;
+
+        if (node.type === 'action_email' || node.data?.nodeType === 'action_email') {
+          if (!cfg.subject && !cfg.templateId) {
+            errors.push(`Email "${label}" precisa de um assunto ou template`);
+          }
+          if (cfg.templateId === '__new__') {
+            errors.push(`Email "${label}" tem template pendente — abra o editor para salvar`);
+          }
+        }
+
+        if (node.type === 'action_whatsapp' || node.data?.nodeType === 'action_whatsapp') {
+          if (!cfg.message && !cfg.templateName) {
+            errors.push(`WhatsApp "${label}" precisa de uma mensagem ou template`);
+          }
+        }
+
+        if (node.type === 'action_sms' || node.data?.nodeType === 'action_sms') {
+          if (!cfg.message) {
+            errors.push(`SMS "${label}" precisa de uma mensagem`);
+          }
+        }
+
+        if (node.type === 'condition_field' || node.data?.nodeType === 'condition_field') {
+          if (!cfg.field) {
+            errors.push(`Condição "${label}" precisa de um campo configurado`);
+          }
+        }
+
+        if (node.type === 'control_delay' || node.data?.nodeType === 'control_delay') {
+          if (!cfg.value || cfg.value <= 0) {
+            errors.push(`Delay "${label}" precisa de um tempo configurado`);
+          }
+        }
+      }
+
+      if (errors.length > 0) {
+        alert('Corrija antes de ativar:\n\n' + errors.join('\n'));
         return;
       }
     }
