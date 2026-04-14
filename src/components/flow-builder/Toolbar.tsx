@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  X,
   Save,
   PlayCircle,
   History,
@@ -139,30 +138,10 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
     onTest();
   };
 
-  const handleClose = () => {
-    if (isDirty) {
-      const confirm = window.confirm('Você tem alterações não salvas. Deseja sair mesmo assim?');
-      if (!confirm) return;
-    }
-    onBack();
-  };
-
   return (
     <div className="h-14 bg-zinc-900 flex items-center px-2 sm:px-4 gap-2 sm:gap-4 shrink-0">
-      {/* Left Section - Close Button + Name */}
+      {/* Left Section - Name */}
       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink-0">
-        <button
-          onClick={handleClose}
-          className={cn(
-            'p-2 rounded-lg flex-shrink-0',
-            'hover:bg-zinc-800 text-zinc-400 hover:text-white',
-            'transition-colors'
-          )}
-          title="Fechar"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
         {/* Name - Left aligned */}
         <div className="flex items-center gap-2 min-w-0">
           {isEditing ? (

@@ -122,9 +122,20 @@ const LIBRARY_SECTIONS: SectionConfig[] = [
     ],
   },
   {
+    id: 'logic',
+    label: 'Lógica',
+    defaultExpanded: true,
+    items: [
+      { type: 'control_delay', label: 'Atraso / Delay', description: 'Aguarda tempo determinado', icon: Clock, category: 'control', color: '#f59e0b' },
+      { type: 'condition_field', label: 'Divisão Condicional', description: 'Divide caminho por condição', icon: GitBranch, category: 'condition', color: '#eab308' },
+      { type: 'condition_whatsapp_keyword', label: 'Condição WhatsApp', description: 'Verifica keyword na resposta', icon: GitBranch, category: 'condition', color: '#f59e0b' },
+      { type: 'logic_split', label: 'Teste A/B', description: 'Divide contatos aleatoriamente', icon: Shuffle, category: 'condition', color: '#6366f1' },
+    ],
+  },
+  {
     id: 'data',
     label: 'Dados',
-    defaultExpanded: true,
+    defaultExpanded: false,
     items: [
       { type: 'action_update', label: 'Atualizar Contato', description: 'Atualiza dados do contato', icon: UserCog, category: 'action', color: '#0891b2' },
       { type: 'action_tag', label: 'Adicionar Tag', description: 'Adiciona tag ao contato', icon: Tag, category: 'action', color: '#0d9488' },
@@ -136,17 +147,6 @@ const LIBRARY_SECTIONS: SectionConfig[] = [
       { type: 'action_move_deal', label: 'Mover Deal', description: 'Move deal para outro estágio', icon: ArrowRight, category: 'action', color: '#64748b' },
       { type: 'action_notify', label: 'Alerta Interno', description: 'Envia notificação para equipe', icon: Bell, category: 'action', color: '#3b82f6' },
       { type: 'action_webhook', label: 'Webhook', description: 'Faz requisição HTTP externa', icon: Webhook, category: 'action', color: '#f97316' },
-    ],
-  },
-  {
-    id: 'logic',
-    label: 'Lógica',
-    defaultExpanded: true,
-    items: [
-      { type: 'control_delay', label: 'Atraso / Delay', description: 'Aguarda tempo determinado', icon: Clock, category: 'control', color: '#f59e0b' },
-      { type: 'condition_field', label: 'Divisão Condicional', description: 'Divide caminho por condição', icon: GitBranch, category: 'condition', color: '#eab308' },
-      { type: 'condition_whatsapp_keyword', label: 'Condição WhatsApp', description: 'Verifica keyword na resposta', icon: GitBranch, category: 'condition', color: '#f59e0b' },
-      { type: 'logic_split', label: 'Teste A/B', description: 'Divide contatos aleatoriamente', icon: Shuffle, category: 'condition', color: '#6366f1' },
     ],
   },
 ];
@@ -163,13 +163,21 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
   const [selectedTrigger, setSelectedTrigger] = useState<string>('trigger_abandon');
   const [isTriggerDropdownOpen, setIsTriggerDropdownOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>(() => {
+    const validIds = LIBRARY_SECTIONS.map(s => s.id);
+    const defaults = LIBRARY_SECTIONS.filter(s => s.defaultExpanded).map(s => s.id);
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('fb-sidebar-sections');
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          const parsed = JSON.parse(saved) as string[];
+          const intersected = parsed.filter(id => validIds.includes(id));
+          // If none of the saved IDs are valid (old schema), fall back to defaults
+          if (intersected.length === 0 && parsed.length > 0) return defaults;
+          return intersected;
+        }
       } catch {}
     }
-    return LIBRARY_SECTIONS.filter(s => s.defaultExpanded).map(s => s.id);
+    return defaults;
   });
   const [searchQuery, setSearchQuery] = useState('');
   const triggerAddedRef = useRef(false);
@@ -489,17 +497,17 @@ interface SectionComponentProps {
 function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNode }: SectionComponentProps) {
   return (
     <div className="mb-1">
-      {/* Header da Seção — estilo Klaviyo: label pequena sem uppercase */}
+      {/* Header da Seção — font padrão do sistema */}
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-1.5 hover:bg-gray-50 transition-colors group"
+        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors group"
       >
-        <span className="text-[11px] font-semibold text-gray-500 tracking-wide">
+        <span className="text-[14px] font-semibold text-gray-900">
           {section.label}
         </span>
         <ChevronDown
           className={cn(
-            'w-3.5 h-3.5 text-gray-400 transition-transform duration-200',
+            'w-4 h-4 text-gray-500 transition-transform duration-200',
             isExpanded && 'rotate-180'
           )}
         />
