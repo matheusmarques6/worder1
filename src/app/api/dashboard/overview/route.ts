@@ -267,6 +267,12 @@ export async function GET(request: NextRequest) {
       fora: Math.round(sb[i].fora),
     }));
 
+    // Mini sparkline data for Campanhas + Automações KPI cards
+    const sparklines = {
+      campanhas: series.map((s) => s.campanhas),
+      automacoes: series.map((s) => s.automacoes),
+    };
+
     // ── Recent campaigns (top 3 with sends) ──
     const recentCampaigns = campaigns
       .filter((c: any) => pickNum(c, 'total_sent') > 0)
@@ -319,6 +325,7 @@ export async function GET(request: NextRequest) {
       storeRevenue,
       storeOrders,
       series,
+      sparklines,
       channels,
       recentCampaigns,
       topAutomations,
@@ -333,7 +340,7 @@ export async function GET(request: NextRequest) {
       campaignsRevenue: 0, campaignsOrders: 0,
       automationsRevenue: 0, automationsOrders: 0,
       storeRevenue: 0, storeOrders: 0,
-      series: [], channels: { email: 0, whatsapp: 0, sms: 0 },
+      series: [], sparklines: { campanhas: [], automacoes: [] }, channels: { email: 0, whatsapp: 0, sms: 0 },
       recentCampaigns: [], topAutomations: [],
       hasShopify: false,
       period: { range, granularity, days: daysForRange(range) },

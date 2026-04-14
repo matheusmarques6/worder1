@@ -12,7 +12,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { RefreshCw, ChevronDown, TrendingUp, TrendingDown } from 'lucide-react'
+import { RefreshCw, ChevronDown, TrendingUp, TrendingDown, Info, ExternalLink } from 'lucide-react'
 
 // ──────────────────────────────────────────────────────────────
 // Types
@@ -53,6 +53,7 @@ interface Overview {
   storeRevenue: number
   storeOrders: number
   series: Array<{ label: string; campanhas: number; automacoes: number; fora: number }>
+  sparklines: { campanhas: number[]; automacoes: number[] }
   channels: { email: number; whatsapp: number; sms: number }
   recentCampaigns: RecentCampaign[]
   topAutomations: TopAutomation[]
@@ -65,6 +66,7 @@ const EMPTY_OVERVIEW: Overview = {
   automationsRevenue: 0, automationsOrders: 0,
   storeRevenue: 0, storeOrders: 0,
   series: [],
+  sparklines: { campanhas: [], automacoes: [] },
   channels: { email: 0, whatsapp: 0, sms: 0 },
   recentCampaigns: [], topAutomations: [],
   hasShopify: false,
@@ -231,13 +233,40 @@ export default function DashboardPage() {
           <p className="text-[14px] text-[#A1A1AA] mt-1">Aqui está o resumo da sua operação.</p>
         </header>
 
+        {/* ── Onboarding banner: shown until a Shopify store is connected ── */}
+        {!loading && !data.hasShopify && (
+          <div
+            className="mb-11 rounded-[14px] bg-white px-6 py-5 flex items-center justify-between gap-4 flex-wrap"
+            style={{ border: '1px solid #E4E4E7' }}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="text-[14px] font-bold text-[#18181B]" style={{ letterSpacing: '-0.01em' }}>
+                Conecte sua loja para liberar a dashboard
+              </div>
+              <p className="text-[13px] text-[#71717A] mt-1 leading-relaxed">
+                Vincule sua Shopify para ver receita, pedidos e atribuição das suas campanhas e automações em tempo real.
+              </p>
+            </div>
+            <Link
+              href="/integrations"
+              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-[#18181B] hover:bg-[#27272A] transition-colors px-4 py-2 rounded-[8px] shrink-0"
+            >
+              Conectar Shopify <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
+
         {/* ── Section header ── */}
         <div className="flex items-start justify-between gap-6 mb-6 flex-wrap">
           <div>
             <h2 className="text-[20px] font-bold text-[#18181B] leading-tight" style={{ letterSpacing: '-0.02em' }}>
               Desempenho de vendas
             </h2>
-            <button className="text-[13px] text-[#71717A] hover:text-[#3F3F46] mt-1 transition-colors">
+            <button
+              className="inline-flex items-center gap-1 text-[13px] text-[#71717A] hover:text-[#3F3F46] mt-1 transition-colors"
+              title="Receita atribuída: pedidos realizados dentro da janela de atribuição após clique em email, WhatsApp ou SMS enviados pela Worder."
+            >
+              <Info className="w-3.5 h-3.5" />
               Como calculamos as vendas
             </button>
           </div>
@@ -307,8 +336,18 @@ export default function DashboardPage() {
 
             {/* Campanhas + Automações */}
             <div className="flex gap-3.5">
-              <MiniKPI label="Campanhas" value={data.campaignsRevenue} sub={`${data.campaignsOrders.toLocaleString('pt-BR')} pedidos`} />
-              <MiniKPI label="Automações" value={data.automationsRevenue} sub={`${data.automationsOrders.toLocaleString('pt-BR')} pedidos`} />
+              <MiniKPI
+                label="Campanhas"
+                value={data.campaignsRevenue}
+                sub={`${data.campaignsOrders.toLocaleString('pt-BR')} pedidos`}
+                spark={data.sparklines?.campanhas}
+              />
+              <MiniKPI
+                label="Automações"
+                value={data.automationsRevenue}
+                sub={`${data.automationsOrders.toLocaleString('pt-BR')} pedidos`}
+                spark={data.sparklines?.automacoes}
+              />
             </div>
 
             {/* Receita total da loja */}
@@ -453,15 +492,38 @@ export default function DashboardPage() {
 // Sub-components
 // ──────────────────────────────────────────────────────────────
 
-function MiniKPI({ label, value, sub }: { label: string; value: number; sub: string }) {
+function MiniKPI({ label, value, sub, spark }: { label: string; value: number; sub: string; spark?: number[] }) {
   return (
-    <div className="flex-1 rounded-[12px] bg-white px-5 py-[18px] transition-colors hover:bg-[#FAFAFA]" style={{ border: '1px solid #E4E4E7' }}>
+    <div className="flex-1 rounded-[12px] bg-white px-5 py-[18px] transition-colors hover:bg-[#FAFAFA] relative overflow-hidden" style={{ border: '1px solid #E4E4E7' }}>
       <div className="text-[12px] font-semibold text-[#71717A] mb-2">{label}</div>
       <div className="text-[19px] font-bold text-[#18181B]" style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
         {formatBRL(value)}
       </div>
       <div className="text-[12px] text-[#A1A1AA] mt-[6px]">{sub}</div>
+      {spark && spark.length > 1 && spark.some((v) => v > 0) && (
+        <div className="mt-2 -mx-1 -mb-1 h-[22px] opacity-60">
+          <Sparkline values={spark} />
+        </div>
+      )}
     </div>
+  )
+}
+
+// Lightweight inline SVG sparkline — no deps, no tooltip, purely visual.
+function Sparkline({ values }: { values: number[] }) {
+  const w = 100
+  const h = 22
+  const max = Math.max(...values, 1)
+  const min = Math.min(...values, 0)
+  const span = Math.max(max - min, 1)
+  const step = values.length > 1 ? w / (values.length - 1) : 0
+  const points = values
+    .map((v, i) => `${(i * step).toFixed(2)},${(h - ((v - min) / span) * h).toFixed(2)}`)
+    .join(' ')
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-full block">
+      <polyline points={points} fill="none" stroke="#A1A1AA" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 
