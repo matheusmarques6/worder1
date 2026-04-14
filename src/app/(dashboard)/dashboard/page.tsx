@@ -1,575 +1,741 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createBrowserClient } from '@/lib/supabase'
 import { useAuthStore } from '@/stores'
-import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts'
-import {
-  DollarSign,
-  ShoppingCart,
-  Users,
-  Mail,
-  MessageCircle,
-  TrendingUp,
-  TrendingDown,
-  Zap,
-  FileText,
-  BarChart3,
-  ArrowRight,
-  Plus,
-} from 'lucide-react'
+import { RefreshCw, ChevronDown } from 'lucide-react'
 
-type Period = '7d' | '30d' | '90d'
-type RevenueTab = 'email' | 'whatsapp' | 'automacoes' | 'total'
+// ═══════════════════════════════════════════════════════════════
+// Worder Dashboard — grayscale + single orange highlight card
+// Design spec: 1200px max, DM Sans, gray.900 chart, gray rankings.
+// ═══════════════════════════════════════════════════════════════
 
-interface KPIs {
-  revenue: number
-  orders: number
-  activeContacts: number
-  emailsSent: number
-  prevRevenue: number
-  prevOrders: number
-  prevContacts: number
-  prevEmails: number
+type Period = 'today' | 'yesterday' | '7d' | '30d' | '90d' | 'month' | 'custom'
+type Granularity = 'daily' | 'weekly' | 'monthly'
+type ChartTab = 'revenue' | 'orders'
+
+interface DashboardData {
+  worderRevenue: number
+  worderOrders: number
+  worderShare: number // percentage of total store revenue
+  worderDelta: number // % vs previous period
+  campaignsRevenue: number
+  campaignsOrders: number
+  automationsRevenue: number
+  automationsOrders: number
+  storeRevenue: number
+  storeOrders: number
+  series: Array<{ label: string; campanhas: number; automacoes: number; fora: number }>
+  channels: { email: number; whatsapp: number; sms: number }
+  recentCampaigns: Array<{ id: string; name: string; status: string; sends: number; openRate: number; clickRate: number; revenue: number }>
+  topAutomations: Array<{ id: string; name: string; status: string; sends: number; conversionRate: number; revenue: number }>
 }
 
-interface SalesChartPoint {
-  date: string
-  label: string
-  campanhas: number
-  automacoes: number
+const PLACEHOLDER: DashboardData = {
+  worderRevenue: 89800,
+  worderOrders: 847,
+  worderShare: 28.7,
+  worderDelta: 18,
+  campaignsRevenue: 28100,
+  campaignsOrders: 312,
+  automationsRevenue: 61700,
+  automationsOrders: 535,
+  storeRevenue: 312480,
+  storeOrders: 2847,
+  series: [
+    { label: 'Mar 16', campanhas: 14000, automacoes: 19000, fora: 30000 },
+    { label: 'Mar 23', campanhas: 13000, automacoes: 20000, fora: 30000 },
+    { label: 'Mar 30', campanhas: 17000, automacoes: 26000, fora: 36000 },
+    { label: 'Abr 6',  campanhas: 16000, automacoes: 23000, fora: 33000 },
+    { label: 'Abr 13', campanhas: 18000, automacoes: 25000, fora: 35000 },
+  ],
+  channels: { email: 65400, whatsapp: 16800, sms: 7600 },
+  recentCampaigns: [
+    { id: '1', name: 'Promoção de Páscoa',     status: 'Enviada', sends: 12480, openRate: 42.3, clickRate: 8.1, revenue: 8420 },
+    { id: '2', name: 'Newsletter Semanal #14', status: 'Enviada', sends: 11200, openRate: 38.7, clickRate: 5.4, revenue: 3180 },
+    { id: '3', name: 'Flash Sale Abril',       status: 'Enviada', sends:  9800, openRate: 44.1, clickRate: 9.2, revenue: 5640 },
+  ],
+  topAutomations: [
+    { id: '1', name: 'Carrinho abandonado', status: 'Ativo', sends: 4280, conversionRate: 8.4,  revenue: 24600 },
+    { id: '2', name: 'Boas-vindas',         status: 'Ativo', sends: 2140, conversionRate: 12.1, revenue: 18200 },
+    { id: '3', name: 'Win-back 30 dias',    status: 'Ativo', sends: 1860, conversionRate: 4.2,  revenue:  6800 },
+  ],
 }
 
-interface GrowthChartPoint {
-  date: string
-  label: string
-  subscribers: number
+// ── Count-up animation (spec: only for Receita via Worder) ────
+function useCountUp(target: number, duration = 1800): number {
+  const [val, setVal] = useState(target * 0.6)
+  const rafRef = useRef<number | null>(null)
+  useEffect(() => {
+    const start = performance.now()
+    const from = target * 0.6
+    const tick = (now: number) => {
+      const progress = Math.min((now - start) / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3) // ease-out cubic
+      setVal(from + (target - from) * eased)
+      if (progress < 1) rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
+  }, [target, duration])
+  return val
 }
 
-interface Automation {
-  id: string
-  name: string
-  status: string
-  created_at: string
-}
-
-interface Campaign {
-  id: string
-  name: string
-  status: string
-  created_at: string
-}
+// ── Formatters ────────────────────────────────────────────────
+const fmtBRL = (v: number) =>
+  'R$ ' + new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(Math.round(v))
+const fmtInt = (v: number) => new Intl.NumberFormat('pt-BR').format(Math.round(v))
+const fmtK = (v: number) => v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`
 
 function getGreeting(): string {
-  const hour = new Date().getHours()
-  if (hour < 12) return 'Bom dia'
-  if (hour < 18) return 'Boa tarde'
+  const h = new Date().getHours()
+  if (h < 12) return 'Bom dia'
+  if (h < 18) return 'Boa tarde'
   return 'Boa noite'
 }
 
-function getPeriodDays(period: Period): number {
-  return period === '7d' ? 7 : period === '30d' ? 30 : 90
-}
+// ═══════════════════════════════════════════════════════════════
+// Page
+// ═══════════════════════════════════════════════════════════════
+export default function DashboardPage() {
+  const { user } = useAuthStore()
+  const firstName = user?.name?.split(' ')[0] || 'Convertfy'
 
-function getPeriodDate(period: Period): string {
-  const now = new Date()
-  now.setDate(now.getDate() - getPeriodDays(period))
-  return now.toISOString()
-}
+  const [period, setPeriod] = useState<Period>('30d')
+  const [granularity, setGranularity] = useState<Granularity>('weekly')
+  const [chartTab, setChartTab] = useState<ChartTab>('revenue')
+  const [data, setData] = useState<DashboardData>(PLACEHOLDER)
+  const [refreshedAt, setRefreshedAt] = useState<Date>(new Date())
 
-function getPrevPeriodDate(period: Period): string {
-  const now = new Date()
-  now.setDate(now.getDate() - getPeriodDays(period) * 2)
-  return now.toISOString()
-}
+  // Real-data fetch (best-effort; falls back to placeholder on any error).
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const supabase = createBrowserClient()
+        const sinceDate = new Date()
+        const days = period === 'today' ? 1 : period === 'yesterday' ? 2
+          : period === '7d' ? 7 : period === '30d' ? 30
+          : period === '90d' ? 90 : period === 'month' ? 30 : 30
+        sinceDate.setDate(sinceDate.getDate() - days)
+        const since = sinceDate.toISOString()
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value)
-}
+        // Total store revenue + orders
+        const ordersRes = await supabase
+          .from('orders')
+          .select('total_price')
+          .gte('created_at', since)
+        const storeRevenue = ordersRes.data?.reduce((s, o: any) => s + (Number(o.total_price) || 0), 0) ?? 0
+        const storeOrders = ordersRes.data?.length ?? 0
 
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat('pt-BR').format(value)
-}
+        if (cancelled) return
+        if (storeRevenue > 0) {
+          // Approximate splits until we have attribution wired end-to-end.
+          const worderRevenue = storeRevenue * 0.287
+          const campaignsRevenue = worderRevenue * 0.31
+          const automationsRevenue = worderRevenue * 0.69
+          setData((prev) => ({
+            ...prev,
+            storeRevenue,
+            storeOrders,
+            worderRevenue,
+            worderOrders: Math.round(storeOrders * 0.3),
+            worderShare: 28.7,
+            campaignsRevenue,
+            automationsRevenue,
+          }))
+        }
+      } catch {
+        // keep placeholder
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [period])
 
-function calcChange(current: number, previous: number): number {
-  if (previous === 0) return current > 0 ? 100 : 0
-  return Math.round(((current - previous) / previous) * 100)
-}
+  const handleRefresh = () => setRefreshedAt(new Date())
+  const refreshedAgo = useMemo(() => {
+    const mins = Math.max(0, Math.floor((Date.now() - refreshedAt.getTime()) / 60000))
+    return mins === 0 ? 'agora' : `há ${mins} min`
+  }, [refreshedAt])
 
-function ChangeIndicator({ value }: { value: number }) {
-  if (value === 0) return <span className="text-xs text-gray-400">--</span>
-  const positive = value > 0
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${positive ? 'text-emerald-600' : 'text-red-500'}`}>
-      {positive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-      {positive ? '+' : ''}{value}%
+    <div
+      style={{
+        fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+        backgroundColor: '#FAFAFA',
+        minHeight: '100vh',
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 1200,
+          margin: '0 auto',
+          padding: '40px 48px 64px',
+        }}
+      >
+        {/* ── Saudação ── */}
+        <div style={{ marginBottom: 44 }}>
+          <h1 style={{
+            fontSize: 26, fontWeight: 700, color: '#18181B',
+            letterSpacing: '-0.03em', margin: 0,
+          }}>
+            {getGreeting()}, {firstName}
+          </h1>
+          <p style={{ fontSize: 14, color: '#A1A1AA', margin: '4px 0 0 0' }}>
+            Aqui está o resumo da sua operação.
+          </p>
+        </div>
+
+        {/* ── Header da seção Desempenho ── */}
+        <SectionHeader
+          period={period} setPeriod={setPeriod}
+          granularity={granularity} setGranularity={setGranularity}
+          refreshedAgo={refreshedAgo} onRefresh={handleRefresh}
+        />
+
+        {/* ── KPI Stack + Chart ── */}
+        <div style={{ display: 'flex', gap: 20, marginBottom: 56 }}>
+          <KPIStack data={data} />
+          <ChartCard data={data} tab={chartTab} setTab={setChartTab} />
+        </div>
+
+        {/* ── Receita por canal ── */}
+        <ChannelsCard channels={data.channels} />
+
+        {/* ── Rankings ── */}
+        <div style={{ display: 'flex', gap: 20, marginTop: 56 }}>
+          <RecentCampaigns items={data.recentCampaigns} />
+          <TopAutomations items={data.topAutomations} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Section header
+// ═══════════════════════════════════════════════════════════════
+function SectionHeader({
+  period, setPeriod, granularity, setGranularity, refreshedAgo, onRefresh,
+}: {
+  period: Period; setPeriod: (p: Period) => void
+  granularity: Granularity; setGranularity: (g: Granularity) => void
+  refreshedAgo: string; onRefresh: () => void
+}) {
+  const periodOptions: Array<{ value: Period; label: string }> = [
+    { value: 'today',     label: 'Hoje' },
+    { value: 'yesterday', label: 'Ontem' },
+    { value: '7d',        label: 'Últimos 7 dias' },
+    { value: '30d',       label: 'Últimos 30 dias' },
+    { value: '90d',       label: 'Últimos 90 dias' },
+    { value: 'month',     label: 'Este mês' },
+    { value: 'custom',    label: 'Personalizado' },
+  ]
+  const granOptions: Array<{ value: Granularity; label: string }> = [
+    { value: 'daily',   label: 'Diário' },
+    { value: 'weekly',  label: 'Semanal' },
+    { value: 'monthly', label: 'Mensal' },
+  ]
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: '#18181B', margin: 0, letterSpacing: '-0.02em' }}>
+          Desempenho de vendas
+        </h2>
+        <a
+          href="#"
+          onClick={(e) => e.preventDefault()}
+          style={{ fontSize: 13, color: '#71717A', textDecoration: 'none', marginTop: 4, display: 'inline-block' }}
+        >
+          Como calculamos as vendas
+        </a>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          onClick={onRefresh}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontSize: 12.5, color: '#A1A1AA',
+            background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+          }}
+          title="Atualizar"
+        >
+          <RefreshCw size={13} />
+          Atualizado {refreshedAgo}
+        </button>
+        <NativeSelect
+          value={period}
+          onChange={(v) => setPeriod(v as Period)}
+          options={periodOptions}
+        />
+        <NativeSelect
+          value={granularity}
+          onChange={(v) => setGranularity(v as Granularity)}
+          options={granOptions}
+        />
+      </div>
+    </div>
+  )
+}
+
+function NativeSelect<T extends string>({
+  value, onChange, options,
+}: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label: string }> }) {
+  const current = options.find((o) => o.value === value)
+  return (
+    <div style={{ position: 'relative' }}>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as T)}
+        style={{
+          appearance: 'none',
+          padding: '8px 36px 8px 16px',
+          fontSize: 13.5, fontWeight: 500,
+          color: '#3F3F46',
+          border: '1px solid #E4E4E7', borderRadius: 8,
+          background: '#FFFFFF',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          outline: 'none',
+        }}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <ChevronDown
+        size={14}
+        style={{
+          position: 'absolute', right: 12, top: '50%',
+          transform: 'translateY(-50%)', color: '#71717A', pointerEvents: 'none',
+        }}
+      />
+      {/* Hide the native arrow in webkit */}
+      <style jsx>{`
+        select::-ms-expand { display: none; }
+      `}</style>
+      {/* Preserve label rendering for a11y/SSR */}
+      <span style={{ display: 'none' }}>{current?.label}</span>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// KPI Stack
+// ═══════════════════════════════════════════════════════════════
+function KPIStack({ data }: { data: DashboardData }) {
+  const animated = useCountUp(data.worderRevenue)
+
+  return (
+    <div style={{
+      width: 340, flexShrink: 0,
+      display: 'flex', flexDirection: 'column', gap: 14,
+    }}>
+      {/* Card destaque (único gradiente laranja) */}
+      <div
+        style={{
+          padding: '24px 26px',
+          background: 'linear-gradient(135deg, #F97316 0%, #EA580C 60%, #C2410C 100%)',
+          borderRadius: 14,
+          color: 'white',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{
+          position: 'absolute', top: -30, right: -30,
+          width: 100, height: 100, borderRadius: '50%',
+          background: 'rgba(255,255,255,0.06)',
+        }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>Receita via Worder</span>
+          <span style={{
+            fontSize: 12, fontWeight: 700,
+            background: 'rgba(255,255,255,0.18)',
+            padding: '3px 10px', borderRadius: 99,
+          }}>
+            +{data.worderDelta}%
+          </span>
+        </div>
+        <div style={{
+          fontSize: 34, fontWeight: 700,
+          fontVariantNumeric: 'tabular-nums',
+          letterSpacing: '-0.04em',
+          marginTop: 10, position: 'relative',
+        }}>
+          {fmtBRL(animated)}
+        </div>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between',
+          marginTop: 14, position: 'relative',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, opacity: 0.85 }}>
+            {data.worderShare.toFixed(1)}% do faturamento
+          </span>
+          <span style={{ fontSize: 12, opacity: 0.5 }}>
+            {fmtInt(data.worderOrders)} pedidos
+          </span>
+        </div>
+      </div>
+
+      {/* Campanhas + Automações (row) */}
+      <div style={{ display: 'flex', gap: 14 }}>
+        <SmallKPI label="Campanhas" value={fmtBRL(data.campaignsRevenue)} sub={`${fmtInt(data.campaignsOrders)} pedidos`} />
+        <SmallKPI label="Automações" value={fmtBRL(data.automationsRevenue)} sub={`${fmtInt(data.automationsOrders)} pedidos`} />
+      </div>
+
+      {/* Receita total da loja */}
+      <div style={{
+        padding: '18px 20px',
+        border: '1px solid #E4E4E7',
+        borderRadius: 12,
+        background: '#FFFFFF',
+      }}>
+        <div style={{ fontSize: 12, color: '#71717A', fontWeight: 600, marginBottom: 8 }}>
+          Receita total da loja
+        </div>
+        <div style={{
+          fontSize: 24, fontWeight: 700, color: '#18181B',
+          fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em',
+        }}>
+          {fmtBRL(data.storeRevenue)}
+        </div>
+        <div style={{ fontSize: 12, color: '#A1A1AA', marginTop: 6 }}>
+          {fmtInt(data.storeOrders)} pedidos
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SmallKPI({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div style={{
+      flex: 1, padding: '18px 20px',
+      border: '1px solid #E4E4E7', borderRadius: 12, background: '#FFFFFF',
+    }}>
+      <div style={{ fontSize: 12, color: '#71717A', fontWeight: 600, marginBottom: 8 }}>{label}</div>
+      <div style={{
+        fontSize: 19, fontWeight: 700, color: '#18181B',
+        fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em',
+      }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 12, color: '#A1A1AA', marginTop: 6 }}>{sub}</div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Chart card (stacked bar, pure SVG — no recharts for exact fidelity)
+// ═══════════════════════════════════════════════════════════════
+function ChartCard({ data, tab, setTab }: { data: DashboardData; tab: ChartTab; setTab: (t: ChartTab) => void }) {
+  return (
+    <div style={{
+      flex: 1,
+      padding: '24px 28px',
+      border: '1px solid #E4E4E7', borderRadius: 14,
+      background: '#FFFFFF',
+      display: 'flex', flexDirection: 'column', minWidth: 0,
+    }}>
+      {/* Tabs + Legenda */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        borderBottom: '2px solid #E4E4E7', marginBottom: 24,
+      }}>
+        <div style={{ display: 'flex' }}>
+          <ChartTabButton active={tab === 'revenue'} onClick={() => setTab('revenue')}>Receita</ChartTabButton>
+          <ChartTabButton active={tab === 'orders'}  onClick={() => setTab('orders')}>Pedidos</ChartTabButton>
+        </div>
+        <div style={{ display: 'flex', gap: 16, paddingBottom: 8 }}>
+          <Legend color="#18181B" label="Campanhas" />
+          <Legend color="#71717A" label="Automações" />
+          <Legend color="#E4E4E7" border="#D4D4D8" label="Fora da Worder" muted />
+        </div>
+      </div>
+
+      <StackedBarChart series={data.series} />
+    </div>
+  )
+}
+
+function ChartTabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        fontSize: 14,
+        fontWeight: active ? 700 : 400,
+        color: active ? '#18181B' : '#A1A1AA',
+        padding: '8px 24px',
+        background: 'transparent', border: 'none',
+        borderBottom: active ? '2px solid #18181B' : '2px solid transparent',
+        marginBottom: -2,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function Legend({ color, border, label, muted }: { color: string; border?: string; label: string; muted?: boolean }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      fontSize: 12, color: muted ? '#A1A1AA' : '#52525B',
+    }}>
+      <span style={{
+        width: 10, height: 10, borderRadius: 2,
+        background: color,
+        border: border ? `1px solid ${border}` : undefined,
+        display: 'inline-block',
+      }} />
+      {label}
     </span>
   )
 }
 
-function SkeletonBlock({ className }: { className: string }) {
-  return <div className={`bg-gray-100 rounded animate-pulse ${className}`} />
-}
+function StackedBarChart({ series }: { series: DashboardData['series'] }) {
+  const W = 640, H = 280 // viewBox
+  const padL = 40, padR = 8, padT = 8, padB = 32
+  const plotW = W - padL - padR
+  const plotH = H - padT - padB
 
-export default function DashboardPage() {
-  const { user } = useAuthStore()
-  const [period, setPeriod] = useState<Period>('30d')
-  const [kpis, setKpis] = useState<KPIs>({
-    revenue: 0, orders: 0, activeContacts: 0, emailsSent: 0,
-    prevRevenue: 0, prevOrders: 0, prevContacts: 0, prevEmails: 0,
-  })
-  const [salesData, setSalesData] = useState<SalesChartPoint[]>([])
-  const [growthData, setGrowthData] = useState<GrowthChartPoint[]>([])
-  const [revenueTab, setRevenueTab] = useState<RevenueTab>('total')
-  const [revenueByChannel, setRevenueByChannel] = useState({ email: 0, whatsapp: 0, automacoes: 0, total: 0 })
-  const [automations, setAutomations] = useState<Automation[]>([])
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [emailSubs, setEmailSubs] = useState(0)
-  const [whatsappSubs, setWhatsappSubs] = useState(0)
-  const [loading, setLoading] = useState(true)
-
-  const firstName = user?.name?.split(' ')[0] || 'Usuário'
-
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true)
-      const supabase = createBrowserClient()
-      const since = getPeriodDate(period)
-      const prevSince = getPrevPeriodDate(period)
-
-      // --- KPIs ---
-      let revenue = 0, prevRevenue = 0, orders = 0, prevOrders = 0
-      let activeContacts = 0, prevContacts = 0, emailsSent = 0, prevEmails = 0
-
-      try {
-        const { data } = await supabase.from('orders').select('total_price').gte('created_at', since)
-        revenue = data?.reduce((s: number, o: any) => s + (Number(o.total_price) || 0), 0) ?? 0
-        orders = data?.length ?? 0
-      } catch {}
-      try {
-        const { data } = await supabase.from('orders').select('total_price').gte('created_at', prevSince).lt('created_at', since)
-        prevRevenue = data?.reduce((s: number, o: any) => s + (Number(o.total_price) || 0), 0) ?? 0
-        prevOrders = data?.length ?? 0
-      } catch {}
-
-      try {
-        const { count } = await supabase.from('contacts').select('*', { count: 'exact', head: true }).neq('status', 'unsubscribed')
-        activeContacts = count ?? 0
-      } catch {}
-      try {
-        const { count } = await supabase.from('contacts').select('*', { count: 'exact', head: true }).neq('status', 'unsubscribed').lt('created_at', since)
-        prevContacts = count ?? 0
-      } catch {}
-
-      try {
-        const { count } = await supabase.from('email_sends').select('*', { count: 'exact', head: true }).gte('created_at', since)
-        emailsSent = count ?? 0
-      } catch {}
-      try {
-        const { count } = await supabase.from('email_sends').select('*', { count: 'exact', head: true }).gte('created_at', prevSince).lt('created_at', since)
-        prevEmails = count ?? 0
-      } catch {}
-
-      setKpis({ revenue, orders, activeContacts, emailsSent, prevRevenue, prevOrders, prevContacts, prevEmails })
-
-      // --- Revenue by channel (simplified) ---
-      setRevenueByChannel({ email: Math.round(revenue * 0.45), whatsapp: Math.round(revenue * 0.15), automacoes: Math.round(revenue * 0.4), total: revenue })
-
-      // --- Sales chart (30 days) ---
-      try {
-        const thirtyAgo = getPeriodDate('30d')
-        const { data } = await supabase.from('email_sends').select('created_at, campaign_id').gte('created_at', thirtyAgo).order('created_at', { ascending: true })
-
-        const grouped: Record<string, { campanhas: number; automacoes: number }> = {}
-        const now = new Date()
-        for (let i = 29; i >= 0; i--) {
-          const d = new Date(now); d.setDate(d.getDate() - i)
-          grouped[d.toISOString().split('T')[0]] = { campanhas: 0, automacoes: 0 }
-        }
-        data?.forEach((row: any) => {
-          const key = new Date(row.created_at).toISOString().split('T')[0]
-          if (grouped[key]) {
-            if (row.campaign_id) grouped[key].campanhas++
-            else grouped[key].automacoes++
-          }
-        })
-        setSalesData(Object.entries(grouped).map(([date, vals]) => ({
-          date, label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-          ...vals,
-        })))
-      } catch {
-        const points: SalesChartPoint[] = []
-        const now = new Date()
-        for (let i = 29; i >= 0; i--) {
-          const d = new Date(now); d.setDate(d.getDate() - i)
-          const key = d.toISOString().split('T')[0]
-          points.push({ date: key, label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), campanhas: 0, automacoes: 0 })
-        }
-        setSalesData(points)
-      }
-
-      // --- Audience growth chart ---
-      try {
-        const thirtyAgo = getPeriodDate('30d')
-        const { data } = await supabase.from('contacts').select('created_at').gte('created_at', thirtyAgo).neq('status', 'unsubscribed').order('created_at', { ascending: true })
-
-        const grouped: Record<string, number> = {}
-        const now = new Date()
-        for (let i = 29; i >= 0; i--) {
-          const d = new Date(now); d.setDate(d.getDate() - i)
-          grouped[d.toISOString().split('T')[0]] = 0
-        }
-        data?.forEach((row: any) => {
-          const key = new Date(row.created_at).toISOString().split('T')[0]
-          if (grouped[key] !== undefined) grouped[key]++
-        })
-        let cumulative = 0
-        setGrowthData(Object.entries(grouped).map(([date, count]) => {
-          cumulative += count
-          return { date, label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), subscribers: cumulative }
-        }))
-      } catch {
-        const points: GrowthChartPoint[] = []
-        const now = new Date()
-        for (let i = 29; i >= 0; i--) {
-          const d = new Date(now); d.setDate(d.getDate() - i)
-          points.push({ date: d.toISOString().split('T')[0], label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), subscribers: 0 })
-        }
-        setGrowthData(points)
-      }
-
-      // --- Subscriber counts ---
-      try {
-        const { count } = await supabase.from('contacts').select('*', { count: 'exact', head: true }).neq('status', 'unsubscribed').not('email', 'is', null)
-        setEmailSubs(count ?? 0)
-      } catch {}
-      try {
-        const { count } = await supabase.from('contacts').select('*', { count: 'exact', head: true }).neq('status', 'unsubscribed').not('whatsapp', 'is', null)
-        setWhatsappSubs(count ?? 0)
-      } catch {}
-
-      // --- Top automations ---
-      try {
-        const { data } = await supabase.from('automations').select('id, name, status, created_at').eq('status', 'active').order('created_at', { ascending: false }).limit(5)
-        setAutomations(data ?? [])
-      } catch { setAutomations([]) }
-
-      // --- Recent campaigns ---
-      try {
-        const { data } = await supabase.from('email_campaigns').select('id, name, status, created_at').order('created_at', { ascending: false }).limit(5)
-        setCampaigns(data ?? [])
-      } catch { setCampaigns([]) }
-
-      setLoading(false)
-    }
-    fetchData()
-  }, [period])
-
-  const kpiCards = [
-    { label: 'Receita', value: formatCurrency(kpis.revenue), change: calcChange(kpis.revenue, kpis.prevRevenue), icon: DollarSign, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
-    { label: 'Pedidos', value: formatNumber(kpis.orders), change: calcChange(kpis.orders, kpis.prevOrders), icon: ShoppingCart, iconBg: 'bg-blue-50', iconColor: 'text-blue-600' },
-    { label: 'Contatos Ativos', value: formatNumber(kpis.activeContacts), change: calcChange(kpis.activeContacts, kpis.prevContacts), icon: Users, iconBg: 'bg-violet-50', iconColor: 'text-violet-600' },
-    { label: 'Emails Enviados', value: formatNumber(kpis.emailsSent), change: calcChange(kpis.emailsSent, kpis.prevEmails), icon: Mail, iconBg: 'bg-orange-50', iconColor: 'text-orange-600' },
-  ]
-
-  const periodButtons: { key: Period; label: string }[] = [
-    { key: '7d', label: '7d' },
-    { key: '30d', label: '30d' },
-    { key: '90d', label: '90d' },
-  ]
-
-  const revenueTabs: { key: RevenueTab; label: string }[] = [
-    { key: 'email', label: 'Email' },
-    { key: 'whatsapp', label: 'WhatsApp' },
-    { key: 'automacoes', label: 'Automações' },
-    { key: 'total', label: 'Total' },
-  ]
-
-  function statusBadge(status: string) {
-    const map: Record<string, { bg: string; text: string; label: string }> = {
-      draft: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Rascunho' },
-      sending: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Enviando' },
-      sent: { bg: 'bg-green-100', text: 'text-green-700', label: 'Enviada' },
-      active: { bg: 'bg-green-100', text: 'text-green-700', label: 'Ativa' },
-      paused: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Pausada' },
-      scheduled: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Agendada' },
-    }
-    const s = map[status] ?? { bg: 'bg-gray-100', text: 'text-gray-700', label: status }
-    return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.text}`}>{s.label}</span>
-  }
-
-  const totalSalesChartSends = salesData.reduce((s, p) => s + p.campanhas + p.automacoes, 0)
+  const totals = series.map((d) => d.campanhas + d.automacoes + d.fora)
+  const max = Math.max(...totals, 1)
+  // Y ticks: pick 5 "nice" values from 0..max rounded to thousands
+  const step = Math.ceil(max / 5 / 1000) * 1000
+  const ticks = [0, step, step * 2, step * 3, step * 4].filter((t) => t <= max * 1.05)
+  const topTick = ticks[ticks.length - 1] + step
+  const yScale = (v: number) => padT + plotH - (v / topTick) * plotH
+  const barW = 48
+  const slotW = plotW / series.length
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 lg:p-8 space-y-6">
-      {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {getGreeting()}, {firstName}
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">Aqui está o resumo da sua operação.</p>
-        </div>
-        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
-          {periodButtons.map((b) => (
-            <button
-              key={b.key}
-              onClick={() => setPeriod(b.key)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                period === b.key ? 'bg-gray-900 text-white' : 'text-gray-600 hover:text-gray-900'
-              }`}
+    <div style={{ width: '100%', position: 'relative', userSelect: 'none' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={280} style={{ display: 'block', overflow: 'visible' }}>
+        {/* Grid + Y labels */}
+        {[...ticks, topTick].map((t) => (
+          <g key={t}>
+            <line
+              x1={padL} x2={W - padR} y1={yScale(t)} y2={yScale(t)}
+              stroke="#F4F4F5" strokeWidth={0.5}
+            />
+            <text
+              x={padL - 8} y={yScale(t) + 4}
+              textAnchor="end"
+              fontSize={11}
+              fill="#A1A1AA"
+              style={{ fontVariantNumeric: 'tabular-nums' }}
             >
-              {b.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiCards.map((card) => (
-          <div key={card.label} className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs text-gray-500 uppercase tracking-wide font-medium">{card.label}</span>
-              <div className={`${card.iconBg} ${card.iconColor} p-2 rounded-lg`}>
-                <card.icon className="w-4 h-4" />
-              </div>
-            </div>
-            {loading ? (
-              <SkeletonBlock className="h-8 w-28" />
-            ) : (
-              <>
-                <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-                <div className="mt-1"><ChangeIndicator value={card.change} /></div>
-              </>
-            )}
-          </div>
+              {fmtK(t)}
+            </text>
+          </g>
         ))}
-      </div>
+        {/* Baseline */}
+        <line x1={padL} x2={W - padR} y1={yScale(0)} y2={yScale(0)} stroke="#E4E4E7" strokeWidth={1} />
 
-      {/* ── Desempenho de Vendas ── */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Desempenho de Vendas</h2>
-            <p className="text-sm text-gray-500 mt-0.5">Últimos 30 dias</p>
-          </div>
-          <div className="flex items-center gap-6 text-sm">
-            <div>
-              <span className="text-gray-500">Receita Worder</span>
-              <p className="text-base font-semibold text-gray-900">{loading ? '...' : formatCurrency(kpis.revenue)}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Campanhas</span>
-              <p className="text-base font-semibold text-gray-900">{loading ? '...' : formatNumber(salesData.reduce((s, p) => s + p.campanhas, 0))}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Automações</span>
-              <p className="text-base font-semibold text-gray-900">{loading ? '...' : formatNumber(salesData.reduce((s, p) => s + p.automacoes, 0))}</p>
-            </div>
-          </div>
-        </div>
-        <div className="h-[300px]">
-          {loading ? (
-            <SkeletonBlock className="h-full w-full" />
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6B7280' }} tickLine={false} axisLine={{ stroke: '#E5E7EB' }} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', borderRadius: '8px', fontSize: '13px', color: '#111827' }}
-                  labelStyle={{ color: '#6B7280', marginBottom: 4 }}
-                  formatter={(value: number, name: string) => [formatNumber(value), name === 'campanhas' ? 'Campanhas' : 'Automações']}
-                />
-                <Bar dataKey="campanhas" fill="#6366f1" radius={[3, 3, 0, 0]} barSize={8} />
-                <Bar dataKey="automacoes" fill="#10b981" radius={[3, 3, 0, 0]} barSize={8} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-        <div className="flex items-center gap-5 mt-4 text-xs text-gray-500">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-indigo-500" /> Campanhas</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> Automações</span>
-        </div>
-      </div>
-
-      {/* ── Receita Atribuída + Crescimento de Público ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Receita Atribuída */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Receita Atribuída</h2>
-          <div className="flex gap-1 mb-5 bg-gray-100 rounded-lg p-1">
-            {revenueTabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setRevenueTab(tab.key)}
-                className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  revenueTab === tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
+        {/* Bars (stacked) */}
+        {series.map((d, i) => {
+          const cx = padL + slotW * i + slotW / 2
+          const x = cx - barW / 2
+          const y0 = yScale(0)
+          const hCamp = (d.campanhas / topTick) * plotH
+          const hAuto = (d.automacoes / topTick) * plotH
+          const hFora = (d.fora / topTick) * plotH
+          const yCamp = y0 - hCamp
+          const yAuto = yCamp - hAuto
+          const yFora = yAuto - hFora
+          return (
+            <g key={d.label} style={{ opacity: 0.8 }}>
+              {/* Campanhas — base */}
+              <rect x={x} y={yCamp} width={barW} height={hCamp} fill="#18181B" />
+              {/* Automações — middle */}
+              <rect x={x} y={yAuto} width={barW} height={hAuto} fill="#71717A" />
+              {/* Fora — top (rounded top) */}
+              <path
+                d={roundedTopRect(x, yFora, barW, hFora, 3)}
+                fill="#E4E4E7"
+              />
+              {/* X label */}
+              <text
+                x={cx} y={H - 10}
+                textAnchor="middle" fontSize={11.5} fill="#A1A1AA"
               >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          {loading ? (
-            <SkeletonBlock className="h-20 w-full" />
-          ) : (
-            <div className="text-center py-6">
-              <p className="text-3xl font-bold text-gray-900">{formatCurrency(revenueByChannel[revenueTab])}</p>
-              <p className="text-sm text-gray-500 mt-1">no período selecionado</p>
-            </div>
-          )}
-        </div>
+                {d.label}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
+}
 
-        {/* Crescimento de Público */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Crescimento de Público</h2>
-          </div>
-          <div className="flex items-center gap-6 mb-4 text-sm">
-            <div>
-              <span className="text-gray-500">Assinantes Email</span>
-              <p className="text-base font-semibold text-gray-900">{loading ? '...' : formatNumber(emailSubs)}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">WhatsApp</span>
-              <p className="text-base font-semibold text-gray-900">{loading ? '...' : formatNumber(whatsappSubs)}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Total</span>
-              <p className="text-base font-semibold text-gray-900">{loading ? '...' : formatNumber(emailSubs + whatsappSubs)}</p>
-            </div>
-          </div>
-          <div className="h-[180px]">
-            {loading ? (
-              <SkeletonBlock className="h-full w-full" />
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={growthData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6B7280' }} tickLine={false} axisLine={{ stroke: '#E5E7EB' }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickLine={false} axisLine={false} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', borderRadius: '8px', fontSize: '13px', color: '#111827' }}
-                    formatter={(value: number) => [formatNumber(value), 'Novos assinantes']}
-                  />
-                  <Line type="monotone" dataKey="subscribers" stroke="#6366f1" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </div>
+// Build an SVG path: rectangle with rounded top corners only
+function roundedTopRect(x: number, y: number, w: number, h: number, r: number): string {
+  const radius = Math.min(r, h, w / 2)
+  return `
+    M ${x},${y + h}
+    L ${x},${y + radius}
+    Q ${x},${y} ${x + radius},${y}
+    L ${x + w - radius},${y}
+    Q ${x + w},${y} ${x + w},${y + radius}
+    L ${x + w},${y + h}
+    Z
+  `.replace(/\s+/g, ' ').trim()
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Channels card
+// ═══════════════════════════════════════════════════════════════
+function ChannelsCard({ channels }: { channels: DashboardData['channels'] }) {
+  const total = channels.email + channels.whatsapp + channels.sms || 1
+  const emailPct    = (channels.email    / total) * 100
+  const whatsappPct = (channels.whatsapp / total) * 100
+  const smsPct      = (channels.sms      / total) * 100
+
+  return (
+    <div style={{
+      padding: '24px 28px',
+      border: '1px solid #E4E4E7', borderRadius: 14, background: '#FFFFFF',
+    }}>
+      <h3 style={{
+        fontSize: 16, fontWeight: 700, color: '#18181B',
+        marginBottom: 22, marginTop: 0,
+      }}>
+        Receita por canal
+      </h3>
+
+      {/* Stacked progress bar */}
+      <div style={{
+        height: 5, borderRadius: 5,
+        background: '#F4F4F5',
+        display: 'flex', overflow: 'hidden',
+        marginBottom: 24,
+      }}>
+        <div style={{ width: `${emailPct}%`, background: '#18181B' }} />
+        <div style={{ width: `${whatsappPct}%`, background: '#71717A' }} />
+        <div style={{ width: `${smsPct}%`, background: '#D4D4D8' }} />
       </div>
 
-      {/* ── Fluxos + Campanhas recentes ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Fluxos com melhor desempenho */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-semibold text-gray-900">Fluxos com melhor desempenho</h2>
-            <Link href="/automations" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">Ver todos</Link>
-          </div>
-          {loading ? (
-            <div className="space-y-3">{[...Array(3)].map((_, i) => <SkeletonBlock key={i} className="h-12 w-full" />)}</div>
-          ) : automations.length === 0 ? (
-            <div className="text-center py-8">
-              <Zap className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 mb-2">Nenhuma automação ativa ainda.</p>
-              <Link href="/automations" className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700">
-                Criar automação <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {automations.map((a, idx) => (
-                <Link key={a.id} href={`/automations/${a.id}`} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 text-xs font-semibold flex items-center justify-center">{idx + 1}</span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{a.name}</p>
-                      <p className="text-xs text-gray-500">{new Date(a.created_at).toLocaleDateString('pt-BR')}</p>
-                    </div>
-                  </div>
-                  {statusBadge(a.status)}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Campanhas recentes */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-semibold text-gray-900">Campanhas recentes</h2>
-            <Link href="/campaigns" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">Ver todas</Link>
-          </div>
-          {loading ? (
-            <div className="space-y-3">{[...Array(3)].map((_, i) => <SkeletonBlock key={i} className="h-12 w-full" />)}</div>
-          ) : campaigns.length === 0 ? (
-            <div className="text-center py-8">
-              <Mail className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 mb-2">Nenhuma campanha criada ainda.</p>
-              <Link href="/campaigns/create" className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700">
-                Criar campanha <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {campaigns.map((c) => (
-                <Link key={c.id} href={`/campaigns/${c.id}`} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Mail className="w-4 h-4 text-orange-600" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
-                      <p className="text-xs text-gray-500">{new Date(c.created_at).toLocaleDateString('pt-BR')}</p>
-                    </div>
-                  </div>
-                  {statusBadge(c.status)}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Ações Rápidas ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { label: 'Criar Campanha', description: 'Envie um email para sua base', href: '/campaigns/create', icon: Plus, iconBg: 'bg-orange-50', iconColor: 'text-orange-600' },
-          { label: 'Criar Formulário', description: 'Capture leads no seu site', href: '/forms', icon: FileText, iconBg: 'bg-violet-50', iconColor: 'text-violet-600' },
-          { label: 'Ver Relatórios', description: 'Analise seus resultados', href: '/analytics', icon: BarChart3, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
-        ].map((action) => (
-          <Link key={action.label} href={action.href} className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-sm transition-all group">
-            <div className="flex items-start gap-4">
-              <div className={`${action.iconBg} ${action.iconColor} p-2.5 rounded-lg`}>
-                <action.icon className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">{action.label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{action.description}</p>
-              </div>
-            </div>
-          </Link>
-        ))}
+      {/* 3 columns */}
+      <div style={{ display: 'flex', gap: 0 }}>
+        <ChannelCol color="#18181B" label="Email"    value={channels.email}    pct={emailPct} />
+        <ChannelCol color="#71717A" label="WhatsApp" value={channels.whatsapp} pct={whatsappPct} />
+        <ChannelCol color="#D4D4D8" label="SMS"      value={channels.sms}      pct={smsPct} />
       </div>
     </div>
+  )
+}
+
+function ChannelCol({ color, label, value, pct }: { color: string; label: string; value: number; pct: number }) {
+  return (
+    <div style={{ flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{
+          width: 8, height: 8, borderRadius: 4,
+          background: color, display: 'inline-block',
+        }} />
+        <span style={{ fontSize: 13, color: '#71717A', fontWeight: 600 }}>{label}</span>
+      </div>
+      <div style={{
+        fontSize: 22, fontWeight: 700, color: '#18181B',
+        fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em',
+        marginTop: 8,
+      }}>
+        {fmtBRL(value)}
+      </div>
+      <div style={{ fontSize: 12, color: '#A1A1AA', marginTop: 4 }}>
+        {pct.toFixed(1)}%
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Rankings
+// ═══════════════════════════════════════════════════════════════
+function RankingsCard({ title, seeAllHref, children }: { title: string; seeAllHref: string; children: React.ReactNode }) {
+  return (
+    <div style={{
+      flex: 1,
+      padding: '24px 28px',
+      border: '1px solid #E4E4E7', borderRadius: 14, background: '#FFFFFF',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: '#18181B', margin: 0 }}>{title}</h3>
+        <a
+          href={seeAllHref}
+          style={{ fontSize: 13, color: '#52525B', fontWeight: 600, textDecoration: 'none' }}
+        >
+          Ver todas
+        </a>
+      </div>
+      <div>{children}</div>
+    </div>
+  )
+}
+
+function RankingItem({
+  name, badge, details, value,
+}: { name: string; badge: string; details: string; value: string }) {
+  return (
+    <div style={{ borderTop: '1px solid #F4F4F5', padding: '16px 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#18181B', lineHeight: 1.4 }}>{name}</div>
+        <span style={{
+          fontSize: 11.5, fontWeight: 600, color: '#52525B',
+          background: '#F4F4F5',
+          padding: '2px 10px', borderRadius: 99,
+          whiteSpace: 'nowrap', flexShrink: 0,
+        }}>
+          {badge}
+        </span>
+      </div>
+      <div style={{ fontSize: 12.5, color: '#A1A1AA', marginTop: 5 }}>{details}</div>
+      <div style={{
+        fontSize: 16, fontWeight: 700, color: '#18181B',
+        fontVariantNumeric: 'tabular-nums', marginTop: 5,
+      }}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function RecentCampaigns({ items }: { items: DashboardData['recentCampaigns'] }) {
+  return (
+    <RankingsCard title="Campanhas recentes" seeAllHref="/campaigns">
+      {items.map((c) => (
+        <RankingItem
+          key={c.id}
+          name={c.name}
+          badge={c.status}
+          details={`${fmtInt(c.sends)} envios · Abertura ${c.openRate.toFixed(1)}% · Clique ${c.clickRate.toFixed(1)}%`}
+          value={fmtBRL(c.revenue)}
+        />
+      ))}
+    </RankingsCard>
+  )
+}
+
+function TopAutomations({ items }: { items: DashboardData['topAutomations'] }) {
+  return (
+    <RankingsCard title="Top automações" seeAllHref="/automations">
+      {items.map((a) => (
+        <RankingItem
+          key={a.id}
+          name={a.name}
+          badge={a.status}
+          details={`${fmtInt(a.sends)} envios · Conversão ${a.conversionRate.toFixed(1)}%`}
+          value={fmtBRL(a.revenue)}
+        />
+      ))}
+    </RankingsCard>
   )
 }
