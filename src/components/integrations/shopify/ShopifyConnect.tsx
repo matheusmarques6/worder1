@@ -53,7 +53,19 @@ export default function ShopifyConnect() {
   const [pixelCode, setPixelCode] = useState<string | null>(null);
   const [copiedPixel, setCopiedPixel] = useState(false);
 
+  // When the page was opened via "Adicionar loja" from the integrations
+  // list, the URL carries ?add=1. In that case we skip the "connected"
+  // view even if there's already a store — the user explicitly wants
+  // to connect a new one (e.g. a second Shopify store on the same org).
+  const forceAdd = searchParams.get('add') === '1' || searchParams.get('add') === 'true';
+
   useEffect(() => {
+    if (forceAdd) {
+      // Skip status fetch — go straight to the connect form.
+      setLoading(false);
+      setConnected(false);
+      return;
+    }
     fetchStatus();
 
     const success = searchParams.get('success');
@@ -66,6 +78,7 @@ export default function ShopifyConnect() {
     if (urlError) {
       setError(getErrorMessage(urlError));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   async function fetchStatus() {
@@ -176,8 +189,10 @@ export default function ShopifyConnect() {
         const pJson = await pRes.json();
         if (pRes.ok && pJson.code) setPixelCode(pJson.code);
       } catch { /* non-blocking */ }
-      // Refresh store status on the page.
-      fetchStatus();
+      // IMPORTANT: do NOT call fetchStatus() here. Doing so would flip
+      // the component into its "connected" view and hide the Custom
+      // Pixel code block (the very next step the merchant needs). The
+      // user exits via the "Voltar para Integrações" button at the top.
     } catch {
       setError('Erro ao conectar. Tente novamente.');
     } finally {
