@@ -41,8 +41,13 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   const toggleHistoryPanel = useFlowStore((state) => state.toggleHistoryPanel);
   const undo = useFlowStore((state) => state.undo);
   const redo = useFlowStore((state) => state.redo);
-  const canUndo = useFlowStore((state) => state.canUndo);
-  const canRedo = useFlowStore((state) => state.canRedo);
+  // Subscribe to past/future length directly so the component re-renders
+  // when history mutates (canUndo/canRedo are functions that access get(),
+  // which doesn't trigger a Zustand re-render on its own).
+  const pastLength = useFlowStore((state) => state.past.length);
+  const futureLength = useFlowStore((state) => state.future.length);
+  const canUndo = () => pastLength > 0;
+  const canRedo = () => futureLength > 0;
   const showAnalytics = useFlowStore((state) => state.showAnalytics);
   const toggleAnalytics = useFlowStore((state) => state.toggleAnalytics);
 

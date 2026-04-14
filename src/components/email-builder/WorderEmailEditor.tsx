@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star } from 'lucide-react'
 import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, useDroppable, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
@@ -33,9 +33,20 @@ interface WorderEmailEditorProps {
 }
 
 // ── Sortable Block Wrapper (drag from anywhere on the block) ──
-function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDelete }: {
-  blockId: string; children: React.ReactNode; isSelected: boolean;
-  onSelect: () => void; onClone: () => void; onDelete: () => void
+function SortableBlock({
+  blockId, children, isSelected, onSelect, onClone, onDelete,
+  isUniversal, savedBlockName, onSaveAsUniversal, onUnlink,
+}: {
+  blockId: string;
+  children: React.ReactNode;
+  isSelected: boolean;
+  onSelect: () => void;
+  onClone: () => void;
+  onDelete: () => void;
+  isUniversal: boolean;
+  savedBlockName?: string;
+  onSaveAsUniversal: () => void;
+  onUnlink: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: blockId,
@@ -48,14 +59,63 @@ function SortableBlock({ blockId, children, isSelected, onSelect, onClone, onDel
       {...listeners}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1, zIndex: isDragging ? 50 : 'auto' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
-      className={`relative group cursor-grab active:cursor-grabbing ${isSelected ? 'ring-2 ring-brand-500 ring-offset-1' : 'hover:ring-1 hover:ring-brand-300'}`}
+      className={`relative group cursor-grab active:cursor-grabbing ${isSelected ? 'ring-2 ring-brand-500 ring-offset-1' : isUniversal ? 'hover:ring-1 hover:ring-violet-300' : 'hover:ring-1 hover:ring-brand-300'}`}
     >
-      {isSelected && (
-        <div className="absolute -right-9 top-0 flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5 z-20">
-          <button onClick={e => { e.stopPropagation(); onClone() }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Duplicar"><Copy className="w-3.5 h-3.5" /></button>
-          <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
+      {/* Universal badge — always visible when linked to saved block */}
+      {isUniversal && (
+        <div
+          className="absolute left-1 top-1 z-20 flex items-center gap-1 px-1.5 py-0.5 bg-violet-500 text-white text-[10px] font-semibold rounded shadow-sm"
+          title={savedBlockName ? `Bloco universal: ${savedBlockName}` : 'Bloco universal'}
+        >
+          <Star className="w-2.5 h-2.5 fill-white" />
+          <span className="uppercase tracking-wide">Universal</span>
         </div>
       )}
+
+      {/* Hover toolbar — appears on hover OR when selected */}
+      <div
+        className={`absolute -right-9 top-0 flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5 z-20 transition-opacity ${
+          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}
+      >
+        <button
+          onClick={e => { e.stopPropagation(); onClone() }}
+          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+          title="Duplicar"
+        >
+          <Copy className="w-3.5 h-3.5" />
+        </button>
+        {isUniversal ? (
+          <button
+            onClick={e => { e.stopPropagation(); onUnlink() }}
+            className="p-1.5 text-violet-500 hover:text-amber-600 hover:bg-amber-50 rounded"
+            title="Desvincular do bloco universal (editar só aqui)"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        ) : (
+          <button
+            onClick={e => { e.stopPropagation(); onSaveAsUniversal() }}
+            className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded"
+            title="Salvar como bloco universal"
+          >
+            <Star className="w-3.5 h-3.5" />
+          </button>
+        )}
+        <button
+          onClick={e => { e.stopPropagation(); onDelete() }}
+          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
+          title="Excluir"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Universal overlay tint — subtle indicator the whole block is linked */}
+      {isUniversal && !isSelected && (
+        <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-violet-200/60 rounded-[1px]" />
+      )}
+
       {children}
     </div>
   )
@@ -343,9 +403,14 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
-  // Undo/Redo
-  const [history, setHistory] = useState<string[]>([])
-  const [historyIdx, setHistoryIdx] = useState(-1)
+  // Undo/Redo — single snapshot frame array + idx as ref to avoid
+  // stale-closure race conditions when mutations fire in quick succession.
+  const [history, setHistory] = useState<string[]>(() => [JSON.stringify(
+    design ? migrateV1toV2(design) : DEFAULT_DOCUMENT
+  )])
+  const [historyIdx, setHistoryIdx] = useState(0)
+  const historyIdxRef = useRef(0)
+  useEffect(() => { historyIdxRef.current = historyIdx }, [historyIdx])
 
   const selectedBlock = selectedBlockId ? allBlocks(doc).find(b => b.id === selectedBlockId) || null : null
   const selectedSection = selectedSectionId ? doc.sections.find(s => s.id === selectedSectionId) || null : null
@@ -357,9 +422,16 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
 
   const pushHistory = useCallback((newDoc: EmailDocument) => {
     const json = JSON.stringify(newDoc)
-    setHistory(prev => [...prev.slice(0, historyIdx + 1), json].slice(-40))
-    setHistoryIdx(prev => prev + 1)
-  }, [historyIdx])
+    setHistory(prev => {
+      // Drop any "future" frames after current idx, append new, cap at 40
+      const truncated = prev.slice(0, historyIdxRef.current + 1)
+      const next = [...truncated, json].slice(-40)
+      const newIdx = next.length - 1
+      historyIdxRef.current = newIdx
+      setHistoryIdx(newIdx)
+      return next
+    })
+  }, [])
 
   const updateDoc = useCallback((newDoc: EmailDocument) => {
     setDoc(newDoc)
@@ -367,12 +439,24 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   }, [pushHistory])
 
   const undo = useCallback(() => {
-    if (historyIdx > 0) { setHistoryIdx(prev => prev - 1); setDoc(JSON.parse(history[historyIdx - 1])) }
-  }, [history, historyIdx])
+    setHistoryIdx(prev => {
+      if (prev <= 0) return prev
+      const next = prev - 1
+      historyIdxRef.current = next
+      setDoc(JSON.parse(history[next]))
+      return next
+    })
+  }, [history])
 
   const redo = useCallback(() => {
-    if (historyIdx < history.length - 1) { setHistoryIdx(prev => prev + 1); setDoc(JSON.parse(history[historyIdx + 1])) }
-  }, [history, historyIdx])
+    setHistoryIdx(prev => {
+      if (prev >= history.length - 1) return prev
+      const next = prev + 1
+      historyIdxRef.current = next
+      setDoc(JSON.parse(history[next]))
+      return next
+    })
+  }, [history])
 
   // ── Selection helpers ──
   const selectBlock = useCallback((blockId: string) => {
@@ -452,9 +536,15 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     selectBlock(block.id)
   }, [doc, updateDoc, selectBlock])
 
-  const addSavedBlock = useCallback((blockJson: any) => {
+  const addSavedBlock = useCallback((blockJson: any, savedBlockId?: string, savedBlockName?: string) => {
     if (!blockJson) return
-    const restored: EmailBlock = { ...blockJson, id: 'b_' + Math.random().toString(36).substring(2, 9) }
+    // Restore a fresh block id so duplicates have their own instance, but
+    // KEEP the link to the saved_block (_savedBlockId) so edits propagate.
+    const restored: EmailBlock = {
+      ...blockJson,
+      id: 'b_' + Math.random().toString(36).substring(2, 9),
+      ...(savedBlockId ? { _savedBlockId: savedBlockId, _savedBlockName: savedBlockName } : {}),
+    }
     const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
     if (sections.length === 0) {
       const section = createSection([100])
@@ -488,18 +578,71 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     selectBlock(clone.id)
   }, [doc, updateDoc, selectBlock])
 
-  const updateProp = useCallback((id: string, key: string, value: any) => {
-    setDoc(prev => ({
-      ...prev,
-      sections: prev.sections.map(s => ({
-        ...s,
-        columns: s.columns.map(c => ({
-          ...c,
-          blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, [key]: value } } : b),
-        })),
-      })),
-    }))
+  // ── Universal Blocks (Klaviyo-style) ──
+  // Open the "Save as Universal" modal pre-filled with the selected block
+  const saveBlockAsUniversal = useCallback((id: string) => {
+    setSelectedBlockId(id)
+    setSaveBlockName('')
+    setShowSaveBlockModal(true)
   }, [])
+
+  // Unlink: keep the current block instance but drop its _savedBlockId so
+  // further edits only affect THIS email (not the saved library entry).
+  const unlinkUniversalBlock = useCallback((id: string) => {
+    const loc = findBlockLocation(doc, id)
+    if (!loc) return
+    const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
+    const b = sections[loc.sectionIdx].columns[loc.columnIdx].blocks[loc.blockIdx]
+    delete b._savedBlockId
+    delete b._savedBlockName
+    updateDoc({ ...doc, sections })
+    showToast('Bloco desvinculado — edições agora ficam só neste email')
+  }, [doc, updateDoc, showToast])
+
+  // Debounced propagation queue for universal blocks — when user edits a
+  // linked block, we PATCH the saved_blocks entry so every email using it
+  // picks up the change. We debounce so rapid keystrokes make one request.
+  const universalSyncTimersRef = useRef<Map<string, any>>(new Map())
+  const scheduleUniversalSync = useCallback((savedBlockId: string, block: EmailBlock) => {
+    const timers = universalSyncTimersRef.current
+    if (timers.has(savedBlockId)) clearTimeout(timers.get(savedBlockId))
+    const t = setTimeout(async () => {
+      timers.delete(savedBlockId)
+      try {
+        // Never persist the link fields back into the saved_block body
+        const clean: EmailBlock = { ...block } as EmailBlock
+        delete (clean as any)._savedBlockId
+        delete (clean as any)._savedBlockName
+        await fetch(`/api/email/saved-blocks/${savedBlockId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ block_json: clean }),
+        })
+      } catch (err) {
+        console.warn('[UniversalBlock] sync failed', err)
+      }
+    }, 600)
+    timers.set(savedBlockId, t)
+  }, [])
+
+  const updateProp = useCallback((id: string, key: string, value: any) => {
+    setDoc(prev => {
+      const next = {
+        ...prev,
+        sections: prev.sections.map(s => ({
+          ...s,
+          columns: s.columns.map(c => ({
+            ...c,
+            blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, [key]: value } } : b),
+          })),
+        })),
+      }
+      // If this block is linked to a saved_block, propagate the mutation.
+      const edited = allBlocks(next).find(b => b.id === id)
+      if (edited?._savedBlockId) scheduleUniversalSync(edited._savedBlockId, edited)
+      return next
+    })
+  }, [scheduleUniversalSync])
 
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
 
@@ -706,7 +849,38 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                 <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider flex-1">
                   {BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}
                 </p>
+                {selectedBlock._savedBlockId && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-violet-100 text-violet-700">
+                    <Star className="w-2.5 h-2.5 fill-violet-600" />
+                    UNIVERSAL
+                  </span>
+                )}
               </div>
+
+              {/* Universal block banner — appears only when the selected block
+                  is linked to a saved_block. Explains propagation + unlink action. */}
+              {selectedBlock._savedBlockId && (
+                <div className="mx-3 mt-3 p-3 rounded-lg bg-violet-50 border border-violet-200">
+                  <div className="flex items-start gap-2">
+                    <Star className="w-4 h-4 text-violet-600 fill-violet-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-semibold text-violet-900 leading-tight">
+                        {selectedBlock._savedBlockName || 'Bloco Universal'}
+                      </p>
+                      <p className="text-[11px] text-violet-700/80 leading-snug mt-0.5">
+                        Edições se aplicam a todos os emails que usam este bloco.
+                      </p>
+                      <button
+                        onClick={() => unlinkUniversalBlock(selectedBlock.id)}
+                        className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:text-violet-900 underline underline-offset-2"
+                      >
+                        Desvincular — editar só neste email
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex-1 overflow-y-auto p-3">
                 <BlockProperties
                   block={selectedBlock}
@@ -880,6 +1054,10 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                       onSelect={() => selectBlock(block.id)}
                                       onClone={() => cloneBlock(block.id)}
                                       onDelete={() => removeBlock(block.id)}
+                                      isUniversal={!!block._savedBlockId}
+                                      savedBlockName={block._savedBlockName}
+                                      onSaveAsUniversal={() => saveBlockAsUniversal(block.id)}
+                                      onUnlink={() => unlinkUniversalBlock(block.id)}
                                     >
                                       <BlockPreview
                                         block={block}
@@ -955,24 +1133,73 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         }}
       />
 
-      {/* ── Save Block Modal ── */}
+      {/* ── Save Block as Universal Modal ── */}
       {showSaveBlockModal && selectedBlock && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowSaveBlockModal(false)}>
-          <div onClick={e => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl w-[380px] p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Salvar Bloco Reutilizável</h3>
-            <input type="text" value={saveBlockName} onChange={e => setSaveBlockName(e.target.value)}
-              placeholder="Nome do bloco..." autoFocus
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none mb-3" />
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl w-[420px] p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-6 h-6 rounded-md bg-violet-100 flex items-center justify-center">
+                <Star className="w-3.5 h-3.5 text-violet-600 fill-violet-600" />
+              </div>
+              <h3 className="text-sm font-semibold text-gray-900">Salvar como Bloco Universal</h3>
+            </div>
+            <p className="text-[12px] text-gray-500 leading-relaxed mb-4 pl-8">
+              Blocos universais ficam disponíveis em todos os emails. Edições
+              no bloco se propagam automaticamente para cada email que o usa.
+            </p>
+            <input
+              type="text"
+              value={saveBlockName}
+              onChange={e => setSaveBlockName(e.target.value)}
+              placeholder="Nome do bloco universal..."
+              autoFocus
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none mb-3"
+            />
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowSaveBlockModal(false)}
-                className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
-              <button disabled={!saveBlockName.trim()} onClick={() => {
-                fetch('/api/email/saved-blocks', {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ name: saveBlockName.trim(), block_json: selectedBlock }),
-                }).then(() => { showToast('Bloco salvo!'); setShowSaveBlockModal(false) }).catch(() => showToast('Erro', 'error'))
-              }} className="px-4 py-2 bg-brand-500 text-white text-sm font-semibold rounded-lg hover:bg-brand-600 disabled:opacity-50">
-                Salvar
+              <button
+                onClick={() => setShowSaveBlockModal(false)}
+                className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={!saveBlockName.trim()}
+                onClick={async () => {
+                  const name = saveBlockName.trim()
+                  try {
+                    // Strip any existing link fields before saving to library
+                    const cleanBlock: EmailBlock = { ...selectedBlock } as EmailBlock
+                    delete (cleanBlock as any)._savedBlockId
+                    delete (cleanBlock as any)._savedBlockName
+                    const res = await fetch('/api/email/saved-blocks', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ name, block_json: cleanBlock }),
+                    })
+                    if (!res.ok) throw new Error('save failed')
+                    const json = await res.json()
+                    const savedId: string | undefined = json?.block?.id
+                    // Link THIS block instance to the new saved_block so it
+                    // acts as a linked universal block from now on.
+                    if (savedId) {
+                      const loc = findBlockLocation(doc, selectedBlock.id)
+                      if (loc) {
+                        const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
+                        const b = sections[loc.sectionIdx].columns[loc.columnIdx].blocks[loc.blockIdx]
+                        b._savedBlockId = savedId
+                        b._savedBlockName = name
+                        updateDoc({ ...doc, sections })
+                      }
+                    }
+                    showToast('Bloco universal criado!')
+                    setShowSaveBlockModal(false)
+                  } catch {
+                    showToast('Erro ao salvar', 'error')
+                  }
+                }}
+                className="px-4 py-2 bg-violet-600 text-white text-sm font-semibold rounded-lg hover:bg-violet-700 disabled:opacity-50"
+              >
+                Salvar como Universal
               </button>
             </div>
           </div>

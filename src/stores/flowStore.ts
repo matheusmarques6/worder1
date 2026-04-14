@@ -279,23 +279,29 @@ export const useFlowStore = create<FlowStore>()(
         }));
       },
       
-      updateNode: (nodeId, data) => set((state) => ({
-        nodes: state.nodes.map((node) =>
-          node.id === nodeId
-            ? { ...node, data: { ...node.data, ...data } }
-            : node
-        ),
-        isDirty: true,
-      })),
-      
-      updateNodeConfig: (nodeId, config) => set((state) => ({
-        nodes: state.nodes.map((node) =>
-          node.id === nodeId
-            ? { ...node, data: { ...node.data, config: { ...node.data.config, ...config } } }
-            : node
-        ),
-        isDirty: true,
-      })),
+      updateNode: (nodeId, data) => {
+        get().saveToHistory();
+        set((state) => ({
+          nodes: state.nodes.map((node) =>
+            node.id === nodeId
+              ? { ...node, data: { ...node.data, ...data } }
+              : node
+          ),
+          isDirty: true,
+        }));
+      },
+
+      updateNodeConfig: (nodeId, config) => {
+        get().saveToHistory();
+        set((state) => ({
+          nodes: state.nodes.map((node) =>
+            node.id === nodeId
+              ? { ...node, data: { ...node.data, config: { ...node.data.config, ...config } } }
+              : node
+          ),
+          isDirty: true,
+        }));
+      },
       
       removeNode: (nodeId) => {
         get().saveToHistory();
