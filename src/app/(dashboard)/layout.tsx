@@ -92,9 +92,8 @@ const navigation: NavSection[] = [
     label: 'Canais',
     items: [
       {
-        name: 'Email', href: '/email/campaigns', icon: Mail,
+        name: 'Email', href: '/email/templates', icon: Mail,
         children: [
-          { name: 'Campanhas', href: '/email/campaigns' },
           { name: 'Templates', href: '/email/templates' },
         ],
       },

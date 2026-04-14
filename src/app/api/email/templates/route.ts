@@ -60,6 +60,12 @@ export async function POST(request: NextRequest) {
       category: body.category || 'marketing',
       created_by: auth.user.id,
     };
+    // Accept design_json / design so templates created from prebuilt
+    // are loaded in the editor with real editable blocks.
+    if (body.design_json || body.design) {
+      insertData.design_json = body.design_json || body.design;
+      insertData.design = body.design || body.design_json;
+    }
     if (storeId) insertData.store_id = storeId;
 
     const { data: template, error } = await supabaseAdmin

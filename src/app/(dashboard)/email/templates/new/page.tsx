@@ -65,6 +65,8 @@ export default function NewTemplatePage() {
           name: template.name,
           category: template.category,
           html: template.html,
+          design: template.design,
+          design_json: template.design,
         }),
       })
       if (!res.ok) {
