@@ -653,41 +653,41 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         </div>
       )}
 
-      {/* ── Toolbar ── */}
-      <div className="flex items-center justify-between px-4 h-[52px] bg-white border-b border-gray-200 flex-shrink-0 z-20">
-        <div className="flex items-center gap-3">
-          <button onClick={() => { if (confirm('Sair sem salvar? Alterações não salvas serão perdidas.')) onBack() }}
-            className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors" title="Voltar para templates">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="h-5 w-px bg-gray-200" />
+      {/* ── Toolbar (black theme, restored from 8442103) ── */}
+      <div className="flex items-center justify-between px-4 h-[52px] bg-zinc-900 flex-shrink-0 z-20">
+        <div className="flex items-center gap-2.5 min-w-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/worder-favicon.svg" alt="Worder" className="w-6 h-6 flex-shrink-0" />
-          <span className="text-sm font-semibold text-gray-900 truncate max-w-[250px]">{templateName}</span>
-          <span className="text-[9px] px-1.5 py-0.5 bg-brand-100 text-brand-700 rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
+          <img src="/worder-favicon.svg" alt="Worder" className="w-7 h-7 flex-shrink-0" />
+          <div className="h-5 w-px bg-zinc-700" />
+          <span className="text-sm font-semibold text-white truncate max-w-[280px]">{templateName}</span>
+          <span className="text-[9px] px-1.5 py-0.5 bg-white/10 text-white rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
         </div>
 
         <div className="flex items-center gap-1">
-          <button onClick={undo} disabled={historyIdx <= 0} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Desfazer"><Undo2 size={15} /></button>
-          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Refazer"><Redo2 size={15} /></button>
-          <div className="w-px h-4 bg-gray-200 mx-1" />
-          <button onClick={() => setDevice('desktop')} className={`p-1.5 rounded transition-colors ${device === 'desktop' ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-gray-700'}`}><Monitor size={15} /></button>
-          <button onClick={() => setDevice('mobile')} className={`p-1.5 rounded transition-colors ${device === 'mobile' ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-gray-700'}`}><Smartphone size={15} /></button>
+          <button onClick={undo} disabled={historyIdx <= 0} className="p-1.5 text-zinc-500 hover:text-white rounded disabled:opacity-30 transition-colors" title="Desfazer"><Undo2 size={15} /></button>
+          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-1.5 text-zinc-500 hover:text-white rounded disabled:opacity-30 transition-colors" title="Refazer"><Redo2 size={15} /></button>
+          <div className="w-px h-4 bg-zinc-700 mx-1" />
+          <button onClick={() => setDevice('desktop')} className={`p-1.5 rounded transition-colors ${device === 'desktop' ? 'text-white bg-zinc-700' : 'text-zinc-500 hover:text-white'}`}><Monitor size={15} /></button>
+          <button onClick={() => setDevice('mobile')} className={`p-1.5 rounded transition-colors ${device === 'mobile' ? 'text-white bg-zinc-700' : 'text-zinc-500 hover:text-white'}`}><Smartphone size={15} /></button>
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowMergeTags(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors" title="Merge Tags">
+          <button onClick={() => setShowMergeTags(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors" title="Merge Tags">
             <Tag size={14} /> Tags
           </button>
-          <button onClick={handlePreview} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+          <button onClick={handlePreview} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors">
             <Eye size={14} /> Preview
           </button>
-          <button onClick={() => setShowSendTest(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+          <button onClick={() => setShowSendTest(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors">
             <Send size={14} /> Teste
           </button>
-          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-500 text-white text-xs font-semibold rounded-lg hover:bg-brand-600 disabled:opacity-50 transition-colors">
+          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-zinc-900 text-xs font-semibold rounded-lg hover:bg-zinc-100 disabled:opacity-50 transition-colors">
             {saving ? <Loader2 size={14} className="animate-spin" /> : isSaved ? <CheckCircle size={14} /> : <Save size={14} />}
             {saving ? 'Salvando...' : isSaved ? 'Salvo!' : 'Salvar'}
+          </button>
+          <button onClick={() => { if (confirm('Sair sem salvar? Alterações não salvas serão perdidas.')) onBack() }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-400 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors" title="Sair">
+            Sair
           </button>
         </div>
       </div>
@@ -695,7 +695,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       {/* ── Main Layout (Klaviyo-style: Left = contextual panel, Right = canvas) ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left Sidebar (contextual: palette OR block/section properties) ── */}
-        <div className="w-[320px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+        <div className="w-[360px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
           {selectedBlock ? (
             <>
               {/* Header with back button when editing a block */}
@@ -756,8 +756,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
             <>
               {/* Default: palette / styles tabs */}
               <div className="flex border-b border-gray-200 flex-shrink-0">
-                <button onClick={() => setLeftTab('content')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'content' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Content</button>
-                <button onClick={() => setLeftTab('styles')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Styles</button>
+                <button onClick={() => setLeftTab('content')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${leftTab === 'content' ? 'text-zinc-900 border-b-2 border-zinc-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Conteúdo</button>
+                <button onClick={() => setLeftTab('styles')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-zinc-900 border-b-2 border-zinc-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Estilos</button>
               </div>
               <div className="flex-1 overflow-hidden">
                 {leftTab === 'content' ? (

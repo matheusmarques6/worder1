@@ -339,7 +339,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
   };
 
   return (
-    <div className="w-[260px] bg-white border-r border-gray-200 flex flex-col h-full shrink-0 overflow-hidden">
+    <div className="w-[300px] bg-white border-r border-gray-200 flex flex-col h-full shrink-0 overflow-hidden">
       {/* Header - Seletor de Gatilho */}
       <div className="p-4 border-b border-gray-200">
         <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
