@@ -21,21 +21,13 @@ import {
   MessageSquare,
   Clock,
   Mail,
-  Phone,
   Bell,
-  Edit,
   GitBranch,
-  Filter,
-  Send,
   UserMinus,
-  GripVertical,
   Sparkles,
   X,
   MessageCircle,
   Shuffle,
-  Code,
-  Timer,
-  LogOut,
   Eye,
   PlusCircle,
   FileText,
@@ -112,49 +104,49 @@ const TRIGGER_OPTIONS: NodeItemConfig[] = [
   { type: 'trigger_ctwa_ad', label: 'Click-to-WhatsApp Ad', description: 'Conversa originada de anúncio (72h)', icon: Globe, category: 'trigger', color: '#10b981' },
 ];
 
-// Seções da biblioteca
+// Seções da biblioteca — estilo Klaviyo (Messages / Data / Logic)
 const LIBRARY_SECTIONS: SectionConfig[] = [
   {
-    id: 'acao',
-    label: 'Ação',
+    id: 'messages',
+    label: 'Mensagens',
     defaultExpanded: true,
     items: [
-      { type: 'action_email', label: 'Enviar E-mail', description: 'Envia email para o contato', icon: Mail, category: 'action', color: '#3b82f6' },
-      { type: 'action_whatsapp', label: 'Enviar WhatsApp', description: 'Envia mensagem ou template via WhatsApp', icon: MessageCircle, category: 'action', color: '#25D366' },
-      { type: 'action_whatsapp_wait_reply', label: 'Aguardar Resposta', description: 'Aguarda resposta do contato com timeout', icon: Clock, category: 'action', color: '#3b82f6' },
-      { type: 'condition_whatsapp_keyword', label: 'Condição WhatsApp', description: 'Verifica keyword na resposta', icon: GitBranch, category: 'condition', color: '#f59e0b' },
-      { type: 'action_whatsapp_transfer', label: 'Transferir p/ Agente', description: 'Transfere para fila ou agente humano', icon: UserPlus, category: 'action', color: '#8b5cf6' },
-      { type: 'action_whatsapp_ai', label: 'IA Responder', description: 'Agente IA responde automaticamente', icon: Bot, category: 'action', color: '#06b6d4', hasAI: true },
-      { type: 'action_whatsapp_catalog', label: 'Enviar Catálogo', description: 'Envia catálogo de produtos', icon: ShoppingBag, category: 'action', color: '#047857' },
+      { type: 'action_email', label: 'E-mail', description: 'Envia email para o contato', icon: Mail, category: 'action', color: '#3b82f6' },
+      { type: 'action_sms', label: 'SMS', description: 'Envia SMS para o contato', icon: Smartphone, category: 'action', color: '#a855f7' },
+      { type: 'action_whatsapp', label: 'WhatsApp', description: 'Envia mensagem ou template via WhatsApp', icon: MessageCircle, category: 'action', color: '#25D366' },
+      { type: 'action_whatsapp_catalog', label: 'Catálogo WhatsApp', description: 'Envia catálogo de produtos', icon: ShoppingBag, category: 'action', color: '#047857' },
       { type: 'action_whatsapp_payment', label: 'Link de Pagamento', description: 'Envia link de pagamento no chat', icon: CreditCard, category: 'action', color: '#1e40af' },
-      { type: 'action_shopify_coupon', label: 'Gerar Cupom Shopify', description: 'Gera cupom de desconto Shopify', icon: Tag, category: 'action', color: '#f97316' },
-      { type: 'action_back_in_stock_notify', label: 'Notificar Estoque', description: 'Notifica quando produto volta ao estoque', icon: ShoppingBag, category: 'action', color: '#84cc16' },
-      { type: 'action_sms', label: 'Enviar SMS', description: 'Envia SMS para o contato', icon: Smartphone, category: 'action', color: '#a855f7' },
-      { type: 'action_webhook', label: 'Enviar Webhook', description: 'Faz requisição HTTP externa', icon: Send, category: 'action', color: '#f97316' },
-      { type: 'action_notify', label: 'Notificação Interna', description: 'Envia notificação para equipe', icon: Bell, category: 'action', color: '#3b82f6' },
+      { type: 'action_whatsapp_ai', label: 'IA Responder', description: 'Agente IA responde automaticamente', icon: Bot, category: 'action', color: '#06b6d4', hasAI: true },
+      { type: 'action_whatsapp_wait_reply', label: 'Aguardar Resposta', description: 'Aguarda resposta do contato com timeout', icon: Clock, category: 'action', color: '#0ea5e9' },
+      { type: 'action_whatsapp_transfer', label: 'Transferir p/ Agente', description: 'Transfere para fila ou agente humano', icon: UserPlus, category: 'action', color: '#8b5cf6' },
     ],
   },
   {
-    id: 'logica',
+    id: 'data',
+    label: 'Dados',
+    defaultExpanded: true,
+    items: [
+      { type: 'action_update', label: 'Atualizar Contato', description: 'Atualiza dados do contato', icon: UserCog, category: 'action', color: '#0891b2' },
+      { type: 'action_tag', label: 'Adicionar Tag', description: 'Adiciona tag ao contato', icon: Tag, category: 'action', color: '#0d9488' },
+      { type: 'action_remove_tag', label: 'Remover Tag', description: 'Remove tag do contato', icon: UserMinus, category: 'action', color: '#64748b' },
+      { type: 'action_add_to_list', label: 'Adicionar à Lista', description: 'Adiciona contato a uma lista', icon: List, category: 'action', color: '#0d9488' },
+      { type: 'action_remove_from_list', label: 'Remover da Lista', description: 'Remove contato de uma lista', icon: List, category: 'action', color: '#64748b' },
+      { type: 'action_shopify_coupon', label: 'Gerar Cupom', description: 'Gera cupom de desconto Shopify', icon: Tag, category: 'action', color: '#f97316' },
+      { type: 'action_back_in_stock_notify', label: 'Notificar Estoque', description: 'Notifica quando produto volta ao estoque', icon: ShoppingBag, category: 'action', color: '#84cc16' },
+      { type: 'action_move_deal', label: 'Mover Deal', description: 'Move deal para outro estágio', icon: ArrowRight, category: 'action', color: '#64748b' },
+      { type: 'action_notify', label: 'Alerta Interno', description: 'Envia notificação para equipe', icon: Bell, category: 'action', color: '#3b82f6' },
+      { type: 'action_webhook', label: 'Webhook', description: 'Faz requisição HTTP externa', icon: Webhook, category: 'action', color: '#f97316' },
+    ],
+  },
+  {
+    id: 'logic',
     label: 'Lógica',
     defaultExpanded: true,
     items: [
-      { type: 'control_delay', label: 'Atraso/Delay', description: 'Aguarda tempo determinado', icon: Clock, category: 'control', color: '#f59e0b' },
-      { type: 'condition_field', label: 'Condição (Split)', description: 'Divide caminho por condição', icon: GitBranch, category: 'condition', color: '#eab308' },
+      { type: 'control_delay', label: 'Atraso / Delay', description: 'Aguarda tempo determinado', icon: Clock, category: 'control', color: '#f59e0b' },
+      { type: 'condition_field', label: 'Divisão Condicional', description: 'Divide caminho por condição', icon: GitBranch, category: 'condition', color: '#eab308' },
+      { type: 'condition_whatsapp_keyword', label: 'Condição WhatsApp', description: 'Verifica keyword na resposta', icon: GitBranch, category: 'condition', color: '#f59e0b' },
       { type: 'logic_split', label: 'Teste A/B', description: 'Divide contatos aleatoriamente', icon: Shuffle, category: 'condition', color: '#6366f1' },
-    ],
-  },
-  {
-    id: 'dados',
-    label: 'Dados',
-    defaultExpanded: false,
-    items: [
-      { type: 'action_update', label: 'Atualizar Contato', description: 'Atualiza dados do contato', icon: UserCog, category: 'action', color: '#64748b' },
-      { type: 'action_tag', label: 'Adicionar Tag', description: 'Adiciona tag ao contato', icon: Tag, category: 'action', color: '#64748b' },
-      { type: 'action_remove_tag', label: 'Remover Tag', description: 'Remove tag do contato', icon: UserMinus, category: 'action', color: '#64748b' },
-      { type: 'action_add_to_list', label: 'Adicionar à Lista', description: 'Adiciona contato a uma lista', icon: List, category: 'action', color: '#64748b' },
-      { type: 'action_remove_from_list', label: 'Remover da Lista', description: 'Remove contato de uma lista', icon: List, category: 'action', color: '#64748b' },
-      { type: 'action_move_deal', label: 'Mover Deal', description: 'Move deal para outro estágio', icon: ArrowRight, category: 'action', color: '#64748b' },
     ],
   },
 ];
@@ -458,8 +450,15 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
         </div>
       </div>
 
+      {/* Título da biblioteca — estilo Klaviyo */}
+      <div className="px-4 pt-4 pb-2">
+        <h3 className="text-[15px] font-semibold text-gray-900 tracking-tight">
+          Ações
+        </h3>
+      </div>
+
       {/* Biblioteca de Blocos */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-4">
         {filteredSections.map((section) => (
           <SectionComponent
             key={section.id}
@@ -489,18 +488,18 @@ interface SectionComponentProps {
 
 function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNode }: SectionComponentProps) {
   return (
-    <div className="border-b border-gray-100">
-      {/* Header da Seção */}
+    <div className="mb-1">
+      {/* Header da Seção — estilo Klaviyo: label pequena sem uppercase */}
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-1.5 hover:bg-gray-50 transition-colors group"
       >
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+        <span className="text-[11px] font-semibold text-gray-500 tracking-wide">
           {section.label}
         </span>
         <ChevronDown
           className={cn(
-            'w-4 h-4 text-gray-500 transition-transform duration-200',
+            'w-3.5 h-3.5 text-gray-400 transition-transform duration-200',
             isExpanded && 'rotate-180'
           )}
         />
@@ -516,7 +515,7 @@ function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNod
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-3 space-y-1">
+            <div className="px-2 py-1 space-y-0.5">
               {section.items.map((item) => (
                 <NodeButton
                   key={item.type}
@@ -530,6 +529,25 @@ function SectionComponent({ section, isExpanded, onToggle, onDragStart, onAddNod
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// Drag handle customizado — 6 pontinhos (2x3) como no Klaviyo
+function DragHandleDots({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 10 16"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="2" cy="3" r="1.2" />
+      <circle cx="8" cy="3" r="1.2" />
+      <circle cx="2" cy="8" r="1.2" />
+      <circle cx="8" cy="8" r="1.2" />
+      <circle cx="2" cy="13" r="1.2" />
+      <circle cx="8" cy="13" r="1.2" />
+    </svg>
   );
 }
 
@@ -552,22 +570,26 @@ function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
       onDragStart={(e) => onDragStart(e as unknown as DragEvent, node)}
       onClick={onClick}
       className={cn(
-        'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md',
-        'hover:bg-gray-50',
+        'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg',
+        'hover:bg-gray-100 hover:shadow-sm',
         'cursor-grab active:cursor-grabbing',
-        'transition-colors duration-100 text-left group'
+        'transition-all duration-150 text-left group',
+        'border border-transparent hover:border-gray-200'
       )}
     >
       <div
-        className="p-1.5 rounded-md shrink-0"
-        style={{ backgroundColor: `${node.color}15` }}
+        className="w-7 h-7 flex items-center justify-center rounded-lg shrink-0 transition-transform group-hover:scale-105"
+        style={{ backgroundColor: `${node.color}18` }}
       >
-        <Icon className="w-4 h-4" style={{ color: node.color }} />
+        <Icon className="w-3.5 h-3.5" style={{ color: node.color }} strokeWidth={2.25} />
       </div>
-      <span className="text-[13px] text-gray-700 group-hover:text-gray-900 flex-1 truncate" title={node.label}>
+      <span className="text-[13px] font-medium text-gray-800 flex-1 truncate" title={node.label}>
         {node.label}
       </span>
-      <GripVertical className="w-3.5 h-3.5 text-gray-300 opacity-40 group-hover:opacity-100 shrink-0 transition-opacity" />
+      {node.hasAI && (
+        <Sparkles className="w-3 h-3 text-violet-500 shrink-0" />
+      )}
+      <DragHandleDots className="w-2.5 h-4 text-gray-300 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
     </button>
   );
 }
