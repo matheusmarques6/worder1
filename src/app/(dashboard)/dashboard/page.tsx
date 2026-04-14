@@ -12,7 +12,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { RefreshCw, ChevronDown, TrendingUp, TrendingDown, Info, ExternalLink } from 'lucide-react'
+import { RefreshCw, ChevronDown, TrendingUp, TrendingDown, Info, ExternalLink, Download } from 'lucide-react'
 
 // ──────────────────────────────────────────────────────────────
 // Types
@@ -174,12 +174,19 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [lastFetch, setLastFetch] = useState<Date>(new Date())
   const [, setNow] = useState<Date>(new Date())
+  const [toast, setToast] = useState<string | null>(null)
 
   // "Atualizado há N min" tick
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30000)
     return () => clearInterval(t)
   }, [])
+
+  // Transient toast for shortcut / export feedback.
+  const showToast = (msg: string) => {
+    setToast(msg)
+    window.setTimeout(() => setToast(null), 1800)
+  }
 
   const fetchData = async () => {
     setLoading(true)
@@ -199,6 +206,71 @@ export default function DashboardPage() {
   }
 
   useEffect(() => { fetchData() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [range, granularity])
+
+  // Keyboard shortcut: "R" refreshes (ignored while typing in inputs).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault()
+        fetchData()
+        showToast('Atualizado')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, granularity])
+
+  // CSV export — exports the current period's time-series plus channel
+  // totals and KPIs. Opens a download without leaving the page.
+  const exportCSV = () => {
+    const rows: string[][] = []
+    rows.push(['Dashboard Worder — export', new Date().toISOString()])
+    rows.push([])
+    rows.push(['Período', range, 'Granularidade', granularity])
+    rows.push([])
+    rows.push(['KPIs'])
+    rows.push(['Receita via Worder', String(data.worderRevenue)])
+    rows.push(['% do faturamento', data.worderShare.toFixed(2) + '%'])
+    rows.push(['Pedidos via Worder', String(data.worderOrders)])
+    rows.push(['Campanhas (receita)', String(data.campaignsRevenue)])
+    rows.push(['Campanhas (pedidos)', String(data.campaignsOrders)])
+    rows.push(['Automações (receita)', String(data.automationsRevenue)])
+    rows.push(['Automações (pedidos)', String(data.automationsOrders)])
+    rows.push(['Receita total da loja', String(data.storeRevenue)])
+    rows.push(['Pedidos totais', String(data.storeOrders)])
+    rows.push([])
+    rows.push(['Canal', 'Receita'])
+    rows.push(['Email', String(data.channels.email)])
+    rows.push(['WhatsApp', String(data.channels.whatsapp)])
+    rows.push(['SMS', String(data.channels.sms)])
+    rows.push([])
+    rows.push(['Período', 'Campanhas', 'Automações', 'Fora da Worder'])
+    for (const s of data.series) {
+      rows.push([s.label, String(s.campanhas), String(s.automacoes), String(s.fora)])
+    }
+
+    const esc = (v: string) => {
+      if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+        return '"' + v.replace(/"/g, '""') + '"'
+      }
+      return v
+    }
+    const csv = rows.map((r) => r.map(esc).join(',')).join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `worder-dashboard-${range}-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    showToast('CSV baixado')
+  }
 
   const heroAnim = useCountUp(data.worderRevenue)
 
@@ -282,6 +354,15 @@ export default function DashboardPage() {
             </button>
             <RangeSelect value={range} onChange={setRange} />
             <GranularitySelect value={granularity} onChange={setGranularity} />
+            <button
+              onClick={exportCSV}
+              className="inline-flex items-center gap-1.5 text-[13.5px] font-medium text-[#52525B] hover:text-[#18181B] bg-white px-3 py-2 rounded-[8px] hover:border-[#D4D4D8] transition-colors"
+              style={{ border: '1px solid #E4E4E7' }}
+              title="Exportar CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Exportar</span>
+            </button>
           </div>
         </div>
 
@@ -464,6 +545,7 @@ export default function DashboardPage() {
             title="Campanhas recentes"
             seeAllHref="/campaigns"
             items={data.recentCampaigns}
+            itemHref={(c: RecentCampaign) => `/campaigns/${c.id}`}
             renderDetails={(c: RecentCampaign) =>
               `${c.sends.toLocaleString('pt-BR')} envios · Abertura ${formatPct(c.openRate)} · Clique ${formatPct(c.clickRate)}`
             }
@@ -475,6 +557,7 @@ export default function DashboardPage() {
             title="Top automações"
             seeAllHref="/automations"
             items={data.topAutomations}
+            itemHref={(a: TopAutomation) => `/automations/${a.id}`}
             renderDetails={(a: TopAutomation) =>
               `${a.sends.toLocaleString('pt-BR')} envios · Conversão ${formatPct(a.conversionRate)}`
             }
@@ -484,6 +567,18 @@ export default function DashboardPage() {
           />
         </section>
       </div>
+
+      {/* Floating toast for keyboard shortcut + export feedback */}
+      {toast && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-[10px] text-[13px] font-medium text-white shadow-lg"
+          style={{ background: '#18181B' }}
+          role="status"
+          aria-live="polite"
+        >
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
@@ -647,6 +742,7 @@ function RankingCard<T extends { id: string; name: string; status: string; reven
   title,
   seeAllHref,
   items,
+  itemHref,
   renderDetails,
   emptyLabel,
   emptyHref,
@@ -655,6 +751,7 @@ function RankingCard<T extends { id: string; name: string; status: string; reven
   title: string
   seeAllHref: string
   items: T[]
+  itemHref?: (item: T) => string
   renderDetails: (item: T) => string
   emptyLabel: string
   emptyHref: string
@@ -677,25 +774,45 @@ function RankingCard<T extends { id: string; name: string; status: string; reven
           </Link>
         </div>
       ) : (
-        items.map((item) => (
-          <div key={item.id} className="py-4" style={{ borderTop: '1px solid #F4F4F5' }}>
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="text-[14px] font-semibold text-[#18181B] truncate">{item.name}</div>
-                <div className="text-[12.5px] text-[#A1A1AA] mt-[5px]">{renderDetails(item)}</div>
+        items.map((item) => {
+          const row = (
+            <>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-semibold text-[#18181B] truncate">{item.name}</div>
+                  <div className="text-[12.5px] text-[#A1A1AA] mt-[5px]">{renderDetails(item)}</div>
+                </div>
+                <span
+                  className="text-[11.5px] font-semibold text-[#52525B] px-[10px] py-[2px] rounded-full shrink-0"
+                  style={{ background: '#F4F4F5' }}
+                >
+                  {item.status}
+                </span>
               </div>
-              <span
-                className="text-[11.5px] font-semibold text-[#52525B] px-[10px] py-[2px] rounded-full shrink-0"
-                style={{ background: '#F4F4F5' }}
+              <div className="text-[16px] font-bold text-[#18181B] mt-[5px]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {formatBRL(item.revenue)}
+              </div>
+            </>
+          )
+          const commonClass = 'block py-4 -mx-2 px-2 rounded-[6px] transition-colors'
+          if (itemHref) {
+            return (
+              <Link
+                key={item.id}
+                href={itemHref(item)}
+                className={`${commonClass} hover:bg-[#FAFAFA]`}
+                style={{ borderTop: '1px solid #F4F4F5' }}
               >
-                {item.status}
-              </span>
+                {row}
+              </Link>
+            )
+          }
+          return (
+            <div key={item.id} className={commonClass} style={{ borderTop: '1px solid #F4F4F5' }}>
+              {row}
             </div>
-            <div className="text-[16px] font-bold text-[#18181B] mt-[5px]" style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {formatBRL(item.revenue)}
-            </div>
-          </div>
-        ))
+          )
+        })
       )}
     </div>
   )
