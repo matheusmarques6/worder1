@@ -223,37 +223,78 @@ ALTER TABLE shopify_checkouts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shopify_webhook_events ENABLE ROW LEVEL SECURITY;
 
 -- Service role bypass (for workers/crons)
-CREATE POLICY IF NOT EXISTS "service_role_all_event_logs" ON event_logs FOR ALL TO service_role USING (true);
-CREATE POLICY IF NOT EXISTS "service_role_all_automation_runs" ON automation_runs FOR ALL TO service_role USING (true);
-CREATE POLICY IF NOT EXISTS "service_role_all_run_steps" ON automation_run_steps FOR ALL TO service_role USING (true);
-CREATE POLICY IF NOT EXISTS "service_role_all_email_templates" ON email_templates FOR ALL TO service_role USING (true);
-CREATE POLICY IF NOT EXISTS "service_role_all_lists" ON lists FOR ALL TO service_role USING (true);
-CREATE POLICY IF NOT EXISTS "service_role_all_list_contacts" ON list_contacts FOR ALL TO service_role USING (true);
-CREATE POLICY IF NOT EXISTS "service_role_all_shopify_orders" ON shopify_orders FOR ALL TO service_role USING (true);
-CREATE POLICY IF NOT EXISTS "service_role_all_shopify_checkouts" ON shopify_checkouts FOR ALL TO service_role USING (true);
-CREATE POLICY IF NOT EXISTS "service_role_all_shopify_webhook_events" ON shopify_webhook_events FOR ALL TO service_role USING (true);
+-- Postgres does NOT support CREATE POLICY IF NOT EXISTS, so we DROP + CREATE
+DROP POLICY IF EXISTS "service_role_all_event_logs" ON event_logs;
+CREATE POLICY "service_role_all_event_logs" ON event_logs FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "service_role_all_automation_runs" ON automation_runs;
+CREATE POLICY "service_role_all_automation_runs" ON automation_runs FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "service_role_all_run_steps" ON automation_run_steps;
+CREATE POLICY "service_role_all_run_steps" ON automation_run_steps FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "service_role_all_email_templates" ON email_templates;
+CREATE POLICY "service_role_all_email_templates" ON email_templates FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "service_role_all_lists" ON lists;
+CREATE POLICY "service_role_all_lists" ON lists FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "service_role_all_list_contacts" ON list_contacts;
+CREATE POLICY "service_role_all_list_contacts" ON list_contacts FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "service_role_all_shopify_orders" ON shopify_orders;
+CREATE POLICY "service_role_all_shopify_orders" ON shopify_orders FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "service_role_all_shopify_checkouts" ON shopify_checkouts;
+CREATE POLICY "service_role_all_shopify_checkouts" ON shopify_checkouts FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "service_role_all_shopify_webhook_events" ON shopify_webhook_events;
+CREATE POLICY "service_role_all_shopify_webhook_events" ON shopify_webhook_events FOR ALL TO service_role USING (true);
 
 -- Authenticated users: org-scoped access
-CREATE POLICY IF NOT EXISTS "org_read_event_logs" ON event_logs FOR SELECT TO authenticated
-  USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()));
+-- Wrapped in DO block to guard against missing organization_members.organization_id column
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'organization_members' AND column_name = 'organization_id'
+  ) THEN
+    -- event_logs
+    EXECUTE 'DROP POLICY IF EXISTS "org_read_event_logs" ON event_logs';
+    EXECUTE 'CREATE POLICY "org_read_event_logs" ON event_logs FOR SELECT TO authenticated
+      USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()))';
 
-CREATE POLICY IF NOT EXISTS "org_read_automation_runs" ON automation_runs FOR SELECT TO authenticated
-  USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()));
+    -- automation_runs
+    EXECUTE 'DROP POLICY IF EXISTS "org_read_automation_runs" ON automation_runs';
+    EXECUTE 'CREATE POLICY "org_read_automation_runs" ON automation_runs FOR SELECT TO authenticated
+      USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()))';
 
-CREATE POLICY IF NOT EXISTS "org_read_email_templates" ON email_templates FOR ALL TO authenticated
-  USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()));
+    -- email_templates
+    EXECUTE 'DROP POLICY IF EXISTS "org_read_email_templates" ON email_templates';
+    EXECUTE 'CREATE POLICY "org_read_email_templates" ON email_templates FOR ALL TO authenticated
+      USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()))';
 
-CREATE POLICY IF NOT EXISTS "org_read_lists" ON lists FOR ALL TO authenticated
-  USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()));
+    -- lists
+    EXECUTE 'DROP POLICY IF EXISTS "org_read_lists" ON lists';
+    EXECUTE 'CREATE POLICY "org_read_lists" ON lists FOR ALL TO authenticated
+      USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()))';
 
-CREATE POLICY IF NOT EXISTS "org_read_list_contacts" ON list_contacts FOR ALL TO authenticated
-  USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()));
+    -- list_contacts
+    EXECUTE 'DROP POLICY IF EXISTS "org_read_list_contacts" ON list_contacts';
+    EXECUTE 'CREATE POLICY "org_read_list_contacts" ON list_contacts FOR ALL TO authenticated
+      USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()))';
 
-CREATE POLICY IF NOT EXISTS "org_read_shopify_orders" ON shopify_orders FOR SELECT TO authenticated
-  USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()));
+    -- shopify_orders
+    EXECUTE 'DROP POLICY IF EXISTS "org_read_shopify_orders" ON shopify_orders';
+    EXECUTE 'CREATE POLICY "org_read_shopify_orders" ON shopify_orders FOR SELECT TO authenticated
+      USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()))';
 
-CREATE POLICY IF NOT EXISTS "org_read_shopify_checkouts" ON shopify_checkouts FOR SELECT TO authenticated
-  USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()));
+    -- shopify_checkouts
+    EXECUTE 'DROP POLICY IF EXISTS "org_read_shopify_checkouts" ON shopify_checkouts';
+    EXECUTE 'CREATE POLICY "org_read_shopify_checkouts" ON shopify_checkouts FOR SELECT TO authenticated
+      USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid()))';
+  END IF;
+END $$;
 
 -- =============================================
 -- 11. Fix automations: add filter/exit/frequency columns
