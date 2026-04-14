@@ -10,6 +10,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 export const dynamic = 'force-dynamic';
 
+// CORS headers — the tracking endpoint is called from the merchant's
+// Shopify storefront domain, so the browser blocks cross-origin JSON
+// requests without these. sendBeacon doesn't require CORS (it uses
+// text/plain) but our fetch() fallback does.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Max-Age': '86400',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 function getSupabase() {
   return getSupabaseAdmin();
 }
@@ -24,7 +39,7 @@ export async function GET(request: NextRequest) {
   if (!shopDomain) {
     return new NextResponse('// Shop domain required', {
       status: 400,
-      headers: { 'Content-Type': 'application/javascript' },
+      headers: { 'Content-Type': 'application/javascript', ...CORS_HEADERS },
     });
   }
   
@@ -337,6 +352,7 @@ export async function GET(request: NextRequest) {
     headers: {
       'Content-Type': 'application/javascript',
       'Cache-Control': 'public, max-age=3600', // Cache por 1 hora
+      ...CORS_HEADERS,
     },
   });
 }
@@ -346,13 +362,26 @@ export async function GET(request: NextRequest) {
 // =============================================
 export async function POST(request: NextRequest) {
   const supabase = getSupabase();
-  
+
   if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+    return NextResponse.json({ error: 'Database not configured' }, { status: 503, headers: CORS_HEADERS });
   }
-  
+
   try {
-    const body = await request.json();
+    // sendBeacon() ships payloads as text/plain, not application/json.
+    // Accept both so we don't lose events from the Beacon fallback.
+    const contentType = request.headers.get('content-type') || '';
+    let body: any;
+    if (contentType.includes('application/json')) {
+      body = await request.json();
+    } else {
+      const text = await request.text();
+      try {
+        body = JSON.parse(text);
+      } catch {
+        return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400, headers: CORS_HEADERS });
+      }
+    }
     
     const {
       event_type,
@@ -371,19 +400,19 @@ export async function POST(request: NextRequest) {
     } = body;
     
     if (!shop_domain || !event_type) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400, headers: CORS_HEADERS });
     }
-    
+
     // 1. Buscar store pelo domínio
     const { data: store } = await supabase
       .from('shopify_stores')
       .select('id, organization_id')
       .eq('shop_domain', shop_domain)
       .maybeSingle();
-    
+
     if (!store) {
       // Loja não encontrada, ignorar silenciosamente
-      return NextResponse.json({ ok: true, ignored: true });
+      return NextResponse.json({ ok: true, ignored: true }, { headers: CORS_HEADERS });
     }
     
     // 2. Tentar encontrar contato por email (se disponível)
@@ -532,11 +561,11 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    return NextResponse.json({ ok: true });
-    
+    return NextResponse.json({ ok: true }, { headers: CORS_HEADERS });
+
   } catch (error: any) {
     console.error('[Pixel] Error processing event:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500, headers: CORS_HEADERS });
   }
 }
 
@@ -546,12 +575,22 @@ export async function POST(request: NextRequest) {
 
 function mapEventTypeToActivityType(eventType: string): string {
   const mapping: Record<string, string> = {
+    // Canonical events emitted by the Custom Pixel (Customer Events)
     'page_view': 'page_view',
-    'add_to_cart': 'add_to_cart',
+    'viewed_product': 'viewed_product',
+    'viewed_collection': 'viewed_collection',
+    'submitted_search': 'submitted_search',
+    'added_to_cart': 'added_to_cart',
+    'cart_viewed': 'cart_viewed',
     'checkout_started': 'checkout_started',
+    'checkout_shipping_submitted': 'checkout_shipping_submitted',
+    'payment_submitted': 'payment_submitted',
+    'checkout_completed': 'checkout_completed',
     'email_captured': 'email_captured',
+    // Backwards compat for the legacy theme script
+    'add_to_cart': 'added_to_cart',
   };
-  return mapping[eventType] || 'page_view';
+  return mapping[eventType] || eventType;
 }
 
 function generateActivityTitle(eventType: string, data: any, pageTitle: string): string {

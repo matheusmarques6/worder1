@@ -8,12 +8,21 @@ export const dynamic = 'force-dynamic';
 const SHOPIFY_CLIENT_ID = process.env.SHOPIFY_CLIENT_ID || '';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || '';
 
+// Scopes declared here must be allowed in the Partner Dashboard for this app.
+// 'read_checkouts' was removed — it's not a valid Shopify scope (checkouts
+// data is exposed via order/checkout webhooks and through the orders scope).
+// 'read_all_orders' requires separate approval and has been dropped.
+// Added: write_discounts/read_discounts + write_price_rules so flows can
+// generate coupon codes, and read_draft_orders for CRM completeness.
 const SCOPES = [
-  'read_orders', 'read_all_orders', 'read_checkouts',
-  'read_customers', 'write_customers', 'read_products',
-  'read_inventory', 'read_shipping', 'read_fulfillments',
-  'write_pixels', 'read_customer_events', 'read_marketing_events',
-  'read_price_rules',
+  'read_orders', 'read_draft_orders',
+  'read_customers', 'write_customers',
+  'read_products', 'read_inventory',
+  'read_discounts', 'write_discounts',
+  'read_price_rules', 'write_price_rules',
+  'write_pixels', 'read_customer_events',
+  'read_shipping', 'read_fulfillments',
+  'read_marketing_events',
 ].join(',');
 
 export async function GET(request: NextRequest) {
