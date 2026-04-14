@@ -12,7 +12,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { RefreshCw, ChevronDown } from 'lucide-react'
+import { RefreshCw, ChevronDown, TrendingUp, TrendingDown } from 'lucide-react'
 
 // ──────────────────────────────────────────────────────────────
 // Types
@@ -148,9 +148,26 @@ export default function DashboardPage() {
   const { user } = useAuthStore()
   const firstName = (user?.name?.split(' ')[0]) || user?.email?.split('@')[0] || 'por aí'
 
+  // Persist filter choices across sessions so users land where they
+  // left off. Defaults to 30d / weekly / revenue on first visit.
   const [range, setRange] = useState<RangeKey>('30d')
   const [granularity, setGranularity] = useState<Granularity>('weekly')
   const [tab, setTab] = useState<ChartTab>('revenue')
+
+  useEffect(() => {
+    try {
+      const r = localStorage.getItem('wd:range') as RangeKey | null
+      const g = localStorage.getItem('wd:granularity') as Granularity | null
+      const t = localStorage.getItem('wd:chartTab') as ChartTab | null
+      if (r && RANGE_OPTIONS.some((o) => o.value === r)) setRange(r)
+      if (g && GRANULARITY_OPTIONS.some((o) => o.value === g)) setGranularity(g)
+      if (t === 'revenue' || t === 'orders') setTab(t)
+    } catch {}
+  }, [])
+
+  useEffect(() => { try { localStorage.setItem('wd:range', range) } catch {} }, [range])
+  useEffect(() => { try { localStorage.setItem('wd:granularity', granularity) } catch {} }, [granularity])
+  useEffect(() => { try { localStorage.setItem('wd:chartTab', tab) } catch {} }, [tab])
   const [data, setData] = useState<Overview>(EMPTY_OVERVIEW)
   const [loading, setLoading] = useState(true)
   const [lastFetch, setLastFetch] = useState<Date>(new Date())
@@ -257,18 +274,26 @@ export default function DashboardPage() {
                 <span className="text-[13px] font-semibold">Receita via Worder</span>
                 {data.worderDelta !== 0 && (
                   <span
-                    className="text-[12px] font-bold px-[10px] py-[3px] rounded-full"
+                    className="inline-flex items-center gap-1 text-[12px] font-bold px-[10px] py-[3px] rounded-full"
                     style={{ background: 'rgba(255,255,255,0.18)' }}
+                    title={`${data.worderDelta > 0 ? 'Crescimento' : 'Queda'} em relação ao período anterior`}
                   >
+                    {data.worderDelta > 0
+                      ? <TrendingUp className="w-3 h-3" />
+                      : <TrendingDown className="w-3 h-3" />}
                     {data.worderDelta > 0 ? '+' : ''}{data.worderDelta}%
                   </span>
                 )}
               </div>
               <div
                 className="text-[34px] font-bold mt-2"
-                style={{ letterSpacing: '-0.04em', fontVariantNumeric: 'tabular-nums' }}
+                style={{ letterSpacing: '-0.04em', fontVariantNumeric: 'tabular-nums', minHeight: 41 }}
               >
-                {formatBRL(heroAnim)}
+                {loading && data.worderRevenue === 0 ? (
+                  <span className="inline-block w-36 h-7 rounded bg-white/15 animate-pulse" />
+                ) : (
+                  formatBRL(heroAnim)
+                )}
               </div>
               <div className="flex items-center justify-between mt-3 relative">
                 <span className="text-[13px] font-semibold opacity-[0.85]">
@@ -287,7 +312,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Receita total da loja */}
-            <div className="rounded-[12px] bg-white px-5 py-[18px]" style={{ border: '1px solid #E4E4E7' }}>
+            <div className="rounded-[12px] bg-white px-5 py-[18px] transition-colors hover:bg-[#FAFAFA]" style={{ border: '1px solid #E4E4E7' }}>
               <div className="text-[12px] font-semibold text-[#71717A] mb-2">Receita total da loja</div>
               <div
                 className="text-[24px] font-bold text-[#18181B]"
@@ -363,23 +388,8 @@ export default function DashboardPage() {
                     />
                     <Tooltip
                       cursor={{ fill: '#F4F4F5' }}
-                      contentStyle={{
-                        background: 'white',
-                        border: '1px solid #E4E4E7',
-                        borderRadius: 10,
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
-                        fontSize: 12.5,
-                        padding: '10px 12px',
-                      }}
-                      labelStyle={{ color: '#71717A', fontWeight: 600, marginBottom: 6 }}
-                      formatter={(value: number, nameKey: string) => {
-                        const names: Record<string, string> = {
-                          campanhas: 'Campanhas',
-                          automacoes: 'Automações',
-                          fora: 'Fora da Worder',
-                        }
-                        return [tab === 'revenue' ? formatBRL(value) : value.toLocaleString('pt-BR'), names[nameKey] || nameKey]
-                      }}
+                      content={<RichTooltip isRevenue={tab === 'revenue'} />}
+                      wrapperStyle={{ outline: 'none' }}
                     />
                     <Bar dataKey="campanhas" stackId="a" fill="#18181B" barSize={34} />
                     <Bar dataKey="automacoes" stackId="a" fill="#71717A" barSize={34} />
@@ -445,12 +455,65 @@ export default function DashboardPage() {
 
 function MiniKPI({ label, value, sub }: { label: string; value: number; sub: string }) {
   return (
-    <div className="flex-1 rounded-[12px] bg-white px-5 py-[18px]" style={{ border: '1px solid #E4E4E7' }}>
+    <div className="flex-1 rounded-[12px] bg-white px-5 py-[18px] transition-colors hover:bg-[#FAFAFA]" style={{ border: '1px solid #E4E4E7' }}>
       <div className="text-[12px] font-semibold text-[#71717A] mb-2">{label}</div>
       <div className="text-[19px] font-bold text-[#18181B]" style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
         {formatBRL(value)}
       </div>
       <div className="text-[12px] text-[#A1A1AA] mt-[6px]">{sub}</div>
+    </div>
+  )
+}
+
+// Rich tooltip used by the stacked bar chart — shows a breakdown by
+// category with color dots, tabular-nums values, and a separator above
+// the total so it reads like the Klaviyo / Linear tooltip style.
+function RichTooltip({ active, payload, label, isRevenue }: any) {
+  if (!active || !payload || !payload.length) return null
+  const rows: Array<{ name: string; value: number; color: string }> = []
+  const keyMap: Record<string, { name: string; color: string }> = {
+    campanhas: { name: 'Campanhas', color: '#18181B' },
+    automacoes: { name: 'Automações', color: '#71717A' },
+    fora: { name: 'Fora da Worder', color: '#D4D4D8' },
+  }
+  for (const p of payload) {
+    const k = p?.dataKey as string
+    const meta = keyMap[k]
+    if (!meta) continue
+    rows.push({ name: meta.name, value: Number(p?.value) || 0, color: meta.color })
+  }
+  const total = rows.reduce((s, r) => s + r.value, 0)
+  const fmt = (v: number) => (isRevenue ? formatBRL(v) : v.toLocaleString('pt-BR'))
+
+  return (
+    <div
+      className="min-w-[200px]"
+      style={{
+        background: 'white',
+        border: '1px solid #E4E4E7',
+        borderRadius: 10,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+        padding: '10px 12px',
+      }}
+    >
+      <div className="text-[11.5px] font-semibold text-[#71717A] mb-2">{label}</div>
+      <div className="space-y-1.5">
+        {rows.map((r) => (
+          <div key={r.name} className="flex items-center justify-between gap-6 text-[12.5px]">
+            <span className="flex items-center gap-2 text-[#52525B]">
+              <span className="inline-block w-2 h-2 rounded-[2px]" style={{ background: r.color }} />
+              {r.name}
+            </span>
+            <span className="font-semibold text-[#18181B]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {fmt(r.value)}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 pt-2 flex items-center justify-between text-[12.5px]" style={{ borderTop: '1px solid #F4F4F5' }}>
+        <span className="text-[#71717A] font-semibold">Total</span>
+        <span className="font-bold text-[#18181B]" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(total)}</span>
+      </div>
     </div>
   )
 }
@@ -488,7 +551,7 @@ function RangeSelect({ value, onChange }: { value: RangeKey; onChange: (v: Range
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as RangeKey)}
-        className="appearance-none bg-white text-[13.5px] font-medium text-[#18181B] px-4 py-2 pr-8 rounded-[8px] cursor-pointer"
+        className="appearance-none bg-white text-[13.5px] font-medium text-[#18181B] px-4 py-2 pr-8 rounded-[8px] cursor-pointer hover:border-[#D4D4D8] transition-colors focus:outline-none focus:border-[#A1A1AA]"
         style={{ border: '1px solid #E4E4E7' }}
       >
         {RANGE_OPTIONS.map((o) => (
@@ -506,7 +569,7 @@ function GranularitySelect({ value, onChange }: { value: Granularity; onChange: 
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as Granularity)}
-        className="appearance-none bg-white text-[13.5px] font-medium text-[#18181B] px-4 py-2 pr-8 rounded-[8px] cursor-pointer"
+        className="appearance-none bg-white text-[13.5px] font-medium text-[#18181B] px-4 py-2 pr-8 rounded-[8px] cursor-pointer hover:border-[#D4D4D8] transition-colors focus:outline-none focus:border-[#A1A1AA]"
         style={{ border: '1px solid #E4E4E7' }}
       >
         {GRANULARITY_OPTIONS.map((o) => (
