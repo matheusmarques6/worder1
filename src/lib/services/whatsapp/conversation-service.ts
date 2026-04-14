@@ -291,15 +291,18 @@ export async function transferConversation(
     return { error: 'Conversation not found' }
   }
 
-  // Get target agent name
+  // Get target agent name (best-effort; fallback to agent id)
   let toAgentName: string | undefined
   if (toAgentId) {
-    const { data: agent } = await supabaseAdmin
-      .from('user_organizations')
-      .select('users(first_name, last_name)')
-      .eq('user_id', toAgentId)
-      .single()
-    toAgentName = agent ? `${(agent as any).users?.first_name || ''} ${(agent as any).users?.last_name || ''}`.trim() : undefined
+    try {
+      // Try agents table first
+      const { data: agentRow } = await supabaseAdmin
+        .from('agents')
+        .select('name')
+        .eq('id', toAgentId)
+        .maybeSingle()
+      if (agentRow?.name) toAgentName = agentRow.name
+    } catch { /* ignore */ }
   }
 
   // Update conversation

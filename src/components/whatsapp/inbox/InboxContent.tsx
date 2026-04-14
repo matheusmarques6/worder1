@@ -394,7 +394,14 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
             onBack={handleBack}
             onToggleContactPanel={handleToggleContactPanel}
             showContactPanel={showContactPanel}
-            onRetryMessage={handleRetryMessage} // NOVO: Passar função de retry
+            onRetryMessage={handleRetryMessage}
+            organizationId={organizationId}
+            currentAgentId={user?.id}
+            currentAgentName={user?.email || user?.id}
+            onResolved={() => {
+              selectConversation(null)
+              refreshConversations()
+            }}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-400">

@@ -4,9 +4,13 @@ import { useState, useRef, useEffect } from 'react'
 import {
   ArrowLeft, Bot, MoreVertical, UserPlus, PanelRightClose, PanelRightOpen,
   Send, Smile, Paperclip, Image as ImageIcon, FileText, Film, X,
-  Check, CheckCheck, Clock, AlertCircle, Loader2, RefreshCw,
+  Check, CheckCheck, Clock, AlertCircle, Loader2, RefreshCw, CheckCircle,
 } from 'lucide-react'
 import { AIToggleButton } from './AIToggleButton'
+import { ServiceWindowBar } from './ServiceWindowBar'
+import { QuickRepliesPicker } from './QuickRepliesPicker'
+import { CSATModal } from './modals/CSATModal'
+import { TransferModal } from './modals/TransferModal'
 import type { InboxConversation, InboxMessage } from '@/types/inbox'
 
 interface ChatPanelProps {
@@ -21,7 +25,12 @@ interface ChatPanelProps {
   onBack: () => void
   onToggleContactPanel: () => void
   showContactPanel: boolean
-  onRetryMessage?: (message: InboxMessage) => Promise<void> // NOVO: Prop para retry
+  onRetryMessage?: (message: InboxMessage) => Promise<void>
+  // NEW: Module A integration
+  organizationId?: string
+  currentAgentId?: string
+  currentAgentName?: string
+  onResolved?: () => void
 }
 
 // Helpers
@@ -264,12 +273,22 @@ function MediaPreviewModal({ file, onClose, onSend, isSending }: {
 export function ChatPanel({
   conversation, messages, isLoading, isSending, isUploading = false,
   onSendMessage, onSendMedia, onToggleBot, onBack, onToggleContactPanel, showContactPanel,
-  onRetryMessage, // NOVO: Prop para retry de mensagens falhas
+  onRetryMessage,
+  organizationId,
+  currentAgentId,
+  currentAgentName,
+  onResolved,
 }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const [showAttachMenu, setShowAttachMenu] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedMediaType, setSelectedMediaType] = useState<'image' | 'video' | 'document'>('document')
+  // Module A: Modals and pickers
+  const [showCSATModal, setShowCSATModal] = useState(false)
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showQuickReplies, setShowQuickReplies] = useState(false)
+  const [slashQuery, setSlashQuery] = useState('')
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -290,15 +309,85 @@ export function ChatPanel({
     if (!input.trim() || isSending) return
     const content = input.trim()
     setInput('')
+    setShowQuickReplies(false)
     await onSendMessage(content)
   }
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value
+    setInput(value)
+    // Detect /slash command at start
+    if (value.startsWith('/') && !value.includes(' ')) {
+      setSlashQuery(value)
+      setShowQuickReplies(true)
+    } else {
+      setShowQuickReplies(false)
+    }
+  }
+
+  const handleSelectQuickReply = (reply: { content: string; title: string }) => {
+    // Replace variables with placeholder; caller can handle real substitution
+    const content = reply.content
+      .replace(/\{nome\}/g, conversation.contact_name || '')
+      .replace(/\{telefone\}/g, conversation.phone_number || '')
+    setInput(content)
+    setShowQuickReplies(false)
+    setTimeout(() => inputRef.current?.focus(), 10)
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showQuickReplies) return // Let picker handle keys
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
   }
+
+  async function handleResolveClick() {
+    if (!organizationId) return
+    setShowMoreMenu(false)
+    setShowCSATModal(true)
+  }
+
+  async function handleCSATSubmit(rating: number, comment: string) {
+    if (!organizationId) return
+    try {
+      // Save CSAT rating
+      await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/csat?organizationId=${organizationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating, comment, agentId: currentAgentId }),
+      })
+    } catch { /* */ }
+    try {
+      // Mark as resolved via close endpoint (existing)
+      await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/close?organizationId=${organizationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentAgentId, resolution: comment, rating }),
+      })
+    } catch { /* */ }
+    if (onResolved) onResolved()
+  }
+
+  async function handleTransferSubmit(params: { toAgentId?: string; toQueueId?: string; reason?: string }) {
+    if (!organizationId) return
+    await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/transfer?organizationId=${organizationId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...params,
+        fromAgentId: currentAgentId,
+        fromAgentName: currentAgentName,
+      }),
+    })
+    setShowTransferModal(false)
+  }
+
+  // Get last inbound message for copilot
+  const lastInboundMessage = messages
+    .filter(m => m.direction === 'inbound' && m.content)
+    .slice(-1)[0]?.content
 
   const handleFileTypeSelect = (type: 'image' | 'video' | 'document') => {
     setSelectedMediaType(type)
@@ -367,7 +456,7 @@ export function ChatPanel({
 
         <div className="flex items-center gap-2">
           <AIToggleButton conversationId={conversation.id} initialEnabled={conversation.ai_enabled !== false} variant="default" />
-          
+
           <button onClick={onToggleBot}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               conversation.is_bot_active
@@ -378,17 +467,115 @@ export function ChatPanel({
             <span className="hidden sm:inline">{conversation.is_bot_active ? 'Bot Ativo' : 'Bot Off'}</span>
           </button>
 
-          <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white">
+          {/* Resolve conversation */}
+          <button
+            onClick={handleResolveClick}
+            disabled={!organizationId}
+            title="Resolver conversa"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
+          >
+            <CheckCircle className="w-4 h-4" />
+            <span className="hidden sm:inline">Resolver</span>
+          </button>
+
+          {/* Transfer */}
+          <button
+            onClick={() => setShowTransferModal(true)}
+            disabled={!organizationId}
+            title="Transferir conversa"
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 disabled:opacity-50"
+          >
             <UserPlus className="w-5 h-5" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white">
-            <MoreVertical className="w-5 h-5" />
-          </button>
-          <button onClick={onToggleContactPanel} className="hidden lg:block p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white">
+
+          {/* More menu */}
+          <div className="relative">
+            <button
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
+            >
+              <MoreVertical className="w-5 h-5" />
+            </button>
+            {showMoreMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
+                <div className="absolute right-0 top-full mt-1 bg-white border rounded-xl shadow-lg min-w-[180px] z-50 py-1">
+                  <button
+                    onClick={async () => {
+                      setShowMoreMenu(false)
+                      if (!organizationId) return
+                      await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}?organizationId=${organizationId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'pending' }),
+                      })
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Marcar como pendente
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setShowMoreMenu(false)
+                      if (!organizationId) return
+                      await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}?organizationId=${organizationId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'archived' }),
+                      })
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Arquivar
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setShowMoreMenu(false)
+                      const tagName = prompt('Nome da tag:')
+                      if (!tagName || !organizationId) return
+                      await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/tags?organizationId=${organizationId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: tagName }),
+                      })
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Adicionar tag
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          <button onClick={onToggleContactPanel} className="hidden lg:block p-2 rounded-lg hover:bg-gray-100 text-gray-500">
             {showContactPanel ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
           </button>
         </div>
       </div>
+
+      {/* Service Window 24h Bar */}
+      <ServiceWindowBar expiresAt={conversation.window_expires_at} />
+
+      {/* Modals */}
+      {showCSATModal && organizationId && (
+        <CSATModal
+          isOpen={showCSATModal}
+          onClose={() => setShowCSATModal(false)}
+          onSubmit={handleCSATSubmit}
+          contactName={conversation.contact_name}
+        />
+      )}
+
+      {showTransferModal && organizationId && (
+        <TransferModal
+          isOpen={showTransferModal}
+          onClose={() => setShowTransferModal(false)}
+          onTransfer={handleTransferSubmit}
+          organizationId={organizationId}
+          conversationId={conversation.id}
+        />
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -478,11 +665,19 @@ export function ChatPanel({
             )}
           </div>
 
-          <div className="flex-1">
-            <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder="Digite uma mensagem..." disabled={isSending} rows={1}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-brand-400 resize-none disabled:opacity-50"
+          <div className="flex-1 relative">
+            <textarea ref={inputRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown}
+              placeholder="Digite uma mensagem ou /atalho..." disabled={isSending} rows={1}
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-400 resize-none disabled:opacity-50"
               style={{ maxHeight: '120px' }} />
+            {showQuickReplies && organizationId && (
+              <QuickRepliesPicker
+                query={slashQuery}
+                organizationId={organizationId}
+                onSelect={handleSelectQuickReply}
+                onClose={() => setShowQuickReplies(false)}
+              />
+            )}
           </div>
 
           <button onClick={handleSend} disabled={!input.trim() || isSending}
