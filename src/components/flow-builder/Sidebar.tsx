@@ -114,8 +114,6 @@ const LIBRARY_SECTIONS: SectionConfig[] = [
       { type: 'action_email', label: 'E-mail', description: 'Envia email para o contato', icon: Mail, category: 'action', color: '#3b82f6' },
       { type: 'action_sms', label: 'SMS', description: 'Envia SMS para o contato', icon: Smartphone, category: 'action', color: '#a855f7' },
       { type: 'action_whatsapp', label: 'WhatsApp', description: 'Envia mensagem ou template via WhatsApp', icon: MessageCircle, category: 'action', color: '#25D366' },
-      { type: 'action_whatsapp_catalog', label: 'Catálogo WhatsApp', description: 'Envia catálogo de produtos', icon: ShoppingBag, category: 'action', color: '#047857' },
-      { type: 'action_whatsapp_payment', label: 'Link de Pagamento', description: 'Envia link de pagamento no chat', icon: CreditCard, category: 'action', color: '#1e40af' },
       { type: 'action_whatsapp_ai', label: 'IA Responder', description: 'Agente IA responde automaticamente', icon: Bot, category: 'action', color: '#06b6d4', hasAI: true },
       { type: 'action_whatsapp_wait_reply', label: 'Aguardar Resposta', description: 'Aguarda resposta do contato com timeout', icon: Clock, category: 'action', color: '#0ea5e9' },
       { type: 'action_whatsapp_transfer', label: 'Transferir p/ Agente', description: 'Transfere para fila ou agente humano', icon: UserPlus, category: 'action', color: '#8b5cf6' },
@@ -578,24 +576,24 @@ function NodeButton({ node, onDragStart, onClick }: NodeButtonProps) {
       onDragStart={(e) => onDragStart(e as unknown as DragEvent, node)}
       onClick={onClick}
       className={cn(
-        'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg',
-        'hover:bg-gray-100 hover:shadow-sm',
+        'w-full flex items-center gap-3 px-2.5 py-2.5 rounded-lg',
+        'hover:bg-gray-50 hover:shadow-sm',
         'cursor-grab active:cursor-grabbing',
         'transition-all duration-150 text-left group',
         'border border-transparent hover:border-gray-200'
       )}
     >
       <div
-        className="w-7 h-7 flex items-center justify-center rounded-lg shrink-0 transition-transform group-hover:scale-105"
-        style={{ backgroundColor: `${node.color}18` }}
+        className="w-9 h-9 flex items-center justify-center rounded-lg shrink-0 transition-transform group-hover:scale-105"
+        style={{ backgroundColor: `${node.color}1A` }}
       >
-        <Icon className="w-3.5 h-3.5" style={{ color: node.color }} strokeWidth={2.25} />
+        <Icon className="w-[18px] h-[18px]" style={{ color: node.color }} strokeWidth={2.1} />
       </div>
-      <span className="text-[13px] font-medium text-gray-800 flex-1 truncate" title={node.label}>
+      <span className="text-[14px] font-medium text-gray-800 flex-1 truncate" title={node.label}>
         {node.label}
       </span>
       {node.hasAI && (
-        <Sparkles className="w-3 h-3 text-violet-500 shrink-0" />
+        <Sparkles className="w-3.5 h-3.5 text-violet-500 shrink-0" />
       )}
       <DragHandleDots className="w-2.5 h-4 text-gray-300 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
     </button>

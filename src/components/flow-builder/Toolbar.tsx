@@ -139,7 +139,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   };
 
   return (
-    <div className="h-14 bg-zinc-950 border-b border-zinc-800 flex items-center px-2 sm:px-4 gap-3 sm:gap-4 shrink-0 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
+    <div className="h-[60px] bg-zinc-950 border-b border-zinc-800 flex items-center px-3 sm:px-5 gap-3 sm:gap-4 shrink-0 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
       {/* Left Section - Logo + Name */}
       <div className="flex items-center gap-3 min-w-0 flex-shrink-0">
         {/* Worder brand mark */}
