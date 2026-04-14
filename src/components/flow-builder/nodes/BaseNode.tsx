@@ -1,6 +1,7 @@
 'use client';
 
-import { memo, useState } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Handle, Position } from '@xyflow/react';
 import {
   ShoppingCart, CreditCard, ShoppingBag, UserPlus, Tag, Briefcase,
@@ -121,6 +122,41 @@ function getNodeSummary(nodeType: string, config: Record<string, any>): string |
 }
 
 // ============================================
+// HELPER: Derive dynamic label from config (for nodes where
+// the title itself should reflect configuration — e.g. "Aguardar 1 dia")
+// Returns null when the static label should be used instead.
+// ============================================
+
+function getDynamicNodeLabel(nodeType: string, config: Record<string, any>): string | null {
+  switch (nodeType) {
+    case 'control_delay':
+    case 'control_delay_until':
+    case 'control_delay_configurable': {
+      const val = config?.value ?? config?.time ?? config?.delayValue;
+      if (!val) return null;
+      const unit = config?.unit || config?.delayUnit || 'hours';
+      const labels: Record<string, { singular: string; plural: string }> = {
+        minutes: { singular: 'minuto', plural: 'minutos' },
+        hours: { singular: 'hora', plural: 'horas' },
+        days: { singular: 'dia', plural: 'dias' },
+        weeks: { singular: 'semana', plural: 'semanas' },
+      };
+      const u = labels[unit];
+      if (!u) return null;
+      const n = Number(val);
+      return `Aguardar ${n} ${n === 1 ? u.singular : u.plural}`;
+    }
+    case 'logic_split': {
+      const pct = config?.percentageA ?? config?.percentA;
+      if (pct === undefined) return null;
+      return `Teste A/B · ${pct}/${100 - pct}`;
+    }
+    default:
+      return null;
+  }
+}
+
+// ============================================
 // BASE NODE COMPONENT (Klaviyo/Omnisend style)
 // ============================================
 
@@ -147,6 +183,9 @@ const nodeTypeIconFallback: Record<string, LucideIcon> = {
 function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
   const { category, label, icon, disabled, nodeType, config: nodeConfig, status } = data;
   const cat = categoryConfig[category] || categoryConfig.action;
+  // Prefer dynamic label computed from config (e.g. "Aguardar 1 dia" reflects
+  // current delay setting). Falls back to the stored label otherwise.
+  const displayLabel = getDynamicNodeLabel(nodeType || '', nodeConfig || {}) || label;
   const IconComponent = icon ? (iconMap[icon] || nodeTypeIconFallback[nodeType] || Zap) : (nodeTypeIconFallback[nodeType] || Zap);
   const selectNode = useFlowStore((s) => s.selectNode);
   const showAnalytics = useFlowStore((s) => s.showAnalytics);
@@ -158,6 +197,17 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
   const removeNode = useFlowStore((s) => s.removeNode);
   const duplicateNode = useFlowStore((s) => s.duplicateNode);
   const [showMenu, setShowMenu] = useState(false);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  // Compute menu position whenever it opens (relative to viewport)
+  useEffect(() => {
+    if (!showMenu) { setMenuPos(null); return; }
+    const rect = menuTriggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMenuPos({ top: rect.bottom + 6, left: rect.right - 144 /* menu width */ });
+    }
+  }, [showMenu]);
 
   return (
     <div
@@ -199,7 +249,7 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-gray-900 leading-snug">
-              {label}
+              {displayLabel}
             </p>
             {summary && (
               <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">
@@ -212,37 +262,16 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
               </p>
             )}
           </div>
-          {/* 3-dot menu — functional */}
-          <div className="relative shrink-0">
+          {/* 3-dot menu — Portal to escape card overflow-hidden */}
+          <div className="shrink-0">
             <button
+              ref={menuTriggerRef}
               onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
               className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-gray-100 transition-opacity"
+              aria-label="Mais opções"
             >
               <MoreVertical className="w-4 h-4 text-gray-400" />
             </button>
-            {showMenu && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-                <div className="absolute right-0 top-8 z-50 w-36 bg-white rounded-lg border border-gray-200 shadow-lg py-1">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); duplicateNode(id); setShowMenu(false); }}
-                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Duplicar
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm('Excluir este bloco?')) { removeNode(id); }
-                      setShowMenu(false);
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                  >
-                    Excluir
-                  </button>
-                </div>
-              </>
-            )}
           </div>
         </div>
 
@@ -309,6 +338,45 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
           position={Position.Bottom}
           className="!w-3.5 !h-3.5 !border-2 !border-gray-300 !bg-white !-bottom-[7px] hover:!border-blue-500 !transition-colors"
         />
+      )}
+
+      {/* Menu rendered via Portal so it isn't clipped by the card's
+          overflow-hidden container. Positioned below the 3-dot button. */}
+      {showMenu && menuPos && typeof document !== 'undefined' && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[100]"
+            onClick={(e) => { e.stopPropagation(); setShowMenu(false); }}
+          />
+          <div
+            role="menu"
+            style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
+            className="z-[101] w-36 bg-white rounded-lg border border-gray-200 shadow-xl py-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                duplicateNode(id);
+                setShowMenu(false);
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Duplicar
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm('Excluir este bloco?')) { removeNode(id); }
+                setShowMenu(false);
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+            >
+              Excluir
+            </button>
+          </div>
+        </>,
+        document.body
       )}
     </div>
   );
