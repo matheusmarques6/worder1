@@ -103,6 +103,7 @@ interface FlowStore {
     whatsappCredentialId?: string;
     emailCredentialId?: string;
     smsCredentialId?: string;
+    storeId?: string;
   };
   
   // History (undo/redo)
@@ -118,6 +119,9 @@ interface FlowStore {
   showTestModal: boolean;
   showCredentialsModal: boolean;
   isFullscreen: boolean;
+  showAnalytics: boolean;
+  analyticsData: Record<string, { sent: number; opened: number; clicked: number; revenue: number }>;
+  analyticsTimeframe: '7d' | '30d' | '90d' | 'all';
   
   // Test execution
   testExecution: TestExecution;
@@ -176,6 +180,9 @@ interface FlowStore {
   togglePropertiesPanel: () => void;
   toggleHistoryPanel: () => void;
   toggleTestModal: () => void;
+  toggleAnalytics: () => void;
+  setAnalyticsData: (data: FlowStore['analyticsData']) => void;
+  setAnalyticsTimeframe: (tf: FlowStore['analyticsTimeframe']) => void;
   toggleCredentialsModal: () => void;
   toggleFullscreen: () => void;
   openPropertiesPanel: () => void;
@@ -235,6 +242,9 @@ const initialState = {
   showTestModal: false,
   showCredentialsModal: false,
   isFullscreen: false,
+  showAnalytics: false,
+  analyticsData: {},
+  analyticsTimeframe: '30d' as const,
   testExecution: {
     isRunning: false,
     steps: [],
@@ -511,6 +521,9 @@ export const useFlowStore = create<FlowStore>()(
       togglePropertiesPanel: () => set((state) => ({ showPropertiesPanel: !state.showPropertiesPanel })),
       toggleHistoryPanel: () => set((state) => ({ showHistoryPanel: !state.showHistoryPanel })),
       toggleTestModal: () => set((state) => ({ showTestModal: !state.showTestModal })),
+      toggleAnalytics: () => set((state) => ({ showAnalytics: !state.showAnalytics })),
+      setAnalyticsData: (data) => set({ analyticsData: data }),
+      setAnalyticsTimeframe: (tf) => set({ analyticsTimeframe: tf }),
       toggleCredentialsModal: () => set((state) => ({ showCredentialsModal: !state.showCredentialsModal })),
       toggleFullscreen: () => set((state) => ({ isFullscreen: !state.isFullscreen })),
       openPropertiesPanel: () => set({ showPropertiesPanel: true }),
@@ -643,7 +656,63 @@ export const useFlowStore = create<FlowStore>()(
             errors.push(`O gatilho "${trigger.data.label}" precisa estar conectado a um próximo nó`);
           }
         }
-        
+
+        // Check email nodes have subject
+        const emailNodes = nodes.filter((n) => n.data.nodeType === 'action_email');
+        for (const emailNode of emailNodes) {
+          const cfg = emailNode.data.config || {};
+          if (!cfg.subject && !cfg.templateId) {
+            errors.push(`Email "${emailNode.data.label}" precisa de um assunto ou template`);
+          }
+          if (cfg.templateId === '__new__') {
+            errors.push(`Email "${emailNode.data.label}" tem template pendente — abra o editor`);
+          }
+        }
+
+        // Check condition nodes have field configured
+        const conditionNodes = nodes.filter((n) => n.data.nodeType === 'condition_field');
+        for (const condNode of conditionNodes) {
+          const cfg = condNode.data.config || {};
+          if (!cfg.field) {
+            errors.push(`Condição "${condNode.data.label}" precisa de um campo configurado`);
+          }
+        }
+
+        // Check WhatsApp nodes have credential
+        const whatsappNodes = nodes.filter((n) => n.data.nodeType === 'action_whatsapp');
+        for (const waNode of whatsappNodes) {
+          const cfg = waNode.data.config || {};
+          if (!cfg.credentialId && !cfg.message && !cfg.templateName) {
+            errors.push(`WhatsApp "${waNode.data.label}" precisa de mensagem ou template configurado`);
+          }
+        }
+
+        // Check SMS nodes have message
+        const smsNodes = nodes.filter((n) => n.data.nodeType === 'action_sms');
+        for (const smsNode of smsNodes) {
+          const cfg = smsNode.data.config || {};
+          if (!cfg.message) {
+            errors.push(`SMS "${smsNode.data.label}" precisa de uma mensagem`);
+          }
+        }
+
+        // Check delay nodes have value
+        const delayNodes = nodes.filter((n) => n.data.nodeType === 'control_delay');
+        for (const delayNode of delayNodes) {
+          const cfg = delayNode.data.config || {};
+          if (!cfg.value || cfg.value <= 0) {
+            errors.push(`Delay "${delayNode.data.label}" precisa de um tempo configurado`);
+          }
+        }
+
+        // Check condition nodes have both outputs connected
+        for (const condNode of nodes.filter((n) => n.data.category === 'condition')) {
+          const outEdges = edges.filter((e) => e.source === condNode.id);
+          if (outEdges.length < 2) {
+            errors.push(`Condição "${condNode.data.label}" precisa de conexões Sim e Não`);
+          }
+        }
+
         return {
           valid: errors.length === 0,
           errors,

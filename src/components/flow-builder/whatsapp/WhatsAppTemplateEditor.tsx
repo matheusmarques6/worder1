@@ -363,9 +363,9 @@ export function WhatsAppTemplateEditor({
 
           {/* Variables count */}
           {variableCount > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-50 border border-primary-500/20">
-              <Sparkles className="w-4 h-4 text-brand-600" />
-              <span className="text-xs text-brand-500">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200">
+              <Sparkles className="w-4 h-4 text-blue-600" />
+              <span className="text-xs text-blue-600">
                 {variableCount} {variableCount === 1 ? 'variável' : 'variáveis'} de personalização
               </span>
             </div>
@@ -475,7 +475,7 @@ function FreeTextEditor({ config, onUpdate, onOpenVariables }: FreeTextEditorPro
           <label className="text-xs text-gray-600/60">Mensagem</label>
           <button
             onClick={() => onOpenVariables('message')}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-100 hover:bg-primary-500/30 text-brand-600 text-xs font-medium transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 text-xs font-medium transition-colors"
           >
             <Sparkles className="w-3.5 h-3.5" />
             Personalizar
@@ -697,7 +697,7 @@ function TemplateEditor({
               <span className="text-[11px] text-gray-500">Texto do cabeçalho</span>
               <button
                 onClick={() => onOpenVariables('header')}
-                className="text-[10px] text-brand-600 hover:text-brand-500"
+                className="text-[10px] text-blue-600 hover:text-blue-600"
               >
                 + Variável
               </button>
@@ -746,7 +746,7 @@ function TemplateEditor({
           <label className="text-xs text-gray-600/60 font-medium">Corpo da Mensagem *</label>
           <button
             onClick={() => onOpenVariables('body')}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-100 hover:bg-primary-500/30 text-brand-600 text-xs font-medium transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 text-xs font-medium transition-colors"
           >
             <Sparkles className="w-3.5 h-3.5" />
             Personalizar

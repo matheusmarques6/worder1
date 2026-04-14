@@ -483,7 +483,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
 
               {/* Contact */}
               {selectedRun.contact && (
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-black/20 mb-3">
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-gray-100 mb-3">
                   <User className="w-4 h-4 text-gray-400" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-700 truncate">
@@ -500,19 +500,19 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
 
               {/* Stats Grid */}
               <div className="grid grid-cols-3 gap-3">
-                <div className="p-2 rounded-lg bg-black/20 text-center">
+                <div className="p-2 rounded-lg bg-gray-100 text-center">
                   <p className="text-lg font-bold text-gray-900">
                     {selectedRun.completed_steps}/{selectedRun.total_steps}
                   </p>
                   <p className="text-[10px] text-gray-500 uppercase tracking-wider">Passos</p>
                 </div>
-                <div className="p-2 rounded-lg bg-black/20 text-center">
+                <div className="p-2 rounded-lg bg-gray-100 text-center">
                   <p className="text-lg font-bold text-gray-900">
                     {formatDuration(selectedRun.duration_ms)}
                   </p>
                   <p className="text-[10px] text-gray-500 uppercase tracking-wider">Duração</p>
                 </div>
-                <div className="p-2 rounded-lg bg-black/20 text-center">
+                <div className="p-2 rounded-lg bg-gray-100 text-center">
                   <p className={cn(
                     'text-lg font-bold',
                     selectedRun.failed_steps > 0 ? 'text-red-400' : 'text-green-400'
@@ -694,7 +694,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                                       <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">
                                         Input
                                       </p>
-                                      <pre className="text-xs text-gray-600/60 overflow-x-auto bg-black/40 p-2 rounded max-h-32">
+                                      <pre className="text-xs text-gray-600/60 overflow-x-auto bg-gray-100 p-2 rounded max-h-32">
                                         {JSON.stringify(step.input_data, null, 2)}
                                       </pre>
                                     </div>
@@ -705,7 +705,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                                       <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">
                                         Output
                                       </p>
-                                      <pre className="text-xs text-gray-600/60 overflow-x-auto bg-black/40 p-2 rounded max-h-32">
+                                      <pre className="text-xs text-gray-600/60 overflow-x-auto bg-gray-100 p-2 rounded max-h-32">
                                         {JSON.stringify(step.output_data, null, 2)}
                                       </pre>
                                     </div>

@@ -144,19 +144,16 @@ export function getVariablesByTriggerType(triggerType: string): VariableCategory
     {
       id: 'contact',
       label: 'Contato',
-      icon: '👤',
       variables: CONTACT_VARIABLES,
     },
     {
       id: 'organization',
       label: 'Empresa',
-      icon: '🏢',
       variables: ORGANIZATION_VARIABLES,
     },
     {
       id: 'date',
       label: 'Data/Hora',
-      icon: '📅',
       variables: DATE_VARIABLES,
     },
   ];
@@ -199,12 +196,61 @@ export function getVariablesByTriggerType(triggerType: string): VariableCategory
     case 'trigger_tag':
       eventVariables = TAG_VARIABLES;
       eventLabel = 'Tag';
-      eventIcon = '🏷️';
       break;
     case 'trigger_webhook':
       eventVariables = WEBHOOK_VARIABLES;
       eventLabel = 'Webhook';
-      eventIcon = '🔗';
+      break;
+    case 'trigger_checkout_abandoned':
+      eventVariables = ABANDONED_CART_VARIABLES;
+      eventLabel = 'Checkout Abandonado';
+      break;
+    case 'trigger_viewed_product':
+      eventVariables = [
+        { key: 'event.product_title', label: 'Nome do Produto', description: 'Titulo do produto visualizado', example: 'Camiseta Azul', category: 'event' },
+        { key: 'event.product_id', label: 'ID do Produto', description: 'ID do produto', example: 'prod_123', category: 'event' },
+        { key: 'event.price', label: 'Preco', description: 'Preco do produto', example: 'R$ 99,90', category: 'event' },
+        { key: 'event.image_url', label: 'Imagem', description: 'URL da imagem', example: 'https://...', category: 'event' },
+        { key: 'event.product_url', label: 'URL do Produto', description: 'Link do produto', example: 'https://loja.com/produto', category: 'event' },
+        { key: 'event.collection', label: 'Colecao', description: 'Colecao do produto', example: 'Verao 2025', category: 'event' },
+      ];
+      eventLabel = 'Produto Visualizado';
+      break;
+    case 'trigger_added_to_cart':
+      eventVariables = [
+        { key: 'event.product_title', label: 'Nome do Produto', description: 'Produto adicionado', example: 'Camiseta Azul', category: 'event' },
+        { key: 'event.product_id', label: 'ID do Produto', description: 'ID do produto', example: 'prod_123', category: 'event' },
+        { key: 'event.price', label: 'Preco', description: 'Preco unitario', example: 'R$ 99,90', category: 'event' },
+        { key: 'event.quantity', label: 'Quantidade', description: 'Quantidade adicionada', example: '2', category: 'event' },
+        { key: 'event.image_url', label: 'Imagem', description: 'URL da imagem', example: 'https://...', category: 'event' },
+      ];
+      eventLabel = 'Adicionado ao Carrinho';
+      break;
+    case 'trigger_fulfilled_order':
+      eventVariables = [
+        { key: 'event.order_id', label: 'Numero do Pedido', description: 'ID do pedido', example: '#12345', category: 'event' },
+        { key: 'event.total_price', label: 'Valor Total', description: 'Valor do pedido', example: 'R$ 299,90', category: 'event' },
+        { key: 'event.tracking_number', label: 'Codigo de Rastreio', description: 'Rastreio do envio', example: 'BR123456', category: 'event' },
+        { key: 'event.tracking_url', label: 'URL de Rastreio', description: 'Link de rastreio', example: 'https://...', category: 'event' },
+        { key: 'event.tracking_company', label: 'Transportadora', description: 'Nome da transportadora', example: 'Correios', category: 'event' },
+      ];
+      eventLabel = 'Pedido Enviado';
+      break;
+    case 'trigger_cancelled_order':
+      eventVariables = [
+        { key: 'event.order_id', label: 'Numero do Pedido', description: 'ID do pedido cancelado', example: '#12345', category: 'event' },
+        { key: 'event.total_price', label: 'Valor Total', description: 'Valor do pedido', example: 'R$ 299,90', category: 'event' },
+        { key: 'event.cancel_reason', label: 'Motivo', description: 'Motivo do cancelamento', example: 'Cliente desistiu', category: 'event' },
+      ];
+      eventLabel = 'Pedido Cancelado';
+      break;
+    case 'trigger_form_submitted':
+      eventVariables = SIGNUP_VARIABLES;
+      eventLabel = 'Formulario Enviado';
+      break;
+    case 'trigger_custom_event':
+      eventVariables = WEBHOOK_VARIABLES;
+      eventLabel = 'Evento Custom';
       break;
     default:
       eventVariables = [];

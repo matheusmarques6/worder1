@@ -10,8 +10,11 @@ import {
   Loader2,
   Check,
   AlertCircle,
-  Zap,
+  AlertTriangle,
   Pencil,
+  Undo2,
+  Redo2,
+  BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useIsValidFlow } from '@/stores/flowStore';
@@ -37,6 +40,12 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   const isDirty = useFlowStore((state) => state.isDirty);
   const setDirty = useFlowStore((state) => state.setDirty);
   const toggleHistoryPanel = useFlowStore((state) => state.toggleHistoryPanel);
+  const undo = useFlowStore((state) => state.undo);
+  const redo = useFlowStore((state) => state.redo);
+  const canUndo = useFlowStore((state) => state.canUndo);
+  const canRedo = useFlowStore((state) => state.canRedo);
+  const showAnalytics = useFlowStore((state) => state.showAnalytics);
+  const toggleAnalytics = useFlowStore((state) => state.toggleAnalytics);
 
   const { valid, errors } = useIsValidFlow();
 
@@ -139,7 +148,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   };
 
   return (
-    <div className="fb-toolbar h-14 bg-white border-b border-gray-200 flex items-center px-2 sm:px-4 gap-2 sm:gap-4">
+    <div className="h-14 bg-white border-b border-gray-200 flex items-center px-2 sm:px-4 gap-2 sm:gap-4 shrink-0">
       {/* Left Section - Close Button + Name */}
       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink-0">
         <button
@@ -168,24 +177,24 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
                 'px-3 py-1.5 rounded-lg',
                 'bg-white border border-gray-300',
                 'text-gray-900 text-base sm:text-lg font-semibold',
-                'focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20',
+                'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20',
                 'w-[150px] sm:w-[200px]'
               )}
             />
           ) : (
             <button
               onClick={() => setIsEditing(true)}
-              className="flex items-center gap-2 text-base sm:text-lg font-semibold text-gray-900 hover:text-brand-600 transition-colors group truncate max-w-[150px] sm:max-w-[250px]"
+              className="flex items-center gap-2 text-base sm:text-lg font-semibold text-gray-900 hover:text-gray-700 transition-colors group truncate max-w-[150px] sm:max-w-[250px]"
               title={automationName}
             >
               <span className="truncate">{automationName}</span>
-              <Pencil className="w-4 h-4 text-gray-500 group-hover:text-brand-600 transition-colors flex-shrink-0" />
+              <Pencil className="w-4 h-4 text-gray-500 group-hover:text-gray-700 transition-colors flex-shrink-0" />
             </button>
           )}
 
           {/* Dirty indicator */}
           {isDirty && (
-            <span className="text-[10px] sm:text-xs text-amber-400 bg-amber-500/20 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-amber-500/30 flex-shrink-0 whitespace-nowrap">
+            <span className="text-[10px] sm:text-xs text-amber-700 bg-amber-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-amber-200 flex-shrink-0 whitespace-nowrap">
               Não salvo
             </span>
           )}
@@ -197,12 +206,64 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
 
       {/* Right Section - Actions */}
       <div className="flex items-center gap-1 sm:gap-2 lg:gap-3 flex-shrink-0">
-        {/* Validation indicator - hidden on small screens */}
+        {/* Undo/Redo */}
+        <div className="hidden sm:flex items-center gap-1">
+          <button
+            onClick={undo}
+            disabled={!canUndo()}
+            className={cn(
+              'p-2 rounded-lg transition-colors',
+              canUndo() ? 'hover:bg-gray-100 text-gray-500 hover:text-gray-900' : 'text-gray-300 cursor-not-allowed opacity-40'
+            )}
+            title="Desfazer (Ctrl+Z)"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={redo}
+            disabled={!canRedo()}
+            className={cn(
+              'p-2 rounded-lg transition-colors',
+              canRedo() ? 'hover:bg-gray-100 text-gray-500 hover:text-gray-900' : 'text-gray-300 cursor-not-allowed opacity-40'
+            )}
+            title="Refazer (Ctrl+Shift+Z)"
+          >
+            <Redo2 className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Validation indicator - Alerts */}
         {!valid && errors.length > 0 && (
-          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 border border-amber-500/30 rounded-lg">
-            <AlertCircle className="w-4 h-4 text-amber-400" />
-            <span className="text-xs text-amber-400 max-w-[200px] truncate">{errors[0]}</span>
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg">
+            <AlertTriangle className="w-4 h-4 text-amber-600" />
+            <span className="text-xs text-amber-700 max-w-[200px] truncate">{errors[0]}</span>
+            {errors.length > 1 && (
+              <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+                +{errors.length - 1}
+              </span>
+            )}
           </div>
+        )}
+
+        {/* Analytics Toggle */}
+        <button
+          onClick={toggleAnalytics}
+          className={cn(
+            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
+            'text-sm transition-colors',
+            showAnalytics
+              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+              : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'
+          )}
+          title="Mostrar Métricas"
+        >
+          <BarChart3 className="w-4 h-4" />
+          <span className="hidden lg:inline">Métricas</span>
+        </button>
+
+        {/* Analytics Timeframe (shown when analytics active) */}
+        {showAnalytics && (
+          <AnalyticsTimeframeSelector />
         )}
 
         {/* History */}
@@ -247,45 +308,33 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
         {/* Divider - hidden on small screens */}
         <div className="hidden sm:block w-px h-8 bg-gray-100" />
 
-        {/* Save */}
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className={cn(
-            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
-            'bg-gray-100 hover:bg-gray-200 border border-gray-300',
-            'text-gray-700 text-sm font-medium',
-            'transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-          title="Salvar"
-        >
-          {saveStatus === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
-          {saveStatus === 'saved' && <Check className="w-4 h-4 text-green-400" />}
-          {saveStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
-          {saveStatus === 'idle' && <Save className="w-4 h-4" />}
-          <span className="hidden sm:inline">SALVAR</span>
-        </button>
+        {/* Save status indicator */}
+        {saveStatus === 'saving' && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-400">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span className="hidden sm:inline">Salvando...</span>
+          </div>
+        )}
+        {saveStatus === 'saved' && (
+          <div className="flex items-center gap-1.5 text-xs text-green-600">
+            <Check className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Salvo</span>
+          </div>
+        )}
 
-        {/* Save and Close */}
+        {/* Salvar e Fechar */}
         <button
           onClick={handleSaveAndClose}
           disabled={isSaving}
           className={cn(
-            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
-            'bg-primary-500 hover:bg-primary-600',
-            'text-gray-700 text-sm font-medium',
+            'flex items-center gap-2 px-4 py-2 rounded-lg',
+            'bg-gray-900 hover:bg-gray-800',
+            'text-white text-sm font-medium',
             'transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
-          title="Salvar e Fechar"
         >
-          {saveStatus === 'saving' ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Check className="w-4 h-4" />
-          )}
-          <span className="hidden md:inline">SALVAR E FECHAR</span>
+          Salvar e Fechar
         </button>
       </div>
     </div>
@@ -313,8 +362,8 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
         'transition-all duration-300 border',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         isActive
-          ? 'bg-green-500/20 border-green-500/40 hover:bg-green-500/30'
-          : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
+          ? 'bg-green-50 border-green-200 hover:bg-green-100'
+          : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
       )}
     >
       {/* Toggle Track */}
@@ -342,7 +391,7 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
       {/* Label */}
       <span className={cn(
         'text-sm font-medium',
-        isActive ? 'text-green-400' : 'text-gray-600'
+        isActive ? 'text-green-700' : 'text-gray-600'
       )}>
         {isLoading ? '...' : isActive ? 'Ativo' : 'Inativo'}
       </span>
@@ -364,6 +413,41 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
         )}
       </AnimatePresence>
     </button>
+  );
+}
+
+// ============================================
+// ANALYTICS TIMEFRAME SELECTOR
+// ============================================
+
+function AnalyticsTimeframeSelector() {
+  const timeframe = useFlowStore((state) => state.analyticsTimeframe);
+  const setTimeframe = useFlowStore((state) => state.setAnalyticsTimeframe);
+
+  const options: Array<{ value: '7d' | '30d' | '90d' | 'all'; label: string }> = [
+    { value: '7d', label: '7d' },
+    { value: '30d', label: '30d' },
+    { value: '90d', label: '90d' },
+    { value: 'all', label: 'Tudo' },
+  ];
+
+  return (
+    <div className="hidden sm:flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          onClick={() => setTimeframe(opt.value)}
+          className={cn(
+            'px-2 py-1 rounded-md text-[10px] font-medium transition-colors',
+            timeframe === opt.value
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
   );
 }
 

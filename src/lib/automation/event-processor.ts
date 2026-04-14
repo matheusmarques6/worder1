@@ -86,17 +86,62 @@ class EventProcessorClass {
         return result;
       }
 
-      // 2. Buscar automações que correspondem
-      const { data: automations, error: autoError } = await supabase
-        .rpc('find_matching_automations', {
-          p_organization_id: event.organization_id,
-          p_event_type: event.event_type,
-          p_payload: event.payload,
-        });
+      // 2. Buscar automações que correspondem ao evento
+      // Map event types to trigger types
+      const EVENT_TO_TRIGGER: Record<string, string> = {
+        'checkout_started': 'trigger_checkout_abandoned',
+        'abandoned_cart': 'trigger_abandon',
+        'placed_order': 'trigger_order',
+        'order_paid': 'trigger_order_paid',
+        'fulfilled_order': 'trigger_fulfilled_order',
+        'cancelled_order': 'trigger_cancelled_order',
+        'viewed_product': 'trigger_viewed_product',
+        'added_to_cart': 'trigger_added_to_cart',
+        'form_submitted': 'trigger_form_submitted',
+        'customer_created': 'trigger_signup',
+        'contact_created': 'trigger_signup',
+        'custom_event': 'trigger_custom_event',
+      };
 
-      if (autoError) {
-        console.error('[EventProcessor] Error finding automations:', autoError);
-        throw autoError;
+      const triggerType = EVENT_TO_TRIGGER[event.event_type] || `trigger_${event.event_type}`;
+
+      // Try RPC first, fallback to direct query
+      let automations: Array<{ automation_id: string; automation_name: string; trigger_type: string }> | null = null;
+
+      try {
+        const { data: rpcResult, error: rpcError } = await supabase
+          .rpc('find_matching_automations', {
+            p_organization_id: event.organization_id,
+            p_event_type: event.event_type,
+            p_payload: event.payload,
+          });
+
+        if (!rpcError && rpcResult) {
+          automations = rpcResult;
+        }
+      } catch {
+        // RPC not available, use direct query
+      }
+
+      if (!automations) {
+        // Fallback: direct query for active automations with matching trigger type
+        const { data: directResult, error: directError } = await supabase
+          .from('automations')
+          .select('id, name, trigger_type')
+          .eq('organization_id', event.organization_id)
+          .eq('status', 'active')
+          .eq('trigger_type', triggerType);
+
+        if (directError) {
+          console.error('[EventProcessor] Error finding automations:', directError);
+          throw directError;
+        }
+
+        automations = (directResult || []).map(a => ({
+          automation_id: a.id,
+          automation_name: a.name,
+          trigger_type: a.trigger_type,
+        }));
       }
 
       console.log(`[EventProcessor] Found ${automations?.length || 0} automations for event ${event.event_type}`);

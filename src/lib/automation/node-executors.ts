@@ -103,6 +103,51 @@ const triggerExecutors: Record<string, NodeExecutor> = {
       return { status: 'success', output: context.trigger?.data || {} };
     },
   },
+  trigger_checkout_abandoned: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_fulfilled_order: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_cancelled_order: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_viewed_product: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_added_to_cart: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_form_submitted: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_custom_event: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_date: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
+  trigger_segment: {
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
 };
 
 // ============================================
@@ -204,76 +249,175 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
   // ========== EMAIL ==========
   action_email: {
-    async execute({ config, context, credentials, isTest }) {
+    async execute({ config, context, credentials, isTest, supabase, organizationId }) {
       const email = context.contact?.email;
 
-      if (isTest) {
+      if (!email) {
         return {
-          status: 'success',
-          output: { 
-            sent: true, 
-            test: true, 
-            to: email,
-            subject: config.subject,
-          },
+          status: isTest ? 'success' : 'error',
+          output: isTest ? { sent: false, test: true, reason: 'Contato sem email' } : null,
+          error: isTest ? undefined : 'Contato sem email',
         };
       }
 
-      if (!email) {
-        return { status: 'error', output: null, error: 'Contato sem email' };
-      }
-
-      const provider = credentials?.type || 'resend';
-
       try {
+        // 1. Resolve HTML content - fetch template if specified
+        let html: string;
+        if (config.templateId && config.templateId !== 'none') {
+          const { data: template, error: tplErr } = await supabase
+            .from('email_templates')
+            .select('design_json, html, name')
+            .eq('id', config.templateId)
+            .single();
+
+          if (tplErr || !template) {
+            return { status: 'error', output: null, error: `Template ${config.templateId} not found` };
+          }
+
+          // Use pre-rendered HTML from template
+          html = template.html || '';
+          if (!html) {
+            html = '<p>Template sem conteúdo HTML renderizado</p>';
+          }
+        } else {
+          html = config.html || config.body || '<p>Email sem conteúdo</p>';
+        }
+
+        // 2. Resolve merge tags using the variable engine
+        let resolvedHtml = html;
+        let resolvedSubject = config.subject || '';
+
+        try {
+          const { variableEngine } = await import('./variable-engine');
+          resolvedHtml = variableEngine.process(html, context);
+          resolvedSubject = variableEngine.process(resolvedSubject, context);
+        } catch {
+          // Fallback: simple regex replacement
+          const resolveTags = (text: string): string => {
+            return text.replace(/\{\{([\w.]+)\}\}/g, (match: string, path: string) => {
+              const parts = path.split('.');
+              if (parts[0] === 'contact') return (context.contact as Record<string, any>)?.[parts[1]] || '';
+              if (parts[0] === 'event') return context.trigger?.data?.[parts[1]] || '';
+              if (parts[0] === 'store') return (context as Record<string, any>).store?.[parts[1]] || '';
+              return match;
+            });
+          };
+          resolvedHtml = resolveTags(html);
+          resolvedSubject = resolveTags(resolvedSubject);
+        }
+
+        let subject = resolvedSubject;
+        html = resolvedHtml;
+
+        // Annotate test emails
+        if (isTest) {
+          subject = `[TESTE] ${subject}`;
+        }
+
+        // 2b. Smart Sending — skip if contact received email recently
+        if (config.smartSending && !isTest && context.contact?.id) {
+          const skipHours = config.smartSendingHours || 16;
+          const cutoff = new Date(Date.now() - skipHours * 60 * 60 * 1000).toISOString();
+          const { data: recentSends } = await supabase
+            .from('email_sends')
+            .select('id')
+            .eq('contact_id', context.contact.id)
+            .gte('created_at', cutoff)
+            .limit(1);
+
+          if (recentSends && recentSends.length > 0) {
+            return {
+              status: 'success',
+              output: { skipped: true, reason: `Smart Sending: contato recebeu email nas últimas ${skipHours}h` },
+            };
+          }
+        }
+
+        // 2c. UTM Tracking — append UTM params to all links
+        if (config.utmTracking) {
+          const utmSource = config.utmSource || 'worder';
+          const utmMedium = config.utmMedium || 'email';
+          const utmCampaign = config.utmCampaign || '';
+          const utmParams = `utm_source=${encodeURIComponent(utmSource)}&utm_medium=${encodeURIComponent(utmMedium)}${utmCampaign ? `&utm_campaign=${encodeURIComponent(utmCampaign)}` : ''}`;
+
+          html = html.replace(
+            /(<a\s[^>]*href=["'])([^"'#][^"']*)(["'][^>]*>)/gi,
+            (match: string, before: string, url: string, after: string) => {
+              if (url.includes('utm_source') || url.includes('unsubscribe') || url.includes('mailto:')) return match;
+              const separator = url.includes('?') ? '&' : '?';
+              return `${before}${url}${separator}${utmParams}${after}`;
+            }
+          );
+        }
+
+        // 3. Build sender info
+        const senderName = config.senderName || (context as any).store?.name || 'Worder';
+        const senderEmail = config.senderEmail || credentials?.defaultFrom || 'noreply@example.com';
+        const from = `${senderName} <${senderEmail}>`;
+
+        // 4. Send via Resend (default provider)
+        const provider = credentials?.type || 'resend';
+        const apiKey = credentials?.apiKey || process.env.RESEND_API_KEY;
+
+        if (!apiKey) {
+          return { status: 'error', output: null, error: 'API key de email não configurada (Resend/SendGrid)' };
+        }
+
         if (provider === 'emailSendgrid' || provider === 'sendgrid') {
-          // SendGrid
           const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${credentials?.apiKey}`,
+              'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               personalizations: [{ to: [{ email }] }],
-              from: { email: config.from || credentials?.defaultFrom },
-              subject: config.subject,
-              content: [
-                { type: 'text/html', value: config.html || config.body },
-              ],
+              from: { email: senderEmail, name: senderName },
+              subject,
+              content: [{ type: 'text/html', value: html }],
             }),
           });
 
           if (!response.ok) {
             const error = await response.text();
-            return { status: 'error', output: { error }, error: 'Falha no envio' };
+            return { status: 'error', output: { error }, error: 'Falha no envio SendGrid' };
           }
 
-          return { status: 'success', output: { sent: true, provider: 'sendgrid' } };
+          return { status: 'success', output: { sent: true, provider: 'sendgrid', to: email } };
         } else {
-          // Resend (default)
           const response = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${credentials?.apiKey}`,
+              'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              from: config.from || credentials?.defaultFrom || 'noreply@example.com',
+              from,
               to: email,
-              subject: config.subject,
-              html: config.html || config.body,
-              text: config.text,
+              subject,
+              html,
             }),
           });
 
           const result = await response.json();
-          
+
           if (!response.ok) {
-            return { status: 'error', output: result, error: result.message || 'Falha no envio' };
+            return { status: 'error', output: result, error: result.message || 'Falha no envio Resend' };
           }
 
-          return { status: 'success', output: { ...result, provider: 'resend' } };
+          // 5. Record the send in email_sends table (skip for tests)
+          if (organizationId && !isTest) {
+            await supabase.from('email_sends').insert({
+              organization_id: organizationId,
+              contact_id: context.contact?.id,
+              email_template_id: config.templateId || null,
+              subject,
+              status: 'sent',
+              resend_id: result?.id,
+            }).catch(() => {}); // non-blocking
+          }
+
+          return { status: 'success', output: { ...result, provider: 'resend', to: email } };
         }
       } catch (error: any) {
         return { status: 'error', output: null, error: error.message };
@@ -761,6 +905,29 @@ const actionExecutors: Record<string, NodeExecutor> = {
     },
   },
 
+  // ========== ADD TO LIST ==========
+  action_add_to_list: {
+    async execute({ config, context, supabase, isTest, organizationId }) {
+      const contactId = context.contact?.id;
+      if (isTest) {
+        return { status: 'success', output: { added: true, listId: config.listId, test: true } };
+      }
+      if (!contactId || !organizationId) {
+        return { status: 'error', output: null, error: 'Contato ou organização não encontrado' };
+      }
+      try {
+        await supabase.from('list_contacts').upsert({
+          list_id: config.listId,
+          contact_id: contactId,
+          organization_id: organizationId,
+        }, { onConflict: 'list_id,contact_id' });
+        return { status: 'success', output: { added: true, listId: config.listId } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
   // ========== NEW WHATSAPP NODES (Module B) ==========
 
   // Aguardar resposta com timeout — marca conversa aguardando
@@ -769,7 +936,6 @@ const actionExecutors: Record<string, NodeExecutor> = {
       if (isTest) {
         return { status: 'success', output: { waiting: true, timeout_seconds: config.timeoutSeconds || 3600 } };
       }
-      // Register a "wait_for_reply" marker in conversation metadata so webhook can resolve it
       try {
         const { supabaseAdmin } = await import('@/lib/supabase-admin');
         const conversationId = context.conversation_id || context.conversationId;
@@ -977,6 +1143,30 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
     },
   },
+
+  // ========== REMOVE FROM LIST ==========
+  action_remove_from_list: {
+    async execute({ config, context, supabase, isTest, organizationId }) {
+      const contactId = context.contact?.id;
+      if (isTest) {
+        return { status: 'success', output: { removed: true, listId: config.listId, test: true } };
+      }
+      if (!contactId || !organizationId) {
+        return { status: 'error', output: null, error: 'Contato ou organização não encontrado' };
+      }
+      try {
+        await supabase
+          .from('list_contacts')
+          .delete()
+          .eq('list_id', config.listId)
+          .eq('contact_id', contactId)
+          .eq('organization_id', organizationId);
+        return { status: 'success', output: { removed: true, listId: config.listId } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
 };
 
 // ============================================
@@ -1138,10 +1328,41 @@ const controlExecutors: Record<string, NodeExecutor> = {
         minutes: 60 * 1000,
         hours: 60 * 60 * 1000,
         days: 24 * 60 * 60 * 1000,
+        weeks: 7 * 24 * 60 * 60 * 1000,
       };
 
       const delayMs = value * (multipliers[unit] || multipliers.hours);
-      const resumeAt = new Date(Date.now() + delayMs);
+      let resumeAt = new Date(Date.now() + delayMs);
+
+      // Apply day-of-week restrictions (allowedDays: 0=Mon, 1=Tue, ..., 6=Sun)
+      if (config.restrictDays && config.allowedDays?.length > 0) {
+        const allowedDays: number[] = config.allowedDays;
+        // JS getDay(): 0=Sun, 1=Mon... → convert to 0=Mon, 6=Sun
+        let guard = 0;
+        while (!allowedDays.includes(resumeAt.getDay() === 0 ? 6 : resumeAt.getDay() - 1) && guard < 8) {
+          resumeAt = new Date(resumeAt.getTime() + 24 * 60 * 60 * 1000);
+          guard++;
+        }
+      }
+
+      // Apply time window restrictions
+      if (config.restrictTime && config.timeFrom && config.timeTo) {
+        const [fromH, fromM] = config.timeFrom.split(':').map(Number);
+        const [toH, toM] = config.timeTo.split(':').map(Number);
+        const hour = resumeAt.getHours();
+        const min = resumeAt.getMinutes();
+        const current = hour * 60 + min;
+        const from = fromH * 60 + fromM;
+        const to = toH * 60 + toM;
+
+        if (current < from) {
+          resumeAt.setHours(fromH, fromM, 0, 0);
+        } else if (current > to) {
+          // Move to next day at fromH:fromM
+          resumeAt = new Date(resumeAt.getTime() + 24 * 60 * 60 * 1000);
+          resumeAt.setHours(fromH, fromM, 0, 0);
+        }
+      }
 
       if (isTest) {
         return {
@@ -1291,11 +1512,40 @@ function evaluateCondition(value1: any, operator: string, value2: any): boolean 
       }
     
     case 'in':
+    case 'in_list':
       return Array.isArray(v2) ? v2.includes(v1) : String(v2).split(',').map(s => s.trim()).includes(v1);
-    
+
     case 'not_in':
+    case 'not_in_list':
       return Array.isArray(v2) ? !v2.includes(v1) : !String(v2).split(',').map(s => s.trim()).includes(v1);
-    
+
+    case 'is_set':
+      return v1 !== null && v1 !== undefined && v1 !== '';
+
+    case 'is_not_set':
+      return v1 === null || v1 === undefined || v1 === '';
+
+    case 'before_date':
+      return new Date(v1).getTime() < new Date(v2).getTime();
+
+    case 'after_date':
+      return new Date(v1).getTime() > new Date(v2).getTime();
+
+    case 'in_last_x_days':
+    case 'not_in_last_x_days': {
+      const daysAgo = new Date(Date.now() - Number(v2) * 24 * 60 * 60 * 1000);
+      const dateVal = new Date(v1);
+      const isInRange = dateVal >= daysAgo;
+      return operator === 'in_last_x_days' ? isInRange : !isInRange;
+    }
+
+    case 'between': {
+      const num = parseFloat(v1);
+      const parts = String(v2).split(',').map(s => parseFloat(s.trim()));
+      if (parts.length >= 2) return num >= parts[0] && num <= parts[1];
+      return false;
+    }
+
     default:
       return v1 === v2;
   }

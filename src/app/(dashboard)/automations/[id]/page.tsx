@@ -91,7 +91,7 @@ export default function AutomationDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <SpinnerGap className="w-8 h-8 text-[#F26B2A] animate-spin" />
+        <SpinnerGap className="w-8 h-8 text-blue-600 animate-spin" />
       </div>
     )
   }
@@ -130,7 +130,7 @@ export default function AutomationDetailPage() {
           </button>
           <div>
             <div className="flex items-center gap-3">
-              <Lightning size={20} className="text-[#F26B2A]" weight="fill" />
+              <Lightning size={20} className="text-blue-600" weight="fill" />
               <h1 className="text-2xl font-bold font-display text-gray-900">{automation.name}</h1>
               <div className="flex items-center gap-1.5">
                 <div className={`w-1.5 h-1.5 rounded-full ${status.dotColor} animate-pulse`} />
@@ -157,7 +157,7 @@ export default function AutomationDetailPage() {
               Pausar
             </button>
           ) : (
-            <button className="flex items-center gap-2 px-3 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg hover:opacity-90 text-xs font-medium">
+            <button className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg hover:opacity-90 text-xs font-medium">
               <Play size={14} weight="fill" />
               Ativar
             </button>
@@ -177,8 +177,8 @@ export default function AutomationDetailPage() {
               <p className="text-xs text-gray-500 font-medium">Status</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">{status.label}</p>
             </div>
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-brand-500/10">
-              <Lightning size={20} className="text-[#F26B2A]" weight="duotone" />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-50">
+              <Lightning size={20} className="text-blue-600" weight="duotone" />
             </div>
           </div>
         </motion.div>

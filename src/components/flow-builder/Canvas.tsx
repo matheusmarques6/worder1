@@ -1,17 +1,15 @@
 'use client';
 
-import { useCallback, useRef, useMemo } from 'react';
+import { useCallback, useRef } from 'react';
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
-  useNodesState,
-  useEdgesState,
-  addEdge,
   Connection,
   BackgroundVariant,
   Panel,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -26,6 +24,7 @@ import { cn } from '@/lib/utils';
 
 export function Canvas() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition } = useReactFlow();
 
   // Store state
   const nodes = useFlowStore((s) => s.nodes);
@@ -46,7 +45,7 @@ export function Canvas() {
           target: connection.target,
           sourceHandle: connection.sourceHandle || undefined,
           targetHandle: connection.targetHandle || undefined,
-          type: 'animated',
+          type: 'smoothstep',
         });
       }
     },
@@ -63,14 +62,12 @@ export function Canvas() {
 
       try {
         const nodeData = JSON.parse(data);
-        const bounds = reactFlowWrapper.current?.getBoundingClientRect();
-        
-        if (!bounds) return;
 
-        const position = {
-          x: event.clientX - bounds.left - 100,
-          y: event.clientY - bounds.top - 30,
-        };
+        // Use React Flow's screenToFlowPosition for correct coordinates at any zoom/pan
+        const position = screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
 
         addNode({
           id: `node-${Date.now()}`,
@@ -89,7 +86,7 @@ export function Canvas() {
         console.error('Error adding node:', error);
       }
     },
-    [addNode]
+    [addNode, screenToFlowPosition]
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -126,20 +123,20 @@ export function Canvas() {
         onPaneClick={onPaneClick}
         fitView
         fitViewOptions={{
-          padding: 0.5,
-          maxZoom: 0.8,
+          padding: 0.15,
+          maxZoom: 1.2,
+          nodes: nodes.filter(n => n.data?.category === 'trigger').map(n => ({ id: n.id })),
         }}
-        minZoom={0.2}
-        maxZoom={1.5}
-        defaultViewport={{ x: 0, y: 0, zoom: 0.7 }}
+        minZoom={0.3}
+        maxZoom={2}
+        defaultViewport={{ x: 0, y: 0, zoom: 1.1 }}
         snapToGrid
         snapGrid={[16, 16]}
         defaultEdgeOptions={{
-          type: 'animated',
-          animated: true,
+          type: 'smoothstep',
         }}
         proOptions={{ hideAttribution: true }}
-        className="bg-[#FAFBFC]"
+        className="bg-[#f8f9fa]"
       >
         {/* Background */}
         <Background
@@ -150,13 +147,7 @@ export function Canvas() {
         />
 
         {/* Controls */}
-        <Controls
-          className={cn(
-            '[&>button]:bg-gray-100 [&>button]:border-gray-300',
-            '[&>button]:text-gray-600 [&>button:hover]:bg-gray-200',
-            '[[&>button:hover]:text-white>button:hover]:text-gray-900 [&>button]:shadow-sm'
-          )}
-        />
+        <Controls />
 
         {/* MiniMap */}
         <MiniMap

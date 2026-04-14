@@ -211,7 +211,7 @@ export function WebhookConfig({
 
               {!automationId && (
                 <p className="text-xs text-amber-400 mt-2">
-                  ⚠️ Salve a automação primeiro para criar o webhook
+                  Salve a automação primeiro para criar o webhook
                 </p>
               )}
             </div>
