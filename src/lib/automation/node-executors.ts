@@ -760,6 +760,223 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
     },
   },
+
+  // ========== NEW WHATSAPP NODES (Module B) ==========
+
+  // Aguardar resposta com timeout — marca conversa aguardando
+  action_whatsapp_wait_reply: {
+    async execute({ config, context, isTest }) {
+      if (isTest) {
+        return { status: 'success', output: { waiting: true, timeout_seconds: config.timeoutSeconds || 3600 } };
+      }
+      // Register a "wait_for_reply" marker in conversation metadata so webhook can resolve it
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabase-admin');
+        const conversationId = context.conversation_id || context.conversationId;
+        if (!conversationId) {
+          return { status: 'error', output: null, error: 'conversationId missing from context' };
+        }
+        const timeoutMs = (config.timeoutSeconds || 3600) * 1000;
+        await supabaseAdmin
+          .from('whatsapp_conversations')
+          .update({
+            metadata: {
+              wait_for_reply: {
+                expires_at: new Date(Date.now() + timeoutMs).toISOString(),
+                execution_id: context.executionId,
+              },
+            },
+          })
+          .eq('id', conversationId);
+        return { status: 'success', output: { waiting: true, timeout: timeoutMs } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // Transferir conversa para fila ou agente
+  action_whatsapp_transfer: {
+    async execute({ config, context, isTest }) {
+      if (isTest) {
+        return { status: 'success', output: { transferred: true, target: config.queueId || config.agentId } };
+      }
+      try {
+        const { transferConversation } = await import('@/lib/services/whatsapp/conversation-service');
+        const conversationId = context.conversation_id || context.conversationId;
+        const organizationId = context.organization_id || context.organizationId;
+        if (!conversationId || !organizationId) {
+          return { status: 'error', output: null, error: 'conversationId/organizationId missing' };
+        }
+        const result = await transferConversation({
+          conversationId,
+          organizationId,
+          toAgentId: config.agentId,
+          toQueueId: config.queueId,
+          reason: config.reason || 'Transferido por automacao',
+        });
+        if (result.error) {
+          return { status: 'error', output: null, error: result.error };
+        }
+        return { status: 'success', output: result.data };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // Ativar agente IA na conversa
+  action_whatsapp_ai: {
+    async execute({ config, context, isTest }) {
+      if (isTest) {
+        return { status: 'success', output: { ai_activated: true, agent_id: config.aiAgentId } };
+      }
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabase-admin');
+        const conversationId = context.conversation_id || context.conversationId;
+        if (!conversationId || !config.aiAgentId) {
+          return { status: 'error', output: null, error: 'conversationId or aiAgentId missing' };
+        }
+        await supabaseAdmin
+          .from('whatsapp_conversations')
+          .update({ bot_active: true, ai_agent_id: config.aiAgentId })
+          .eq('id', conversationId);
+        return { status: 'success', output: { ai_activated: true } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // Enviar catalogo Meta
+  action_whatsapp_catalog: {
+    async execute({ config, context, credentials, isTest }) {
+      if (isTest) {
+        return { status: 'success', output: { catalog_sent: true, product_count: config.productIds?.length || 0 } };
+      }
+      const phone = context.contact?.phone;
+      if (!phone) return { status: 'error', output: null, error: 'Contato sem telefone' };
+      try {
+        const response = await fetch(
+          `https://graph.facebook.com/v21.0/${credentials?.phoneNumberId}/messages`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${credentials?.accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              to: phone.replace(/\D/g, ''),
+              type: 'interactive',
+              interactive: {
+                type: 'product_list',
+                header: { type: 'text', text: config.headerText || 'Nossos produtos' },
+                body: { text: config.bodyText || 'Confira:' },
+                action: {
+                  catalog_id: config.catalogId || credentials?.catalogId,
+                  sections: config.sections || [
+                    { title: 'Destaques', product_items: (config.productIds || []).map((id: string) => ({ product_retailer_id: id })) },
+                  ],
+                },
+              },
+            }),
+          }
+        );
+        const result = await response.json();
+        if (!response.ok) return { status: 'error', output: result, error: result.error?.message };
+        return { status: 'success', output: result };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // Enviar link de pagamento
+  action_whatsapp_payment: {
+    async execute({ config, context, isTest }) {
+      if (isTest) {
+        return { status: 'success', output: { payment_link_sent: true, amount: config.amount } };
+      }
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabase-admin');
+        const conversationId = context.conversation_id || context.conversationId;
+        const organizationId = context.organization_id || context.organizationId;
+
+        const { data: link } = await supabaseAdmin
+          .from('whatsapp_payment_links')
+          .insert({
+            organization_id: organizationId,
+            conversation_id: conversationId,
+            contact_id: context.contact?.id,
+            amount: config.amount,
+            currency: config.currency || 'BRL',
+            description: config.description,
+            payment_url: config.paymentUrl || `https://pay.example.com/checkout/${Date.now()}`,
+            status: 'pending',
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          })
+          .select()
+          .single();
+
+        if (!link) return { status: 'error', output: null, error: 'Failed to create payment link' };
+
+        return { status: 'success', output: { url: link.payment_url, id: link.id } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // Gerar cupom Shopify
+  action_shopify_coupon: {
+    async execute({ config, context, credentials, isTest }) {
+      if (isTest) {
+        const code = (config.prefix || 'GIFT') + '-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+        return { status: 'success', output: { code, test: true } };
+      }
+      try {
+        const { generateShopifyCoupon } = await import('@/lib/services/whatsapp/shopify-coupon-service');
+        const result = await generateShopifyCoupon({
+          shopDomain: credentials?.shopDomain,
+          accessToken: credentials?.accessToken,
+          discountType: config.discountType || 'percentage',
+          value: config.value || 10,
+          validityDays: config.validityDays || 7,
+          prefix: config.prefix || 'GIFT',
+          contactEmail: context.contact?.email,
+        });
+        if (result.error) return { status: 'error', output: null, error: result.error };
+        return { status: 'success', output: { code: result.data?.code } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // Registrar interesse em produto (back-in-stock)
+  action_back_in_stock_notify: {
+    async execute({ config, context, isTest }) {
+      if (isTest) {
+        return { status: 'success', output: { registered: true, product_id: config.productId } };
+      }
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabase-admin');
+        await supabaseAdmin.from('whatsapp_product_interests').insert({
+          organization_id: context.organization_id || context.organizationId,
+          contact_id: context.contact?.id,
+          phone: context.contact?.phone,
+          product_id: config.productId,
+          product_title: config.productTitle,
+          variant_id: config.variantId,
+          notified: false,
+        });
+        return { status: 'success', output: { registered: true } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
 };
 
 // ============================================
@@ -876,6 +1093,31 @@ const conditionExecutors: Record<string, NodeExecutor> = {
         status: 'success',
         output: { conditions: results, logicOperator, result: finalResult },
         branch: finalResult ? 'true' : 'false',
+      };
+    },
+  },
+
+  // WhatsApp keyword matcher (Module B)
+  condition_whatsapp_keyword: {
+    async execute({ config, context }) {
+      const message = (context.message?.text || context.lastMessage || '').toLowerCase();
+      const keywords: string[] = config.keywords || [];
+      const mode = config.mode || 'contains'; // contains|equals|regex
+
+      let matched = false;
+      for (const kw of keywords) {
+        const lower = kw.toLowerCase();
+        if (mode === 'equals') matched = message.trim() === lower;
+        else if (mode === 'regex') {
+          try { matched = new RegExp(kw, 'i').test(message); } catch { matched = false; }
+        } else matched = message.includes(lower);
+        if (matched) break;
+      }
+
+      return {
+        status: 'success',
+        output: { matched, message },
+        branch: matched ? 'true' : 'false',
       };
     },
   },

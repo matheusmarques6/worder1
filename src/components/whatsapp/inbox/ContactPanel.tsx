@@ -55,6 +55,7 @@ import { NotesTab } from './tabs/NotesTab'
 // Import modals
 import { CreateDealModal } from './modals/CreateDealModal'
 import { AssignModal } from './modals/AssignModal'
+import { CopilotSidebar } from './CopilotSidebar'
 
 interface ContactPanelProps {
   contact: InboxContact | null
@@ -88,6 +89,10 @@ interface ContactPanelProps {
   onDeleteInvoice?: (invoiceId: string) => Promise<void>
   onAddComment?: (contactId: string, content: string, type?: string, mentions?: string[]) => Promise<void>
   onRefreshContact?: () => void
+  // Module C: Copilot
+  organizationId?: string
+  lastInboundMessage?: string
+  onInsertCopilotSuggestion?: (text: string) => void
 }
 
 // Helpers
@@ -162,6 +167,9 @@ export function ContactPanel({
   onDeleteInvoice,
   onAddComment,
   onRefreshContact,
+  organizationId,
+  lastInboundMessage,
+  onInsertCopilotSuggestion,
 }: ContactPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>('info')
   const [newTag, setNewTag] = useState('')
@@ -314,6 +322,18 @@ export function ContactPanel({
           ))}
         </div>
       </div>
+
+      {/* ========== COPILOT ========== */}
+      {organizationId && onInsertCopilotSuggestion && conversationId && (
+        <div className="p-3 border-b border-gray-200">
+          <CopilotSidebar
+            conversationId={conversationId}
+            organizationId={organizationId}
+            lastInboundMessage={lastInboundMessage}
+            onInsertSuggestion={onInsertCopilotSuggestion}
+          />
+        </div>
+      )}
 
       {/* ========== TAB CONTENT ========== */}
       <div className="flex-1 overflow-y-auto">
