@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, Palette, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star } from 'lucide-react'
+import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star } from 'lucide-react'
 import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, useDroppable, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -664,6 +664,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/worder-favicon.svg" alt="Worder" className="w-6 h-6 flex-shrink-0" />
           <span className="text-sm font-semibold text-gray-900 truncate max-w-[250px]">{templateName}</span>
+          <span className="text-[9px] px-1.5 py-0.5 bg-brand-100 text-brand-700 rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
         </div>
 
         <div className="flex items-center gap-1">
@@ -691,40 +692,101 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         </div>
       </div>
 
-      {/* ── Main Layout ── */}
+      {/* ── Main Layout (Klaviyo-style: Left = contextual panel, Right = canvas) ── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* ── Left Sidebar ── */}
-        <div className="w-[280px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
-          <div className="flex border-b border-gray-200 flex-shrink-0">
-            <button onClick={() => setLeftTab('content')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'content' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Content</button>
-            <button onClick={() => setLeftTab('styles')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Styles</button>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            {leftTab === 'content' ? (
-              <div className="flex flex-col h-full overflow-y-auto">
-                {/* Layout section — Columns + Section like Klaviyo */}
-                <div className="p-3 border-b border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Layout</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <button onClick={() => setShowColumnModal(true)}
-                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
-                      <Columns className="w-5 h-5 text-gray-500" />
-                      <span className="text-[10px] font-medium text-gray-600">Colunas</span>
-                    </button>
-                    <button onClick={() => addSection([100])}
-                      className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
-                      <LayoutGrid className="w-5 h-5 text-gray-500" />
-                      <span className="text-[10px] font-medium text-gray-600">Seção</span>
-                    </button>
-                  </div>
-                </div>
-                {/* Block palette */}
-                <BlockPalette onAddBlock={addBlock} onAddSavedBlock={addSavedBlock} />
+        {/* ── Left Sidebar (contextual: palette OR block/section properties) ── */}
+        <div className="w-[320px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+          {selectedBlock ? (
+            <>
+              {/* Header with back button when editing a block */}
+              <div className="flex items-center gap-2 py-2.5 px-3 border-b border-gray-200 flex-shrink-0">
+                <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors" title="Voltar">
+                  <ArrowLeft size={14} />
+                </button>
+                <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider flex-1">
+                  {BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}
+                </p>
               </div>
-            ) : (
-              <StylesTab doc={doc} setDoc={setDoc} />
-            )}
-          </div>
+              <div className="flex-1 overflow-y-auto p-3">
+                <BlockProperties
+                  block={selectedBlock}
+                  onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
+                  onSaveAsReusable={() => {
+                    setSaveBlockName('')
+                    setShowSaveBlockModal(true)
+                  }}
+                />
+              </div>
+            </>
+          ) : selectedSection ? (
+            <>
+              {/* Header with back button when editing a section */}
+              <div className="flex items-center gap-2 py-2.5 px-3 border-b border-gray-200 flex-shrink-0">
+                <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors" title="Voltar">
+                  <ArrowLeft size={14} />
+                </button>
+                <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider flex-1">Seção</p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3">
+                <SectionProperties
+                  section={selectedSection}
+                  onStyleChange={(key, value) => updateSectionStyles(selectedSection.id, { [key]: value })}
+                  onColumnLayoutChange={(cols) => {
+                    setDoc(prev => ({
+                      ...prev,
+                      sections: prev.sections.map(s => {
+                        if (s.id !== selectedSection.id) return s
+                        const newCols = cols.map((w, i) => ({
+                          id: s.columns[i]?.id || ('c_' + Date.now().toString(36) + '_' + i),
+                          width: w,
+                          blocks: s.columns[i]?.blocks || [],
+                        }))
+                        if (s.columns.length > cols.length) {
+                          const overflow = s.columns.slice(cols.length).flatMap(c => c.blocks)
+                          newCols[newCols.length - 1].blocks.push(...overflow)
+                        }
+                        return { ...s, columns: newCols }
+                      })
+                    }))
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Default: palette / styles tabs */}
+              <div className="flex border-b border-gray-200 flex-shrink-0">
+                <button onClick={() => setLeftTab('content')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'content' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Content</button>
+                <button onClick={() => setLeftTab('styles')} className={`flex-1 py-2.5 text-[11px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-brand-600 border-b-2 border-brand-500 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Styles</button>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                {leftTab === 'content' ? (
+                  <div className="flex flex-col h-full overflow-y-auto">
+                    {/* Layout section — Columns + Section like Klaviyo */}
+                    <div className="p-3 border-b border-gray-100">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Layout</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button onClick={() => setShowColumnModal(true)}
+                          className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
+                          <Columns className="w-5 h-5 text-gray-500" />
+                          <span className="text-[10px] font-medium text-gray-600">Colunas</span>
+                        </button>
+                        <button onClick={() => addSection([100])}
+                          className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
+                          <LayoutGrid className="w-5 h-5 text-gray-500" />
+                          <span className="text-[10px] font-medium text-gray-600">Seção</span>
+                        </button>
+                      </div>
+                    </div>
+                    {/* Block palette */}
+                    <BlockPalette onAddBlock={addBlock} onAddSavedBlock={addSavedBlock} />
+                  </div>
+                ) : (
+                  <StylesTab doc={doc} setDoc={setDoc} />
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* ── Canvas ── */}
@@ -845,57 +907,6 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           </div>
         </div>
 
-        {/* ── Right Sidebar ── */}
-        <div className="w-[340px] bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
-          <div className="py-2.5 px-4 border-b border-gray-200 flex-shrink-0">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-              {selectedBlock ? (BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type)
-                : selectedSection ? 'Secao' : 'Propriedades'}
-            </p>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3">
-            {selectedBlock ? (
-              <BlockProperties
-                block={selectedBlock}
-                onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
-                onSaveAsReusable={() => {
-                  setSaveBlockName('')
-                  setShowSaveBlockModal(true)
-                }}
-              />
-            ) : selectedSection ? (
-              <SectionProperties
-                section={selectedSection}
-                onStyleChange={(key, value) => updateSectionStyles(selectedSection.id, { [key]: value })}
-                onColumnLayoutChange={(cols) => {
-                  setDoc(prev => ({
-                    ...prev,
-                    sections: prev.sections.map(s => {
-                      if (s.id !== selectedSection.id) return s
-                      const newCols = cols.map((w, i) => ({
-                        id: s.columns[i]?.id || ('c_' + Date.now().toString(36) + '_' + i),
-                        width: w,
-                        blocks: s.columns[i]?.blocks || [],
-                      }))
-                      // Move overflow blocks to last column
-                      if (s.columns.length > cols.length) {
-                        const overflow = s.columns.slice(cols.length).flatMap(c => c.blocks)
-                        newCols[newCols.length - 1].blocks.push(...overflow)
-                      }
-                      return { ...s, columns: newCols }
-                    })
-                  }))
-                }}
-              />
-            ) : (
-              <div className="text-center py-16 text-gray-400">
-                <span className="block mb-3"><Palette className="w-8 h-8 text-gray-300 mx-auto" /></span>
-                <p className="text-xs font-medium text-gray-500">Selecione um bloco ou secao</p>
-                <p className="text-[10px] text-gray-400 mt-1">para editar suas propriedades</p>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* ── Preview Modal ── */}

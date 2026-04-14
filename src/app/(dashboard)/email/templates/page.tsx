@@ -201,10 +201,10 @@ export default function EmailTemplatesPage() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.03 }}
-              className="group bg-white border border-zinc-200 rounded-xl overflow-hidden hover:shadow-lg hover:border-zinc-300 transition-all duration-200 relative"
+              className="group bg-white border border-zinc-200 rounded-xl hover:shadow-lg hover:border-zinc-300 transition-all duration-200 relative"
             >
               {/* Thumbnail / HTML Preview */}
-              <div className="aspect-[4/3] bg-zinc-50 relative overflow-hidden border-b border-zinc-100">
+              <div className="aspect-[4/3] bg-zinc-50 relative overflow-hidden border-b border-zinc-100 rounded-t-xl">
                 {template.html ? (
                   <div className="absolute inset-0 flex items-start justify-center">
                     <iframe
@@ -283,22 +283,30 @@ export default function EmailTemplatesPage() {
                       <MoreVertical className="w-4 h-4" />
                     </button>
                     {activeMenu === template.id && (
-                      <div className="absolute right-0 top-8 z-10 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-                        <Link
-                          href={`/email/templates/${template.id}/edit`}
-                          className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                          Editar
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(template.id)}
-                          className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Excluir
-                        </button>
-                      </div>
+                      <>
+                        {/* backdrop — fecha menu ao clicar fora */}
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setActiveMenu(null)}
+                        />
+                        <div className="absolute right-0 top-8 z-50 w-44 bg-white border border-gray-200 rounded-lg shadow-xl py-1">
+                          <Link
+                            href={`/email/templates/${template.id}/edit`}
+                            onClick={() => setActiveMenu(null)}
+                            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                            Editar
+                          </Link>
+                          <button
+                            onClick={() => { setActiveMenu(null); handleDelete(template.id); }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Excluir
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
