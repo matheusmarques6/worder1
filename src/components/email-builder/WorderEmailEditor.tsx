@@ -661,8 +661,9 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
             <ArrowLeft size={18} />
           </button>
           <div className="h-5 w-px bg-gray-200" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/worder-favicon.svg" alt="Worder" className="w-6 h-6 flex-shrink-0" />
           <span className="text-sm font-semibold text-gray-900 truncate max-w-[250px]">{templateName}</span>
-          <span className="text-[9px] px-1.5 py-0.5 bg-brand-100 text-brand-700 rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
         </div>
 
         <div className="flex items-center gap-1">
