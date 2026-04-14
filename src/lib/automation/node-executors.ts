@@ -353,72 +353,91 @@ const actionExecutors: Record<string, NodeExecutor> = {
         // 3. Build sender info
         const senderName = config.senderName || (context as any).store?.name || 'Worder';
         const senderEmail = config.senderEmail || credentials?.defaultFrom || 'noreply@example.com';
-        const from = `${senderName} <${senderEmail}>`;
 
-        // 4. Send via Resend (default provider)
-        const provider = credentials?.type || 'resend';
-        const apiKey = credentials?.apiKey || process.env.RESEND_API_KEY;
+        // 4. Send via the full campaign pipeline so automation emails
+        //    get the same tracking as campaigns (open pixel, click
+        //    tracking, unsubscribe link, resend tags with flow_id).
+        //    This replaces the previous raw fetch to the Resend REST
+        //    endpoint which skipped all tracking.
 
-        if (!apiKey) {
-          return { status: 'error', output: null, error: 'API key de email não configurada (Resend/SendGrid)' };
+        if (!process.env.RESEND_API_KEY && !credentials?.apiKey) {
+          return { status: 'error', output: null, error: 'RESEND_API_KEY não configurada' };
         }
 
-        if (provider === 'emailSendgrid' || provider === 'sendgrid') {
-          const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              personalizations: [{ to: [{ email }] }],
-              from: { email: senderEmail, name: senderName },
-              subject,
-              content: [{ type: 'text/html', value: html }],
-            }),
-          });
-
-          if (!response.ok) {
-            const error = await response.text();
-            return { status: 'error', output: { error }, error: 'Falha no envio SendGrid' };
-          }
-
-          return { status: 'success', output: { sent: true, provider: 'sendgrid', to: email } };
-        } else {
-          const response = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              from,
-              to: email,
-              subject,
-              html,
-            }),
-          });
-
-          const result = await response.json();
-
-          if (!response.ok) {
-            return { status: 'error', output: result, error: result.message || 'Falha no envio Resend' };
-          }
-
-          // 5. Record the send in email_sends table (skip for tests)
-          if (organizationId && !isTest) {
-            await supabase.from('email_sends').insert({
-              organization_id: organizationId,
-              contact_id: context.contact?.id,
-              email_template_id: config.templateId || null,
-              subject,
-              status: 'sent',
-              resend_id: result?.id,
-            }).catch(() => {}); // non-blocking
-          }
-
-          return { status: 'success', output: { ...result, provider: 'resend', to: email } };
+        if (isTest) {
+          // In test mode, skip the DB insert (no email_sends row) and
+          // return success without actually sending. The test panel
+          // uses a separate /api/email/test endpoint for real sends.
+          return {
+            status: 'success',
+            output: { sent: false, test: true, to: email, subject, preview: html.slice(0, 200) },
+          };
         }
+
+        const { sendCampaignEmail } = await import('@/lib/email/send-campaign-email');
+
+        // Build merge data from the same context we already resolved
+        // (contact + event + store). Using empty mergeData works too
+        // because the HTML/subject were pre-rendered by the variable
+        // engine above — prepareEmailHtml still adds tracking + footer.
+        const mergeData: Record<string, string> = {
+          first_name: (context.contact as any)?.first_name || '',
+          last_name: (context.contact as any)?.last_name || '',
+          email: email || '',
+          phone: (context.contact as any)?.phone || '',
+        };
+        if ((context.contact as any)?.custom_fields && typeof (context.contact as any).custom_fields === 'object') {
+          for (const [k, v] of Object.entries((context.contact as any).custom_fields)) {
+            mergeData[`custom.${k}`] = String(v ?? '');
+            mergeData[`custom_${k}`] = String(v ?? '');
+          }
+        }
+
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app';
+
+        // Use flowId as campaignId surrogate so email_sends rows carry
+        // a stable key we can aggregate by when the Automations ranking
+        // queries attribution revenue.
+        const campaignIdSurrogate = (context as any).flowId || (context as any).flow_id || `flow-${Date.now()}`;
+
+        const result = await sendCampaignEmail({
+          campaignId: campaignIdSurrogate,
+          contactId: (context.contact as any)?.id || '',
+          contactEmail: email,
+          mergeData,
+          templateHtml: html,
+          subject,
+          fromEmail: senderEmail,
+          senderName,
+          replyTo: undefined,
+          baseUrl,
+          organizationId: organizationId || '',
+        });
+
+        if (!result.success) {
+          return { status: 'error', output: { error: result.error }, error: result.error || 'Falha no envio' };
+        }
+
+        // Tag the email_sends row with flow/automation ids (so we can
+        // tell apart campaign sends from automation sends downstream).
+        if (result.emailSendId) {
+          try {
+            const updates: Record<string, any> = {};
+            const flowId = (context as any).flowId || (context as any).flow_id;
+            const runId = (context as any).automation_run_id || (context as any).runId;
+            if (flowId) updates.flow_id = flowId;
+            if (runId) updates.automation_run_id = runId;
+            if (config.templateId) updates.email_template_id = config.templateId;
+            if (Object.keys(updates).length > 0) {
+              await supabase.from('email_sends').update(updates).eq('id', result.emailSendId);
+            }
+          } catch { /* non-blocking */ }
+        }
+
+        return {
+          status: 'success',
+          output: { sent: true, provider: 'resend', to: email, emailSendId: result.emailSendId },
+        };
       } catch (error: any) {
         return { status: 'error', output: null, error: error.message };
       }

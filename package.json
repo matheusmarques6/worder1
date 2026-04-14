@@ -54,6 +54,7 @@
     "react-querybuilder": "^8.14.3",
     "recharts": "^2.10.3",
     "resend": "^6.9.4",
+    "svix": "^1.86.0",
     "tailwind-merge": "^2.2.0",
     "zustand": "^4.4.7"
   },

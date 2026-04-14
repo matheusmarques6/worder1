@@ -44,3 +44,48 @@ export async function getTopEmailCampaigns(supabase: any, orgId: string, limit =
     return campaigns || []
   } catch { return [] }
 }
+
+// =============================================
+// Conversion metrics — revenue per campaign, total attributed revenue
+// =============================================
+export async function getEmailConversionMetrics(supabase: any, orgId: string, days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString()
+  try {
+    // Campaigns with their attributed revenue rolled up
+    const { data: campaigns } = await supabase
+      .from('email_campaigns')
+      .select('id, name, subject, status, revenue, conversions, total_sent, total_recipients, opens, clicks, created_at, sent_at')
+      .eq('organization_id', orgId)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+
+    // Total attributed revenue across all sends (includes automations)
+    const { data: sends } = await supabase
+      .from('email_sends')
+      .select('conversion_value')
+      .eq('organization_id', orgId)
+      .gte('created_at', since)
+      .gt('conversion_value', 0)
+
+    const totalRevenue = (sends || []).reduce(
+      (sum: number, s: any) => sum + Number(s.conversion_value || 0),
+      0
+    )
+    const totalConversions = (sends || []).length
+
+    return {
+      totalRevenue,
+      totalConversions,
+      revenuePerRecipient: totalConversions > 0 ? totalRevenue / totalConversions : 0,
+      campaigns: (campaigns || []).map((c: any) => ({
+        ...c,
+        openRate: c.total_sent > 0 ? ((c.opens || 0) / c.total_sent * 100).toFixed(1) : '0',
+        clickRate: c.total_sent > 0 ? ((c.clicks || 0) / c.total_sent * 100).toFixed(1) : '0',
+        conversionRate: c.total_sent > 0 ? ((c.conversions || 0) / c.total_sent * 100).toFixed(1) : '0',
+        revenueFormatted: `R$ ${(c.revenue || 0).toFixed(2)}`,
+      })),
+    }
+  } catch {
+    return { totalRevenue: 0, totalConversions: 0, revenuePerRecipient: 0, campaigns: [] }
+  }
+}

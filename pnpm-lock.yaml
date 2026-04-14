@@ -125,6 +125,9 @@ importers:
       resend:
         specifier: ^6.9.4
         version: 6.9.4
+      svix:
+        specifier: ^1.86.0
+        version: 1.86.0
       tailwind-merge:
         specifier: ^2.2.0
         version: 2.6.1

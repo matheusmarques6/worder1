@@ -7,6 +7,7 @@ const tabs = [
   { title: 'Conta', href: '/settings/account' },
   { title: 'Faturamento', href: '/settings/billing' },
   { title: 'E-mail', href: '/settings' },
+  { title: 'Domínios', href: '/settings/email' },
   { title: 'Rastreamento', href: '/settings/tracking' },
   { title: 'Atribuição', href: '/settings/attribution' },
   { title: 'Dados', href: '/settings/lgpd' },
