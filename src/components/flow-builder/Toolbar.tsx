@@ -139,10 +139,19 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   };
 
   return (
-    <div className="h-14 bg-zinc-900 flex items-center px-2 sm:px-4 gap-2 sm:gap-4 shrink-0">
-      {/* Left Section - Name */}
-      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink-0">
-        {/* Name - Left aligned */}
+    <div className="h-14 bg-zinc-950 border-b border-zinc-800 flex items-center px-2 sm:px-4 gap-3 sm:gap-4 shrink-0 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
+      {/* Left Section - Logo + Name */}
+      <div className="flex items-center gap-3 min-w-0 flex-shrink-0">
+        {/* Worder brand mark */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/worder-favicon.svg"
+          alt="Worder"
+          className="w-7 h-7 flex-shrink-0"
+        />
+        <div className="h-5 w-px bg-zinc-700" />
+
+        {/* Name - inline editable */}
         <div className="flex items-center gap-2 min-w-0">
           {isEditing ? (
             <input
@@ -153,27 +162,27 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
               onKeyDown={(e) => e.key === 'Enter' && setIsEditing(false)}
               autoFocus
               className={cn(
-                'px-3 py-1.5 rounded-lg',
+                'px-3 py-1 rounded-md',
                 'bg-zinc-800 border border-zinc-700',
-                'text-white text-base sm:text-lg font-semibold',
-                'focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20',
-                'w-[150px] sm:w-[200px]'
+                'text-white text-[15px] font-semibold tracking-tight',
+                'focus:outline-none focus:border-white/40 focus:ring-2 focus:ring-white/10',
+                'w-[180px] sm:w-[240px]'
               )}
             />
           ) : (
             <button
               onClick={() => setIsEditing(true)}
-              className="flex items-center gap-2 text-base sm:text-lg font-semibold text-white hover:text-zinc-200 transition-colors group truncate max-w-[150px] sm:max-w-[250px]"
-              title={automationName}
+              className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-white hover:text-white/90 transition-colors group truncate max-w-[180px] sm:max-w-[280px]"
+              title={`Renomear: ${automationName}`}
             >
               <span className="truncate">{automationName}</span>
-              <Pencil className="w-4 h-4 text-zinc-500 group-hover:text-zinc-300 transition-colors flex-shrink-0" />
+              <Pencil className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white transition-colors flex-shrink-0" strokeWidth={2} />
             </button>
           )}
 
           {/* Dirty indicator */}
           {isDirty && (
-            <span className="text-[10px] sm:text-xs text-amber-300 bg-amber-500/15 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-amber-500/30 flex-shrink-0 whitespace-nowrap">
+            <span className="text-[10px] sm:text-[11px] font-medium text-amber-200 bg-amber-500/10 px-1.5 sm:px-2 py-0.5 rounded-full border border-amber-400/30 flex-shrink-0 whitespace-nowrap">
               Não salvo
             </span>
           )}
@@ -184,40 +193,43 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
       <div className="flex-1" />
 
       {/* Right Section - Actions */}
-      <div className="flex items-center gap-1 sm:gap-2 lg:gap-3 flex-shrink-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
         {/* Undo/Redo */}
-        <div className="hidden sm:flex items-center gap-1">
+        <div className="hidden sm:flex items-center gap-0.5">
           <button
             onClick={undo}
             disabled={!canUndo()}
             className={cn(
-              'p-2 rounded-lg transition-colors',
-              canUndo() ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'text-zinc-600 cursor-not-allowed opacity-40'
+              'p-1.5 rounded-md transition-colors',
+              canUndo() ? 'hover:bg-zinc-800 text-zinc-300 hover:text-white' : 'text-zinc-600 cursor-not-allowed'
             )}
             title="Desfazer (Ctrl+Z)"
           >
-            <Undo2 className="w-4 h-4" />
+            <Undo2 className="w-[15px] h-[15px]" strokeWidth={2} />
           </button>
           <button
             onClick={redo}
             disabled={!canRedo()}
             className={cn(
-              'p-2 rounded-lg transition-colors',
-              canRedo() ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'text-zinc-600 cursor-not-allowed opacity-40'
+              'p-1.5 rounded-md transition-colors',
+              canRedo() ? 'hover:bg-zinc-800 text-zinc-300 hover:text-white' : 'text-zinc-600 cursor-not-allowed'
             )}
             title="Refazer (Ctrl+Shift+Z)"
           >
-            <Redo2 className="w-4 h-4" />
+            <Redo2 className="w-[15px] h-[15px]" strokeWidth={2} />
           </button>
         </div>
 
+        {/* Divider */}
+        <div className="hidden sm:block w-px h-5 bg-zinc-800 mx-1" />
+
         {/* Validation indicator - Alerts */}
         {!valid && errors.length > 0 && (
-          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-            <AlertTriangle className="w-4 h-4 text-amber-400" />
-            <span className="text-xs text-amber-300 max-w-[200px] truncate">{errors[0]}</span>
+          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 border border-amber-400/25 rounded-md">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-300" />
+            <span className="text-[11px] text-amber-100 max-w-[200px] truncate">{errors[0]}</span>
             {errors.length > 1 && (
-              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full font-medium">
+              <span className="text-[10px] bg-amber-500/25 text-amber-100 px-1.5 py-0.5 rounded-full font-medium">
                 +{errors.length - 1}
               </span>
             )}
@@ -228,15 +240,15 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
         <button
           onClick={toggleAnalytics}
           className={cn(
-            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
-            'text-sm transition-colors',
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md',
+            'text-[13px] font-medium transition-colors',
             showAnalytics
-              ? 'bg-brand-500/15 text-brand-300 border border-brand-500/30'
-              : 'hover:bg-zinc-800 text-zinc-400 hover:text-white'
+              ? 'bg-white/10 text-white ring-1 ring-inset ring-white/15'
+              : 'hover:bg-zinc-800 text-zinc-200 hover:text-white'
           )}
-          title="Mostrar Métricas"
+          title="Métricas"
         >
-          <BarChart3 className="w-4 h-4" />
+          <BarChart3 className="w-4 h-4" strokeWidth={2} />
           <span className="hidden lg:inline">Métricas</span>
         </button>
 
@@ -249,13 +261,13 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
         <button
           onClick={toggleHistoryPanel}
           className={cn(
-            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
-            'hover:bg-zinc-800 text-zinc-400 hover:text-white',
-            'transition-colors text-sm'
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md',
+            'hover:bg-zinc-800 text-zinc-200 hover:text-white',
+            'transition-colors text-[13px] font-medium'
           )}
           title="Histórico"
         >
-          <History className="w-4 h-4" />
+          <History className="w-4 h-4" strokeWidth={2} />
           <span className="hidden lg:inline">Histórico</span>
         </button>
 
@@ -264,17 +276,19 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           onClick={handleTest}
           disabled={!valid}
           className={cn(
-            'flex items-center gap-2 p-2 sm:px-3 sm:py-2 rounded-lg',
-            'border border-zinc-700 hover:bg-zinc-800',
-            'text-zinc-300 hover:text-white text-sm font-medium',
-            'transition-colors',
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md',
+            'hover:bg-zinc-800 text-zinc-200 hover:text-white',
+            'transition-colors text-[13px] font-medium',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
-          title="Testar"
+          title="Testar automação"
         >
-          <PlayCircle className="w-4 h-4" />
+          <PlayCircle className="w-4 h-4" strokeWidth={2} />
           <span className="hidden sm:inline">Testar</span>
         </button>
+
+        {/* Divider */}
+        <div className="hidden sm:block w-px h-5 bg-zinc-800 mx-1" />
 
         {/* Activation Toggle */}
         <ActivationToggle
@@ -284,18 +298,15 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           onToggle={handleToggleStatus}
         />
 
-        {/* Divider - hidden on small screens */}
-        <div className="hidden sm:block w-px h-8 bg-zinc-700" />
-
         {/* Save status indicator */}
         {saveStatus === 'saving' && (
-          <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+          <div className="flex items-center gap-1.5 text-[11px] text-zinc-300 pl-1">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
             <span className="hidden sm:inline">Salvando...</span>
           </div>
         )}
         {saveStatus === 'saved' && (
-          <div className="flex items-center gap-1.5 text-xs text-green-400">
+          <div className="flex items-center gap-1.5 text-[11px] text-emerald-300 pl-1">
             <Check className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Salvo</span>
           </div>
@@ -306,10 +317,10 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           onClick={handleSaveAndClose}
           disabled={isSaving}
           className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg',
+            'flex items-center gap-1.5 px-3.5 py-1.5 rounded-md ml-1',
             'bg-white hover:bg-zinc-100',
-            'text-zinc-900 text-sm font-semibold',
-            'transition-colors',
+            'text-zinc-900 text-[13px] font-semibold tracking-tight',
+            'shadow-sm transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         >
@@ -337,27 +348,27 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
       onClick={onToggle}
       disabled={disabled || isLoading}
       className={cn(
-        'relative flex items-center gap-2 px-3 py-2 rounded-lg',
-        'transition-all duration-300 border',
+        'relative flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-md',
+        'transition-all duration-200 ring-1 ring-inset',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         isActive
-          ? 'bg-green-500/10 border-green-500/30 hover:bg-green-500/20'
-          : 'bg-zinc-800 border-zinc-700 hover:bg-zinc-700'
+          ? 'bg-emerald-500/10 ring-emerald-400/30 hover:bg-emerald-500/15'
+          : 'bg-zinc-800/60 ring-zinc-700 hover:bg-zinc-800'
       )}
     >
       {/* Toggle Track */}
       <div className={cn(
-        'relative w-10 h-5 rounded-full transition-colors duration-300',
-        isActive ? 'bg-green-500' : 'bg-zinc-600'
+        'relative w-8 h-[18px] rounded-full transition-colors duration-300',
+        isActive ? 'bg-emerald-500' : 'bg-zinc-600'
       )}>
         {/* Toggle Thumb */}
         <motion.div
           className={cn(
-            'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm',
+            'absolute top-0.5 w-[14px] h-[14px] rounded-full bg-white shadow',
             'flex items-center justify-center'
           )}
           animate={{
-            left: isActive ? 20 : 2,
+            left: isActive ? 16 : 2,
           }}
           transition={{ type: 'spring', stiffness: 500, damping: 30 }}
         >
@@ -369,8 +380,8 @@ function ActivationToggle({ isActive, isLoading, disabled, onToggle }: Activatio
 
       {/* Label */}
       <span className={cn(
-        'text-sm font-medium',
-        isActive ? 'text-green-300' : 'text-zinc-300'
+        'text-[13px] font-medium tracking-tight',
+        isActive ? 'text-emerald-200' : 'text-zinc-200'
       )}>
         {isLoading ? '...' : isActive ? 'Ativo' : 'Inativo'}
       </span>
@@ -411,16 +422,16 @@ function AnalyticsTimeframeSelector() {
   ];
 
   return (
-    <div className="hidden sm:flex items-center gap-0.5 bg-zinc-800 rounded-lg p-0.5">
+    <div className="hidden sm:flex items-center gap-0.5 bg-zinc-800/80 ring-1 ring-inset ring-zinc-700 rounded-md p-0.5">
       {options.map((opt) => (
         <button
           key={opt.value}
           onClick={() => setTimeframe(opt.value)}
           className={cn(
-            'px-2 py-1 rounded-md text-[10px] font-medium transition-colors',
+            'px-2 py-0.5 rounded-[4px] text-[11px] font-semibold tracking-tight transition-colors',
             timeframe === opt.value
               ? 'bg-white text-zinc-900 shadow-sm'
-              : 'text-zinc-400 hover:text-white'
+              : 'text-zinc-300 hover:text-white'
           )}
         >
           {opt.label}

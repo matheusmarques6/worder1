@@ -349,8 +349,8 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
   return (
     <div className="w-[300px] bg-white border-r border-gray-200 flex flex-col h-full shrink-0 overflow-hidden">
       {/* Header - Seletor de Gatilho */}
-      <div className="p-4 border-b border-gray-200">
-        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 block">
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+        <label className="text-[11px] font-semibold text-gray-500 tracking-wider uppercase mb-2 block">
           Gatilho
         </label>
 
@@ -359,24 +359,24 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
           <button
             onClick={() => setIsTriggerDropdownOpen(!isTriggerDropdownOpen)}
             className={cn(
-              'w-full flex items-center justify-between px-3 py-2.5 rounded-lg',
-              'bg-white border border-gray-300',
-              'hover:border-gray-300 transition-all duration-200',
-              'text-left',
-              isTriggerDropdownOpen && 'border-blue-500 ring-1 ring-blue-100'
+              'w-full flex items-center justify-between px-2.5 py-2 rounded-lg',
+              'bg-white ring-1 ring-inset ring-gray-200',
+              'hover:ring-gray-300 transition-all duration-150',
+              'text-left shadow-sm',
+              isTriggerDropdownOpen && 'ring-2 ring-zinc-900/10 border-zinc-900'
             )}
           >
-            <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-md bg-emerald-50">
-                <currentTrigger.icon className="w-4 h-4 text-emerald-600" />
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 flex items-center justify-center rounded-md bg-emerald-50 shrink-0">
+                <currentTrigger.icon className="w-3.5 h-3.5 text-emerald-600" strokeWidth={2.25} />
               </div>
-              <span className="text-sm text-gray-900 font-medium truncate">
+              <span className="text-[13px] text-gray-900 font-medium truncate">
                 {currentTrigger.label}
               </span>
             </div>
             <ChevronDown
               className={cn(
-                'w-4 h-4 text-gray-500 transition-transform duration-200 shrink-0 ml-2',
+                'w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ml-2',
                 isTriggerDropdownOpen && 'rotate-180'
               )}
             />
@@ -440,11 +440,11 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
-              'w-full pl-10 pr-10 py-2 rounded-lg',
-              'bg-white border border-gray-300',
-              'text-sm text-gray-900 placeholder-gray-400',
-              'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20',
-              'transition-all duration-200'
+              'w-full pl-9 pr-9 py-2 rounded-lg',
+              'bg-gray-50 ring-1 ring-inset ring-gray-200',
+              'text-[13px] text-gray-900 placeholder-gray-400',
+              'focus:outline-none focus:bg-white focus:ring-2 focus:ring-zinc-900/10 focus:ring-offset-0',
+              'transition-all duration-150'
             )}
           />
           {searchQuery && (
