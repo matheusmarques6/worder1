@@ -5,7 +5,10 @@ export const dynamic = 'force-dynamic';
 
 // =============================================
 // API: /api/tracking/events
-// Captura eventos de comportamento do cliente
+// Endpoint AUTENTICADO para gravar eventos via painel/integrações internas.
+// (Pixel público usa /api/track/event — ver tracking.js)
+//
+// TABELA: contact_events (fonte única de verdade).
 // =============================================
 
 // POST - Registrar evento
@@ -18,27 +21,28 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       event_type,
-      event_source = 'web',
-      
+      event_source = 'worder_internal',
+
       // Identificadores
       visitor_id,
       customer_email,
       customer_phone,
       shopify_customer_id,
       contact_id,
-      
+      store_id,
+
       // Produto
       product_id,
       product_name,
       product_price,
       product_quantity,
       product_category,
-      
+
       // Pedido
       order_id,
       order_total,
       order_items,
-      
+
       // Sessão
       session_id,
       page_url,
@@ -46,9 +50,10 @@ export async function POST(request: NextRequest) {
       utm_source,
       utm_medium,
       utm_campaign,
-      
+
       // Extras
       event_data = {},
+      idempotency_key,
     } = body
 
     if (!event_type) {
@@ -57,12 +62,12 @@ export async function POST(request: NextRequest) {
 
     // Extrair info do request
     const userAgent = request.headers.get('user-agent') || ''
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0] ||
                request.headers.get('x-real-ip') || null
-    
-    const device_type = /mobile/i.test(userAgent) ? 'mobile' : 
+
+    const device_type = /mobile/i.test(userAgent) ? 'mobile' :
                         /tablet/i.test(userAgent) ? 'tablet' : 'desktop'
-    
+
     const browser = userAgent.includes('Chrome') ? 'Chrome' :
                     userAgent.includes('Firefox') ? 'Firefox' :
                     userAgent.includes('Safari') ? 'Safari' :
@@ -75,26 +80,42 @@ export async function POST(request: NextRequest) {
         .from('contacts')
         .select('id')
         .eq('organization_id', organization_id)
-        .or(`email.eq.${customer_email},phone.eq.${customer_phone},whatsapp.eq.${customer_phone}`)
+        .or(
+          [
+            customer_email ? `email.eq.${customer_email}` : '',
+            customer_phone ? `phone.eq.${customer_phone}` : '',
+            customer_phone ? `whatsapp.eq.${customer_phone}` : '',
+          ].filter(Boolean).join(',')
+        )
         .limit(1)
-        .single()
-      
+        .maybeSingle()
+
       resolvedContactId = contact?.id
     }
 
-    // Inserir evento
+    // Inserir evento em contact_events
+    const now = new Date().toISOString()
+    const idem =
+      idempotency_key ||
+      (order_id
+        ? `${event_type}:${organization_id}:order:${order_id}`
+        : null)
+
     const { data: event, error } = await supabase
-      .from('customer_events')
+      .from('contact_events')
       .insert({
         organization_id,
-        contact_id: resolvedContactId,
-        visitor_id,
-        customer_email,
-        customer_phone,
-        shopify_customer_id,
+        contact_id: resolvedContactId || null,
+        store_id: store_id || null,
+        visitor_id: visitor_id || null,
         event_type,
         event_source,
-        event_data: { ...event_data, order_items },
+        properties: {
+          ...event_data,
+          customer_email,
+          customer_phone,
+          order_items,
+        },
         product_id,
         product_name,
         product_price,
@@ -102,6 +123,8 @@ export async function POST(request: NextRequest) {
         product_category,
         order_id,
         order_total,
+        monetary_value: order_total ?? product_price ?? null,
+        currency: 'BRL',
         session_id,
         page_url,
         referrer_url,
@@ -111,51 +134,36 @@ export async function POST(request: NextRequest) {
         device_type,
         browser,
         ip_address: ip,
-        event_timestamp: new Date().toISOString(),
+        shopify_customer_id,
+        occurred_at: now,
+        received_at: now,
+        idempotency_key: idem,
       })
       .select()
       .single()
 
-    if (error) throw error
+    if (error && !String(error.message).includes('duplicate key')) throw error
 
     // Se for compra, atualizar contato
     if (event_type === 'purchase' && resolvedContactId && order_total) {
       try {
-        // Tentar usar RPC
         await supabase.rpc('increment_contact_revenue', {
           p_contact_id: resolvedContactId,
-          p_amount: order_total,
+          p_amount: Number(order_total),
         })
-      } catch {
-        // Fallback: atualizar manualmente
-        const { data: currentContact } = await supabase
-          .from('contacts')
-          .select('total_revenue, total_orders')
-          .eq('id', resolvedContactId)
-          .single()
-
-        if (currentContact) {
-          await supabase
-            .from('contacts')
-            .update({ 
-              total_revenue: (currentContact.total_revenue || 0) + order_total,
-              total_orders: (currentContact.total_orders || 0) + 1,
-              last_order_date: new Date().toISOString(),
-            })
-            .eq('id', resolvedContactId)
-        }
-      }
+      } catch { /* ignore */ }
     }
 
     // Trigger automações (async)
-    triggerAutomations(event).catch(console.error)
+    if (event) {
+      triggerAutomations(event).catch(console.error)
+    }
 
-    return NextResponse.json({ 
-      success: true, 
-      event_id: event.id,
+    return NextResponse.json({
+      success: true,
+      event_id: event?.id || null,
       contact_id: resolvedContactId,
     })
-
   } catch (error: any) {
     console.error('[Event Tracking] Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -172,14 +180,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const contact_id = searchParams.get('contact_id')
     const event_type = searchParams.get('event_type')
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 500)
+    const offset = parseInt(searchParams.get('offset') || '0', 10)
 
     let query = supabase
-      .from('customer_events')
+      .from('contact_events')
       .select('*', { count: 'exact' })
       .eq('organization_id', organization_id)
-      .order('event_timestamp', { ascending: false })
+      .order('occurred_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
     if (contact_id) query = query.eq('contact_id', contact_id)
@@ -189,7 +197,6 @@ export async function GET(request: NextRequest) {
     if (error) throw error
 
     return NextResponse.json({ events: data, total: count })
-
   } catch (error: any) {
     console.error('[Event Tracking] Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -197,11 +204,10 @@ export async function GET(request: NextRequest) {
 }
 
 // =============================================
-// TRIGGER AUTOMAÇÕES
+// TRIGGER AUTOMAÇÕES (fire-and-forget)
 // =============================================
 async function triggerAutomations(event: any) {
   try {
-    // Buscar playbooks ativos com trigger de evento
     const { data: playbooks } = await supabase
       .from('automation_playbooks')
       .select('*')
@@ -212,38 +218,31 @@ async function triggerAutomations(event: any) {
     if (!playbooks?.length) return
 
     for (const playbook of playbooks) {
-      // Verificar se o evento corresponde
       const triggerEventType = playbook.trigger_config?.event_type
       if (triggerEventType && triggerEventType !== event.event_type) continue
 
-      // Verificar cooldown
       if (playbook.settings?.cooldown_days && event.contact_id) {
         const cooldownDate = new Date()
         cooldownDate.setDate(cooldownDate.getDate() - playbook.settings.cooldown_days)
-
-        const { data: recentRuns } = await supabase
+        const { data: recent } = await supabase
           .from('playbook_runs')
           .select('id')
           .eq('playbook_id', playbook.id)
           .eq('contact_id', event.contact_id)
           .gte('started_at', cooldownDate.toISOString())
           .limit(1)
-
-        if (recentRuns?.length) continue
+        if (recent?.length) continue
       }
 
-      // Verificar max_per_contact
       if (playbook.settings?.max_per_contact && event.contact_id) {
         const { count } = await supabase
           .from('playbook_runs')
           .select('*', { count: 'exact', head: true })
           .eq('playbook_id', playbook.id)
           .eq('contact_id', event.contact_id)
-
         if (count && count >= playbook.settings.max_per_contact) continue
       }
 
-      // Criar run
       const delay = playbook.trigger_config?.delay_minutes || 0
       const nextStepAt = new Date()
       nextStepAt.setMinutes(nextStepAt.getMinutes() + delay)
@@ -260,7 +259,7 @@ async function triggerAutomations(event: any) {
           next_step_at: nextStepAt.toISOString(),
         })
 
-      console.log(`[Automation] Triggered playbook ${playbook.name} for contact ${event.contact_id}`)
+      console.log(`[Automation] Triggered ${playbook.name} for contact ${event.contact_id}`)
     }
   } catch (error) {
     console.error('[Automation Trigger] Error:', error)
