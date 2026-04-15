@@ -1265,17 +1265,69 @@ const conditionExecutors: Record<string, NodeExecutor> = {
     },
   },
 
-  // A/B Split
+  // A/B Split — determinístico por contato/execução (mesmo contato sempre cai no mesmo grupo)
   logic_split: {
-    async execute({ config }) {
-      const percentageA = config.percentageA || 50;
-      const random = Math.random() * 100;
-      const isA = random < percentageA;
-      
+    async execute({ config, context }) {
+      const percentageA = Math.max(0, Math.min(100, Number(config.percentageA ?? 50)));
+      // Hash estável do contactId (ou executionId) para determinismo
+      const seed =
+        (context.contact as any)?.id ||
+        context.executionId ||
+        String(Math.random());
+      // FNV-1a hash leve
+      let h = 2166136261;
+      for (let i = 0; i < seed.length; i++) {
+        h ^= seed.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      const bucket = Math.abs(h) % 10000; // 0..9999
+      const threshold = (percentageA / 100) * 10000;
+      const isA = bucket < threshold;
+
       return {
         status: 'success',
-        output: { random, percentageA, isA },
+        output: {
+          bucket,
+          percentageA,
+          variant: isA ? 'A' : 'B',
+          seed: seed.slice(0, 12),
+        },
         branch: isA ? 'true' : 'false',
+      };
+    },
+  },
+
+  // Randomizer — N-way split (variants[] = [{name, weight}...]). sourceHandle = nome da variant.
+  logic_randomizer: {
+    async execute({ config, context }) {
+      const variants: Array<{ name: string; weight?: number }> = Array.isArray(config.variants)
+        ? config.variants
+        : [{ name: 'A', weight: 50 }, { name: 'B', weight: 50 }];
+
+      const totalWeight = variants.reduce((s, v) => s + Math.max(0, Number(v.weight || 1)), 0) || 1;
+
+      // Determinístico via hash do contactId + nodeId (pra múltiplos randomizers no mesmo flow)
+      const seed =
+        ((context.contact as any)?.id || context.executionId || '') +
+        ':' + (config._nodeId || '');
+      let h = 2166136261;
+      for (let i = 0; i < seed.length; i++) {
+        h ^= seed.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      const bucket = (Math.abs(h) % totalWeight) + 1;
+
+      let acc = 0;
+      let chosen = variants[0];
+      for (const v of variants) {
+        acc += Math.max(0, Number(v.weight || 1));
+        if (bucket <= acc) { chosen = v; break; }
+      }
+
+      return {
+        status: 'success',
+        output: { variant: chosen.name, bucket, totalWeight },
+        branch: chosen.name,
       };
     },
   },
