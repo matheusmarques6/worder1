@@ -16,10 +16,25 @@ const QUEUE_NAME = 'email-send-batch';
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthClient();
-    if (!auth) return authError();
+    // Suporta chamada interna (cron): header X-Internal + Bearer CRON_SECRET + X-Org-Id
+    const internalHeader = request.headers.get('x-internal');
+    const authHeader = request.headers.get('authorization');
+    const orgHeader = request.headers.get('x-org-id');
+    const isInternal =
+      internalHeader === 'true' &&
+      process.env.CRON_SECRET &&
+      authHeader === `Bearer ${process.env.CRON_SECRET}` &&
+      orgHeader;
 
-    const { user } = auth;
+    let organizationId: string;
+    if (isInternal) {
+      organizationId = String(orgHeader);
+    } else {
+      const auth = await getAuthClient();
+      if (!auth) return authError();
+      organizationId = auth.user.organization_id;
+    }
+
     const { campaign_id } = await request.json();
 
     if (!campaign_id) {
@@ -31,7 +46,7 @@ export async function POST(request: NextRequest) {
       .from('email_campaigns')
       .select('*, email_templates(*)')
       .eq('id', campaign_id)
-      .eq('organization_id', user.organization_id)
+      .eq('organization_id', organizationId)
       .single();
 
     if (campaignError || !campaign) {
@@ -57,51 +72,37 @@ export async function POST(request: NextRequest) {
       .eq('id', campaign_id);
 
     // Resolve contacts
-    let contactsQuery: any = supabaseAdmin
-      .from('contacts')
-      .select('id, email, first_name, last_name, phone')
-      .eq('organization_id', user.organization_id)
-      .eq('is_subscribed_email', true)
-      .not('email', 'is', null);
+    // Se segment_id definido, usa resolver avançado (AND/OR, behavioral, RFM)
+    let contacts: any[] = []
+    let contactsError: any = null
 
-    // Filter by segment if specified
     if (campaign.segment_id) {
-      const { data: segment } = await supabaseAdmin
-        .from('segments')
-        .select('conditions')
-        .eq('id', campaign.segment_id)
-        .single();
-
-      if (segment?.conditions) {
-        for (const condition of segment.conditions) {
-          const { field, operator, value } = condition;
-          switch (operator) {
-            case 'eq':
-              contactsQuery = contactsQuery.eq(field, value);
-              break;
-            case 'neq':
-              contactsQuery = contactsQuery.neq(field, value);
-              break;
-            case 'contains':
-              contactsQuery = contactsQuery.ilike(field, `%${value}%`);
-              break;
-            case 'gt':
-              contactsQuery = contactsQuery.gt(field, value);
-              break;
-            case 'lt':
-              contactsQuery = contactsQuery.lt(field, value);
-              break;
-          }
-        }
+      const { resolveSegment } = await import('@/lib/segments/resolver')
+      const ids = await resolveSegment(supabaseAdmin, campaign.segment_id, organizationId)
+      if (ids.length > 0) {
+        let q: any = supabaseAdmin
+          .from('contacts')
+          .select('id, email, first_name, last_name, phone')
+          .in('id', ids)
+          .eq('is_subscribed_email', true)
+          .not('email', 'is', null)
+        if (campaign.store_id) q = q.eq('store_id', campaign.store_id)
+        const { data, error } = await q
+        contacts = data || []
+        contactsError = error
       }
+    } else {
+      let q: any = supabaseAdmin
+        .from('contacts')
+        .select('id, email, first_name, last_name, phone')
+        .eq('organization_id', organizationId)
+        .eq('is_subscribed_email', true)
+        .not('email', 'is', null)
+      if (campaign.store_id) q = q.eq('store_id', campaign.store_id)
+      const { data, error } = await q
+      contacts = data || []
+      contactsError = error
     }
-
-    // Filter by store if specified
-    if (campaign.store_id) {
-      contactsQuery = contactsQuery.eq('store_id', campaign.store_id);
-    }
-
-    const { data: contacts, error: contactsError } = await contactsQuery;
 
     if (contactsError) {
       console.error('[SendCampaign] Error fetching contacts:', contactsError);
@@ -126,10 +127,29 @@ export async function POST(request: NextRequest) {
       .update({ total_recipients: contacts.length })
       .eq('id', campaign_id);
 
-    // Split contacts into batches
-    const batches: typeof contacts[] = [];
-    for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
-      batches.push(contacts.slice(i, i + BATCH_SIZE));
+    // Split contacts into batches, marcando A/B variant quando habilitado
+    type ContactWithVariant = any & { ab_variant?: 'a' | 'b' }
+
+    const abEnabled = Boolean(campaign.ab_test_enabled && campaign.ab_variant_b)
+    let taggedContacts: ContactWithVariant[] = contacts
+    if (abEnabled) {
+      const percentA = Math.max(0, Math.min(100, Number(campaign.ab_test_percent ?? 50)))
+      taggedContacts = contacts.map((c: any) => {
+        // hash determinístico por contactId
+        const seed = String(c.id || '')
+        let h = 2166136261
+        for (let i = 0; i < seed.length; i++) {
+          h ^= seed.charCodeAt(i)
+          h = Math.imul(h, 16777619)
+        }
+        const bucket = Math.abs(h) % 100
+        return { ...c, ab_variant: bucket < percentA ? 'a' : 'b' }
+      })
+    }
+
+    const batches: ContactWithVariant[][] = []
+    for (let i = 0; i < taggedContacts.length; i += BATCH_SIZE) {
+      batches.push(taggedContacts.slice(i, i + BATCH_SIZE))
     }
 
     // Enfileira todos os batches (Upstash Redis durable queue).
@@ -140,14 +160,18 @@ export async function POST(request: NextRequest) {
     if (useQueue) {
       for (let i = 0; i < batches.length; i++) {
         const delayMs = Math.floor(i / 5) * 1000; // staircase throttle: 5 batches por segundo
+        const batch = batches[i]
         await enqueue(
           QUEUE_NAME,
           {
             campaign_id,
-            contact_ids: batches[i].map((c: any) => c.id),
+            contact_ids: batch.map((c: any) => c.id),
+            contact_variants: abEnabled
+              ? batch.map((c: any) => ({ id: c.id, variant: c.ab_variant || 'a' }))
+              : undefined,
             batch_number: i + 1,
             total_batches: batches.length,
-            organizationId: user.organization_id,
+            organizationId: organizationId,
           },
           {
             jobId: `campaign:${campaign_id}:batch:${i + 1}`,
@@ -176,7 +200,7 @@ export async function POST(request: NextRequest) {
               contact_ids: batches[i].map((c: any) => c.id),
               batch_number: i + 1,
               total_batches: batches.length,
-              organizationId: user.organization_id,
+              organizationId: organizationId,
             }),
           }).catch((err) =>
             console.error(`[SendCampaign] Batch ${i + 1} failed to queue:`, err)

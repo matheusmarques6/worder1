@@ -759,8 +759,11 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       }
     }
     let html = renderDocumentToHtml(resolvedDoc)
-    // Resolve countdown timer URLs
-    html = html.replace(/\{\{countdown_base_url\}\}/g, window.location.origin)
+    // Resolve placeholders dinâmicos para preview (products sample, cart sample, countdown)
+    try {
+      const { resolvePreviewPlaceholders } = await import('@/lib/email/preview-samples')
+      html = resolvePreviewPlaceholders(html, window.location.origin)
+    } catch { /* fallback silencioso */ }
     // Replace common merge tags with preview values
     html = html.replace(/\{\{first_name\}\}/g, 'Cliente')
     html = html.replace(/\{\{store_name\}\}/g, 'Minha Loja')
