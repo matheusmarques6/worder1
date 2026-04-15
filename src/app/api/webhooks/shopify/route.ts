@@ -1252,13 +1252,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'Shop not registered' });
     }
 
-    // 4. Verificar assinatura (se api_secret configurado)
-    if (store.api_secret) {
-      const isValid = await verifyShopifyWebhook(bodyText, hmacHeader, store.api_secret);
+    // 4. Verificar assinatura HMAC
+    //    - Se api_secret existe no store, valida contra ele.
+    //    - Caso contrário, tenta SHOPIFY_API_SECRET global (apps monolíticas).
+    //    - Em produção sem nenhum secret → REJEITA (fail closed).
+    //    - Em dev, permite passar para facilitar testes.
+    const effectiveSecret = store.api_secret || process.env.SHOPIFY_API_SECRET || null;
+    if (effectiveSecret) {
+      const isValid = await verifyShopifyWebhook(bodyText, hmacHeader, effectiveSecret);
       if (!isValid) {
-        console.error('[Shopify Webhook] Invalid signature');
+        console.error(`[Shopify Webhook] Invalid signature for store ${store.id}`);
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
       }
+    } else if (process.env.NODE_ENV === 'production') {
+      console.error(
+        `[Shopify Webhook] No secret configured (store=${store.id}, shop=${shopDomain}) — REJECTING in production`
+      );
+      return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
+    } else {
+      console.warn(
+        `[Shopify Webhook] No secret configured for ${shopDomain} — allowing in DEV mode only`
+      );
     }
 
     // 5. Verificar idempotência via shopify_webhook_log

@@ -4,6 +4,7 @@
 // =============================================
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -190,12 +191,37 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    // ---- Rate limit anti-spam ----
+    const ip = getClientIp(request)
+    const formId = params.id
+    // 10 submissions / minuto por IP/form (já é generoso para usuários legítimos)
+    const rl = await checkRateLimit(`form:${formId}:${ip}`, {
+      limit: 10,
+      windowSec: 60,
+    })
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Muitas tentativas. Aguarde e tente novamente.' },
+        { status: 429 }
+      )
+    }
+    // Limite global por IP (caso alguém tente múltiplos forms)
+    const rlGlobal = await checkRateLimit(`form:global:${ip}`, {
+      limit: 30,
+      windowSec: 60,
+    })
+    if (!rlGlobal.allowed) {
+      return NextResponse.json(
+        { error: 'Muitas tentativas. Aguarde e tente novamente.' },
+        { status: 429 }
+      )
+    }
+
     const supabase = getSupabaseClient()
     if (!supabase) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
     }
 
-    const formId = params.id
     const body = await request.json()
     const { answers, utm_source, utm_medium, utm_campaign, utm_term, utm_content } = body
 

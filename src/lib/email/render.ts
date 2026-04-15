@@ -104,7 +104,25 @@ export function evaluateBlockCondition(
 }
 
 /**
+ * Escapa caracteres HTML para evitar XSS ao interpolar merge tags.
+ * Converter < > & " ' / impede que user-provided content vire tag HTML no email.
+ */
+function escapeHtml(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/\//g, '&#x2F;')
+}
+
+/**
  * Replace {{tag}} and {{tag|fallback}} in HTML with data values.
+ *
+ * IMPORTANTE: valores são HTML-escaped por padrão (prevenção XSS).
+ * Para injetar HTML confiável use a prefix tag `raw.`, ex: `{{raw.html_block}}`.
  */
 export function renderMergeTags(
   html: string,
@@ -118,32 +136,35 @@ export function renderMergeTags(
     current_year: String(now.getFullYear()),
   }
 
+  const resolve = (tag: string, fallback: string = ''): string => {
+    const rawMode = tag.startsWith('raw.')
+    const actual = rawMode ? tag.slice(4) : tag
+    let value: string | undefined
+
+    if (actual.startsWith('custom.')) {
+      const customKey = actual.slice(7)
+      value = dateData[`custom_${customKey}`] ?? dateData[`custom.${customKey}`]
+    } else {
+      value = dateData[actual]
+    }
+
+    const final = value ?? fallback
+    return rawMode ? final : escapeHtml(final)
+  }
+
   // Replace {{tag|fallback}} first (with fallback)
   let result = html.replace(
     /\{\{([a-zA-Z0-9_.]+)\|([^}]*)\}\}/g,
-    (_, tag: string, fallback: string) => {
-      // Support custom.* prefix for custom_fields
-      if (tag.startsWith('custom.')) {
-        const customKey = tag.slice(7)
-        return dateData[`custom_${customKey}`] ?? dateData[`custom.${customKey}`] ?? fallback;
-      }
-      return dateData[tag] ?? fallback;
-    }
-  );
+    (_, tag: string, fallback: string) => resolve(tag, fallback)
+  )
 
   // Replace {{tag}} (no fallback)
   result = result.replace(
     /\{\{([a-zA-Z0-9_.]+)\}\}/g,
-    (_, tag: string) => {
-      if (tag.startsWith('custom.')) {
-        const customKey = tag.slice(7)
-        return dateData[`custom_${customKey}`] ?? dateData[`custom.${customKey}`] ?? '';
-      }
-      return dateData[tag] ?? '';
-    }
-  );
+    (_, tag: string) => resolve(tag, '')
+  )
 
-  return result;
+  return result
 }
 
 /**

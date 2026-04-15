@@ -106,6 +106,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validação de email format
+    const { firstInvalidEmail } = await import('@/lib/email/validation')
+    const invalid = firstInvalidEmail([from_email, reply_to])
+    if (invalid) {
+      return NextResponse.json(
+        { error: `Email inválido: ${invalid}` },
+        { status: 400 }
+      );
+    }
+
     const insertData: Record<string, any> = {
       organization_id: user.organization_id,
       name,

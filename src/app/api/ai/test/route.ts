@@ -4,19 +4,22 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { 
-  testRedisConnection, 
-  isRedisConfigured, 
+import {
+  testRedisConnection,
+  isRedisConfigured,
   getCacheStats,
-  CACHE_PREFIX 
+  CACHE_PREFIX
 } from '@/lib/redis'
+import { assertDebugAllowed } from '@/lib/debug-guard'
 export const dynamic = 'force-dynamic';
 
 // =====================================================
 // GET - Status e instruções
 // =====================================================
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const blocked = assertDebugAllowed(request)
+  if (blocked) return blocked
   // Testar conexão Redis
   const redisConfigured = isRedisConfigured()
   let redisStatus: { connected: boolean; latencyMs?: number; error?: string } = { 

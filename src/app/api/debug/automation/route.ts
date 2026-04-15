@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, Workflow } from '@/lib/automation/execution-engine';
+import { assertDebugAllowed } from '@/lib/debug-guard';
 export const dynamic = 'force-dynamic';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -19,6 +20,8 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 export const maxDuration = 60; // 60 segundos
 
 export async function GET(request: NextRequest) {
+  const blocked = assertDebugAllowed(request);
+  if (blocked) return blocked;
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action') || 'status';
   const runId = searchParams.get('runId');

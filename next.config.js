@@ -19,6 +19,14 @@ const nextConfig = {
       },
     ],
   },
+  // Em produção, remove todos os console.* exceto error/warn.
+  // Isso limpa os 1.6k+ console.log dispersos sem precisar refatorar cada arquivo.
+  compiler: {
+    removeConsole:
+      process.env.NODE_ENV === 'production'
+        ? { exclude: ['error', 'warn'] }
+        : false,
+  },
 }
 
 module.exports = nextConfig

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { assertDebugAllowed } from '@/lib/debug-guard'
 export const dynamic = 'force-dynamic';
 
 // GET /api/debug/realtime-test - Lista organizações e conversas
-// GET /api/debug/realtime-test?organizationId=xxx - Lista conversas da org
-// GET /api/debug/realtime-test?organizationId=xxx&conversationId=xxx - Insere mensagem teste
-// GET /api/debug/realtime-test?organizationId=xxx&create=true - Cria conversa de teste
-// GET /api/debug/realtime-test?schema=true - Mostra schema das tabelas
+// Requer DEBUG_ENDPOINT_SECRET em produção (header x-debug-key).
 export async function GET(request: NextRequest) {
+  const blocked = assertDebugAllowed(request)
+  if (blocked) return blocked
   const { searchParams } = new URL(request.url)
   const organizationId = searchParams.get('organizationId')
   const conversationId = searchParams.get('conversationId')

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyWebhookSignature } from '@/lib/automation/credential-encryption';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 export const dynamic = 'force-dynamic';
 
 // ============================================
@@ -36,6 +37,16 @@ export async function POST(
     return NextResponse.json({ error: 'Token required' }, { status: 400 });
   }
 
+  // Rate limit por token + IP (evita abuso)
+  const ip = getClientIp(request);
+  const rl = await checkRateLimit(`flow-webhook:${token}:${ip}`, {
+    limit: 60,
+    windowSec: 60,
+  });
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Rate limited' }, { status: 429 });
+  }
+
   try {
     // Find webhook by token
     const { data: webhook, error } = await supabase
@@ -49,25 +60,38 @@ export async function POST(
       return NextResponse.json({ error: 'Webhook not found' }, { status: 404 });
     }
 
-    // Verify signature if secret is set
-    const signature = request.headers.get('x-webhook-signature') || 
+    // Ler body uma vez (reutilizamos para signature + parse)
+    const rawBody = await request.text();
+
+    // Verificar assinatura
+    // - Se secret configurado: EXIGE signature válida.
+    // - Caso contrário, o próprio token (na URL) serve como credencial (modelo Slack).
+    const signature = request.headers.get('x-webhook-signature') ||
                      request.headers.get('x-hub-signature-256');
-    
-    if (webhook.secret && signature) {
-      const rawBody = await request.text();
-      const isValid = verifyWebhookSignature(rawBody, signature.replace('sha256=', ''), webhook.secret);
-      
+
+    if (webhook.secret) {
+      if (!signature) {
+        return NextResponse.json(
+          { error: 'Signature required (header x-webhook-signature)' },
+          { status: 401 }
+        );
+      }
+      const isValid = verifyWebhookSignature(
+        rawBody,
+        signature.replace(/^sha256=/, ''),
+        webhook.secret
+      );
       if (!isValid) {
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
       }
     }
 
     // Parse body
-    let payload;
+    let payload: any;
     try {
-      payload = await request.clone().json();
+      payload = rawBody ? JSON.parse(rawBody) : {};
     } catch {
-      payload = await request.text();
+      payload = rawBody;
     }
 
     // Get headers and query params

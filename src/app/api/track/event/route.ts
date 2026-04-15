@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import type { WorderShopifyEventType } from '@/lib/shopify/event-types';
 import { EVENT_SOURCES } from '@/lib/shopify/event-types';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,6 +78,19 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
   try {
+    // ---- Rate limit anti-DoS (pixel público) ----
+    const ip = getClientIp(request);
+    const rl = await checkRateLimit(`pixel:${ip}`, {
+      limit: 300, // 300 eventos/min por IP (permite high-traffic mas bloqueia spam)
+      windowSec: 60,
+    });
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limited', retryAfterSec: Math.ceil((rl.resetAt - Date.now()) / 1000) },
+        { status: 429, headers: { ...CORS_HEADERS, 'Retry-After': '60' } }
+      );
+    }
+
     const body = await request.json();
 
     const {

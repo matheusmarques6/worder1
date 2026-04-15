@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
+import { validateFlow } from '@/lib/automation/flow-validation';
 import { SupabaseClient } from '@supabase/supabase-js';
 export const dynamic = 'force-dynamic';
 
@@ -150,8 +151,18 @@ export async function POST(request: NextRequest) {
       created_by: auth.user.id,
     };
 
-    // Se status for 'active', setar activated_at
+    // Se status for 'active', validar e setar activated_at
     if (data.status === 'active') {
+      const validation = validateFlow(insertData.nodes || [], insertData.edges || [])
+      if (!validation.valid) {
+        return NextResponse.json(
+          {
+            error: 'Automação inválida. Corrija os problemas antes de ativar.',
+            issues: validation.issues,
+          },
+          { status: 422 }
+        )
+      }
       insertData.activated_at = new Date().toISOString();
     }
 
@@ -208,9 +219,34 @@ export async function PUT(request: NextRequest) {
     // ✅ Tratar mudanças de status
     if (data.status !== undefined) {
       updateData.status = data.status;
-      
+
       // Setar timestamps baseado no status
       if (data.status === 'active') {
+        // ✅ VALIDAÇÃO OBRIGATÓRIA ao ativar: sem loops, sem branches órfãs, delays válidos
+        // Pega nodes/edges do payload OU do estado atual no banco
+        let nodes = data.nodes
+        let edges = data.edges
+        if (!nodes || !edges) {
+          const { data: current } = await supabase
+            .from('automations')
+            .select('nodes, edges')
+            .eq('id', id)
+            .eq('organization_id', organizationId)
+            .single()
+          nodes = nodes || current?.nodes || []
+          edges = edges || current?.edges || []
+        }
+        const validation = validateFlow(nodes, edges)
+        if (!validation.valid) {
+          return NextResponse.json(
+            {
+              error: 'Automação inválida. Corrija os problemas antes de ativar.',
+              issues: validation.issues,
+            },
+            { status: 422 }
+          )
+        }
+
         updateData.activated_at = new Date().toISOString();
         updateData.paused_at = null;
       } else if (data.status === 'paused') {
