@@ -54,6 +54,11 @@ export interface EmailSection {
     mobileStackOrder?: 'rtl' | 'ltr' | 'none'
   }
   label?: string
+  /** If set, this section is linked to a universal/saved section.
+   *  `columns`, `styles` and nested block props are re-hydrated from the
+   *  saved_blocks row on load so edits propagate across all emails. */
+  _savedSectionId?: string
+  _savedSectionName?: string
 }
 
 // ── Document ──
