@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { ShoppingBag, Tag, ShoppingCart, Type, ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Package, User, Store, Package2, Link, LucideIcon, Menu, Layers, Table, Quote, Clock, GripVertical, Star, Trash2, Search } from 'lucide-react'
+import { ShoppingBag, Tag, ShoppingCart, Type, ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Package, User, Store, Package2, Link, LucideIcon, Menu, Layers, Table, Quote, Clock, GripVertical, Star, Trash2, Search, ExternalLink } from 'lucide-react'
 import { BLOCK_DEFS, type BlockDef, type EmailBlock, type EmailSection } from '../config/types'
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -319,6 +319,16 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddSavedSection, o
                         </div>
                         <p className="text-[10px] text-zinc-400">Arraste ou clique para inserir</p>
                       </div>
+                      <a
+                        href={`/email/universal/${item.id}/edit`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="p-1 text-zinc-300 hover:text-violet-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                        title="Abrir editor dedicado (edita em todos os emails)"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
                       <button
                         onClick={async (e) => {
                           e.stopPropagation()

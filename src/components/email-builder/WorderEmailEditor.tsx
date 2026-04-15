@@ -1268,12 +1268,22 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                       <p className="text-[11px] text-violet-700/80 leading-snug mt-0.5">
                         Edições se aplicam a todos os emails que usam este bloco.
                       </p>
-                      <button
-                        onClick={() => unlinkUniversalBlock(selectedBlock.id)}
-                        className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:text-violet-900 underline underline-offset-2"
-                      >
-                        Desvincular — editar só neste email
-                      </button>
+                      <div className="mt-2 flex items-center gap-3 flex-wrap">
+                        <a
+                          href={`/email/universal/${selectedBlock._savedBlockId}/edit`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-white bg-violet-600 rounded-md hover:bg-violet-700"
+                        >
+                          Abrir editor dedicado
+                        </a>
+                        <button
+                          onClick={() => unlinkUniversalBlock(selectedBlock.id)}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:text-violet-900 underline underline-offset-2"
+                        >
+                          Desvincular — editar só neste email
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1335,12 +1345,22 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                         Edições (blocos, cores, visibilidade, padding…) se aplicam
                         a todos os emails que usam essa seção.
                       </p>
-                      <button
-                        onClick={() => unlinkUniversalSection(selectedSection.id)}
-                        className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:text-violet-900 underline underline-offset-2"
-                      >
-                        Desvincular — editar só neste email
-                      </button>
+                      <div className="mt-2 flex items-center gap-3 flex-wrap">
+                        <a
+                          href={`/email/universal/${selectedSection._savedSectionId}/edit`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-white bg-violet-600 rounded-md hover:bg-violet-700"
+                        >
+                          Abrir editor dedicado
+                        </a>
+                        <button
+                          onClick={() => unlinkUniversalSection(selectedSection.id)}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:text-violet-900 underline underline-offset-2"
+                        >
+                          Desvincular — editar só neste email
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

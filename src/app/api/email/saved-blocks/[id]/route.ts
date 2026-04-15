@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+
+    const { data, error } = await supabaseAdmin
+      .from('saved_blocks')
+      .select('*')
+      .eq('id', params.id)
+      .eq('organization_id', auth.user.organization_id)
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 404 })
+    return NextResponse.json({ block: data })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}
+
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const auth = await getAuthClient()
