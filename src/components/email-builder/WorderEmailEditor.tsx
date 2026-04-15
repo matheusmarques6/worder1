@@ -36,6 +36,7 @@ interface WorderEmailEditorProps {
 function SortableBlock({
   blockId, children, isSelected, onSelect, onClone, onDelete,
   isUniversal, savedBlockName, onSaveAsUniversal, onUnlink,
+  hiddenOnDevice,
 }: {
   blockId: string;
   children: React.ReactNode;
@@ -47,6 +48,8 @@ function SortableBlock({
   savedBlockName?: string;
   onSaveAsUniversal: () => void;
   onUnlink: () => void;
+  /** 'desktop' | 'mobile' when the block is hidden on the currently previewed device */
+  hiddenOnDevice?: 'desktop' | 'mobile' | null;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: blockId,
@@ -72,9 +75,23 @@ function SortableBlock({
         </div>
       )}
 
+      {/* Hidden-on-device indicator: dim + diagonal stripes so the user sees
+          that visibility settings are taking effect in the current preview. */}
+      {hiddenOnDevice && (
+        <>
+          <div
+            className="pointer-events-none absolute inset-0 z-10 bg-gray-100/60"
+            style={{ backgroundImage: 'repeating-linear-gradient(-45deg, rgba(0,0,0,0.04) 0 6px, transparent 6px 12px)' }}
+          />
+          <div className="pointer-events-none absolute left-1/2 top-1 -translate-x-1/2 z-20 flex items-center gap-1 px-1.5 py-0.5 bg-gray-900/85 text-white text-[10px] font-semibold rounded shadow">
+            {hiddenOnDevice === 'desktop' ? 'Oculto no Desktop' : 'Oculto no Mobile'}
+          </div>
+        </>
+      )}
+
       {/* Hover toolbar — appears on hover OR when selected */}
       <div
-        className={`absolute -right-9 top-0 flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5 z-20 transition-opacity ${
+        className={`absolute -right-9 top-0 flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5 z-30 transition-opacity ${
           isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         }`}
       >
@@ -122,7 +139,13 @@ function SortableBlock({
 }
 
 // ── Sortable Section Wrapper (drag sections to reorder) ──
-function SortableSection({ sectionId, children, isSelected }: { sectionId: string; children: React.ReactNode; isSelected: boolean }) {
+function SortableSection({ sectionId, children, isSelected, hiddenOnDevice }: {
+  sectionId: string;
+  children: React.ReactNode;
+  isSelected: boolean;
+  /** 'desktop' | 'mobile' when the section is hidden on the currently previewed device */
+  hiddenOnDevice?: 'desktop' | 'mobile' | null;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: sectionId,
     data: { type: 'section', sectionId },
@@ -142,6 +165,18 @@ function SortableSection({ sectionId, children, isSelected }: { sectionId: strin
       >
         <GripVertical className="w-3.5 h-3.5" />
       </div>
+      {/* Hidden-on-device indicator for the whole section */}
+      {hiddenOnDevice && (
+        <>
+          <div
+            className="pointer-events-none absolute inset-0 z-10 bg-gray-100/60"
+            style={{ backgroundImage: 'repeating-linear-gradient(-45deg, rgba(0,0,0,0.05) 0 8px, transparent 8px 16px)' }}
+          />
+          <div className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 z-20 flex items-center gap-1 px-2 py-0.5 bg-indigo-700/90 text-white text-[10px] font-semibold rounded shadow">
+            {hiddenOnDevice === 'desktop' ? 'Seção oculta no Desktop' : 'Seção oculta no Mobile'}
+          </div>
+        </>
+      )}
       {children}
     </div>
   )
@@ -985,8 +1020,17 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   const isLast = sectionIndex === doc.sections.length - 1
                   const br = doc.settings.borderRadius || 0
                   const sectionBorderRadius = br > 0 ? `${isFirst ? br : 0}px ${isFirst ? br : 0}px ${isLast ? br : 0}px ${isLast ? br : 0}px` : undefined
+                  // Device visibility for the section (mirrors render-html behaviour
+                  // so what the user sees in the canvas matches the exported HTML).
+                  const ss = section.styles as any
+                  const sectionShowDesktop = ss.showOnDesktop !== false
+                  const sectionShowMobile = ss.showOnMobile !== false
+                  const sectionHiddenOnDevice: 'desktop' | 'mobile' | null =
+                    device === 'desktop' && !sectionShowDesktop ? 'desktop'
+                    : device === 'mobile' && !sectionShowMobile ? 'mobile'
+                    : null
                   return (
-                  <SortableSection key={section.id} sectionId={section.id} isSelected={selectedSectionId === section.id}>
+                  <SortableSection key={section.id} sectionId={section.id} isSelected={selectedSectionId === section.id} hiddenOnDevice={sectionHiddenOnDevice}>
                   {/* Section = FULL WIDTH with section color */}
                   <div
                     className={`relative group/section ${selectedSectionId === section.id ? 'ring-2 ring-indigo-400 ring-inset' : 'hover:ring-1 hover:ring-indigo-200 hover:ring-inset'}`}
@@ -1013,13 +1057,18 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                           </div>
                         </div>
                       )}
-                      {/* Content area = centered, max-width, with content bg */}
+                      {/* Content area = centered, max-width, with content bg.
+                          NOTE: we deliberately do NOT set overflow:hidden here even
+                          when a border-radius is applied — that wrapper was clipping
+                          the block's hover toolbar (positioned at -right-9), which
+                          hid the "save as reusable block" star icon. The rounded
+                          corners still look correct because children don't have
+                          their own colored backgrounds at the corners. */}
                       <div style={{
                         maxWidth: canvasWidth,
                         margin: '0 auto',
                         backgroundColor: section.styles.contentBackgroundColor || doc.settings.contentBackgroundColor || undefined,
                         borderRadius: sectionBorderRadius,
-                        overflow: sectionBorderRadius ? 'hidden' : undefined,
                         fontFamily: doc.settings.fontFamily || undefined,
                       }}>
                       <div
@@ -1046,7 +1095,13 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                 </DroppableColumn>
                               ) : (
                                 <SortableContext items={colBlocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
-                                  {colBlocks.map((block) => (
+                                  {colBlocks.map((block) => {
+                                    const bv = (block.props as any)?.visibility as string | undefined
+                                    const blockHiddenOnDevice: 'desktop' | 'mobile' | null =
+                                      device === 'desktop' && bv === 'mobile' ? 'desktop'
+                                      : device === 'mobile' && bv === 'desktop' ? 'mobile'
+                                      : null
+                                    return (
                                     <SortableBlock
                                       key={block.id}
                                       blockId={block.id}
@@ -1058,6 +1113,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                       savedBlockName={block._savedBlockName}
                                       onSaveAsUniversal={() => saveBlockAsUniversal(block.id)}
                                       onUnlink={() => unlinkUniversalBlock(block.id)}
+                                      hiddenOnDevice={blockHiddenOnDevice}
                                     >
                                       <BlockPreview
                                         block={block}
@@ -1067,7 +1123,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                         onDelete={() => removeBlock(block.id)}
                                       />
                                     </SortableBlock>
-                                  ))}
+                                    )
+                                  })}
                                 </SortableContext>
                               )}
                             </div>
