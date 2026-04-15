@@ -47,6 +47,14 @@
     {
       "path": "/api/cron/check-back-in-stock",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/detect-segment-changes",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/check-inactivity",
+      "schedule": "0 1 * * *"
     }
   ]
 }

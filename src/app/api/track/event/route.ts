@@ -318,6 +318,35 @@ export async function POST(request: NextRequest) {
 
     await supabase.from('contact_events').insert(eventData);
 
+    // ---- Disparar automações baseadas no tipo de evento (fire-and-forget) ----
+    // Mapeia event types do pixel para trigger_types de automação
+    const triggerMap: Record<string, string> = {
+      viewed_product: 'trigger_viewed_product',
+      added_to_cart: 'trigger_added_to_cart',
+      checkout_started: 'trigger_checkout_abandoned',
+      checkout_completed: 'trigger_order',
+    };
+    const triggerType = triggerMap[mappedEventType];
+    if (triggerType && contactId) {
+      import('@/lib/automation/trigger-dispatcher').then(({ dispatchTrigger }) =>
+        dispatchTrigger({
+          organizationId,
+          triggerType,
+          contactId,
+          triggerData: {
+            event_type: mappedEventType,
+            product_id: enrichedProperties.product_id,
+            product_name: enrichedProperties.product_name,
+            monetary_value: monetaryValue,
+            properties: enrichedProperties,
+          },
+          idempotencyKey: idempotencyKey
+            ? `trigger:${triggerType}:${idempotencyKey}`
+            : undefined,
+        }).catch(() => { /* silent */ })
+      ).catch(() => { /* silent */ });
+    }
+
     // ---- Update contact (fire-and-forget for speed) ----
     if (contactId) {
       const contactUpdate: Record<string, any> = {

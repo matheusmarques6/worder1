@@ -333,6 +333,47 @@ async function handleIncomingMessage(instanceName: string, data: any, body: any)
 
     conversationId = newConv.id;
     console.log('[Webhook] ✅ Created conversation:', conversationId, 'for store:', storeId);
+
+    // Disparar trigger_whatsapp_first_message para novas conversas
+    try {
+      const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
+      await dispatchTrigger({
+        organizationId: orgId,
+        triggerType: 'trigger_whatsapp_first_message',
+        contactId,
+        triggerData: {
+          phone: phoneNumber,
+          conversation_id: conversationId,
+          message: content,
+        },
+        idempotencyKey: `wa_first_msg:${conversationId}`,
+      });
+    } catch (e) { /* silent */ }
+
+    // Detectar CTWA ad (Click-to-WhatsApp) via referral
+    const referral = data?.message?.referral || body?.messages?.[0]?.referral;
+    if (referral && referral.source_url) {
+      try {
+        const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
+        await dispatchTrigger({
+          organizationId: orgId,
+          triggerType: 'trigger_ctwa_ad',
+          contactId,
+          triggerData: {
+            source_url: referral.source_url,
+            source_id: referral.source_id,
+            source_type: referral.source_type,
+            headline: referral.headline,
+            body_text: referral.body,
+            media_type: referral.media_type,
+            ctwa_clid: referral.ctwa_clid,
+            conversation_id: conversationId,
+            message: content,
+          },
+          idempotencyKey: `ctwa:${conversationId}:${referral.source_id || referral.ctwa_clid}`,
+        });
+      } catch (e) { /* silent */ }
+    }
   }
 
   // =============================================

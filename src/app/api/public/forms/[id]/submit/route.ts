@@ -615,6 +615,36 @@ export async function POST(
         .eq('id', submission.id)
     }
 
+    // 8.5. Disparar automações com trigger_form_submitted
+    try {
+      const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
+      await dispatchTrigger({
+        organizationId: form.organization_id,
+        triggerType: 'trigger_form_submitted',
+        contactId: contactId || null,
+        dealId: dealId || null,
+        triggerData: {
+          form_id: formId,
+          form_name: form.name,
+          submission_id: submission.id,
+          answers,
+          utm_source,
+          utm_medium,
+          utm_campaign,
+          utm_term,
+          utm_content,
+        },
+        matchConfig: (cfg) => {
+          // Se automação define form_id específico, filtra
+          if (cfg?.form_id && cfg.form_id !== formId) return false
+          return true
+        },
+        idempotencyKey: `form_submit:${submission.id}`,
+      })
+    } catch (e: any) {
+      console.warn('[Form Submit] automation dispatch failed:', e?.message)
+    }
+
     // 9. Return success with tracking data for client-side pixels
     const response = NextResponse.json({
       success: true,
