@@ -1,35 +1,71 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { verifyHmacSignature } from '@/lib/webhook-security'
 export const dynamic = 'force-dynamic';
 
 // =============================================
 // API: /api/tracking/shopify-webhook
-// Recebe webhooks do Shopify e converte em eventos
+// Recebe webhooks do Shopify e converte em eventos.
+// AUTENTICAÇÃO: HMAC-SHA256 por loja (api_secret do store).
 // =============================================
 
 export async function POST(request: NextRequest) {
   try {
     const topic = request.headers.get('x-shopify-topic')
     const shopDomain = request.headers.get('x-shopify-shop-domain')
+    const hmacHeader = request.headers.get('x-shopify-hmac-sha256')
 
     if (!topic || !shopDomain) {
       return NextResponse.json({ error: 'Missing Shopify headers' }, { status: 400 })
     }
 
-    const body = await request.json()
+    // IMPORTANTE: ler raw body pra HMAC — NÃO usar request.json() antes
+    const rawBody = await request.text()
 
     console.log(`[Shopify Webhook] Topic: ${topic} | Shop: ${shopDomain}`)
 
-    // Buscar organização pelo domínio da loja
+    // Buscar loja com secret (necessário pro HMAC)
     const { data: store } = await supabase
       .from('shopify_stores')
-      .select('organization_id')
+      .select('id, organization_id, api_secret')
       .eq('shop_domain', shopDomain)
       .single()
 
     if (!store) {
       console.warn(`[Shopify Webhook] Store not found: ${shopDomain}`)
       return NextResponse.json({ error: 'Store not found' }, { status: 404 })
+    }
+
+    // Verificar HMAC (Shopify envia base64, não hex)
+    const secret = store.api_secret || process.env.SHOPIFY_API_SECRET || ''
+    if (!secret) {
+      console.error(`[Shopify Webhook] No secret configured for store ${store.id}`)
+      return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 })
+    }
+
+    // HMAC do Shopify é base64
+    let hmacValid = false
+    try {
+      const { createHmac, timingSafeEqual } = await import('crypto')
+      const expected = createHmac('sha256', secret).update(rawBody, 'utf8').digest('base64')
+      const received = hmacHeader || ''
+      if (expected.length === received.length) {
+        hmacValid = timingSafeEqual(Buffer.from(expected), Buffer.from(received))
+      }
+    } catch {
+      hmacValid = false
+    }
+
+    if (!hmacValid) {
+      console.warn(`[Shopify Webhook] Invalid HMAC for ${shopDomain}`)
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+    }
+
+    let body: any
+    try {
+      body = JSON.parse(rawBody)
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
     }
 
     const organization_id = store.organization_id

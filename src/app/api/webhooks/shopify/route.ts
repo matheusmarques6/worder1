@@ -1357,9 +1357,27 @@ export async function POST(request: NextRequest) {
           await processFulfillmentEvent(store, body);
           break;
 
-        case 'customers/delete':
+        case 'customers/delete': {
           console.log(`[Shopify Webhook] Customer deleted: ${body.id}`);
+          // Marca contato como inativo / revoga consent / limpa shopify_customer_id.
+          // NÃO deletamos o contato — preserva histórico de atividades para audit/LGPD.
+          const supabase = getSupabase();
+          const nowIso = new Date().toISOString();
+          await supabase
+            .from('contacts')
+            .update({
+              is_active: false,
+              email_consent: false,
+              sms_consent: false,
+              whatsapp_consent: false,
+              status: 'deleted_in_shopify',
+              shopify_customer_id: null,
+              updated_at: nowIso,
+            })
+            .eq('organization_id', store.organization_id)
+            .eq('shopify_customer_id', String(body.id));
           break;
+        }
 
         case 'customers/email_marketing_consent/update':
           await processMarketingConsentUpdate(store, body);

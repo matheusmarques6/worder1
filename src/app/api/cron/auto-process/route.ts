@@ -1,10 +1,13 @@
 /**
- * AUTO-PROCESS: Endpoint público para processar runs pendentes
- * Pode ser chamado por serviços externos de cron (cron-job.org, etc)
- * 
+ * AUTO-PROCESS: Endpoint para processar runs pendentes
+ * Chamado por Vercel Cron ou provider externo (cron-job.org, etc).
+ *
  * GET /api/cron/auto-process
- * 
- * Não requer autenticação - processa runs pendentes automaticamente
+ *
+ * Autenticação:
+ *  - Vercel Cron envia header `x-vercel-cron: 1`
+ *  - OU header `Authorization: Bearer <CRON_SECRET>`
+ *  - Sem nenhum deles → 401
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,7 +21,25 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 // Permitir execução mais longa
 export const maxDuration = 60;
 
+function isAuthorizedCron(request: NextRequest): boolean {
+  // Vercel Cron identifier
+  if (request.headers.get('x-vercel-cron')) return true;
+
+  const secret = process.env.CRON_SECRET;
+  if (!secret) {
+    // Em dev sem CRON_SECRET definido, aceitamos (evita bloqueio local)
+    return process.env.NODE_ENV !== 'production';
+  }
+
+  const auth = request.headers.get('authorization');
+  return auth === `Bearer ${secret}`;
+}
+
 export async function GET(request: NextRequest) {
+  if (!isAuthorizedCron(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const startTime = Date.now();
   console.log('[AutoProcess] Starting...');
 

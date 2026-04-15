@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 export const dynamic = 'force-dynamic';
 
 // Lazy initialize Supabase client
@@ -24,9 +25,38 @@ const isDevMode = process.env.NODE_ENV === 'development' || process.env.DEV_AUTH
 export async function POST(request: NextRequest) {
   const { action, ...data } = await request.json();
 
+  // ---- Rate limit anti brute-force (apenas ações sensíveis) ----
+  if (action === 'login' || action === 'signup' || action === 'reset-password') {
+    const ip = getClientIp(request);
+    const emailKey = (data?.email || '').toString().toLowerCase();
+    // Janela 60s: até 10 tentativas por IP e 5 por email/IP.
+    const ipLimit = await checkRateLimit(`auth:${action}:ip:${ip}`, {
+      limit: 10,
+      windowSec: 60,
+    });
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Muitas tentativas. Aguarde e tente novamente.' },
+        { status: 429 }
+      );
+    }
+    if (emailKey) {
+      const emailLimit = await checkRateLimit(`auth:${action}:email:${emailKey}`, {
+        limit: 5,
+        windowSec: 60,
+      });
+      if (!emailLimit.allowed) {
+        return NextResponse.json(
+          { error: 'Muitas tentativas para esta conta. Aguarde alguns segundos.' },
+          { status: 429 }
+        );
+      }
+    }
+  }
+
   try {
     const client = getSupabase();
-    
+
     // If Supabase is not configured and we're in dev mode, allow bypass
     if (!client) {
       if (isDevMode && action === 'login') {

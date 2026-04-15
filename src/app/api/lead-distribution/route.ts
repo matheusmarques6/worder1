@@ -1,6 +1,7 @@
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthClient, authError } from '@/lib/api-utils'
 
 // =============================================
 // Types
@@ -49,17 +50,17 @@ interface DistributionLog {
 
 export async function GET(request: NextRequest) {
   try {
+    // ✅ Multi-tenant: org_id SEMPRE vem do usuário autenticado, nunca de query params
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organizationId = auth.user.organization_id
+
     const supabase = createServerComponentClient({ cookies })
     const { searchParams } = new URL(request.url)
 
-    const organizationId = searchParams.get('organization_id')
     const ruleId = searchParams.get('rule_id')
     const storeId = searchParams.get('store_id')
     const includeLogs = searchParams.get('include_logs') === 'true'
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
 
     // Get single rule with logs
     if (ruleId) {
@@ -146,6 +147,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // ✅ Multi-tenant: org_id SEMPRE vem do usuário autenticado
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organization_id = auth.user.organization_id
+
     const supabase = createServerComponentClient({ cookies })
     const body = await request.json()
 
@@ -153,20 +159,19 @@ export async function POST(request: NextRequest) {
 
     // Distribute a lead
     if (action === 'distribute') {
-      return await distributeLead(supabase, body)
+      return await distributeLead(supabase, { ...body, organization_id })
     }
 
     // Create new rule
     const {
-      organization_id,
       store_id,
       name,
       distribution_type = 'round_robin',
       config,
     } = body
 
-    if (!organization_id || !name) {
-      return NextResponse.json({ error: 'organization_id e name sao obrigatorios' }, { status: 400 })
+    if (!name) {
+      return NextResponse.json({ error: 'name eh obrigatorio' }, { status: 400 })
     }
 
     const { data: rule, error } = await supabase
@@ -201,10 +206,16 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    // ✅ Multi-tenant: garantir org do user
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organization_id = auth.user.organization_id
+
     const supabase = createServerComponentClient({ cookies })
     const body = await request.json()
 
-    const { id, ...updates } = body
+    // Remover quaisquer tentativas do cliente de forçar org_id
+    const { id, organization_id: _omit, ...updates } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
@@ -217,6 +228,7 @@ export async function PUT(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('organization_id', organization_id)
       .select()
       .single()
 
@@ -238,6 +250,11 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    // ✅ Multi-tenant: garantir org do user
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organization_id = auth.user.organization_id
+
     const supabase = createServerComponentClient({ cookies })
     const { searchParams } = new URL(request.url)
 
@@ -251,6 +268,7 @@ export async function DELETE(request: NextRequest) {
       .from('lead_distribution_rules')
       .delete()
       .eq('id', id)
+      .eq('organization_id', organization_id)
 
     if (error) {
       console.error('[LeadDistribution] Delete error:', error)
