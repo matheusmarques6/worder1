@@ -148,6 +148,11 @@ export default function EditUniversalPage() {
         alert('Erro ao salvar: ' + (err.error || 'Tente novamente'))
         return false
       }
+      // Broadcast to sibling tabs so any other open email editor can re-
+      // hydrate the linked blocks/sections right away (no reload needed).
+      try {
+        localStorage.setItem('worder:universal-saved', JSON.stringify({ id, at: Date.now() }))
+      } catch { /* private-mode / full storage — non-fatal */ }
       return true
     } catch (err: any) {
       alert('Erro ao salvar: ' + err.message)

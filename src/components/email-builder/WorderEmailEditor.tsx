@@ -727,6 +727,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         })
         if (!res.ok) throw new Error('patch failed')
         setUniversalSyncStatus('saved')
+        // Broadcast to any other open tab so its email editor re-hydrates.
+        try { localStorage.setItem('worder:universal-saved', JSON.stringify({ id: savedBlockId, at: Date.now() })) } catch {}
         // Let the "Saved" chip linger briefly, then settle to idle.
         setTimeout(() => setUniversalSyncStatus(s => s === 'saved' ? 'idle' : s), 1500)
       } catch (err) {
@@ -768,6 +770,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         })
         if (!res.ok) throw new Error('patch failed')
         setUniversalSyncStatus('saved')
+        try { localStorage.setItem('worder:universal-saved', JSON.stringify({ id: savedSectionId, at: Date.now() })) } catch {}
         setTimeout(() => setUniversalSyncStatus(s => s === 'saved' ? 'idle' : s), 1500)
       } catch (err) {
         console.warn('[UniversalSection] sync failed', err)
@@ -777,74 +780,109 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     timers.set(key, t)
   }, [])
 
-  // ── On load: hydrate linked blocks/sections from the library ──
+  // ── Hydrate linked blocks/sections from the library ──
   // This is what actually makes edits in one email propagate to another: the
-  // saved email stores a snapshot of the block/section, but on every open we
-  // override the snapshot with the latest library content. Klaviyo/Omnisend
-  // behave the same way — the library is the source of truth, each email's
-  // stored copy is just a cache that gets refreshed on load.
+  // saved email stores a snapshot of the block/section, but every time we
+  // refresh (mount, tab focus, cross-tab save broadcast) we override the
+  // snapshot with the latest library content. Klaviyo/Omnisend behave the
+  // same way — the library is the source of truth, each email's stored copy
+  // is just a cache.
+  const hydrateFromLibrary = useCallback(async () => {
+    // Never clobber local state while the user has in-flight edits — their
+    // debounced PATCH hasn't landed yet and re-fetching would roll them back.
+    if (universalSyncTimersRef.current.size > 0) return
+    try {
+      const res = await fetch('/api/email/saved-blocks')
+      if (!res.ok) return
+      const data = await res.json()
+      const byId = new Map<string, any>()
+      for (const row of (data.blocks || [])) byId.set(row.id, row)
+      // Intentionally proceed even when byId is empty so we can strip
+      // dangling _savedBlockId/_savedSectionId links if the library row
+      // was deleted elsewhere (otherwise blocks would keep a ghost link).
+      setDoc(prev => {
+        let changed = false
+        const nextSections = prev.sections.map(sec => {
+          if (sec._savedSectionId) {
+            const row = byId.get(sec._savedSectionId)
+            const saved = row?.block_json
+            if (saved?._kind === 'section' && saved.section) {
+              changed = true
+              return {
+                ...saved.section,
+                id: sec.id,
+                _savedSectionId: sec._savedSectionId,
+                _savedSectionName: sec._savedSectionName || row.name,
+              } as EmailSection
+            }
+            if (!row) {
+              // Library row deleted → strip the dangling link so the UI
+              // stops showing the "UNIVERSAL" badge and future edits don't
+              // try to PATCH a 404 endpoint.
+              changed = true
+              const { _savedSectionId: _a, _savedSectionName: _b, ...rest } = sec
+              return rest as EmailSection
+            }
+          }
+          const nextCols = sec.columns.map(col => ({
+            ...col,
+            blocks: col.blocks.map(b => {
+              if (b._savedBlockId) {
+                const row = byId.get(b._savedBlockId)
+                const saved = row?.block_json
+                if (saved && !saved._kind) {
+                  changed = true
+                  return {
+                    ...saved,
+                    id: b.id,
+                    _savedBlockId: b._savedBlockId,
+                    _savedBlockName: b._savedBlockName || row.name,
+                  } as EmailBlock
+                }
+                if (!row) {
+                  changed = true
+                  const { _savedBlockId: _a, _savedBlockName: _b, ...rest } = b
+                  return rest as EmailBlock
+                }
+              }
+              return b
+            }),
+          }))
+          return { ...sec, columns: nextCols }
+        })
+        return changed ? { ...prev, sections: nextSections } : prev
+      })
+    } catch {
+      // Silent — editor still works with the cached copy in design_json.
+    }
+  }, [])
+
+  // Initial hydration on mount.
   const hydratedOnce = useRef(false)
   useEffect(() => {
     if (hydratedOnce.current) return
     hydratedOnce.current = true
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch('/api/email/saved-blocks')
-        if (!res.ok) return
-        const data = await res.json()
-        const byId = new Map<string, any>()
-        for (const row of (data.blocks || [])) byId.set(row.id, row)
-        if (cancelled || byId.size === 0) return
-        setDoc(prev => {
-          let changed = false
-          const nextSections = prev.sections.map(sec => {
-            // Section-level linking first. If the entire section is linked,
-            // we replace its columns/styles with the library version but keep
-            // the section's `id` (and the link fields).
-            if (sec._savedSectionId) {
-              const row = byId.get(sec._savedSectionId)
-              const saved = row?.block_json
-              if (saved?._kind === 'section' && saved.section) {
-                changed = true
-                return {
-                  ...saved.section,
-                  id: sec.id,
-                  _savedSectionId: sec._savedSectionId,
-                  _savedSectionName: sec._savedSectionName || row.name,
-                } as EmailSection
-              }
-            }
-            // Otherwise, resolve per-block links within the section.
-            const nextCols = sec.columns.map(col => ({
-              ...col,
-              blocks: col.blocks.map(b => {
-                if (b._savedBlockId) {
-                  const row = byId.get(b._savedBlockId)
-                  const saved = row?.block_json
-                  if (saved && !saved._kind) {
-                    changed = true
-                    return {
-                      ...saved,
-                      id: b.id,
-                      _savedBlockId: b._savedBlockId,
-                      _savedBlockName: b._savedBlockName || row.name,
-                    } as EmailBlock
-                  }
-                }
-                return b
-              }),
-            }))
-            return { ...sec, columns: nextCols }
-          })
-          return changed ? { ...prev, sections: nextSections } : prev
-        })
-      } catch {
-        // Silent — editor still works with the cached copy in design_json.
-      }
-    })()
-    return () => { cancelled = true }
-  }, [])
+    hydrateFromLibrary()
+  }, [hydrateFromLibrary])
+
+  // Cross-tab + tab-focus re-hydration — when the user saves in the
+  // dedicated universal editor (opened in a new tab), that tab writes to
+  // localStorage. This tab picks up the storage event and re-hydrates.
+  // Same thing happens when the tab regains visibility (user switches back).
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'worder:universal-saved') hydrateFromLibrary()
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') hydrateFromLibrary()
+    }
+    window.addEventListener('storage', onStorage)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [hydrateFromLibrary])
 
   const updateProp = useCallback((id: string, key: string, value: any) => {
     setDoc(prev => {
@@ -1111,6 +1149,17 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   // If the user closes the tab or SPA-unmounts the editor mid-debounce, we
   // must still push pending saved_blocks PATCHes; otherwise their last edits
   // never land in the library and the next email shows stale content.
+  //
+  // NOTE: we deliberately split this into TWO effects. The naïve approach
+  // (single effect with [doc, flushUniversalSync] deps) re-runs the cleanup
+  // on every edit — which would force-flush on every keystroke and defeat
+  // the 600ms debounce in scheduleUniversalSync/scheduleUniversalSectionSync.
+  // We use a ref to keep a handle to the latest flush fn so the unmount
+  // cleanup can call it without the effect itself depending on it.
+  const flushRef = useRef<() => Promise<void>>()
+  useEffect(() => { flushRef.current = flushUniversalSync }, [flushUniversalSync])
+
+  // beforeunload — needs latest doc, so it re-binds when doc changes. Cheap.
   useEffect(() => {
     const onBeforeUnload = () => {
       const timers = universalSyncTimersRef.current
@@ -1150,12 +1199,18 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       timers.clear()
     }
     window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [doc])
+
+  // Unmount-only flush (SPA navigation). Empty deps → cleanup runs ONCE
+  // on real unmount, not on every doc change.
+  useEffect(() => {
     return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload)
-      // SPA unmount path: regular fetch works (tab is alive).
-      flushUniversalSync().catch(() => {})
+      // Both the call and the .catch are optional-chained so this stays a
+      // no-op if the ref never got populated (shouldn't happen in practice).
+      flushRef.current?.()?.catch(() => {})
     }
-  }, [doc, flushUniversalSync])
+  }, [])
 
   const canvasWidth = device === 'mobile' ? 375 : doc.settings.contentWidth
   const isSaved = toast?.type === 'success' && toast.msg.includes('salvo')
@@ -1545,6 +1600,32 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                               onDrop={e => {
                                 e.preventDefault(); e.stopPropagation();
                                 e.currentTarget.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30')
+                                // Saved SECTION can't live inside a column — insert it as a
+                                // new section AFTER the current one (Klaviyo does the same).
+                                const ssJson = e.dataTransfer.getData('savedSectionJson')
+                                if (ssJson) {
+                                  try {
+                                    const parsed = JSON.parse(ssJson) as EmailSection
+                                    const ssId = e.dataTransfer.getData('savedSectionId') || undefined
+                                    const ssName = e.dataTransfer.getData('savedSectionName') || undefined
+                                    const restored: EmailSection = {
+                                      ...parsed,
+                                      id: 's_' + Math.random().toString(36).substring(2, 9),
+                                      columns: parsed.columns.map(c => ({
+                                        ...c,
+                                        id: 'c_' + Math.random().toString(36).substring(2, 9),
+                                        blocks: c.blocks.map(b => ({ ...b, id: 'b_' + Math.random().toString(36).substring(2, 9) })),
+                                      })),
+                                      ...(ssId ? { _savedSectionId: ssId, _savedSectionName: ssName } : {}),
+                                    }
+                                    const idx = doc.sections.findIndex(s => s.id === section.id)
+                                    const nextSections = [...doc.sections]
+                                    nextSections.splice(idx + 1, 0, restored)
+                                    updateDoc({ ...doc, sections: nextSections })
+                                    selectSection(restored.id)
+                                    return
+                                  } catch { /* fall through */ }
+                                }
                                 // Saved block dropped directly into a column → add here, not at doc level
                                 const sbJson = e.dataTransfer.getData('savedBlockJson')
                                 if (sbJson) {
