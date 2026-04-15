@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthClient();
