@@ -458,6 +458,9 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   // Bumped every time a save-as-universal (block or section) succeeds so the
   // palette re-fetches the library without switching tabs manually.
   const [savedLibraryVersion, setSavedLibraryVersion] = useState(0)
+  // Sync status for visible feedback in the universal banner so the user
+  // can SEE that edits are landing in the library (Klaviyo shows the same).
+  const [universalSyncStatus, setUniversalSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('idle')
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -709,6 +712,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const scheduleUniversalSync = useCallback((savedBlockId: string, block: EmailBlock) => {
     const timers = universalSyncTimersRef.current
     if (timers.has(savedBlockId)) clearTimeout(timers.get(savedBlockId))
+    setUniversalSyncStatus('syncing')
     const t = setTimeout(async () => {
       timers.delete(savedBlockId)
       try {
@@ -716,13 +720,18 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         const clean: EmailBlock = { ...block } as EmailBlock
         delete (clean as any)._savedBlockId
         delete (clean as any)._savedBlockName
-        await fetch(`/api/email/saved-blocks/${savedBlockId}`, {
+        const res = await fetch(`/api/email/saved-blocks/${savedBlockId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ block_json: clean }),
         })
+        if (!res.ok) throw new Error('patch failed')
+        setUniversalSyncStatus('saved')
+        // Let the "Saved" chip linger briefly, then settle to idle.
+        setTimeout(() => setUniversalSyncStatus(s => s === 'saved' ? 'idle' : s), 1500)
       } catch (err) {
         console.warn('[UniversalBlock] sync failed', err)
+        setUniversalSyncStatus('error')
       }
     }, 600)
     timers.set(savedBlockId, t)
@@ -735,6 +744,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     const timers = universalSyncTimersRef.current
     const key = 'section:' + savedSectionId
     if (timers.has(key)) clearTimeout(timers.get(key))
+    setUniversalSyncStatus('syncing')
     const t = setTimeout(async () => {
       timers.delete(key)
       try {
@@ -749,15 +759,19 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
             delete (b as any)._savedBlockName
           }
         }
-        await fetch(`/api/email/saved-blocks/${savedSectionId}`, {
+        const res = await fetch(`/api/email/saved-blocks/${savedSectionId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             block_json: { _kind: 'section', section: clean },
           }),
         })
+        if (!res.ok) throw new Error('patch failed')
+        setUniversalSyncStatus('saved')
+        setTimeout(() => setUniversalSyncStatus(s => s === 'saved' ? 'idle' : s), 1500)
       } catch (err) {
         console.warn('[UniversalSection] sync failed', err)
+        setUniversalSyncStatus('error')
       }
     }, 600)
     timers.set(key, t)
@@ -973,15 +987,70 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   }, [addBlock, addSavedBlock, doc, updateDoc, selectSection])
 
   // ── Save ──
+  // Force-flush every pending universal sync PATCH before we leave the
+  // editor (save / unmount). Without this, rapid Edit → Save closes would
+  // drop the last in-flight debounce and the library row would never learn
+  // about the final change — which is exactly what "editei e nao propagou"
+  // looks like to the user.
+  const flushUniversalSync = useCallback(async () => {
+    const timers = universalSyncTimersRef.current
+    if (timers.size === 0) return
+    const pending: Array<{ id: string; kind: 'block' | 'section'; payload: any }> = []
+    // Walk the current doc to produce fresh payloads for every scheduled id.
+    for (const key of timers.keys()) {
+      clearTimeout(timers.get(key))
+      if (key.startsWith('section:')) {
+        const savedSectionId = key.slice('section:'.length)
+        const sec = doc.sections.find(s => s._savedSectionId === savedSectionId)
+        if (!sec) continue
+        const clean: EmailSection = JSON.parse(JSON.stringify(sec))
+        delete (clean as any)._savedSectionId
+        delete (clean as any)._savedSectionName
+        for (const col of clean.columns || []) {
+          for (const b of col.blocks || []) {
+            delete (b as any)._savedBlockId
+            delete (b as any)._savedBlockName
+          }
+        }
+        pending.push({ id: savedSectionId, kind: 'section', payload: { _kind: 'section', section: clean } })
+      } else {
+        const savedBlockId = key
+        const block = allBlocks(doc).find(b => b._savedBlockId === savedBlockId)
+        if (!block) continue
+        const clean: EmailBlock = { ...block } as EmailBlock
+        delete (clean as any)._savedBlockId
+        delete (clean as any)._savedBlockName
+        pending.push({ id: savedBlockId, kind: 'block', payload: clean })
+      }
+    }
+    timers.clear()
+    // Fire all PATCHes in parallel and wait — the user is saving so it's OK
+    // to make them wait the round-trip.
+    await Promise.all(pending.map(p =>
+      fetch(`/api/email/saved-blocks/${p.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ block_json: p.payload }),
+      }).catch(() => { /* non-blocking */ })
+    ))
+  }, [doc])
+
   const handleSave = useCallback(async () => {
     setSaving(true)
     try {
+      // 1. Flush any pending universal-sync debounces so nothing is lost.
+      await flushUniversalSync()
+      // 2. Render + persist the email itself.
       const html = renderDocumentToHtml(doc)
       const success = await onSave(doc as any, html)
       if (success) showToast('Template salvo com sucesso!')
+      // 3. Bump the palette counter so neighbouring UI re-fetches the
+      //    updated library immediately (useful when saving then dragging
+      //    the same universal into another section without leaving).
+      setSavedLibraryVersion(v => v + 1)
     } catch (err: any) { showToast('Erro: ' + err.message, 'error') }
     setSaving(false)
-  }, [doc, onSave, showToast])
+  }, [doc, onSave, showToast, flushUniversalSync])
 
   // ── Preview ──
   const handlePreview = useCallback(async () => {
@@ -1038,6 +1107,56 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     return () => window.removeEventListener('keydown', handler)
   }, [handleSave, undo, redo, selectedBlockId, removeBlock, clearSelection])
 
+  // ── Universal-sync safeguards ──
+  // If the user closes the tab or SPA-unmounts the editor mid-debounce, we
+  // must still push pending saved_blocks PATCHes; otherwise their last edits
+  // never land in the library and the next email shows stale content.
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      const timers = universalSyncTimersRef.current
+      if (timers.size === 0) return
+      // beforeunload can't await — use sendBeacon so the PATCH actually
+      // leaves before the tab dies. For each pending timer, fire now.
+      for (const key of timers.keys()) {
+        clearTimeout(timers.get(key))
+        try {
+          if (key.startsWith('section:')) {
+            const id = key.slice('section:'.length)
+            const sec = doc.sections.find(s => s._savedSectionId === id)
+            if (!sec) continue
+            const clean: any = JSON.parse(JSON.stringify(sec))
+            delete clean._savedSectionId
+            delete clean._savedSectionName
+            for (const col of clean.columns || []) {
+              for (const b of col.blocks || []) { delete b._savedBlockId; delete b._savedBlockName }
+            }
+            navigator.sendBeacon(
+              `/api/email/saved-blocks/${id}`,
+              new Blob([JSON.stringify({ block_json: { _kind: 'section', section: clean } })], { type: 'application/json' })
+            )
+          } else {
+            const block = allBlocks(doc).find(b => b._savedBlockId === key)
+            if (!block) continue
+            const clean: any = { ...block }
+            delete clean._savedBlockId
+            delete clean._savedBlockName
+            navigator.sendBeacon(
+              `/api/email/saved-blocks/${key}`,
+              new Blob([JSON.stringify({ block_json: clean })], { type: 'application/json' })
+            )
+          }
+        } catch { /* best-effort */ }
+      }
+      timers.clear()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      // SPA unmount path: regular fetch works (tab is alive).
+      flushUniversalSync().catch(() => {})
+    }
+  }, [doc, flushUniversalSync])
+
   const canvasWidth = device === 'mobile' ? 375 : doc.settings.contentWidth
   const isSaved = toast?.type === 'success' && toast.msg.includes('salvo')
 
@@ -1083,7 +1202,15 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
             {saving ? <Loader2 size={14} className="animate-spin" /> : isSaved ? <CheckCircle size={14} /> : <Save size={14} />}
             {saving ? 'Salvando...' : isSaved ? 'Salvo!' : 'Salvar'}
           </button>
-          <button onClick={() => { if (confirm('Sair sem salvar? Alterações não salvas serão perdidas.')) onBack() }}
+          <button onClick={async () => {
+            if (!confirm('Sair sem salvar? Alterações não salvas serão perdidas.')) return
+            // Even when the user leaves without saving the EMAIL, any pending
+            // universal-sync PATCHes for blocks/sections they did edit should
+            // still land — the library is a separate resource. Flush first,
+            // then leave.
+            await flushUniversalSync()
+            onBack()
+          }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-400 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors" title="Sair">
             Sair
           </button>
@@ -1119,9 +1246,25 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   <div className="flex items-start gap-2">
                     <Star className="w-4 h-4 text-violet-600 fill-violet-600 shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-semibold text-violet-900 leading-tight">
-                        {selectedBlock._savedBlockName || 'Bloco Universal'}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[12px] font-semibold text-violet-900 leading-tight flex-1 truncate">
+                          {selectedBlock._savedBlockName || 'Bloco Universal'}
+                        </p>
+                        {/* Live sync status chip (Klaviyo-style) */}
+                        {universalSyncStatus === 'syncing' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Sincronizando…
+                          </span>
+                        )}
+                        {universalSyncStatus === 'saved' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+                            <CheckCircle className="w-3 h-3" /> Salvo na biblioteca
+                          </span>
+                        )}
+                        {universalSyncStatus === 'error' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-600">Erro ao sincronizar</span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-violet-700/80 leading-snug mt-0.5">
                         Edições se aplicam a todos os emails que usam este bloco.
                       </p>
@@ -1170,9 +1313,24 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   <div className="flex items-start gap-2">
                     <Star className="w-4 h-4 text-violet-600 fill-violet-600 shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-semibold text-violet-900 leading-tight">
-                        {selectedSection._savedSectionName || 'Seção Universal'}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[12px] font-semibold text-violet-900 leading-tight flex-1 truncate">
+                          {selectedSection._savedSectionName || 'Seção Universal'}
+                        </p>
+                        {universalSyncStatus === 'syncing' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Sincronizando…
+                          </span>
+                        )}
+                        {universalSyncStatus === 'saved' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+                            <CheckCircle className="w-3 h-3" /> Salvo na biblioteca
+                          </span>
+                        )}
+                        {universalSyncStatus === 'error' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-600">Erro ao sincronizar</span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-violet-700/80 leading-snug mt-0.5">
                         Edições (blocos, cores, visibilidade, padding…) se aplicam
                         a todos os emails que usam essa seção.
@@ -1192,22 +1350,29 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   section={selectedSection}
                   onStyleChange={(key, value) => updateSectionStyles(selectedSection.id, { [key]: value })}
                   onColumnLayoutChange={(cols) => {
-                    setDoc(prev => ({
-                      ...prev,
-                      sections: prev.sections.map(s => {
-                        if (s.id !== selectedSection.id) return s
-                        const newCols = cols.map((w, i) => ({
-                          id: s.columns[i]?.id || ('c_' + Date.now().toString(36) + '_' + i),
-                          width: w,
-                          blocks: s.columns[i]?.blocks || [],
-                        }))
-                        if (s.columns.length > cols.length) {
-                          const overflow = s.columns.slice(cols.length).flatMap(c => c.blocks)
-                          newCols[newCols.length - 1].blocks.push(...overflow)
-                        }
-                        return { ...s, columns: newCols }
-                      })
-                    }))
+                    setDoc(prev => {
+                      const next = {
+                        ...prev,
+                        sections: prev.sections.map(s => {
+                          if (s.id !== selectedSection.id) return s
+                          const newCols = cols.map((w, i) => ({
+                            id: s.columns[i]?.id || ('c_' + Date.now().toString(36) + '_' + i),
+                            width: w,
+                            blocks: s.columns[i]?.blocks || [],
+                          }))
+                          if (s.columns.length > cols.length) {
+                            const overflow = s.columns.slice(cols.length).flatMap(c => c.blocks)
+                            newCols[newCols.length - 1].blocks.push(...overflow)
+                          }
+                          return { ...s, columns: newCols }
+                        })
+                      }
+                      // Column layout is part of the section — propagate to
+                      // the library if the section is linked.
+                      const edited = next.sections.find(s => s.id === selectedSection.id)
+                      if (edited?._savedSectionId) scheduleUniversalSectionSync(edited._savedSectionId, edited)
+                      return next
+                    })
                   }}
                 />
               </div>
