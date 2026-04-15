@@ -90,11 +90,12 @@ export async function sendCampaignEmail({
       baseUrl,
     });
 
-    // 4. Render subject merge tags
+    // 4. Render subject merge tags (subject is plaintext — don't HTML-escape)
     const { renderMergeTags } = await import('@/lib/email/render');
-    const finalSubject = renderMergeTags(subject, mergeData);
+    const finalSubject = renderMergeTags(subject, mergeData, { raw: true });
 
-    // 5. Send via Resend
+    // 5. Send via Resend (with RFC 8058 one-click unsubscribe headers)
+    const unsubscribeUrl = `${baseUrl}/api/unsubscribe/${emailSendId}?mode=1click`;
     const result = await sendEmail({
       to: contactEmail,
       from: fromEmail,
@@ -102,6 +103,7 @@ export async function sendCampaignEmail({
       subject: finalSubject,
       html: finalHtml,
       replyTo,
+      unsubscribeUrl,
       tags: [
         { name: 'campaign_id', value: campaignId },
         { name: 'email_send_id', value: emailSendId },

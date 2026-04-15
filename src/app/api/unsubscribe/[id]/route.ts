@@ -7,48 +7,83 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+async function unsubscribeByEmailSendId(emailSendId: string): Promise<boolean> {
+  try {
+    const { isSupabaseConfigured, supabaseAdmin } = await import('@/lib/supabase-admin');
+    if (!isSupabaseConfigured()) return false;
+
+    const { data: emailSend } = await supabaseAdmin
+      .from('email_sends')
+      .select('contact_id, email')
+      .eq('id', emailSendId)
+      .single();
+
+    if (!emailSend?.contact_id) return false;
+
+    const { error } = await supabaseAdmin
+      .from('contacts')
+      .update({
+        is_subscribed_email: false,
+        status: 'unsubscribed',
+        email_consent: false,
+        unsubscribed_at: new Date().toISOString(),
+      })
+      .eq('id', emailSend.contact_id);
+
+    if (error) {
+      // Fall back to just toggling is_subscribed_email if newer columns don't exist
+      await supabaseAdmin
+        .from('contacts')
+        .update({ is_subscribed_email: false })
+        .eq('id', emailSend.contact_id);
+    }
+
+    await supabaseAdmin
+      .from('email_sends')
+      .update({ unsubscribed_at: new Date().toISOString() })
+      .eq('id', emailSendId);
+
+    await supabaseAdmin
+      .from('contact_events')
+      .insert({
+        contact_id: emailSend.contact_id,
+        type: 'email_unsubscribed',
+        metadata: { email_send_id: emailSendId, source: 'one_click' },
+      })
+      .throwOnError()
+      .catch(() => null);
+
+    return true;
+  } catch (error) {
+    console.error('[Unsubscribe] Error:', error);
+    return false;
+  }
+}
+
+/**
+ * RFC 8058 one-click unsubscribe endpoint.
+ * Mail clients (Gmail, Yahoo, Apple Mail) POST here when the recipient clicks
+ * the native "Unsubscribe" button.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const ok = await unsubscribeByEmailSendId(params.id);
+  return NextResponse.json({ ok }, { status: ok ? 200 : 400 });
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const emailSendId = params.id;
-  let success = false;
+  const mode = request.nextUrl.searchParams.get('mode');
+  const success = await unsubscribeByEmailSendId(emailSendId);
 
-  try {
-    const { isSupabaseConfigured } = await import('@/lib/supabase-admin');
-
-    if (isSupabaseConfigured()) {
-      const { supabaseAdmin } = await import('@/lib/supabase-admin');
-
-      // Get the contact_id from email_sends
-      const { data: emailSend } = await supabaseAdmin
-        .from('email_sends')
-        .select('contact_id')
-        .eq('id', emailSendId)
-        .single();
-
-      if (emailSend?.contact_id) {
-        // Mark contact as unsubscribed
-        const { error } = await supabaseAdmin
-          .from('contacts')
-          .update({ is_subscribed_email: false })
-          .eq('id', emailSend.contact_id);
-
-        if (!error) {
-          success = true;
-        } else {
-          console.error('[Unsubscribe] Error updating contact:', error);
-        }
-
-        // Also record unsubscribe on email_sends
-        await supabaseAdmin
-          .from('email_sends')
-          .update({ unsubscribed_at: new Date().toISOString() })
-          .eq('id', emailSendId);
-      }
-    }
-  } catch (error) {
-    console.error('[Unsubscribe] Error:', error);
+  // If Gmail's safety check probes via GET (mode=1click), just 200
+  if (mode === '1click') {
+    return NextResponse.json({ ok: success }, { status: success ? 200 : 400 });
   }
 
   const html = `<!DOCTYPE html>

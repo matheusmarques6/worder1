@@ -266,7 +266,12 @@ async function getSegmentCount(segment: any): Promise<number> {
         .from('contacts')
         .select('*', { count: 'exact', head: true })
         .eq('organization_id', segment.organization_id)
-        .not('store_id', 'is', null) // Only count contacts linked to a store
+
+      // Only scope to a specific store if the segment itself is store-scoped.
+      // Previously this filter excluded org-level segments entirely.
+      if (segment.store_id) {
+        query = query.eq('store_id', segment.store_id)
+      }
 
       for (const rule of segment.rules) {
         query = applyRule(query, rule)

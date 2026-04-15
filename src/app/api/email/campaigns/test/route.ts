@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       baseUrl,
     });
 
-    const finalSubject = `[TESTE] ${renderMergeTags(campaign.subject, sampleData)}`;
+    const finalSubject = `[TESTE] ${renderMergeTags(campaign.subject, sampleData, { raw: true })}`;
 
     await sendEmail({
       to: testEmail,

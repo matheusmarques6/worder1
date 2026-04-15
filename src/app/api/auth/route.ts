@@ -280,7 +280,18 @@ async function handleUpdatePassword(
     newPassword: string;
   }
 ) {
-  const { error } = await supabase.auth.admin.updateUserById(accessToken, {
+  // Resolve the user from the access token first — admin.updateUserById takes
+  // a user UUID, not a JWT. Passing the token directly (as the previous
+  // implementation did) causes every password change to fail.
+  const { data: { user }, error: getUserError } = await supabase.auth.getUser(accessToken);
+  if (getUserError || !user?.id) {
+    return NextResponse.json(
+      { error: getUserError?.message || 'Invalid or expired session' },
+      { status: 401 }
+    );
+  }
+
+  const { error } = await supabase.auth.admin.updateUserById(user.id, {
     password: newPassword,
   });
 

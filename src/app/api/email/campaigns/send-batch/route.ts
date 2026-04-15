@@ -127,12 +127,18 @@ export async function POST(req: NextRequest) {
         .filter(Boolean)
     );
 
-    const eligibleContacts = contacts.filter(
-      (c: any) => c.email && !suppressedEmails.has(c.email.toLowerCase())
-    );
+    const eligibleContacts = contacts.filter((c: any) => {
+      if (!c.email) return false;
+      if (suppressedEmails.has(c.email.toLowerCase())) return false;
+      // Respect explicit unsubscribe / status flags
+      if (c.is_subscribed_email === false) return false;
+      if (c.email_consent === false) return false;
+      if (c.status === 'unsubscribed' || c.status === 'bounced' || c.status === 'complained') return false;
+      return true;
+    });
     const skipped = contacts.length - eligibleContacts.length;
     if (skipped > 0) {
-      console.log(`[SendBatch] Suppressed ${skipped} contact(s) (bounced/complained in last 90d)`);
+      console.log(`[SendBatch] Skipped ${skipped} contact(s) (suppressed or unsubscribed)`);
     }
 
     // ──────────────────────────────────────────
@@ -256,12 +262,13 @@ export async function POST(req: NextRequest) {
           emailSendId: emailSend.id,
           baseUrl,
         });
-        const finalSubject = renderMergeTags(campaign.subject || '', mergeData);
+        const finalSubject = renderMergeTags(campaign.subject || '', mergeData, { raw: true });
 
         const fromAddress = campaign.sender_name
           ? `${campaign.sender_name} <${campaign.from_email}>`
           : campaign.from_email;
 
+        const unsubscribeUrl = `${baseUrl}/api/unsubscribe/${emailSend.id}?mode=1click`;
         prepped.push({
           contactId: contact.id,
           emailSendId: emailSend.id,
@@ -272,6 +279,10 @@ export async function POST(req: NextRequest) {
             subject: finalSubject,
             html: finalHtml,
             replyTo: campaign.reply_to || undefined,
+            headers: {
+              'List-Unsubscribe': `<${unsubscribeUrl}>`,
+              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+            },
             tags: [
               { name: 'campaign_id', value: String(campaign_id) },
               { name: 'email_send_id', value: String(emailSend.id) },

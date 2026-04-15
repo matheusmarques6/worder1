@@ -29,6 +29,24 @@ export interface SendEmailOptions {
   html: string;
   replyTo?: string;
   tags?: { name: string; value: string }[];
+  /** Extra headers (e.g. List-Unsubscribe). Merged with defaults. */
+  headers?: Record<string, string>;
+  /** Per-recipient unsubscribe URL — used to build RFC 2369/8058 headers. */
+  unsubscribeUrl?: string;
+}
+
+/**
+ * Build RFC 2369 + RFC 8058 unsubscribe headers so Gmail/Yahoo show the
+ * native "Unsubscribe" link and treat the sender as compliant.
+ */
+function buildUnsubscribeHeaders(unsubscribeUrl?: string): Record<string, string> {
+  if (!unsubscribeUrl) return {};
+  return {
+    'List-Unsubscribe': `<${unsubscribeUrl}>`,
+    // RFC 8058 — allows mail clients to POST a one-click unsubscribe without
+    // loading the web page. The server must accept POST with an empty body.
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+  };
 }
 
 export async function sendEmail({
@@ -39,10 +57,16 @@ export async function sendEmail({
   html,
   replyTo,
   tags,
+  headers,
+  unsubscribeUrl,
 }: SendEmailOptions) {
   const resend = getResend();
 
   const fromAddress = senderName ? `${senderName} <${from}>` : from;
+  const finalHeaders = {
+    ...buildUnsubscribeHeaders(unsubscribeUrl),
+    ...(headers || {}),
+  };
 
   const { data, error } = await resend.emails.send({
     to: Array.isArray(to) ? to : [to],
@@ -51,7 +75,8 @@ export async function sendEmail({
     html,
     replyTo,
     tags,
-  });
+    headers: Object.keys(finalHeaders).length ? finalHeaders : undefined,
+  } as any);
 
   if (error) {
     console.error('[Resend] Error sending email:', error);

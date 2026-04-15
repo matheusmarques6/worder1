@@ -23,11 +23,22 @@ const supabase = new Proxy({} as SupabaseClient, {
 
 // Verify Shopify webhook signature
 function verifyShopifyWebhook(body: string, signature: string): boolean {
-  const secret = process.env.SHOPIFY_WEBHOOK_SECRET!;
+  const secret = process.env.SHOPIFY_WEBHOOK_SECRET;
+  if (!secret) {
+    console.error('[Shopify] SHOPIFY_WEBHOOK_SECRET not configured — rejecting webhook');
+    return false;
+  }
   const hmac = crypto.createHmac('sha256', secret);
   hmac.update(body, 'utf8');
   const digest = hmac.digest('base64');
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
+  const sigBuf = Buffer.from(signature, 'base64');
+  const digBuf = Buffer.from(digest, 'base64');
+  if (sigBuf.length !== digBuf.length) return false;
+  try {
+    return crypto.timingSafeEqual(sigBuf, digBuf);
+  } catch {
+    return false;
+  }
 }
 
 // Handle Shopify OAuth callback
@@ -36,14 +47,62 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code');
   const shop = searchParams.get('shop');
   const state = searchParams.get('state');
+  const hmac = searchParams.get('hmac');
 
   if (!code || !shop || !state) {
-    return NextResponse.redirect('/settings?error=missing_params');
+    return NextResponse.redirect(new URL('/settings?error=missing_params', request.url));
+  }
+
+  // Validate shop domain format to prevent SSRF into arbitrary hosts
+  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)) {
+    return NextResponse.redirect(new URL('/settings?error=invalid_shop', request.url));
   }
 
   try {
-    // Verify state (should be stored in session)
-    // For production, verify state matches what was sent in the initial request
+    // ===== CSRF PROTECTION =====
+    // Validate state against oauth_states table (set during /api/integrations/shopify/auth).
+    // This prevents attackers from forging callbacks with arbitrary organization_id.
+    const { data: oauthState } = await supabase
+      .from('oauth_states')
+      .select('data, expires_at')
+      .eq('state_token', state)
+      .maybeSingle();
+
+    if (!oauthState || !oauthState.data?.organization_id) {
+      console.error('[Shopify OAuth] State token invalid or not found');
+      return NextResponse.redirect(new URL('/settings?error=invalid_state', request.url));
+    }
+
+    if (new Date(oauthState.expires_at) < new Date()) {
+      return NextResponse.redirect(new URL('/settings?error=state_expired', request.url));
+    }
+
+    const organizationId: string = oauthState.data.organization_id;
+
+    // Consume the state token (single-use)
+    await supabase.from('oauth_states').delete().eq('state_token', state);
+
+    // ===== HMAC VALIDATION (optional but recommended) =====
+    if (hmac && process.env.SHOPIFY_CLIENT_SECRET) {
+      const params = new URLSearchParams(searchParams);
+      params.delete('hmac');
+      params.sort();
+      const message = params.toString();
+      const generatedHmac = crypto
+        .createHmac('sha256', process.env.SHOPIFY_CLIENT_SECRET)
+        .update(message)
+        .digest('hex');
+      try {
+        const ok =
+          generatedHmac.length === hmac.length &&
+          crypto.timingSafeEqual(Buffer.from(generatedHmac, 'hex'), Buffer.from(hmac, 'hex'));
+        if (!ok) {
+          return NextResponse.redirect(new URL('/settings?error=hmac_invalid', request.url));
+        }
+      } catch {
+        return NextResponse.redirect(new URL('/settings?error=hmac_invalid', request.url));
+      }
+    }
 
     // Exchange code for access token
     const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
@@ -59,15 +118,12 @@ export async function GET(request: NextRequest) {
     const { access_token, scope } = await tokenResponse.json();
 
     // Get shop info
-    const shopResponse = await fetch(`https://${shop}/admin/api/2024-01/shop.json`, {
+    const shopResponse = await fetch(`https://${shop}/admin/api/2024-10/shop.json`, {
       headers: { 'X-Shopify-Access-Token': access_token },
     });
     const { shop: shopData } = await shopResponse.json();
 
-    // Parse organization_id from state
-    const organizationId = state;
-
-    // Save to database
+    // Save to database (organizationId was resolved via oauth_states above)
     const { error } = await supabase.from('shopify_stores').upsert({
       organization_id: organizationId,
       shop_domain: shop,
@@ -93,7 +149,7 @@ export async function GET(request: NextRequest) {
     ];
 
     for (const topic of webhooksToCreate) {
-      await fetch(`https://${shop}/admin/api/2024-01/webhooks.json`, {
+      await fetch(`https://${shop}/admin/api/2024-10/webhooks.json`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -109,10 +165,10 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.redirect('/settings?tab=integrations&success=shopify_connected');
+    return NextResponse.redirect(new URL('/settings?tab=integrations&success=shopify_connected', request.url));
   } catch (error) {
     console.error('Shopify OAuth error:', error);
-    return NextResponse.redirect('/settings?error=oauth_failed');
+    return NextResponse.redirect(new URL('/settings?error=oauth_failed', request.url));
   }
 }
 

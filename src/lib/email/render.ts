@@ -104,11 +104,27 @@ export function evaluateBlockCondition(
 }
 
 /**
+ * Escape HTML entities to prevent XSS/injection when interpolating untrusted
+ * merge data into the rendered email body.
+ */
+function escapeHtml(value: string): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/**
  * Replace {{tag}} and {{tag|fallback}} in HTML with data values.
+ * Values are HTML-escaped by default; pass { raw: true } to keep raw (for
+ * rendering plaintext subjects or pre-trusted HTML snippets).
  */
 export function renderMergeTags(
   html: string,
-  data: Record<string, string>
+  data: Record<string, string>,
+  options: { raw?: boolean } = {}
 ): string {
   // Inject date tags
   const now = new Date()
@@ -117,6 +133,7 @@ export function renderMergeTags(
     current_date: now.toLocaleDateString('pt-BR'),
     current_year: String(now.getFullYear()),
   }
+  const esc = (v: string) => (options.raw ? v : escapeHtml(v))
 
   // Replace {{tag|fallback}} first (with fallback)
   let result = html.replace(
@@ -125,9 +142,9 @@ export function renderMergeTags(
       // Support custom.* prefix for custom_fields
       if (tag.startsWith('custom.')) {
         const customKey = tag.slice(7)
-        return dateData[`custom_${customKey}`] ?? dateData[`custom.${customKey}`] ?? fallback;
+        return esc(dateData[`custom_${customKey}`] ?? dateData[`custom.${customKey}`] ?? fallback);
       }
-      return dateData[tag] ?? fallback;
+      return esc(dateData[tag] ?? fallback);
     }
   );
 
@@ -137,9 +154,9 @@ export function renderMergeTags(
     (_, tag: string) => {
       if (tag.startsWith('custom.')) {
         const customKey = tag.slice(7)
-        return dateData[`custom_${customKey}`] ?? dateData[`custom.${customKey}`] ?? '';
+        return esc(dateData[`custom_${customKey}`] ?? dateData[`custom.${customKey}`] ?? '');
       }
-      return dateData[tag] ?? '';
+      return esc(dateData[tag] ?? '');
     }
   );
 

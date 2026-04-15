@@ -32,9 +32,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.text();
     const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
+    const isProd = process.env.NODE_ENV === 'production';
 
-    // Verify signature if secret is configured
-    if (webhookSecret) {
+    // In production the secret MUST be present, otherwise reject.
+    if (!webhookSecret) {
+      if (isProd) {
+        console.error('[ResendWebhook] RESEND_WEBHOOK_SECRET not configured in production — rejecting');
+        return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 });
+      }
+      console.warn('[ResendWebhook] RESEND_WEBHOOK_SECRET missing (dev only)');
+    } else {
       const svixId = request.headers.get('svix-id');
       const svixTimestamp = request.headers.get('svix-timestamp');
       const svixSignature = request.headers.get('svix-signature');
@@ -68,7 +75,7 @@ export async function POST(request: NextRequest) {
     // Find the email_send by resend_id
     const { data: emailSend, error: findError } = await supabaseAdmin
       .from('email_sends')
-      .select('id, campaign_id')
+      .select('id, campaign_id, contact_id')
       .eq('resend_id', resendId)
       .maybeSingle();
 
@@ -80,7 +87,40 @@ export async function POST(request: NextRequest) {
 
     const emailSendId = emailSend.id;
     const campaignId = emailSend.campaign_id;
+    const contactId = emailSend.contact_id;
     const now = new Date().toISOString();
+
+    // Helper: auto-suppress contact so future campaigns skip them
+    async function suppressContact(reason: 'bounced' | 'complained', bounceType?: string) {
+      if (!contactId) return;
+      const isHardBounce = bounceType
+        ? /hard|invalid|nonexistent|unknown|blocked|rejected|permanent/i.test(bounceType)
+        : reason === 'complained';
+
+      try {
+        await supabaseAdmin
+          .from('contacts')
+          .update({
+            is_subscribed_email: false,
+            // only hard-suppress on complaints or hard bounces; soft bounces
+            // don't mark status=unsubscribed.
+            ...(isHardBounce
+              ? { status: reason === 'complained' ? 'complained' : 'bounced' }
+              : {}),
+          })
+          .eq('id', contactId);
+      } catch (e) {
+        console.error('[ResendWebhook] suppress contact error', e);
+      }
+
+      try {
+        await supabaseAdmin.from('contact_events').insert({
+          contact_id: contactId,
+          type: reason === 'complained' ? 'email_complained' : 'email_bounced',
+          metadata: { email_send_id: emailSendId, bounce_type: bounceType || null },
+        });
+      } catch {}
+    }
 
     switch (type) {
       case 'email.delivered':
@@ -99,6 +139,7 @@ export async function POST(request: NextRequest) {
             error_message: data.bounce?.type || 'bounced',
           })
           .eq('id', emailSendId);
+        await suppressContact('bounced', data.bounce?.type);
         if (campaignId) {
           try { await supabaseAdmin.rpc('increment_campaign_bounces', { p_campaign_id: campaignId }); } catch {}
         }
@@ -109,6 +150,7 @@ export async function POST(request: NextRequest) {
           .from('email_sends')
           .update({ status: 'complained', complained_at: now })
           .eq('id', emailSendId);
+        await suppressContact('complained');
         break;
 
       case 'email.opened':

@@ -48,6 +48,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Campaign template not found' }, { status: 404 });
     }
 
+    // ===== SCHEDULED SEND =====
+    // If a scheduled_at is set in the future, just mark as scheduled and return.
+    // A cron/worker picks up due campaigns and calls this endpoint with force=true.
+    const forceNow = (await (async () => {
+      try {
+        const parsed = JSON.parse(await request.clone().text());
+        return Boolean(parsed?.force);
+      } catch {
+        return false;
+      }
+    })());
+
+    if (!forceNow && campaign.scheduled_at) {
+      const scheduledTs = new Date(campaign.scheduled_at).getTime();
+      if (!Number.isNaN(scheduledTs) && scheduledTs > Date.now() + 30_000) {
+        await supabaseAdmin
+          .from('email_campaigns')
+          .update({ status: 'scheduled' })
+          .eq('id', campaign_id);
+        return NextResponse.json({
+          scheduled: true,
+          scheduled_at: campaign.scheduled_at,
+        });
+      }
+    }
+
     // Update campaign status to 'sending'
     await supabaseAdmin
       .from('email_campaigns')

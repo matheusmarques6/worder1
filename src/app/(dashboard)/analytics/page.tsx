@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ChartLineUp,
@@ -35,51 +35,12 @@ import {
   Cell,
 } from 'recharts'
 
-const periods = ['7d', '30d', '90d', '12m']
+const periods = ['7d', '30d', '90d', '12m'] as const
+type Period = typeof periods[number]
 
-const revenueData = [
-  { date: '01 Mar', email: 12400, whatsapp: 8200, sms: 3100, total: 23700 },
-  { date: '03 Mar', email: 14200, whatsapp: 9100, sms: 2800, total: 26100 },
-  { date: '05 Mar', email: 11800, whatsapp: 10400, sms: 3400, total: 25600 },
-  { date: '07 Mar', email: 16500, whatsapp: 11200, sms: 4100, total: 31800 },
-  { date: '09 Mar', email: 15100, whatsapp: 9800, sms: 3600, total: 28500 },
-  { date: '11 Mar', email: 18200, whatsapp: 12600, sms: 4800, total: 35600 },
-  { date: '13 Mar', email: 17400, whatsapp: 11900, sms: 5200, total: 34500 },
-]
-
-const engagementData = [
-  { date: '01 Mar', opens: 4200, clicks: 1800, conversions: 340 },
-  { date: '03 Mar', opens: 4800, clicks: 2100, conversions: 390 },
-  { date: '05 Mar', opens: 3900, clicks: 1600, conversions: 310 },
-  { date: '07 Mar', opens: 5200, clicks: 2400, conversions: 450 },
-  { date: '09 Mar', opens: 4600, clicks: 2000, conversions: 380 },
-  { date: '11 Mar', opens: 5800, clicks: 2700, conversions: 520 },
-  { date: '13 Mar', opens: 5400, clicks: 2500, conversions: 490 },
-]
-
-const channelBreakdown = [
-  { name: 'E-mail', value: 45, color: '#F26B2A' },
-  { name: 'WhatsApp', value: 30, color: '#25D366' },
-  { name: 'SMS', value: 15, color: '#8B5CF6' },
-  { name: 'Chat Web', value: 10, color: '#3B82F6' },
-]
-
-const topCampaigns = [
-  { name: 'Promoção Dia do Consumidor', channel: 'email', sent: 12400, opened: 4960, clicked: 1488, revenue: 'R$ 18.200' },
-  { name: 'Carrinho Abandonado - 1h', channel: 'whatsapp', sent: 3200, opened: 2880, clicked: 1280, revenue: 'R$ 12.800' },
-  { name: 'Flash Sale Março', channel: 'email', sent: 8900, opened: 3560, clicked: 890, revenue: 'R$ 9.450' },
-  { name: 'PIX Pendente - Lembrete', channel: 'whatsapp', sent: 1800, opened: 1620, clicked: 720, revenue: 'R$ 7.200' },
-  { name: 'Newsletter Semanal', channel: 'sms', sent: 5400, opened: 2160, clicked: 540, revenue: 'R$ 4.100' },
-]
-
-const kpis = [
-  { title: 'Receita Atribuída', value: 'R$ 186.400', change: '+18.2%', positive: true, icon: CurrencyDollar },
-  { title: 'Mensagens Enviadas', value: '48.200', change: '+12.5%', positive: true, icon: EnvelopeSimple },
-  { title: 'Taxa de Abertura', value: '42.3%', change: '+3.1%', positive: true, icon: Eye },
-  { title: 'Taxa de Cliques', value: '8.7%', change: '-0.4%', positive: false, icon: CursorClick },
-  { title: 'Taxa de Conversão', value: '3.2%', change: '+0.6%', positive: true, icon: ArrowsClockwise },
-  { title: 'Contatos Ativos', value: '24.500', change: '+8.3%', positive: true, icon: UsersThree },
-]
+const iconMap: Record<string, React.ComponentType<any>> = {
+  CurrencyDollar, EnvelopeSimple, Eye, CursorClick, ArrowsClockwise, UsersThree,
+}
 
 const channelIcon: Record<string, React.ComponentType<any>> = {
   email: EnvelopeSimple,
@@ -88,9 +49,36 @@ const channelIcon: Record<string, React.ComponentType<any>> = {
   chat: ChatCircle,
 }
 
+interface OverviewData {
+  kpis: Array<{ title: string; value: string; change: string; positive: boolean; icon: string }>
+  revenueSeries: Array<{ date: string; email: number; whatsapp: number; sms: number; total: number }>
+  engagementSeries: Array<{ date: string; opens: number; clicks: number; conversions: number }>
+  channelBreakdown: Array<{ name: string; value: number; color: string }>
+  topCampaigns: Array<{ name: string; channel: string; sent: number; opened: number; clicked: number; revenue: string }>
+}
+
 export default function AnalyticsPage() {
-  const [period, setPeriod] = useState('30d')
+  const [period, setPeriod] = useState<Period>('30d')
   const [chartView, setChartView] = useState<'revenue' | 'engagement'>('revenue')
+  const [data, setData] = useState<OverviewData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    fetch(`/api/analytics/overview?period=${period}`)
+      .then((r) => r.json())
+      .then((json) => { if (!cancelled) setData(json) })
+      .catch(() => { if (!cancelled) setData(null) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [period])
+
+  const kpis = data?.kpis || []
+  const revenueData = data?.revenueSeries || []
+  const engagementData = data?.engagementSeries || []
+  const channelBreakdown = data?.channelBreakdown || []
+  const topCampaigns = data?.topCampaigns || []
 
   return (
     <div className="space-y-6">
@@ -122,9 +110,17 @@ export default function AnalyticsPage() {
       </div>
 
       {/* KPIs */}
+      {loading && (
+        <div className="text-xs text-gray-500">Carregando dados…</div>
+      )}
+      {!loading && kpis.length === 0 && (
+        <div className="bg-white/50 border border-dashed border-gray-200 rounded-xl p-8 text-center text-sm text-gray-500">
+          Sem dados no período selecionado. Envie uma campanha ou conecte uma loja para começar a ver analytics.
+        </div>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {kpis.map((kpi, i) => {
-          const Icon = kpi.icon
+          const Icon = iconMap[kpi.icon] || CurrencyDollar
           return (
             <motion.div
               key={kpi.title}
