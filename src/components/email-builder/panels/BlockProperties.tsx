@@ -196,11 +196,45 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
     </div>
   )
 
+  // Universal device-visibility selector — shown for every block type
+  // (image had its own implementation that we keep; this covers all
+  // other blocks). Maps to `props.visibility` which render-html.ts
+  // turns into the .worder-desktop-only / .worder-mobile-only CSS
+  // classes around the block's <tr>.
+  const deviceVisibilitySection = (
+    <div className="border-t border-gray-100 pt-3 mt-3">
+      <p className="text-[11px] font-semibold text-gray-700 mb-2">Visibilidade no dispositivo</p>
+      <div className="grid grid-cols-3 gap-1.5">
+        {([
+          { v: 'all', label: 'Todos' },
+          { v: 'desktop', label: 'Desktop' },
+          { v: 'mobile', label: 'Mobile' },
+        ] as const).map(opt => {
+          const active = ((p as any).visibility || 'all') === opt.v
+          return (
+            <button
+              key={opt.v}
+              onClick={() => onChange('visibility', opt.v)}
+              className={`text-[11px] py-1.5 rounded-md border transition-colors ${
+                active
+                  ? 'border-zinc-900 bg-zinc-900 text-white font-semibold'
+                  : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'
+              }`}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+
   const saveButton = onSaveAsReusable ? (
     <div className="border-t border-gray-100 pt-3 mt-3">
       <button onClick={onSaveAsReusable}
-        className="w-full py-2 text-xs font-medium text-zinc-900 bg-zinc-50 rounded-lg hover:bg-zinc-100 transition-colors">
-        Salvar como reutilizável
+        className="w-full py-2 text-[11px] font-semibold text-violet-700 bg-violet-50 rounded-lg hover:bg-violet-100 transition-colors inline-flex items-center justify-center gap-1.5">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        Salvar como bloco universal
       </button>
     </div>
   ) : null
@@ -210,6 +244,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
       {paddingEditor}
       {hasBg && bgColorEditor()}
       {conditionalSection}
+      {deviceVisibilitySection}
       {saveButton}
     </>
   )

@@ -36,6 +36,7 @@ interface WorderEmailEditorProps {
 function SortableBlock({
   blockId, children, isSelected, onSelect, onClone, onDelete,
   isUniversal, savedBlockName, onSaveAsUniversal, onUnlink,
+  visibility,
 }: {
   blockId: string;
   children: React.ReactNode;
@@ -47,6 +48,7 @@ function SortableBlock({
   savedBlockName?: string;
   onSaveAsUniversal: () => void;
   onUnlink: () => void;
+  visibility?: 'all' | 'desktop' | 'mobile' | string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: blockId,
@@ -72,42 +74,66 @@ function SortableBlock({
         </div>
       )}
 
-      {/* Hover toolbar — appears on hover OR when selected */}
+      {/* Device-visibility badge — shows the user that this block is
+          hidden on one of the devices. Won't render on 'all' (default). */}
+      {visibility === 'desktop' && (
+        <div
+          className="absolute left-1 bottom-1 z-20 flex items-center gap-1 px-1.5 py-0.5 bg-zinc-900/80 text-white text-[10px] font-semibold rounded shadow-sm"
+          title="Visível apenas em desktop (oculto no mobile)"
+        >
+          <span>🖥 Só desktop</span>
+        </div>
+      )}
+      {visibility === 'mobile' && (
+        <div
+          className="absolute left-1 bottom-1 z-20 flex items-center gap-1 px-1.5 py-0.5 bg-zinc-900/80 text-white text-[10px] font-semibold rounded shadow-sm"
+          title="Visível apenas em mobile (oculto no desktop)"
+        >
+          <span>📱 Só mobile</span>
+        </div>
+      )}
+
+      {/* Hover toolbar — horizontal pill floating at top-right of the
+          block. Positioned inside the block bounds so it never gets
+          clipped by narrow columns (the previous -right-9 version
+          drifted off-canvas when the block was in a sidebar column).
+          Klaviyo-style: always accessible on hover. */}
       <div
-        className={`absolute -right-9 top-0 flex flex-col gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5 z-20 transition-opacity ${
+        className={`absolute right-2 top-2 flex items-center gap-0.5 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg shadow-md p-1 z-20 transition-opacity ${
           isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         }`}
+        onMouseDown={(e) => e.stopPropagation()}
       >
-        <button
-          onClick={e => { e.stopPropagation(); onClone() }}
-          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-          title="Duplicar"
-        >
-          <Copy className="w-3.5 h-3.5" />
-        </button>
         {isUniversal ? (
           <button
             onClick={e => { e.stopPropagation(); onUnlink() }}
-            className="p-1.5 text-violet-500 hover:text-amber-600 hover:bg-amber-50 rounded"
+            className="p-1.5 text-violet-600 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
             title="Desvincular do bloco universal (editar só aqui)"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-3.5 h-3.5" strokeWidth={2.25} />
           </button>
         ) : (
           <button
             onClick={e => { e.stopPropagation(); onSaveAsUniversal() }}
-            className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded"
+            className="p-1.5 text-gray-500 hover:text-violet-600 hover:bg-violet-50 rounded transition-colors"
             title="Salvar como bloco universal"
           >
-            <Star className="w-3.5 h-3.5" />
+            <Star className="w-3.5 h-3.5" strokeWidth={2.25} />
           </button>
         )}
         <button
+          onClick={e => { e.stopPropagation(); onClone() }}
+          className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+          title="Duplicar"
+        >
+          <Copy className="w-3.5 h-3.5" strokeWidth={2.25} />
+        </button>
+        <button
           onClick={e => { e.stopPropagation(); onDelete() }}
-          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
+          className="p-1.5 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
           title="Excluir"
         >
-          <Trash2 className="w-3.5 h-3.5" />
+          <Trash2 className="w-3.5 h-3.5" strokeWidth={2.25} />
         </button>
       </div>
 
@@ -403,14 +429,18 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
-  // Undo/Redo — single snapshot frame array + idx as ref to avoid
-  // stale-closure race conditions when mutations fire in quick succession.
+  // Undo/Redo — frames + idx as separate state. We use a single ref to
+  // hold the "live" idx that's safe to read synchronously from any
+  // callback (avoids the setState-inside-setState antipattern that
+  // triggered React error #300 in production).
   const [history, setHistory] = useState<string[]>(() => [JSON.stringify(
     design ? migrateV1toV2(design) : DEFAULT_DOCUMENT
   )])
   const [historyIdx, setHistoryIdx] = useState(0)
   const historyIdxRef = useRef(0)
+  const historyRef = useRef<string[]>(history)
   useEffect(() => { historyIdxRef.current = historyIdx }, [historyIdx])
+  useEffect(() => { historyRef.current = history }, [history])
 
   const selectedBlock = selectedBlockId ? allBlocks(doc).find(b => b.id === selectedBlockId) || null : null
   const selectedSection = selectedSectionId ? doc.sections.find(s => s.id === selectedSectionId) || null : null
@@ -422,15 +452,16 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
 
   const pushHistory = useCallback((newDoc: EmailDocument) => {
     const json = JSON.stringify(newDoc)
-    setHistory(prev => {
-      // Drop any "future" frames after current idx, append new, cap at 40
-      const truncated = prev.slice(0, historyIdxRef.current + 1)
-      const next = [...truncated, json].slice(-40)
-      const newIdx = next.length - 1
-      historyIdxRef.current = newIdx
-      setHistoryIdx(newIdx)
-      return next
-    })
+    // Compute next frames + idx synchronously, then commit both
+    // setState calls separately. No nested updaters.
+    const prev = historyRef.current
+    const truncated = prev.slice(0, historyIdxRef.current + 1)
+    const next = [...truncated, json].slice(-40)
+    const newIdx = next.length - 1
+    historyRef.current = next
+    historyIdxRef.current = newIdx
+    setHistory(next)
+    setHistoryIdx(newIdx)
   }, [])
 
   const updateDoc = useCallback((newDoc: EmailDocument) => {
@@ -439,24 +470,28 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   }, [pushHistory])
 
   const undo = useCallback(() => {
-    setHistoryIdx(prev => {
-      if (prev <= 0) return prev
-      const next = prev - 1
-      historyIdxRef.current = next
-      setDoc(JSON.parse(history[next]))
-      return next
-    })
-  }, [history])
+    const cur = historyIdxRef.current
+    if (cur <= 0) return
+    const nextIdx = cur - 1
+    const frames = historyRef.current
+    const snapshot = frames[nextIdx]
+    if (!snapshot) return
+    historyIdxRef.current = nextIdx
+    setHistoryIdx(nextIdx)
+    try { setDoc(JSON.parse(snapshot)) } catch {}
+  }, [])
 
   const redo = useCallback(() => {
-    setHistoryIdx(prev => {
-      if (prev >= history.length - 1) return prev
-      const next = prev + 1
-      historyIdxRef.current = next
-      setDoc(JSON.parse(history[next]))
-      return next
-    })
-  }, [history])
+    const cur = historyIdxRef.current
+    const frames = historyRef.current
+    if (cur >= frames.length - 1) return
+    const nextIdx = cur + 1
+    const snapshot = frames[nextIdx]
+    if (!snapshot) return
+    historyIdxRef.current = nextIdx
+    setHistoryIdx(nextIdx)
+    try { setDoc(JSON.parse(snapshot)) } catch {}
+  }, [])
 
   // ── Selection helpers ──
   const selectBlock = useCallback((blockId: string) => {
@@ -1058,6 +1093,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                       savedBlockName={block._savedBlockName}
                                       onSaveAsUniversal={() => saveBlockAsUniversal(block.id)}
                                       onUnlink={() => unlinkUniversalBlock(block.id)}
+                                      visibility={(block.props as any)?.visibility}
                                     >
                                       <BlockPreview
                                         block={block}
