@@ -1,31 +1,38 @@
 // =============================================
-// Shopify Manual Integration API
+// Shopify Manual Integration API (Client Credentials Grant)
 // POST /api/integrations/shopify/manual
 //
-// Allows merchants to connect their Shopify store without going through
-// the public OAuth app: they create a Custom App in Shopify Admin, paste
-// the Admin API Access Token + API Secret Key, and Worder does the rest
-// (validate, register webhooks, trigger sync) — producing the exact same
-// database state as the OAuth callback so the rest of the product works
-// identically regardless of connection_type.
+// Merchant flow:
+//   1. Merchant creates a custom app in the Shopify Dev Dashboard,
+//      configures scopes, installs it on their store.
+//   2. Merchant copies Client ID + Client Secret (NOT an access token
+//      — since Jan 2026 custom apps don't expose access tokens).
+//   3. Merchant pastes { domain, clientId, clientSecret } here.
+//   4. We exchange credentials for a 24h access token via
+//      grant_type=client_credentials, persist it, and the
+//      /api/cron/shopify-token-refresh cron renews it every ~23h.
+//
+// Produces the exact same shopify_stores row shape as the OAuth
+// callback so the rest of the product (webhooks, sync, tracking)
+// doesn't care which connection_type was used.
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAccessTokenViaClientCredentials } from '@/lib/shopify/client-credentials';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const API_VERSION = '2026-01';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || '';
+const SHOPIFY_API_VERSION = '2026-01';
 
-// Required scopes for baseline Worder functionality
 const REQUIRED_SCOPES = ['read_orders', 'read_customers', 'read_products'];
 
 // 17 webhook topics — must match the OAuth callback exactly so both
 // connection modes produce identical event coverage.
-const WEBHOOK_TOPICS = [
+const REQUIRED_WEBHOOKS = [
   'orders/create', 'orders/updated', 'orders/paid', 'orders/cancelled', 'orders/fulfilled',
   'checkouts/create', 'checkouts/update',
   'customers/create', 'customers/update', 'customers/delete',
@@ -36,159 +43,145 @@ const WEBHOOK_TOPICS = [
 ];
 
 function normalizeShopDomain(input: string): string {
-  const cleaned = input.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  const cleaned = input.trim().toLowerCase().replace(/\s+/g, '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   if (cleaned.endsWith('.myshopify.com')) return cleaned;
   return `${cleaned}.myshopify.com`;
 }
 
-async function shopifyGraphQL(domain: string, token: string, query: string) {
-  const res = await fetch(`https://${domain}/admin/api/${API_VERSION}/graphql.json`, {
-    method: 'POST',
-    headers: {
-      'X-Shopify-Access-Token': token,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query }),
-  });
-  if (!res.ok) {
-    throw new Error(`Shopify API returned ${res.status}`);
-  }
-  return res.json();
-}
-
-async function shopifyREST(
-  domain: string,
-  token: string,
-  path: string,
-  init?: RequestInit
-): Promise<Response> {
-  return fetch(`https://${domain}/admin/api/${API_VERSION}${path}`, {
-    ...init,
-    headers: {
-      'X-Shopify-Access-Token': token,
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-  });
-}
-
 export async function POST(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
+
   try {
-    const auth = await getAuthClient();
-    if (!auth) return authError();
-
     const body = await request.json();
-    const { domain, accessToken, apiSecretKey } = body || {};
+    const { domain, clientId, clientSecret } = body || {};
 
-    if (!domain || !accessToken || !apiSecretKey) {
+    if (!domain || !clientId || !clientSecret) {
       return NextResponse.json(
-        { error: 'domain, accessToken e apiSecretKey são obrigatórios' },
+        { error: 'Domínio, Client ID e Client Secret são obrigatórios' },
         { status: 400 }
       );
     }
 
     const shopDomain = normalizeShopDomain(String(domain));
+    const cleanClientId = String(clientId).trim();
+    const cleanClientSecret = String(clientSecret).trim();
 
     // ──────────────────────────────────────────
-    // 1. Validate the token by pulling shop info
+    // 1. Exchange credentials for an access token
     // ──────────────────────────────────────────
-    let shopInfo: any;
+    let tokenResult;
     try {
-      const gql = await shopifyGraphQL(
+      tokenResult = await getAccessTokenViaClientCredentials(
         shopDomain,
-        String(accessToken),
-        `{
-          shop {
-            name
-            email
-            currencyCode
-            ianaTimezone
-            plan { displayName }
-          }
-        }`
+        cleanClientId,
+        cleanClientSecret
       );
-      if (gql.errors) {
-        return NextResponse.json(
-          { error: 'Access Token inválido ou sem permissão', details: gql.errors },
-          { status: 401 }
-        );
-      }
-      shopInfo = gql.data?.shop;
-      if (!shopInfo) {
-        return NextResponse.json(
-          { error: 'Não foi possível obter informações da loja. Verifique o token.' },
-          { status: 401 }
-        );
-      }
-    } catch (err: any) {
-      return NextResponse.json(
-        { error: `Falha ao conectar com a Shopify: ${err.message}` },
-        { status: 502 }
-      );
+    } catch (error: any) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
     }
+
+    const accessToken = tokenResult.access_token;
+    const grantedScopesStr = tokenResult.scope;
+    const expiresIn = tokenResult.expires_in;
+    const scopesList = grantedScopesStr
+      ? grantedScopesStr.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : [];
+
+    console.log('[Shopify Manual] Token OK. scopes=', scopesList.length, 'expires_in=', expiresIn);
 
     // ──────────────────────────────────────────
     // 2. Verify required scopes
     // ──────────────────────────────────────────
-    let scopes: string[] = [];
-    try {
-      const scopesRes = await shopifyREST(
-        shopDomain,
-        String(accessToken),
-        '/oauth/access_scopes.json'
-      );
-      if (scopesRes.ok) {
-        const scopesJson = await scopesRes.json();
-        scopes = (scopesJson.access_scopes || []).map((s: any) => s.handle);
-      }
-    } catch {
-      // Non-blocking — if Shopify fails here, carry on.
-    }
-
-    const missing = REQUIRED_SCOPES.filter((s) => !scopes.includes(s));
-    if (missing.length > 0) {
+    const missingScopes = REQUIRED_SCOPES.filter((s) => !scopesList.includes(s));
+    if (missingScopes.length > 0) {
       return NextResponse.json(
         {
-          error: `Faltam permissões no Custom App: ${missing.join(', ')}`,
-          missing,
-          scopes,
+          error: `O app não tem as permissões necessárias. Faltam: ${missingScopes.join(', ')}. Configure os escopos no Dev Dashboard e reinstale o app.`,
+          missingScopes,
+          grantedScopes: scopesList,
         },
         { status: 400 }
       );
     }
 
     // ──────────────────────────────────────────
-    // 3. Upsert the store (PARITY with OAuth callback)
+    // 3. Fetch shop info via GraphQL (name, email, currency, plan)
+    // ──────────────────────────────────────────
+    let shopName = shopDomain;
+    let shopEmail = '';
+    let currency = 'BRL';
+    let planName = '';
+    let timezone = '';
+
+    try {
+      const shopInfoRes = await fetch(
+        `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+        {
+          method: 'POST',
+          headers: {
+            'X-Shopify-Access-Token': accessToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: `{ shop { name email currencyCode timezoneAbbreviation plan { displayName } } }`,
+          }),
+        }
+      );
+
+      if (shopInfoRes.ok) {
+        const shopInfo = await shopInfoRes.json();
+        const s = shopInfo.data?.shop;
+        if (s) {
+          shopName = s.name || shopDomain;
+          shopEmail = s.email || '';
+          currency = s.currencyCode || 'BRL';
+          planName = s.plan?.displayName || '';
+          timezone = s.timezoneAbbreviation || '';
+        }
+      }
+    } catch (err) {
+      console.warn('[Shopify Manual] Failed to get shop info:', err);
+    }
+
+    // ──────────────────────────────────────────
+    // 4. Upsert the store
     // ──────────────────────────────────────────
     const supabase = getSupabaseAdmin();
+    const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    // Has this org/shop already connected? Update in place rather than
-    // duplicating rows.
-    const { data: existing } = await supabase
+    const { data: existingStore } = await supabase
       .from('shopify_stores')
       .select('id')
-      .eq('organization_id', auth.user.organization_id)
+      .eq('organization_id', organizationId)
       .eq('shop_domain', shopDomain)
       .maybeSingle();
 
-    const baseRow: Record<string, any> = {
-      organization_id: auth.user.organization_id,
+    const storeRecord: Record<string, any> = {
+      organization_id: organizationId,
       shop_domain: shopDomain,
-      shop_name: shopInfo.name,
-      shop_email: shopInfo.email || null,
+      shop_name: shopName,
+      shop_email: shopEmail,
       access_token: accessToken,
-      api_secret: apiSecretKey,
-      webhook_secret: apiSecretKey,
-      currency: shopInfo.currencyCode || 'BRL',
-      plan_name: shopInfo.plan?.displayName || null,
-      api_version: API_VERSION,
-      scopes,
+      // api_secret holds the Client Secret — used to:
+      //  (a) verify HMAC on inbound webhooks, and
+      //  (b) refresh the access token every ~23h.
+      api_secret: cleanClientSecret,
+      client_id: cleanClientId,
+      currency,
+      timezone,
+      plan_name: planName,
+      api_version: SHOPIFY_API_VERSION,
+      scopes: scopesList,
       is_active: true,
       status: 'active',
       connection_type: 'manual',
       installed_at: new Date().toISOString(),
       last_sync_at: new Date().toISOString(),
+      token_expires_at: tokenExpiresAt,
       pixel_installed: false,
+      webhook_secret: cleanClientSecret,
       embed_installed: false,
       settings: {
         theme_editor_url: `https://${shopDomain}/admin/themes/current/editor?context=apps`,
@@ -197,61 +190,63 @@ export async function POST(request: NextRequest) {
     };
 
     let storeId: string;
-    if (existing?.id) {
-      const { data: updated, error: updErr } = await supabase
+    if (existingStore) {
+      const { error: updErr } = await supabase
         .from('shopify_stores')
-        .update(baseRow)
-        .eq('id', existing.id)
-        .select('id')
-        .single();
+        .update(storeRecord)
+        .eq('id', existingStore.id);
       if (updErr) throw updErr;
-      storeId = updated!.id;
+      storeId = existingStore.id;
     } else {
-      const { data: inserted, error: insErr } = await supabase
+      const { data: newStore, error: insErr } = await supabase
         .from('shopify_stores')
-        .insert(baseRow)
+        .insert(storeRecord)
         .select('id')
         .single();
       if (insErr) throw insErr;
-      storeId = inserted!.id;
+      storeId = newStore!.id;
     }
 
     // ──────────────────────────────────────────
-    // 4. Register webhooks (REST API)
-    //    Skip topics that already exist for this store.
+    // 5. Register 17 webhooks (skip any that already exist for this URL)
     // ──────────────────────────────────────────
     const webhookUrl = `${APP_URL}/api/webhooks/shopify`;
-    let created = 0;
-    let existingCount = 0;
-    let failed = 0;
-
     let existingTopics: string[] = [];
     try {
-      const listRes = await shopifyREST(shopDomain, String(accessToken), '/webhooks.json');
+      const listRes = await fetch(
+        `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`,
+        { headers: { 'X-Shopify-Access-Token': accessToken } }
+      );
       if (listRes.ok) {
-        const listJson = await listRes.json();
-        existingTopics = (listJson.webhooks || [])
+        const json = await listRes.json();
+        existingTopics = (json.webhooks || [])
           .filter((w: any) => w.address === webhookUrl)
           .map((w: any) => w.topic);
       }
-    } catch { /* fall through */ }
+    } catch { /* best-effort */ }
 
-    for (const topic of WEBHOOK_TOPICS) {
+    let created = 0;
+    let existingCount = 0;
+    let failed = 0;
+    for (const topic of REQUIRED_WEBHOOKS) {
       if (existingTopics.includes(topic)) {
         existingCount++;
         continue;
       }
       try {
-        const res = await shopifyREST(shopDomain, String(accessToken), '/webhooks.json', {
-          method: 'POST',
-          body: JSON.stringify({
-            webhook: {
-              topic,
-              address: webhookUrl,
-              format: 'json',
+        const res = await fetch(
+          `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': accessToken,
             },
-          }),
-        });
+            body: JSON.stringify({
+              webhook: { topic, address: webhookUrl, format: 'json' },
+            }),
+          }
+        );
         if (res.ok) created++;
         else failed++;
       } catch {
@@ -260,7 +255,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ──────────────────────────────────────────
-    // 5. Trigger initial sync (fire-and-forget)
+    // 6. Trigger initial sync (fire-and-forget)
     // ──────────────────────────────────────────
     let syncTriggered = false;
     try {
@@ -276,15 +271,21 @@ export async function POST(request: NextRequest) {
       success: true,
       store: {
         id: storeId,
-        name: shopInfo.name,
+        name: shopName,
         domain: shopDomain,
-        email: shopInfo.email,
-        currency: shopInfo.currencyCode,
-        plan: shopInfo.plan?.displayName,
+        email: shopEmail,
+        currency,
+        plan: planName,
       },
-      scopes,
+      token: {
+        obtained: true,
+        expiresIn,
+        expiresAt: tokenExpiresAt,
+        autoRefresh: true,
+      },
+      scopes: scopesList,
       webhooks: {
-        total: WEBHOOK_TOPICS.length,
+        total: REQUIRED_WEBHOOKS.length,
         created,
         existing: existingCount,
         failed,

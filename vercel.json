@@ -27,6 +27,10 @@
     {
       "path": "/api/workers/abandoned-cart",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/shopify-token-refresh",
+      "schedule": "0 */23 * * *"
     }
   ]
 }

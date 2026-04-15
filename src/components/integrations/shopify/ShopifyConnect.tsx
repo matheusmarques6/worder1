@@ -46,8 +46,8 @@ export default function ShopifyConnect() {
   // while the public app is still pending Shopify Partner approval.
   const [mode, setMode] = useState<'official' | 'manual'>('manual');
   const [manualDomain, setManualDomain] = useState('');
-  const [manualToken, setManualToken] = useState('');
-  const [manualSecret, setManualSecret] = useState('');
+  const [manualClientId, setManualClientId] = useState('');
+  const [manualClientSecret, setManualClientSecret] = useState('');
   const [manualConnecting, setManualConnecting] = useState(false);
   const [manualResult, setManualResult] = useState<any>(null);
   const [pixelCode, setPixelCode] = useState<string | null>(null);
@@ -156,8 +156,8 @@ export default function ShopifyConnect() {
 
   async function handleManualConnect() {
     const domain = manualDomain.trim();
-    if (!domain || !manualToken.trim() || !manualSecret.trim()) {
-      setError('Preencha domínio, Access Token e API Secret Key.');
+    if (!domain || !manualClientId.trim() || !manualClientSecret.trim()) {
+      setError('Preencha domínio, Client ID e Client Secret.');
       return;
     }
     setManualConnecting(true);
@@ -171,8 +171,8 @@ export default function ShopifyConnect() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           domain,
-          accessToken: manualToken.trim(),
-          apiSecretKey: manualSecret.trim(),
+          clientId: manualClientId.trim(),
+          clientSecret: manualClientSecret.trim(),
         }),
       });
       const data = await res.json();
@@ -431,11 +431,9 @@ export default function ShopifyConnect() {
       ) : (
         <>
           <p className="text-xs text-gray-500 -mt-2">
-            Cole as credenciais de um Custom App criado no admin da Shopify. Ideal enquanto
-            o app oficial está em aprovação. {' '}
-            <a href="https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/generate-admin-api-access-tokens" target="_blank" rel="noreferrer" className="text-[#95BF47] hover:underline">
-              Como criar →
-            </a>
+            Crie um app no <a href="https://dev.shopify.com" target="_blank" rel="noreferrer" className="text-[#95BF47] hover:underline">Shopify Dev Dashboard</a>,
+            configure os escopos, instale na loja e cole aqui o Client ID + Client Secret.
+            A Worder gera o access token automaticamente via <code className="text-[11px] px-1 py-0.5 bg-gray-100 rounded">client_credentials</code>.
           </p>
 
           <div>
@@ -450,34 +448,36 @@ export default function ShopifyConnect() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Admin API Access Token</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Client ID</label>
             <input
-              type="password"
-              value={manualToken}
-              onChange={(e) => setManualToken(e.target.value)}
-              placeholder="shpat_..."
+              type="text"
+              value={manualClientId}
+              onChange={(e) => setManualClientId(e.target.value)}
+              placeholder="copiado do Dev Dashboard"
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-[#95BF47] focus:border-[#95BF47] outline-none"
               autoComplete="off"
             />
-            <p className="text-xs text-gray-400 mt-1">Obtido em Apps → Custom App → Credenciais da API</p>
+            <p className="text-xs text-gray-400 mt-1">Dev Dashboard → seu app → Configurações → ID do cliente</p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">API Secret Key</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Client Secret</label>
             <input
               type="password"
-              value={manualSecret}
-              onChange={(e) => setManualSecret(e.target.value)}
-              placeholder="shpss_..."
+              value={manualClientSecret}
+              onChange={(e) => setManualClientSecret(e.target.value)}
+              placeholder="copiada do Dev Dashboard"
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-[#95BF47] focus:border-[#95BF47] outline-none"
               autoComplete="off"
             />
-            <p className="text-xs text-gray-400 mt-1">Necessária para validar webhooks (HMAC)</p>
+            <p className="text-xs text-gray-400 mt-1">
+              A Worder gera o access token a partir do Client Secret e renova automaticamente a cada 24h.
+            </p>
           </div>
 
           <button
             onClick={handleManualConnect}
-            disabled={manualConnecting || !manualDomain.trim() || !manualToken.trim() || !manualSecret.trim()}
+            disabled={manualConnecting || !manualDomain.trim() || !manualClientId.trim() || !manualClientSecret.trim()}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#95BF47] text-white rounded-lg hover:bg-[#7da03a] disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
           >
             {manualConnecting ? (
@@ -490,6 +490,11 @@ export default function ShopifyConnect() {
           {manualResult && (
             <div className="space-y-3 pt-3 border-t border-gray-100">
               <StatusLine label="Loja conectada" ok detail={manualResult.store?.name || '—'} />
+              <StatusLine
+                label="Token de acesso"
+                ok={!!manualResult.token?.obtained}
+                detail={manualResult.token?.obtained ? 'Gerado (renovação automática a cada 24h)' : '—'}
+              />
               <StatusLine
                 label="Webhooks configurados"
                 ok={manualResult.webhooks?.created + manualResult.webhooks?.existing > 0}
