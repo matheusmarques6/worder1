@@ -9,8 +9,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { enqueue, isQueueAvailable } from '@/lib/queue/durable-queue';
 
 const BATCH_SIZE = 50;
+const QUEUE_NAME = 'email-send-batch';
 
 export async function POST(request: NextRequest) {
   try {
@@ -130,37 +132,64 @@ export async function POST(request: NextRequest) {
       batches.push(contacts.slice(i, i + BATCH_SIZE));
     }
 
-    // Fire all batches as background requests (non-blocking)
+    // Enfileira todos os batches (Upstash Redis durable queue).
+    // Throttle: 5 batches por segundo (respeita limite 100 emails/s Resend com batch=50 = 250emails/s máx).
+    const useQueue = isQueueAvailable();
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
 
-    for (let i = 0; i < batches.length; i++) {
-      fetch(`${baseUrl}/api/email/campaigns/send-batch`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Internal': 'true',
-        },
-        body: JSON.stringify({
-          campaign_id,
-          contact_ids: batches[i].map((c: any) => c.id),
-          batch_number: i + 1,
-          total_batches: batches.length,
-          organizationId: user.organization_id,
-        }),
-      }).catch((err) =>
-        console.error(`[SendCampaign] Batch ${i + 1} failed to queue:`, err)
+    if (useQueue) {
+      for (let i = 0; i < batches.length; i++) {
+        const delayMs = Math.floor(i / 5) * 1000; // staircase throttle: 5 batches por segundo
+        await enqueue(
+          QUEUE_NAME,
+          {
+            campaign_id,
+            contact_ids: batches[i].map((c: any) => c.id),
+            batch_number: i + 1,
+            total_batches: batches.length,
+            organizationId: user.organization_id,
+          },
+          {
+            jobId: `campaign:${campaign_id}:batch:${i + 1}`,
+            delayMs,
+            maxAttempts: 5,
+          }
+        );
+      }
+      console.log(
+        `[SendCampaign] Campaign ${campaign_id} enqueued: ${contacts.length} contacts in ${batches.length} batches (durable queue, throttled)`
       );
+    } else {
+      // Fallback sem Redis: dispara em paralelo com pequeno delay entre batches
+      console.warn('[SendCampaign] Redis not configured, using fire-and-forget fallback');
+      for (let i = 0; i < batches.length; i++) {
+        const delayMs = Math.floor(i / 5) * 1000;
+        setTimeout(() => {
+          fetch(`${baseUrl}/api/email/campaigns/send-batch`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Internal': 'true',
+            },
+            body: JSON.stringify({
+              campaign_id,
+              contact_ids: batches[i].map((c: any) => c.id),
+              batch_number: i + 1,
+              total_batches: batches.length,
+              organizationId: user.organization_id,
+            }),
+          }).catch((err) =>
+            console.error(`[SendCampaign] Batch ${i + 1} failed to queue:`, err)
+          );
+        }, delayMs);
+      }
     }
 
-    console.log(
-      `[SendCampaign] Campaign ${campaign_id} queued: ${contacts.length} contacts in ${batches.length} batches`
-    );
-
-    // Return immediately
     return NextResponse.json({
       queued: true,
       totalContacts: contacts.length,
       batches: batches.length,
+      durable: useQueue,
     });
   } catch (error) {
     console.error('[SendCampaign] Error:', error);

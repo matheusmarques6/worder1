@@ -6,6 +6,13 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { VariableContext, variableEngine, createExecutionContext } from './variable-engine';
 import { nodeExecutors, NodeExecutionResult } from './node-executors';
+import {
+  withNodeTimeout,
+  timeoutForNodeType,
+  withCircuit,
+  CircuitOpenError,
+  NodeTimeoutError,
+} from './node-timeout';
 
 // ============================================
 // TYPES
@@ -179,17 +186,28 @@ export class ExecutionEngine {
             credentials = await this.getCredentials(node.data.credentialId);
           }
 
-          // Execute the node
+          // Execute the node com timeout + circuit breaker por automação
           // ⚠️ CRÍTICO: Passar organizationId para isolamento
-          const result = await executor.execute({
-            node,
-            config: processedConfig,
-            context,
-            credentials,
-            supabase: this.supabase,
-            isTest: this.isTest,
-            organizationId: options.organizationId || (context as any).organizationId,
-          });
+          const timeoutMs = timeoutForNodeType(nodeType);
+          const circuitKey = `automation:${workflow.id}`;
+          const result = await withCircuit(
+            circuitKey,
+            () =>
+              withNodeTimeout(
+                node.id,
+                timeoutMs,
+                executor.execute({
+                  node,
+                  config: processedConfig,
+                  context,
+                  credentials,
+                  supabase: this.supabase,
+                  isTest: this.isTest,
+                  organizationId: options.organizationId || (context as any).organizationId,
+                })
+              ),
+            { threshold: 5, cooldownMs: 60_000 }
+          );
 
           nodeResults[node.id] = {
             ...result,
@@ -226,12 +244,33 @@ export class ExecutionEngine {
           }
 
         } catch (nodeError: any) {
+          const isTimeout = nodeError instanceof NodeTimeoutError;
+          const isCircuitOpen = nodeError instanceof CircuitOpenError;
+
           nodeResults[node.id] = {
             status: 'error',
             output: null,
             error: nodeError.message,
             duration: Date.now() - nodeStartTime,
+            ...(isTimeout ? { timedOut: true } : {}),
+            ...(isCircuitOpen ? { circuitOpen: true } : {}),
           };
+
+          // Circuit breaker aberto → para imediatamente para não queimar recursos
+          if (isCircuitOpen) {
+            return this.createResult(executionId, 'error', startedAt, nodeResults, context, {
+              error: `Circuit breaker aberto: muitas falhas consecutivas. ${nodeError.message}`,
+              errorNodeId: node.id,
+            });
+          }
+
+          // Timeout → sempre para (evita deixar run em 'running' para sempre)
+          if (isTimeout) {
+            return this.createResult(executionId, 'error', startedAt, nodeResults, context, {
+              error: nodeError.message,
+              errorNodeId: node.id,
+            });
+          }
 
           if (workflow.settings?.errorHandling === 'stop') {
             return this.createResult(executionId, 'error', startedAt, nodeResults, context, {

@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, Workflow } from '@/lib/automation/execution-engine';
+import { claimRun, releaseRun, withHeartbeat } from '@/lib/automation/run-lock';
 export const dynamic = 'force-dynamic';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -77,6 +78,14 @@ export async function GET(request: NextRequest) {
 
     for (const run of pendingRuns) {
       try {
+        // ✅ Lock optimista: só 1 worker processa cada run
+        const lock = await claimRun(run.id);
+        if (!lock) {
+          // Outro worker pegou — pula silenciosamente
+          results.push({ runId: run.id, success: false, skipped: true, reason: 'locked_by_another_worker' });
+          continue;
+        }
+
         // Buscar automação
         const { data: automation, error: autoError } = await supabase
           .from('automations')
@@ -86,29 +95,20 @@ export async function GET(request: NextRequest) {
 
         if (autoError || !automation) {
           console.error(`[AutoProcess] Automation not found for run ${run.id}`);
-          await markRunFailed(supabase, run.id, 'Automation not found');
+          await releaseRun(run.id, lock.token, 'failed', 'Automation not found');
           results.push({ runId: run.id, success: false, error: 'Automation not found' });
           continue;
         }
 
         if (automation.status !== 'active') {
           console.log(`[AutoProcess] Automation ${automation.id} not active`);
-          await supabase
-            .from('automation_runs')
-            .update({ status: 'cancelled', completed_at: new Date().toISOString(), last_error: 'Automation not active' })
-            .eq('id', run.id);
+          await releaseRun(run.id, lock.token, 'cancelled', 'Automation not active');
           results.push({ runId: run.id, success: false, error: 'Automation not active' });
           continue;
         }
 
-        // Atualizar para running
-        await supabase
-          .from('automation_runs')
-          .update({ status: 'running' })
-          .eq('id', run.id);
-
         // Buscar contact
-        let contact;
+        let contact: any;
         if (run.contact_id) {
           const { data: c } = await supabase
             .from('contacts')
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
 
         // Buscar deal
         const metadata = run.metadata || {};
-        let deal;
+        let deal: any;
         if (metadata.deal_id) {
           const { data: d } = await supabase
             .from('deals')
@@ -155,40 +155,48 @@ export async function GET(request: NextRequest) {
 
         console.log(`[AutoProcess] Executing run ${run.id} with ${workflow.nodes.length} nodes, hasDeal=${!!deal}`);
 
-        const result = await executeWorkflow(workflow, {
-          organizationId: automation.organization_id,
-          executionId: run.id,
-          triggerData: metadata.trigger_data || {},
-          contactId: run.contact_id,
-          dealId: metadata.deal_id,
-          context: {
+        // Executa com heartbeat periódico (lock não expira durante execução longa)
+        const result = await withHeartbeat(run.id, lock.token, () =>
+          executeWorkflow(workflow, {
             organizationId: automation.organization_id,
-            contact: contact ? {
-              id: contact.id,
-              email: contact.email,
-              phone: contact.phone,
-              firstName: contact.first_name,
-              lastName: contact.last_name,
-              name: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email,
-              tags: contact.tags || [],
-              customFields: contact.custom_fields || {},
-              createdAt: contact.created_at,
-              updatedAt: contact.updated_at,
-            } : undefined,
-            deal,
-            trigger: metadata.trigger_data || {},
-          },
-        });
-
-        // Atualizar run
-        await supabase
-          .from('automation_runs')
-          .update({
-            status: result.status === 'waiting' ? 'waiting' : (result.status === 'success' ? 'completed' : 'failed'),
-            completed_at: result.status !== 'waiting' ? new Date().toISOString() : null,
-            last_error: result.error || null,
+            executionId: run.id,
+            triggerData: metadata.trigger_data || {},
+            contactId: run.contact_id,
+            dealId: metadata.deal_id,
+            context: {
+              organizationId: automation.organization_id,
+              contact: contact ? {
+                id: contact.id,
+                email: contact.email,
+                phone: contact.phone,
+                firstName: contact.first_name,
+                lastName: contact.last_name,
+                name: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email,
+                tags: contact.tags || [],
+                customFields: contact.custom_fields || {},
+                createdAt: contact.created_at,
+                updatedAt: contact.updated_at,
+              } : undefined,
+              deal,
+              trigger: metadata.trigger_data || {},
+            },
           })
-          .eq('id', run.id);
+        );
+
+        // Liberar lock com status final
+        const finalStatus =
+          result.status === 'waiting' ? 'waiting' :
+          result.status === 'success' ? 'completed' :
+          result.status === 'cancelled' ? 'cancelled' :
+          'failed';
+
+        await releaseRun(
+          run.id,
+          lock.token,
+          finalStatus as any,
+          result.error || null,
+          { nodeResults: result.nodeResults } as any
+        );
 
         results.push({
           runId: run.id,
@@ -200,6 +208,7 @@ export async function GET(request: NextRequest) {
 
       } catch (error: any) {
         console.error(`[AutoProcess] Error on run ${run.id}:`, error);
+        // Falhou — libera com status failed. Se ainda temos o token, usa; senão força via markRunFailed.
         await markRunFailed(supabase, run.id, error.message);
         results.push({ runId: run.id, success: false, error: error.message });
       }

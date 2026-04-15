@@ -35,6 +35,14 @@
     {
       "path": "/api/cron/recompute-segments",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/email-queue-worker",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/reclaim-stale-runs",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
