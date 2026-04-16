@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { assertDebugAllowed } from '@/lib/debug-guard';
 import { getSupabaseClient } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,7 @@ async function shopifyFetch(shopDomain: string, accessToken: string, endpoint: s
 }
 
 export async function GET(request: NextRequest) {
+  const blocked = assertDebugAllowed(request); if (blocked) return blocked;
   const { searchParams } = new URL(request.url);
   const storeId = searchParams.get('storeId');
   const period = searchParams.get('period') || 'today';

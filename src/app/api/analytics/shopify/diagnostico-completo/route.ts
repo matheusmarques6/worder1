@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { assertDebugAllowed } from '@/lib/debug-guard';
 import { getSupabaseClient } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
@@ -265,6 +266,7 @@ async function analyzeOnePeriod(
 }
 
 export async function GET(request: NextRequest) {
+  const blocked = assertDebugAllowed(request); if (blocked) return blocked;
   const { searchParams } = new URL(request.url);
   const storeId = searchParams.get('storeId');
   const periodos = searchParams.get('periodos')?.split(',') || ['yesterday', 'today', '7d', '30d'];
