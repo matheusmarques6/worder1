@@ -120,7 +120,14 @@ export default function SettingsEmailPage() {
       if (!res.ok) {
         showToast(data.error || 'Falha ao verificar', 'error')
       } else {
-        showToast('Status atualizado')
+        const status = data.domain?.status || data.resend?.status || 'pending'
+        if (status === 'verified') {
+          showToast('Domínio verificado com sucesso!')
+        } else if (status === 'failed') {
+          showToast('Verificação falhou. Confira os registros DNS.', 'error')
+        } else {
+          showToast('Verificação iniciada. Aguarde alguns minutos e tente novamente.')
+        }
         loadDomains()
       }
     } catch {

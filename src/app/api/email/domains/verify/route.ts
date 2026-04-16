@@ -1,14 +1,11 @@
 // =============================================
 // WORDER: Verify Email Domain
-// /src/app/api/email/domains/verify/route.ts
-//
-// POST: trigger domain verification via Resend.
+// POST: trigger domain verification via Resend REST API.
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { verifyDomain, getDomain } from '@/lib/email/resend';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +19,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'domainId is required' }, { status: 400 });
     }
 
-    // Get domain from our DB
     const { data: dbDomain, error: fetchError } = await supabaseAdmin
       .from('email_domains')
       .select('*')
@@ -35,33 +31,78 @@ export async function POST(request: NextRequest) {
     }
 
     if (!dbDomain.resend_domain_id) {
-      return NextResponse.json({ error: 'Domain has no Resend ID' }, { status: 400 });
+      return NextResponse.json({ error: 'Domain has no Resend ID. Re-add the domain.' }, { status: 400 });
     }
 
-    // Trigger verification in Resend
-    await verifyDomain(dbDomain.resend_domain_id);
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: 'RESEND_API_KEY not configured' }, { status: 500 });
+    }
 
-    // Get updated status from Resend
-    const resendDomain = await getDomain(dbDomain.resend_domain_id);
+    const resendId = dbDomain.resend_domain_id;
 
-    // Update our DB
+    // 1. Trigger verify
+    const verifyRes = await fetch(`https://api.resend.com/domains/${resendId}/verify`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    // Verify pode retornar 200 ou 400 se já verificado — ambos OK
+    const verifyBody = await verifyRes.json().catch(() => ({}));
+
+    // 2. Get domain status atualizado
+    const getRes = await fetch(`https://api.resend.com/domains/${resendId}`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+
+    if (!getRes.ok) {
+      const errBody = await getRes.json().catch(() => ({}));
+      return NextResponse.json({
+        error: `Failed to get domain status: ${getRes.status}`,
+        details: errBody,
+      }, { status: 500 });
+    }
+
+    const resendDomain = await getRes.json();
+
+    // 3. Mapear status Resend → nosso schema
+    // Resend retorna: not_started | pending | verified | failed | temporary_failure
+    const resendStatus = String(resendDomain.status || '').toLowerCase();
+    let ourStatus: 'pending' | 'verified' | 'failed' = 'pending';
+    if (resendStatus === 'verified') ourStatus = 'verified';
+    else if (resendStatus === 'failed' || resendStatus === 'temporary_failure') ourStatus = 'failed';
+
+    // 4. Extrair DNS records do Resend (pode estar em .records ou .dns)
+    const dnsRecords = resendDomain.records || resendDomain.dns || dbDomain.dns_records || [];
+
+    // 5. Update DB
+    const updates: Record<string, any> = {
+      status: ourStatus,
+      dns_records: dnsRecords,
+    };
+    if (ourStatus === 'verified') {
+      updates.verified_at = new Date().toISOString();
+    }
+
     const { data: updatedDomain, error: updateError } = await supabaseAdmin
       .from('email_domains')
-      .update({
-        status: resendDomain?.status || 'pending',
-        dns_records: resendDomain?.records || dbDomain.dns_records,
-        verified_at: resendDomain?.status === 'verified' ? new Date().toISOString() : null,
-      })
+      .update(updates)
       .eq('id', domainId)
+      .eq('organization_id', user.organization_id)
       .select()
       .single();
 
     if (updateError) {
-      console.error('[VerifyDomain] Error updating domain:', updateError);
-      return NextResponse.json({ error: 'Failed to update domain' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to update domain in DB' }, { status: 500 });
     }
 
-    return NextResponse.json({ domain: updatedDomain });
+    return NextResponse.json({
+      domain: updatedDomain,
+      resend: {
+        status: resendDomain.status,
+        region: resendDomain.region,
+        created_at: resendDomain.created_at,
+      },
+    });
   } catch (error: any) {
     console.error('[VerifyDomain] Error:', error);
     return NextResponse.json(

@@ -6,8 +6,7 @@ import { cn } from '@/lib/utils'
 const tabs = [
   { title: 'Conta', href: '/settings/account' },
   { title: 'Faturamento', href: '/settings/billing' },
-  { title: 'E-mail', href: '/settings' },
-  { title: 'Domínios', href: '/settings/email' },
+  { title: 'E-mail & Domínios', href: '/settings/email' },
   { title: 'Rastreamento', href: '/settings/tracking' },
   { title: 'Atribuição', href: '/settings/attribution' },
   { title: 'Dados & LGPD', href: '/settings/lgpd' },
