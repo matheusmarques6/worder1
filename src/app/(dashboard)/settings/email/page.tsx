@@ -20,6 +20,7 @@ import {
   Shield,
   Loader2,
   Trash2,
+  Zap,
 } from 'lucide-react'
 
 interface DnsRecord {
@@ -328,6 +329,69 @@ export default function SettingsEmailPage() {
           })
         )}
       </div>
+
+      {/* Webhook Resend */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <div className="px-6 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-[#FF6A2B]" />
+            <h2 className="text-base font-semibold text-gray-900">Webhook de Tracking</h2>
+          </div>
+          <p className="text-sm text-gray-500 mt-1 leading-relaxed">
+            Registre o webhook do Resend para receber eventos de bounce, abertura, clique e reclamação automaticamente.
+          </p>
+        </div>
+        <div className="p-6">
+          <WebhookResendButton />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function WebhookResendButton() {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  const [message, setMessage] = useState('')
+
+  const handleRegister = async () => {
+    setStatus('loading')
+    try {
+      const res = await fetch('/api/email/webhooks/register', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        setStatus('error')
+        setMessage(data.error || 'Erro')
+      } else {
+        setStatus('done')
+        setMessage(data.message || 'Webhook registrado com sucesso')
+      }
+    } catch {
+      setStatus('error')
+      setMessage('Erro de conexão')
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-4">
+      <button
+        onClick={handleRegister}
+        disabled={status === 'loading'}
+        className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FF6A2B] text-white text-sm font-medium rounded-lg hover:bg-[#E85D1F] disabled:opacity-50 transition-colors"
+      >
+        {status === 'loading' ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : status === 'done' ? (
+          <CheckCircle className="w-4 h-4" />
+        ) : (
+          <Zap className="w-4 h-4" />
+        )}
+        {status === 'done' ? 'Registrado' : 'Registrar Webhook'}
+      </button>
+      {message && (
+        <span className={`text-sm ${status === 'error' ? 'text-red-600' : 'text-emerald-600'}`}>
+          {message}
+        </span>
+      )}
     </div>
   )
 }

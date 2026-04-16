@@ -128,6 +128,19 @@ export async function POST(request: NextRequest) {
     if (reply_to) insertData.reply_to = reply_to
     if (segment_id) insertData.segment_id = segment_id
     if (store_id) insertData.store_id = store_id
+    // A/B test fields
+    if (body.ab_test_enabled) {
+      insertData.ab_test_enabled = true
+      insertData.ab_test_percent = body.ab_test_percent ?? 50
+      insertData.ab_variant_b = body.ab_variant_b || null
+      insertData.ab_winner_metric = body.ab_winner_metric || 'open_rate'
+      insertData.ab_duration_hours = body.ab_duration_hours ?? 4
+    }
+    // Agendamento
+    if (body.scheduled_at) {
+      insertData.scheduled_at = body.scheduled_at
+      insertData.status = 'scheduled'
+    }
 
     const { data: campaign, error } = await supabaseAdmin
       .from('email_campaigns')

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star } from 'lucide-react'
+import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star, RotateCcw } from 'lucide-react'
 import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, useDroppable, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -35,7 +35,7 @@ interface WorderEmailEditorProps {
 // ── Sortable Block Wrapper (drag from anywhere on the block) ──
 function SortableBlock({
   blockId, children, isSelected, onSelect, onClone, onDelete,
-  isUniversal, savedBlockName, onSaveAsUniversal, onUnlink,
+  isUniversal, savedBlockName, savedBlockId, onSaveAsUniversal, onUnlink, onShowVersions,
 }: {
   blockId: string;
   children: React.ReactNode;
@@ -45,8 +45,10 @@ function SortableBlock({
   onDelete: () => void;
   isUniversal: boolean;
   savedBlockName?: string;
+  savedBlockId?: string;
   onSaveAsUniversal: () => void;
   onUnlink: () => void;
+  onShowVersions?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: blockId,
@@ -86,13 +88,24 @@ function SortableBlock({
           <Copy className="w-3.5 h-3.5" />
         </button>
         {isUniversal ? (
-          <button
-            onClick={e => { e.stopPropagation(); onUnlink() }}
-            className="p-1.5 text-violet-500 hover:text-amber-600 hover:bg-amber-50 rounded"
-            title="Desvincular do bloco universal (editar só aqui)"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+          <>
+            <button
+              onClick={e => { e.stopPropagation(); onUnlink() }}
+              className="p-1.5 text-violet-500 hover:text-amber-600 hover:bg-amber-50 rounded"
+              title="Desvincular do bloco universal (editar só aqui)"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+            {onShowVersions && (
+              <button
+                onClick={e => { e.stopPropagation(); onShowVersions() }}
+                className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded"
+                title="Histórico de versões"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </>
         ) : (
           <button
             onClick={e => { e.stopPropagation(); onSaveAsUniversal() }}
@@ -395,6 +408,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const [showFlowPreview, setShowFlowPreview] = useState(false)
   const [showMergeTags, setShowMergeTags] = useState(false)
   const [showSendTest, setShowSendTest] = useState(false)
+  const [versionsModal, setVersionsModal] = useState<{ blockId: string; savedBlockId: string } | null>(null)
   const [showSaveBlockModal, setShowSaveBlockModal] = useState(false)
   const [showColumnModal, setShowColumnModal] = useState(false)
   const [columnModalCols, setColumnModalCols] = useState(2)
@@ -1059,8 +1073,10 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                       onDelete={() => removeBlock(block.id)}
                                       isUniversal={!!block._savedBlockId}
                                       savedBlockName={block._savedBlockName}
+                                      savedBlockId={block._savedBlockId}
                                       onSaveAsUniversal={() => saveBlockAsUniversal(block.id)}
                                       onUnlink={() => unlinkUniversalBlock(block.id)}
+                                      onShowVersions={block._savedBlockId ? () => setVersionsModal({ blockId: block.id, savedBlockId: block._savedBlockId! }) : undefined}
                                     >
                                       <BlockPreview
                                         block={block}
@@ -1280,6 +1296,90 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           </div>
         </div>
       )}
+
+      {/* ── Saved Block Versions Modal ── */}
+      {versionsModal && (
+        <SavedBlockVersionsModal
+          savedBlockId={versionsModal.savedBlockId}
+          onClose={() => setVersionsModal(null)}
+          onRestored={() => {
+            setVersionsModal(null)
+            if (typeof window !== 'undefined') window.location.reload()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function SavedBlockVersionsModal({ savedBlockId, onClose, onRestored }: {
+  savedBlockId: string; onClose: () => void; onRestored: () => void
+}) {
+  const [versions, setVersions] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [restoring, setRestoring] = useState<number | null>(null)
+
+  useEffect(() => {
+    fetch(`/api/email/saved-blocks/${savedBlockId}/versions`)
+      .then(r => r.json())
+      .then(d => setVersions(d.versions || []))
+      .finally(() => setLoading(false))
+  }, [savedBlockId])
+
+  const restore = async (version: number) => {
+    if (!confirm(`Restaurar versão ${version}? A versão atual será preservada como snapshot.`)) return
+    setRestoring(version)
+    try {
+      const res = await fetch(`/api/email/saved-blocks/${savedBlockId}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version }),
+      })
+      if (res.ok) onRestored()
+    } finally { setRestoring(null) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-[520px] max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">Histórico de versões</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Clique em Restaurar para reverter para uma versão anterior.</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="p-12 text-center"><Loader2 className="w-5 h-5 animate-spin text-gray-400 mx-auto" /></div>
+          ) : versions.length === 0 ? (
+            <div className="p-12 text-center text-sm text-gray-500">Nenhuma versão anterior salva.</div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {versions.map((v: any) => (
+                <div key={v.id} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Versão {v.version}</p>
+                    <p className="text-xs text-gray-500">
+                      {new Date(v.created_at).toLocaleString('pt-BR')}
+                      {v.comment && ` — ${v.comment}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => restore(v.version)}
+                    disabled={restoring === v.version}
+                    className="text-xs font-medium text-violet-600 hover:text-violet-700 px-3 py-1.5 rounded-lg hover:bg-violet-50 disabled:opacity-50"
+                  >
+                    {restoring === v.version ? 'Restaurando...' : 'Restaurar'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

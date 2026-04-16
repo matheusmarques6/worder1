@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useStoreStore } from '@/stores'
+import ABTestPanel, { type ABTestConfig } from '@/components/email/ABTestPanel'
 
 interface Template {
   id: string
@@ -62,6 +63,15 @@ export default function NewCampaignPage() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [senderName, setSenderName] = useState('')
   const [senderEmail, setSenderEmail] = useState('')
+
+  // Step 3.5 - A/B Test
+  const [abConfig, setAbConfig] = useState<ABTestConfig>({
+    enabled: false,
+    percent: 50,
+    variantB: null,
+    winner_metric: 'open_rate',
+    duration_hours: 4,
+  })
 
   // Step 4 - Schedule
   const [sendType, setSendType] = useState<'now' | 'schedule'>('now')
@@ -155,6 +165,12 @@ export default function NewCampaignPage() {
           sender_email: senderEmail,
           store_id: currentStore,
           scheduled_at: sendType === 'schedule' ? scheduledAt : null,
+          // A/B test
+          ab_test_enabled: abConfig.enabled,
+          ab_test_percent: abConfig.percent,
+          ab_variant_b: abConfig.enabled ? abConfig.variantB : null,
+          ab_winner_metric: abConfig.winner_metric,
+          ab_duration_hours: abConfig.duration_hours,
         }),
       })
 
@@ -412,6 +428,13 @@ export default function NewCampaignPage() {
                   />
                 </div>
               </div>
+              {/* A/B Testing */}
+              <ABTestPanel
+                variantA={{ subject, preheader: previewText }}
+                config={abConfig}
+                onChange={setAbConfig}
+              />
+
               <div>
                 <button
                   type="button"

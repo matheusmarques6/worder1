@@ -318,6 +318,56 @@ export async function POST(request: NextRequest) {
 
     await supabase.from('contact_events').insert(eventData);
 
+    // ---- Attribution touchpoints (first/last touch) ----
+    const hasUtm = utmParams && (utmParams.utm_source || utmParams.utm_medium || utmParams.utm_campaign);
+    const hasClickIds = clickIds && (clickIds.gclid || clickIds.fbclid || clickIds.ttclid);
+    if (hasUtm || hasClickIds) {
+      const touchpointBase = {
+        organization_id: organizationId,
+        contact_id: contactId || null,
+        visitor_id: visitorId || anonymousId || null,
+        session_id: sessionId || null,
+        utm_source: utmParams?.utm_source || null,
+        utm_medium: utmParams?.utm_medium || null,
+        utm_campaign: utmParams?.utm_campaign || null,
+        utm_term: utmParams?.utm_term || null,
+        utm_content: utmParams?.utm_content || null,
+        gclid: clickIds?.gclid || null,
+        fbclid: clickIds?.fbclid || null,
+        ttclid: clickIds?.ttclid || null,
+        occurred_at: timestamp || now,
+      };
+
+      // First touch: só grava se não existe nenhum pra este visitor/contact
+      const existingKey = contactId || visitorId || anonymousId;
+      if (existingKey) {
+        const idField = contactId ? 'contact_id' : 'visitor_id';
+        const { data: existing } = await supabase
+          .from('attribution_touchpoints')
+          .select('id')
+          .eq(idField, existingKey)
+          .eq('touchpoint_type', 'first')
+          .maybeSingle();
+
+        if (!existing) {
+          supabase.from('attribution_touchpoints').insert({
+            ...touchpointBase,
+            touchpoint_type: 'first',
+          }).then(() => {});
+        }
+      }
+
+      // Last touch: sempre upsert (último click antes de conversão)
+      supabase.from('attribution_touchpoints').insert({
+        ...touchpointBase,
+        touchpoint_type: 'last',
+        // Se é checkout_completed/purchase, vincula revenue
+        ...(monetaryValue && ['checkout_completed', 'purchase'].includes(mappedEventType)
+          ? { revenue: monetaryValue, currency, order_id: properties?.order_id || null }
+          : {}),
+      }).then(() => {});
+    }
+
     // ---- Disparar automações baseadas no tipo de evento (fire-and-forget) ----
     // Mapeia event types do pixel para trigger_types de automação
     const triggerMap: Record<string, string> = {

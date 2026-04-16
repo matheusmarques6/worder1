@@ -133,6 +133,7 @@ Se não souber a resposta, diga que vai verificar com a equipe.`,
     // 6. Chamar provider de IA
     let aiResponse: string
     
+    const aiCallStart = Date.now()
     try {
       switch (aiConfig.provider) {
         case 'openai':
@@ -148,9 +149,38 @@ Se não souber a resposta, diga que vai verificar com a equipe.`,
           aiResponse = await callOpenAI(apiKeyData.api_key, aiConfig.model, messages, aiConfig.temperature, aiConfig.max_tokens)
       }
     } catch (aiError: any) {
+      // Track failed call too
+      try {
+        const { trackAiUsage } = await import('@/lib/ai/cost-tracker')
+        await trackAiUsage({
+          organizationId: organization_id,
+          provider: aiConfig.provider, model: aiConfig.model,
+          feature: 'whatsapp_ai_process', agentId: aiConfig.agent_id,
+          conversationId: conversation_id, success: false,
+          error: aiError?.message, durationMs: Date.now() - aiCallStart,
+        })
+      } catch { /* silent */ }
       console.error('[AI Process] AI call failed:', aiError)
       return NextResponse.json({ error: 'AI provider error: ' + aiError.message }, { status: 500 })
     }
+
+    // Track successful AI call
+    const aiDuration = Date.now() - aiCallStart
+    try {
+      const { trackAiUsage } = await import('@/lib/ai/cost-tracker')
+      // Estima tokens (~4 chars per token)
+      const estPrompt = Math.ceil(JSON.stringify(messages).length / 4)
+      const estCompletion = Math.ceil((aiResponse || '').length / 4)
+      await trackAiUsage({
+        organizationId: organization_id,
+        provider: aiConfig.provider, model: aiConfig.model,
+        feature: 'whatsapp_ai_process',
+        agentId: aiConfig.agent_id,
+        conversationId: conversation_id,
+        promptTokens: estPrompt, completionTokens: estCompletion,
+        durationMs: aiDuration,
+      })
+    } catch { /* silent */ }
 
     if (!aiResponse) {
       console.error('[AI Process] Empty AI response')

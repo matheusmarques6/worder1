@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
     // Chamar o provider
     let response: string
     let tokensUsed = { input: 0, output: 0 }
+    const aiStartTime = Date.now()
 
     switch (aiConfig.provider) {
       case 'openai':
@@ -149,8 +150,9 @@ export async function POST(request: NextRequest) {
         tokensUsed = defaultResult.tokens
     }
 
-    // Registrar uso
-    await logUsage(supabase, orgId, agent_id, aiConfig.provider, aiConfig.model, tokensUsed)
+    // Registrar uso (com custo estimado)
+    const aiDuration = Date.now() - aiStartTime
+    await logUsage(supabase, orgId, agent_id, aiConfig.provider, aiConfig.model, tokensUsed, aiDuration, 'ai_respond', conversation_id)
 
     // Atualizar API key stats
     await supabase
@@ -357,27 +359,32 @@ async function callOpenAICompatible(
   }
 }
 
-// Log usage
+// Log usage via trackAiUsage (grava em ai_usage_logs com colunas corretas + custo)
 async function logUsage(
-  supabase: any,
+  _supabase: any,
   orgId: string,
   agentId: string | undefined,
   provider: string,
   model: string,
-  tokens: { input: number; output: number }
+  tokens: { input: number; output: number },
+  durationMs?: number,
+  feature: string = 'ai_respond',
+  conversationId?: string
 ) {
   try {
-    await supabase.from('ai_usage_logs').insert({
-      organization_id: orgId,
-      agent_id: agentId,
+    const { trackAiUsage } = await import('@/lib/ai/cost-tracker')
+    await trackAiUsage({
+      organizationId: orgId,
       provider,
       model,
-      tokens_input: tokens.input,
-      tokens_output: tokens.output,
-      tokens_total: tokens.input + tokens.output,
+      feature,
+      agentId: agentId || null,
+      conversationId: conversationId || null,
+      promptTokens: tokens.input,
+      completionTokens: tokens.output,
+      durationMs,
     })
   } catch (error) {
-    // Tabela pode não existir ainda
-    console.log('Could not log AI usage:', error)
+    console.warn('Could not log AI usage:', error)
   }
 }
