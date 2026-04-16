@@ -108,6 +108,15 @@ export default function NewCampaignPage() {
   useEffect(() => {
     fetchTemplates()
     fetchSegments()
+    // Autocompletar remetente da org
+    fetch('/api/settings/organization')
+      .then(r => r.json())
+      .then(d => {
+        const s = d?.organization?.email_settings || {}
+        if (!senderName && s.default_sender_name) setSenderName(s.default_sender_name)
+        if (!senderEmail && s.default_sender_email) setSenderEmail(s.default_sender_email)
+      })
+      .catch(() => {})
   }, [fetchTemplates, fetchSegments])
 
   const canProceed = () => {

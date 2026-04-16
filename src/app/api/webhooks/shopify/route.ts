@@ -246,7 +246,70 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   // Atualizar estatísticas do contato
   const orderValue = parseFloat(order.total_price || '0');
   await updateContactOrderStats(contact.id, orderValue);
-  
+
+  // ---- Revenue attribution: vincular receita à última campanha de email ----
+  // Se o contato clicou/abriu um email nos últimos N dias (attribution window),
+  // atribuir a receita do pedido àquela campanha.
+  try {
+    // Buscar attribution window (default 5 dias pra email)
+    const { data: orgSettings } = await supabase
+      .from('organizations')
+      .select('email_settings')
+      .eq('id', store.organization_id)
+      .maybeSingle();
+    const windowDays = orgSettings?.email_settings?.attribution?.email_window_days || 5;
+    const windowDate = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+
+    // Buscar último email_clicked ou email_opened do contato dentro da window
+    const { data: lastEmailEvent } = await supabase
+      .from('contact_events')
+      .select('properties')
+      .eq('contact_id', contact.id)
+      .eq('organization_id', store.organization_id)
+      .in('event_type', ['email_clicked', 'email_opened'])
+      .gte('occurred_at', windowDate)
+      .order('occurred_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (lastEmailEvent?.properties?.CampaignId) {
+      const campaignId = lastEmailEvent.properties.CampaignId;
+      // Incrementar attributed_revenue na campanha
+      const { data: currentCamp } = await supabase
+        .from('email_campaigns')
+        .select('attributed_revenue, conversions')
+        .eq('id', campaignId)
+        .maybeSingle();
+      if (currentCamp) {
+        await supabase.from('email_campaigns').update({
+          attributed_revenue: (currentCamp.attributed_revenue || 0) + orderValue,
+          conversions: (currentCamp.conversions || 0) + 1,
+        }).eq('id', campaignId);
+      }
+      // Gravar CDP event de conversion
+      await supabase.from('contact_events').insert({
+        organization_id: store.organization_id,
+        contact_id: contact.id,
+        store_id: store.id,
+        event_type: 'email_conversion',
+        event_source: 'worder_email',
+        properties: {
+          CampaignId: campaignId,
+          order_id: order.id || order.order_number,
+          order_value: orderValue,
+          currency: order.currency || 'BRL',
+          attribution_window_days: windowDays,
+        },
+        monetary_value: orderValue,
+        currency: order.currency || 'BRL',
+        occurred_at: new Date().toISOString(),
+        idempotency_key: `email_conv:${campaignId}:${order.id || order.order_number}`,
+      }).select().maybeSingle();
+    }
+  } catch (attrErr) {
+    console.warn('[Shopify] Revenue attribution failed (non-critical):', attrErr);
+  }
+
   // Salvar pedido no banco
   await supabase.from('shopify_orders').upsert({
     store_id: store.id,

@@ -111,6 +111,11 @@ export default function CampaignDetailPage() {
 
   useEffect(() => {
     fetchCampaign()
+    // Auto-refresh métricas a cada 15s (Klaviyo-style real-time)
+    const interval = setInterval(() => {
+      fetchCampaign()
+    }, 15000)
+    return () => clearInterval(interval)
   }, [fetchCampaign])
 
   if (loading) {

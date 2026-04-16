@@ -297,26 +297,54 @@ export async function POST(req: NextRequest) {
         });
         const finalSubject = renderMergeTags(subjectSource, mergeData);
 
-        const fromAddress = campaign.sender_name
-          ? `${campaign.sender_name} <${campaign.from_email}>`
-          : campaign.from_email;
+        // ---- Resolver remetente (com fallback org sender) ----
+        let fromAddress = campaign.from_email
+          ? (campaign.sender_name ? `${campaign.sender_name} <${campaign.from_email}>` : campaign.from_email)
+          : null;
+
+        if (!fromAddress) {
+          try {
+            const { getOrgSender } = await import('@/lib/email/sender');
+            const sender = await getOrgSender(organizationId);
+            fromAddress = sender.from;
+          } catch {
+            fromAddress = `Worder <${process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'}>`;
+          }
+        }
+
+        const replyTo = campaign.reply_to || campaign.from_email || undefined;
+
+        // ---- Headers anti-spam (RFC 2369 + RFC 8058) ----
+        // List-Unsubscribe: obrigatório pra Gmail/Yahoo desde Fev 2024
+        // List-Unsubscribe-Post: one-click unsubscribe (RFC 8058)
+        const unsubUrl = `${baseUrl}/api/email/unsubscribe?token=unsub`;
+        const antiSpamHeaders: Record<string, string> = {
+          'List-Unsubscribe': `<${unsubUrl}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          'Precedence': 'bulk',
+          'X-Mailer': 'Worder/1.0',
+        };
+        if (campaign_id) {
+          antiSpamHeaders['X-Campaign-Id'] = String(campaign_id);
+        }
 
         prepped.push({
           contactId: contact.id,
           emailSendId: emailSend.id,
           email: contact.email,
-          payload: {
+          payload: ({
             from: fromAddress,
             to: [contact.email],
             subject: finalSubject,
             html: finalHtml,
-            replyTo: campaign.reply_to || undefined,
+            replyTo,
+            headers: antiSpamHeaders,
             tags: [
               { name: 'campaign_id', value: String(campaign_id) },
               { name: 'email_send_id', value: String(emailSend.id) },
               ...(campaign.ab_test_enabled ? [{ name: 'ab_variant', value: variant }] : []),
             ],
-          },
+          }) as any,
         });
       }
 
