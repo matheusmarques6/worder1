@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const { data: segments, error } = await supabase
       .from('segments')
       .select('id, organization_id, conditions, type')
-      .in('type', ['dynamic', 'rfm'])
+      .in('segment_type', ['dynamic', 'rfm'])
       .limit(500);
 
     if (error) {

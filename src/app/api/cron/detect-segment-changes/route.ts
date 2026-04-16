@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     const { data: segments, error } = await supabaseAdmin
       .from('segments')
       .select('id, organization_id, conditions, type')
-      .in('type', ['dynamic', 'rfm'])
+      .in('segment_type', ['dynamic', 'rfm'])
       .limit(200)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
