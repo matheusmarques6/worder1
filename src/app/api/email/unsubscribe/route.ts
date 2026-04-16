@@ -116,4 +116,4 @@ export async function GET(req: NextRequest) {
 /**
  * Helper exportado para uso em envios de email.
  */
-export { signUnsubscribeToken }
+// signUnsubscribeToken disponível via import de '@/lib/email/unsubscribe-token'
