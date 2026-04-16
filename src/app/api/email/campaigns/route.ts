@@ -136,6 +136,12 @@ export async function POST(request: NextRequest) {
       insertData.ab_winner_metric = body.ab_winner_metric || 'open_rate'
       insertData.ab_duration_hours = body.ab_duration_hours ?? 4
     }
+    // Smart sending / engagement / send-time optimization
+    if (typeof body.smart_sending_enabled === 'boolean') insertData.smart_sending_enabled = body.smart_sending_enabled
+    if (typeof body.smart_sending_hours === 'number') insertData.smart_sending_hours = body.smart_sending_hours
+    if (typeof body.skip_unengaged === 'boolean') insertData.skip_unengaged = body.skip_unengaged
+    if (typeof body.skip_unengaged_days === 'number') insertData.skip_unengaged_days = body.skip_unengaged_days
+    if (typeof body.send_time_optimization === 'boolean') insertData.send_time_optimization = body.send_time_optimization
     // Agendamento
     if (body.scheduled_at) {
       insertData.scheduled_at = body.scheduled_at
