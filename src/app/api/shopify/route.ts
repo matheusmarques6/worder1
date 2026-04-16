@@ -23,7 +23,7 @@ const supabase = new Proxy({} as SupabaseClient, {
 
 // Verify Shopify webhook signature
 function verifyShopifyWebhook(body: string, signature: string): boolean {
-  const secret = process.env.SHOPIFY_WEBHOOK_SECRET!;
+  const secret = process.env.SHOPIFY_WEBHOOK_SECRET || '';
   const hmac = crypto.createHmac('sha256', secret);
   hmac.update(body, 'utf8');
   const digest = hmac.digest('base64');

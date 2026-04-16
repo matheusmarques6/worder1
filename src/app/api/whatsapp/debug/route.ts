@@ -9,8 +9,8 @@ import { getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host';
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY!;
-const WEBHOOK_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+const WEBHOOK_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.worder.com.br';
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();

@@ -62,8 +62,8 @@ export async function GET(request: NextRequest) {
   try {
     // 4. Trocar code por access token
     const tokenUrl = new URL(`${META_API_URL}/oauth/access_token`);
-    tokenUrl.searchParams.set('client_id', process.env.META_APP_ID!);
-    tokenUrl.searchParams.set('client_secret', process.env.META_APP_SECRET!);
+    tokenUrl.searchParams.set('client_id', process.env.META_APP_ID || '');
+    tokenUrl.searchParams.set('client_secret', process.env.META_APP_SECRET || '');
     tokenUrl.searchParams.set('redirect_uri', `${baseUrl}/api/integrations/meta/callback`);
     tokenUrl.searchParams.set('code', code);
 
@@ -79,8 +79,8 @@ export async function GET(request: NextRequest) {
     // 5. Obter long-lived token (60 dias)
     const longLivedUrl = new URL(`${META_API_URL}/oauth/access_token`);
     longLivedUrl.searchParams.set('grant_type', 'fb_exchange_token');
-    longLivedUrl.searchParams.set('client_id', process.env.META_APP_ID!);
-    longLivedUrl.searchParams.set('client_secret', process.env.META_APP_SECRET!);
+    longLivedUrl.searchParams.set('client_id', process.env.META_APP_ID || '');
+    longLivedUrl.searchParams.set('client_secret', process.env.META_APP_SECRET || '');
     longLivedUrl.searchParams.set('fb_exchange_token', shortLivedToken);
 
     const longLivedResponse = await fetch(longLivedUrl.toString());

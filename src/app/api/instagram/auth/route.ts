@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { randomBytes } from 'crypto'
 
-const META_APP_ID = process.env.META_APP_ID!
-const META_APP_SECRET = process.env.META_APP_SECRET!
+const META_APP_ID = process.env.META_APP_ID || ''
+const META_APP_SECRET = process.env.META_APP_SECRET || ''
 const META_API_VERSION = 'v19.0'
 
 // Scopes needed for Instagram Messaging
