@@ -9,13 +9,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { Resend } from 'resend';
-
-function getResend(): Resend | null {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return null;
-  return new Resend(apiKey);
-}
 
 export async function GET(
   _req: NextRequest,
@@ -70,19 +63,22 @@ export async function DELETE(
       return NextResponse.json({ error: 'Domain not found' }, { status: 404 });
     }
 
-    // Best-effort remoção no Resend (se falhar, seguimos e removemos no DB)
+    // Remover no Resend via REST (best-effort)
     if (domain.resend_domain_id) {
-      const resend = getResend();
-      if (resend) {
-        try {
-          const client: any = resend as any;
-          await client.domains.remove(domain.resend_domain_id);
-        } catch (err: any) {
-          console.warn(
-            '[EmailDomains/DELETE] Resend remove failed, removing locally anyway:',
-            err?.message
-          );
+      try {
+        const apiKey = process.env.RESEND_API_KEY;
+        if (apiKey) {
+          const res = await fetch(`https://api.resend.com/domains/${domain.resend_domain_id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${apiKey}` },
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            console.warn('[EmailDomains/DELETE] Resend delete failed:', res.status, body);
+          }
         }
+      } catch (err: any) {
+        console.warn('[EmailDomains/DELETE] Resend delete error:', err?.message);
       }
     }
 
