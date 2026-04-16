@@ -202,6 +202,16 @@ export async function PATCH(request: NextRequest) {
 
     if (error) throw error
 
+    // Recalculate contact_count when rules changed
+    if (updates.rules && segment) {
+      const count = await getSegmentCount(segment)
+      await supabase
+        .from('customer_segments')
+        .update({ contact_count: count, last_count_at: new Date().toISOString() })
+        .eq('id', id)
+      segment.contact_count = count
+    }
+
     return NextResponse.json({ segment })
 
   } catch (error: any) {
