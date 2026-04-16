@@ -291,6 +291,9 @@ export async function POST(req: NextRequest) {
           mergeData,
           emailSendId: emailSend.id,
           baseUrl,
+          contactId: contact.id,
+          orgId: organizationId,
+          campaignId: campaign_id,
         });
         const finalSubject = renderMergeTags(subjectSource, mergeData);
 

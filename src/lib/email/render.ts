@@ -217,16 +217,36 @@ export function injectOpenPixel(
 }
 
 /**
- * Add unsubscribe link in PT-BR before </body>.
+ * Add unsubscribe link with HMAC-signed token before </body>.
  */
 export function addUnsubscribeLink(
   html: string,
   emailSendId: string,
-  baseUrl: string
+  baseUrl: string,
+  contactId?: string,
+  orgId?: string,
+  campaignId?: string
 ): string {
+  let unsubUrl: string;
+
+  if (contactId && orgId) {
+    // Token HMAC seguro (novo — Klaviyo-style)
+    try {
+      const { signUnsubscribeToken } = require('@/lib/email/unsubscribe-token');
+      const token = signUnsubscribeToken({ contactId, orgId, campaignId });
+      unsubUrl = `${baseUrl}/unsubscribe?token=${token}`;
+    } catch {
+      // Fallback se import falhar
+      unsubUrl = `${baseUrl}/api/unsubscribe/${emailSendId}`;
+    }
+  } else {
+    // Fallback legacy
+    unsubUrl = `${baseUrl}/api/unsubscribe/${emailSendId}`;
+  }
+
   const unsubscribeHtml = `
 <div style="text-align:center;padding:20px 0 10px;font-size:12px;color:#999;">
-  <a href="${baseUrl}/api/unsubscribe/${emailSendId}" style="color:#999;text-decoration:underline;">
+  <a href="${unsubUrl}" style="color:#999;text-decoration:underline;">
     Cancelar inscrição
   </a>
   &nbsp;|&nbsp;
@@ -418,11 +438,17 @@ export function prepareEmailHtml({
   mergeData,
   emailSendId,
   baseUrl,
+  contactId,
+  orgId,
+  campaignId,
 }: {
   html: string;
   mergeData: Record<string, string>;
   emailSendId: string;
   baseUrl: string;
+  contactId?: string;
+  orgId?: string;
+  campaignId?: string;
 }): string {
   let result = html;
 
@@ -446,8 +472,8 @@ export function prepareEmailHtml({
   // 1. Replace merge tags
   result = renderMergeTags(result, mergeData);
 
-  // 2. Add unsubscribe link (before tracking rewrites)
-  result = addUnsubscribeLink(result, emailSendId, baseUrl);
+  // 2. Add unsubscribe link with HMAC token (before tracking rewrites)
+  result = addUnsubscribeLink(result, emailSendId, baseUrl, contactId, orgId, campaignId);
 
   // 3. Rewrite URLs for click tracking
   result = rewriteUrlsForTracking(result, emailSendId, baseUrl);
