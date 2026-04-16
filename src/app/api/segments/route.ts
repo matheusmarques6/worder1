@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const segment_id = searchParams.get('id')
     const include_count = searchParams.get('include_count') === 'true'
     const storeId = searchParams.get('store_id')
+    const activeOnly = searchParams.get('active_only') === 'true'
 
     // If no org_id provided, try to get from auth
     if (!organization_id) {
@@ -81,6 +82,10 @@ export async function GET(request: NextRequest) {
 
     if (storeId) {
       listQuery = listQuery.or(`store_id.eq.${storeId},store_id.is.null`)
+    }
+
+    if (activeOnly) {
+      listQuery = listQuery.or('is_active.eq.true,is_active.is.null')
     }
 
     const { data: segments, error } = await listQuery

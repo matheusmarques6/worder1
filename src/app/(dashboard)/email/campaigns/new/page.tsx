@@ -115,6 +115,7 @@ export default function NewCampaignPage() {
       const params = new URLSearchParams({
         organization_id: user.organization_id,
         include_count: 'true',
+        active_only: 'true',
       })
       if (currentStore?.id) params.set('store_id', currentStore.id)
       const res = await fetch(`/api/segments?${params}`)
