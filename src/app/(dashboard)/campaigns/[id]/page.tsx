@@ -25,7 +25,9 @@ import {
   UsersThree,
   ArrowSquareOut,
   SpinnerGap,
+  Calendar,
 } from '@phosphor-icons/react'
+import ScheduleCampaignModal from '@/components/email/ScheduleCampaignModal'
 import {
   AreaChart,
   Area,
@@ -80,6 +82,7 @@ export default function CampaignDetailPage() {
   const params = useParams()
   const [campaign, setCampaign] = useState<CampaignData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
 
   const fetchCampaign = useCallback(async () => {
     if (!params.id) return
@@ -199,12 +202,33 @@ export default function CampaignDetailPage() {
             <Export size={14} />
             Exportar
           </button>
+          {(campaign.status === 'draft' || campaign.status === 'scheduled') && (
+            <button
+              onClick={() => setShowScheduleModal(true)}
+              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-xs font-medium"
+            >
+              <Calendar size={14} />
+              {campaign.status === 'scheduled' ? 'Reagendar' : 'Agendar'}
+            </button>
+          )}
           <button className="flex items-center gap-2 px-3 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg hover:opacity-90 text-xs font-medium">
             <Repeat size={14} />
-            Reenviar
+            {campaign.status === 'draft' ? 'Enviar agora' : 'Reenviar'}
           </button>
         </div>
       </div>
+
+      {showScheduleModal && (
+        <ScheduleCampaignModal
+          campaignId={campaign.id}
+          currentScheduledAt={campaign.scheduled_at}
+          onClose={() => setShowScheduleModal(false)}
+          onScheduled={() => {
+            setShowScheduleModal(false)
+            router.refresh()
+          }}
+        />
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

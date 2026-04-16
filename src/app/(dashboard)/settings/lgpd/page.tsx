@@ -1,314 +1,370 @@
 'use client'
 
-import { useState } from 'react'
-import { motion } from 'framer-motion'
+// =============================================
+// WORDER: LGPD Settings page
+// /settings/lgpd — conecta com /api/lgpd/* endpoints
+// =============================================
+
+import { useEffect, useState } from 'react'
 import {
   ShieldCheck,
-  Lock,
-  Eye,
-  UserMinus,
   FileText,
   Download,
-  Trash,
-  CheckCircle,
-  Warning,
-  Clock,
-  EnvelopeSimple,
-  Cookie,
-  ToggleRight,
-  ToggleLeft,
-  MagnifyingGlass,
-  ArrowRight,
-  Export,
-  Fingerprint,
-} from '@phosphor-icons/react'
+  Trash2,
+  Edit3,
+  Loader2,
+  Plus,
+  X,
+  XCircle,
+  AlertCircle,
+  Mail,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
 
-const complianceStatus = [
-  { title: 'Consentimento de Coleta', status: 'compliant', description: 'Pixel e formulários com opt-in ativo' },
-  { title: 'Política de Privacidade', status: 'compliant', description: 'Política atualizada e publicada' },
-  { title: 'Direito ao Esquecimento', status: 'compliant', description: 'Processo automatizado de exclusão' },
-  { title: 'Portabilidade de Dados', status: 'compliant', description: 'Export de dados em JSON/CSV' },
-  { title: 'Banner de Cookies', status: 'warning', description: 'Banner configurado mas sem granularidade' },
-  { title: 'DPO Registrado', status: 'pending', description: 'Necessário designar encarregado' },
-]
-
-const consentSettings = [
-  { id: 'marketing_email', label: 'E-mail Marketing', description: 'Envio de campanhas e newsletters', enabled: true },
-  { id: 'marketing_sms', label: 'SMS Marketing', description: 'Envio de promoções por SMS', enabled: true },
-  { id: 'marketing_whatsapp', label: 'WhatsApp Marketing', description: 'Mensagens promocionais via WhatsApp', enabled: true },
-  { id: 'tracking', label: 'Rastreamento de Navegação', description: 'Pixel de tracking no site', enabled: true },
-  { id: 'analytics', label: 'Analytics e Relatórios', description: 'Dados para análise de performance', enabled: true },
-  { id: 'profiling', label: 'Perfilamento e Scoring', description: 'Lead scoring e segmentação automática', enabled: false },
-]
-
-const dataRequests = [
-  { id: '#DR-001', type: 'Exclusão', contact: 'ana@email.com', date: '12 Mar 2026', status: 'completed', completedAt: '12 Mar 2026' },
-  { id: '#DR-002', type: 'Exportação', contact: 'carlos@email.com', date: '11 Mar 2026', status: 'completed', completedAt: '11 Mar 2026' },
-  { id: '#DR-003', type: 'Exclusão', contact: 'maria@email.com', date: '10 Mar 2026', status: 'processing', completedAt: null },
-  { id: '#DR-004', type: 'Retificação', contact: 'joao@email.com', date: '09 Mar 2026', status: 'completed', completedAt: '09 Mar 2026' },
-]
-
-const retentionPolicies = [
-  { data: 'Contatos Inativos', retention: '24 meses', action: 'Anonimizar', editable: true },
-  { data: 'Dados de Navegação', retention: '12 meses', action: 'Excluir', editable: true },
-  { data: 'Logs de E-mail', retention: '6 meses', action: 'Excluir', editable: true },
-  { data: 'Dados de Compra', retention: '60 meses', action: 'Manter (fiscal)', editable: false },
-  { data: 'Consentimentos', retention: 'Indefinido', action: 'Manter (legal)', editable: false },
-]
-
-const statusIcon: Record<string, { icon: React.ComponentType<any>; color: string; label: string }> = {
-  compliant: { icon: CheckCircle, color: 'text-emerald-400', label: 'Conforme' },
-  warning: { icon: Warning, color: 'text-yellow-400', label: 'Atenção' },
-  pending: { icon: Clock, color: 'text-red-400', label: 'Pendente' },
+interface DataRequest {
+  id: string
+  requester_email: string
+  request_type: 'export' | 'delete' | 'rectification' | 'portability' | 'object' | 'restrict'
+  status: 'pending' | 'processing' | 'completed' | 'rejected' | 'cancelled'
+  verified_at: string | null
+  processed_at: string | null
+  created_at: string
+  reason: string | null
 }
 
-const requestStatusColors: Record<string, string> = {
-  completed: 'bg-emerald-500/10 text-emerald-400',
-  processing: 'bg-yellow-500/10 text-yellow-400',
-  pending: 'bg-zinc-500/10 text-gray-500',
+const REQUEST_TYPE_LABELS: Record<string, { label: string; icon: any }> = {
+  export: { label: 'Exportar dados', icon: Download },
+  portability: { label: 'Portabilidade', icon: Download },
+  delete: { label: 'Excluir dados', icon: Trash2 },
+  rectification: { label: 'Retificar', icon: Edit3 },
+  object: { label: 'Objeção', icon: XCircle },
+  restrict: { label: 'Restringir', icon: AlertCircle },
 }
 
-export default function LGPDPage() {
-  const [consents, setConsents] = useState<Record<string, boolean>>(
-    Object.fromEntries(consentSettings.map(c => [c.id, c.enabled]))
-  )
-  const [search, setSearch] = useState('')
+const STATUS_LABELS: Record<string, { label: string; className: string }> = {
+  pending: { label: 'Aguardando verificação', className: 'bg-gray-100 text-gray-700' },
+  processing: { label: 'Processando', className: 'bg-blue-50 text-blue-700 border border-blue-200' },
+  completed: { label: 'Concluído', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+  rejected: { label: 'Rejeitado', className: 'bg-red-50 text-red-700 border border-red-200' },
+  cancelled: { label: 'Cancelado', className: 'bg-gray-100 text-gray-500' },
+}
 
-  const toggleConsent = (id: string) => {
-    setConsents(prev => ({ ...prev, [id]: !prev[id] }))
+const RESOURCES = [
+  { value: 'contact_events', label: 'Eventos de contato', description: 'Histórico de comportamento (viewed, clicked, etc)' },
+  { value: 'email_sends', label: 'Emails enviados', description: 'Registros de opens/clicks de campanhas' },
+  { value: 'contacts_inactive', label: 'Contatos inativos', description: 'Contatos sem atividade e sem compras' },
+]
+
+export default function LgpdSettingsPage() {
+  const [tab, setTab] = useState<'requests' | 'retention' | 'consents'>('requests')
+  const [requests, setRequests] = useState<DataRequest[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showNewRequest, setShowNewRequest] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 2500)
   }
 
-  const compliantCount = complianceStatus.filter(s => s.status === 'compliant').length
-  const totalChecks = complianceStatus.length
+  const load = async () => {
+    try {
+      const res = await fetch('/api/lgpd/data-requests')
+      if (res.ok) {
+        const d = await res.json()
+        setRequests(d.requests || [])
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-            <ShieldCheck size={22} className="text-emerald-400" weight="fill" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold font-display text-gray-900">LGPD & Privacidade</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Gerencie conformidade, consentimento e dados pessoais</p>
-          </div>
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors text-sm">
-          <Export size={16} />
-          Relatório de Conformidade
-        </button>
-      </div>
+    <div className="p-8 max-w-5xl">
+      {toast && (
+        <div
+          className={cn(
+            'fixed top-20 right-6 z-50 px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium',
+            toast.type === 'success'
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              : 'bg-red-50 text-red-700 border border-red-200'
+          )}
+        >{toast.msg}</div>
+      )}
 
-      {/* Compliance Score */}
-      <div className="bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 rounded-xl p-6">
-        <div className="flex items-center justify-between">
+      <div className="mb-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-emerald-600" />
+          </div>
           <div>
-            <h3 className="text-sm text-emerald-400 font-medium">Score de Conformidade LGPD</h3>
-            <p className="text-3xl font-bold text-gray-900 mt-1">
-              {compliantCount}/{totalChecks}
-              <span className="text-lg text-gray-500 ml-2">
-                ({((compliantCount / totalChecks) * 100).toFixed(0)}%)
-              </span>
+            <h1 className="text-2xl font-bold text-gray-900">LGPD & Privacidade</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Gerencie pedidos de dados, consentimentos e políticas de retenção.
             </p>
           </div>
-          <div className="w-20 h-20 rounded-full border-4 border-emerald-500/30 flex items-center justify-center">
-            <ShieldCheck size={32} className="text-emerald-400" weight="fill" />
-          </div>
         </div>
       </div>
 
-      {/* Compliance Checklist */}
-      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Checklist de Conformidade</h3>
-        <div className="space-y-3">
-          {complianceStatus.map((item) => {
-            const status = statusIcon[item.status]
-            const StatusIcon = status.icon
-            return (
-              <div key={item.title} className="flex items-center justify-between py-3 border-b border-gray-200/50 last:border-0">
-                <div className="flex items-center gap-3">
-                  <StatusIcon size={20} className={status.color} weight="fill" />
+      <div className="flex gap-1 border-b border-gray-200 mb-6">
+        {[
+          { key: 'requests', label: 'Pedidos de dados' },
+          { key: 'retention', label: 'Retenção' },
+          { key: 'consents', label: 'Consentimentos' },
+        ].map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key as any)}
+            className={cn(
+              'px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px',
+              tab === t.key
+                ? 'border-orange-500 text-orange-600'
+                : 'border-transparent text-gray-500 hover:text-gray-900'
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'requests' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-500">
+              Pedidos de exclusão, exportação e retificação dos seus contatos.
+            </p>
+            <button
+              onClick={() => setShowNewRequest(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white rounded-lg"
+            >
+              <Plus size={14} /> Novo pedido
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : requests.length === 0 ? (
+            <div className="bg-white border border-dashed border-gray-200 rounded-xl p-12 text-center">
+              <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-sm text-gray-500">Nenhum pedido recebido ainda.</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Seus contatos podem solicitar via <code className="font-mono bg-gray-50 px-1.5 py-0.5 rounded">POST /api/lgpd/data-requests</code>
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Tipo</th>
+                    <th className="text-left px-4 py-3 text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Solicitante</th>
+                    <th className="text-left px-4 py-3 text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Status</th>
+                    <th className="text-left px-4 py-3 text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Data</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {requests.map((r) => {
+                    const meta = REQUEST_TYPE_LABELS[r.request_type] || REQUEST_TYPE_LABELS.export
+                    const sts = STATUS_LABELS[r.status] || STATUS_LABELS.pending
+                    const Icon = meta.icon
+                    return (
+                      <tr key={r.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <Icon size={14} className="text-gray-400" />
+                            <span className="text-sm font-medium text-gray-900">{meta.label}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 font-mono text-xs">{r.requester_email}</td>
+                        <td className="px-4 py-3">
+                          <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full', sts.className)}>
+                            {sts.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {new Date(r.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'retention' && (
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+            <AlertCircle size={16} className="text-blue-500 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-blue-900">
+              Políticas de retenção rodam automaticamente todo dia às 3h. Dados acima do prazo são anonimizados ou excluídos.
+            </div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h3 className="text-base font-semibold text-gray-900">Recursos disponíveis para retenção</h3>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {RESOURCES.map((r) => (
+                <div key={r.value} className="px-6 py-4 flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-700 font-medium">{item.title}</p>
-                    <p className="text-xs text-gray-500">{item.description}</p>
+                    <p className="text-sm font-medium text-gray-900">{r.label}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{r.description}</p>
                   </div>
+                  <code className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded">
+                    {r.value}
+                  </code>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                  item.status === 'compliant' ? 'bg-emerald-500/10 text-emerald-400' :
-                  item.status === 'warning' ? 'bg-yellow-500/10 text-yellow-400' :
-                  'bg-red-500/10 text-red-400'
-                }`}>
-                  {status.label}
-                </span>
-              </div>
-            )
-          })}
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Consent Management */}
-        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Fingerprint size={16} className="text-[#F26B2A]" />
-            Gerenciamento de Consentimento
-          </h3>
-          <p className="text-xs text-gray-500 mb-4">
-            Configure quais tipos de consentimento são coletados dos contatos.
+      {tab === 'consents' && (
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
+          <h3 className="text-base font-semibold text-gray-900 mb-2">Consentimentos coletados</h3>
+          <p className="text-sm text-gray-500 mb-4">
+            Cada consentimento é registrado com IP + User Agent para auditoria.
           </p>
-          <div className="space-y-3">
-            {consentSettings.map((consent) => (
-              <div key={consent.id} className="flex items-center justify-between py-2 border-b border-gray-200/50 last:border-0">
-                <div>
-                  <p className="text-sm text-gray-700">{consent.label}</p>
-                  <p className="text-xs text-gray-500">{consent.description}</p>
-                </div>
-                <button onClick={() => toggleConsent(consent.id)}>
-                  {consents[consent.id] ? (
-                    <ToggleRight size={28} className="text-emerald-400" weight="fill" />
-                  ) : (
-                    <ToggleLeft size={28} className="text-gray-400" weight="fill" />
-                  )}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Data Retention */}
-        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Clock size={16} className="text-[#F26B2A]" />
-            Políticas de Retenção de Dados
-          </h3>
-          <div className="space-y-3">
-            {retentionPolicies.map((policy) => (
-              <div key={policy.data} className="flex items-center justify-between py-2 border-b border-gray-200/50 last:border-0">
-                <div>
-                  <p className="text-sm text-gray-700">{policy.data}</p>
-                  <p className="text-xs text-gray-500">{policy.action}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {policy.editable ? (
-                    <select className="bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none">
-                      <option>{policy.retention}</option>
-                      <option>6 meses</option>
-                      <option>12 meses</option>
-                      <option>24 meses</option>
-                      <option>36 meses</option>
-                    </select>
-                  ) : (
-                    <span className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">{policy.retention}</span>
-                  )}
-                  {!policy.editable && <Lock size={12} className="text-gray-400" />}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Data Subject Requests */}
-      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-            <UserMinus size={16} className="text-[#F26B2A]" />
-            Solicitações de Titulares
-          </h3>
-          <div className="relative">
-            <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-            <input
-              type="text"
-              placeholder="Buscar por e-mail..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="bg-white border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-500 w-48"
-            />
-          </div>
-        </div>
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-gray-200">
-              <th className="text-left text-xs text-gray-500 font-medium pb-3">ID</th>
-              <th className="text-left text-xs text-gray-500 font-medium pb-3">Tipo</th>
-              <th className="text-left text-xs text-gray-500 font-medium pb-3">Contato</th>
-              <th className="text-left text-xs text-gray-500 font-medium pb-3">Solicitado em</th>
-              <th className="text-left text-xs text-gray-500 font-medium pb-3">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dataRequests.map((req) => (
-              <tr key={req.id} className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors">
-                <td className="py-3 text-sm text-gray-500 font-mono">{req.id}</td>
-                <td className="py-3">
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                    req.type === 'Exclusão' ? 'bg-red-500/10 text-red-400' :
-                    req.type === 'Exportação' ? 'bg-blue-500/10 text-blue-400' :
-                    'bg-yellow-500/10 text-yellow-400'
-                  }`}>
-                    {req.type}
-                  </span>
-                </td>
-                <td className="py-3 text-sm text-gray-700">{req.contact}</td>
-                <td className="py-3 text-sm text-gray-500">{req.date}</td>
-                <td className="py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${requestStatusColors[req.status]}`}>
-                    {req.status === 'completed' ? 'Concluído' : 'Processando'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Cookie Banner Config */}
-      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Cookie size={16} className="text-[#F26B2A]" />
-          Banner de Cookies
-        </h3>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="space-y-4">
+          <div className="text-xs text-gray-500 font-mono bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2">
             <div>
-              <label className="block text-xs text-gray-500 mb-1.5">Texto do Banner</label>
-              <textarea
-                rows={3}
-                defaultValue="Utilizamos cookies para melhorar sua experiência. Ao continuar navegando, você concorda com nossa Política de Privacidade."
-                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-brand-500 resize-none"
-              />
+              <strong>Endpoint público:</strong> <code>POST /api/lgpd/consents</code>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1.5">Link da Política de Privacidade</label>
+              <strong>Body:</strong>
+              <pre className="mt-1 text-[11px] overflow-x-auto">{JSON.stringify({
+                organization_id: 'uuid',
+                contact_id: 'uuid (opcional)',
+                visitor_id: 'string (opcional)',
+                consents: { marketing: true, tracking: false, analytics: true },
+                source: 'banner',
+              }, null, 2)}</pre>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 mt-4">
+            Tipos válidos: <code className="font-mono">marketing</code>, <code className="font-mono">analytics</code>, <code className="font-mono">tracking</code>, <code className="font-mono">profiling</code>, <code className="font-mono">data_sharing</code>, <code className="font-mono">cookies</code>.
+          </p>
+        </div>
+      )}
+
+      {showNewRequest && (
+        <NewRequestModal
+          onClose={() => setShowNewRequest(false)}
+          onCreated={() => {
+            showToast('Pedido criado. Email de verificação enviado.')
+            load()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function NewRequestModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [email, setEmail] = useState('')
+  const [type, setType] = useState<DataRequest['request_type']>('export')
+  const [saving, setSaving] = useState(false)
+  const [orgId, setOrgId] = useState<string>('')
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/settings/organization').then((r) => r.json()).then((d) => {
+      if (d?.organization?.id) setOrgId(d.organization.id)
+    })
+  }, [])
+
+  const submit = async () => {
+    if (!email.trim() || !orgId) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/lgpd/data-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organization_id: orgId,
+          requester_email: email.trim(),
+          request_type: type,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setError(json.error || 'Erro ao criar pedido')
+        return
+      }
+      onCreated()
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-gray-900">Novo pedido LGPD</h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
+            <X size={18} className="text-gray-500" />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email do solicitante</label>
+            <div className="relative mt-1">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
-                type="text"
-                defaultValue="https://minhaloja.com.br/privacidade"
-                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-brand-500"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="cliente@exemplo.com"
+                className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1.5">Preview</label>
-            <div className="bg-zinc-950 rounded-lg p-4 border border-gray-200">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-700 mb-3">
-                  Utilizamos cookies para melhorar sua experiência. Ao continuar navegando, você concorda com nossa Política de Privacidade.
-                </p>
-                <div className="flex items-center gap-2">
-                  <button className="px-3 py-1 bg-brand-500 text-white text-xs rounded hover:opacity-90">
-                    Aceitar
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Tipo</label>
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              {(['export', 'delete', 'rectification', 'restrict'] as const).map((t) => {
+                const meta = REQUEST_TYPE_LABELS[t]
+                const Icon = meta.icon
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setType(t)}
+                    className={cn(
+                      'p-3 text-sm border rounded-lg text-left inline-flex items-center gap-2 transition-colors',
+                      type === t ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                    )}
+                  >
+                    <Icon size={14} />
+                    {meta.label}
                   </button>
-                  <button className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-zinc-600">
-                    Configurar
-                  </button>
-                  <button className="text-xs text-gray-500 hover:text-gray-500 ml-auto">
-                    Rejeitar
-                  </button>
-                </div>
-              </div>
+                )
+              })}
             </div>
           </div>
+          {error && (
+            <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">{error}</div>
+          )}
+        </div>
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg">Cancelar</button>
+          <button
+            onClick={submit}
+            disabled={!email.trim() || saving}
+            className="px-4 py-2 text-sm font-semibold bg-orange-500 hover:bg-orange-600 text-white rounded-lg disabled:opacity-50 inline-flex items-center gap-2"
+          >
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            Criar pedido
+          </button>
         </div>
       </div>
     </div>

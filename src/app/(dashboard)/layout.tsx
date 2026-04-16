@@ -85,7 +85,14 @@ const navigation: NavSection[] = [
     items: [
       { name: 'Início', href: '/dashboard', icon: LayoutDashboard },
       { name: 'Campanhas', href: '/campaigns', icon: Send },
-      { name: 'Fluxos', href: '/automations', icon: Zap },
+      {
+        name: 'Fluxos', href: '/automations', icon: Zap,
+        children: [
+          { name: 'Todos', href: '/automations' },
+          { name: 'Templates', href: '/automations/templates' },
+          { name: 'Monitoramento', href: '/automations/monitoring' },
+        ],
+      },
     ],
   },
   {

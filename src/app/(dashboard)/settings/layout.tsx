@@ -10,7 +10,8 @@ const tabs = [
   { title: 'Domínios', href: '/settings/email' },
   { title: 'Rastreamento', href: '/settings/tracking' },
   { title: 'Atribuição', href: '/settings/attribution' },
-  { title: 'Dados', href: '/settings/lgpd' },
+  { title: 'Dados & LGPD', href: '/settings/lgpd' },
+  { title: 'Uso de IA', href: '/settings/ai-usage' },
   { title: 'API', href: '/settings/api' },
   { title: 'Segurança', href: '/settings/security' },
 ]

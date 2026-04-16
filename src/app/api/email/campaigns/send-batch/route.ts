@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     const {
       campaign_id,
       contact_ids,
+      contact_variants, // [{id, variant: 'a'|'b'}] - só quando A/B ativo
       batch_number,
       total_batches,
       organizationId,
@@ -45,6 +46,14 @@ export async function POST(req: NextRequest) {
 
     if (!campaign_id || !contact_ids || !batch_number || !total_batches || !organizationId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // Mapeia contact_id → variant ('a'|'b')
+    const variantMap = new Map<string, 'a' | 'b'>()
+    if (Array.isArray(contact_variants)) {
+      for (const cv of contact_variants) {
+        if (cv?.id) variantMap.set(String(cv.id), (cv.variant === 'b' ? 'b' : 'a'))
+      }
     }
 
     // Get campaign with template
@@ -245,8 +254,35 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        // ---- A/B variant selection ----
+        const variant = variantMap.get(String(contact.id)) || 'a'
+        const variantB = campaign.ab_variant_b || null
+        const useB = variant === 'b' && variantB && campaign.ab_test_enabled
+
+        // Escolhe template (variant B pode ter template_id próprio) ou usa o default
+        let htmlSource = template.html
+        let subjectSource = campaign.subject || ''
+        if (useB) {
+          if (variantB.subject) subjectSource = variantB.subject
+          if (variantB.template_id && variantB.template_id !== template.id) {
+            const { data: altTpl } = await supabaseAdmin
+              .from('email_templates')
+              .select('html, design_json')
+              .eq('id', variantB.template_id)
+              .eq('organization_id', organizationId)
+              .maybeSingle()
+            if (altTpl?.html) htmlSource = altTpl.html
+          }
+        }
+
+        // Persistir variant no email_sends (pro relatório A/B)
+        await supabaseAdmin
+          .from('email_sends')
+          .update({ ab_variant: variant })
+          .eq('id', emailSend.id)
+
         // Resolve dynamic product/cart blocks per contact
-        let htmlResolved = await resolveProductBlocks(template.html, organizationId, contact.id);
+        let htmlResolved = await resolveProductBlocks(htmlSource, organizationId, contact.id);
         htmlResolved = await resolveCartBlocks(htmlResolved, organizationId, contact.id);
 
         // Prep final HTML (merge tags + tracking pixel + click tracking + unsubscribe)
@@ -256,7 +292,7 @@ export async function POST(req: NextRequest) {
           emailSendId: emailSend.id,
           baseUrl,
         });
-        const finalSubject = renderMergeTags(campaign.subject || '', mergeData);
+        const finalSubject = renderMergeTags(subjectSource, mergeData);
 
         const fromAddress = campaign.sender_name
           ? `${campaign.sender_name} <${campaign.from_email}>`
@@ -275,6 +311,7 @@ export async function POST(req: NextRequest) {
             tags: [
               { name: 'campaign_id', value: String(campaign_id) },
               { name: 'email_send_id', value: String(emailSend.id) },
+              ...(campaign.ab_test_enabled ? [{ name: 'ab_variant', value: variant }] : []),
             ],
           },
         });

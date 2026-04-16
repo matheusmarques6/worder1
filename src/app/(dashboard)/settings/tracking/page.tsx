@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Activity,
   Loader2,
@@ -122,11 +123,20 @@ export default function TrackingSettingsPage() {
 
   return (
     <div className="p-8 max-w-2xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Rastreamento</h1>
-        <p className="text-gray-500 mt-1">
-          Monitore o status do rastreamento e os eventos recentes da sua loja.
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Rastreamento</h1>
+          <p className="text-gray-500 mt-1">
+            Monitore o status do rastreamento e os eventos recentes da sua loja.
+          </p>
+        </div>
+        <Link
+          href="/settings/tracking/install"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-500 hover:text-orange-600 whitespace-nowrap"
+        >
+          <Code2 className="w-4 h-4" />
+          Instalar pixel
+        </Link>
       </div>
 
       <div className="space-y-6">
