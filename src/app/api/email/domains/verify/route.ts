@@ -1,6 +1,6 @@
 // =============================================
 // WORDER: Verify Email Domain
-// POST: trigger domain verification via Resend REST API.
+// POST: trigger verification + sync status from Resend
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!dbDomain.resend_domain_id) {
-      return NextResponse.json({ error: 'Domain has no Resend ID. Re-add the domain.' }, { status: 400 });
+      return NextResponse.json({ error: 'Domain has no Resend ID' }, { status: 400 });
     }
 
     const apiKey = process.env.RESEND_API_KEY;
@@ -41,46 +41,60 @@ export async function POST(request: NextRequest) {
 
     const resendId = dbDomain.resend_domain_id;
 
-    // 1. Trigger verify
-    const verifyRes = await fetch(`https://api.resend.com/domains/${resendId}/verify`, {
+    // 1. Trigger verify (pode retornar 200 ou erro se já verificado)
+    await fetch(`https://api.resend.com/domains/${resendId}/verify`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiKey}` },
-    });
-    // Verify pode retornar 200 ou 400 se já verificado — ambos OK
-    const verifyBody = await verifyRes.json().catch(() => ({}));
+    }).catch(() => {});
 
-    // 2. Get domain status atualizado
+    // 2. Delay 2s para Resend propagar o status
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // 3. Get domain status atualizado
     const getRes = await fetch(`https://api.resend.com/domains/${resendId}`, {
       headers: { 'Authorization': `Bearer ${apiKey}` },
     });
 
     if (!getRes.ok) {
-      const errBody = await getRes.json().catch(() => ({}));
-      return NextResponse.json({
-        error: `Failed to get domain status: ${getRes.status}`,
-        details: errBody,
-      }, { status: 500 });
+      return NextResponse.json({ error: `Resend API error: ${getRes.status}` }, { status: 500 });
     }
 
     const resendDomain = await getRes.json();
+    console.log('[VerifyDomain] Resend response:', JSON.stringify({
+      id: resendDomain.id,
+      status: resendDomain.status,
+      region: resendDomain.region,
+    }));
 
-    // 3. Mapear status Resend → nosso schema
-    // Resend retorna: not_started | pending | verified | failed | temporary_failure
-    const resendStatus = String(resendDomain.status || '').toLowerCase();
+    // 4. Mapear status — Resend pode retornar variantes
+    const rawStatus = String(resendDomain.status || '').toLowerCase().trim();
     let ourStatus: 'pending' | 'verified' | 'failed' = 'pending';
-    if (resendStatus === 'verified') ourStatus = 'verified';
-    else if (resendStatus === 'failed' || resendStatus === 'temporary_failure') ourStatus = 'failed';
+    if (rawStatus === 'verified' || rawStatus === 'active') {
+      ourStatus = 'verified';
+    } else if (rawStatus === 'failed' || rawStatus === 'temporary_failure') {
+      ourStatus = 'failed';
+    }
+    // Se não mudou mas Resend diz not_started, mantém pending
 
-    // 4. Extrair DNS records do Resend (pode estar em .records ou .dns)
+    // 5. Extrair DNS + tracking config
     const dnsRecords = resendDomain.records || resendDomain.dns || dbDomain.dns_records || [];
 
-    // 5. Update DB
+    // 6. Update DB com tudo
     const updates: Record<string, any> = {
       status: ourStatus,
       dns_records: dnsRecords,
     };
     if (ourStatus === 'verified') {
       updates.verified_at = new Date().toISOString();
+    }
+    // Salvar tracking config do Resend se disponível
+    if (resendDomain.open_tracking !== undefined || resendDomain.click_tracking !== undefined) {
+      updates.tracking_config = {
+        open_tracking: resendDomain.open_tracking ?? false,
+        click_tracking: resendDomain.click_tracking ?? false,
+        tls: resendDomain.tls || 'opportunistic',
+        region: resendDomain.region || 'us-east-1',
+      };
     }
 
     const { data: updatedDomain, error: updateError } = await supabaseAdmin
@@ -92,22 +106,33 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (updateError) {
-      return NextResponse.json({ error: 'Failed to update domain in DB' }, { status: 500 });
+      // Pode ser que tracking_config não existe como coluna — tenta sem
+      console.warn('[VerifyDomain] Update with tracking failed, retrying without:', updateError.message);
+      delete updates.tracking_config;
+      const { data: retry, error: retryErr } = await supabaseAdmin
+        .from('email_domains')
+        .update(updates)
+        .eq('id', domainId)
+        .eq('organization_id', user.organization_id)
+        .select()
+        .single();
+      if (retryErr) {
+        return NextResponse.json({ error: 'Failed to update domain' }, { status: 500 });
+      }
+      return NextResponse.json({
+        domain: retry,
+        resend_status: rawStatus,
+        our_status: ourStatus,
+      });
     }
 
     return NextResponse.json({
       domain: updatedDomain,
-      resend: {
-        status: resendDomain.status,
-        region: resendDomain.region,
-        created_at: resendDomain.created_at,
-      },
+      resend_status: rawStatus,
+      our_status: ourStatus,
     });
   } catch (error: any) {
     console.error('[VerifyDomain] Error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 });
   }
 }
