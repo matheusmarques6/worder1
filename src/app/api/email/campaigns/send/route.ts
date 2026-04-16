@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       .eq('id', campaign_id);
 
     // Resolve contacts
-    // Se segment_id definido, usa resolver avançado (AND/OR, behavioral, RFM)
+    const contactFields = 'id, email, first_name, last_name, phone, last_email_sent_at, engagement_score'
     let contacts: any[] = []
     let contactsError: any = null
 
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       if (ids.length > 0) {
         let q: any = supabaseAdmin
           .from('contacts')
-          .select('id, email, first_name, last_name, phone')
+          .select(contactFields)
           .in('id', ids)
           .eq('is_subscribed_email', true)
           .not('email', 'is', null)
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
     } else {
       let q: any = supabaseAdmin
         .from('contacts')
-        .select('id, email, first_name, last_name, phone')
+        .select(contactFields)
         .eq('organization_id', organizationId)
         .eq('is_subscribed_email', true)
         .not('email', 'is', null)
@@ -119,6 +119,98 @@ export async function POST(request: NextRequest) {
         .update({ status: 'sent', total_sent: 0 })
         .eq('id', campaign_id);
       return NextResponse.json({ message: 'No contacts to send to', total: 0 });
+    }
+
+    // ── Smart Sending: skip contacts who received email recently ──
+    const smartSendingEnabled = campaign.smart_sending_enabled !== false
+    const smartSendingHours = campaign.smart_sending_hours || 16
+    let smartSendingSkipped = 0
+
+    if (smartSendingEnabled) {
+      const cutoff = new Date(Date.now() - smartSendingHours * 3600000).toISOString()
+      contacts = contacts.filter((c: any) => {
+        if (c.last_email_sent_at && c.last_email_sent_at > cutoff) {
+          smartSendingSkipped++
+          return false
+        }
+        return true
+      })
+    }
+
+    // ── Engagement filter: skip unengaged contacts ──
+    let engagementSkipped = 0
+    if (campaign.skip_unengaged) {
+      const days = campaign.skip_unengaged_days || 120
+      const { data: unengagedIds } = await supabaseAdmin
+        .from('email_sends')
+        .select('contact_id')
+        .eq('organization_id', organizationId)
+        .is('opened_at', null)
+        .lt('sent_at', new Date(Date.now() - days * 86400000).toISOString())
+
+      if (unengagedIds && unengagedIds.length > 0) {
+        const hasRecentOpen = new Set<string>()
+        const { data: recentOpens } = await supabaseAdmin
+          .from('email_sends')
+          .select('contact_id')
+          .eq('organization_id', organizationId)
+          .not('opened_at', 'is', null)
+          .gte('sent_at', new Date(Date.now() - days * 86400000).toISOString())
+
+        if (recentOpens) {
+          for (const r of recentOpens) hasRecentOpen.add(r.contact_id)
+        }
+
+        const neverEngaged = new Set(
+          unengagedIds
+            .map((u: any) => u.contact_id)
+            .filter((id: string) => !hasRecentOpen.has(id))
+        )
+
+        contacts = contacts.filter((c: any) => {
+          if (neverEngaged.has(c.id)) {
+            engagementSkipped++
+            return false
+          }
+          return true
+        })
+      }
+    }
+
+    if (smartSendingSkipped > 0 || engagementSkipped > 0) {
+      console.log(`[SendCampaign] Filtered: ${smartSendingSkipped} smart-sending, ${engagementSkipped} unengaged`)
+    }
+
+    if (contacts.length === 0) {
+      await supabaseAdmin
+        .from('email_campaigns')
+        .update({ status: 'sent', total_sent: 0 })
+        .eq('id', campaign_id);
+      return NextResponse.json({
+        message: 'All contacts filtered (smart sending / engagement)',
+        smartSendingSkipped,
+        engagementSkipped,
+        total: 0,
+      });
+    }
+
+    // ── Domain warm-up: cap daily volume for warming domains ──
+    let warmupCapped = 0
+    try {
+      const { getWarmupStatus } = await import('@/lib/email/warmup')
+      const fromEmail = campaign.from_email || ''
+      if (fromEmail) {
+        const warmup = await getWarmupStatus(organizationId, fromEmail)
+        if (warmup.isWarmingUp && warmup.remaining >= 0 && warmup.remaining < contacts.length) {
+          // Sort by engagement_score DESC — send to most engaged first (best for warm-up)
+          contacts.sort((a: any, b: any) => (b.engagement_score || 50) - (a.engagement_score || 50))
+          warmupCapped = contacts.length - warmup.remaining
+          contacts = contacts.slice(0, warmup.remaining)
+          console.log(`[SendCampaign] Warm-up cap: sending ${contacts.length}, deferred ${warmupCapped} (day ${warmup.warmupDay}, limit ${warmup.dailyLimit})`)
+        }
+      }
+    } catch (e: any) {
+      console.warn('[SendCampaign] Warm-up check failed (proceeding):', e?.message)
     }
 
     // Update total_recipients upfront

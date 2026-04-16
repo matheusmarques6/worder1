@@ -67,6 +67,10 @@
     {
       "path": "/api/cron/resolve-ab-winners",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/update-send-times",
+      "schedule": "0 3 * * *"
     }
   ]
 }

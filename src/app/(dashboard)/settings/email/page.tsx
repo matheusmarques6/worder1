@@ -41,6 +41,9 @@ interface Domain {
   dns_records: DnsRecord[] | null
   verified_at: string | null
   created_at: string
+  warmup_enabled?: boolean
+  warmup_day?: number
+  warmup_daily_limit?: number
 }
 
 function statusBadgeClass(status: string) {
@@ -329,6 +332,40 @@ export default function SettingsEmailPage() {
                           })}
                         </tbody>
                       </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Warm-up control */}
+                {d.status === 'verified' && (
+                  <div className="px-6 py-4 border-t border-zinc-100">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-zinc-900">🔥 Warm-up de IP</p>
+                        <p className="text-xs text-zinc-500 mt-0.5">
+                          {d.warmup_enabled
+                            ? `Dia ${d.warmup_day || 0} · Limite: ${(d.warmup_daily_limit || 200).toLocaleString('pt-BR')} emails/dia`
+                            : 'Aumente volume gradualmente para proteger reputação (recomendado para domínios novos)'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          const newVal = !d.warmup_enabled
+                          try {
+                            await fetch('/api/email/domains/warmup', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ domain_id: d.id, enabled: newVal }),
+                            })
+                            setDomains(prev => prev.map(dom =>
+                              dom.id === d.id ? { ...dom, warmup_enabled: newVal, warmup_day: newVal ? 1 : 0, warmup_daily_limit: 200 } : dom
+                            ))
+                          } catch {}
+                        }}
+                        className={`relative w-10 h-6 rounded-full transition-colors ${d.warmup_enabled ? 'bg-amber-500' : 'bg-gray-200'}`}
+                      >
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow-sm ${d.warmup_enabled ? 'translate-x-4' : ''}`} />
+                      </button>
                     </div>
                   </div>
                 )}

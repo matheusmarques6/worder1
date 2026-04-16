@@ -25,7 +25,31 @@ export const maxDuration = 300; // 5 minutes for batch processing
 // that (50) to keep individual batch latency low and leave headroom
 // when a single batch happens to fan-out to the webhook in parallel.
 const RESEND_BATCH_SIZE = 50;
-const THROTTLE_MS = 1000; // 1s between batches to respect daily + per-second caps
+const THROTTLE_MS = 1000;
+
+// ── ISP Rate Limits (msgs per batch cycle) ──
+// Conservative limits per ISP to protect sender reputation.
+// Gmail/Yahoo enforce stricter limits for new domains.
+const ISP_CONFIG: Record<string, { batchSize: number; throttleMs: number }> = {
+  gmail:   { batchSize: 40, throttleMs: 1200 },
+  yahoo:   { batchSize: 25, throttleMs: 1500 },
+  outlook: { batchSize: 20, throttleMs: 2000 },
+  hotmail: { batchSize: 20, throttleMs: 2000 },
+  aol:     { batchSize: 25, throttleMs: 1500 },
+  uol:     { batchSize: 30, throttleMs: 1200 },
+  default: { batchSize: 50, throttleMs: 1000 },
+};
+
+function detectISP(email: string): string {
+  const domain = (email.split('@')[1] || '').toLowerCase()
+  if (domain.includes('gmail') || domain.includes('googlemail')) return 'gmail'
+  if (domain.includes('yahoo') || domain.includes('ymail')) return 'yahoo'
+  if (domain.includes('outlook') || domain.includes('live.com')) return 'outlook'
+  if (domain.includes('hotmail') || domain.includes('msn.com')) return 'hotmail'
+  if (domain.includes('aol')) return 'aol'
+  if (domain.includes('uol') || domain.includes('bol.com.br')) return 'uol'
+  return 'default'
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -146,18 +170,40 @@ export async function POST(req: NextRequest) {
 
     // ──────────────────────────────────────────
     // Render per contact + batch via Resend API
+    // ISP-aware: group by ISP, apply per-ISP throttle
     // ──────────────────────────────────────────
     let sent = 0;
     let failed = 0;
 
-    // Chunk eligible contacts into batches (max RESEND_BATCH_SIZE each)
-    const chunks: any[][] = [];
-    for (let i = 0; i < eligibleContacts.length; i += RESEND_BATCH_SIZE) {
-      chunks.push(eligibleContacts.slice(i, i + RESEND_BATCH_SIZE));
+    // Group contacts by ISP for throttling
+    const ispGroups = new Map<string, any[]>();
+    for (const c of eligibleContacts) {
+      const isp = detectISP(c.email || '');
+      if (!ispGroups.has(isp)) ispGroups.set(isp, []);
+      ispGroups.get(isp)!.push(c);
     }
 
+    // Interleave ISP groups into chunks with per-ISP batch sizes
+    // This prevents hammering a single ISP
+    const allChunks: { contacts: any[]; isp: string; throttleMs: number }[] = [];
+    for (const [isp, ispContacts] of ispGroups) {
+      const config = ISP_CONFIG[isp] || ISP_CONFIG.default;
+      for (let i = 0; i < ispContacts.length; i += config.batchSize) {
+        allChunks.push({
+          contacts: ispContacts.slice(i, i + config.batchSize),
+          isp,
+          throttleMs: config.throttleMs,
+        });
+      }
+    }
+
+    // Fallback for mixed ISP (original behavior)
+    const chunks = allChunks.length > 0
+      ? allChunks
+      : [{ contacts: eligibleContacts, isp: 'default', throttleMs: THROTTLE_MS }];
+
     for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
-      const chunk = chunks[cIdx];
+      const { contacts: chunk, isp: chunkIsp, throttleMs: chunkThrottleMs } = chunks[cIdx];
 
       // Per-contact prep: create email_sends row, render HTML with
       // its own emailSendId so trackers point at the right record.
@@ -236,6 +282,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Create the send row (status pending) to get emailSendId
+        const contactIsp = detectISP(contact.email || '')
         const { data: emailSend, error: insertErr } = await supabaseAdmin
           .from('email_sends')
           .insert({
@@ -244,6 +291,7 @@ export async function POST(req: NextRequest) {
             email: contact.email,
             status: 'pending',
             organization_id: organizationId,
+            isp_domain: contactIsp,
           })
           .select('id')
           .single();
@@ -387,9 +435,20 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Throttle between chunks (skip after the last one)
+      // Update last_email_sent_at for smart sending (fire-and-forget)
+      const sentContactIds = prepped.map((p) => p.contactId)
+      if (sentContactIds.length > 0) {
+        void Promise.resolve(
+          supabaseAdmin
+            .from('contacts')
+            .update({ last_email_sent_at: new Date().toISOString() })
+            .in('id', sentContactIds)
+        ).catch(() => {})
+      }
+
+      // Per-ISP throttle between chunks (skip after the last one)
       if (cIdx < chunks.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, THROTTLE_MS));
+        await new Promise((resolve) => setTimeout(resolve, chunkThrottleMs));
       }
     }
 

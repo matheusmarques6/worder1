@@ -20,6 +20,7 @@ import {
 import Link from 'next/link'
 import { useStoreStore } from '@/stores'
 import ABTestPanel, { type ABTestConfig } from '@/components/email/ABTestPanel'
+import SmartSendingPanel, { type SmartSendingConfig } from '@/components/email/SmartSendingPanel'
 
 interface Template {
   id: string
@@ -71,6 +72,15 @@ export default function NewCampaignPage() {
     variantB: null,
     winner_metric: 'open_rate',
     duration_hours: 4,
+  })
+
+  // Smart Sending
+  const [smartConfig, setSmartConfig] = useState<SmartSendingConfig>({
+    smartSendingEnabled: true,
+    smartSendingHours: 16,
+    skipUnengaged: false,
+    skipUnengagedDays: 120,
+    sendTimeOptimization: false,
   })
 
   // Step 4 - Schedule
@@ -180,6 +190,12 @@ export default function NewCampaignPage() {
           ab_variant_b: abConfig.enabled ? abConfig.variantB : null,
           ab_winner_metric: abConfig.winner_metric,
           ab_duration_hours: abConfig.duration_hours,
+          // Smart Sending
+          smart_sending_enabled: smartConfig.smartSendingEnabled,
+          smart_sending_hours: smartConfig.smartSendingHours,
+          skip_unengaged: smartConfig.skipUnengaged,
+          skip_unengaged_days: smartConfig.skipUnengagedDays,
+          send_time_optimization: smartConfig.sendTimeOptimization,
         }),
       })
 
@@ -442,6 +458,11 @@ export default function NewCampaignPage() {
                 variantA={{ subject, preheader: previewText }}
                 config={abConfig}
                 onChange={setAbConfig}
+              />
+
+              <SmartSendingPanel
+                config={smartConfig}
+                onChange={setSmartConfig}
               />
 
               <div>
