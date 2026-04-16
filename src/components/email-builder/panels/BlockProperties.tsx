@@ -138,6 +138,11 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
   const p = block.props
   const [showConditions, setShowConditions] = useState(!!p._condition_enabled)
   const [showMediaLib, setShowMediaLib] = useState(false)
+  // IMPORTANT: hooks must always be called unconditionally at the top of the
+  // component — moving this into a switch case caused React error #300
+  // (rendered fewer/more hooks than expected) every time the user switched
+  // between block types, which crashed the editor.
+  const [imgTab, setImgTab] = useState<'styles' | 'display'>('styles')
 
   /* ── Common Tail Sections ── */
 
@@ -235,7 +240,6 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
       )
 
     case 'image': {
-      const [imgTab, setImgTab] = useState<'styles' | 'display'>('styles')
       return (
         <div className="space-y-0">
           {/* Tabs: Styles | Display */}
@@ -297,7 +301,10 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
                   <div>
                     <span className="text-[10px] text-gray-400">L</span>
                     <div className="flex items-center gap-1">
-                      <input type="number" value={p.width || 'auto'} onChange={e => onChange('width', e.target.value === '' ? undefined : Number(e.target.value))} placeholder="auto" min={50} max={600}
+                      {/* type="number" rejects non-numeric values like "auto" and logs
+                          "The specified value 'auto' cannot be parsed…". Keep the value
+                          numeric (empty when undefined) and let placeholder hint "auto". */}
+                      <input type="number" value={p.width ?? ''} onChange={e => onChange('width', e.target.value === '' ? undefined : Number(e.target.value))} placeholder="auto" min={50} max={600}
                         className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                       <span className="text-[10px] text-gray-400">px</span>
                     </div>
@@ -305,7 +312,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
                   <div>
                     <span className="text-[10px] text-gray-400">A</span>
                     <div className="flex items-center gap-1">
-                      <input type="number" value={p.height || 'auto'} onChange={e => onChange('height', e.target.value === '' ? undefined : Number(e.target.value))} placeholder="auto" min={20} max={800}
+                      <input type="number" value={p.height ?? ''} onChange={e => onChange('height', e.target.value === '' ? undefined : Number(e.target.value))} placeholder="auto" min={20} max={800}
                         className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                       <span className="text-[10px] text-gray-400">px</span>
                     </div>

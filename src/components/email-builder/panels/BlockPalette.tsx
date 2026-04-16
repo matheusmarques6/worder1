@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ShoppingBag, Tag, ShoppingCart, Type, ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Package, User, Store, Package2, Link, LucideIcon, Menu, Layers, Table, Quote, Clock, GripVertical } from 'lucide-react'
-import { BLOCK_DEFS, type BlockDef, type EmailBlock } from '../config/types'
+import { useState, useEffect, useMemo } from 'react'
+import { ShoppingBag, Tag, ShoppingCart, Type, ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Package, User, Store, Package2, Link, LucideIcon, Menu, Layers, Table, Quote, Clock, GripVertical, Star, Trash2, Search, ExternalLink } from 'lucide-react'
+import { BLOCK_DEFS, type BlockDef, type EmailBlock, type EmailSection } from '../config/types'
 
 const ICON_MAP: Record<string, LucideIcon> = {
   ShoppingBag, Tag, ShoppingCart, Type, Image: ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Menu, Layers, Table, Quote, Clock,
@@ -87,18 +87,52 @@ const PREBUILT_SECTIONS = [
 interface BlockPaletteProps {
   onAddBlock: (type: string) => void
   onAddSavedBlock?: (block: EmailBlock, savedBlockId?: string, savedBlockName?: string) => void
+  onAddSavedSection?: (section: EmailSection, savedSectionId?: string, savedSectionName?: string) => void
   onAddPrebuiltSection?: (type: string) => void
+  /** Incremented by the editor whenever a new saved block/section is created
+   *  so the palette re-fetches the library without requiring a tab switch. */
+  savedLibraryVersion?: number
 }
 
-export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddPrebuiltSection }: BlockPaletteProps) {
-  const [tab, setTab] = useState<'blocks' | 'prebuilt' | 'saved'>('blocks')
-  const [savedBlocks, setSavedBlocks] = useState<any[]>([])
+type SavedItem = {
+  id: string
+  name: string
+  category: string | null
+  block_json: any
+  // Computed fields:
+  kind: 'block' | 'section'
+}
 
+export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddSavedSection, onAddPrebuiltSection, savedLibraryVersion = 0 }: BlockPaletteProps) {
+  const [tab, setTab] = useState<'blocks' | 'prebuilt' | 'saved'>('blocks')
+  const [savedItems, setSavedItems] = useState<SavedItem[]>([])
+  const [savedLoading, setSavedLoading] = useState(false)
+  const [savedFilter, setSavedFilter] = useState<'all' | 'blocks' | 'sections'>('all')
+  const [search, setSearch] = useState('')
+
+  // Load library on mount, when the Salvos tab is opened, AND every time
+  // the editor bumps savedLibraryVersion (after creating a universal).
   useEffect(() => {
-    if (tab === 'saved') {
-      fetch('/api/email/saved-blocks').then(r => r.json()).then(d => setSavedBlocks(d.blocks || [])).catch(() => {})
-    }
-  }, [tab])
+    let cancelled = false
+    setSavedLoading(true)
+    fetch('/api/email/saved-blocks')
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return
+        const rows: any[] = d.blocks || []
+        const items: SavedItem[] = rows.map(r => ({
+          id: r.id,
+          name: r.name,
+          category: r.category,
+          block_json: r.block_json,
+          kind: (r.block_json && r.block_json._kind === 'section') || r.category === 'section' ? 'section' : 'block',
+        }))
+        setSavedItems(items)
+      })
+      .catch(() => { if (!cancelled) setSavedItems([]) })
+      .finally(() => { if (!cancelled) setSavedLoading(false) })
+    return () => { cancelled = true }
+  }, [savedLibraryVersion])
 
   const categories = ['Conteúdo', 'E-commerce', 'Estrutura']
 
@@ -106,6 +140,20 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddPrebuiltSection
     e.dataTransfer.setData('blockType', def.type)
     e.dataTransfer.effectAllowed = 'copy'
   }
+
+  const filteredSaved = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return savedItems.filter(item => {
+      if (savedFilter === 'blocks' && item.kind !== 'block') return false
+      if (savedFilter === 'sections' && item.kind !== 'section') return false
+      if (q && !item.name.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [savedItems, savedFilter, search])
+
+  const savedCount = savedItems.length
+  const blocksCount = savedItems.filter(i => i.kind === 'block').length
+  const sectionsCount = savedItems.filter(i => i.kind === 'section').length
 
   return (
     <div className="h-full flex flex-col">
@@ -115,11 +163,14 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddPrebuiltSection
           {([
             { id: 'blocks' as const, label: 'Blocos' },
             { id: 'prebuilt' as const, label: 'Pre-built' },
-            { id: 'saved' as const, label: 'Salvos' },
+            { id: 'saved' as const, label: 'Universais', count: savedCount },
           ]).map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md transition-all ${tab === t.id ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
-              {t.label}
+              className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md transition-all flex items-center justify-center gap-1 ${tab === t.id ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
+              <span>{t.label}</span>
+              {'count' in t && t.count ? (
+                <span className={`text-[9px] px-1 rounded ${tab === t.id ? 'bg-violet-100 text-violet-700' : 'bg-zinc-200 text-zinc-600'}`}>{t.count}</span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -181,47 +232,120 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddPrebuiltSection
           </div>
         )}
 
-        {/* Saved / Universal blocks */}
+        {/* ── Universal content (Saved blocks + sections, Klaviyo/Omnisend parity) ── */}
         {tab === 'saved' && (
-          <div>
-            <p className="text-[10px] text-zinc-400 mb-3 leading-snug">Blocos universais sao reutilizaveis em qualquer email. Arraste para adicionar.</p>
-            {savedBlocks.length === 0 ? (
-              <div className="text-center py-10">
-                <Package className="w-8 h-8 text-zinc-300 mx-auto mb-2" />
-                <p className="text-[12px] text-zinc-500 font-medium">Nenhum bloco salvo</p>
-                <p className="text-[10px] text-zinc-400 mt-1">Selecione um bloco e clique no icone<br/>estrela na toolbar do bloco</p>
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-violet-50 border border-violet-100">
+              <Star className="w-3.5 h-3.5 text-violet-600 fill-violet-600 shrink-0 mt-0.5" />
+              <p className="text-[10px] text-violet-900/80 leading-snug">
+                Conteúdo universal fica disponível em todos os emails. Edições
+                se propagam automaticamente — igual Klaviyo e Omnisend.
+              </p>
+            </div>
+
+            {/* Filter pills: all / blocks / sections */}
+            <div className="flex bg-zinc-100 rounded-md p-0.5">
+              {([
+                { id: 'all' as const, label: 'Tudo', count: savedCount },
+                { id: 'blocks' as const, label: 'Blocos', count: blocksCount },
+                { id: 'sections' as const, label: 'Seções', count: sectionsCount },
+              ]).map(f => (
+                <button key={f.id} onClick={() => setSavedFilter(f.id)}
+                  className={`flex-1 py-1 text-[10px] font-semibold rounded transition-colors flex items-center justify-center gap-1 ${savedFilter === f.id ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
+                  <span>{f.label}</span>
+                  <span className="text-[9px] text-zinc-400">{f.count}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar universais..."
+                className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-zinc-200 rounded-md text-[11px] text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-zinc-400" />
+            </div>
+
+            {savedLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <div className="w-4 h-4 border-2 border-zinc-300 border-t-violet-500 rounded-full animate-spin" />
+              </div>
+            ) : filteredSaved.length === 0 ? (
+              <div className="text-center py-10 px-4">
+                <Package className="w-9 h-9 text-zinc-300 mx-auto mb-2" />
+                <p className="text-[12px] text-zinc-600 font-medium">
+                  {savedCount === 0 ? 'Nenhum universal ainda' : 'Nada encontrado'}
+                </p>
+                <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">
+                  {savedCount === 0
+                    ? 'Selecione um bloco ou seção e clique no ícone ⭐ da toolbar para salvar como universal.'
+                    : 'Ajuste o filtro ou a busca.'}
+                </p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {savedBlocks.map((sb: any) => (
-                  <div key={sb.id}
-                    draggable
-                    onDragStart={(e) => { e.dataTransfer.setData('savedBlockJson', JSON.stringify(sb.block_json)); e.dataTransfer.setData('savedBlockId', sb.id); e.dataTransfer.setData('savedBlockName', sb.name); e.dataTransfer.effectAllowed = 'copy' }}
-                    className="flex items-center gap-2.5 p-3 bg-white border border-zinc-200 rounded-xl hover:border-zinc-400 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing group"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center flex-shrink-0">
-                      <Package className="w-4 h-4 text-zinc-500" />
-                    </div>
-                    <div className="flex-1 min-w-0" onClick={() => onAddSavedBlock?.(sb.block_json, sb.id, sb.name)}>
-                      <p className="text-[12px] font-medium text-zinc-900 truncate cursor-pointer hover:text-zinc-700">{sb.name}</p>
-                      <p className="text-[10px] text-zinc-400">{sb.category || 'Personalizado'}</p>
-                    </div>
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation()
-                        if (!confirm(`Excluir bloco "${sb.name}"?`)) return
-                        try {
-                          await fetch(`/api/email/saved-blocks/${sb.id}`, { method: 'DELETE' })
-                          setSavedBlocks(prev => prev.filter(b => b.id !== sb.id))
-                        } catch {}
+              <div className="space-y-1.5">
+                {filteredSaved.map((item) => {
+                  const isSection = item.kind === 'section'
+                  const payloadJson = isSection ? (item.block_json?.section || item.block_json) : item.block_json
+                  return (
+                    <div key={item.id}
+                      draggable
+                      onDragStart={(e) => {
+                        if (isSection) {
+                          e.dataTransfer.setData('savedSectionJson', JSON.stringify(payloadJson))
+                          e.dataTransfer.setData('savedSectionId', item.id)
+                          e.dataTransfer.setData('savedSectionName', item.name)
+                        } else {
+                          e.dataTransfer.setData('savedBlockJson', JSON.stringify(payloadJson))
+                          e.dataTransfer.setData('savedBlockId', item.id)
+                          e.dataTransfer.setData('savedBlockName', item.name)
+                        }
+                        e.dataTransfer.effectAllowed = 'copy'
                       }}
-                      className="p-1 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                      title="Excluir bloco"
+                      onClick={() => {
+                        if (isSection) onAddSavedSection?.(payloadJson, item.id, item.name)
+                        else onAddSavedBlock?.(payloadJson, item.id, item.name)
+                      }}
+                      className="flex items-center gap-2.5 p-2.5 bg-white border border-zinc-200 rounded-lg hover:border-violet-400 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing group"
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                    </button>
-                  </div>
-                ))}
+                      <div className={`w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 ${isSection ? 'bg-violet-100' : 'bg-zinc-100'}`}>
+                        {isSection ? <Layers className="w-4 h-4 text-violet-600" /> : <Package className="w-4 h-4 text-zinc-500" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-[12px] font-medium text-zinc-900 truncate">{item.name}</p>
+                          <span className={`text-[8px] px-1 py-px rounded font-semibold uppercase tracking-wide ${isSection ? 'bg-violet-100 text-violet-700' : 'bg-zinc-100 text-zinc-600'}`}>
+                            {isSection ? 'Seção' : 'Bloco'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-400">Arraste ou clique para inserir</p>
+                      </div>
+                      <a
+                        href={`/email/universal/${item.id}/edit`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="p-1 text-zinc-300 hover:text-violet-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                        title="Abrir editor dedicado (edita em todos os emails)"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (!confirm(`Excluir "${item.name}" da biblioteca? Os emails que já usam esse ${isSection ? 'seção' : 'bloco'} universal vão perder o vínculo.`)) return
+                          try {
+                            await fetch(`/api/email/saved-blocks/${item.id}`, { method: 'DELETE' })
+                            setSavedItems(prev => prev.filter(b => b.id !== item.id))
+                          } catch {}
+                        }}
+                        className="p-1 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
