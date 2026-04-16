@@ -2,9 +2,8 @@
  * CRON: Detect segment entry/exit
  * /api/cron/detect-segment-changes
  *
- * Para cada segmento dinâmico, compara membros atuais com snapshot anterior
- * (tabela segment_memberships_snapshot). Para cada NOVO membro, dispara
- * automações com trigger_type='trigger_segment' e config.segment_id matching.
+ * Para cada segmento dinâmico em customer_segments, compara membros atuais
+ * com snapshot anterior. Para cada NOVO membro, dispara automações.
  *
  * Roda a cada 15 min.
  */
@@ -12,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { dispatchTrigger } from '@/lib/automation/trigger-dispatcher'
+import { resolveByConditions } from '@/lib/segments/resolver'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -31,10 +31,9 @@ export async function GET(req: NextRequest) {
   const start = Date.now()
 
   try {
-    // Busca segmentos dinâmicos
     const { data: segments, error } = await supabaseAdmin
-      .from('segments')
-      .select('id, organization_id, conditions, type')
+      .from('customer_segments')
+      .select('id, organization_id, rules, rules_logic, rfm_segments, segment_type')
       .in('segment_type', ['dynamic', 'rfm'])
       .limit(200)
 
@@ -45,10 +44,11 @@ export async function GET(req: NextRequest) {
 
     for (const seg of segments || []) {
       try {
-        // Resolver membros atuais
-        const { resolveSegment } = await import('@/lib/segments/resolver')
-        const currentMembers = await resolveSegment(supabaseAdmin, seg.id, seg.organization_id)
-        const currentSet = new Set(currentMembers)
+        const conditions = {
+          logic: (seg.rules_logic || 'AND').toLowerCase(),
+          rules: seg.rules || [],
+        }
+        const currentMembers = await resolveByConditions(supabaseAdmin, conditions, seg.organization_id)
 
         // Snapshot anterior
         const { data: previousSnapshot } = await supabaseAdmin
@@ -58,28 +58,20 @@ export async function GET(req: NextRequest) {
           .maybeSingle()
 
         const previousSet = new Set<string>((previousSnapshot?.contact_ids as string[]) || [])
-
-        // Novos membros = current - previous
         const newEntries = currentMembers.filter((id) => !previousSet.has(id))
 
-        // Disparar automações para cada novo membro
         for (const contactId of newEntries) {
           await dispatchTrigger({
             organizationId: seg.organization_id,
             triggerType: 'trigger_segment',
             contactId,
-            triggerData: {
-              segment_id: seg.id,
-              event: 'entered',
-            },
-            matchConfig: (cfg) =>
-              !cfg?.segment_id || cfg.segment_id === seg.id,
+            triggerData: { segment_id: seg.id, event: 'entered' },
+            matchConfig: (cfg) => !cfg?.segment_id || cfg.segment_id === seg.id,
             idempotencyKey: `segment_entry:${seg.id}:${contactId}`,
           })
           totalEntries++
         }
 
-        // Atualiza snapshot
         await supabaseAdmin
           .from('segment_memberships_snapshot')
           .upsert({

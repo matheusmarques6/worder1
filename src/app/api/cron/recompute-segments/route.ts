@@ -3,10 +3,6 @@
  * Atualiza `member_count` + `last_count_at` de todos os segmentos dinâmicos.
  *
  * Roda a cada 15 minutos (configurar em vercel.json).
- *
- * Autenticação:
- *  - Header `x-vercel-cron` (Vercel Cron)
- *  - OU `Authorization: Bearer CRON_SECRET`
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -35,11 +31,9 @@ export async function GET(request: NextRequest) {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    // Busca segmentos dinâmicos de TODAS as orgs.
-    // A função countSegmentByConditions já faz filtro por organization_id.
     const { data: segments, error } = await supabase
-      .from('segments')
-      .select('id, organization_id, conditions, type')
+      .from('customer_segments')
+      .select('id, organization_id, rules, rules_logic, rfm_segments, segment_type')
       .in('segment_type', ['dynamic', 'rfm'])
       .limit(500);
 
@@ -52,16 +46,21 @@ export async function GET(request: NextRequest) {
 
     for (const seg of segments || []) {
       try {
+        // Converte rules do schema customer_segments para o formato conditions do resolver
+        const conditions = {
+          logic: (seg.rules_logic || 'AND').toLowerCase(),
+          rules: seg.rules || [],
+        };
         const count = await countSegmentByConditions(
           supabase,
-          seg.conditions,
+          conditions,
           seg.organization_id
         );
 
         await supabase
-          .from('segments')
+          .from('customer_segments')
           .update({
-            member_count: count,
+            contact_count: count,
             last_count_at: new Date().toISOString(),
           })
           .eq('id', seg.id);

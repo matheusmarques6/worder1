@@ -270,12 +270,12 @@ UPDATE automation_runs
 -- -----------------------------------------------------------------
 -- 7. Segmentos: colunas member_count + last_count_at
 -- -----------------------------------------------------------------
-ALTER TABLE segments
+ALTER TABLE customer_segments
   ADD COLUMN IF NOT EXISTS member_count  INT DEFAULT 0,
   ADD COLUMN IF NOT EXISTS last_count_at TIMESTAMPTZ;
 
-CREATE INDEX IF NOT EXISTS segments_org_type_idx
-  ON segments (organization_id, type);
+CREATE INDEX IF NOT EXISTS customer_segments_org_segment_type_idx
+  ON customer_segments (organization_id, segment_type);
 
 -- ==================================================================
 -- FILE: 20260415_automation_workers_lock.sql

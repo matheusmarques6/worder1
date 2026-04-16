@@ -55,11 +55,23 @@ export async function resolveSegment(
   orgId: string
 ): Promise<string[]> {
   try {
-    const { data: segment } = await supabase
-      .from('segments')
-      .select('conditions')
+    // Tenta customer_segments primeiro (tabela principal), depois segments (legada/view)
+    let segment: any = null
+    const { data: cs } = await supabase
+      .from('customer_segments')
+      .select('rules, rules_logic, rfm_segments, segment_type')
       .eq('id', segmentId)
       .maybeSingle()
+    if (cs) {
+      segment = { conditions: { logic: (cs.rules_logic || 'AND').toLowerCase(), rules: cs.rules || [] } }
+    } else {
+      const { data: s } = await supabase
+        .from('segments')
+        .select('conditions')
+        .eq('id', segmentId)
+        .maybeSingle()
+      segment = s
+    }
     if (!segment) return []
     return resolveByConditions(supabase, segment.conditions, orgId)
   } catch (err) {
