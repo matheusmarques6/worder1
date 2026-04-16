@@ -115,27 +115,37 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Send via Resend
+      // Send via Resend usando remetente configurado da org
       try {
         const resendKey = process.env.RESEND_API_KEY;
         if (!resendKey) {
           return NextResponse.json({ error: 'Resend not configured' }, { status: 500 });
         }
+
+        // Buscar remetente da org
+        const { getOrgSender } = await import('@/lib/email/sender');
+        const sender = await getOrgSender(organizationId);
+
         const res = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            from: 'Worder <noreply@worder.app>',
+            from: sender.from,
             to: testEmail,
             subject: `[TESTE] ${tpl.name || 'Preview'}`,
             html,
+            reply_to: sender.replyTo,
           }),
         });
         if (!res.ok) {
           const err = await res.json();
-          return NextResponse.json({ error: err.message || 'Send failed' }, { status: 500 });
+          return NextResponse.json({
+            error: err.message || 'Send failed',
+            hint: err.message?.includes('verify') ? 'Verifique o domínio em Configurações → E-mail & Domínios' : undefined,
+            from: sender.from,
+          }, { status: 500 });
         }
-        return NextResponse.json({ sent: true });
+        return NextResponse.json({ sent: true, from: sender.from });
       } catch (err: any) {
         return NextResponse.json({ error: err.message }, { status: 500 });
       }
