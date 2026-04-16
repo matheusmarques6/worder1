@@ -416,6 +416,33 @@ if (msgError) {
     console.error('[Webhook] ❌ Error saving message:', msgError);
   } else {
     console.log('[Webhook] ✅ Message saved for store:', storeId);
+
+    // CDP: gravar evento whatsapp_message_received
+    if (contactId) {
+      try {
+        await supabase.from('contact_events').insert({
+          organization_id: orgId,
+          contact_id: contactId,
+          store_id: storeId,
+          event_type: 'whatsapp_message_received',
+          event_source: 'whatsapp',
+          properties: {
+            message_type: messageType,
+            conversation_id: conversationId,
+            message_preview: (content || '').slice(0, 100),
+            phone: phoneNumber,
+            push_name: pushName,
+          },
+          occurred_at: messageDate,
+          idempotency_key: `wa_msg:${orgId}:${messageId}`,
+        }).select().maybeSingle();
+
+        // Atualizar contato
+        await supabase.from('contacts')
+          .update({ last_active_at: messageDate, last_event_type: 'whatsapp_message_received' })
+          .eq('id', contactId);
+      } catch { /* silent */ }
+    }
   }
 }
 

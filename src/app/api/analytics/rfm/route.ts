@@ -184,11 +184,11 @@ async function calculateRFMManual(organization_id: string, period_days: number) 
 
   // Buscar métricas de compra por contato
   const { data: purchases } = await supabase
-    .from('customer_events')
-    .select('contact_id, order_total, event_timestamp')
+    .from('contact_events')
+    .select('contact_id, order_total, occurred_at')
     .eq('organization_id', organization_id)
-    .eq('event_type', 'purchase')
-    .gte('event_timestamp', cutoffDate.toISOString())
+    .in('event_type', ['purchase', 'placed_order', 'checkout_completed'])
+    .gte('occurred_at', cutoffDate.toISOString())
 
   // Agregar por contato
   const contactMetrics: Record<string, { 
@@ -202,14 +202,14 @@ async function calculateRFMManual(organization_id: string, period_days: number) 
     
     if (!contactMetrics[p.contact_id]) {
       contactMetrics[p.contact_id] = {
-        lastPurchase: new Date(p.event_timestamp),
+        lastPurchase: new Date(p.occurred_at),
         orders: 0,
         total: 0,
       }
     }
 
     const m = contactMetrics[p.contact_id]
-    const pDate = new Date(p.event_timestamp)
+    const pDate = new Date(p.occurred_at)
     if (pDate > m.lastPurchase) m.lastPurchase = pDate
     m.orders++
     m.total += p.order_total || 0

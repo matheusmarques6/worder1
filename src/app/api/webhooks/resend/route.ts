@@ -65,72 +65,112 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing email_id' }, { status: 400 });
     }
 
-    // Find the email_send by resend_id
+    // Find the email_send with contact + campaign info
     const { data: emailSend, error: findError } = await supabaseAdmin
       .from('email_sends')
-      .select('id, campaign_id')
+      .select('id, campaign_id, contact_id, ab_variant')
       .eq('resend_id', resendId)
       .maybeSingle();
 
     if (findError || !emailSend) {
       console.log(`[ResendWebhook] No email_send found for resend_id: ${resendId}`);
-      // Return 200 to prevent Resend from retrying
       return NextResponse.json({ received: true, matched: false });
     }
 
     const emailSendId = emailSend.id;
     const campaignId = emailSend.campaign_id;
+    const contactId = emailSend.contact_id;
     const now = new Date().toISOString();
+
+    // Resolve organization_id
+    let orgId: string | null = null;
+    if (campaignId) {
+      const { data: camp } = await supabaseAdmin
+        .from('email_campaigns')
+        .select('organization_id')
+        .eq('id', campaignId)
+        .maybeSingle();
+      orgId = camp?.organization_id || null;
+    }
+
+    // Helper: gravar evento no CDP + atualizar contato
+    const cdpEvent = async (eventType: string, props: Record<string, any> = {}) => {
+      if (!orgId || !contactId) return;
+      const dayKey = now.slice(0, 10);
+      // CDP event
+      await supabaseAdmin.from('contact_events').insert({
+        organization_id: orgId,
+        contact_id: contactId,
+        event_type: eventType,
+        event_source: 'worder_email',
+        properties: { CampaignId: campaignId, SendId: emailSendId, ...props },
+        occurred_at: now,
+        idempotency_key: `${eventType}:${campaignId}:${contactId}:${dayKey}`,
+      }).select().maybeSingle();
+      // Update contact
+      await supabaseAdmin.from('contacts')
+        .update({ last_active_at: now, last_event_type: eventType })
+        .eq('id', contactId);
+    };
 
     switch (type) {
       case 'email.delivered':
-        await supabaseAdmin
-          .from('email_sends')
+        await supabaseAdmin.from('email_sends')
           .update({ status: 'delivered', delivered_at: now })
           .eq('id', emailSendId);
+        await cdpEvent('email_delivered');
+        if (campaignId) {
+          const { error } = await supabaseAdmin.rpc('increment_campaign_opens', { campaign_id: campaignId });
+          // increment_campaign_delivered RPC pode não existir — silenciar
+        }
         break;
 
       case 'email.bounced':
-        await supabaseAdmin
-          .from('email_sends')
-          .update({
-            status: 'bounced',
-            bounced_at: now,
-            error_message: data.bounce?.type || 'bounced',
-          })
+        await supabaseAdmin.from('email_sends')
+          .update({ status: 'bounced', bounced_at: now, error_message: data.bounce?.type || 'bounced' })
           .eq('id', emailSendId);
-        if (campaignId) {
-          try { await supabaseAdmin.rpc('increment_campaign_bounces', { p_campaign_id: campaignId }); } catch {}
+        await cdpEvent('email_bounced', { bounce_type: data.bounce?.type, bounce_message: data.bounce?.message });
+        // Revogar consent do contato que bounced (hard bounce)
+        if (contactId && data.bounce?.type === 'hard') {
+          await supabaseAdmin.from('contacts')
+            .update({ email_consent: false, status: 'bounced' })
+            .eq('id', contactId);
         }
         break;
 
       case 'email.complained':
-        await supabaseAdmin
-          .from('email_sends')
+        await supabaseAdmin.from('email_sends')
           .update({ status: 'complained', complained_at: now })
           .eq('id', emailSendId);
+        await cdpEvent('email_complained');
+        // Revogar consent de quem reclamou (spam report)
+        if (contactId) {
+          await supabaseAdmin.from('contacts')
+            .update({ email_consent: false, status: 'complained' })
+            .eq('id', contactId);
+        }
         break;
 
       case 'email.opened':
-        // Update only if not already set (open pixel may have fired first)
-        await supabaseAdmin
-          .from('email_sends')
+        await supabaseAdmin.from('email_sends')
           .update({ opened_at: now })
           .eq('id', emailSendId)
           .is('opened_at', null);
+        // CDP: só grava se nosso pixel não pegou (dedup via idempotency_key)
+        await cdpEvent('email_opened');
         if (campaignId) {
-          try { await supabaseAdmin.rpc('increment_campaign_opens', { campaign_id: campaignId }); } catch {}
+          const { error } = await supabaseAdmin.rpc('increment_campaign_opens', { campaign_id: campaignId });
         }
         break;
 
       case 'email.clicked':
-        await supabaseAdmin
-          .from('email_sends')
+        await supabaseAdmin.from('email_sends')
           .update({ clicked_at: now })
           .eq('id', emailSendId)
           .is('clicked_at', null);
+        await cdpEvent('email_clicked', { source: 'resend_webhook' });
         if (campaignId) {
-          try { await supabaseAdmin.rpc('increment_campaign_clicks', { p_campaign_id: campaignId }); } catch {}
+          const { error } = await supabaseAdmin.rpc('increment_campaign_clicks', { campaign_id: campaignId });
         }
         break;
 

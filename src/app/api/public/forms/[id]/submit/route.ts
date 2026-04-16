@@ -615,7 +615,30 @@ export async function POST(
         .eq('id', submission.id)
     }
 
-    // 8.5. Disparar automações com trigger_form_submitted
+    // 8.5. CDP: gravar evento form_submitted
+    if (contactId) {
+      try {
+        await supabase.from('contact_events').insert({
+          organization_id: form.organization_id,
+          contact_id: contactId,
+          event_type: 'form_submitted',
+          event_source: 'worder_form',
+          properties: {
+            form_id: formId,
+            form_name: form.name,
+            submission_id: submission?.id,
+            utm_source, utm_medium, utm_campaign,
+          },
+          occurred_at: new Date().toISOString(),
+          idempotency_key: `form_submitted:${submission?.id || formId}:${contactId}`,
+        })
+        await supabase.from('contacts')
+          .update({ last_active_at: new Date().toISOString(), last_event_type: 'form_submitted' })
+          .eq('id', contactId)
+      } catch { /* silent */ }
+    }
+
+    // 8.6. Disparar automações com trigger_form_submitted
     try {
       const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
       await dispatchTrigger({
