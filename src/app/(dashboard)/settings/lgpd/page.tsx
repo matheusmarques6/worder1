@@ -72,8 +72,13 @@ export default function LgpdSettingsPage() {
       const res = await fetch('/api/lgpd/data-requests')
       if (res.ok) {
         const d = await res.json()
-        setRequests(d.requests || [])
+        setRequests(Array.isArray(d.requests) ? d.requests : [])
+      } else {
+        // API pode retornar 500 se tabela não existe
+        setRequests([])
       }
+    } catch {
+      setRequests([])
     } finally {
       setLoading(false)
     }

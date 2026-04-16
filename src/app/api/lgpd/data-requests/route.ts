@@ -113,6 +113,10 @@ export async function GET(req: NextRequest) {
   if (status) q = q.eq('status', status)
 
   const { data, error } = await q
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    // Tabela pode não existir ainda
+    console.warn('[lgpd/data-requests GET] error:', error.message)
+    return NextResponse.json({ requests: [] })
+  }
   return NextResponse.json({ requests: data || [] })
 }

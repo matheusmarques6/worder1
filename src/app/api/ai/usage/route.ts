@@ -28,7 +28,15 @@ export async function GET(req: NextRequest) {
     .gte('created_at', since)
     .limit(100000)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // Se tabela não existe ou erro, retorna vazio (não quebra UI)
+  if (error) {
+    console.warn('[ai/usage] query error (table may not exist):', error.message)
+    return NextResponse.json({
+      period,
+      totals: { calls: 0, successful: 0, failed: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, costUsd: 0, avgDurationMs: 0 },
+      grouped: [],
+    })
+  }
 
   const rows = data || []
 

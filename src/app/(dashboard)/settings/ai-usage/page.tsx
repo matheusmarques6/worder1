@@ -51,12 +51,25 @@ export default function AiUsagePage() {
   const [groupBy, setGroupBy] = useState<'day' | 'model' | 'feature'>('day')
   const [data, setData] = useState<UsageData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
+    setError(null)
     fetch(`/api/ai/usage?period=${period}&group_by=${groupBy}`)
-      .then((r) => r.json())
-      .then(setData)
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status}`)
+        return r.json()
+      })
+      .then((d) => {
+        // Garantir que totals e grouped existem
+        setData({
+          period: d.period || period,
+          totals: d.totals || { calls: 0, successful: 0, failed: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, costUsd: 0, avgDurationMs: 0 },
+          grouped: Array.isArray(d.grouped) ? d.grouped : [],
+        })
+      })
+      .catch((e) => setError(e?.message || 'Erro ao carregar'))
       .finally(() => setLoading(false))
   }, [period, groupBy])
 
@@ -67,9 +80,30 @@ export default function AiUsagePage() {
       </div>
     )
   }
+  if (error) {
+    return (
+      <div className="p-8 max-w-5xl space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
+            <Sparkles className="w-5 h-5 text-violet-600" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Uso de IA</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Nenhum dado disponível ainda.</p>
+          </div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
+          <Sparkles className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Os dados de uso aparecerão aqui quando features de IA forem utilizadas.</p>
+          <p className="text-xs text-gray-400 mt-2">Verifique se a migration do <code className="font-mono">ai_usage_logs</code> foi executada no Supabase.</p>
+        </div>
+      </div>
+    )
+  }
   if (!data) return null
 
-  const maxCost = Math.max(...data.grouped.map((g) => g.costUsd), 0.001)
+  const grouped: Array<{ key: string; calls: number; tokens: number; costUsd: number }> = data.grouped || []
+  const maxCost = Math.max(...grouped.map((g: any) => g.costUsd), 0.001)
   const successRate =
     data.totals.calls > 0 ? ((data.totals.successful / data.totals.calls) * 100).toFixed(1) : '—'
 
@@ -157,7 +191,7 @@ export default function AiUsagePage() {
           <div>
             <h2 className="text-base font-semibold text-gray-900">Breakdown</h2>
             <p className="text-xs text-gray-500 mt-0.5">
-              {data.grouped.length} grupos · ordenados por custo
+              {grouped.length} grupos · ordenados por custo
             </p>
           </div>
           <div className="flex gap-1">
@@ -178,7 +212,7 @@ export default function AiUsagePage() {
           </div>
         </div>
 
-        {data.grouped.length === 0 ? (
+        {grouped.length === 0 ? (
           <div className="p-12 text-center">
             <Sparkles className="w-10 h-10 text-gray-300 mx-auto mb-3" />
             <p className="text-sm text-gray-500">Nenhum uso de IA registrado no período.</p>
@@ -188,7 +222,7 @@ export default function AiUsagePage() {
           </div>
         ) : (
           <div className="p-6 space-y-3">
-            {data.grouped.map((g) => {
+            {grouped.map((g) => {
               const pct = (g.costUsd / maxCost) * 100
               return (
                 <div key={g.key}>

@@ -75,29 +75,43 @@ export async function createDomain(domain: string) {
 }
 
 export async function verifyDomain(domainId: string) {
-  const resend = getResend();
-
-  const { data, error } = await resend.domains.verify(domainId);
-
-  if (error) {
-    console.error('[Resend] Error verifying domain:', error);
-    throw new Error(`Resend error: ${error.message}`);
+  const apiKey = process.env.RESEND_API_KEY;
+  // Chamar REST diretamente (SDK pode ter incompatibilidades de versão)
+  const res = await fetch(`https://api.resend.com/domains/${domainId}/verify`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    console.error('[Resend] Verify domain error:', json);
+    throw new Error(json?.message || `Verify failed: ${res.status}`);
   }
-
-  return data;
+  return await res.json().catch(() => ({}));
 }
 
 export async function getDomain(domainId: string) {
-  const resend = getResend();
-
-  const { data, error } = await resend.domains.get(domainId);
-
-  if (error) {
-    console.error('[Resend] Error getting domain:', error);
-    throw new Error(`Resend error: ${error.message}`);
+  const apiKey = process.env.RESEND_API_KEY;
+  const res = await fetch(`https://api.resend.com/domains/${domainId}`, {
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    console.error('[Resend] Get domain error:', json);
+    throw new Error(json?.message || `Get domain failed: ${res.status}`);
   }
+  return await res.json();
+}
 
-  return data;
+/**
+ * Lista todos os domínios da conta Resend.
+ */
+export async function listDomains() {
+  const apiKey = process.env.RESEND_API_KEY;
+  const res = await fetch('https://api.resend.com/domains', {
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+  });
+  if (!res.ok) throw new Error(`List domains failed: ${res.status}`);
+  return await res.json();
 }
 
 // =============================================
@@ -106,9 +120,10 @@ export async function getDomain(domainId: string) {
 
 export async function registerWebhook(endpointUrl: string) {
   const resend = getResend();
-  const client: any = resend as any;
-  const { data, error } = await client.webhooks.create({
-    url: endpointUrl,
+
+  // Resend SDK v6+ usa 'endpoint' (não 'url')
+  const payload: any = {
+    endpoint: endpointUrl,
     events: [
       'email.sent',
       'email.delivered',
@@ -118,23 +133,50 @@ export async function registerWebhook(endpointUrl: string) {
       'email.opened',
       'email.clicked',
     ],
-  });
-  if (error) {
-    console.error('[Resend] Error registering webhook:', error);
-    throw new Error(`Resend webhook error: ${error.message}`);
+  };
+
+  // Tenta via SDK
+  const client: any = resend as any;
+  if (client.webhooks?.create) {
+    const { data, error } = await client.webhooks.create(payload);
+    if (error) {
+      console.error('[Resend] SDK webhook error:', error);
+      throw new Error(`Resend webhook error: ${error.message}`);
+    }
+    return data;
   }
-  return data;
+
+  // Fallback: chamada direta REST
+  const apiKey = process.env.RESEND_API_KEY;
+  const res = await fetch('https://api.resend.com/webhooks', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.message || json?.error?.message || 'Webhook registration failed');
+  return json;
 }
 
 export async function listWebhooks() {
   const resend = getResend();
   const client: any = resend as any;
-  const { data, error } = await client.webhooks.list();
-  if (error) {
-    console.error('[Resend] Error listing webhooks:', error);
-    throw new Error(`Resend webhook error: ${error.message}`);
+  if (client.webhooks?.list) {
+    const { data, error } = await client.webhooks.list();
+    if (error) throw new Error(`Resend webhook error: ${error.message}`);
+    return data;
   }
-  return data;
+  // Fallback REST
+  const apiKey = process.env.RESEND_API_KEY;
+  const res = await fetch('https://api.resend.com/webhooks', {
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.message || 'Failed to list webhooks');
+  return json;
 }
 
 // =============================================

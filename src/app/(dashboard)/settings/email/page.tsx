@@ -21,6 +21,7 @@ import {
   Loader2,
   Trash2,
   Zap,
+  Mail,
 } from 'lucide-react'
 
 interface DnsRecord {
@@ -330,6 +331,9 @@ export default function SettingsEmailPage() {
         )}
       </div>
 
+      {/* Configuração do Remetente */}
+      <SenderConfig verifiedDomains={domains.filter(d => d.status === 'verified')} />
+
       {/* Webhook Resend */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
         <div className="px-6 py-5 border-b border-gray-100">
@@ -343,6 +347,145 @@ export default function SettingsEmailPage() {
         </div>
         <div className="p-6">
           <WebhookResendButton />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SenderConfig({ verifiedDomains }: { verifiedDomains: Domain[] }) {
+  const [senderName, setSenderName] = useState('')
+  const [senderLocal, setSenderLocal] = useState('') // parte antes do @
+  const [selectedDomain, setSelectedDomain] = useState('')
+  const [replyTo, setReplyTo] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [toast, setToast] = useState('')
+
+  useEffect(() => {
+    fetch('/api/settings/organization')
+      .then(r => r.json())
+      .then(d => {
+        const s = d?.organization?.email_settings || {}
+        setSenderName(s.default_sender_name || '')
+        setReplyTo(s.default_reply_to || '')
+        const email = s.default_sender_email || ''
+        if (email.includes('@')) {
+          setSenderLocal(email.split('@')[0])
+          setSelectedDomain(email.split('@')[1])
+        }
+        setLoaded(true)
+      })
+      .catch(() => setLoaded(true))
+  }, [])
+
+  useEffect(() => {
+    if (verifiedDomains.length > 0 && !selectedDomain) {
+      setSelectedDomain(verifiedDomains[0].domain)
+    }
+  }, [verifiedDomains, selectedDomain])
+
+  const fullEmail = senderLocal && selectedDomain ? `${senderLocal}@${selectedDomain}` : ''
+
+  const save = async () => {
+    if (!fullEmail) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/settings/organization', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email_settings: {
+            default_sender_name: senderName,
+            default_sender_email: fullEmail,
+            default_reply_to: replyTo || fullEmail,
+          },
+        }),
+      })
+      if (res.ok) {
+        setToast('Salvo com sucesso')
+        setTimeout(() => setToast(''), 2000)
+      }
+    } finally { setSaving(false) }
+  }
+
+  if (!loaded) return null
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div className="px-6 py-5 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <Mail className="w-4 h-4 text-[#FF6A2B]" />
+          <h2 className="text-base font-semibold text-gray-900">Remetente Padrão</h2>
+        </div>
+        <p className="text-sm text-gray-500 mt-1 leading-relaxed">
+          Configure o email e nome do remetente. Só é possível enviar a partir de domínios verificados.
+        </p>
+      </div>
+      <div className="p-6 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome do remetente</label>
+          <input
+            type="text"
+            value={senderName}
+            onChange={e => setSenderName(e.target.value)}
+            placeholder="Minha Loja"
+            className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Email do remetente</label>
+          {verifiedDomains.length === 0 ? (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              Nenhum domínio verificado. Adicione e verifique um domínio acima primeiro.
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={senderLocal}
+                onChange={e => setSenderLocal(e.target.value.replace(/[^a-zA-Z0-9._\-+]/g, ''))}
+                placeholder="contato"
+                className="flex-1 px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 font-mono placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
+              />
+              <span className="flex items-center text-sm text-gray-400 font-mono">@</span>
+              <select
+                value={selectedDomain}
+                onChange={e => setSelectedDomain(e.target.value)}
+                className="flex-1 px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 font-mono bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
+              >
+                {verifiedDomains.map(d => (
+                  <option key={d.id} value={d.domain}>{d.domain}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {fullEmail && (
+            <p className="text-xs text-gray-500 mt-1.5 font-mono">
+              Envios de: <span className="text-gray-900 font-semibold">{senderName || 'Sua Loja'} &lt;{fullEmail}&gt;</span>
+            </p>
+          )}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Responder para (opcional)</label>
+          <input
+            type="email"
+            value={replyTo}
+            onChange={e => setReplyTo(e.target.value)}
+            placeholder={fullEmail || 'contato@sualoja.com'}
+            className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 font-mono placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={save}
+            disabled={saving || !fullEmail || !senderName}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FF6A2B] text-white text-sm font-medium rounded-lg hover:bg-[#E85D1F] disabled:opacity-50 transition-colors"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+            Salvar Configuração
+          </button>
+          {toast && <span className="text-sm text-emerald-600">{toast}</span>}
         </div>
       </div>
     </div>
