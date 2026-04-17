@@ -263,23 +263,69 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        // Resolve last order data (best-effort)
+        try {
+          const { data: lastOrder } = await supabaseAdmin
+            .from('shopify_orders')
+            .select('order_number, total_price, created_at, tracking_url, tracking_number, currency, line_items, financial_status')
+            .or(`email.ilike.${contact.email},contact_id.eq.${contact.id}`)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (lastOrder) {
+            mergeData.order_number = String(lastOrder.order_number || '');
+            mergeData['order.number'] = mergeData.order_number;
+            mergeData.order_total = lastOrder.total_price
+              ? `R$ ${Number(lastOrder.total_price).toFixed(2)}`
+              : '';
+            mergeData['order.total'] = mergeData.order_total;
+            mergeData.order_date = lastOrder.created_at
+              ? new Date(lastOrder.created_at).toLocaleDateString('pt-BR')
+              : '';
+            mergeData['order.date'] = mergeData.order_date;
+            mergeData.order_status = lastOrder.financial_status || '';
+            mergeData['order.status'] = mergeData.order_status;
+            mergeData.tracking_url = lastOrder.tracking_url || '';
+            mergeData['order.tracking_url'] = mergeData.tracking_url;
+            mergeData.tracking_number = lastOrder.tracking_number || '';
+            mergeData['order.tracking_number'] = mergeData.tracking_number;
+            mergeData.order_currency = lastOrder.currency || 'BRL';
+          }
+        } catch {}
+
         // Resolve checkout_url from latest abandoned cart (best-effort)
-        if (!mergeData.checkout_url) {
-          try {
-            const { data: cart } = await supabaseAdmin
-              .from('shopify_checkouts')
-              .select('recovery_url')
-              .eq('status', 'abandoned')
-              .or(`email.eq.${contact.email},contact_id.eq.${contact.id}`)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            if (cart?.recovery_url) {
+        try {
+          const { data: cart } = await supabaseAdmin
+            .from('shopify_checkouts')
+            .select('recovery_url, total_price, currency, line_items')
+            .eq('status', 'abandoned')
+            .or(`email.eq.${contact.email},contact_id.eq.${contact.id}`)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (cart) {
+            if (cart.recovery_url) {
               mergeData.checkout_url = cart.recovery_url;
               mergeData['checkout.url'] = cart.recovery_url;
+              mergeData.cart_url = cart.recovery_url;
             }
-          } catch { /* table may not exist */ }
-        }
+            if (cart.total_price) {
+              mergeData.cart_total = `R$ ${Number(cart.total_price).toFixed(2)}`;
+            }
+            const items = Array.isArray(cart.line_items) ? cart.line_items : [];
+            if (items.length > 0) {
+              mergeData.cart_first_item = items[0]?.title || '';
+              mergeData.cart_first_item_price = items[0]?.price
+                ? `R$ ${Number(items[0].price).toFixed(2)}`
+                : '';
+              mergeData.cart_item_count = String(items.length);
+            }
+          }
+        } catch {}
+
+        // System tags
+        mergeData.current_date = new Date().toLocaleDateString('pt-BR');
+        mergeData.current_year = String(new Date().getFullYear());
 
         // Create the send row (status pending) to get emailSendId
         const contactIsp = detectISP(contact.email || '')

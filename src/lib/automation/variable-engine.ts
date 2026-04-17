@@ -452,6 +452,12 @@ export class VariableEngine {
       return context.now?.iso || new Date().toISOString();
     }
 
+    // Alias: event.X → trigger.data.X (matches merge tag picker format)
+    if (path.startsWith('event.')) {
+      const eventPath = 'trigger.data.' + path.slice(6);
+      return get(context, eventPath);
+    }
+
     // Use lodash get for nested paths
     return get(context, path);
   }
