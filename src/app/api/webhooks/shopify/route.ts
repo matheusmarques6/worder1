@@ -375,20 +375,33 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
     console.error(`[Shopify] shopify_orders upsert FAILED for order ${order.id}:`, orderUpsertErr);
   }
   
-  // Verificar se checkout existente foi convertido
+  // Verificar se checkout existente foi convertido. Match por 3 chaves possíveis:
+  // 1) order.checkout_id        (Shopify ID)
+  // 2) order.checkout_token     (alternativa para gateway-based checkouts)
+  // 3) email + pending status   (fallback para casos onde checkout_id não foi stored)
+  const updateBase = {
+    status: 'converted' as const,
+    converted_order_id: String(order.id),
+    converted_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
   if (order.checkout_id) {
     await supabase
       .from('shopify_checkouts')
-      .update({
-        status: 'converted',
-        converted_order_id: String(order.id),
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateBase)
       .eq('store_id', store.id)
       .eq('shopify_checkout_id', String(order.checkout_id));
   }
+  if (order.checkout_token) {
+    await supabase
+      .from('shopify_checkouts')
+      .update(updateBase)
+      .eq('store_id', store.id)
+      .eq('shopify_checkout_token', String(order.checkout_token))
+      .in('status', ['pending', 'abandoned']);
+  }
 
-  // Mark any abandoned checkout as recovered
+  // Mark any abandoned checkout by email as recovered/converted
   if (order.email) {
     await markCheckoutRecovered(store.id, order.email, String(order.id));
   }
@@ -1077,6 +1090,20 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
     return isNaN(n) ? 0 : n;
   };
 
+  // Preserve existing status on update: if the cron already marked this checkout
+  // as 'abandoned' or 'converted', a late webhook update must NOT overwrite it
+  // back to 'pending'. Without this check, the upsert would regress the status.
+  const { data: existingRow } = await supabase
+    .from('shopify_checkouts')
+    .select('status')
+    .eq('store_id', store.id)
+    .eq('shopify_checkout_id', checkoutKey)
+    .maybeSingle();
+
+  const preservedStatus = existingRow?.status && existingRow.status !== 'pending'
+    ? existingRow.status
+    : 'pending';
+
   // Salvar checkout para detecção de abandono.
   // Escrevemos em ambas as colunas de URL (recovery_url + abandoned_checkout_url)
   // porque diferentes versões do schema usaram nomes distintos.
@@ -1095,7 +1122,7 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
     line_items: checkout.line_items || [],
     recovery_url: recoveryUrl,
     abandoned_checkout_url: recoveryUrl,
-    status: 'pending',
+    status: preservedStatus,
     shopify_created_at: checkout.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -1116,7 +1143,7 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       total_price: checkoutRow.total_price,
       currency: checkoutRow.currency,
       line_items: checkoutRow.line_items,
-      status: 'pending',
+      status: preservedStatus,
       updated_at: checkoutRow.updated_at,
     };
     const { error: fallbackErr } = await supabase

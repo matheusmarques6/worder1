@@ -94,7 +94,11 @@ export async function GET(request: NextRequest) {
     if (statusFilter) {
       query = query.eq('status', statusFilter);
     } else {
-      query = query.in('status', ['pending', 'abandoned', 'recovered', 'converted']);
+      // Default abandoned-checkouts view must EXCLUDE 'converted' rows —
+      // those are customers that already paid and shouldn't appear in the
+      // recovery funnel. 'recovered' means we brought them back through
+      // a recovery email (we keep those for recovery-rate stats).
+      query = query.in('status', ['pending', 'abandoned', 'recovered']);
     }
 
     // Only checkouts that reached the email step

@@ -207,16 +207,31 @@ async function pollAbandonedCheckoutsGraphQL(
   let abandoned = 0;
 
   try {
-    // Query checkouts updated in the last 30 minutes
-    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-    const result = await shopifyGraphQL(storeConfig, ABANDONED_CHECKOUTS_QUERY, {
-      first: 50,
-      query: `updated_at:>'${thirtyMinAgo}'`,
-    });
+    // Query checkouts updated in the last 2 hours (overlap with cron frequency).
+    // Paginate through ALL results — Shopify returns up to 250 per page.
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    let cursor: string | null = null;
+    let hasNext = true;
+    let pages = 0;
+    const maxPages = 20; // safety cap (up to 5000 checkouts per run)
+    const allCheckouts: any[] = [];
 
-    const checkouts = result.data?.abandonedCheckouts?.nodes || [];
+    while (hasNext && pages < maxPages) {
+      const result: any = await shopifyGraphQL(storeConfig, ABANDONED_CHECKOUTS_QUERY, {
+        first: 250,
+        after: cursor,
+        query: `updated_at:>'${twoHoursAgo}'`,
+      });
+      const pageNodes = result.data?.abandonedCheckouts?.nodes || [];
+      allCheckouts.push(...pageNodes);
+      const pageInfo = result.data?.abandonedCheckouts?.pageInfo;
+      hasNext = !!pageInfo?.hasNextPage;
+      cursor = pageInfo?.endCursor || null;
+      pages++;
+      if (!cursor) break;
+    }
 
-    for (const checkout of checkouts) {
+    for (const checkout of allCheckouts) {
       processed++;
       const checkoutGid = checkout.id;
       const checkoutId = extractShopifyId(checkoutGid);
@@ -431,28 +446,36 @@ export async function markCheckoutRecovered(
   orderId: string
 ): Promise<void> {
   try {
-    const { data: abandonedCheckout } = await supabase
+    // Mark ALL still-open checkouts from this email as converted. An order was
+    // placed, so anything that was abandoned/pending for this customer is no
+    // longer in the recovery funnel. We mark all rows to keep the funnel clean.
+    const { data: openCheckouts } = await supabase
       .from('shopify_checkouts')
-      .select('id, shopify_checkout_id')
+      .select('id, status')
       .eq('store_id', storeId)
-      .eq('email', email)
-      .eq('status', 'abandoned')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .ilike('email', email)
+      .in('status', ['pending', 'abandoned'])
+      .order('created_at', { ascending: false });
 
-    if (abandonedCheckout) {
-      await supabase
-        .from('shopify_checkouts')
-        .update({
-          status: 'recovered',
-          converted_order_id: orderId,
-          converted_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', abandonedCheckout.id);
-
-      console.log(`[AbandonedCart] Checkout ${abandonedCheckout.id} marked as recovered (order: ${orderId})`);
+    if (openCheckouts && openCheckouts.length > 0) {
+      // The most-recent abandoned one is counted as 'recovered' (for recovery-rate
+      // metrics); earlier rows become 'converted' so they still leave the funnel.
+      const firstAbandonedIdx = openCheckouts.findIndex(c => c.status === 'abandoned');
+      for (let i = 0; i < openCheckouts.length; i++) {
+        const row = openCheckouts[i];
+        const newStatus = i === firstAbandonedIdx ? 'recovered' : 'converted';
+        await supabase
+          .from('shopify_checkouts')
+          .update({
+            status: newStatus,
+            converted_order_id: orderId,
+            converted_at: new Date().toISOString(),
+            recovered_at: newStatus === 'recovered' ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', row.id);
+      }
+      console.log(`[AbandonedCart] ${openCheckouts.length} checkouts for ${email} cleared from funnel (order: ${orderId})`);
     }
   } catch (error) {
     console.error('[AbandonedCart] Failed to mark checkout as recovered:', error);
