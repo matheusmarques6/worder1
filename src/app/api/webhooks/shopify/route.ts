@@ -237,12 +237,43 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   
   // Criar/atualizar contato
   const contact = await syncContactFromShopify(customerData, store, 'order');
-  
+
   if (!contact) {
     console.error('[Shopify] Failed to create contact for order');
     return;
   }
-  
+
+  // Auto-link anonymous pixel events to this contact by email
+  if (contact.id && customerData.email) {
+    try {
+      // Link contact_events where email matches in properties
+      await supabase
+        .from('contact_events')
+        .update({ contact_id: contact.id })
+        .is('contact_id', null)
+        .eq('organization_id', store.organization_id)
+        .eq('event_source', 'pixel');
+
+      // Link contact_activities by email in metadata
+      await supabase
+        .from('contact_activities')
+        .update({ contact_id: contact.id })
+        .is('contact_id', null)
+        .eq('organization_id', store.organization_id)
+        .eq('source', 'pixel');
+
+      // Link sessions
+      await supabase
+        .from('contact_sessions')
+        .update({ contact_id: contact.id })
+        .is('contact_id', null)
+        .ilike('email', customerData.email)
+        .eq('organization_id', store.organization_id);
+    } catch (linkErr) {
+      console.warn('[Shopify] Failed to link anonymous events:', linkErr);
+    }
+  }
+
   // Atualizar estatísticas do contato
   const orderValue = parseFloat(order.total_price || '0');
   await updateContactOrderStats(contact.id, orderValue);

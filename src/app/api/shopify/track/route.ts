@@ -417,15 +417,62 @@ export async function POST(request: NextRequest) {
     
     // 2. Tentar encontrar contato por email (se disponível)
     let contactId = null;
-    if (email) {
+    const eventEmail = email || data?.email;
+
+    if (eventEmail) {
       const { data: contact } = await supabase
         .from('contacts')
         .select('id')
         .eq('organization_id', store.organization_id)
-        .ilike('email', email)
+        .ilike('email', eventEmail)
         .maybeSingle();
-      
+
       contactId = contact?.id;
+
+      // If email_captured/checkout but no contact exists yet, create one
+      if (!contactId && (event_type === 'email_captured' || event_type === 'checkout_completed' || event_type === 'checkout_started')) {
+        const { data: newContact } = await supabase
+          .from('contacts')
+          .insert({
+            organization_id: store.organization_id,
+            store_id: store.id,
+            email: eventEmail,
+            first_name: data?.first_name || null,
+            last_name: data?.last_name || null,
+            phone: data?.phone || null,
+            source: 'pixel',
+            is_subscribed_email: true,
+          })
+          .select('id')
+          .single();
+        if (newContact) contactId = newContact.id;
+      }
+
+      // Auto-link all previous anonymous events from this session
+      if (contactId && session_id) {
+        await supabase
+          .from('contact_activities')
+          .update({ contact_id: contactId })
+          .is('contact_id', null)
+          .eq('source_id', `${visitor_id}:${session_id}`);
+
+        await supabase
+          .from('contact_sessions')
+          .update({ contact_id: contactId, email: eventEmail })
+          .is('contact_id', null)
+          .eq('session_id', session_id)
+          .eq('organization_id', store.organization_id);
+
+        // Also link CDP events
+        try {
+          await supabase
+            .from('contact_events')
+            .update({ contact_id: contactId })
+            .is('contact_id', null)
+            .eq('session_id', session_id)
+            .eq('organization_id', store.organization_id);
+        } catch {}
+      }
     }
     
     // 3. Registrar atividade
@@ -454,7 +501,31 @@ export async function POST(request: NextRequest) {
     }
     
     await supabase.from('contact_activities').insert(activityData);
-    
+
+    // 3b. Also store in contact_events CDP table for analytics
+    await supabase.from('contact_events').insert({
+      organization_id: store.organization_id,
+      contact_id: contactId || null,
+      store_id: store.id,
+      event_type,
+      event_source: 'pixel',
+      properties: {
+        page_url,
+        page_title,
+        page_type,
+        visitor_id,
+        session_id,
+        referrer,
+        ...data,
+      },
+      session_id,
+      anonymous_id: visitor_id,
+      monetary_value: data?.price || data?.total_price || null,
+      currency: data?.currency || null,
+      occurred_at: timestamp || new Date().toISOString(),
+      idempotency_key: `pixel:${session_id}:${event_type}:${timestamp || Date.now()}`,
+    });
+
     // 4. Atualizar ou criar sessão
     const { data: existingSession } = await supabase
       .from('contact_sessions')
