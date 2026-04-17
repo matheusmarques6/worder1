@@ -46,8 +46,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ connected: false, store: null });
   }
 
-  // A store without shop_domain is NOT connected to Shopify
-  const isShopifyConnected = !!store.shop_domain && store.shop_domain.length > 0 && !!store.access_token;
+  // A store is connected to Shopify only if it has a real Shopify domain and token
+  const isManualStore = !store.shop_domain || store.shop_domain.endsWith('.worder.local') || store.access_token === 'manual'
+  const isShopifyConnected = !isManualStore && !!store.shop_domain && !!store.access_token;
 
   if (!isShopifyConnected) {
     return NextResponse.json({
