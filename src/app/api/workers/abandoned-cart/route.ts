@@ -40,8 +40,8 @@ export async function GET(request: NextRequest) {
       .from('contact_events')
       .select('*')
       .eq('event_type', 'checkout_started')
-      .lt('created_at', fourHoursAgo)
-      .or('metadata->abandoned_cart_processed.is.null,metadata->>abandoned_cart_processed.eq.false')
+      .lt('occurred_at', fourHoursAgo)
+      .or('properties->abandoned_cart_processed.is.null,properties->>abandoned_cart_processed.eq.false')
       .limit(100);
 
     if (queryError) {
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
           .select('id')
           .eq('contact_id', checkout.contact_id)
           .eq('event_type', 'placed_order')
-          .gt('created_at', checkout.created_at)
+          .gt('occurred_at', checkout.occurred_at)
           .limit(1);
 
         if (orderError) {
@@ -75,12 +75,13 @@ export async function GET(request: NextRequest) {
               contact_id: checkout.contact_id,
               organization_id: checkout.organization_id,
               event_type: 'abandoned_cart',
-              metadata: {
+              event_source: 'worker',
+              properties: {
                 source_checkout_id: checkout.id,
-                checkout_data: checkout.metadata || {},
-                checkout_created_at: checkout.created_at,
+                checkout_data: checkout.properties || {},
+                checkout_occurred_at: checkout.occurred_at,
               },
-              created_at: new Date().toISOString(),
+              occurred_at: new Date().toISOString(),
             });
 
           processed++;
@@ -90,8 +91,8 @@ export async function GET(request: NextRequest) {
         await supabase
           .from('contact_events')
           .update({
-            metadata: {
-              ...(checkout.metadata || {}),
+            properties: {
+              ...(checkout.properties || {}),
               abandoned_cart_processed: true,
             },
           })

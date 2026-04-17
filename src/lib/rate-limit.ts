@@ -25,6 +25,7 @@ export interface RateLimitResult {
 
 // ------------ in-memory fallback (por processo) ------------
 const memMap = new Map<string, { count: number; resetAt: number }>();
+let _lastRedisWarn = 0;
 
 function memCheck(key: string, opts: RateLimitOptions): RateLimitResult {
   const now = Date.now();
@@ -76,7 +77,10 @@ export async function checkRateLimit(
     try {
       return await redisCheck(key, opts);
     } catch (err) {
-      console.warn('[rate-limit] Redis failed, falling back to memory:', err);
+      if (Date.now() - _lastRedisWarn > 60_000) {
+        console.warn('[rate-limit] Redis unavailable, using memory fallback')
+        _lastRedisWarn = Date.now()
+      }
       return memCheck(key, opts);
     }
   }

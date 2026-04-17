@@ -105,16 +105,33 @@ export async function releaseRun(
 
 /**
  * Cron helper: recupera runs com heartbeat stale.
+ * Uses direct query instead of RPC to avoid missing function errors.
  */
 export async function reclaimStaleRuns(minutes: number = 10): Promise<number> {
-  const { data, error } = await supabaseAdmin.rpc('reclaim_stale_automation_runs', {
-    p_minutes: minutes,
-  })
-  if (error) {
-    console.error('[run-lock] reclaim error:', error)
+  try {
+    const threshold = new Date(Date.now() - minutes * 60 * 1000).toISOString()
+    const { data, error } = await supabaseAdmin
+      .from('automation_runs')
+      .update({
+        status: 'pending',
+        lock_token: null,
+        locked_by: null,
+        locked_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('status', 'running')
+      .lt('heartbeat_at', threshold)
+      .select('id')
+
+    if (error) {
+      console.error('[run-lock] reclaim error:', error)
+      return 0
+    }
+    return data?.length ?? 0
+  } catch (err) {
+    console.error('[run-lock] reclaim exception:', err)
     return 0
   }
-  return Number(data || 0)
 }
 
 /**

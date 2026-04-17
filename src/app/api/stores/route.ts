@@ -137,12 +137,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Store name is required' }, { status: 400 });
     }
 
-    // Create the store in shopify_stores (even without Shopify connection)
+    // Generate a unique slug for non-Shopify stores to avoid idx_shopify_domain conflict
+    const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    const uniqueDomain = `manual-${slug}-${Date.now().toString(36)}.worder.local`
+
     const storeData = {
       organization_id: profile.organization_id,
       shop_name: name.trim(),
-      shop_domain: '',
-      access_token: '',
+      shop_domain: uniqueDomain,
+      access_token: 'manual',
       is_active: true,
       status: 'pending',
       currency: currency || 'BRL',

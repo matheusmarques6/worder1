@@ -34,11 +34,18 @@ export async function GET(req: NextRequest) {
   const start = Date.now()
 
   try {
-    const jobs = await reserve<any>(QUEUE_NAME, BATCH)
+    let jobs: Awaited<ReturnType<typeof reserve>>
+    try {
+      jobs = await reserve<any>(QUEUE_NAME, BATCH)
+    } catch (redisErr: any) {
+      console.warn('[email-queue-worker] Redis unavailable, skipping:', redisErr?.message?.slice(0, 100))
+      return NextResponse.json({ skipped: true, reason: 'Redis unavailable' })
+    }
+
     if (jobs.length === 0) {
       return NextResponse.json({
         processed: 0,
-        stats: await stats(QUEUE_NAME),
+        stats: await stats(QUEUE_NAME).catch(() => null),
       })
     }
 
