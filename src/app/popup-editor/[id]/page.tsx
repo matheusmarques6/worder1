@@ -23,7 +23,7 @@ interface PopupDesign {
   /** Global field styles applied to new inputs and updatable via "Apply to all inputs" */
   fieldStyles?: Record<string, any>
   styles: {
-    width: number; backgroundColor: string; borderRadius: number; padding: number; fontFamily: string
+    width: number; minHeight?: number; backgroundColor: string; borderRadius: number; padding: number; fontFamily: string
     paddingTop?: number; paddingRight?: number; paddingBottom?: number; paddingLeft?: number
     overlay: { enabled: boolean; color: string; opacity: number; closeOnClick: boolean }
     closeButton: { show: boolean; color: string; size: number }
@@ -186,7 +186,7 @@ const defaultDesign: PopupDesign = {
     { id: uid(), type: 'text', props: { content: 'Obrigado!', fontSize: 24, color: '#111827', fontWeight: 'bold', align: 'center' } },
   ]},
   styles: {
-    width: 420, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 32, fontFamily: 'Inter, sans-serif',
+    width: 700, minHeight: 500, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 32, fontFamily: 'Inter, sans-serif',
     overlay: { enabled: true, color: '#000000', opacity: 50, closeOnClick: true },
     closeButton: { show: true, color: '#6B7280', size: 24 },
     sideImage: { enabled: false, src: '', position: 'left', width: 200 },
@@ -1427,8 +1427,9 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
         </Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Largura"><div className="relative"><input type="number" className={inp + ' pr-8'} value={s.width} onChange={e => setS({ width: +e.target.value })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span></div></Field>
-          <Field label="Borda"><div className="relative"><input type="number" className={inp + ' pr-8'} value={s.borderRadius} onChange={e => setS({ borderRadius: +e.target.value })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span></div></Field>
+          <Field label="Altura mínima"><div className="relative"><input type="number" className={inp + ' pr-8'} value={s.minHeight ?? 500} onChange={e => setS({ minHeight: +e.target.value })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span></div></Field>
         </div>
+        <Field label="Borda"><div className="relative"><input type="number" className={inp + ' pr-8'} value={s.borderRadius} onChange={e => setS({ borderRadius: +e.target.value })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span></div></Field>
         <Field label="Fonte">
           <select className={sel} value={s.fontFamily || 'Inter, sans-serif'} onChange={e => setS({ fontFamily: e.target.value })}>
             <option value="Inter, sans-serif">Inter</option>
@@ -1511,9 +1512,7 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
                 <button onClick={() => setSi({ position: 'right' })} className={`flex-1 py-2 text-[12px] font-medium transition-colors ${s.sideImage.position === 'right' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Direita</button>
               </div>
             </Field>
-            <Field label={`Largura: ${s.sideImage.width}px`}>
-              <input type="range" min={100} max={600} value={s.sideImage.width} onChange={e => setSi({ width: +e.target.value })} className="w-full accent-brand-500" />
-            </Field>
+            <p className="text-[11px] text-gray-400 leading-snug">A imagem ocupa 50% da largura do popup para um visual limpo e profissional.</p>
           </div>
         )}
       </Section>
@@ -1924,10 +1923,13 @@ export default function PopupEditorPage() {
         {/* Center canvas */}
         <main className="flex-1 flex flex-col items-center overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.15)' }}>
           <div className="flex-1 flex items-center justify-center w-full p-8">
-            {/* Popup container */}
+            {/* Popup container — total width stays s.width; when side image is
+                enabled the interior splits 50/50 (Omnisend-style) instead of
+                appending image width on top. Default min-height: 500px. */}
             <div className="relative flex overflow-hidden shadow-2xl" style={{
-              width: preview === 'mobile' ? 360 : s.width + (s.sideImage.enabled && s.sideImage.src ? s.sideImage.width : 0),
+              width: preview === 'mobile' ? 360 : s.width,
               maxWidth: '95%',
+              minHeight: s.minHeight ?? 500,
               borderRadius: s.borderRadius,
             }}>
               {/* Close button — always top-right of entire popup */}
@@ -1938,11 +1940,11 @@ export default function PopupEditorPage() {
               )}
               {/* Side image LEFT */}
               {s.sideImage.enabled && s.sideImage.position === 'left' && s.sideImage.src && !(preview === 'mobile') && (
-                <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="overflow-hidden">
+                <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
                   <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
                 </div>
               )}
-              {/* Popup body */}
+              {/* Popup body — 50% when side image active, full when not */}
               <div style={{
                 backgroundColor: s.backgroundColor,
                 paddingTop: s.paddingTop ?? s.padding ?? 32,
@@ -1950,8 +1952,13 @@ export default function PopupEditorPage() {
                 paddingBottom: s.paddingBottom ?? s.padding ?? 32,
                 paddingLeft: s.paddingLeft ?? s.padding ?? 32,
                 fontFamily: s.fontFamily,
-                flexGrow: 1,
-                minHeight: 200,
+                flex: 1,
+                flexBasis: 0,
+                minWidth: 0,
+                minHeight: s.minHeight ?? 500,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
               }} className="relative">
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={activeStep.blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
@@ -1974,13 +1981,13 @@ export default function PopupEditorPage() {
               </div>
               {/* Side image RIGHT */}
               {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && !(preview === 'mobile') && (
-                <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="overflow-hidden">
+                <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
                   <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
                 </div>
               )}
               {/* Side image placeholder (no src) */}
               {s.sideImage.enabled && !s.sideImage.src && !(preview === 'mobile') && (
-                <div style={{ width: s.sideImage.width, flexShrink: 0, order: s.sideImage.position === 'left' ? -1 : 1 }}
+                <div style={{ flex: 1, flexBasis: 0, minWidth: 0, order: s.sideImage.position === 'left' ? -1 : 1 }}
                   className="bg-gray-100 flex items-center justify-center">
                   <div className="text-center text-gray-400">
                     <ImageIcon className="w-8 h-8 mx-auto mb-1" />
@@ -2060,8 +2067,10 @@ export default function PopupEditorPage() {
             <div className="fixed inset-0 top-[52px] flex items-center justify-center" style={{ zIndex: 10 }}>
               {s.overlay.enabled && <div className="absolute inset-0" style={{ backgroundColor: s.overlay.color, opacity: s.overlay.opacity / 100 }} />}
               <div className="relative flex overflow-hidden shadow-2xl" style={{
-                width: previewDevice === 'mobile' ? 360 : s.width + (s.sideImage.enabled && s.sideImage.src ? s.sideImage.width : 0),
-                maxWidth: '95%', borderRadius: s.borderRadius,
+                width: previewDevice === 'mobile' ? 360 : s.width,
+                maxWidth: '95%',
+                minHeight: s.minHeight ?? 500,
+                borderRadius: s.borderRadius,
                 animation: s.animation === 'fade' ? 'fadeIn 0.3s ease' : s.animation === 'slide-up' ? 'slideUp 0.3s ease' : undefined,
               }}>
                 {s.closeButton.show && (
@@ -2070,15 +2079,15 @@ export default function PopupEditorPage() {
                   </button>
                 )}
                 {s.sideImage.enabled && s.sideImage.position === 'left' && s.sideImage.src && previewDevice !== 'mobile' && (
-                  <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="overflow-hidden">
+                  <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
                     <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
                   </div>
                 )}
-                <div style={{ backgroundColor: s.backgroundColor, paddingTop: s.paddingTop ?? s.padding ?? 32, paddingRight: s.paddingRight ?? s.padding ?? 32, paddingBottom: s.paddingBottom ?? s.padding ?? 32, paddingLeft: s.paddingLeft ?? s.padding ?? 32, fontFamily: s.fontFamily, flexGrow: 1, minHeight: 200 }}>
+                <div style={{ backgroundColor: s.backgroundColor, paddingTop: s.paddingTop ?? s.padding ?? 32, paddingRight: s.paddingRight ?? s.padding ?? 32, paddingBottom: s.paddingBottom ?? s.padding ?? 32, paddingLeft: s.paddingLeft ?? s.padding ?? 32, fontFamily: s.fontFamily, flex: 1, flexBasis: 0, minWidth: 0, minHeight: s.minHeight ?? 500, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                   {activeStep.blocks.map(block => <BlockPreview key={block.id} block={block} />)}
                 </div>
                 {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && previewDevice !== 'mobile' && (
-                  <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="overflow-hidden">
+                  <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
                     <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
                   </div>
                 )}
