@@ -1784,6 +1784,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           navigator.clipboard.writeText(tag).catch(() => {})
           setShowMergeTags(false)
         }}
+        context={flowContext ? 'automation' : 'campaign'}
+        triggerType={flowContext?.triggerType}
       />
 
       {/* ── Save Block as Universal Modal ── */}
