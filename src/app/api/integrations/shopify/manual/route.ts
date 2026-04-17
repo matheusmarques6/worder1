@@ -85,17 +85,29 @@ export async function POST(request: NextRequest) {
     const accessToken = tokenResult.access_token;
     const grantedScopesStr = tokenResult.scope;
     const expiresIn = tokenResult.expires_in;
+
+    console.log('[Shopify Manual] Raw scope string:', JSON.stringify(grantedScopesStr));
+
     // Shopify returns scopes space-separated OR comma-separated depending on endpoint
     const scopesList = grantedScopesStr
       ? grantedScopesStr.split(/[\s,]+/).map((s: string) => s.trim()).filter(Boolean)
       : [];
 
-    console.log('[Shopify Manual] Token OK. scopes=', scopesList, 'expires_in=', expiresIn);
+    console.log('[Shopify Manual] Parsed scopes:', scopesList, 'expires_in=', expiresIn);
 
     // ──────────────────────────────────────────
     // 2. Verify required scopes
+    // write_X implies read_X in Shopify, so check both
     // ──────────────────────────────────────────
-    const missingScopes = REQUIRED_SCOPES.filter((s) => !scopesList.includes(s));
+    const hasScope = (required: string) => {
+      if (scopesList.includes(required)) return true
+      if (required.startsWith('read_')) {
+        const writeVariant = required.replace('read_', 'write_')
+        if (scopesList.includes(writeVariant)) return true
+      }
+      return false
+    }
+    const missingScopes = REQUIRED_SCOPES.filter((s) => !hasScope(s));
     if (missingScopes.length > 0) {
       return NextResponse.json(
         {

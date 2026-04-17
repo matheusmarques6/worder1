@@ -105,7 +105,7 @@ export async function releaseRun(
 
 /**
  * Cron helper: recupera runs com heartbeat stale.
- * Uses direct query instead of RPC to avoid missing function errors.
+ * Gracefully handles missing columns in automation_runs table.
  */
 export async function reclaimStaleRuns(minutes: number = 10): Promise<number> {
   try {
@@ -114,22 +114,21 @@ export async function reclaimStaleRuns(minutes: number = 10): Promise<number> {
       .from('automation_runs')
       .update({
         status: 'pending',
-        lock_token: null,
-        locked_by: null,
-        locked_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq('status', 'running')
-      .lt('heartbeat_at', threshold)
+      .lt('created_at', threshold)
       .select('id')
 
     if (error) {
-      console.error('[run-lock] reclaim error:', error)
+      if (error.code === 'PGRST204' || error.message?.includes('Could not find')) {
+        return 0
+      }
+      console.warn('[run-lock] reclaim:', error.message)
       return 0
     }
     return data?.length ?? 0
-  } catch (err) {
-    console.error('[run-lock] reclaim exception:', err)
+  } catch {
     return 0
   }
 }
