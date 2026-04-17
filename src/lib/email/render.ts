@@ -445,15 +445,16 @@ export function resolveOrderBlocks(
   while ((m = regex.exec(html)) !== null) matches.push(m)
   if (matches.length === 0) return html
 
-  const items: any[] = eventData?.Items || eventData?.items || eventData?.line_items || []
+  const items: any[] = eventData?.Items || eventData?.items || eventData?.line_items || eventData?.extra?.line_items || []
+  const rawLineItems: any[] = eventData?.extra?.line_items || []
   const currency = eventData?.Currency || eventData?.currency || 'BRL'
   const currencySymbol = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : 'R$'
 
-  const fmtPrice = (v: any): string => {
-    const n = typeof v === 'number' ? v : parseFloat(String(v || '0'))
-    if (isNaN(n)) return `${currencySymbol}0.00`
-    return `${currencySymbol}${n.toFixed(2)}`
+  const toNum = (v: any): number => {
+    const n = typeof v === 'number' ? v : parseFloat(String(v ?? '0'))
+    return isNaN(n) ? 0 : n
   }
+  const fmtPrice = (v: any): string => `${currencySymbol}${toNum(v).toFixed(2)}`
 
   for (const match of matches) {
     let cfg: any = {}
@@ -477,42 +478,53 @@ export function resolveOrderBlocks(
     let orderHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:${font};">`
 
     items.forEach((item: any, i: number) => {
-      const title = item.ProductName || item.title || item.name || 'Product'
-      const qty = item.Quantity || item.quantity || 1
-      const itemPrice = item.ItemPrice ?? item.price ?? 0
-      const rowTotal = item.RowTotal ?? (itemPrice * qty)
-      const variantName = item.VariantName || item.variant_title || ''
-      const sku = item.SKU || item.sku || ''
-      const imgUrl = item.ImageURL || item.image_url || ''
-      const brand = item.Brand || item.vendor || ''
-      const discount = item.DiscountAmount || item.discount || 0
+      const raw = rawLineItems[i] || {}
+      const title = item.ProductName || item.title || item.name || raw.title || raw.name || 'Product'
+      const qty = toNum(item.Quantity ?? item.quantity ?? raw.quantity ?? 1) || 1
+      const itemPrice = toNum(item.ItemPrice ?? item.price ?? raw.price ?? 0)
+      const rowTotal = toNum(item.RowTotal ?? (itemPrice * qty))
+      const variantName = item.VariantName || item.variant_title || raw.variant_title || ''
+      const sku = item.SKU || item.sku || raw.sku || ''
+      const imgUrl = item.ImageURL
+        || item.image_url
+        || raw.image_url
+        || raw.image?.src
+        || raw.product?.image?.src
+        || raw.product?.images?.[0]?.src
+        || ''
+      const discount = toNum(
+        item.DiscountAmount
+        ?? item.discount
+        ?? (Array.isArray(raw.discount_allocations)
+          ? raw.discount_allocations.reduce((s: number, d: any) => s + toNum(d.amount), 0)
+          : 0)
+      )
       const priceAfterDiscount = discount > 0 ? rowTotal - discount : rowTotal
 
       let imgCell = ''
       if (cfg.showImage) {
-        imgCell = `<td width="${imgW}" valign="top" style="vertical-align:top;padding-right:12px;">${imgUrl
-          ? `<img src="${imgUrl}" alt="${title}" width="${imgW}" height="${imgW}" style="display:block;width:${imgW}px;height:${imgW}px;object-fit:cover;border-radius:${imgR}px;border:0;" />`
+        imgCell = `<td width="${imgW}" valign="top" style="vertical-align:top;padding-right:16px;width:${imgW}px;">${imgUrl
+          ? `<img src="${imgUrl}" alt="${title.replace(/"/g, '&quot;')}" width="${imgW}" height="${imgW}" style="display:block;width:${imgW}px;height:${imgW}px;object-fit:cover;border-radius:${imgR}px;border:0;" />`
           : `<div style="width:${imgW}px;height:${imgW}px;background:#F3F4F6;border-radius:${imgR}px;"></div>`
         }</td>`
       }
 
-      let detailLines: string[] = []
+      const detailLines: string[] = []
       if (cfg.showName) {
-        detailLines.push(`<p style="margin:0;font-size:14px;font-weight:600;color:${primColor};">${title}${cfg.showQuantity ? ` &times; ${qty}` : ''}</p>`)
+        detailLines.push(`<div style="font-size:14px;font-weight:600;color:${primColor};line-height:1.4;">${title}${cfg.showQuantity ? ` &times; ${qty}` : ''}</div>`)
       }
       if (cfg.showVariant && variantName) {
-        detailLines.push(`<p style="margin:2px 0 0;font-size:12px;color:${secColor};">Variant: ${variantName}</p>`)
+        detailLines.push(`<div style="margin-top:4px;font-size:12px;color:${secColor};line-height:1.4;">${variantName}</div>`)
       }
       if (cfg.showSku && sku) {
-        detailLines.push(`<p style="margin:2px 0 0;font-size:11px;color:${secColor};">SKU: ${sku}</p>`)
+        detailLines.push(`<div style="margin-top:2px;font-size:11px;color:${secColor};line-height:1.4;">SKU: ${sku}</div>`)
       }
       if (cfg.showDiscount && discount > 0) {
-        detailLines.push(`<p style="margin:4px 0 0;font-size:12px;color:${secColor};">Discount: <span style="float:right;">-${fmtPrice(discount)}</span></p>`)
-        detailLines.push(`<p style="margin:2px 0 0;font-size:13px;font-weight:600;color:${primColor};">Price after discount: <span style="float:right;color:${priceColor};font-weight:700;">${fmtPrice(priceAfterDiscount)}</span></p>`)
+        detailLines.push(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;"><tr><td style="font-size:12px;color:${secColor};">Discount</td><td style="font-size:12px;color:${secColor};text-align:right;">-${fmtPrice(discount)}</td></tr><tr><td style="font-size:13px;font-weight:600;color:${primColor};padding-top:2px;">Price after discount</td><td style="font-size:13px;font-weight:700;color:${priceColor};text-align:right;padding-top:2px;">${fmtPrice(priceAfterDiscount)}</td></tr></table>`)
       }
 
       const priceCell = cfg.showPrice
-        ? `<td width="80" valign="top" style="vertical-align:top;text-align:right;"><p style="margin:0;font-size:14px;font-weight:600;color:${priceColor};">${fmtPrice(rowTotal)}</p></td>`
+        ? `<td valign="top" style="vertical-align:top;text-align:right;white-space:nowrap;padding-left:12px;"><div style="font-size:14px;font-weight:600;color:${priceColor};">${fmtPrice(rowTotal)}</div></td>`
         : ''
 
       orderHtml += `<tr><td style="padding:12px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${imgCell}<td valign="top" style="vertical-align:top;">${detailLines.join('')}</td>${priceCell}</tr></table></td></tr>`
@@ -523,28 +535,44 @@ export function resolveOrderBlocks(
     })
 
     if (cfg.showTotals) {
-      const totalPrice = eventData?.$value || eventData?.total_price || eventData?.TotalPrice || 0
-      const subtotalPrice = eventData?.SubtotalPrice || eventData?.subtotal_price || 0
-      const shippingPrice = eventData?.TotalShipping || eventData?.total_shipping || eventData?.ShippingRate || 0
-      const taxPrice = eventData?.TotalTax || eventData?.total_tax || 0
-      const discountTotal = eventData?.DiscountValue || eventData?.total_discounts || 0
+      const totalPrice = toNum(eventData?.$value ?? eventData?.total_price ?? eventData?.TotalPrice ?? 0)
+      const subtotalPrice = toNum(eventData?.SubtotalPrice ?? eventData?.subtotal_price ?? 0)
+      const taxPrice = toNum(eventData?.TotalTax ?? eventData?.total_tax ?? 0)
+      const discountTotal = toNum(eventData?.DiscountValue ?? eventData?.total_discounts ?? 0)
 
-      orderHtml += `<tr><td style="border-top:1px solid ${divColor};padding-top:12px;">`
+      // Shipping: prefer numeric field; if missing (webhook only stores method name),
+      // derive it from totals: shipping = total - subtotal - tax + discount
+      let shippingPrice: number | null = null
+      if (typeof eventData?.TotalShipping === 'number') shippingPrice = eventData.TotalShipping
+      else if (typeof eventData?.total_shipping === 'number') shippingPrice = eventData.total_shipping
+      else if (Array.isArray(eventData?.shipping_lines)) {
+        shippingPrice = eventData.shipping_lines.reduce((s: number, sl: any) => s + toNum(sl.price), 0)
+      } else if (Array.isArray(eventData?.extra?.shipping_lines)) {
+        shippingPrice = eventData.extra.shipping_lines.reduce((s: number, sl: any) => s + toNum(sl.price), 0)
+      } else if (totalPrice > 0 && subtotalPrice > 0) {
+        const derived = totalPrice - subtotalPrice - taxPrice + discountTotal
+        shippingPrice = derived > 0 ? derived : 0
+      } else {
+        shippingPrice = 0
+      }
+
+      const rowStyle = `font-size:13px;color:${secColor};padding:4px 0;line-height:1.4;`
+      orderHtml += `<tr><td style="border-top:1px solid ${divColor};padding-top:14px;">`
       orderHtml += `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:${font};">`
       if (cfg.showTotalDiscount && discountTotal > 0) {
-        orderHtml += `<tr><td style="font-size:13px;color:${secColor};padding:2px 0;">Discount:</td><td style="font-size:13px;color:${secColor};padding:2px 0;text-align:right;">-${fmtPrice(discountTotal)}</td></tr>`
+        orderHtml += `<tr><td style="${rowStyle}">Discount</td><td style="${rowStyle}text-align:right;">-${fmtPrice(discountTotal)}</td></tr>`
       }
       if (cfg.showSubtotal) {
-        orderHtml += `<tr><td style="font-size:13px;color:${secColor};padding:2px 0;">Subtotal price:</td><td style="font-size:13px;color:${secColor};padding:2px 0;text-align:right;">${fmtPrice(subtotalPrice)}</td></tr>`
+        orderHtml += `<tr><td style="${rowStyle}">Subtotal</td><td style="${rowStyle}text-align:right;">${fmtPrice(subtotalPrice)}</td></tr>`
       }
       if (cfg.showShipping) {
-        orderHtml += `<tr><td style="font-size:13px;color:${secColor};padding:2px 0;">Shipping price:</td><td style="font-size:13px;color:${secColor};padding:2px 0;text-align:right;">${fmtPrice(typeof shippingPrice === 'number' ? shippingPrice : 0)}</td></tr>`
+        orderHtml += `<tr><td style="${rowStyle}">Shipping</td><td style="${rowStyle}text-align:right;">${fmtPrice(shippingPrice)}</td></tr>`
       }
-      if (cfg.showTax) {
-        orderHtml += `<tr><td style="font-size:13px;color:${secColor};padding:2px 0;">Tax:</td><td style="font-size:13px;color:${secColor};padding:2px 0;text-align:right;">${fmtPrice(taxPrice)}</td></tr>`
+      if (cfg.showTax && taxPrice > 0) {
+        orderHtml += `<tr><td style="${rowStyle}">Tax</td><td style="${rowStyle}text-align:right;">${fmtPrice(taxPrice)}</td></tr>`
       }
-      orderHtml += `<tr><td colspan="2" style="border-top:2px solid ${divColor};padding-top:8px;"></td></tr>`
-      orderHtml += `<tr><td style="font-size:16px;font-weight:700;color:${totalColor};padding:0;">Total price:</td><td style="font-size:16px;font-weight:700;color:${totalColor};padding:0;text-align:right;">${fmtPrice(totalPrice)}</td></tr>`
+      orderHtml += `<tr><td colspan="2" style="border-top:1px solid ${divColor};padding-top:10px;font-size:1px;line-height:1px;">&nbsp;</td></tr>`
+      orderHtml += `<tr><td style="font-size:16px;font-weight:700;color:${totalColor};padding:2px 0;">Total</td><td style="font-size:16px;font-weight:700;color:${totalColor};padding:2px 0;text-align:right;">${fmtPrice(totalPrice)}</td></tr>`
       orderHtml += `</table></td></tr>`
     }
 
