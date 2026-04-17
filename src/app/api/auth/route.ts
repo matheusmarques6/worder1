@@ -18,8 +18,8 @@ function getSupabase(): SupabaseClient | null {
   return supabase;
 }
 
-// Check if we should use dev mode (bypass auth)
-const isDevMode = process.env.NODE_ENV === 'development' || process.env.DEV_AUTH_BYPASS === 'true';
+// Dev mode ONLY in local development (never in production)
+const isDevMode = process.env.NODE_ENV === 'development' && process.env.DEV_AUTH_BYPASS === 'true';
 
 // Login
 export async function POST(request: NextRequest) {
@@ -361,53 +361,11 @@ async function handleGetOrCreateOrg(supabase: SupabaseClient, request: NextReque
       }
     }
 
-    // No authenticated user - try to get existing organization for demo
-    const { data: existingOrg, error: fetchError } = await supabase
-      .from('organizations')
-      .select('*')
-      .limit(1)
-      .single();
-
-    if (existingOrg) {
-      return NextResponse.json({
-        organization: existingOrg,
-        user: {
-          id: 'default-user',
-          email: 'demo@worder.com',
-          first_name: 'Demo',
-          last_name: 'User',
-        },
-      });
-    }
-
-    // Create new organization
-    const { data: newOrg, error: createError } = await supabase
-      .from('organizations')
-      .insert({
-        name: 'Minha Empresa',
-        slug: 'minha-empresa',
-      })
-      .select()
-      .single();
-
-    if (createError) {
-      console.error('Error creating organization:', createError);
-      // ✅ CORREÇÃO: Retornar erro em vez de ID inválido
-      return NextResponse.json(
-        { error: 'Failed to create organization', details: createError.message },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      organization: newOrg,
-      user: {
-        id: 'default-user',
-        email: 'demo@worder.com',
-        first_name: 'Demo',
-        last_name: 'User',
-      },
-    });
+    // No authenticated user — return empty (must login first)
+    return NextResponse.json(
+      { error: 'Not authenticated' },
+      { status: 401 }
+    );
   } catch (error: any) {
     console.error('Error in handleGetOrCreateOrg:', error);
     // ✅ CORREÇÃO: Retornar erro em vez de ID inválido

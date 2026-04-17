@@ -165,9 +165,9 @@ export default function LoginPage() {
                 />
                 <span className="text-sm text-gray-500">Lembrar de mim</span>
               </label>
-              <a href="#" className="text-sm text-brand-600 hover:text-brand-500 transition-colors">
+              <Link href="/forgot-password" className="text-sm text-brand-600 hover:text-brand-500 transition-colors">
                 Esqueceu a senha?
-              </a>
+              </Link>
             </div>
 
             {error && (
