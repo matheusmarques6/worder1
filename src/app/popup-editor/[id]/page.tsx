@@ -221,11 +221,11 @@ function Section({ title, children, defaultOpen = false, noPadding = false }: { 
   const [open, setOpen] = useState(defaultOpen)
   return (
     <div className="border-b border-gray-100 last:border-b-0">
-      <button onClick={() => setOpen(!open)} className="flex items-center justify-between w-full px-4 py-3.5 text-[13px] font-semibold text-gray-900 hover:bg-gray-50 transition-colors">
+      <button onClick={() => setOpen(!open)} className="flex items-center justify-between w-full px-5 py-3.5 text-[13px] font-semibold text-gray-900 hover:bg-gray-50 transition-colors group">
         <span>{title}</span>
-        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? '' : '-rotate-90'}`} />
+        <ChevronDown className={`w-4 h-4 text-gray-400 group-hover:text-gray-600 transition-transform ${open ? '' : '-rotate-90'}`} />
       </button>
-      {open && <div className={noPadding ? 'pb-3' : 'px-4 pb-4 space-y-3'}>{children}</div>}
+      {open && <div className={noPadding ? 'pb-3' : 'px-5 pb-4 space-y-3'}>{children}</div>}
     </div>
   )
 }
@@ -569,25 +569,33 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     )
   }
 
-  // Unified input "Input" tab renderer (Klaviyo-style clean layout)
+  // Section header with Omnisend-style visual weight
+  const SectionHeader = ({ title, icon }: { title: string; icon?: React.ReactNode }) => (
+    <div className="flex items-center gap-2 pt-1 pb-0.5">
+      {icon}
+      <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">{title}</p>
+    </div>
+  )
+
+  // Unified input "Input" tab renderer (Omnisend-style clean sections)
   const renderInputConfig = () => {
     // Lock email/phone mapping since the type implies the target
     const lockedMap = block.type === 'email' ? 'email' : block.type === 'phone' ? 'phone' : null
     return (
-      <div className="space-y-4">
-        {/* Conteudo section */}
+      <div className="space-y-5">
+        {/* Conteúdo section */}
         <div className="space-y-3">
-          <p className="text-[13px] font-semibold text-gray-900">Conteudo</p>
+          <SectionHeader title="Conteúdo" />
 
-          <LabeledField label="Campo do perfil" hint="Onde o valor deste campo sera salvo no perfil do contato.">
+          <LabeledField label="Mapear para" hint="Onde o valor deste campo será salvo no perfil do contato.">
             <select className={sel} value={lockedMap || p.mapTo || ''} disabled={!!lockedMap} onChange={e => up('mapTo', e.target.value)}>
-              <option value="">Nao mapear</option>
+              <option value="">Não mapear</option>
               {PROFILE_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
             </select>
           </LabeledField>
 
           {(p.mapTo === 'custom' && !lockedMap) && (
-            <LabeledField label="Nome do campo personalizado" hint="Identificador tecnico salvo em custom_fields.">
+            <LabeledField label="Nome do campo personalizado" hint="Identificador técnico salvo em custom_fields.">
               <input className={inp} value={p.mapToCustom || ''} onChange={e => up('mapToCustom', e.target.value)} placeholder="ex: favoriteColor" />
             </LabeledField>
           )}
@@ -597,7 +605,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           </LabeledField>
 
           {block.type === 'phone' && (
-            <LabeledField label="Pais padrao">
+            <LabeledField label="País padrão">
               <select className={sel} value={p.countryCode || '+55'} onChange={e => up('countryCode', e.target.value)}>
                 <option value="+55">Brasil (+55)</option>
                 <option value="+1">EUA (+1)</option>
@@ -605,12 +613,14 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 <option value="+44">Reino Unido (+44)</option>
                 <option value="+34">Espanha (+34)</option>
                 <option value="+49">Alemanha (+49)</option>
-                <option value="+33">Franca (+33)</option>
+                <option value="+33">França (+33)</option>
               </select>
             </LabeledField>
           )}
 
-          <div className="pt-1"><Toggle label="Mostrar label no formulario" checked={p.showLabel || false} onChange={v => up('showLabel', v)} /></div>
+          <div className="pt-1">
+            <Toggle label="Mostrar label no formulário" checked={p.showLabel || false} onChange={v => up('showLabel', v)} />
+          </div>
           {p.showLabel && (
             <LabeledField label="Texto do label">
               <input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} />
@@ -618,34 +628,46 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           )}
         </div>
 
-        {/* Validacao section */}
+        {/* Validação section */}
         <div className="pt-4 border-t border-gray-100 space-y-3">
-          <p className="text-[13px] font-semibold text-gray-900">Validacao</p>
+          <SectionHeader title="Validação" />
 
-          <Toggle label="Campo obrigatorio" checked={block.type === 'email' ? true : !!p.required} onChange={v => up('required', v)} />
-          {p.required && (
-            <LabeledField label="Mensagem quando vazio" hint="Exibida quando o usuario nao preenche o campo.">
-              <input className={inp} value={p.requiredMsg || 'Este campo e obrigatorio'} onChange={e => up('requiredMsg', e.target.value)} />
+          <Toggle label="Campo obrigatório" checked={block.type === 'email' ? true : !!p.required} onChange={v => up('required', v)} />
+          {(p.required || block.type === 'email') && (
+            <LabeledField label="Mensagem quando vazio" hint="Exibida quando o usuário não preenche o campo.">
+              <input className={inp} value={p.requiredMsg || 'Este campo é obrigatório'} onChange={e => up('requiredMsg', e.target.value)} />
             </LabeledField>
           )}
           {(block.type === 'email' || block.type === 'phone') && (
-            <LabeledField label="Mensagem quando invalido" hint="Exibida quando o formato nao corresponde ao esperado.">
-              <input className={inp} value={p.errorMsg || (block.type === 'email' ? 'Email invalido' : 'Telefone invalido')} onChange={e => up('errorMsg', e.target.value)} />
+            <LabeledField label="Mensagem quando inválido" hint="Exibida quando o formato não corresponde ao esperado.">
+              <input className={inp} value={p.errorMsg || (block.type === 'email' ? 'Email inválido' : 'Telefone inválido')} onChange={e => up('errorMsg', e.target.value)} />
             </LabeledField>
           )}
         </div>
 
         {/* Layout section */}
         <div className="pt-4 border-t border-gray-100 space-y-3">
-          <p className="text-[13px] font-semibold text-gray-900">Layout do bloco</p>
-          <LabeledField label="Alinhamento">
+          <SectionHeader title="Layout" />
+          <LabeledField label="Alinhamento do input">
             <AlignButtons value={p.align || 'full'} onChange={v => up('align', v)} />
           </LabeledField>
 
-          <Group title="Espacamento externo" defaultOpen={false}>
+          <Group title="Espaçamento externo" defaultOpen={false}>
             <PaddingControl prefix="padding" defaults={{ b: 8 }} />
           </Group>
         </div>
+
+        {/* Tip about Field settings */}
+        {onApplyToAllInputs && (
+          <div className="mx-3 p-3 rounded-lg bg-blue-50/60 border border-blue-100 flex items-start gap-2.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-500 flex-shrink-0 mt-0.5">
+              <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
+            </svg>
+            <p className="text-[11px] text-blue-900/80 leading-relaxed">
+              Use a aba <span className="font-semibold">Fields</span> para editar cores, borda e tipografia. O botão "Aplicar a todos" replica o estilo em todos os inputs.
+            </p>
+          </div>
+        )}
       </div>
     )
   }
@@ -1550,16 +1572,20 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
         </div>
       </Section>
 
-      <Section title="Cores">
-        <PanelColorField label="Cor de fundo do popup" value={s.backgroundColor} onChange={v => setS({ backgroundColor: v })} />
+      <Section title="Cores" defaultOpen={true}>
+        <Field label="Cor de fundo do popup">
+          <ColorPicker value={s.backgroundColor} onChange={v => setS({ backgroundColor: v })} />
+        </Field>
 
         <div className="pt-2 border-t border-gray-100">
-          <ToggleRow label="Exibir overlay de fundo" checked={s.overlay.enabled} onChange={v => setOv({ enabled: v })} hint="Fundo escurecido atras do popup" />
+          <ToggleRow label="Exibir overlay de fundo" checked={s.overlay.enabled} onChange={v => setOv({ enabled: v })} hint="Fundo escurecido atrás do popup" />
           {s.overlay.enabled && (
             <div className="space-y-3 mt-3">
-              <PanelColorField label="Cor do overlay" value={s.overlay.color} onChange={v => setOv({ color: v })} />
+              <Field label="Cor do overlay">
+                <ColorPicker value={s.overlay.color} onChange={v => setOv({ color: v })} />
+              </Field>
               <Field label={`Opacidade: ${s.overlay.opacity}%`}>
-                <input type="range" min={0} max={100} value={s.overlay.opacity} onChange={e => setOv({ opacity: +e.target.value })} className="w-full accent-brand-500" />
+                <input type="range" min={0} max={100} value={s.overlay.opacity} onChange={e => setOv({ opacity: +e.target.value })} className="w-full accent-orange-500" />
               </Field>
             </div>
           )}
@@ -1605,9 +1631,11 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
         <ToggleRow label="Mostrar botao fechar" checked={s.closeButton.show} onChange={v => setCb({ show: v })} />
         {s.closeButton.show && (
           <div className="mt-3 space-y-3">
-            <PanelColorField label="Cor" value={s.closeButton.color} onChange={v => setCb({ color: v })} />
+            <Field label="Cor do botão">
+              <ColorPicker value={s.closeButton.color} onChange={v => setCb({ color: v })} />
+            </Field>
             <Field label={`Tamanho: ${s.closeButton.size || 24}px`}>
-              <input type="range" min={16} max={48} value={s.closeButton.size || 24} onChange={e => setCb({ size: +e.target.value })} className="w-full accent-brand-500" />
+              <input type="range" min={16} max={48} value={s.closeButton.size || 24} onChange={e => setCb({ size: +e.target.value })} className="w-full accent-orange-500" />
             </Field>
           </div>
         )}
@@ -1917,27 +1945,39 @@ export default function PopupEditorPage() {
         <aside className="w-[340px] bg-white border-r border-gray-200 flex flex-col shrink-0">
           {selectedBlock ? (
             <>
-              {/* Header with back button */}
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 shrink-0">
+              {/* Block editor header with type icon */}
+              <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-gray-100 shrink-0 bg-gradient-to-b from-gray-50/50 to-white">
                 <button onClick={() => setSelectedBlockId(null)}
-                  className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors">
+                  title="Voltar"
+                  className="p-1.5 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100 transition-colors">
                   <ArrowLeft className="w-4 h-4" />
                 </button>
-                <h2 className="text-[13px] font-semibold text-gray-900 flex-1">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                   {(() => {
-                    const labels: Record<string, string> = {
-                      email: 'Email input', phone: 'Telefone', 'name-input': 'Nome',
-                      'text-input': 'Campo de texto', 'date-input': 'Data',
-                      dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
-                      'legal-consent': 'Consentimento', text: 'Texto', button: 'Botao', image: 'Imagem',
-                      spacer: 'Espacador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem',
-                    }
-                    return labels[selectedBlock.type] || selectedBlock.type
+                    const blockMeta = BLOCK_TYPES.find(bt => bt.type === selectedBlock.type)
+                    const Icon = blockMeta?.icon
+                    return Icon ? (
+                      <div className="w-7 h-7 rounded-md bg-orange-50 flex items-center justify-center flex-shrink-0">
+                        <Icon className="w-3.5 h-3.5 text-orange-600" />
+                      </div>
+                    ) : null
                   })()}
-                </h2>
+                  <h2 className="text-[13.5px] font-semibold text-gray-900 truncate">
+                    {(() => {
+                      const labels: Record<string, string> = {
+                        email: 'Email', phone: 'Telefone', 'name-input': 'Nome',
+                        'text-input': 'Campo de texto', 'date-input': 'Data',
+                        dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
+                        'legal-consent': 'Consentimento', text: 'Texto', button: 'Botão', image: 'Imagem',
+                        spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem',
+                      }
+                      return labels[selectedBlock.type] || selectedBlock.type
+                    })()}
+                  </h2>
+                </div>
                 <button onClick={() => deleteBlock(selectedBlock.id)}
                   title="Excluir bloco"
-                  className="p-1 text-gray-400 hover:text-red-500 rounded hover:bg-red-50 transition-colors">
+                  className="p-1.5 text-gray-400 hover:text-red-500 rounded-md hover:bg-red-50 transition-colors">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -1948,45 +1988,60 @@ export default function PopupEditorPage() {
           ) : leftView === 'hub' ? (
             <>
               {/* Hub view: 3 big cards (Styles, Targeting, Blocks) */}
-              <div className="flex items-center px-4 py-3.5 border-b border-gray-100 shrink-0">
-                <h2 className="text-[14px] font-semibold text-gray-900">Visao geral</h2>
+              <div className="flex items-center px-5 py-4 border-b border-gray-100 shrink-0">
+                <h2 className="text-[15px] font-semibold text-gray-900">Visão geral</h2>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
-                <button onClick={() => setLeftView('styles')}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-all text-left group">
-                  <div className="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
-                    <Palette className="w-4 h-4 text-purple-600" />
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                <button onClick={() => setLeftView('blocks')}
+                  className="w-full flex items-center gap-3.5 px-4 py-4 border border-gray-200 rounded-xl hover:border-orange-300 hover:bg-orange-50/40 hover:shadow-sm transition-all text-left group">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center flex-shrink-0 group-hover:from-orange-100 group-hover:to-orange-200 transition-colors">
+                    <LayoutGrid className="w-5 h-5 text-orange-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold text-gray-900">Estilos</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">Layout, cores, imagem lateral</p>
+                    <p className="text-[13.5px] font-semibold text-gray-900">Adicionar blocos</p>
+                    <p className="text-[11.5px] text-gray-500 mt-0.5">Inputs, texto, botões, imagens</p>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-orange-500 flex-shrink-0 transition-colors" />
+                </button>
+
+                <button onClick={() => setLeftView('styles')}
+                  className="w-full flex items-center gap-3.5 px-4 py-4 border border-gray-200 rounded-xl hover:border-purple-300 hover:bg-purple-50/30 hover:shadow-sm transition-all text-left group">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center flex-shrink-0 group-hover:from-purple-100 group-hover:to-purple-200 transition-colors">
+                    <Palette className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13.5px] font-semibold text-gray-900">Estilos</p>
+                    <p className="text-[11.5px] text-gray-500 mt-0.5">Layout, cores, imagem lateral</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-purple-500 flex-shrink-0 transition-colors" />
                 </button>
 
                 <button onClick={() => setLeftView('targeting')}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-all text-left group">
-                  <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                    <Target className="w-4 h-4 text-blue-600" />
+                  className="w-full flex items-center gap-3.5 px-4 py-4 border border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-sm transition-all text-left group">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center flex-shrink-0 group-hover:from-blue-100 group-hover:to-blue-200 transition-colors">
+                    <Target className="w-5 h-5 text-blue-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold text-gray-900">Segmentacao e comportamento</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">Quando e para quem exibir</p>
+                    <p className="text-[13.5px] font-semibold text-gray-900">Segmentação e comportamento</p>
+                    <p className="text-[11.5px] text-gray-500 mt-0.5">Quando e para quem exibir</p>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 flex-shrink-0 transition-colors" />
                 </button>
 
-                <button onClick={() => setLeftView('blocks')}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-all text-left group">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                    <LayoutGrid className="w-4 h-4 text-emerald-600" />
+                {/* Status summary card */}
+                <div className="mt-4 p-4 rounded-xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={`w-2 h-2 rounded-full ${formStatus === 'published' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                    <p className="text-[11.5px] font-semibold text-gray-800">
+                      {formStatus === 'published' ? 'Publicado' : 'Em rascunho'}
+                    </p>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold text-gray-900">Adicionar blocos</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">Inputs, texto, botoes, imagens</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
-                </button>
+                  <p className="text-[11px] text-gray-500 leading-relaxed">
+                    {formStatus === 'published'
+                      ? 'O popup está ativo e sendo exibido para visitantes.'
+                      : 'Finalize a configuração e clique em Ativar para publicar.'}
+                  </p>
+                </div>
               </div>
             </>
           ) : leftView === 'styles' ? (
@@ -2017,23 +2072,32 @@ export default function PopupEditorPage() {
             </>
           ) : (
             <>
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 shrink-0">
+              <div className="flex items-center gap-2 px-4 py-3.5 border-b border-gray-100 shrink-0">
                 <button onClick={() => setLeftView('hub')}
                   className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors">
                   <ArrowLeft className="w-4 h-4" />
                 </button>
                 <h2 className="text-[13px] font-semibold text-gray-900 flex-1">Adicionar blocos</h2>
               </div>
-              <div className="flex-1 overflow-y-auto">
-                <p className="px-4 pt-4 pb-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Blocos</p>
-                <div className="grid grid-cols-2 gap-1.5 px-3 pb-4">
+              <div className="flex-1 overflow-y-auto px-3 py-4">
+                <p className="px-1 pb-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Itens</p>
+                <div className="grid grid-cols-2 gap-2">
                   {BLOCK_TYPES.map(bt => (
                     <button key={bt.type} onClick={() => addBlock(bt.type)}
-                      className="flex flex-col items-center gap-1 p-2.5 rounded-lg border border-gray-100 hover:border-brand-300 hover:bg-brand-50 transition text-gray-600 hover:text-brand-600 cursor-grab active:cursor-grabbing">
-                      <bt.icon className="w-5 h-5" />
-                      <span className="text-[11px] leading-tight">{bt.label}</span>
+                      title={`Adicionar ${bt.label}`}
+                      className="group flex flex-col items-center gap-2 py-4 px-2 rounded-xl border border-gray-200 bg-white hover:border-orange-400 hover:bg-orange-50/40 hover:shadow-sm transition-all text-gray-600 hover:text-orange-600 cursor-grab active:cursor-grabbing">
+                      <div className="w-9 h-9 rounded-lg bg-gray-50 group-hover:bg-orange-100 flex items-center justify-center transition-colors">
+                        <bt.icon className="w-4 h-4" />
+                      </div>
+                      <span className="text-[11px] font-medium leading-tight text-center">{bt.label}</span>
                     </button>
                   ))}
+                </div>
+                <p className="px-1 pt-5 pb-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Dica</p>
+                <div className="mx-1 p-3 rounded-lg bg-blue-50/50 border border-blue-100">
+                  <p className="text-[11px] text-blue-900/80 leading-relaxed">
+                    Clique em um bloco para adicionar ou arraste para reorganizar na tela.
+                  </p>
                 </div>
               </div>
             </>
@@ -2121,23 +2185,23 @@ export default function PopupEditorPage() {
           </div>
 
           {/* Step tabs - pinned to bottom, floating above dark canvas */}
-          <div className="flex items-center gap-2 px-6 py-3 bg-white/95 backdrop-blur-sm border-t border-gray-800/20 w-full shrink-0 shadow-lg">
+          <div className="flex items-center gap-1.5 px-6 py-3 bg-white/95 backdrop-blur-sm border-t border-gray-800/20 w-full shrink-0 shadow-xl">
             {design.steps.map((step, i) => (
-              <div key={step.id} className="flex items-center gap-2">
+              <div key={step.id} className="flex items-center gap-1.5">
                 <button onClick={() => { setActiveStepIdx(i); setShowSuccess(false); setSelectedBlockId(null) }}
-                  className={`px-4 py-2 text-sm rounded-lg font-medium whitespace-nowrap transition-colors ${!showSuccess && activeStepIdx === i ? 'bg-brand-500 text-white shadow-sm' : 'text-gray-600 bg-gray-100 hover:bg-gray-200'}`}>
+                  className={`px-4 py-1.5 text-[13px] rounded-lg font-semibold whitespace-nowrap transition-all ${!showSuccess && activeStepIdx === i ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-700 bg-gray-100 hover:bg-gray-200'}`}>
                   {step.name}
                 </button>
-                {i < design.steps.length - 1 && <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />}
+                {i < design.steps.length - 1 && <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />}
               </div>
             ))}
-            <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+            <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
             <button onClick={() => { setShowSuccess(true); setSelectedBlockId(null) }}
-              className={`px-4 py-2 text-sm rounded-lg font-medium whitespace-nowrap transition-colors ${showSuccess ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-600 bg-gray-100 hover:bg-gray-200'}`}>
+              className={`px-4 py-1.5 text-[13px] rounded-lg font-semibold whitespace-nowrap transition-all ${showSuccess ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-700 bg-gray-100 hover:bg-gray-200'}`}>
               Sucesso
             </button>
             <div className="flex-1" />
-            <button onClick={addStep} className="flex items-center gap-1 px-3 py-2 text-sm text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors">
+            <button onClick={addStep} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors">
               <Plus className="w-3.5 h-3.5" /> Adicionar etapa
             </button>
             {design.steps.length > 1 && !showSuccess && (
