@@ -10,8 +10,8 @@ export const dynamic = 'force-dynamic';
 const TRIGGER_TO_EVENT_TYPES: Record<string, string[]> = {
   trigger_abandon: ['abandoned_cart', 'checkout_abandoned'],
   trigger_checkout_abandoned: ['checkout_abandoned', 'checkout_started'],
-  trigger_order: ['placed_order', 'order_paid', 'checkout_completed'],
-  trigger_order_paid: ['order_paid', 'placed_order', 'checkout_completed'],
+  trigger_order: ['placed_order', 'order_paid'],
+  trigger_order_paid: ['order_paid', 'placed_order'],
   trigger_fulfilled_order: ['fulfilled_order'],
   trigger_cancelled_order: ['cancelled_order'],
   trigger_viewed_product: ['viewed_product'],

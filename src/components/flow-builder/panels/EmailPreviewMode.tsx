@@ -4,29 +4,29 @@ import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Monitor, Smartphone, ChevronDown, Send, Mail, CheckCircle2, XCircle, Inbox, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// ── Event-type presentation (Klaviyo-style colored badges) ─────────────────
-const EVENT_STYLES: Record<string, { label: string; bg: string; text: string; dot: string }> = {
-  placed_order:        { label: 'Placed Order',        bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  order_paid:          { label: 'Order Paid',          bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  fulfilled_order:     { label: 'Fulfilled Order',     bg: 'bg-teal-50',     text: 'text-teal-700',    dot: 'bg-teal-500' },
-  cancelled_order:     { label: 'Cancelled Order',     bg: 'bg-rose-50',     text: 'text-rose-700',    dot: 'bg-rose-500' },
-  refunded_order:      { label: 'Refunded Order',      bg: 'bg-rose-50',     text: 'text-rose-700',    dot: 'bg-rose-500' },
-  checkout_started:    { label: 'Checkout Started',    bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-500' },
-  checkout_abandoned:  { label: 'Checkout Abandoned',  bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-500' },
-  checkout_completed:  { label: 'Checkout Completed',  bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  abandoned_cart:      { label: 'Abandoned Cart',      bg: 'bg-orange-50',   text: 'text-orange-700',  dot: 'bg-orange-500' },
-  added_to_cart:       { label: 'Added to Cart',       bg: 'bg-blue-50',     text: 'text-blue-700',    dot: 'bg-blue-500' },
-  viewed_product:      { label: 'Viewed Product',      bg: 'bg-sky-50',      text: 'text-sky-700',     dot: 'bg-sky-500' },
-  viewed_collection:   { label: 'Viewed Collection',   bg: 'bg-sky-50',      text: 'text-sky-700',     dot: 'bg-sky-500' },
-  profile_created:     { label: 'Profile Created',     bg: 'bg-violet-50',   text: 'text-violet-700',  dot: 'bg-violet-500' },
-  profile_updated:     { label: 'Profile Updated',     bg: 'bg-violet-50',   text: 'text-violet-700',  dot: 'bg-violet-500' },
-  subscribed_email:    { label: 'Subscribed',          bg: 'bg-violet-50',   text: 'text-violet-700',  dot: 'bg-violet-500' },
-  customer_created:    { label: 'Customer Created',    bg: 'bg-violet-50',   text: 'text-violet-700',  dot: 'bg-violet-500' },
-  form_submitted:      { label: 'Form Submitted',      bg: 'bg-indigo-50',   text: 'text-indigo-700',  dot: 'bg-indigo-500' },
+// ── Event-type labels (clean, muted style — no heavy coloring) ────────────
+const EVENT_LABELS: Record<string, string> = {
+  placed_order:        'Placed Order',
+  order_paid:          'Order Paid',
+  fulfilled_order:     'Fulfilled Order',
+  cancelled_order:     'Cancelled Order',
+  refunded_order:      'Refunded Order',
+  checkout_started:    'Checkout Started',
+  checkout_abandoned:  'Checkout Abandoned',
+  checkout_completed:  'Checkout Completed',
+  abandoned_cart:      'Abandoned Cart',
+  added_to_cart:       'Added to Cart',
+  viewed_product:      'Viewed Product',
+  viewed_collection:   'Viewed Collection',
+  profile_created:     'Profile Created',
+  profile_updated:     'Profile Updated',
+  subscribed_email:    'Subscribed',
+  customer_created:    'Customer Created',
+  form_submitted:      'Form Submitted',
 };
 
-function eventStyle(type: string) {
-  return EVENT_STYLES[type] || { label: type, bg: 'bg-zinc-100', text: 'text-zinc-700', dot: 'bg-zinc-400' };
+function eventLabel(type: string): string {
+  return EVENT_LABELS[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function initialsFrom(s: string | null | undefined): string {
@@ -37,25 +37,27 @@ function initialsFrom(s: string | null | undefined): string {
   return (parts[0]?.[0] || '').concat(parts[1]?.[0] || '').toUpperCase() || clean[0]!.toUpperCase();
 }
 
-function avatarColor(seed: string): string {
-  const palette = [
-    'bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-amber-500',
-    'bg-rose-500', 'bg-sky-500', 'bg-orange-500', 'bg-teal-500', 'bg-indigo-500',
-  ];
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
-  return palette[Math.abs(h) % palette.length];
-}
-
 function formatValue(v: any): string {
   if (v === null || v === undefined || v === '') return '—';
   if (typeof v === 'boolean') return v ? 'true' : 'false';
   return String(v);
 }
 
-function humanizeKey(k: string): string {
-  return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
+// Profile fields to display in a curated order, with PT-BR labels.
+const PROFILE_FIELDS: [string, string][] = [
+  ['email', 'Email'],
+  ['first_name', 'First Name'],
+  ['last_name', 'Last Name'],
+  ['phone', 'Phone'],
+  ['city', 'City'],
+  ['state', 'State'],
+  ['country', 'Country'],
+  ['company', 'Company'],
+  ['tags', 'Tags'],
+  ['total_orders', 'Total Orders'],
+  ['total_spent', 'Total Spent'],
+  ['created_at', 'Created At'],
+];
 
 interface EmailPreviewModeProps {
   templateId: string;
@@ -229,7 +231,6 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
     });
   };
 
-  const currentStyle = currentEvent ? eventStyle(currentEvent.event_type) : null;
   const displayName = (currentEvent as any)?.contact_email || contact?.email || 'Sem lead';
 
   return (
@@ -363,66 +364,55 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
         </div>
 
         {/* ─ Right: lead selector + properties ─ */}
-        <div className="w-[380px] border-l border-zinc-200 flex flex-col bg-white shrink-0">
+        <div className="w-[360px] border-l border-zinc-200/80 flex flex-col bg-zinc-50/50 shrink-0">
           {/* Lead selector */}
-          <div className="px-5 py-4 border-b border-zinc-100">
+          <div className="px-5 pt-5 pb-4 bg-white border-b border-zinc-100">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.08em]">Lead selecionado</p>
-              <span className="text-[11px] font-medium text-zinc-400 tabular-nums">
+              <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-[0.08em]">Lead selecionado</p>
+              <span className="text-[11px] text-zinc-400 tabular-nums">
                 {events.length > 0 ? `${selectedIdx + 1} de ${events.length}` : '—'}
               </span>
             </div>
 
-            <div className="flex items-stretch gap-1.5">
+            <div className="flex items-center gap-2">
               <button onClick={() => selectEvent(Math.max(0, selectedIdx - 1))} disabled={selectedIdx <= 0}
-                className="shrink-0 w-8 rounded-lg border border-zinc-200 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-50 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center">
+                className="shrink-0 p-1 text-zinc-300 hover:text-zinc-600 disabled:opacity-0 transition-all">
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <div className="flex-1 min-w-0">
                 {currentEvent ? (
-                  <div className="h-full p-3 rounded-lg border border-zinc-200 bg-white hover:border-zinc-300 transition-colors">
-                    <div className="flex items-start gap-2.5">
-                      <div className={cn(
-                        'w-8 h-8 rounded-full text-white font-semibold text-[12px] flex items-center justify-center shrink-0',
-                        avatarColor(displayName),
-                      )}>
-                        {initialsFrom(displayName)}
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-zinc-900 text-white text-[12px] font-semibold flex items-center justify-center shrink-0">
+                      {initialsFrom(contact?.first_name || displayName)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold text-zinc-900 truncate">{displayName}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[11px] text-zinc-500">{eventLabel(currentEvent.event_type)}</span>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[12.5px] font-semibold text-zinc-900 truncate">{displayName}</p>
-                        {currentStyle && (
-                          <div className={cn(
-                            'inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium',
-                            currentStyle.bg, currentStyle.text,
-                          )}>
-                            <span className={cn('w-1 h-1 rounded-full', currentStyle.dot)} />
-                            {currentStyle.label}
-                          </div>
-                        )}
-                        <p className="text-[10px] text-zinc-400 mt-1 tabular-nums">
-                          {new Date(currentEvent.occurred_at).toLocaleString('pt-BR', {
-                            day: '2-digit', month: '2-digit', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit',
-                          })}
-                        </p>
-                      </div>
+                      <p className="text-[10px] text-zinc-400 mt-0.5 tabular-nums">
+                        {new Date(currentEvent.occurred_at).toLocaleString('pt-BR', {
+                          day: '2-digit', month: '2-digit', year: 'numeric',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="h-full p-3 rounded-lg border border-dashed border-zinc-200 flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-zinc-100 flex items-center justify-center shrink-0">
                       <Inbox className="w-4 h-4 text-zinc-400" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[12px] font-medium text-zinc-500">Sem eventos</p>
-                      <p className="text-[10px] text-zinc-400 mt-0.5">Esta automação ainda não foi disparada</p>
+                      <p className="text-[12px] text-zinc-500">Sem eventos</p>
+                      <p className="text-[10px] text-zinc-400 mt-0.5">Nenhum evento encontrado para esta automação</p>
                     </div>
                   </div>
                 )}
               </div>
               <button onClick={() => selectEvent(Math.min(events.length - 1, selectedIdx + 1))}
                 disabled={selectedIdx >= events.length - 1}
-                className="shrink-0 w-8 rounded-lg border border-zinc-200 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-50 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center">
+                className="shrink-0 p-1 text-zinc-300 hover:text-zinc-600 disabled:opacity-0 transition-all">
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -433,17 +423,19 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
             {/* Event props */}
             <div className="border-b border-zinc-100">
               <button onClick={() => setShowEventProps(!showEventProps)}
-                className="w-full flex items-center justify-between px-5 h-11 text-left hover:bg-zinc-50 transition-colors">
-                <span className="text-[12px] font-semibold text-zinc-900 tracking-tight">Propriedades do evento</span>
-                <ChevronDown className={cn('w-3.5 h-3.5 text-zinc-400 transition-transform', !showEventProps && '-rotate-90')} />
+                className="w-full flex items-center justify-between px-5 h-10 text-left hover:bg-white/80 transition-colors">
+                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-[0.04em]">Propriedades do evento</span>
+                <ChevronDown className={cn('w-3.5 h-3.5 text-zinc-300 transition-transform', !showEventProps && '-rotate-90')} />
               </button>
               {showEventProps && (
-                <div className="px-5 pb-4 -mt-0.5">
-                  {Object.keys(eventProps).length > 0 ? (
-                    <div className="space-y-0.5">{renderTree(eventProps)}</div>
-                  ) : (
-                    <p className="text-[11px] text-zinc-400 italic">Sem dados do evento</p>
-                  )}
+                <div className="px-5 pb-4 bg-white mx-3 mb-3 rounded-lg border border-zinc-100">
+                  <div className="pt-3">
+                    {Object.keys(eventProps).length > 0 ? (
+                      <div className="space-y-0">{renderTree(eventProps)}</div>
+                    ) : (
+                      <p className="text-[11px] text-zinc-400">Sem dados</p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -451,28 +443,40 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
             {/* Profile props */}
             <div>
               <button onClick={() => setShowProfileProps(!showProfileProps)}
-                className="w-full flex items-center justify-between px-5 h-11 text-left hover:bg-zinc-50 transition-colors">
-                <span className="text-[12px] font-semibold text-zinc-900 tracking-tight">Propriedades do perfil</span>
-                <ChevronDown className={cn('w-3.5 h-3.5 text-zinc-400 transition-transform', !showProfileProps && '-rotate-90')} />
+                className="w-full flex items-center justify-between px-5 h-10 text-left hover:bg-white/80 transition-colors">
+                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-[0.04em]">Propriedades do perfil</span>
+                <ChevronDown className={cn('w-3.5 h-3.5 text-zinc-300 transition-transform', !showProfileProps && '-rotate-90')} />
               </button>
               {showProfileProps && contact && (
-                <div className="px-5 pb-4 -mt-0.5 space-y-[3px]">
-                  {Object.entries(contact).map(([key, value]) => (
-                    <div key={key} className="flex gap-3 py-[3px] leading-tight">
-                      <span className="text-[11px] font-medium text-zinc-500 shrink-0 min-w-[110px]">{humanizeKey(key)}:</span>
-                      <span className="text-[11px] text-zinc-900 break-all font-medium">
-                        {value === null || value === undefined || value === ''
-                          ? '—'
-                          : typeof value === 'object'
-                            ? JSON.stringify(value)
-                            : String(value)}
-                      </span>
-                    </div>
-                  ))}
+                <div className="mx-3 mb-3 bg-white rounded-lg border border-zinc-100 overflow-hidden">
+                  <table className="w-full">
+                    <tbody>
+                      {PROFILE_FIELDS.map(([field, label]) => {
+                        const raw = contact[field];
+                        if (raw === undefined) return null;
+                        let display: string;
+                        if (raw === null || raw === '') {
+                          display = '—';
+                        } else if (Array.isArray(raw)) {
+                          display = raw.join(', ');
+                        } else if (typeof raw === 'object') {
+                          display = JSON.stringify(raw);
+                        } else {
+                          display = String(raw);
+                        }
+                        return (
+                          <tr key={field} className="border-b border-zinc-50 last:border-0">
+                            <td className="pl-4 pr-2 py-2 text-[11px] text-zinc-400 whitespace-nowrap align-top w-[110px]">{label}</td>
+                            <td className="pr-4 py-2 text-[11px] text-zinc-800 break-all">{display}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
               {showProfileProps && !contact && (
-                <p className="px-5 pb-4 text-[11px] text-zinc-400 italic">Sem dados do perfil</p>
+                <p className="px-5 pb-4 text-[11px] text-zinc-400">Sem dados do perfil</p>
               )}
             </div>
           </div>
