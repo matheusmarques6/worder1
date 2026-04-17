@@ -556,6 +556,48 @@ export function resolveOrderBlocks(
 
     let orderHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:${font};">`
 
+    // Title section — "Resumo do Pedido"
+    if (cfg.showTitle && cfg.titleText) {
+      const tAlign = cfg.titleAlign || 'center'
+      const tColor = cfg.titleColor || primColor
+      const tSize = cfg.titleFontSize || 24
+      const tWeight = cfg.titleWeight || '700'
+      orderHtml += `<tr><td style="padding:0 0 8px;text-align:${tAlign};font-size:${tSize}px;font-weight:${tWeight};color:${tColor};line-height:1.3;">${cfg.titleText}</td></tr>`
+    }
+
+    // Order meta (number + date)
+    const showOrderNum = cfg.showOrderNumber !== false
+    const showOrderDate = cfg.showOrderDate !== false
+    if (showOrderNum || showOrderDate) {
+      const orderNum = eventData?.OrderNumber || eventData?.order_number || eventData?.OrderId || eventData?.order_id || ''
+      const rawDate = eventData?.OrderDate
+        || eventData?.occurred_at
+        || eventData?.created_at
+        || eventData?.CreatedAt
+        || ''
+      const locale = currency === 'USD' ? 'en-US' : currency === 'EUR' ? 'en-GB' : 'pt-BR'
+      let dateStr = ''
+      if (rawDate) {
+        const d = new Date(rawDate)
+        if (!isNaN(d.getTime())) {
+          try {
+            dateStr = d.toLocaleString(locale, { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+          } catch {
+            dateStr = d.toISOString().split('T')[0]
+          }
+        }
+      }
+      const metaParts: string[] = []
+      if (showOrderNum && orderNum) metaParts.push(`${cfg.orderNumberLabel || 'Pedido'}: #${orderNum}`)
+      if (showOrderDate && dateStr) metaParts.push(dateStr)
+      if (metaParts.length > 0) {
+        const mAlign = cfg.metaAlign || 'center'
+        const mColor = cfg.metaColor || secColor
+        const mSize = cfg.metaFontSize || 13
+        orderHtml += `<tr><td style="padding:0 0 20px;text-align:${mAlign};font-size:${mSize}px;color:${mColor};line-height:1.5;">${metaParts.join('<br/>')}</td></tr>`
+      }
+    }
+
     items.forEach((item: any, i: number) => {
       const raw = rawLineItems[i] || {}
       const title = item.ProductName || item.title || item.name || raw.title || raw.name || 'Product'
@@ -599,7 +641,10 @@ export function resolveOrderBlocks(
         detailLines.push(`<div style="margin-top:2px;font-size:11px;color:${secColor};line-height:1.4;">SKU: ${sku}</div>`)
       }
       if (cfg.showDiscount && discount > 0) {
-        detailLines.push(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;"><tr><td style="font-size:12px;color:${secColor};">Discount</td><td style="font-size:12px;color:${secColor};text-align:right;">-${fmtPrice(discount)}</td></tr><tr><td style="font-size:13px;font-weight:600;color:${primColor};padding-top:2px;">Price after discount</td><td style="font-size:13px;font-weight:700;color:${priceColor};text-align:right;padding-top:2px;">${fmtPrice(priceAfterDiscount)}</td></tr></table>`)
+        const isEnLocale = currency === 'USD' || currency === 'EUR'
+        const dLbl = isEnLocale ? 'Discount' : 'Desconto'
+        const pLbl = isEnLocale ? 'Price after discount' : 'Preço com desconto'
+        detailLines.push(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;"><tr><td style="font-size:12px;color:${secColor};">${dLbl}</td><td style="font-size:12px;color:${secColor};text-align:right;">-${fmtPrice(discount)}</td></tr><tr><td style="font-size:13px;font-weight:600;color:${primColor};padding-top:2px;">${pLbl}</td><td style="font-size:13px;font-weight:700;color:${priceColor};text-align:right;padding-top:2px;">${fmtPrice(priceAfterDiscount)}</td></tr></table>`)
       }
 
       const priceCell = cfg.showPrice
@@ -638,20 +683,24 @@ export function resolveOrderBlocks(
       const rowStyle = `font-size:13px;color:${secColor};padding:4px 0;line-height:1.4;`
       orderHtml += `<tr><td style="border-top:1px solid ${divColor};padding-top:14px;">`
       orderHtml += `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:${font};">`
+      const isEnLocale = currency === 'USD' || currency === 'EUR'
+      const lbl = isEnLocale
+        ? { discount: 'Discount', subtotal: 'Subtotal', shipping: 'Shipping', tax: 'Tax', total: 'Total' }
+        : { discount: 'Desconto', subtotal: 'Subtotal', shipping: 'Frete', tax: 'Taxa', total: 'Total' }
       if (cfg.showTotalDiscount && discountTotal > 0) {
-        orderHtml += `<tr><td style="${rowStyle}">Discount</td><td style="${rowStyle}text-align:right;">-${fmtPrice(discountTotal)}</td></tr>`
+        orderHtml += `<tr><td style="${rowStyle}">${lbl.discount}</td><td style="${rowStyle}text-align:right;">-${fmtPrice(discountTotal)}</td></tr>`
       }
       if (cfg.showSubtotal) {
-        orderHtml += `<tr><td style="${rowStyle}">Subtotal</td><td style="${rowStyle}text-align:right;">${fmtPrice(subtotalPrice)}</td></tr>`
+        orderHtml += `<tr><td style="${rowStyle}">${lbl.subtotal}</td><td style="${rowStyle}text-align:right;">${fmtPrice(subtotalPrice)}</td></tr>`
       }
       if (cfg.showShipping) {
-        orderHtml += `<tr><td style="${rowStyle}">Shipping</td><td style="${rowStyle}text-align:right;">${fmtPrice(shippingPrice)}</td></tr>`
+        orderHtml += `<tr><td style="${rowStyle}">${lbl.shipping}</td><td style="${rowStyle}text-align:right;">${fmtPrice(shippingPrice)}</td></tr>`
       }
       if (cfg.showTax && taxPrice > 0) {
-        orderHtml += `<tr><td style="${rowStyle}">Tax</td><td style="${rowStyle}text-align:right;">${fmtPrice(taxPrice)}</td></tr>`
+        orderHtml += `<tr><td style="${rowStyle}">${lbl.tax}</td><td style="${rowStyle}text-align:right;">${fmtPrice(taxPrice)}</td></tr>`
       }
       orderHtml += `<tr><td colspan="2" style="border-top:1px solid ${divColor};padding-top:10px;font-size:1px;line-height:1px;">&nbsp;</td></tr>`
-      orderHtml += `<tr><td style="font-size:16px;font-weight:700;color:${totalColor};padding:2px 0;">Total</td><td style="font-size:16px;font-weight:700;color:${totalColor};padding:2px 0;text-align:right;">${fmtPrice(totalPrice)}</td></tr>`
+      orderHtml += `<tr><td style="font-size:16px;font-weight:700;color:${totalColor};padding:2px 0;">${lbl.total}</td><td style="font-size:16px;font-weight:700;color:${totalColor};padding:2px 0;text-align:right;">${fmtPrice(totalPrice)}</td></tr>`
       orderHtml += `</table></td></tr>`
     }
 

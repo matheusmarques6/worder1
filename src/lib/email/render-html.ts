@@ -210,6 +210,21 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     case 'order-products': {
       const orderConfig = {
         type: 'order-products',
+        // Title
+        showTitle: p.showTitle !== false,
+        titleText: p.titleText || 'Resumo do Pedido',
+        titleFontSize: p.titleFontSize || 24,
+        titleWeight: p.titleWeight || '700',
+        titleAlign: p.titleAlign || 'center',
+        titleColor: p.titleColor || '#000000',
+        // Meta
+        showOrderNumber: p.showOrderNumber !== false,
+        showOrderDate: p.showOrderDate !== false,
+        orderNumberLabel: p.orderNumberLabel || 'Pedido',
+        metaColor: p.metaColor || '#AFAFAF',
+        metaFontSize: p.metaFontSize || 13,
+        metaAlign: p.metaAlign || 'center',
+        // Products
         showImage: p.showImage !== false,
         showName: p.showName !== false,
         showQuantity: p.showQuantity !== false,
@@ -217,18 +232,22 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
         showVariant: p.showVariant !== false,
         showSku: p.showSku || false,
         showDiscount: p.showDiscount !== false,
+        // Totals
         showTotals: p.showTotals !== false,
         showSubtotal: p.showSubtotal !== false,
         showShipping: p.showShipping !== false,
         showTax: p.showTax !== false,
         showTotalDiscount: p.showTotalDiscount !== false,
+        // Colors
         primaryTextColor: p.primaryTextColor || '#000000',
         secondaryTextColor: p.secondaryTextColor || '#AFAFAF',
         priceTextColor: p.priceTextColor || '#000000',
         totalTextColor: p.totalTextColor || '#000000',
         dividerColor: p.dividerColor || '#EDEDED',
+        // Image
         imageWidth: p.imageWidth || 80,
         imageBorderRadius: p.imageBorderRadius ?? 4,
+        // Separator
         separator: p.separator !== false,
         separatorColor: p.separatorColor || '#EDEDED',
         font,

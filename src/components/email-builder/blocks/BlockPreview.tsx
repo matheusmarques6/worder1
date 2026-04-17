@@ -681,8 +681,8 @@ export function BlockPreview({
       // ── Order Products ──
       case 'order-products': {
         const sampleItems = [
-          { name: 'Product name', qty: 1, price: 'R$0.00', variant: 'Variant', img: '' },
-          { name: 'Product name', qty: 1, price: 'R$0.00', variant: 'Variant', img: '' },
+          { name: 'Nome do produto', qty: 1, price: 'R$0,00', variant: 'Variante', img: '' },
+          { name: 'Nome do produto', qty: 1, price: 'R$0,00', variant: 'Variante', img: '' },
         ]
         const imgW = p.imageWidth || 80
         const imgR = p.imageBorderRadius ?? 4
@@ -690,8 +690,40 @@ export function BlockPreview({
         const secColor = p.secondaryTextColor || '#AFAFAF'
         const priceColor = p.priceTextColor || '#000000'
         const divColor = p.dividerColor || '#EDEDED'
+        const titleColor = p.titleColor || primColor
+        const metaColor = p.metaColor || secColor
         return (
           <div style={{ ...pad, backgroundColor: p.backgroundColor || undefined }}>
+            {/* Title */}
+            {p.showTitle !== false && (
+              <div style={{
+                textAlign: (p.titleAlign || 'center') as any,
+                fontSize: p.titleFontSize || 24,
+                fontWeight: p.titleWeight || 700,
+                color: titleColor,
+                lineHeight: 1.3,
+                paddingBottom: 8,
+              }}>
+                {p.titleText || 'Resumo do Pedido'}
+              </div>
+            )}
+            {/* Order meta */}
+            {(p.showOrderNumber !== false || p.showOrderDate !== false) && (
+              <div style={{
+                textAlign: (p.metaAlign || 'center') as any,
+                fontSize: p.metaFontSize || 13,
+                color: metaColor,
+                lineHeight: 1.5,
+                paddingBottom: 20,
+              }}>
+                {p.showOrderNumber !== false && (
+                  <div>{(p.orderNumberLabel || 'Pedido')}: #1001</div>
+                )}
+                {p.showOrderDate !== false && (
+                  <div>17 de abril de 2026 14:30</div>
+                )}
+              </div>
+            )}
             {sampleItems.map((item, i) => (
               <div key={i}>
                 <div style={{ display: 'flex', gap: 12, padding: '12px 0' }}>
@@ -714,7 +746,7 @@ export function BlockPreview({
                           </p>
                         )}
                         {p.showVariant !== false && (
-                          <p style={{ margin: '2px 0 0', fontSize: 12, color: secColor }}>Variant: {item.variant}</p>
+                          <p style={{ margin: '2px 0 0', fontSize: 12, color: secColor }}>{item.variant}</p>
                         )}
                         {p.showSku && (
                           <p style={{ margin: '2px 0 0', fontSize: 11, color: secColor }}>SKU: ABC123</p>
@@ -727,10 +759,10 @@ export function BlockPreview({
                     {p.showDiscount && (
                       <div style={{ marginTop: 4 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: secColor }}>
-                          <span>Discount:</span><span>-R$0.00</span>
+                          <span>Desconto</span><span>-R$0,00</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: primColor, marginTop: 2 }}>
-                          <span>Price after discount:</span><span style={{ color: priceColor }}>R$0.00</span>
+                          <span>Preço com desconto</span><span style={{ color: priceColor }}>R$0,00</span>
                         </div>
                       </div>
                     )}
@@ -742,30 +774,30 @@ export function BlockPreview({
               </div>
             ))}
             {p.showTotals !== false && (
-              <div style={{ borderTop: `1px solid ${divColor}`, marginTop: 8, paddingTop: 12 }}>
+              <div style={{ borderTop: `1px solid ${divColor}`, marginTop: 8, paddingTop: 14 }}>
                 {p.showTotalDiscount !== false && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '2px 0' }}>
-                    <span>Discount:</span><span>-R$0.00</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '4px 0' }}>
+                    <span>Desconto</span><span>-R$0,00</span>
                   </div>
                 )}
                 {p.showSubtotal !== false && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '2px 0' }}>
-                    <span>Subtotal price:</span><span>R$0.00</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '4px 0' }}>
+                    <span>Subtotal</span><span>R$0,00</span>
                   </div>
                 )}
                 {p.showShipping !== false && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '2px 0' }}>
-                    <span>Shipping price:</span><span>R$0.00</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '4px 0' }}>
+                    <span>Frete</span><span>R$0,00</span>
                   </div>
                 )}
                 {p.showTax !== false && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '2px 0' }}>
-                    <span>Tax:</span><span>R$0.00</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '4px 0' }}>
+                    <span>Taxa</span><span>R$0,00</span>
                   </div>
                 )}
-                <hr style={{ border: 'none', borderTop: `2px solid ${divColor}`, margin: '8px 0' }} />
+                <hr style={{ border: 'none', borderTop: `1px solid ${divColor}`, margin: '10px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 700, color: p.totalTextColor || primColor }}>
-                  <span>Total price:</span><span>R$0.00</span>
+                  <span>Total</span><span>R$0,00</span>
                 </div>
               </div>
             )}

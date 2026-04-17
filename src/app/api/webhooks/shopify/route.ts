@@ -529,6 +529,7 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
         $value: orderValue,
         OrderId: String(order.id),
         OrderNumber: String(order.order_number),
+        OrderDate: order.created_at || new Date().toISOString(),
         Currency: order.currency,
         FinancialStatus: order.financial_status,
         FulfillmentStatus: order.fulfillment_status,
@@ -536,6 +537,7 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
         DiscountValue: parseFloat(order.total_discounts || '0'),
         SubtotalPrice: parseFloat(order.subtotal_price || '0'),
         TotalTax: parseFloat(order.total_tax || '0'),
+        TotalShipping: (order.shipping_lines || []).reduce((sum: number, sl: any) => sum + parseFloat(sl.price || '0'), 0),
         ItemCount: order.line_items?.length || 0,
         'Customer Locale': order.customer_locale || 'pt-BR',
         Items: (order.line_items || []).map((item: any) => {

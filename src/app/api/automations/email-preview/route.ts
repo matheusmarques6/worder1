@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
         const eventTypes = resolveEventTypes(triggerType);
         const { data: ev } = await supabase
           .from('contact_events')
-          .select('properties')
+          .select('properties, occurred_at')
           .eq('organization_id', organizationId)
           .eq('contact_id', contactId)
           .in('event_type', eventTypes)
@@ -194,6 +194,7 @@ export async function POST(request: NextRequest) {
           .limit(1)
           .maybeSingle();
         testEvent = (ev?.properties as Record<string, any>) || {};
+        if (ev?.occurred_at && !testEvent.occurred_at) testEvent.occurred_at = ev.occurred_at;
       }
       const { data: testStore } = await supabase
         .from('shopify_stores')
@@ -298,6 +299,10 @@ export async function POST(request: NextRequest) {
 
     if (recentEvent) {
       eventData = recentEvent.properties || {};
+      // Inject the occurred_at timestamp so the order resolver can render the order date
+      if (recentEvent.occurred_at && !eventData.occurred_at) {
+        eventData.occurred_at = recentEvent.occurred_at;
+      }
     }
 
     // 4. Fetch store for {{store_*}} tags

@@ -265,9 +265,24 @@ export const BLOCK_DEFS: BlockDef[] = [
       visibility: 'all',
     } },
 
-  // ── Pedido: bloco dinâmico que renderiza line_items do evento de pedido ──
-  { type: 'order-products', label: 'Pedido', icon: 'Receipt', category: 'E-commerce',
+  // ── Resumo do Pedido: bloco dinâmico com título + meta + produtos + totais ──
+  { type: 'order-products', label: 'Resumo do Pedido', icon: 'Receipt', category: 'E-commerce',
     defaultProps: {
+      // Title section (Order Summary header)
+      showTitle: true,
+      titleText: 'Resumo do Pedido',
+      titleFontSize: 24,
+      titleWeight: '700',
+      titleAlign: 'center',
+      titleColor: '#000000',
+      // Order metadata (number + date)
+      showOrderNumber: true,
+      showOrderDate: true,
+      orderNumberLabel: 'Pedido',
+      metaColor: '#AFAFAF',
+      metaFontSize: 13,
+      metaAlign: 'center',
+      // Product row options
       showImage: true,
       showName: true,
       showQuantity: true,
@@ -275,20 +290,25 @@ export const BLOCK_DEFS: BlockDef[] = [
       showVariant: true,
       showSku: false,
       showDiscount: true,
+      // Totals
       showTotals: true,
       showSubtotal: true,
       showShipping: true,
       showTax: true,
       showTotalDiscount: true,
+      // Colors
       primaryTextColor: '#000000',
       secondaryTextColor: '#AFAFAF',
       priceTextColor: '#000000',
       totalTextColor: '#000000',
       dividerColor: '#EDEDED',
+      // Image
       imageWidth: 80,
       imageBorderRadius: 4,
+      // Separator
       separator: true,
       separatorColor: '#EDEDED',
+      // Layout
       padding: { top: 24, right: 24, bottom: 24, left: 24 },
       backgroundColor: '',
       visibility: 'all',
