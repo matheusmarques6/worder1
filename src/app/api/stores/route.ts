@@ -53,39 +53,13 @@ export async function GET(request: NextRequest) {
       ...(memberships?.map(m => m.organization_id) || []),
     ])];
 
-    // Fetch active stores from ALL user's organizations
-    let { data: stores, error } = await supabase
+    // Fetch active stores ONLY from the user's organizations
+    const { data: stores, error } = await supabase
       .from('shopify_stores')
       .select('*')
       .in('organization_id', orgIds)
       .eq('is_active', true)
       .order('installed_at', { ascending: false });
-
-    // FALLBACK: If no stores found via org membership, search ALL active stores
-    // This handles the case where OAuth callback saved with a different org
-    if ((!stores || stores.length === 0) && !error) {
-      const { data: allStores } = await supabase
-        .from('shopify_stores')
-        .select('*')
-        .eq('is_active', true)
-        .order('installed_at', { ascending: false });
-
-      if (allStores && allStores.length > 0) {
-        stores = allStores;
-        console.log(`[/api/stores] Fallback: found ${allStores.length} stores outside user's orgs`);
-
-        // Fix the org mismatch: update these stores to user's org
-        for (const s of allStores) {
-          if (!orgIds.includes(s.organization_id)) {
-            await supabase
-              .from('shopify_stores')
-              .update({ organization_id: userOrgId })
-              .eq('id', s.id);
-            console.log(`[/api/stores] Fixed org for store ${s.shop_domain}: ${s.organization_id} → ${userOrgId}`);
-          }
-        }
-      }
-    }
 
     if (error) {
       return NextResponse.json({ success: false, stores: [], error: error.message });
