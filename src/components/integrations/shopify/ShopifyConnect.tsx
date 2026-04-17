@@ -41,9 +41,6 @@ export default function ShopifyConnect() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Dual-mode connection: the merchant can either OAuth (official) or
-  // paste credentials from a Custom App (manual). Defaults to manual
-  // while the public app is still pending Shopify Partner approval.
   const [mode, setMode] = useState<'official' | 'manual'>('manual');
   const [manualDomain, setManualDomain] = useState('');
   const [manualClientId, setManualClientId] = useState('');
@@ -52,6 +49,8 @@ export default function ShopifyConnect() {
   const [manualResult, setManualResult] = useState<any>(null);
   const [pixelCode, setPixelCode] = useState<string | null>(null);
   const [copiedPixel, setCopiedPixel] = useState(false);
+  const [showPixelCode, setShowPixelCode] = useState(false);
+  const [loadingPixelCode, setLoadingPixelCode] = useState(false);
 
   // When the page was opened via "Adicionar loja" from the integrations
   // list, the URL carries ?add=1. In that case we skip the "connected"
@@ -200,6 +199,25 @@ export default function ShopifyConnect() {
     }
   }
 
+  async function fetchPixelCode() {
+    if (!store?.shopDomain) return;
+    setLoadingPixelCode(true);
+    try {
+      const res = await fetch(`/api/integrations/shopify/pixel-code?shop=${encodeURIComponent(store.shopDomain)}`);
+      const data = await res.json();
+      if (res.ok && data.code) {
+        setPixelCode(data.code);
+        setShowPixelCode(true);
+      } else {
+        setError('Não foi possível gerar o código do pixel.');
+      }
+    } catch {
+      setError('Erro ao buscar código do pixel.');
+    } finally {
+      setLoadingPixelCode(false);
+    }
+  }
+
   async function handleSyncAll() {
     setSyncingAll(true);
     setError('');
@@ -303,6 +321,73 @@ export default function ShopifyConnect() {
           <StatusLine label="Última sync" ok={true} detail={store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleString('pt-BR') : 'Nunca'} />
           <StatusLine label="API" ok={true} detail={store.apiVersion || '2026-01'} />
         </div>
+
+        {!store.pixelInstalled && !showPixelCode && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-medium text-amber-800 text-sm">Custom Pixel não instalado</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  O pixel captura visualizações de produto, carrinho, checkout e email. Sem ele, o tracking comportamental não funciona.
+                </p>
+              </div>
+              <button
+                onClick={fetchPixelCode}
+                disabled={loadingPixelCode}
+                className="flex-shrink-0 px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
+              >
+                {loadingPixelCode ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ver código'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {store.pixelInstalled && !showPixelCode && (
+          <button
+            onClick={fetchPixelCode}
+            disabled={loadingPixelCode}
+            className="text-sm text-gray-500 hover:text-gray-700 underline transition-colors"
+          >
+            {loadingPixelCode ? 'Carregando...' : 'Ver código do Custom Pixel'}
+          </button>
+        )}
+
+        {showPixelCode && pixelCode && (
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <p className="font-medium text-gray-900 text-sm">Código do Custom Pixel</p>
+              <button onClick={() => setShowPixelCode(false)} className="text-xs text-gray-400 hover:text-gray-600">
+                Fechar
+              </button>
+            </div>
+            <div className="relative">
+              <pre className="bg-white p-3 rounded border border-gray-200 text-[11px] font-mono overflow-x-auto text-gray-800 max-h-56 overflow-y-auto">
+                {pixelCode}
+              </pre>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(pixelCode);
+                    setCopiedPixel(true);
+                    setTimeout(() => setCopiedPixel(false), 2000);
+                  } catch {}
+                }}
+                className="absolute top-2 right-2 px-2.5 py-1 bg-brand-500 text-white rounded text-xs font-medium hover:bg-brand-600 transition-colors"
+              >
+                {copiedPixel ? '✓ Copiado!' : 'Copiar'}
+              </button>
+            </div>
+            <div className="mt-3 text-xs text-gray-600 space-y-1">
+              <p className="font-semibold text-gray-700">Como instalar:</p>
+              <p>1. No admin Shopify, vá em <strong>Configurações → Customer Events</strong></p>
+              <p>2. Clique em <strong>Adicionar pixel personalizado</strong></p>
+              <p>3. Nome: <strong>Worder</strong></p>
+              <p>4. Cole o código acima no editor</p>
+              <p>5. Em &ldquo;Privacidade do cliente&rdquo;, selecione <strong>Não obrigatório</strong></p>
+              <p>6. Clique <strong>Salvar</strong> e depois <strong>Conectar</strong></p>
+            </div>
+          </div>
+        )}
 
         {!store.embedInstalled && (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
