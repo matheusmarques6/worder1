@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { Pipette } from 'lucide-react'
 
 // ── Color conversion helpers ──
 function hexToRgb(hex: string): [number, number, number] {
@@ -162,6 +163,25 @@ export function ColorPicker({ value, onChange, label }: ColorPickerProps) {
 
   const recent = getRecentColors()
 
+  const eyeDropperSupported = typeof window !== 'undefined' && 'EyeDropper' in window
+
+  const pickWithEyeDropper = useCallback(async () => {
+    try {
+      const ED = (window as any).EyeDropper
+      if (!ED) return
+      const result = await new ED().open()
+      const picked = (result?.sRGBHex || '').toLowerCase()
+      if (picked) {
+        onChange(picked)
+        setHexInput(picked)
+        setHue(hexToHsl(picked)[0])
+        addRecentColor(picked)
+      }
+    } catch {
+      // user cancelled — no-op
+    }
+  }, [onChange])
+
   return (
     <div className="relative">
       {label && <label className="block text-[12px] font-medium text-zinc-700 mb-1">{label}</label>}
@@ -183,6 +203,17 @@ export function ColorPicker({ value, onChange, label }: ColorPickerProps) {
           className="flex-1 font-mono text-[12px] text-zinc-800 border border-zinc-200 rounded-md px-2 py-1.5 h-[30px] focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/15 transition-colors"
           placeholder="#000000"
         />
+        {/* Eyedropper button */}
+        {eyeDropperSupported && (
+          <button
+            type="button"
+            onClick={pickWithEyeDropper}
+            className="w-7 h-7 rounded-sm border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-800 hover:border-zinc-400 transition-colors flex-shrink-0"
+            title="Capturar cor da tela"
+          >
+            <Pipette className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Popover */}
