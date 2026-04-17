@@ -78,6 +78,7 @@ export function ColorPicker({ value, onChange, label }: ColorPickerProps) {
   const popRef = useRef<HTMLDivElement>(null)
   const gradRef = useRef<HTMLCanvasElement>(null)
 
+  const isEmpty = !value
   const hex = value || '#000000'
   const [r, g, b] = hexToRgb(hex)
   const [, sat, lit] = hexToHsl(hex)
@@ -120,18 +121,52 @@ export function ColorPicker({ value, onChange, label }: ColorPickerProps) {
     ctx.fillRect(0, 0, w, h)
   }, [open, hue])
 
-  const handleGradientClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = e.currentTarget
+  // Smooth drag using rAF + canvas ref (not e.currentTarget which breaks on document drag)
+  const rafRef = useRef<number | null>(null)
+  const pickAtPoint = useCallback((clientX: number, clientY: number) => {
+    const canvas = gradRef.current
+    if (!canvas) return
     const rect = canvas.getBoundingClientRect()
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
-    // x = saturation (0=white, 1=full hue), y = brightness (0=bright, 1=black)
+    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
     const s = x * 100
-    const l = (1 - y) * (100 - s / 2) // approximation
+    const l = (1 - y) * (100 - s / 2)
     const newHex = hslToHex(hue, Math.min(100, s), Math.max(0, Math.min(100, l)))
     onChange(newHex)
     setHexInput(newHex)
   }, [hue, onChange])
+
+  const scheduledPick = useCallback((clientX: number, clientY: number) => {
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      pickAtPoint(clientX, clientY)
+    })
+  }, [pickAtPoint])
+
+  const handleGradientPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.preventDefault()
+    const canvas = e.currentTarget
+    canvas.setPointerCapture(e.pointerId)
+    pickAtPoint(e.clientX, e.clientY)
+    const onMove = (ev: PointerEvent) => {
+      ev.preventDefault()
+      scheduledPick(ev.clientX, ev.clientY)
+    }
+    const onUp = (ev: PointerEvent) => {
+      try { canvas.releasePointerCapture(ev.pointerId) } catch {}
+      canvas.removeEventListener('pointermove', onMove)
+      canvas.removeEventListener('pointerup', onUp)
+      canvas.removeEventListener('pointercancel', onUp)
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+    }
+    canvas.addEventListener('pointermove', onMove)
+    canvas.addEventListener('pointerup', onUp)
+    canvas.addEventListener('pointercancel', onUp)
+  }, [pickAtPoint, scheduledPick])
 
   const handleHueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const h = +e.target.value
@@ -186,22 +221,30 @@ export function ColorPicker({ value, onChange, label }: ColorPickerProps) {
     <div className="relative">
       {label && <label className="block text-[12px] font-medium text-zinc-700 mb-1">{label}</label>}
       <div className="flex items-center gap-2">
-        {/* Swatch */}
+        {/* Swatch — shows transparent checkerboard when value is empty */}
         <button
           type="button"
           onClick={() => setOpen(!open)}
           className="w-7 h-7 rounded-sm border border-zinc-200 shadow-sm flex-shrink-0 cursor-pointer hover:border-zinc-400 transition-colors"
-          style={{ backgroundColor: hex }}
-          title="Abrir seletor de cor"
+          style={isEmpty
+            ? {
+                backgroundImage:
+                  'linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)',
+                backgroundSize: '8px 8px',
+                backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px',
+                backgroundColor: '#ffffff',
+              }
+            : { backgroundColor: hex }}
+          title={isEmpty ? 'Sem cor (transparente)' : 'Abrir seletor de cor'}
         />
         {/* Hex input inline */}
         <input
           type="text"
-          value={hexInput}
+          value={isEmpty ? '' : hexInput}
           onChange={e => handleHexSubmit(e.target.value)}
           onBlur={() => handleHexSubmit(hexInput)}
           className="flex-1 font-mono text-[12px] text-zinc-800 border border-zinc-200 rounded-md px-2 py-1.5 h-[30px] focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/15 transition-colors"
-          placeholder="#000000"
+          placeholder="Transparente"
         />
         {/* Eyedropper button */}
         {eyeDropperSupported && (
@@ -224,9 +267,9 @@ export function ColorPicker({ value, onChange, label }: ColorPickerProps) {
             ref={gradRef}
             width={234}
             height={130}
-            className="w-full h-[130px] rounded-md cursor-crosshair border border-zinc-100"
-            onClick={handleGradientClick}
-            onMouseDown={e => { handleGradientClick(e); const mv = (ev: MouseEvent) => handleGradientClick(ev as any); const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up) }; document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up) }}
+            className="w-full h-[130px] rounded-md cursor-crosshair border border-zinc-100 touch-none select-none"
+            onPointerDown={handleGradientPointerDown}
+            style={{ touchAction: 'none' }}
           />
 
           {/* Hue slider */}
@@ -296,6 +339,15 @@ export function ColorPicker({ value, onChange, label }: ColorPickerProps) {
               </div>
             </div>
           )}
+
+          {/* Clear color (transparent) */}
+          <button
+            type="button"
+            onClick={() => { onChange(''); setHexInput('') }}
+            className="w-full text-[11px] text-zinc-500 hover:text-zinc-800 py-1.5 border-t border-zinc-100 transition-colors"
+          >
+            Remover cor (transparente)
+          </button>
         </div>
       )}
     </div>

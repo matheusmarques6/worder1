@@ -726,11 +726,12 @@ export function BlockPreview({
             )}
             {sampleItems.map((item, i) => (
               <div key={i}>
-                <div style={{ display: 'flex', gap: 12, padding: '12px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', padding: '16px 0' }}>
                   {p.showImage !== false && (
                     <div style={{
                       width: imgW, height: imgW, flexShrink: 0,
                       background: '#F3F4F6', borderRadius: imgR,
+                      marginRight: 16,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       color: '#9CA3AF', fontSize: 10,
                     }}>
@@ -738,33 +739,35 @@ export function BlockPreview({
                     </div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div>
-                        {p.showName !== false && (
-                          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: primColor }}>
-                            {item.name}{p.showQuantity !== false ? ` × ${item.qty}` : ''}
-                          </p>
-                        )}
-                        {p.showVariant !== false && (
-                          <p style={{ margin: '2px 0 0', fontSize: 12, color: secColor }}>{item.variant}</p>
-                        )}
-                        {p.showSku && (
-                          <p style={{ margin: '2px 0 0', fontSize: 11, color: secColor }}>SKU: ABC123</p>
+                    {p.showName !== false && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: primColor, lineHeight: 1.45 }}>
+                          {item.name}{p.showQuantity !== false ? ` × ${item.qty}` : ''}
+                        </span>
+                        {p.showPrice !== false && (
+                          <span style={{ fontSize: 14, fontWeight: 600, color: priceColor, whiteSpace: 'nowrap' }}>{item.price}</span>
                         )}
                       </div>
-                      {p.showPrice !== false && (
-                        <span style={{ fontSize: 14, fontWeight: 600, color: priceColor, flexShrink: 0 }}>{item.price}</span>
-                      )}
-                    </div>
+                    )}
+                    {p.showVariant !== false && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, color: secColor, lineHeight: 1.5, marginTop: 4 }}>
+                        <span>Variante:</span><span>{item.variant}</span>
+                      </div>
+                    )}
+                    {p.showSku && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 11, color: secColor, lineHeight: 1.5, marginTop: 2 }}>
+                        <span>SKU:</span><span>ABC123</span>
+                      </div>
+                    )}
                     {p.showDiscount && (
-                      <div style={{ marginTop: 4 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: secColor }}>
-                          <span>Desconto</span><span>-R$0,00</span>
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, color: secColor, marginTop: 6 }}>
+                          <span>Desconto:</span><span>-R$0,00</span>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: primColor, marginTop: 2 }}>
-                          <span>Preço com desconto</span><span style={{ color: priceColor }}>R$0,00</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, fontWeight: 600, color: primColor, marginTop: 2 }}>
+                          <span>Preço com desconto:</span><span style={{ color: priceColor, fontWeight: 700 }}>R$0,00</span>
                         </div>
-                      </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -774,30 +777,30 @@ export function BlockPreview({
               </div>
             ))}
             {p.showTotals !== false && (
-              <div style={{ borderTop: `1px solid ${divColor}`, marginTop: 8, paddingTop: 14 }}>
+              <div style={{ borderTop: `1px solid ${divColor}`, marginTop: 8, paddingTop: 18 }}>
                 {p.showTotalDiscount !== false && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '4px 0' }}>
-                    <span>Desconto</span><span>-R$0,00</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '6px 0' }}>
+                    <span>Desconto:</span><span>-R$0,00</span>
                   </div>
                 )}
                 {p.showSubtotal !== false && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '4px 0' }}>
-                    <span>Subtotal</span><span>R$0,00</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '6px 0' }}>
+                    <span>Subtotal:</span><span>R$0,00</span>
                   </div>
                 )}
                 {p.showShipping !== false && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '4px 0' }}>
-                    <span>Frete</span><span>R$0,00</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '6px 0' }}>
+                    <span>Frete:</span><span>R$0,00</span>
                   </div>
                 )}
                 {p.showTax !== false && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '4px 0' }}>
-                    <span>Taxa</span><span>R$0,00</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '6px 0' }}>
+                    <span>Taxa:</span><span>R$0,00</span>
                   </div>
                 )}
-                <hr style={{ border: 'none', borderTop: `1px solid ${divColor}`, margin: '10px 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 700, color: p.totalTextColor || primColor }}>
-                  <span>Total</span><span>R$0,00</span>
+                <hr style={{ border: 'none', borderTop: `1px solid ${divColor}`, margin: '14px 0 4px' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, fontWeight: 700, color: p.totalTextColor || primColor, paddingTop: 4 }}>
+                  <span>Total:</span><span>R$0,00</span>
                 </div>
               </div>
             )}

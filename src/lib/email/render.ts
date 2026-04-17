@@ -622,36 +622,73 @@ export function resolveOrderBlocks(
       )
       const priceAfterDiscount = discount > 0 ? rowTotal - discount : rowTotal
 
-      let imgCell = ''
-      if (cfg.showImage) {
-        imgCell = `<td width="${imgW}" valign="top" style="vertical-align:top;padding-right:16px;width:${imgW}px;">${imgUrl
-          ? `<img src="${imgUrl}" alt="${title.replace(/"/g, '&quot;')}" width="${imgW}" height="${imgW}" style="display:block;width:${imgW}px;height:${imgW}px;object-fit:cover;border-radius:${imgR}px;border:0;" />`
-          : `<div style="width:${imgW}px;height:${imgW}px;background:#F3F4F6;border-radius:${imgR}px;"></div>`
-        }</td>`
-      }
-
-      const detailLines: string[] = []
-      if (cfg.showName) {
-        detailLines.push(`<div style="font-size:14px;font-weight:600;color:${primColor};line-height:1.4;">${title}${cfg.showQuantity ? ` &times; ${qty}` : ''}</div>`)
-      }
-      if (cfg.showVariant && variantName) {
-        detailLines.push(`<div style="margin-top:4px;font-size:12px;color:${secColor};line-height:1.4;">${variantName}</div>`)
-      }
-      if (cfg.showSku && sku) {
-        detailLines.push(`<div style="margin-top:2px;font-size:11px;color:${secColor};line-height:1.4;">SKU: ${sku}</div>`)
-      }
-      if (cfg.showDiscount && discount > 0) {
-        const isEnLocale = currency === 'USD' || currency === 'EUR'
-        const dLbl = isEnLocale ? 'Discount' : 'Desconto'
-        const pLbl = isEnLocale ? 'Price after discount' : 'Preço com desconto'
-        detailLines.push(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;"><tr><td style="font-size:12px;color:${secColor};">${dLbl}</td><td style="font-size:12px;color:${secColor};text-align:right;">-${fmtPrice(discount)}</td></tr><tr><td style="font-size:13px;font-weight:600;color:${primColor};padding-top:2px;">${pLbl}</td><td style="font-size:13px;font-weight:700;color:${priceColor};text-align:right;padding-top:2px;">${fmtPrice(priceAfterDiscount)}</td></tr></table>`)
-      }
-
-      const priceCell = cfg.showPrice
-        ? `<td valign="top" style="vertical-align:top;text-align:right;white-space:nowrap;padding-left:12px;"><div style="font-size:14px;font-weight:600;color:${priceColor};">${fmtPrice(rowTotal)}</div></td>`
+      // Omnisend-style layout: image cell vertically centered spanning all detail rows.
+      // Product name row has quantity + price aligned. Variant/SKU/Discount render as
+      // separate rows with label on left, value aligned right (like the totals table).
+      const isEnLocale = currency === 'USD' || currency === 'EUR'
+      const imgCell = cfg.showImage
+        ? `<td width="${imgW}" valign="middle" style="vertical-align:middle;padding:0 16px 0 0;width:${imgW}px;">${imgUrl
+            ? `<img src="${imgUrl}" alt="${title.replace(/"/g, '&quot;')}" width="${imgW}" height="${imgW}" style="display:block;width:${imgW}px;height:${imgW}px;object-fit:cover;border-radius:${imgR}px;border:0;" />`
+            : `<div style="width:${imgW}px;height:${imgW}px;background:#F3F4F6;border-radius:${imgR}px;"></div>`
+          }</td>`
         : ''
 
-      orderHtml += `<tr><td style="padding:12px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${imgCell}<td valign="top" style="vertical-align:top;">${detailLines.join('')}</td>${priceCell}</tr></table></td></tr>`
+      // Build the detail block (right of image) as its own table so name/variant
+      // rows align their right-edge values with each other (Omnisend look).
+      const detailRows: string[] = []
+      if (cfg.showName) {
+        const nameText = `${title}${cfg.showQuantity ? ` &times; ${qty}` : ''}`
+        const priceText = cfg.showPrice ? fmtPrice(rowTotal) : ''
+        detailRows.push(
+          `<tr>
+            <td style="font-size:14px;font-weight:600;color:${primColor};line-height:1.45;padding:0;">${nameText}</td>
+            ${cfg.showPrice ? `<td style="font-size:14px;font-weight:600;color:${priceColor};line-height:1.45;padding:0 0 0 12px;text-align:right;white-space:nowrap;">${priceText}</td>` : ''}
+          </tr>`
+        )
+      }
+      if (cfg.showVariant && variantName) {
+        const vLabel = isEnLocale ? 'Variant' : 'Variante'
+        detailRows.push(
+          `<tr>
+            <td style="font-size:12px;color:${secColor};line-height:1.5;padding:4px 0 0;">${vLabel}:</td>
+            <td style="font-size:12px;color:${secColor};line-height:1.5;padding:4px 0 0 12px;text-align:right;">${variantName}</td>
+          </tr>`
+        )
+      }
+      if (cfg.showSku && sku) {
+        detailRows.push(
+          `<tr>
+            <td style="font-size:11px;color:${secColor};line-height:1.5;padding:2px 0 0;">SKU:</td>
+            <td style="font-size:11px;color:${secColor};line-height:1.5;padding:2px 0 0 12px;text-align:right;">${sku}</td>
+          </tr>`
+        )
+      }
+      if (cfg.showDiscount && discount > 0) {
+        const dLbl = isEnLocale ? 'Discount' : 'Desconto'
+        const pLbl = isEnLocale ? 'Price after discount' : 'Preço com desconto'
+        detailRows.push(
+          `<tr>
+            <td style="font-size:12px;color:${secColor};line-height:1.5;padding:6px 0 0;">${dLbl}:</td>
+            <td style="font-size:12px;color:${secColor};line-height:1.5;padding:6px 0 0 12px;text-align:right;">-${fmtPrice(discount)}</td>
+          </tr>
+          <tr>
+            <td style="font-size:13px;font-weight:600;color:${primColor};line-height:1.5;padding:2px 0 0;">${pLbl}:</td>
+            <td style="font-size:13px;font-weight:700;color:${priceColor};line-height:1.5;padding:2px 0 0 12px;text-align:right;">${fmtPrice(priceAfterDiscount)}</td>
+          </tr>`
+        )
+      }
+
+      const detailCell = `<td valign="middle" style="vertical-align:middle;padding:0;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          ${detailRows.join('')}
+        </table>
+      </td>`
+
+      orderHtml += `<tr><td style="padding:16px 0;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>${imgCell}${detailCell}</tr>
+        </table>
+      </td></tr>`
 
       if (cfg.separator && i < items.length - 1) {
         orderHtml += `<tr><td style="border-top:1px solid ${sepColor};font-size:1px;line-height:1px;">&nbsp;</td></tr>`
@@ -680,27 +717,28 @@ export function resolveOrderBlocks(
         shippingPrice = 0
       }
 
-      const rowStyle = `font-size:13px;color:${secColor};padding:4px 0;line-height:1.4;`
-      orderHtml += `<tr><td style="border-top:1px solid ${divColor};padding-top:14px;">`
+      const rowLabelStyle = `font-size:13px;color:${secColor};padding:6px 0;line-height:1.5;`
+      const rowValueStyle = `font-size:13px;color:${secColor};padding:6px 0 6px 12px;line-height:1.5;text-align:right;white-space:nowrap;`
+      orderHtml += `<tr><td style="border-top:1px solid ${divColor};padding-top:18px;">`
       orderHtml += `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:${font};">`
-      const isEnLocale = currency === 'USD' || currency === 'EUR'
-      const lbl = isEnLocale
-        ? { discount: 'Discount', subtotal: 'Subtotal', shipping: 'Shipping', tax: 'Tax', total: 'Total' }
+      const isEnLocale2 = currency === 'USD' || currency === 'EUR'
+      const lbl = isEnLocale2
+        ? { discount: 'Discount', subtotal: 'Subtotal price', shipping: 'Shipping price', tax: 'Taxes', total: 'Total price' }
         : { discount: 'Desconto', subtotal: 'Subtotal', shipping: 'Frete', tax: 'Taxa', total: 'Total' }
       if (cfg.showTotalDiscount && discountTotal > 0) {
-        orderHtml += `<tr><td style="${rowStyle}">${lbl.discount}</td><td style="${rowStyle}text-align:right;">-${fmtPrice(discountTotal)}</td></tr>`
+        orderHtml += `<tr><td style="${rowLabelStyle}">${lbl.discount}:</td><td style="${rowValueStyle}">-${fmtPrice(discountTotal)}</td></tr>`
       }
       if (cfg.showSubtotal) {
-        orderHtml += `<tr><td style="${rowStyle}">${lbl.subtotal}</td><td style="${rowStyle}text-align:right;">${fmtPrice(subtotalPrice)}</td></tr>`
+        orderHtml += `<tr><td style="${rowLabelStyle}">${lbl.subtotal}:</td><td style="${rowValueStyle}">${fmtPrice(subtotalPrice)}</td></tr>`
       }
       if (cfg.showShipping) {
-        orderHtml += `<tr><td style="${rowStyle}">${lbl.shipping}</td><td style="${rowStyle}text-align:right;">${fmtPrice(shippingPrice)}</td></tr>`
+        orderHtml += `<tr><td style="${rowLabelStyle}">${lbl.shipping}:</td><td style="${rowValueStyle}">${fmtPrice(shippingPrice)}</td></tr>`
       }
       if (cfg.showTax && taxPrice > 0) {
-        orderHtml += `<tr><td style="${rowStyle}">${lbl.tax}</td><td style="${rowStyle}text-align:right;">${fmtPrice(taxPrice)}</td></tr>`
+        orderHtml += `<tr><td style="${rowLabelStyle}">${lbl.tax}:</td><td style="${rowValueStyle}">${fmtPrice(taxPrice)}</td></tr>`
       }
-      orderHtml += `<tr><td colspan="2" style="border-top:1px solid ${divColor};padding-top:10px;font-size:1px;line-height:1px;">&nbsp;</td></tr>`
-      orderHtml += `<tr><td style="font-size:16px;font-weight:700;color:${totalColor};padding:2px 0;">${lbl.total}</td><td style="font-size:16px;font-weight:700;color:${totalColor};padding:2px 0;text-align:right;">${fmtPrice(totalPrice)}</td></tr>`
+      orderHtml += `<tr><td colspan="2" style="border-top:1px solid ${divColor};padding-top:14px;font-size:1px;line-height:1px;">&nbsp;</td></tr>`
+      orderHtml += `<tr><td style="font-size:18px;font-weight:700;color:${totalColor};padding:4px 0 0;line-height:1.4;">${lbl.total}:</td><td style="font-size:18px;font-weight:700;color:${totalColor};padding:4px 0 0 12px;line-height:1.4;text-align:right;white-space:nowrap;">${fmtPrice(totalPrice)}</td></tr>`
       orderHtml += `</table></td></tr>`
     }
 
