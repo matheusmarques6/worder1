@@ -194,7 +194,7 @@ export async function GET(request: NextRequest) {
       currency,
       plan_name: planName,
       api_version: '2026-01',
-      scopes: grantedScopes ? grantedScopes.split(',') : [],
+      scopes: grantedScopes ? grantedScopes.split(/[\s,]+/).filter(Boolean) : [],
       is_active: true,
       status: 'active',
       installed_at: new Date().toISOString(),

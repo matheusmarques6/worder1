@@ -85,11 +85,12 @@ export async function POST(request: NextRequest) {
     const accessToken = tokenResult.access_token;
     const grantedScopesStr = tokenResult.scope;
     const expiresIn = tokenResult.expires_in;
+    // Shopify returns scopes space-separated OR comma-separated depending on endpoint
     const scopesList = grantedScopesStr
-      ? grantedScopesStr.split(',').map((s: string) => s.trim()).filter(Boolean)
+      ? grantedScopesStr.split(/[\s,]+/).map((s: string) => s.trim()).filter(Boolean)
       : [];
 
-    console.log('[Shopify Manual] Token OK. scopes=', scopesList.length, 'expires_in=', expiresIn);
+    console.log('[Shopify Manual] Token OK. scopes=', scopesList, 'expires_in=', expiresIn);
 
     // ──────────────────────────────────────────
     // 2. Verify required scopes
