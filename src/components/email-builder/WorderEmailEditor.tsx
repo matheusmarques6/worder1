@@ -548,6 +548,63 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     selectSection(section.id)
   }, [doc, updateDoc, selectSection])
 
+  const addPrebuiltSection = useCallback((type: string) => {
+    const section = createSection([100])
+    const bid = () => 'b_' + Math.random().toString(36).substring(2, 9)
+    const blocks: EmailBlock[] = []
+    switch (type) {
+      case 'hero':
+        blocks.push(
+          { id: bid(), type: 'image', props: { src: '', alt: 'Hero', width: 600, fillColumn: true, padding: { top: 0, right: 0, bottom: 0, left: 0 }, backgroundColor: '' } },
+          { id: bid(), type: 'text', props: { contentHtml: '<h1 style="text-align:center;font-size:32px;font-weight:bold;color:#111827;">Título Principal</h1>', fontSize: 32, color: '#111827', lineHeight: 1.3, align: 'center', padding: { top: 24, right: 24, bottom: 8, left: 24 } } },
+          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;color:#6B7280;">Subtítulo com descrição do conteúdo principal do email.</p>', fontSize: 16, color: '#6B7280', lineHeight: 1.6, align: 'center', padding: { top: 0, right: 24, bottom: 16, left: 24 } } },
+          { id: bid(), type: 'button', props: { text: 'SAIBA MAIS', href: '#', bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, fontWeight: 'bold', borderRadius: 8, paddingH: 32, paddingV: 14, fullWidth: false, align: 'center', padding: { top: 0, right: 24, bottom: 24, left: 24 } } },
+        )
+        break
+      case 'cta':
+        blocks.push(
+          { id: bid(), type: 'text', props: { contentHtml: '<h2 style="text-align:center;font-size:24px;font-weight:bold;color:#111827;">Não perca esta oportunidade</h2>', fontSize: 24, color: '#111827', align: 'center', padding: { top: 32, right: 24, bottom: 8, left: 24 } } },
+          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;color:#6B7280;">Aproveite nossa oferta exclusiva por tempo limitado.</p>', fontSize: 15, color: '#6B7280', align: 'center', padding: { top: 0, right: 32, bottom: 16, left: 32 } } },
+          { id: bid(), type: 'button', props: { text: 'APROVEITAR AGORA', href: '#', bgColor: '#111827', textColor: '#FFFFFF', fontSize: 15, fontWeight: 'bold', borderRadius: 8, paddingH: 40, paddingV: 16, fullWidth: true, padding: { top: 0, right: 24, bottom: 32, left: 24 } } },
+        )
+        section.styles.backgroundColor = '#F9FAFB'
+        break
+      case 'products':
+        blocks.push(
+          { id: bid(), type: 'text', props: { contentHtml: '<h2 style="text-align:center;font-weight:bold;color:#111827;">Recomendados para você</h2>', fontSize: 22, color: '#111827', align: 'center', padding: { top: 24, right: 24, bottom: 16, left: 24 } } },
+          { id: bid(), type: 'product-grid', props: { mode: 'static', columns: 2, rows: 1, showName: true, showPrice: true, showComparePrice: true, showButton: true, buttonText: 'Comprar', buttonColor: '#F97316', buttonTextColor: '#FFFFFF', stackOnMobile: true, padding: { top: 0, right: 24, bottom: 24, left: 24 } } },
+        )
+        break
+      case 'footer':
+        blocks.push(
+          { id: bid(), type: 'social', props: { networks: [{ type: 'instagram', url: '#', enabled: true }, { type: 'facebook', url: '#', enabled: true }, { type: 'tiktok', url: '#', enabled: true }], iconSize: 28, spacing: 12, align: 'center', iconStyle: 'color', padding: { top: 24, right: 24, bottom: 12, left: 24 } } },
+          { id: bid(), type: 'footer', props: { companyName: '{{store_name}}', address: '', showUnsubscribe: true, showPreferences: false, showViewInBrowser: true, textColor: '#9CA3AF', fontSize: 11, padding: { top: 8, right: 24, bottom: 24, left: 24 } } },
+        )
+        section.styles.backgroundColor = '#F9FAFB'
+        break
+      case 'image-hero':
+        blocks.push(
+          { id: bid(), type: 'image', props: { src: '', alt: 'Imagem hero', width: 600, fillColumn: true, padding: { top: 0, right: 0, bottom: 0, left: 0 }, backgroundColor: '' } },
+          { id: bid(), type: 'text', props: { contentHtml: '<h1 style="text-align:center;font-size:28px;font-weight:bold;color:#111827;">Sua mensagem em destaque</h1>', fontSize: 28, color: '#111827', align: 'center', padding: { top: 24, right: 24, bottom: 8, left: 24 } } },
+          { id: bid(), type: 'button', props: { text: 'VER AGORA', href: '#', bgColor: '#111827', textColor: '#FFFFFF', fontSize: 14, fontWeight: 'bold', borderRadius: 8, paddingH: 32, paddingV: 14, fullWidth: false, align: 'center', padding: { top: 0, right: 24, bottom: 24, left: 24 } } },
+        )
+        break
+      case 'testimonial':
+        blocks.push(
+          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;font-size:36px;color:#D1D5DB;line-height:1;">&ldquo;</p>', fontSize: 36, color: '#D1D5DB', align: 'center', padding: { top: 24, right: 24, bottom: 0, left: 24 } } },
+          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;font-style:italic;color:#374151;">Adorei a compra, chegou super rápido e a qualidade é excelente. Recomendo muito!</p>', fontSize: 16, color: '#374151', lineHeight: 1.6, align: 'center', padding: { top: 0, right: 32, bottom: 16, left: 32 } } },
+          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;font-weight:bold;color:#111827;">— Maria S.</p>', fontSize: 14, color: '#111827', align: 'center', padding: { top: 0, right: 24, bottom: 24, left: 24 } } },
+        )
+        section.styles.backgroundColor = '#FFFFFF'
+        break
+      default:
+        return
+    }
+    section.columns[0].blocks = blocks
+    updateDoc({ ...doc, sections: [...doc.sections, section] })
+    selectSection(section.id)
+  }, [doc, updateDoc, selectSection])
+
   const removeSection = useCallback((sectionId: string) => {
     updateDoc({ ...doc, sections: doc.sections.filter(s => s.id !== sectionId) })
     if (selectedSectionId === sectionId) clearSelection()
@@ -1520,6 +1577,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                       onAddBlock={addBlock}
                       onAddSavedBlock={addSavedBlock}
                       onAddSavedSection={addSavedSection}
+                      onAddPrebuiltSection={addPrebuiltSection}
                       savedLibraryVersion={savedLibraryVersion}
                     />
                   </div>
