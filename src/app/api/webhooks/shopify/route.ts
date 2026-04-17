@@ -347,7 +347,7 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   }
 
   // Salvar pedido no banco
-  await supabase.from('shopify_orders').upsert({
+  const { error: orderUpsertErr } = await supabase.from('shopify_orders').upsert({
     store_id: store.id,
     organization_id: store.organization_id,
     shopify_order_id: String(order.id),
@@ -371,6 +371,9 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   }, {
     onConflict: 'store_id,shopify_order_id',
   });
+  if (orderUpsertErr) {
+    console.error(`[Shopify] shopify_orders upsert FAILED for order ${order.id}:`, orderUpsertErr);
+  }
   
   // Verificar se checkout existente foi convertido
   if (order.checkout_id) {
@@ -929,28 +932,47 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
     .eq('email', order.email)
     .maybeSingle();
   
-  if (contact && store.default_pipeline_id) {
-    // Marcar deal como perdido
-    const { data: deal } = await supabase
-      .from('deals')
-      .select('id')
-      .eq('contact_id', contact.id)
-      .eq('pipeline_id', store.default_pipeline_id)
-      .eq('status', 'open')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    
-    if (deal) {
-      await supabase
+  if (contact) {
+    // Tracking: Registrar atividade
+    await trackActivity({
+      organizationId: store.organization_id,
+      contactId: contact.id,
+      type: 'order_cancelled',
+      title: `Pedido cancelado #${order.order_number}`,
+      description: order.cancel_reason ? `Motivo: ${order.cancel_reason}` : undefined,
+      metadata: {
+        order_id: order.id,
+        order_number: order.order_number,
+        total_price: parseFloat(order.total_price || '0'),
+        cancel_reason: order.cancel_reason,
+      },
+      source: 'shopify',
+      sourceId: String(order.id),
+    });
+
+    if (store.default_pipeline_id) {
+      // Marcar deal como perdido
+      const { data: deal } = await supabase
         .from('deals')
-        .update({
-          status: 'lost',
-          lost_reason: order.cancel_reason || 'Pedido cancelado no Shopify',
-          closed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', deal.id);
+        .select('id')
+        .eq('contact_id', contact.id)
+        .eq('pipeline_id', store.default_pipeline_id)
+        .eq('status', 'open')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (deal) {
+        await supabase
+          .from('deals')
+          .update({
+            status: 'lost',
+            lost_reason: order.cancel_reason || 'Pedido cancelado no Shopify',
+            closed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', deal.id);
+      }
     }
   }
 
@@ -1218,18 +1240,43 @@ async function processRefundCreated(store: ShopifyStoreConfig, refund: any) {
   // Find contact by order
   const { data: orderRecord } = await supabase
     .from('shopify_orders')
-    .select('contact_id')
+    .select('contact_id, shopify_order_number')
     .eq('store_id', store.id)
     .eq('shopify_order_id', String(refund.order_id))
     .maybeSingle();
 
   const contactId = orderRecord?.contact_id || null;
+  const orderNumber = orderRecord?.shopify_order_number || refund.order_id;
 
   // Calculate refund total
   const refundAmount = refund.transactions?.reduce(
     (sum: number, t: any) => sum + parseFloat(t.amount || '0'),
     0
   ) || 0;
+
+  // Tracking: Registrar atividade na timeline do contato
+  if (contactId) {
+    try {
+      await trackActivity({
+        organizationId: store.organization_id,
+        contactId,
+        type: 'order_refunded',
+        title: `Reembolso no pedido #${orderNumber}`,
+        description: `R$ ${refundAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${refund.note ? ` — ${refund.note}` : ''}`,
+        metadata: {
+          order_id: refund.order_id,
+          refund_id: refund.id,
+          refund_amount: refundAmount,
+          currency: refund.currency || 'BRL',
+          items_count: refund.refund_line_items?.length || 0,
+        },
+        source: 'shopify',
+        sourceId: String(refund.id),
+      });
+    } catch (actErr) {
+      console.warn('[Shopify] trackActivity for refund failed (non-critical):', actErr);
+    }
+  }
 
   // CDP event
   try {
@@ -1275,16 +1322,47 @@ async function processFulfillmentEvent(store: ShopifyStoreConfig, fulfillment: a
 
   const { data: orderRecord } = await supabase
     .from('shopify_orders')
-    .select('contact_id')
+    .select('contact_id, shopify_order_number')
     .eq('store_id', store.id)
     .eq('shopify_order_id', String(fulfillment.order_id))
     .maybeSingle();
 
   const contactId = orderRecord?.contact_id || null;
+  const orderNumber = orderRecord?.shopify_order_number || fulfillment.order_id;
 
   const eventType = fulfillment.status === 'delivered'
     ? WORDER_SHOPIFY_EVENTS.SHIPMENT_DELIVERED
     : WORDER_SHOPIFY_EVENTS.SHIPMENT_CONFIRMED;
+
+  // Tracking: Registrar atividade na timeline do contato
+  if (contactId) {
+    try {
+      const isDelivered = fulfillment.status === 'delivered';
+      await trackActivity({
+        organizationId: store.organization_id,
+        contactId,
+        type: isDelivered ? 'order_fulfilled' : 'order_fulfilled',
+        title: isDelivered
+          ? `Pedido entregue #${orderNumber}`
+          : `Envio confirmado #${orderNumber}`,
+        description: fulfillment.tracking_number
+          ? `Rastreio: ${fulfillment.tracking_company || ''} ${fulfillment.tracking_number}`
+          : undefined,
+        metadata: {
+          order_id: fulfillment.order_id,
+          fulfillment_id: fulfillment.id,
+          status: fulfillment.status,
+          tracking_number: fulfillment.tracking_number,
+          tracking_url: fulfillment.tracking_url,
+          tracking_company: fulfillment.tracking_company,
+        },
+        source: 'shopify',
+        sourceId: String(fulfillment.id),
+      });
+    } catch (actErr) {
+      console.warn('[Shopify] trackActivity for fulfillment failed (non-critical):', actErr);
+    }
+  }
 
   try {
     await createEvent({
@@ -1382,7 +1460,7 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
   }
 
   // Upsert product
-  await supabase.from('shopify_products').upsert({
+  const { error: productErr } = await supabase.from('shopify_products').upsert({
     store_id: store.id,
     organization_id: store.organization_id,
     shopify_product_id: String(product.id),
@@ -1399,6 +1477,9 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
   }, {
     onConflict: 'store_id,shopify_product_id',
   });
+  if (productErr) {
+    console.error(`[Shopify] shopify_products upsert FAILED for product ${product.id}:`, productErr);
+  }
 }
 
 // ============================================

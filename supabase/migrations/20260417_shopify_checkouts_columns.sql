@@ -79,3 +79,30 @@ CREATE INDEX IF NOT EXISTS idx_shopify_checkouts_org_status
 
 CREATE INDEX IF NOT EXISTS idx_shopify_checkouts_store_status
   ON shopify_checkouts (store_id, status, created_at DESC);
+
+-- =============================================
+-- shopify_webhook_events: schema says event_id
+-- but code writes shopify_event_id. Also missing
+-- organization_id, payload, received_at columns.
+-- =============================================
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'shopify_webhook_events') THEN
+    -- Rename event_id → shopify_event_id if old schema has event_id
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'shopify_webhook_events' AND column_name = 'event_id'
+    ) AND NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'shopify_webhook_events' AND column_name = 'shopify_event_id'
+    ) THEN
+      ALTER TABLE shopify_webhook_events RENAME COLUMN event_id TO shopify_event_id;
+    END IF;
+
+    -- Add columns code expects but old schema didn't have
+    ALTER TABLE shopify_webhook_events ADD COLUMN IF NOT EXISTS shopify_event_id TEXT;
+    ALTER TABLE shopify_webhook_events ADD COLUMN IF NOT EXISTS organization_id  UUID;
+    ALTER TABLE shopify_webhook_events ADD COLUMN IF NOT EXISTS payload          JSONB DEFAULT '{}';
+    ALTER TABLE shopify_webhook_events ADD COLUMN IF NOT EXISTS received_at      TIMESTAMPTZ DEFAULT NOW();
+  END IF;
+END $$;

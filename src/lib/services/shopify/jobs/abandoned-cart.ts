@@ -234,8 +234,8 @@ async function pollAbandonedCheckoutsGraphQL(
         image_url: li.variant?.product?.featuredImage?.url || null,
       }));
 
-      // Upsert checkout in DB
-      await supabase.from('shopify_checkouts').upsert({
+      // Upsert checkout in DB (write both URL columns for schema compat)
+      const { error: upsertErr } = await supabase.from('shopify_checkouts').upsert({
         store_id: store.id,
         organization_id: store.organization_id,
         shopify_checkout_id: checkoutId,
@@ -246,6 +246,7 @@ async function pollAbandonedCheckoutsGraphQL(
         currency,
         line_items: lineItems,
         recovery_url: checkout.abandonedCheckoutUrl,
+        abandoned_checkout_url: checkout.abandonedCheckoutUrl,
         status: 'abandoned',
         abandoned_at: new Date().toISOString(),
         shopify_created_at: checkout.createdAt,
@@ -253,6 +254,9 @@ async function pollAbandonedCheckoutsGraphQL(
       }, {
         onConflict: 'store_id,shopify_checkout_id',
       });
+      if (upsertErr) {
+        console.error(`[AbandonedCart] GraphQL: shopify_checkouts upsert FAILED for ${checkoutId}:`, upsertErr);
+      }
 
       // Resolve contact
       let contactId: string | null = null;
