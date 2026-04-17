@@ -544,10 +544,11 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
           const prodData = productImageMap.get(pid)
           let imageUrl = ''
           if (prodData) {
+            const imgSrc = (img: any) => img?.src || img?.url || ''
             const variant = prodData.variants?.find((v: any) => String(v.id) === vid)
             const variantImgId = variant?.image_id
-            const variantImg = variantImgId ? prodData.images?.find((img: any) => img.id === variantImgId) : null
-            imageUrl = variantImg?.src || prodData.images?.[0]?.src || ''
+            const variantImg = variantImgId ? prodData.images?.find((img: any) => String(img.id) === String(variantImgId)) : null
+            imageUrl = imgSrc(variantImg) || imgSrc(prodData.images?.[0]) || ''
           }
           return {
             ProductID: pid || undefined,

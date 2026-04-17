@@ -472,16 +472,21 @@ export async function enrichOrderItemImages(
   const pMap = new Map<string, any>()
   for (const p of prods) pMap.set(String(p.shopify_product_id), p)
 
+  const imgSrc = (img: any): string => img?.src || img?.url || ''
+
   const resolveImage = (it: any): string => {
     const pid = it.ProductID || (it.product_id != null ? String(it.product_id) : '')
     if (!pid) return ''
     const prod = pMap.get(pid)
     if (!prod) return ''
+    const images: any[] = prod.images || []
     const vid = it.VariantID || (it.variant_id != null ? String(it.variant_id) : '')
     const variant = (prod.variants || []).find((v: any) => String(v.id) === vid)
     const variantImgId = variant?.image_id
-    const variantImg = variantImgId ? (prod.images || []).find((img: any) => String(img.id) === String(variantImgId)) : null
-    return variantImg?.src || (prod.images || [])[0]?.src || ''
+    const variantImg = variantImgId
+      ? images.find((img: any) => String(img.id) === String(variantImgId))
+      : null
+    return imgSrc(variantImg) || imgSrc(images[0]) || ''
   }
 
   for (const it of items) {
@@ -562,9 +567,9 @@ export function resolveOrderBlocks(
       const imgUrl = item.ImageURL
         || item.image_url
         || raw.image_url
-        || raw.image?.src
-        || raw.product?.image?.src
-        || raw.product?.images?.[0]?.src
+        || raw.image?.src || raw.image?.url
+        || raw.product?.image?.src || raw.product?.image?.url
+        || raw.product?.images?.[0]?.src || raw.product?.images?.[0]?.url
         || ''
       const discount = toNum(
         item.DiscountAmount
