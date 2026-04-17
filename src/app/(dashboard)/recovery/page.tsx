@@ -79,7 +79,8 @@ export default function RecoveryPage() {
   })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [sendingWhatsApp, setSendingWhatsApp] = useState<string | null>(null)
+  // sendingWhatsApp kept for UI state parity even though wa.me opens instantly
+  const [sendingWhatsApp] = useState<string | null>(null)
   const { currentStore } = useStoreStore()
 
   const fetchRecovery = useCallback(async () => {
@@ -134,16 +135,17 @@ export default function RecoveryPage() {
     fetchRecovery()
   }, [fetchRecovery])
 
-  const handleSendWhatsApp = async (itemId: string) => {
-    setSendingWhatsApp(itemId)
-    try {
-      await fetch(`/api/recovery/${itemId}/whatsapp`, { method: 'POST' })
-      fetchRecovery()
-    } catch (err) {
-      console.error('Failed to send WhatsApp:', err)
-    } finally {
-      setSendingWhatsApp(null)
-    }
+  const handleSendWhatsApp = (item: RecoveryItem) => {
+    // Click-to-chat: open WhatsApp with a prefilled recovery message.
+    // Pre-existing endpoint /api/recovery/[id]/whatsapp was never implemented.
+    const phone = (item.customer_phone || '').replace(/\D/g, '')
+    if (!phone) return
+    const name = item.customer_name || 'Olá'
+    const value = formatCurrency(item.amount)
+    const text = encodeURIComponent(
+      `Oi ${name}! Vi que você deixou itens no carrinho (${value}). Posso te ajudar a finalizar a compra?`
+    )
+    window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer')
   }
 
   const filtered = items.filter(
@@ -350,7 +352,7 @@ export default function RecoveryPage() {
                         <div className="flex items-center justify-end gap-1.5">
                           {item.customer_phone && item.status !== 'recovered' && (
                             <button
-                              onClick={() => handleSendWhatsApp(item.id)}
+                              onClick={() => handleSendWhatsApp(item)}
                               disabled={sendingWhatsApp === item.id}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-50 transition-colors"
                               title="Enviar WhatsApp"

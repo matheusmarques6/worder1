@@ -133,7 +133,6 @@ export default function RecoveryDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [sendingWhatsApp, setSendingWhatsApp] = useState(false)
 
   useEffect(() => {
     if (!params?.id) return
@@ -158,16 +157,16 @@ export default function RecoveryDetailPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleSendWhatsApp = async () => {
+  const handleSendWhatsApp = () => {
     if (!data) return
-    setSendingWhatsApp(true)
-    try {
-      await fetch(`/api/recovery/${data.id}/whatsapp`, { method: 'POST' })
-    } catch (err) {
-      console.error('Failed to send WhatsApp:', err)
-    } finally {
-      setSendingWhatsApp(false)
-    }
+    const phone = (data.contact.phone || '').replace(/\D/g, '')
+    if (!phone) return
+    const value = formatCurrency(data.totals.total_price, data.totals.currency)
+    const url = data.recovery_url ? `\n\nFinaliza por aqui: ${data.recovery_url}` : ''
+    const text = encodeURIComponent(
+      `Oi ${data.contact.name}! Vi que você deixou itens no carrinho (${value}). Posso te ajudar a finalizar?${url}`
+    )
+    window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer')
   }
 
   if (loading) {
@@ -261,14 +260,9 @@ export default function RecoveryDetailPage() {
             {data.contact.phone && (
               <button
                 onClick={handleSendWhatsApp}
-                disabled={sendingWhatsApp}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100"
               >
-                {sendingWhatsApp ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <MessageCircle className="w-3.5 h-3.5" />
-                )}
+                <MessageCircle className="w-3.5 h-3.5" />
                 WhatsApp
               </button>
             )}
