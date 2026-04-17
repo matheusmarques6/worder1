@@ -431,9 +431,9 @@ export async function resolveCartBlocks(
 }
 
 /**
- * Enriches Items[] in eventData with product images from shopify_products
- * when ImageURL is missing (common for older events stored before the webhook fix).
- * Mutates eventData.Items in place.
+ * Enriches Items[] (Klaviyo PascalCase) and/or line_items[] (raw Shopify) in
+ * eventData with product images from shopify_products when image URL is missing.
+ * Handles both webhook-bridge formats transparently. Mutates arrays in place.
  */
 export async function enrichOrderItemImages(
   eventData: Record<string, any>,
@@ -441,13 +441,22 @@ export async function enrichOrderItemImages(
   storeId?: string,
   organizationId?: string,
 ): Promise<void> {
-  const items: any[] = eventData?.Items || []
-  if (items.length === 0) return
+  const items: any[] = Array.isArray(eventData?.Items) ? eventData.Items : []
+  const lineItems: any[] = Array.isArray(eventData?.line_items) ? eventData.line_items : []
+  const extraLineItems: any[] = Array.isArray(eventData?.extra?.line_items) ? eventData.extra.line_items : []
 
-  const missingImage = items.some((it: any) => !it.ImageURL)
-  if (!missingImage) return
+  const all = [...items, ...lineItems, ...extraLineItems]
+  if (all.length === 0) return
 
-  const productIds = [...new Set(items.map((it: any) => it.ProductID).filter(Boolean))]
+  const needsImage = (it: any) => {
+    const existing = it.ImageURL || it.image_url || it.image?.src
+    return !existing
+  }
+  if (!all.some(needsImage)) return
+
+  const productIds = [...new Set(
+    all.map((it: any) => it.ProductID || (it.product_id != null ? String(it.product_id) : null)).filter(Boolean)
+  )] as string[]
   if (productIds.length === 0) return
 
   let query = supabase
@@ -461,18 +470,36 @@ export async function enrichOrderItemImages(
   if (!prods || prods.length === 0) return
 
   const pMap = new Map<string, any>()
-  for (const p of prods) pMap.set(p.shopify_product_id, p)
+  for (const p of prods) pMap.set(String(p.shopify_product_id), p)
 
-  for (const item of items) {
-    if (item.ImageURL) continue
-    const prod = pMap.get(item.ProductID)
-    if (!prod) continue
-    const variant = (prod.variants || []).find((v: any) => String(v.id) === String(item.VariantID))
+  const resolveImage = (it: any): string => {
+    const pid = it.ProductID || (it.product_id != null ? String(it.product_id) : '')
+    if (!pid) return ''
+    const prod = pMap.get(pid)
+    if (!prod) return ''
+    const vid = it.VariantID || (it.variant_id != null ? String(it.variant_id) : '')
+    const variant = (prod.variants || []).find((v: any) => String(v.id) === vid)
     const variantImgId = variant?.image_id
-    const variantImg = variantImgId ? (prod.images || []).find((img: any) => img.id === variantImgId) : null
-    item.ImageURL = variantImg?.src || (prod.images || [])[0]?.src || ''
-    if (!item.ProductURL && prod.handle) {
-      item.ProductURL = item.ProductURL || ''
+    const variantImg = variantImgId ? (prod.images || []).find((img: any) => String(img.id) === String(variantImgId)) : null
+    return variantImg?.src || (prod.images || [])[0]?.src || ''
+  }
+
+  for (const it of items) {
+    if (!it.ImageURL) {
+      const url = resolveImage(it)
+      if (url) it.ImageURL = url
+    }
+  }
+  for (const it of lineItems) {
+    if (!it.image_url && !it.image?.src) {
+      const url = resolveImage(it)
+      if (url) { it.image_url = url; it.image = it.image || { src: url } }
+    }
+  }
+  for (const it of extraLineItems) {
+    if (!it.image_url && !it.image?.src) {
+      const url = resolveImage(it)
+      if (url) { it.image_url = url; it.image = it.image || { src: url } }
     }
   }
 }
