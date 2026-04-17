@@ -1,7 +1,97 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { renderMergeTags } from '@/lib/email/render';
 
 export const dynamic = 'force-dynamic';
+
+// Maps a flow-builder trigger_type to the real event_type(s) stored in contact_events.
+// A trigger may accept multiple underlying event types (e.g. "order paid" matches both
+// the webhook-originated `order_paid` and the legacy `placed_order`).
+const TRIGGER_TO_EVENT_TYPES: Record<string, string[]> = {
+  trigger_abandon: ['abandoned_cart', 'checkout_abandoned'],
+  trigger_checkout_abandoned: ['checkout_abandoned', 'checkout_started'],
+  trigger_order: ['placed_order', 'order_paid', 'checkout_completed'],
+  trigger_order_paid: ['order_paid', 'placed_order', 'checkout_completed'],
+  trigger_fulfilled_order: ['fulfilled_order'],
+  trigger_cancelled_order: ['cancelled_order'],
+  trigger_viewed_product: ['viewed_product'],
+  trigger_added_to_cart: ['added_to_cart'],
+  trigger_signup: ['profile_created', 'customer_created', 'contact_created', 'subscribed_email'],
+  trigger_form_submitted: ['form_submitted'],
+};
+
+function resolveEventTypes(triggerType: string | undefined): string[] {
+  return TRIGGER_TO_EVENT_TYPES[triggerType || ''] || ['placed_order', 'order_paid'];
+}
+
+function buildMergeData(
+  contact: Record<string, any> | null,
+  eventProps: Record<string, any>,
+  store: Record<string, any> | null,
+): Record<string, string> {
+  const c = contact || {};
+  const s = store || {};
+  const firstName = c.first_name || '';
+  const lastName = c.last_name || '';
+  const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'Cliente';
+
+  const data: Record<string, string> = {
+    // Contact
+    first_name: firstName || 'Cliente',
+    last_name: lastName,
+    full_name: fullName,
+    email: c.email || '',
+    phone: c.phone || '',
+    company: c.company || '',
+    city: c.city || '',
+    state: c.state || '',
+    country: c.country || '',
+    birthday: c.birthday || '',
+    source: c.source || '',
+    tags: Array.isArray(c.tags) ? c.tags.join(', ') : (c.tags || ''),
+
+    // Purchase history
+    total_orders: String(c.total_orders || 0),
+    total_spent: typeof c.total_spent === 'number'
+      ? `R$ ${c.total_spent.toFixed(2).replace('.', ',')}`
+      : String(c.total_spent || '0'),
+    average_order_value: c.average_order_value ? String(c.average_order_value) : '',
+    last_order_at: c.last_order_at
+      ? new Date(c.last_order_at).toLocaleDateString('pt-BR')
+      : '',
+
+    // Store
+    store_name: s.name || s.shop_name || '',
+    store_url: s.domain || s.url || '',
+    store_email: s.email || '',
+    store_phone: s.phone || '',
+
+    // Last order (from event props when available)
+    order_number: String(eventProps.order_number || eventProps.order_id || ''),
+    order_total: String(eventProps.total_price || eventProps.order_total || ''),
+    order_date: eventProps.created_at
+      ? new Date(eventProps.created_at).toLocaleDateString('pt-BR')
+      : '',
+    order_status: String(eventProps.financial_status || eventProps.order_status || ''),
+    tracking_url: String(eventProps.tracking_url || ''),
+    tracking_number: String(eventProps.tracking_number || ''),
+
+    // Cart / checkout
+    checkout_url: String(eventProps.checkout_url || eventProps.abandoned_checkout_url || ''),
+    cart_total: String(eventProps.cart_total || eventProps.total_price || ''),
+    cart_item_count: String(eventProps.item_count || eventProps.items?.length || ''),
+    cart_first_item: String(eventProps.items?.[0]?.title || ''),
+    cart_first_item_price: String(eventProps.items?.[0]?.price || ''),
+  };
+
+  // Event-scoped tags ({{event.OrderId}}, {{event.ProductName}}, …)
+  for (const [k, v] of Object.entries(eventProps || {})) {
+    if (v === null || v === undefined) continue;
+    data[`event.${k}`] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  }
+
+  return data;
+}
 
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -22,26 +112,14 @@ export async function POST(request: NextRequest) {
   try {
     // If action is list_events, return recent UNIQUE CONTACTS that had this event
     if (action === 'list_events') {
-      const eventTypeMap: Record<string, string> = {
-        trigger_abandon: 'cart_abandoned',
-        trigger_checkout_abandoned: 'checkout_started',
-        trigger_order: 'order',
-        trigger_order_paid: 'order',
-        trigger_fulfilled_order: 'fulfilled_order',
-        trigger_cancelled_order: 'cancelled_order',
-        trigger_viewed_product: 'viewed_product',
-        trigger_added_to_cart: 'add_to_cart',
-        trigger_signup: 'contact_created',
-        trigger_form_submitted: 'form_submitted',
-      };
-      const eventType = eventTypeMap[triggerType || ''] || 'order';
+      const eventTypes = resolveEventTypes(triggerType);
 
-      // Get recent events of this type, then deduplicate by contact_id
+      // Get recent events of these types, then deduplicate by contact_id
       const { data: rawEvents } = await supabase
         .from('contact_events')
         .select('id, contact_id, event_type, properties, occurred_at')
         .eq('organization_id', organizationId)
-        .eq('event_type', eventType)
+        .in('event_type', eventTypes)
         .order('occurred_at', { ascending: false })
         .limit(50);
 
@@ -72,19 +150,10 @@ export async function POST(request: NextRequest) {
         contact_email: contactMap[e.contact_id] || e.contact_id,
       }));
 
-      if (enrichedEvents.length > 0) {
-        return NextResponse.json({ events: enrichedEvents, eventType });
-      }
-
-      // Fallback: get any recent events
-      const { data: anyEvents } = await supabase
-        .from('contact_events')
-        .select('id, contact_id, event_type, properties, occurred_at')
-        .eq('organization_id', organizationId)
-        .order('occurred_at', { ascending: false })
-        .limit(10);
-
-      return NextResponse.json({ events: anyEvents || [] });
+      // Return even when empty — showing wrong-type events here caused the
+      // preview panel to display unrelated events (e.g. checkout_completed
+      // for an order_paid automation).
+      return NextResponse.json({ events: enrichedEvents, eventTypes });
     }
 
     // Send test email action
@@ -107,13 +176,32 @@ export async function POST(request: NextRequest) {
 
       let html = tpl.html;
 
-      // Resolve merge tags with contact data if contactId provided
+      // Resolve merge tags using the production render engine so {{first_name}},
+      // {{store_name}}, {{event.*}}, etc. all get replaced consistently.
+      let testContact: Record<string, any> | null = null;
+      let testEvent: Record<string, any> = {};
       if (contactId) {
-        const { data: c } = await supabase.from('contacts').select('*').eq('id', contactId).single();
-        if (c) {
-          html = html.replace(/\{\{contact\.(\w+)\}\}/g, (_: string, k: string) => (c as Record<string, any>)[k] || '');
-        }
+        const { data: c } = await supabase.from('contacts').select('*').eq('id', contactId).maybeSingle();
+        testContact = c;
+        const eventTypes = resolveEventTypes(triggerType);
+        const { data: ev } = await supabase
+          .from('contact_events')
+          .select('properties')
+          .eq('organization_id', organizationId)
+          .eq('contact_id', contactId)
+          .in('event_type', eventTypes)
+          .order('occurred_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        testEvent = (ev?.properties as Record<string, any>) || {};
       }
+      const { data: testStore } = await supabase
+        .from('shopify_stores')
+        .select('name, domain, email, phone')
+        .eq('organization_id', organizationId)
+        .limit(1)
+        .maybeSingle();
+      html = renderMergeTags(html, buildMergeData(testContact, testEvent, testStore));
 
       // Send via Resend usando remetente configurado da org
       try {
@@ -186,27 +274,14 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Fetch most recent event matching trigger type
-    const eventTypeMap: Record<string, string> = {
-      trigger_abandon: 'cart_abandoned',
-      trigger_checkout_abandoned: 'checkout_started',
-      trigger_order: 'order',
-      trigger_order_paid: 'order',
-      trigger_fulfilled_order: 'fulfilled_order',
-      trigger_cancelled_order: 'cancelled_order',
-      trigger_viewed_product: 'viewed_product',
-      trigger_added_to_cart: 'add_to_cart',
-      trigger_signup: 'contact_created',
-      trigger_form_submitted: 'form_submitted',
-    };
-
-    const eventType = eventTypeMap[triggerType || ''] || 'order';
+    const eventTypes = resolveEventTypes(triggerType);
     let eventData: Record<string, any> = {};
 
     // Try to find event for this contact, fallback to any event of this type
     let eventQuery = supabase
       .from('contact_events')
       .select('*')
-      .eq('event_type', eventType)
+      .in('event_type', eventTypes)
       .eq('organization_id', organizationId)
       .order('occurred_at', { ascending: false })
       .limit(1);
@@ -221,32 +296,20 @@ export async function POST(request: NextRequest) {
       eventData = recentEvent.properties || {};
     }
 
-    // 4. Resolve merge tags in HTML
-    let html = template.html;
-    const contactProps: Record<string, string> = contact ? {
-      first_name: contact.first_name || '',
-      last_name: contact.last_name || '',
-      email: contact.email || '',
-      phone: contact.phone || '',
-      city: contact.city || '',
-      state: contact.state || '',
-      country: contact.country || '',
-      company: contact.company || '',
-      total_orders: String(contact.total_orders || 0),
-      total_spent: String(contact.total_spent || 0),
-    } : {};
+    // 4. Fetch store for {{store_*}} tags
+    const { data: store } = await supabase
+      .from('shopify_stores')
+      .select('name, domain, email, phone')
+      .eq('organization_id', organizationId)
+      .limit(1)
+      .maybeSingle();
 
-    // Replace {{contact.*}} tags
-    html = html.replace(/\{\{contact\.(\w+)\}\}/g, (_match: string, key: string) => {
-      return contactProps[key] || '';
-    });
+    // 5. Resolve merge tags using the production engine — covers {{first_name}},
+    // {{email}}, {{store_name}}, {{event.*}}, {{order_number}}, etc.
+    const mergeData = buildMergeData(contact, eventData, store);
+    const html = renderMergeTags(template.html, mergeData);
 
-    // Replace {{event.*}} tags
-    html = html.replace(/\{\{event\.(\w+)\}\}/g, (_match: string, key: string) => {
-      return String(eventData[key] || '');
-    });
-
-    // 5. Build response
+    // 6. Build response
     return NextResponse.json({
       html,
       subject: template.name,
@@ -272,7 +335,7 @@ export async function POST(request: NextRequest) {
         occurred_at: recentEvent.occurred_at,
       } : null,
       eventProperties: eventData,
-      contactProperties: contactProps,
+      contactProperties: mergeData,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
