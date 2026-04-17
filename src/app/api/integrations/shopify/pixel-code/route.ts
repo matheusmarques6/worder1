@@ -66,8 +66,10 @@ function generateId() {
 
 var visitorId = generateId();
 var sessionId = generateId();
+var knownEmail = null;
+var knownPhone = null;
 
-// Restore persisted IDs (async — runs before first event fires)
+// Restore persisted IDs + contact info (async — runs before first event fires)
 (async function() {
   try {
     var stored = await browser.localStorage.getItem('_worder_vid');
@@ -79,10 +81,41 @@ var sessionId = generateId();
     if (sid) { sessionId = sid; }
     else { await browser.sessionStorage.setItem('_worder_sid', sessionId); }
   } catch(e) {}
+  try {
+    var em = await browser.localStorage.getItem('_worder_email');
+    if (em) knownEmail = em;
+  } catch(e) {}
+  try {
+    var ph = await browser.localStorage.getItem('_worder_phone');
+    if (ph) knownPhone = ph;
+  } catch(e) {}
 })();
+
+function persistContactInfo(email, phone) {
+  if (email) {
+    knownEmail = email;
+    try { browser.localStorage.setItem('_worder_email', email); } catch(e) {}
+  }
+  if (phone) {
+    knownPhone = phone;
+    try { browser.localStorage.setItem('_worder_phone', phone); } catch(e) {}
+  }
+}
 
 function sendEvent(eventType, eventData, eventContext) {
   var ctx = eventContext || {};
+  // Capture email/phone from event data when present (checkout steps)
+  if (eventData) {
+    if (eventData.email || eventData.phone) {
+      persistContactInfo(eventData.email, eventData.phone);
+    }
+  }
+  // Attach last-known email/phone to every event so downstream can identify
+  // the visitor even when the current event itself doesn't carry contact data.
+  var dataWithIdentity = Object.assign({}, eventData || {});
+  if (knownEmail && !dataWithIdentity.email) dataWithIdentity.email = knownEmail;
+  if (knownPhone && !dataWithIdentity.phone) dataWithIdentity.phone = knownPhone;
+
   var payload = {
     event_type: eventType,
     shop_domain: WORDER_CONFIG.shopDomain,
@@ -92,7 +125,9 @@ function sendEvent(eventType, eventData, eventContext) {
     page_title: (ctx.document && ctx.document.title) || '',
     referrer: (ctx.document && ctx.document.referrer) || '',
     timestamp: new Date().toISOString(),
-    data: eventData || {},
+    data: dataWithIdentity,
+    email: knownEmail || undefined,
+    phone: knownPhone || undefined,
   };
 
   fetch(WORDER_CONFIG.endpoint, {

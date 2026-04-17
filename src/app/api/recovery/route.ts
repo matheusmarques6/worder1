@@ -297,20 +297,29 @@ async function handleCartTab(opts: {
 }): Promise<NextResponse> {
   const { orgIds, activeStoreIds, storeId, limit, offset } = opts;
 
-  // Fetch recent added_to_cart events (last 30 days window)
+  // Fetch recent cart events (last 30 days window).
+  // Matches multiple variants because different pixel versions use different names:
+  // - modern pixel:    'added_to_cart' (normalized from product_added_to_cart)
+  // - legacy theme:    'add_to_cart'
+  // - checkout-level:  'checkout_started' (started checkout but didn't complete)
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
   let q = supabaseAdmin
     .from('contact_events')
-    .select('id, contact_id, store_id, organization_id, properties, session_id, anonymous_id, monetary_value, currency, occurred_at, created_at')
+    .select('id, contact_id, store_id, organization_id, properties, session_id, anonymous_id, monetary_value, currency, occurred_at, created_at, event_type')
     .in('organization_id', orgIds)
-    .in('store_id', activeStoreIds)
-    .eq('event_type', 'added_to_cart')
+    .in('event_type', ['added_to_cart', 'add_to_cart', 'checkout_started'])
     .gte('occurred_at', since)
     .order('occurred_at', { ascending: false })
-    .limit(1000);
+    .limit(2000);
 
-  if (storeId) q = q.eq('store_id', storeId);
+  // Store filter: if we know the store, use it; otherwise filter by active stores.
+  if (storeId) {
+    q = q.eq('store_id', storeId);
+  } else if (activeStoreIds.length > 0) {
+    // Include events with NULL store_id too (older events stored without it)
+    q = q.or(`store_id.in.(${activeStoreIds.join(',')}),store_id.is.null`);
+  }
 
   const { data: rawEvents, error: evErr } = await q;
   if (evErr) {
@@ -415,9 +424,9 @@ async function handleCartTab(opts: {
   }
 
   // A cart is abandoned if:
-  // 1. Last cart event was >= 60min ago (customer is no longer actively shopping), AND
+  // 1. Last cart event was >= 15min ago (Shopify's default threshold), AND
   // 2. No purchase happened after the last cart event.
-  const cartAbandonmentCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const cartAbandonmentCutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
   const abandoned = bucketList.filter(b => {
     if (b.last_at > cartAbandonmentCutoff) return false; // still active
     const sessionPurchase = b.session_id ? purchasesBySession.get(b.session_id) : null;
@@ -438,23 +447,101 @@ async function handleCartTab(opts: {
     for (const c of (cs || [])) contactMap.set(c.id, c);
   }
 
+  // Secondary identity lookup: for buckets WITHOUT contact_id, try to pull
+  // email/phone from the event properties themselves. checkout_started events
+  // often carry email when the customer typed it but didn't submit, and cart
+  // events sometimes include it if a returning visitor was pre-identified.
+  const extraEmails = new Set<string>();
+  for (const b of abandoned) {
+    if (b.contact_id) continue;
+    for (const ev of b.events) {
+      const p = ev.properties || {};
+      const em = (p.email || p._email || p.Email || p.customer?.email || '').toLowerCase();
+      if (em && /\S+@\S+\.\S+/.test(em)) {
+        extraEmails.add(em);
+        break;
+      }
+    }
+  }
+  const emailContactMap = new Map<string, any>();
+  if (extraEmails.size > 0) {
+    const { data: cs } = await supabaseAdmin
+      .from('contacts')
+      .select('id, email, first_name, last_name, phone')
+      .in('organization_id', orgIds)
+      .in('email', Array.from(extraEmails));
+    for (const c of (cs || [])) {
+      if (c.email) emailContactMap.set(String(c.email).toLowerCase(), c);
+    }
+  }
+
   // Sort by most recent activity
   abandoned.sort((a, b) => (a.last_at < b.last_at ? 1 : -1));
 
   const paged = abandoned.slice(offset, offset + limit);
 
   const normalized = paged.map(b => {
-    const contact = b.contact_id ? contactMap.get(b.contact_id) : null;
+    // Extract email/phone/name from event properties as a fallback
+    let propEmail: string | null = null;
+    let propPhone: string | null = null;
+    let propName: string | null = null;
+    for (const ev of b.events) {
+      const p = ev.properties || {};
+      if (!propEmail) {
+        const em = p.email || p._email || p.Email || p.customer?.email;
+        if (em && /\S+@\S+\.\S+/.test(em)) propEmail = String(em).toLowerCase();
+      }
+      if (!propPhone) {
+        const ph = p.phone || p._phone || p.Phone || p.customer?.phone;
+        if (ph) propPhone = String(ph);
+      }
+      if (!propName) {
+        const fn = p._first_name || p.first_name || p.FirstName || p.customer?.first_name;
+        const ln = p._last_name || p.last_name || p.LastName || p.customer?.last_name;
+        const full = [fn, ln].filter(Boolean).join(' ').trim();
+        if (full) propName = full;
+      }
+    }
+
+    const contact = (b.contact_id && contactMap.get(b.contact_id))
+      || (propEmail && emailContactMap.get(propEmail))
+      || null;
+
     const name =
-      [contact?.first_name, contact?.last_name].filter(Boolean).join(' ') ||
+      [contact?.first_name, contact?.last_name].filter(Boolean).join(' ').trim() ||
+      propName ||
       contact?.email ||
+      propEmail ||
       'Desconhecido';
+
+    const email = contact?.email || propEmail || null;
+    const phone = contact?.phone || propPhone || null;
 
     // Dedupe products by product_id/title — prefer most recent event's properties
     const itemsMap = new Map<string, any>();
     let value = 0;
     for (const ev of b.events) {
       const p = ev.properties || {};
+      // Skip non-product events like checkout_started with no line_items
+      if (ev.event_type === 'checkout_started') {
+        // checkout_started carries line_items in properties
+        const lis = p.line_items || p.lineItems || [];
+        for (const li of (Array.isArray(lis) ? lis : [])) {
+          const pid = String(li.product_id || li.variant_id || li.title || Math.random());
+          if (itemsMap.has(pid)) continue;
+          const qty = Number(li.quantity || 1);
+          const price = Number(li.price || li.ItemPrice || 0);
+          const title = li.title || li.product_title || li.name || 'Produto';
+          const img = li.image_url || li.image?.src || null;
+          itemsMap.set(pid, { title, quantity: qty, price, image_url: img });
+          value += price * qty;
+        }
+        if (typeof p.total_price === 'number' || typeof p.total_price === 'string') {
+          const tp = Number(p.total_price);
+          if (!isNaN(tp) && tp > 0) value = Math.max(value, tp);
+        }
+        continue;
+      }
       const pid = String(p.product_id || p.ProductID || p.title || p.ProductName || Math.random());
       const prev = itemsMap.get(pid);
       const qty = Number(p.quantity || p.Quantity || 1);
@@ -474,8 +561,8 @@ async function handleCartTab(opts: {
       id: `cart-${b.key}`,
       type: 'cart' as const,
       status: 'abandoned' as const,
-      email: contact?.email || null,
-      phone: contact?.phone || null,
+      email,
+      phone,
       contact_id: b.contact_id,
       contact_name: name,
       value,
