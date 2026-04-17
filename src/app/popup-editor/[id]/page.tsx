@@ -788,113 +788,197 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 
       case 'text':
         return <>
-          <Field label="Estilo do texto">
+          <LabeledField label="Estilo do texto">
             <select className={sel} value={p.tag || 'p'} onChange={e => up('tag', e.target.value)}>
-              <option value="h1">Título 1</option><option value="h2">Título 2</option><option value="h3">Título 3</option><option value="p">Parágrafo</option>
+              <option value="h1">Título grande</option>
+              <option value="h2">Título médio</option>
+              <option value="h3">Título pequeno</option>
+              <option value="p">Parágrafo</option>
             </select>
-          </Field>
-          <Field label="Conteúdo"><textarea className={inp} rows={3} value={p.content || ''} onChange={e => up('content', e.target.value)} /></Field>
+          </LabeledField>
+          <LabeledField label="Conteúdo">
+            <textarea className={inp} rows={3} value={p.content || ''} onChange={e => up('content', e.target.value)} />
+          </LabeledField>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Fonte">
+            <LabeledField label="Fonte">
               <select className={sel} value={p.fontFamily || 'inherit'} onChange={e => up('fontFamily', e.target.value)}>
-                <option value="inherit">Padrão</option><option value="Georgia, serif">Georgia</option><option value="Arial, sans-serif">Arial</option><option value="'Inter', sans-serif">Inter</option>
+                <option value="inherit">Padrão</option>
+                <option value="'Inter', sans-serif">Inter</option>
+                <option value="'Montserrat', sans-serif">Montserrat</option>
+                <option value="'Poppins', sans-serif">Poppins</option>
+                <option value="'Roboto', sans-serif">Roboto</option>
+                <option value="'Open Sans', sans-serif">Open Sans</option>
+                <option value="Georgia, serif">Georgia</option>
+                <option value="Arial, sans-serif">Arial</option>
               </select>
-            </Field>
-            <Field label="Tamanho"><input type="number" className={inp} value={p.fontSize || 16} onChange={e => up('fontSize', +e.target.value)} /></Field>
+            </LabeledField>
+            <LabeledField label="Tamanho">
+              <div className="relative">
+                <input type="number" className={inp + ' pr-8'} value={p.fontSize || 16} onChange={e => up('fontSize', +e.target.value)} />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span>
+              </div>
+            </LabeledField>
           </div>
-          <Field label="Altura da linha">
+          <LabeledField label="Altura da linha">
             <select className={sel} value={String(p.lineHeight || 1.5)} onChange={e => up('lineHeight', +e.target.value)}>
-              <option value="1">1.0</option><option value="1.2">1.2</option><option value="1.5">1.5</option><option value="1.8">1.8</option><option value="2">2.0</option>
+              <option value="1">Simples (1.0)</option>
+              <option value="1.2">1.2</option>
+              <option value="1.5">1.5</option>
+              <option value="1.8">1.8</option>
+              <option value="2">Duplo (2.0)</option>
             </select>
-          </Field>
-          <ColorField label="Cor do texto" value={p.color || '#111827'} onChange={v => up('color', v)} />
-          <ColorField label="Cor do link" value={p.linkColor || '#0094EB'} onChange={v => up('linkColor', v)} />
-          <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-1">
-            {[{ v: 'bold', l: 'B', s: 'font-bold' }, { v: 'italic', l: 'I', s: 'italic' }, { v: 'underline', l: 'U', s: 'underline' }].map(f => (
-              <button key={f.v} onClick={() => up(f.v === 'bold' ? 'fontWeight' : f.v === 'italic' ? 'fontStyle' : 'textDecoration',
-                p[f.v === 'bold' ? 'fontWeight' : f.v === 'italic' ? 'fontStyle' : 'textDecoration'] === f.v ? 'normal' : f.v)}
-                className={`px-2.5 py-1 text-sm rounded ${f.s} ${(p.fontWeight === 'bold' && f.v === 'bold') || (p.fontStyle === 'italic' && f.v === 'italic') || (p.textDecoration === 'underline' && f.v === 'underline') ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>
-                {f.l}
-              </button>
-            ))}
-          </div>
-          <Field label="Alinhamento"><AlignButtons value={p.align || 'left'} onChange={v => up('align', v)} /></Field>
+          </LabeledField>
+          <LabeledField label="Cor do texto">
+            <ColorPicker value={p.color || '#111827'} onChange={v => up('color', v)} />
+          </LabeledField>
+          <LabeledField label="Cor do link">
+            <ColorPicker value={p.linkColor || '#0094EB'} onChange={v => up('linkColor', v)} />
+          </LabeledField>
+          <LabeledField label="Formatação">
+            <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-1 bg-gray-50/50">
+              {[
+                { v: 'bold', l: 'B', s: 'font-bold', k: 'fontWeight' },
+                { v: 'italic', l: 'I', s: 'italic', k: 'fontStyle' },
+                { v: 'underline', l: 'U', s: 'underline', k: 'textDecoration' },
+              ].map(f => {
+                const active = p[f.k] === f.v;
+                return (
+                  <button key={f.v}
+                    onClick={() => up(f.k, active ? 'normal' : f.v)}
+                    className={`flex-1 py-1.5 text-sm rounded transition-colors ${f.s} ${active ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+                    {f.l}
+                  </button>
+                );
+              })}
+            </div>
+          </LabeledField>
+          <LabeledField label="Alinhamento">
+            <AlignButtons value={p.align || 'left'} onChange={v => up('align', v)} />
+          </LabeledField>
         </>
 
       case 'button':
         return <>
-          <Field label="Acao do botao">
+          <LabeledField label="Ação do botão">
             <select className={sel} value={p.action || 'submit'} onChange={e => up('action', e.target.value)}>
-              <option value="submit">Enviar formulario</option><option value="url">Abrir link</option><option value="next-step">Proxima etapa</option><option value="close">Fechar popup</option>
+              <option value="submit">Enviar formulário</option>
+              <option value="url">Abrir link</option>
+              <option value="next-step">Próxima etapa</option>
+              <option value="close">Fechar popup</option>
             </select>
-          </Field>
-          {p.action === 'url' && <Field label="URL"><input className={inp} value={p.url || ''} onChange={e => up('url', e.target.value)} placeholder="https://" /></Field>}
-          <Field label="Texto do botao"><input className={inp} value={p.text || ''} onChange={e => up('text', e.target.value)} /></Field>
+          </LabeledField>
+          {p.action === 'url' && (
+            <LabeledField label="URL">
+              <input className={inp} value={p.url || ''} onChange={e => up('url', e.target.value)} placeholder="https://" />
+            </LabeledField>
+          )}
+          <LabeledField label="Texto">
+            <input className={inp} value={p.text || ''} onChange={e => up('text', e.target.value)} />
+          </LabeledField>
 
-          <PanelColorField label="Cor de fundo" value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
-          <PanelColorField label="Cor do texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
-          <PanelColorField label="Cor ao passar o mouse" value={p.hoverColor || ''} onChange={v => up('hoverColor', v)} />
+          <Group title="Cores" defaultOpen={true}>
+            <LabeledField label="Cor de fundo">
+              <ColorPicker value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
+            </LabeledField>
+            <LabeledField label="Cor do texto">
+              <ColorPicker value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
+            </LabeledField>
+            <LabeledField label="Cor no hover">
+              <ColorPicker value={p.hoverColor || ''} onChange={v => up('hoverColor', v)} />
+            </LabeledField>
+          </Group>
 
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 15} onChange={e => up('fontSize', +e.target.value)} min={10} max={30} /></Field>
-            <Field label="Raio borda"><input type="number" className={inp} value={p.borderRadius || 8} onChange={e => up('borderRadius', +e.target.value)} min={0} max={50} /></Field>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Padding vertical"><input type="number" className={inp} value={p.paddingV || 14} onChange={e => up('paddingV', +e.target.value)} min={4} max={40} /></Field>
-            <Field label="Padding horizontal"><input type="number" className={inp} value={p.paddingH || 28} onChange={e => up('paddingH', +e.target.value)} min={4} max={60} /></Field>
-          </div>
-          <Field label="Alinhamento"><AlignButtons value={p.fullWidth ? 'full' : (p.align || 'full')} onChange={v => { up('fullWidth', v === 'full'); if (v !== 'full') up('align', v) }} /></Field>
-
-          <div className="pt-2 border-t border-gray-100">
-            <p className="text-[12px] font-medium text-gray-700 mb-2">Borda do botao</p>
+          <Group title="Tipografia & estilo" defaultOpen={false}>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Largura"><input type="number" className={inp} value={p.btnBorderWidth ?? 0} onChange={e => up('btnBorderWidth', +e.target.value)} min={0} max={5} /></Field>
-              <PanelColorField label="Cor" value={p.btnBorderColor || '#E5E7EB'} onChange={v => up('btnBorderColor', v)} />
+              <LabeledField label="Tamanho fonte">
+                <div className="relative">
+                  <input type="number" className={inp + ' pr-8'} value={p.fontSize || 15} onChange={e => up('fontSize', +e.target.value)} min={10} max={30} />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span>
+                </div>
+              </LabeledField>
+              <LabeledField label="Raio da borda">
+                <div className="relative">
+                  <input type="number" className={inp + ' pr-8'} value={p.borderRadius || 8} onChange={e => up('borderRadius', +e.target.value)} min={0} max={50} />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span>
+                </div>
+              </LabeledField>
             </div>
-          </div>
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledField label="Largura borda">
+                <div className="relative">
+                  <input type="number" className={inp + ' pr-8'} value={p.btnBorderWidth ?? 0} onChange={e => up('btnBorderWidth', +e.target.value)} min={0} max={5} />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span>
+                </div>
+              </LabeledField>
+              <LabeledField label="Cor da borda">
+                <ColorPicker value={p.btnBorderColor || '#E5E7EB'} onChange={v => up('btnBorderColor', v)} />
+              </LabeledField>
+            </div>
+          </Group>
+
+          <LabeledField label="Alinhamento do botão">
+            <AlignButtons value={p.fullWidth ? 'full' : (p.align || 'full')} onChange={v => { up('fullWidth', v === 'full'); if (v !== 'full') up('align', v) }} />
+          </LabeledField>
         </>
 
       case 'image':
         return <>
-          <p className="text-xs text-gray-400">JPG, PNG e GIF. Máximo 2000px.</p>
-          {p.src ? (
-            <div className="space-y-2">
-              <img src={p.src} alt="" className="w-full h-24 object-contain bg-gray-50 rounded-lg border" />
-              <div className="flex gap-2">
-                <button onClick={() => onOpenMedia?.(url => up('src', url))}
-                  className="flex-1 py-1.5 text-xs font-medium text-center text-gray-700 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                  Trocar
-                </button>
-                <button onClick={() => up('src', '')} className="flex-1 py-1.5 text-xs font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">Remover</button>
+          <LabeledField label="Imagem" hint="JPG, PNG ou GIF — máximo 2000px.">
+            {p.src ? (
+              <div className="space-y-2">
+                <div className="relative rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                  <img src={p.src} alt="" className="w-full h-32 object-contain" />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => onOpenMedia?.(url => up('src', url))}
+                    className="flex-1 py-2 text-[12px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors">
+                    Substituir
+                  </button>
+                  <button onClick={() => up('src', '')} className="flex-1 py-2 text-[12px] font-semibold text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50 hover:border-red-200 transition-colors">
+                    Remover
+                  </button>
+                </div>
               </div>
+            ) : (
+              <button onClick={() => onOpenMedia?.(url => up('src', url))}
+                className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/30 transition-colors">
+                <ImageIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <span className="text-[12px] text-gray-500">Escolher imagem da biblioteca</span>
+              </button>
+            )}
+          </LabeledField>
+          <LabeledField label="Texto alternativo" hint="Descreva a imagem para acessibilidade.">
+            <input className={inp} value={p.alt || ''} onChange={e => up('alt', e.target.value)} placeholder="Descreva a imagem" />
+          </LabeledField>
+          <LabeledField label="Link (opcional)" hint="URL ao clicar na imagem.">
+            <input className={inp} value={p.href || ''} onChange={e => up('href', e.target.value)} placeholder="https://" />
+          </LabeledField>
+          <LabeledField label="Alinhamento">
+            <AlignButtons value={p.align || 'center'} onChange={v => up('align', v)} />
+          </LabeledField>
+
+          <Group title="Dimensões" defaultOpen={false}>
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledField label="Largura">
+                <div className="relative">
+                  <input type="number" className={inp + ' pr-7'} value={p.imgWidth ?? 100} onChange={e => up('imgWidth', +e.target.value)} min={10} max={100} />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">%</span>
+                </div>
+              </LabeledField>
+              <LabeledField label="Altura máx">
+                <div className="relative">
+                  <input type="number" className={inp + ' pr-8'} value={p.maxHeight ?? 300} onChange={e => up('maxHeight', +e.target.value)} min={50} max={800} />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span>
+                </div>
+              </LabeledField>
             </div>
-          ) : (
-            <button onClick={() => onOpenMedia?.(url => up('src', url))}
-              className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-brand-400">
-              <ImageIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-              <span className="text-xs text-gray-500">Clique para escolher imagem</span>
-            </button>
-          )}
-          <Field label="URL da imagem"><input className={inp} value={p.src || ''} onChange={e => up('src', e.target.value)} placeholder="https://" /></Field>
-          <Field label="Texto alternativo"><input className={inp} value={p.alt || ''} onChange={e => up('alt', e.target.value)} placeholder="Descreva a imagem" /></Field>
-          <Field label="Link"><input className={inp} value={p.href || ''} onChange={e => up('href', e.target.value)} placeholder="https://" /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Largura">
-              <div className="flex items-center gap-1">
-                <input type="number" className={inp} value={p.imgWidth ?? 100} onChange={e => up('imgWidth', +e.target.value)} min={10} max={100} />
-                <span className="text-xs text-gray-400 flex-shrink-0">%</span>
+            <LabeledField label="Raio da borda">
+              <div className="relative">
+                <input type="number" className={inp + ' pr-8'} value={p.borderRadius ?? 0} onChange={e => up('borderRadius', +e.target.value)} min={0} max={50} />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span>
               </div>
-            </Field>
-            <Field label="Altura máx">
-              <div className="flex items-center gap-1">
-                <input type="number" className={inp} value={p.maxHeight ?? 300} onChange={e => up('maxHeight', +e.target.value)} min={50} max={800} />
-                <span className="text-xs text-gray-400 flex-shrink-0">px</span>
-              </div>
-            </Field>
-          </div>
-          <Field label="Raio da borda"><input type="number" className={inp} value={p.borderRadius ?? 0} onChange={e => up('borderRadius', +e.target.value)} min={0} max={50} /></Field>
-          <Field label="Alinhamento"><AlignButtons value={p.align || 'center'} onChange={v => up('align', v)} /></Field>
-          <Field label="Padding (px)"><input type="number" className={inp} value={p.padding ?? 0} onChange={e => up('padding', +e.target.value)} /></Field>
+            </LabeledField>
+          </Group>
         </>
 
       case '__unused__':
@@ -1555,6 +1639,7 @@ function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate
 
 // ── Media Library Modal (uses shared component) ─────────────────────────────
 import { MediaLibraryModal } from '@/components/shared/MediaLibraryModal'
+import { ColorPicker } from '@/components/email-builder/ui/ColorPicker'
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function PopupEditorPage() {
@@ -1566,6 +1651,8 @@ export default function PopupEditorPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [formStatus, setFormStatus] = useState<'draft' | 'published'>('draft')
+  const [formName, setFormName] = useState('Popup sem título')
+  const [editingName, setEditingName] = useState(false)
   const [preview, setPreview] = useState<'desktop' | 'mobile'>('desktop')
   const [activeStepIdx, setActiveStepIdx] = useState(0)
   const [showSuccess, setShowSuccess] = useState(false)
@@ -1612,6 +1699,7 @@ export default function PopupEditorPage() {
   useEffect(() => {
     fetch(`/api/forms/${formId}`).then(r => r.json()).then(data => {
       const form = data.form || data
+      if (form.name) setFormName(form.name)
       if (form.design_json && Object.keys(form.design_json).length > 0) {
         // Deep-merge to preserve new default fields (styles/behavior sub-objects)
         const saved = form.design_json
@@ -1651,10 +1739,10 @@ export default function PopupEditorPage() {
       await fetch(`/api/forms/${formId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ design_json: design, form_type: design.formType, behavior: design.behavior, status: formStatus }),
+        body: JSON.stringify({ name: formName, design_json: design, form_type: design.formType, behavior: design.behavior, status: formStatus }),
       })
     } finally { setSaving(false) }
-  }, [formId, design, formStatus])
+  }, [formId, design, formStatus, formName])
 
   const handlePublish = useCallback(async () => {
     const newStatus = formStatus === 'published' ? 'draft' : 'published'
@@ -1760,33 +1848,65 @@ export default function PopupEditorPage() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
-      {/* Top bar */}
-      <header className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 shrink-0">
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.back()} className="p-1.5 rounded-md hover:bg-gray-100"><ArrowLeft className="w-5 h-5 text-gray-600" /></button>
-          <div className="h-5 w-px bg-gray-200" />
-          <span className="text-sm font-semibold text-gray-800">Editor de Popup</span>
-          {formStatus === 'published' && <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-700 rounded-full">ATIVO</span>}
+      {/* Top bar — Omnisend-inspired with Worder identity */}
+      <header className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200 shrink-0">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <button onClick={() => router.back()} className="flex-shrink-0 p-1.5 rounded-md hover:bg-gray-100" title="Voltar">
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          </button>
+          <div className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 shadow-sm">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5.5 7L3 17L7 17L8.5 11L10 17L14 17L15.5 11L17 17L21 17L18.5 7L14.5 7L13 12L11.5 7L7.5 7L5.5 7Z" fill="white" />
+            </svg>
+          </div>
+          <div className="h-5 w-px bg-gray-200 flex-shrink-0" />
+          <div className="flex items-center gap-2 min-w-0">
+            {editingName ? (
+              <input
+                autoFocus
+                value={formName}
+                onChange={e => setFormName(e.target.value)}
+                onBlur={() => setEditingName(false)}
+                onKeyDown={e => { if (e.key === 'Enter') setEditingName(false) }}
+                className="text-[15px] font-semibold text-gray-900 bg-transparent border-b-2 border-orange-400 outline-none min-w-[200px] max-w-[400px]"
+              />
+            ) : (
+              <button
+                onClick={() => setEditingName(true)}
+                className="group flex items-center gap-2 text-[15px] font-semibold text-gray-900 hover:text-orange-600 transition-colors"
+                title="Renomear popup"
+              >
+                <span className="truncate max-w-[320px]">{formName}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-0 group-hover:opacity-60 transition-opacity flex-shrink-0">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              </button>
+            )}
+            {formStatus === 'published' && (
+              <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-700 rounded-full flex-shrink-0">ATIVO</span>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {/* Undo/Redo */}
           <button onClick={undo} disabled={historyIdx <= 0} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Desfazer"><Undo2 className="w-4 h-4" /></button>
           <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Refazer"><Redo2 className="w-4 h-4" /></button>
           <div className="h-5 w-px bg-gray-200" />
           {/* Desktop/Mobile */}
           <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
-            <button onClick={() => setPreview('desktop')} className={`p-1.5 rounded ${preview === 'desktop' ? 'bg-white shadow-sm' : ''}`}><Monitor className="w-4 h-4" /></button>
-            <button onClick={() => setPreview('mobile')} className={`p-1.5 rounded ${preview === 'mobile' ? 'bg-white shadow-sm' : ''}`}><Smartphone className="w-4 h-4" /></button>
+            <button onClick={() => setPreview('desktop')} className={`p-1.5 rounded transition-all ${preview === 'desktop' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}><Monitor className="w-4 h-4" /></button>
+            <button onClick={() => setPreview('mobile')} className={`p-1.5 rounded transition-all ${preview === 'mobile' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}><Smartphone className="w-4 h-4" /></button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 px-4 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:border-gray-300 transition-colors">
             <Eye className="w-4 h-4" /> Preview
           </button>
-          <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+          <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar
           </button>
-          <button onClick={handlePublish} className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${formStatus === 'published' ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}>
+          <button onClick={handlePublish} className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors shadow-sm ${formStatus === 'published' ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700'}`}>
             <Power className="w-4 h-4" /> {formStatus === 'published' ? 'Desativar' : 'Ativar'}
           </button>
         </div>
@@ -1920,8 +2040,10 @@ export default function PopupEditorPage() {
           )}
         </aside>
 
-        {/* Center canvas */}
-        <main className="flex-1 flex flex-col items-center overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.15)' }}>
+        {/* Center canvas — dark Omnisend-inspired background with subtle gradient for depth */}
+        <main className="flex-1 flex flex-col items-center overflow-y-auto" style={{
+          background: 'radial-gradient(ellipse at center, #2a2f3a 0%, #1a1e26 100%)',
+        }}>
           <div className="flex-1 flex items-center justify-center w-full p-8">
             {/* Popup container — total width stays s.width; when side image is
                 enabled the interior splits 50/50 (Omnisend-style) instead of
@@ -1998,8 +2120,8 @@ export default function PopupEditorPage() {
             </div>
           </div>
 
-          {/* Step tabs - professional design */}
-          <div className="flex items-center gap-2 px-6 py-3 bg-white border-t border-gray-200 w-full shrink-0">
+          {/* Step tabs - pinned to bottom, floating above dark canvas */}
+          <div className="flex items-center gap-2 px-6 py-3 bg-white/95 backdrop-blur-sm border-t border-gray-800/20 w-full shrink-0 shadow-lg">
             {design.steps.map((step, i) => (
               <div key={step.id} className="flex items-center gap-2">
                 <button onClick={() => { setActiveStepIdx(i); setShowSuccess(false); setSelectedBlockId(null) }}
