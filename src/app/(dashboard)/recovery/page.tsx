@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
   ShoppingCart,
+  ShoppingBag,
   QrCode,
   FileText,
   CreditCard,
@@ -22,7 +24,7 @@ import {
 } from 'lucide-react'
 import { useStoreStore } from '@/stores'
 
-type TabKey = 'cart' | 'pix' | 'boleto' | 'card'
+type TabKey = 'cart' | 'checkout' | 'pix' | 'boleto' | 'card'
 
 interface RecoveryItem {
   id: string
@@ -46,6 +48,7 @@ interface RecoveryStats {
 
 const tabs: { key: TabKey; label: string; icon: any }[] = [
   { key: 'cart', label: 'Carrinho', icon: ShoppingCart },
+  { key: 'checkout', label: 'Checkout', icon: ShoppingBag },
   { key: 'pix', label: 'PIX', icon: QrCode },
   { key: 'boleto', label: 'Boleto', icon: FileText },
   { key: 'card', label: 'Cartão', icon: CreditCard },
@@ -65,6 +68,7 @@ const formatCurrency = (value: number) =>
 const formatNumber = (n: number) => new Intl.NumberFormat('pt-BR').format(n)
 
 export default function RecoveryPage() {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<TabKey>('cart')
   const [items, setItems] = useState<RecoveryItem[]>([])
   const [stats, setStats] = useState<RecoveryStats>({
@@ -360,6 +364,7 @@ export default function RecoveryPage() {
                             </button>
                           )}
                           <button
+                            onClick={() => router.push(`/recovery/${item.id}`)}
                             className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
                             title="Ver detalhes"
                           >

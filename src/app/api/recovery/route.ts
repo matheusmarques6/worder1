@@ -46,11 +46,29 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Only consider active stores — eliminates phantom rows from deleted/inactive integrations
+    const { data: activeStores } = await supabaseAdmin
+      .from('shopify_stores')
+      .select('id')
+      .in('organization_id', orgIds)
+      .eq('is_active', true);
+
+    const activeStoreIds = (activeStores || []).map((s: any) => s.id);
+
+    if (activeStoreIds.length === 0) {
+      return NextResponse.json({
+        items: [],
+        total: 0,
+        stats: { total: 0, pending: 0, abandoned: 0, converted: 0, recovered: 0, revenue_recovered: 0, recovery_rate: '0.0' },
+      });
+    }
+
     // Query the checkouts table
     let query = supabaseAdmin
       .from('shopify_checkouts')
       .select('id, store_id, shopify_checkout_id, shopify_checkout_token, email, phone, total_price, currency, line_items, abandoned_checkout_url, recovery_url, status, abandoned_at, converted_at, recovered_at, contact_id, shopify_created_at, created_at, updated_at, contacts(id, email, first_name, last_name, phone)', { count: 'exact' })
       .in('organization_id', orgIds)
+      .in('store_id', activeStoreIds)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -60,6 +78,15 @@ export async function GET(request: NextRequest) {
     } else {
       // Default: only show checkouts that matter (not brand-new pending)
       query = query.in('status', ['pending', 'abandoned', 'recovered', 'converted']);
+    }
+
+    // Differentiate cart (no email captured) vs checkout (email captured).
+    // Klaviyo/Omnisend parity: a "cart" is anonymous added-to-cart, a "checkout"
+    // means the visitor reached the checkout step and submitted contact info.
+    if (type === 'cart') {
+      query = query.or('email.is.null,email.eq.');
+    } else if (type === 'checkout') {
+      query = query.not('email', 'is', null).neq('email', '');
     }
 
     const { data: items, count, error } = await query;
@@ -76,15 +103,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message || 'Failed to fetch' }, { status: 500 });
     }
 
-    // Compute stats across the whole org
+    // Compute stats scoped to the active tab (cart vs checkout) so KPIs match the table
     let stats = { total: 0, pending: 0, abandoned: 0, converted: 0, recovered: 0 };
     let revenueRecovered = 0;
 
     try {
-      const { data: allItems } = await supabaseAdmin
+      let statsQuery = supabaseAdmin
         .from('shopify_checkouts')
-        .select('status, total_price')
-        .in('organization_id', orgIds);
+        .select('status, total_price, email')
+        .in('organization_id', orgIds)
+        .in('store_id', activeStoreIds);
+
+      if (type === 'cart') {
+        statsQuery = statsQuery.or('email.is.null,email.eq.');
+      } else if (type === 'checkout') {
+        statsQuery = statsQuery.not('email', 'is', null).neq('email', '');
+      }
+
+      const { data: allItems } = await statsQuery;
 
       if (allItems) {
         stats.total = allItems.length;
@@ -111,7 +147,7 @@ export async function GET(request: NextRequest) {
       const items = Array.isArray(c.line_items) ? c.line_items : [];
       return {
         id: c.id,
-        type: 'cart',
+        type,
         status: c.status,
         email: c.email || contact?.email || null,
         phone: c.phone || contact?.phone || null,
