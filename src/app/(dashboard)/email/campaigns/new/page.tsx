@@ -315,8 +315,12 @@ export default function NewCampaignPage() {
                       value={subject}
                       onChange={(e) => setSubject(e.target.value)}
                       placeholder="Ex.: Ofertas imperdíveis de Black Friday"
+                      maxLength={200}
                       className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none transition"
                     />
+                    <p className={`text-xs mt-1 ${subject.length > 60 ? 'text-amber-600' : 'text-gray-400'}`}>
+                      {subject.length}/60 caracteres — ideal manter abaixo de 60 para mobile
+                    </p>
                   </FormField>
 
                   <FormField label="Nome do remetente">
@@ -369,8 +373,10 @@ export default function NewCampaignPage() {
                       value={previewText}
                       onChange={(e) => setPreviewText(e.target.value)}
                       placeholder="Confira as novidades…"
+                      maxLength={150}
                       className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none transition"
                     />
+                    <p className="text-xs text-gray-400 mt-1">{previewText.length}/150 caracteres</p>
                   </FormField>
 
                   <FormField label="Nome da campanha" hint="Nome interno, opcional">
@@ -445,7 +451,7 @@ export default function NewCampaignPage() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                   {templates
-                    .filter(() => templateTab === 'all' || true)
+                    .filter((t) => templateTab === 'all' || t.category === 'saved' || t.updated_at)
                     .map((t) => {
                       const sel = selectedTemplate === t.id
                       return (
@@ -732,7 +738,29 @@ export default function NewCampaignPage() {
           )}
           <button
             type="button"
-            onClick={() => router.push('/email/campaigns')}
+            onClick={async () => {
+              if (subject.trim() || name.trim()) {
+                try {
+                  await fetch('/api/email/campaigns', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      name: name || subject || 'Rascunho',
+                      subject, preview_text: previewText,
+                      template_id: selectedTemplate || null,
+                      recipient_type: recipientType,
+                      segment_id: recipientType === 'segment' && selectedSegments.length > 0
+                        ? selectedSegments[0] : null,
+                      sender_name: senderName, from_email: senderEmail,
+                      reply_to: replyTo || null,
+                      store_id: currentStore?.id || null,
+                      status: 'draft',
+                    }),
+                  })
+                } catch {}
+              }
+              router.push('/email/campaigns')
+            }}
             className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
             Salvar e fechar
