@@ -581,11 +581,58 @@ export default function ShopifyConnect() {
                 detail={manualResult.token?.obtained ? 'Gerado (renovação automática a cada 24h)' : '—'}
               />
               <StatusLine
-                label="Webhooks configurados"
-                ok={manualResult.webhooks?.created + manualResult.webhooks?.existing > 0}
-                detail={`${manualResult.webhooks?.created + manualResult.webhooks?.existing} / ${manualResult.webhooks?.total}`}
+                label="Webhooks"
+                ok={(manualResult.webhooks?.created || 0) + (manualResult.webhooks?.existing || 0) > 0}
+                detail={
+                  manualResult.webhooks?.manualSetupRequired
+                    ? 'Configuração manual necessária (ver abaixo)'
+                    : `${(manualResult.webhooks?.created || 0) + (manualResult.webhooks?.existing || 0)} / ${manualResult.webhooks?.total}`
+                }
               />
               <StatusLine label="Sync inicial" ok={!!manualResult.sync?.triggered} detail={manualResult.sync?.triggered ? 'Disparado' : '—'} />
+
+              {/* Webhook manual setup instructions */}
+              {manualResult.webhooks?.failed > 0 && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg mt-2">
+                  <p className="font-medium text-amber-800 text-sm mb-2">
+                    {manualResult.webhooks.manualSetupRequired
+                      ? 'Webhooks precisam ser configurados manualmente'
+                      : `${manualResult.webhooks.failed} webhook(s) falharam — configure manualmente:`}
+                  </p>
+                  <div className="mb-3">
+                    <p className="text-xs text-amber-700 font-medium mb-1">URL do webhook (copiar):</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-[11px] bg-white border border-amber-200 rounded px-2 py-1.5 text-gray-800 break-all font-mono">
+                        {manualResult.webhooks.webhookUrl}
+                      </code>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(manualResult.webhooks.webhookUrl).catch(() => {})}
+                        className="px-2 py-1.5 bg-amber-100 text-amber-700 text-xs font-medium rounded hover:bg-amber-200 flex-shrink-0"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-xs text-amber-700 space-y-1">
+                    <p className="font-medium">Como configurar:</p>
+                    <p>1. No Dev Dashboard → seu app → <strong>Webhooks</strong></p>
+                    <p>2. Adicione a URL acima como <strong>Endpoint URL</strong></p>
+                    <p>3. Selecione os tópicos:</p>
+                    <div className="mt-1 grid grid-cols-2 gap-1 text-[10px] font-mono bg-white/60 rounded p-2">
+                      {(manualResult.webhooks.failedTopics || [
+                        'orders/create', 'orders/updated', 'orders/paid',
+                        'checkouts/create', 'checkouts/update',
+                        'customers/create', 'customers/update',
+                        'products/create', 'products/update',
+                      ]).map((t: string) => (
+                        <span key={t} className="text-amber-800">{t}</span>
+                      ))}
+                    </div>
+                    <p className="mt-2">4. Formato: <strong>JSON</strong></p>
+                    <p>5. API version: <strong>2026-01</strong></p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

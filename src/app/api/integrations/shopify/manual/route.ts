@@ -247,6 +247,9 @@ export async function POST(request: NextRequest) {
     let created = 0;
     let existingCount = 0;
     let failed = 0;
+    const failedTopics: string[] = [];
+    const failReasons: string[] = [];
+
     for (const topic of REQUIRED_WEBHOOKS) {
       if (existingTopics.includes(topic)) {
         existingCount++;
@@ -266,11 +269,25 @@ export async function POST(request: NextRequest) {
             }),
           }
         );
-        if (res.ok) created++;
-        else failed++;
-      } catch {
+        if (res.ok) {
+          created++;
+        } else {
+          failed++;
+          failedTopics.push(topic);
+          const errBody = await res.text().catch(() => '');
+          const reason = `${res.status}: ${errBody.slice(0, 200)}`;
+          failReasons.push(reason);
+          console.warn(`[Shopify Manual] Webhook ${topic} failed: ${reason}`);
+        }
+      } catch (err: any) {
         failed++;
+        failedTopics.push(topic);
+        failReasons.push(err?.message || 'fetch error');
       }
+    }
+
+    if (failed > 0) {
+      console.warn(`[Shopify Manual] ${failed} webhooks failed. Topics: ${failedTopics.join(', ')}`);
     }
 
     // ──────────────────────────────────────────
@@ -308,6 +325,9 @@ export async function POST(request: NextRequest) {
         created,
         existing: existingCount,
         failed,
+        failedTopics: failed > 0 ? failedTopics : undefined,
+        webhookUrl,
+        manualSetupRequired: failed > 0 && created === 0 && existingCount === 0,
       },
       sync: { triggered: syncTriggered },
     });
