@@ -118,30 +118,36 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message || 'Failed to fetch' }, { status: 500 });
     }
 
-    // Compute stats for the checkout tab
+    // Compute stats for the checkout tab (matching the filter of the displayed items)
     let stats = { total: 0, pending: 0, abandoned: 0, converted: 0, recovered: 0 };
     let revenueRecovered = 0;
 
     try {
       const { data: allItems } = await supabaseAdmin
         .from('shopify_checkouts')
-        .select('status, total_price, email')
+        .select('status, total_price, email, created_at')
         .in('organization_id', orgIds)
         .in('store_id', activeStoreIds)
         .not('email', 'is', null)
-        .neq('email', '');
+        .neq('email', '')
+        .in('status', ['pending', 'abandoned', 'recovered']);
 
       if (allItems) {
-        stats.total = allItems.length;
-        for (const it of allItems) {
-          if (it.status === 'pending') stats.pending++;
-          else if (it.status === 'abandoned') stats.abandoned++;
-          else if (it.status === 'converted') stats.converted++;
-          else if (it.status === 'recovered') {
+        const abandonmentCutoff = Date.now() - 15 * 60 * 1000; // 15min threshold
+        for (const it of allItems as any[]) {
+          // Treat pending >15min old as effectively abandoned for stats
+          const createdMs = it.created_at ? new Date(it.created_at).getTime() : 0;
+          const effectiveStatus = (it.status === 'pending' && createdMs && createdMs < abandonmentCutoff)
+            ? 'abandoned'
+            : it.status;
+          if (effectiveStatus === 'pending') stats.pending++;
+          else if (effectiveStatus === 'abandoned') stats.abandoned++;
+          else if (effectiveStatus === 'recovered') {
             stats.recovered++;
             revenueRecovered += Number(it.total_price) || 0;
           }
         }
+        stats.total = stats.pending + stats.abandoned + stats.recovered;
       }
     } catch {}
 
@@ -176,6 +182,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Normalize items to a simpler shape
+    const abandonmentCutoff = Date.now() - 15 * 60 * 1000;
     const normalized = (items || []).map((c: any) => {
       const ci = Array.isArray(c.contacts) ? c.contacts[0] : c.contacts
       const contact = ci || (c.email ? contactsByEmail.get(String(c.email).toLowerCase()) : null)
@@ -185,10 +192,16 @@ export async function GET(request: NextRequest) {
         c.email ||
         'Desconhecido';
       const items = Array.isArray(c.line_items) ? c.line_items : [];
+      // Show "abandoned" for old pending rows that the cron hasn't processed yet —
+      // UX-wise they are effectively abandoned. Keeps the UI consistent with Shopify.
+      const createdMs = c.created_at ? new Date(c.created_at).getTime() : 0;
+      const effectiveStatus = (c.status === 'pending' && createdMs && createdMs < abandonmentCutoff)
+        ? 'abandoned'
+        : c.status;
       return {
         id: c.id,
         type,
-        status: c.status,
+        status: effectiveStatus,
         email: c.email || contact?.email || null,
         phone: c.phone || contact?.phone || null,
         contact_id: c.contact_id,
@@ -273,7 +286,9 @@ async function handleCartTab(opts: {
     return NextResponse.json({ items: [], total: 0, stats: zeroStats() });
   }
 
-  // Group events by session (falling back to anonymous_id or contact_id)
+  // Group events: prefer contact_id (dedupes across sessions for known customers),
+  // fall back to session_id, then anonymous_id. This collapses a contact's
+  // multiple cart sessions into one bucket — avoids showing "Kim Brown" 3x.
   type CartBucket = {
     key: string;
     contact_id: string | null;
@@ -286,13 +301,20 @@ async function handleCartTab(opts: {
   };
   const buckets = new Map<string, CartBucket>();
   for (const e of events) {
-    const key = String(e.session_id || e.anonymous_id || e.contact_id || e.id);
+    const key = e.contact_id
+      ? `c:${e.contact_id}`
+      : e.session_id
+        ? `s:${e.session_id}`
+        : e.anonymous_id
+          ? `a:${e.anonymous_id}`
+          : `e:${e.id}`;
     const existing = buckets.get(key);
     if (existing) {
       existing.events.push(e);
       if (e.occurred_at < existing.first_at) existing.first_at = e.occurred_at;
       if (e.occurred_at > existing.last_at) existing.last_at = e.occurred_at;
       if (!existing.contact_id && e.contact_id) existing.contact_id = e.contact_id;
+      if (!existing.session_id && e.session_id) existing.session_id = e.session_id;
     } else {
       buckets.set(key, {
         key,
@@ -308,36 +330,62 @@ async function handleCartTab(opts: {
   }
 
   const bucketList = Array.from(buckets.values());
-  const sessionIds = bucketList.map(b => b.session_id).filter(Boolean) as string[];
-  const contactIds = bucketList.map(b => b.contact_id).filter(Boolean) as string[];
+  const sessionIds = Array.from(new Set(bucketList.map(b => b.session_id).filter(Boolean))) as string[];
+  const contactIds = Array.from(new Set(bucketList.map(b => b.contact_id).filter(Boolean))) as string[];
 
-  // Which of these sessions/contacts placed an order in the meantime? Those are NOT cart abandonments.
-  const placedOrderSessionIds = new Set<string>();
-  const placedOrderContactIds = new Set<string>();
-  if (sessionIds.length > 0 || contactIds.length > 0) {
-    const filters: string[] = [];
-    if (sessionIds.length > 0) filters.push(`session_id.in.(${sessionIds.map(s => `"${s}"`).join(',')})`);
-    if (contactIds.length > 0) filters.push(`contact_id.in.(${contactIds.join(',')})`);
+  // Fetch purchases once per key — two separate queries are simpler and more
+  // robust than stitching .or() filters with .in.() (which is fragile for
+  // UUIDs with dashes/strings). We'll filter in JS.
+  type PurchaseRow = { session_id: string | null; contact_id: string | null; occurred_at: string };
+  const purchasesBySession = new Map<string, string>(); // session_id -> occurred_at
+  const purchasesByContact = new Map<string, string>(); // contact_id -> occurred_at
+
+  if (sessionIds.length > 0) {
     try {
-      const { data: purchases } = await supabaseAdmin
+      const { data } = await supabaseAdmin
         .from('contact_events')
-        .select('session_id, contact_id')
+        .select('session_id, occurred_at')
         .in('organization_id', orgIds)
         .in('event_type', ['placed_order', 'order_paid', 'checkout_completed'])
+        .in('session_id', sessionIds)
+        .gte('occurred_at', since);
+      for (const p of (data || []) as PurchaseRow[]) {
+        if (p.session_id && !purchasesBySession.has(p.session_id)) {
+          purchasesBySession.set(p.session_id, p.occurred_at);
+        }
+      }
+    } catch {}
+  }
+  if (contactIds.length > 0) {
+    try {
+      const { data } = await supabaseAdmin
+        .from('contact_events')
+        .select('contact_id, occurred_at')
+        .in('organization_id', orgIds)
+        .in('event_type', ['placed_order', 'order_paid', 'checkout_completed'])
+        .in('contact_id', contactIds)
         .gte('occurred_at', since)
-        .or(filters.join(','));
-      for (const p of (purchases || []) as any[]) {
-        if (p.session_id) placedOrderSessionIds.add(p.session_id);
-        if (p.contact_id) placedOrderContactIds.add(p.contact_id);
+        .order('occurred_at', { ascending: false });
+      for (const p of (data || []) as PurchaseRow[]) {
+        if (p.contact_id && !purchasesByContact.has(p.contact_id)) {
+          purchasesByContact.set(p.contact_id, p.occurred_at);
+        }
       }
     } catch {}
   }
 
-  // Filter out buckets that ended in a purchase
-  const abandoned = bucketList.filter(b =>
-    !(b.session_id && placedOrderSessionIds.has(b.session_id)) &&
-    !(b.contact_id && placedOrderContactIds.has(b.contact_id))
-  );
+  // A cart is abandoned if:
+  // 1. Last cart event was >= 60min ago (customer is no longer actively shopping), AND
+  // 2. No purchase happened after the last cart event.
+  const cartAbandonmentCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const abandoned = bucketList.filter(b => {
+    if (b.last_at > cartAbandonmentCutoff) return false; // still active
+    const sessionPurchase = b.session_id ? purchasesBySession.get(b.session_id) : null;
+    if (sessionPurchase && sessionPurchase >= b.last_at) return false;
+    const contactPurchase = b.contact_id ? purchasesByContact.get(b.contact_id) : null;
+    if (contactPurchase && contactPurchase >= b.last_at) return false;
+    return true;
+  });
 
   // Resolve contacts for the buckets that have contact_id
   const uniqueContactIds = Array.from(new Set(abandoned.map(b => b.contact_id).filter(Boolean))) as string[];

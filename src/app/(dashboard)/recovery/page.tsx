@@ -32,7 +32,7 @@ interface RecoveryItem {
   customer_email: string
   customer_phone?: string
   amount: number
-  status: 'pending' | 'sent' | 'recovered' | 'expired' | 'failed'
+  status: 'pending' | 'abandoned' | 'sent' | 'recovered' | 'expired' | 'failed'
   type: TabKey
   created_at: string
   recovered_at?: string
@@ -55,8 +55,9 @@ const tabs: { key: TabKey; label: string; icon: any }[] = [
 ]
 
 const statusConfig: Record<string, { label: string; className: string }> = {
-  pending: { label: 'Pendente', className: 'bg-amber-50 text-amber-700 border border-amber-200' },
-  sent: { label: 'Enviado', className: 'bg-blue-50 text-blue-700 border border-blue-200' },
+  pending: { label: 'Não recuperado', className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+  abandoned: { label: 'Não recuperado', className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+  sent: { label: 'Contatado', className: 'bg-blue-50 text-blue-700 border border-blue-200' },
   recovered: { label: 'Recuperado', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
   expired: { label: 'Expirado', className: 'bg-gray-50 text-gray-600 border border-gray-200' },
   failed: { label: 'Falhou', className: 'bg-red-50 text-red-700 border border-red-200' },
@@ -96,7 +97,7 @@ export default function RecoveryPage() {
         // UI:  pending | sent    | recovered | expired | failed
         const statusMap: Record<string, RecoveryItem['status']> = {
           pending: 'pending',
-          abandoned: 'pending',
+          abandoned: 'abandoned',
           recovered: 'recovered',
           converted: 'recovered',
           expired: 'expired',
