@@ -285,15 +285,15 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
               </div>
 
               {/* Preview frame */}
-              <div className="flex-1 overflow-auto bg-zinc-100 px-6 py-8 flex justify-center">
+              <div className="flex-1 overflow-auto bg-white px-6 py-8 flex justify-center">
                 {loading ? (
                   <div className="flex items-center justify-center h-full">
                     <Loader2 className="w-5 h-5 text-zinc-400 animate-spin" />
                   </div>
                 ) : html ? (
                   <div className={cn(
-                    'bg-white shadow-[0_10px_40px_-12px_rgba(0,0,0,0.15)] overflow-hidden transition-all duration-200 ring-1 ring-zinc-200/60',
-                    viewMode === 'mobile' ? 'w-[375px] rounded-[2.25rem]' : 'w-full max-w-[680px] rounded-xl',
+                    'overflow-hidden transition-all duration-200 shadow-[0_2px_20px_-4px_rgba(0,0,0,0.1)] ring-1 ring-zinc-200/50',
+                    viewMode === 'mobile' ? 'w-[375px] rounded-[2.25rem] bg-white' : 'w-[600px] max-w-[600px] rounded-lg',
                   )}>
                     {viewMode === 'mobile' && (
                       <div className="bg-zinc-900 h-6 flex justify-center items-center">
@@ -301,7 +301,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
                       </div>
                     )}
                     <iframe srcDoc={html}
-                      className={cn('w-full border-0 bg-white', viewMode === 'mobile' ? 'h-[640px]' : 'h-[720px]')}
+                      className={cn('w-full border-0', viewMode === 'mobile' ? 'h-[640px] bg-white' : 'h-[720px]')}
                       sandbox="allow-same-origin" title="Email preview" />
                   </div>
                 ) : (

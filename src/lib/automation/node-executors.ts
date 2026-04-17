@@ -378,8 +378,9 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
         // Resolve order-products blocks using event data before sending
         if (html.includes('WORDER_ORDER_BLOCK')) {
-          const { resolveOrderBlocks } = await import('@/lib/email/render');
+          const { resolveOrderBlocks, enrichOrderItemImages } = await import('@/lib/email/render');
           const eventData = context.trigger?.data || {};
+          await enrichOrderItemImages(eventData, supabase, undefined, organizationId);
           html = resolveOrderBlocks(html, eventData);
         }
 

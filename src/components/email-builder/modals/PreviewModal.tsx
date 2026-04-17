@@ -149,7 +149,7 @@ export function PreviewModal({ isOpen, onClose, html, subject, onSendTest }: Pre
             <div className="h-full overflow-auto bg-gray-100 flex items-start justify-center p-6">
               {/* Device frames */}
               {device === 'desktop' ? (
-                <div className="w-full max-w-[660px] bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+                <div className="w-[600px] max-w-[600px] bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
                   {/* Browser chrome */}
                   <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200">
                     <div className="flex gap-1.5">

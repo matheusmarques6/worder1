@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { renderMergeTags, resolveOrderBlocks } from '@/lib/email/render';
+import { renderMergeTags, resolveOrderBlocks, enrichOrderItemImages } from '@/lib/email/render';
 
 export const dynamic = 'force-dynamic';
 
@@ -202,6 +202,7 @@ export async function POST(request: NextRequest) {
         .limit(1)
         .maybeSingle();
       if (html.includes('WORDER_ORDER_BLOCK')) {
+        await enrichOrderItemImages(testEvent, supabase, undefined, organizationId);
         html = resolveOrderBlocks(html, testEvent);
       }
       html = renderMergeTags(html, buildMergeData(testContact, testEvent, testStore));
@@ -310,6 +311,7 @@ export async function POST(request: NextRequest) {
     // 5. Resolve order-products blocks using event data
     let processedHtml = template.html;
     if (processedHtml.includes('WORDER_ORDER_BLOCK')) {
+      await enrichOrderItemImages(eventData, supabase, undefined, organizationId);
       processedHtml = resolveOrderBlocks(processedHtml, eventData);
     }
 

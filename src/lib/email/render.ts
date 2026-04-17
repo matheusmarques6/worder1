@@ -431,6 +431,53 @@ export async function resolveCartBlocks(
 }
 
 /**
+ * Enriches Items[] in eventData with product images from shopify_products
+ * when ImageURL is missing (common for older events stored before the webhook fix).
+ * Mutates eventData.Items in place.
+ */
+export async function enrichOrderItemImages(
+  eventData: Record<string, any>,
+  supabase: any,
+  storeId?: string,
+  organizationId?: string,
+): Promise<void> {
+  const items: any[] = eventData?.Items || []
+  if (items.length === 0) return
+
+  const missingImage = items.some((it: any) => !it.ImageURL)
+  if (!missingImage) return
+
+  const productIds = [...new Set(items.map((it: any) => it.ProductID).filter(Boolean))]
+  if (productIds.length === 0) return
+
+  let query = supabase
+    .from('shopify_products')
+    .select('shopify_product_id, images, variants, handle')
+    .in('shopify_product_id', productIds)
+  if (storeId) query = query.eq('store_id', storeId)
+  else if (organizationId) query = query.eq('organization_id', organizationId)
+
+  const { data: prods } = await query
+  if (!prods || prods.length === 0) return
+
+  const pMap = new Map<string, any>()
+  for (const p of prods) pMap.set(p.shopify_product_id, p)
+
+  for (const item of items) {
+    if (item.ImageURL) continue
+    const prod = pMap.get(item.ProductID)
+    if (!prod) continue
+    const variant = (prod.variants || []).find((v: any) => String(v.id) === String(item.VariantID))
+    const variantImgId = variant?.image_id
+    const variantImg = variantImgId ? (prod.images || []).find((img: any) => img.id === variantImgId) : null
+    item.ImageURL = variantImg?.src || (prod.images || [])[0]?.src || ''
+    if (!item.ProductURL && prod.handle) {
+      item.ProductURL = item.ProductURL || ''
+    }
+  }
+}
+
+/**
  * Resolves <!-- WORDER_ORDER_BLOCK:{json} --> placeholders with real order product HTML.
  * Uses Items array from the order event properties (Klaviyo PascalCase format).
  */

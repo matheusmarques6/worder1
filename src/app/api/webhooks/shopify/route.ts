@@ -500,6 +500,24 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   // CDP: Criar eventos na contact_events
   // ======================================
   try {
+    // Look up product images from shopify_products so Items have real ImageURL
+    const orderProductIds = [...new Set(
+      (order.line_items || []).map((li: any) => li.product_id ? String(li.product_id) : null).filter(Boolean)
+    )] as string[]
+    let productImageMap = new Map<string, { images: any[]; variants: any[] }>()
+    if (orderProductIds.length > 0) {
+      const { data: prods } = await supabase
+        .from('shopify_products')
+        .select('shopify_product_id, images, variants')
+        .eq('store_id', store.id)
+        .in('shopify_product_id', orderProductIds)
+      if (prods) {
+        for (const p of prods) {
+          productImageMap.set(p.shopify_product_id, { images: p.images || [], variants: p.variants || [] })
+        }
+      }
+    }
+
     // Evento placed_order
     await createEvent({
       organization_id: store.organization_id,
@@ -520,21 +538,32 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
         TotalTax: parseFloat(order.total_tax || '0'),
         ItemCount: order.line_items?.length || 0,
         'Customer Locale': order.customer_locale || 'pt-BR',
-        Items: (order.line_items || []).map((item: any) => ({
-          ProductID: item.product_id ? String(item.product_id) : undefined,
-          SKU: item.sku,
-          ProductName: item.title || item.name,
-          Quantity: item.quantity || 1,
-          ItemPrice: parseFloat(item.price || '0'),
-          RowTotal: parseFloat(item.price || '0') * (item.quantity || 1),
-          VariantName: item.variant_title,
-          VariantID: item.variant_id ? String(item.variant_id) : undefined,
-          Brand: item.vendor,
-          ImageURL: item.product?.images?.[0]?.src || item.product?.image?.src || '',
-          ProductURL: item.product?.handle ? `https://${store.shop_domain}/products/${item.product.handle}` : '',
-          Categories: item.product?.product_type ? [item.product.product_type] : [],
-          CompareAtPrice: item.product?.variant?.images?.[0] ? undefined : undefined,
-        })),
+        Items: (order.line_items || []).map((item: any) => {
+          const pid = item.product_id ? String(item.product_id) : ''
+          const vid = item.variant_id ? String(item.variant_id) : ''
+          const prodData = productImageMap.get(pid)
+          let imageUrl = ''
+          if (prodData) {
+            const variant = prodData.variants?.find((v: any) => String(v.id) === vid)
+            const variantImgId = variant?.image_id
+            const variantImg = variantImgId ? prodData.images?.find((img: any) => img.id === variantImgId) : null
+            imageUrl = variantImg?.src || prodData.images?.[0]?.src || ''
+          }
+          return {
+            ProductID: pid || undefined,
+            SKU: item.sku,
+            ProductName: item.title || item.name,
+            Quantity: item.quantity || 1,
+            ItemPrice: parseFloat(item.price || '0'),
+            RowTotal: parseFloat(item.price || '0') * (item.quantity || 1),
+            VariantName: item.variant_title,
+            VariantID: vid || undefined,
+            Brand: item.vendor,
+            ImageURL: imageUrl,
+            ProductURL: prodData ? `https://${store.shop_domain}/products/${item.product?.handle || ''}` : '',
+            Categories: item.product?.product_type ? [item.product.product_type] : [],
+          }
+        }),
         ItemNames: (order.line_items || []).map((item: any) => item.title || item.name),
         Categories: [...new Set((order.line_items || []).map((item: any) => item.product?.product_type).filter(Boolean))],
         Collections: [...new Set((order.line_items || []).flatMap((item: any) => item.product?.tags?.split(',').map((t: string) => t.trim()) || []))],
