@@ -597,6 +597,23 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
         )
         section.styles.backgroundColor = '#FFFFFF'
         break
+      case 'order-confirmation':
+        blocks.push(
+          { id: bid(), type: 'text', props: { contentHtml: '<h2 style="text-align:center;font-size:24px;font-weight:bold;color:#111827;margin:0;">Order Summary</h2>', fontSize: 24, color: '#111827', align: 'center', padding: { top: 24, right: 24, bottom: 4, left: 24 } } },
+          { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;color:#9CA3AF;font-size:14px;margin:0;">Order: {{order_number}}<br/>{{order_date}}</p>', fontSize: 14, color: '#9CA3AF', align: 'center', padding: { top: 0, right: 24, bottom: 16, left: 24 } } },
+          { id: bid(), type: 'order-products', props: {
+            showImage: true, showName: true, showQuantity: true, showPrice: true,
+            showVariant: true, showSku: false, showDiscount: true,
+            showTotals: true, showSubtotal: true, showShipping: true, showTax: true, showTotalDiscount: true,
+            primaryTextColor: '#000000', secondaryTextColor: '#AFAFAF',
+            priceTextColor: '#000000', totalTextColor: '#000000', dividerColor: '#EDEDED',
+            imageWidth: 80, imageBorderRadius: 4,
+            separator: true, separatorColor: '#EDEDED',
+            padding: { top: 0, right: 24, bottom: 24, left: 24 },
+            backgroundColor: '',
+          }},
+        )
+        break
       default:
         return
     }

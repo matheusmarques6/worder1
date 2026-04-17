@@ -207,6 +207,36 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}font-family:${font};"><!-- WORDER_CART_BLOCK:${configJson} --></td></tr>`
     }
 
+    case 'order-products': {
+      const orderConfig = {
+        type: 'order-products',
+        showImage: p.showImage !== false,
+        showName: p.showName !== false,
+        showQuantity: p.showQuantity !== false,
+        showPrice: p.showPrice !== false,
+        showVariant: p.showVariant !== false,
+        showSku: p.showSku || false,
+        showDiscount: p.showDiscount !== false,
+        showTotals: p.showTotals !== false,
+        showSubtotal: p.showSubtotal !== false,
+        showShipping: p.showShipping !== false,
+        showTax: p.showTax !== false,
+        showTotalDiscount: p.showTotalDiscount !== false,
+        primaryTextColor: p.primaryTextColor || '#000000',
+        secondaryTextColor: p.secondaryTextColor || '#AFAFAF',
+        priceTextColor: p.priceTextColor || '#000000',
+        totalTextColor: p.totalTextColor || '#000000',
+        dividerColor: p.dividerColor || '#EDEDED',
+        imageWidth: p.imageWidth || 80,
+        imageBorderRadius: p.imageBorderRadius ?? 4,
+        separator: p.separator !== false,
+        separatorColor: p.separatorColor || '#EDEDED',
+        font,
+      }
+      const configJson = encodeURIComponent(JSON.stringify(orderConfig))
+      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}font-family:${font};"><!-- WORDER_ORDER_BLOCK:${configJson} --></td></tr>`
+    }
+
     case 'coupon': {
       const cpv = p.codePaddingV ?? 10
       const cph = p.codePaddingH ?? 28

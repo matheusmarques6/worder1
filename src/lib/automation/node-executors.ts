@@ -376,6 +376,13 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
         const { sendCampaignEmail } = await import('@/lib/email/send-campaign-email');
 
+        // Resolve order-products blocks using event data before sending
+        if (html.includes('WORDER_ORDER_BLOCK')) {
+          const { resolveOrderBlocks } = await import('@/lib/email/render');
+          const eventData = context.trigger?.data || {};
+          html = resolveOrderBlocks(html, eventData);
+        }
+
         // Build merge data from the same context we already resolved
         // (contact + event + store). Using empty mergeData works too
         // because the HTML/subject were pre-rendered by the variable

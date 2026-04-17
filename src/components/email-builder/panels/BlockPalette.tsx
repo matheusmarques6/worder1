@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { ShoppingBag, Tag, ShoppingCart, Type, ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Package, User, Store, Package2, Link, LucideIcon, Menu, Layers, Table, Quote, Clock, GripVertical, Star, Trash2, Search, ExternalLink } from 'lucide-react'
+import { ShoppingBag, Tag, ShoppingCart, Type, ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Package, User, Store, Package2, Link, LucideIcon, Menu, Layers, Table, Quote, Clock, GripVertical, Star, Trash2, Search, ExternalLink, Receipt } from 'lucide-react'
 import { BLOCK_DEFS, type BlockDef, type EmailBlock, type EmailSection } from '../config/types'
 
 const ICON_MAP: Record<string, LucideIcon> = {
-  ShoppingBag, Tag, ShoppingCart, Type, Image: ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Menu, Layers, Table, Quote, Clock,
+  ShoppingBag, Tag, ShoppingCart, Type, Image: ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Menu, Layers, Table, Quote, Clock, Receipt,
 }
 
 // ── Pre-built section definitions with SVG previews ──
@@ -78,6 +78,28 @@ const PREBUILT_SECTIONS = [
         <div className="flex items-center justify-center gap-1 mt-1">
           <div className="w-3 h-3 bg-zinc-300 rounded-full" />
           <div className="h-1 w-8 bg-zinc-300 rounded" />
+        </div>
+      </div>
+    ),
+  },
+  {
+    type: 'order-confirmation', label: 'Pedido',
+    description: 'Resumo do pedido com produtos',
+    preview: (
+      <div className="w-full bg-white rounded-md p-2 border border-zinc-100 space-y-1.5">
+        <div className="h-2 w-16 bg-zinc-300 rounded mx-auto" />
+        <div className="h-1 w-12 bg-zinc-200 rounded mx-auto" />
+        <div className="flex gap-1.5 items-start">
+          <div className="w-6 h-6 bg-zinc-100 rounded flex-shrink-0" />
+          <div className="flex-1 space-y-0.5">
+            <div className="h-1.5 w-14 bg-zinc-200 rounded" />
+            <div className="h-1 w-10 bg-zinc-100 rounded" />
+          </div>
+          <div className="h-1.5 w-6 bg-zinc-200 rounded" />
+        </div>
+        <div className="border-t border-zinc-100 pt-1 flex justify-between">
+          <div className="h-1.5 w-8 bg-zinc-300 rounded" />
+          <div className="h-1.5 w-8 bg-zinc-800 rounded" />
         </div>
       </div>
     ),

@@ -431,6 +431,131 @@ export async function resolveCartBlocks(
 }
 
 /**
+ * Resolves <!-- WORDER_ORDER_BLOCK:{json} --> placeholders with real order product HTML.
+ * Uses Items array from the order event properties (Klaviyo PascalCase format).
+ */
+export function resolveOrderBlocks(
+  html: string,
+  eventData: Record<string, any>
+): string {
+  const regex = /<!-- WORDER_ORDER_BLOCK:([^ ]*?) -->/g
+  let result = html
+  const matches: RegExpExecArray[] = []
+  let m: RegExpExecArray | null
+  while ((m = regex.exec(html)) !== null) matches.push(m)
+  if (matches.length === 0) return html
+
+  const items: any[] = eventData?.Items || eventData?.items || eventData?.line_items || []
+  const currency = eventData?.Currency || eventData?.currency || 'BRL'
+  const currencySymbol = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : 'R$'
+
+  const fmtPrice = (v: any): string => {
+    const n = typeof v === 'number' ? v : parseFloat(String(v || '0'))
+    if (isNaN(n)) return `${currencySymbol}0.00`
+    return `${currencySymbol}${n.toFixed(2)}`
+  }
+
+  for (const match of matches) {
+    let cfg: any = {}
+    try { cfg = JSON.parse(decodeURIComponent(match[1])) } catch { continue }
+
+    const font = cfg.font || 'Arial, sans-serif'
+    const primColor = cfg.primaryTextColor || '#000000'
+    const secColor = cfg.secondaryTextColor || '#AFAFAF'
+    const priceColor = cfg.priceTextColor || '#000000'
+    const totalColor = cfg.totalTextColor || primColor
+    const divColor = cfg.dividerColor || '#EDEDED'
+    const imgW = cfg.imageWidth || 80
+    const imgR = cfg.imageBorderRadius ?? 4
+    const sepColor = cfg.separatorColor || divColor
+
+    if (items.length === 0) {
+      result = result.replace(match[0], '')
+      continue
+    }
+
+    let orderHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:${font};">`
+
+    items.forEach((item: any, i: number) => {
+      const title = item.ProductName || item.title || item.name || 'Product'
+      const qty = item.Quantity || item.quantity || 1
+      const itemPrice = item.ItemPrice ?? item.price ?? 0
+      const rowTotal = item.RowTotal ?? (itemPrice * qty)
+      const variantName = item.VariantName || item.variant_title || ''
+      const sku = item.SKU || item.sku || ''
+      const imgUrl = item.ImageURL || item.image_url || ''
+      const brand = item.Brand || item.vendor || ''
+      const discount = item.DiscountAmount || item.discount || 0
+      const priceAfterDiscount = discount > 0 ? rowTotal - discount : rowTotal
+
+      let imgCell = ''
+      if (cfg.showImage) {
+        imgCell = `<td width="${imgW}" valign="top" style="vertical-align:top;padding-right:12px;">${imgUrl
+          ? `<img src="${imgUrl}" alt="${title}" width="${imgW}" height="${imgW}" style="display:block;width:${imgW}px;height:${imgW}px;object-fit:cover;border-radius:${imgR}px;border:0;" />`
+          : `<div style="width:${imgW}px;height:${imgW}px;background:#F3F4F6;border-radius:${imgR}px;"></div>`
+        }</td>`
+      }
+
+      let detailLines: string[] = []
+      if (cfg.showName) {
+        detailLines.push(`<p style="margin:0;font-size:14px;font-weight:600;color:${primColor};">${title}${cfg.showQuantity ? ` &times; ${qty}` : ''}</p>`)
+      }
+      if (cfg.showVariant && variantName) {
+        detailLines.push(`<p style="margin:2px 0 0;font-size:12px;color:${secColor};">Variant: ${variantName}</p>`)
+      }
+      if (cfg.showSku && sku) {
+        detailLines.push(`<p style="margin:2px 0 0;font-size:11px;color:${secColor};">SKU: ${sku}</p>`)
+      }
+      if (cfg.showDiscount && discount > 0) {
+        detailLines.push(`<p style="margin:4px 0 0;font-size:12px;color:${secColor};">Discount: <span style="float:right;">-${fmtPrice(discount)}</span></p>`)
+        detailLines.push(`<p style="margin:2px 0 0;font-size:13px;font-weight:600;color:${primColor};">Price after discount: <span style="float:right;color:${priceColor};font-weight:700;">${fmtPrice(priceAfterDiscount)}</span></p>`)
+      }
+
+      const priceCell = cfg.showPrice
+        ? `<td width="80" valign="top" style="vertical-align:top;text-align:right;"><p style="margin:0;font-size:14px;font-weight:600;color:${priceColor};">${fmtPrice(rowTotal)}</p></td>`
+        : ''
+
+      orderHtml += `<tr><td style="padding:12px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${imgCell}<td valign="top" style="vertical-align:top;">${detailLines.join('')}</td>${priceCell}</tr></table></td></tr>`
+
+      if (cfg.separator && i < items.length - 1) {
+        orderHtml += `<tr><td style="border-top:1px solid ${sepColor};font-size:1px;line-height:1px;">&nbsp;</td></tr>`
+      }
+    })
+
+    if (cfg.showTotals) {
+      const totalPrice = eventData?.$value || eventData?.total_price || eventData?.TotalPrice || 0
+      const subtotalPrice = eventData?.SubtotalPrice || eventData?.subtotal_price || 0
+      const shippingPrice = eventData?.TotalShipping || eventData?.total_shipping || eventData?.ShippingRate || 0
+      const taxPrice = eventData?.TotalTax || eventData?.total_tax || 0
+      const discountTotal = eventData?.DiscountValue || eventData?.total_discounts || 0
+
+      orderHtml += `<tr><td style="border-top:1px solid ${divColor};padding-top:12px;">`
+      orderHtml += `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:${font};">`
+      if (cfg.showTotalDiscount && discountTotal > 0) {
+        orderHtml += `<tr><td style="font-size:13px;color:${secColor};padding:2px 0;">Discount:</td><td style="font-size:13px;color:${secColor};padding:2px 0;text-align:right;">-${fmtPrice(discountTotal)}</td></tr>`
+      }
+      if (cfg.showSubtotal) {
+        orderHtml += `<tr><td style="font-size:13px;color:${secColor};padding:2px 0;">Subtotal price:</td><td style="font-size:13px;color:${secColor};padding:2px 0;text-align:right;">${fmtPrice(subtotalPrice)}</td></tr>`
+      }
+      if (cfg.showShipping) {
+        orderHtml += `<tr><td style="font-size:13px;color:${secColor};padding:2px 0;">Shipping price:</td><td style="font-size:13px;color:${secColor};padding:2px 0;text-align:right;">${fmtPrice(typeof shippingPrice === 'number' ? shippingPrice : 0)}</td></tr>`
+      }
+      if (cfg.showTax) {
+        orderHtml += `<tr><td style="font-size:13px;color:${secColor};padding:2px 0;">Tax:</td><td style="font-size:13px;color:${secColor};padding:2px 0;text-align:right;">${fmtPrice(taxPrice)}</td></tr>`
+      }
+      orderHtml += `<tr><td colspan="2" style="border-top:2px solid ${divColor};padding-top:8px;"></td></tr>`
+      orderHtml += `<tr><td style="font-size:16px;font-weight:700;color:${totalColor};padding:0;">Total price:</td><td style="font-size:16px;font-weight:700;color:${totalColor};padding:0;text-align:right;">${fmtPrice(totalPrice)}</td></tr>`
+      orderHtml += `</table></td></tr>`
+    }
+
+    orderHtml += '</table>'
+    result = result.replace(match[0], orderHtml)
+  }
+
+  return result
+}
+
+/**
  * Full email preparation pipeline.
  */
 export function prepareEmailHtml({

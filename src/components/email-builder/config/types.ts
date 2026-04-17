@@ -6,7 +6,7 @@
 export type BlockType =
   | 'text' | 'image' | 'button' | 'divider' | 'spacer'
   | 'columns' | 'html' | 'social' | 'video'
-  | 'product-grid' | 'coupon' | 'abandoned-cart'
+  | 'product-grid' | 'coupon' | 'abandoned-cart' | 'order-products'
   | 'header' | 'footer'
   | 'split' | 'header-bar' | 'drop-shadow' | 'table' | 'review-quote' | 'countdown'
 
@@ -260,6 +260,35 @@ export const BLOCK_DEFS: BlockDef[] = [
       stackOnMobile: true,
       separator: true, separatorColor: '#E5E7EB',
       // Block
+      padding: { top: 24, right: 24, bottom: 24, left: 24 },
+      backgroundColor: '',
+      visibility: 'all',
+    } },
+
+  // ── Pedido: bloco dinâmico que renderiza line_items do evento de pedido ──
+  { type: 'order-products', label: 'Pedido', icon: 'Receipt', category: 'E-commerce',
+    defaultProps: {
+      showImage: true,
+      showName: true,
+      showQuantity: true,
+      showPrice: true,
+      showVariant: true,
+      showSku: false,
+      showDiscount: true,
+      showTotals: true,
+      showSubtotal: true,
+      showShipping: true,
+      showTax: true,
+      showTotalDiscount: true,
+      primaryTextColor: '#000000',
+      secondaryTextColor: '#AFAFAF',
+      priceTextColor: '#000000',
+      totalTextColor: '#000000',
+      dividerColor: '#EDEDED',
+      imageWidth: 80,
+      imageBorderRadius: 4,
+      separator: true,
+      separatorColor: '#EDEDED',
       padding: { top: 24, right: 24, bottom: 24, left: 24 },
       backgroundColor: '',
       visibility: 'all',

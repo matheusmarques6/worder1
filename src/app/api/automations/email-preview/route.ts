@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { renderMergeTags } from '@/lib/email/render';
+import { renderMergeTags, resolveOrderBlocks } from '@/lib/email/render';
 
 export const dynamic = 'force-dynamic';
 
@@ -201,6 +201,9 @@ export async function POST(request: NextRequest) {
         .eq('organization_id', organizationId)
         .limit(1)
         .maybeSingle();
+      if (html.includes('WORDER_ORDER_BLOCK')) {
+        html = resolveOrderBlocks(html, testEvent);
+      }
       html = renderMergeTags(html, buildMergeData(testContact, testEvent, testStore));
 
       // Send via Resend usando remetente configurado da org
@@ -304,12 +307,18 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .maybeSingle();
 
-    // 5. Resolve merge tags using the production engine — covers {{first_name}},
+    // 5. Resolve order-products blocks using event data
+    let processedHtml = template.html;
+    if (processedHtml.includes('WORDER_ORDER_BLOCK')) {
+      processedHtml = resolveOrderBlocks(processedHtml, eventData);
+    }
+
+    // 6. Resolve merge tags using the production engine — covers {{first_name}},
     // {{email}}, {{store_name}}, {{event.*}}, {{order_number}}, etc.
     const mergeData = buildMergeData(contact, eventData, store);
-    const html = renderMergeTags(template.html, mergeData);
+    const html = renderMergeTags(processedHtml, mergeData);
 
-    // 6. Build response
+    // 7. Build response
     return NextResponse.json({
       html,
       subject: template.name,

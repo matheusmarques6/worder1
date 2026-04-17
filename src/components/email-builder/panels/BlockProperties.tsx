@@ -815,6 +815,99 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
         </div>
       )
 
+    case 'order-products':
+      return (
+        <div className="space-y-4">
+          <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+            <div className="w-7 h-7 rounded-md bg-zinc-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </div>
+            <div>
+              <p className="text-[11px] text-zinc-600 leading-snug">Selected details will be filled right from the customer&apos;s order.</p>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[12px] font-medium text-zinc-700 mb-2">Product details</p>
+            <div className="space-y-1.5">
+              {[
+                { key: 'showImage', label: 'Image' },
+                { key: 'showName', label: 'Name' },
+                { key: 'showQuantity', label: 'Quantity' },
+                { key: 'showVariant', label: 'Variant' },
+                { key: 'showSku', label: 'SKU' },
+                { key: 'showPrice', label: 'Price' },
+                { key: 'showDiscount', label: 'Discount amount' },
+              ].map(item => (
+                <label key={item.key} className="flex items-center gap-2.5 cursor-pointer py-0.5">
+                  <input type="checkbox" checked={p[item.key] !== false} onChange={e => onChange(item.key, e.target.checked)}
+                    className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500" />
+                  <span className="text-[13px] text-zinc-700">{item.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <details className="group border border-zinc-100 rounded-lg" open>
+            <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+              Colors <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <Field label="Primary text color"><ColorInput value={p.primaryTextColor || '#000000'} onChange={v => onChange('primaryTextColor', v)} /></Field>
+              <Field label="Secondary text color"><ColorInput value={p.secondaryTextColor || '#AFAFAF'} onChange={v => onChange('secondaryTextColor', v)} /></Field>
+              <Field label="Price text color"><ColorInput value={p.priceTextColor || '#000000'} onChange={v => onChange('priceTextColor', v)} /></Field>
+              <Field label="Divider color"><ColorInput value={p.dividerColor || '#EDEDED'} onChange={v => onChange('dividerColor', v)} /></Field>
+            </div>
+          </details>
+
+          <details className="group border border-zinc-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+              Totals <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+            </summary>
+            <div className="px-3 pb-3 space-y-1.5">
+              {[
+                { key: 'showTotals', label: 'Show totals section' },
+                { key: 'showTotalDiscount', label: 'Discount' },
+                { key: 'showSubtotal', label: 'Subtotal' },
+                { key: 'showShipping', label: 'Shipping' },
+                { key: 'showTax', label: 'Tax' },
+              ].map(item => (
+                <label key={item.key} className="flex items-center gap-2.5 cursor-pointer py-0.5">
+                  <input type="checkbox" checked={p[item.key] !== false} onChange={e => onChange(item.key, e.target.checked)}
+                    className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500" />
+                  <span className="text-[13px] text-zinc-700">{item.label}</span>
+                </label>
+              ))}
+              <Field label="Total text color"><ColorInput value={p.totalTextColor || '#000000'} onChange={v => onChange('totalTextColor', v)} /></Field>
+            </div>
+          </details>
+
+          <details className="group border border-zinc-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+              Image <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <Field label="Image size (px)"><NumberInput value={p.imageWidth || 80} onChange={v => onChange('imageWidth', v)} min={40} max={200} /></Field>
+              <Field label="Border radius"><NumberInput value={p.imageBorderRadius ?? 4} onChange={v => onChange('imageBorderRadius', v)} min={0} max={40} /></Field>
+            </div>
+          </details>
+
+          <details className="group border border-zinc-100 rounded-lg">
+            <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+              Display <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <Toggle value={p.separator !== false} onChange={v => onChange('separator', v)} label="Separator between products" />
+              {p.separator !== false && (
+                <Field label="Separator color"><ColorInput value={p.separatorColor || '#EDEDED'} onChange={v => onChange('separatorColor', v)} /></Field>
+              )}
+            </div>
+          </details>
+
+          {commonTail()}
+        </div>
+      )
+
     case 'coupon':
       return (
         <div className="space-y-4">

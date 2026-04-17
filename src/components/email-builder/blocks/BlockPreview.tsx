@@ -14,7 +14,7 @@ interface BlockPreviewProps {
   onSelectSubElement?: (subEl: string | null) => void
 }
 
-const DYNAMIC_TYPES = new Set(['product-grid', 'abandoned-cart', 'coupon'])
+const DYNAMIC_TYPES = new Set(['product-grid', 'abandoned-cart', 'order-products', 'coupon'])
 
 const SOCIAL_ICONS: Record<string, { icon: typeof Instagram; label: string }> = {
   instagram: { icon: Instagram, label: 'Instagram' },
@@ -674,6 +674,101 @@ export function BlockPreview({
                 )
               })}
             </div>
+          </div>
+        )
+      }
+
+      // ── Order Products ──
+      case 'order-products': {
+        const sampleItems = [
+          { name: 'Product name', qty: 1, price: 'R$0.00', variant: 'Variant', img: '' },
+          { name: 'Product name', qty: 1, price: 'R$0.00', variant: 'Variant', img: '' },
+        ]
+        const imgW = p.imageWidth || 80
+        const imgR = p.imageBorderRadius ?? 4
+        const primColor = p.primaryTextColor || '#000000'
+        const secColor = p.secondaryTextColor || '#AFAFAF'
+        const priceColor = p.priceTextColor || '#000000'
+        const divColor = p.dividerColor || '#EDEDED'
+        return (
+          <div style={{ ...pad, backgroundColor: p.backgroundColor || undefined }}>
+            {sampleItems.map((item, i) => (
+              <div key={i}>
+                <div style={{ display: 'flex', gap: 12, padding: '12px 0' }}>
+                  {p.showImage !== false && (
+                    <div style={{
+                      width: imgW, height: imgW, flexShrink: 0,
+                      background: '#F3F4F6', borderRadius: imgR,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#9CA3AF', fontSize: 10,
+                    }}>
+                      Imagem
+                    </div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        {p.showName !== false && (
+                          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: primColor }}>
+                            {item.name}{p.showQuantity !== false ? ` × ${item.qty}` : ''}
+                          </p>
+                        )}
+                        {p.showVariant !== false && (
+                          <p style={{ margin: '2px 0 0', fontSize: 12, color: secColor }}>Variant: {item.variant}</p>
+                        )}
+                        {p.showSku && (
+                          <p style={{ margin: '2px 0 0', fontSize: 11, color: secColor }}>SKU: ABC123</p>
+                        )}
+                      </div>
+                      {p.showPrice !== false && (
+                        <span style={{ fontSize: 14, fontWeight: 600, color: priceColor, flexShrink: 0 }}>{item.price}</span>
+                      )}
+                    </div>
+                    {p.showDiscount && (
+                      <div style={{ marginTop: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: secColor }}>
+                          <span>Discount:</span><span>-R$0.00</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: primColor, marginTop: 2 }}>
+                          <span>Price after discount:</span><span style={{ color: priceColor }}>R$0.00</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {p.separator !== false && i < sampleItems.length - 1 && (
+                  <hr style={{ border: 'none', borderTop: `1px solid ${p.separatorColor || divColor}`, margin: 0 }} />
+                )}
+              </div>
+            ))}
+            {p.showTotals !== false && (
+              <div style={{ borderTop: `1px solid ${divColor}`, marginTop: 8, paddingTop: 12 }}>
+                {p.showTotalDiscount !== false && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '2px 0' }}>
+                    <span>Discount:</span><span>-R$0.00</span>
+                  </div>
+                )}
+                {p.showSubtotal !== false && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '2px 0' }}>
+                    <span>Subtotal price:</span><span>R$0.00</span>
+                  </div>
+                )}
+                {p.showShipping !== false && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '2px 0' }}>
+                    <span>Shipping price:</span><span>R$0.00</span>
+                  </div>
+                )}
+                {p.showTax !== false && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: secColor, padding: '2px 0' }}>
+                    <span>Tax:</span><span>R$0.00</span>
+                  </div>
+                )}
+                <hr style={{ border: 'none', borderTop: `2px solid ${divColor}`, margin: '8px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 700, color: p.totalTextColor || primColor }}>
+                  <span>Total price:</span><span>R$0.00</span>
+                </div>
+              </div>
+            )}
           </div>
         )
       }
