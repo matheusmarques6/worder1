@@ -48,9 +48,6 @@ export async function GET(request: NextRequest) {
 }
 
 function generatePixelCode(trackEndpoint: string, shopDomain: string): string {
-  // NOTE: the returned string is JavaScript that runs inside Shopify's
-  // sandboxed Custom Pixel environment — it has `analytics`, `browser`
-  // (async storage), and `init` (page context) available globally.
   return `// Worder Tracking Pixel
 // Envia eventos de comportamento do visitante para o Worder CDP
 // NAO edite este codigo — ele e gerado automaticamente
@@ -61,44 +58,39 @@ const WORDER_CONFIG = {
 };
 
 function generateId() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = (Math.random() * 16) | 0;
     return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
   });
 }
 
-let visitorId;
-try {
-  visitorId = await browser.localStorage.getItem('_worder_vid');
-  if (!visitorId) {
-    visitorId = generateId();
-    await browser.localStorage.setItem('_worder_vid', visitorId);
-  }
-} catch (e) {
-  visitorId = generateId();
-}
+var visitorId = generateId();
+var sessionId = generateId();
 
-let sessionId;
-try {
-  sessionId = await browser.sessionStorage.getItem('_worder_sid');
-  if (!sessionId) {
-    sessionId = generateId();
-    await browser.sessionStorage.setItem('_worder_sid', sessionId);
-  }
-} catch (e) {
-  sessionId = generateId();
-}
+// Restore persisted IDs (async — runs before first event fires)
+(async function() {
+  try {
+    var stored = await browser.localStorage.getItem('_worder_vid');
+    if (stored) { visitorId = stored; }
+    else { await browser.localStorage.setItem('_worder_vid', visitorId); }
+  } catch(e) {}
+  try {
+    var sid = await browser.sessionStorage.getItem('_worder_sid');
+    if (sid) { sessionId = sid; }
+    else { await browser.sessionStorage.setItem('_worder_sid', sessionId); }
+  } catch(e) {}
+})();
 
 function sendEvent(eventType, eventData, eventContext) {
-  const ctx = eventContext || {};
-  const payload = {
+  var ctx = eventContext || {};
+  var payload = {
     event_type: eventType,
     shop_domain: WORDER_CONFIG.shopDomain,
     visitor_id: visitorId,
     session_id: sessionId,
-    page_url: ctx?.document?.location?.href || (typeof init !== 'undefined' ? init.context?.document?.location?.href : '') || '',
-    page_title: ctx?.document?.title || (typeof init !== 'undefined' ? init.context?.document?.title : '') || '',
-    referrer: ctx?.document?.referrer || (typeof init !== 'undefined' ? init.context?.document?.referrer : '') || '',
+    page_url: (ctx.document && ctx.document.location && ctx.document.location.href) || '',
+    page_title: (ctx.document && ctx.document.title) || '',
+    referrer: (ctx.document && ctx.document.referrer) || '',
     timestamp: new Date().toISOString(),
     data: eventData || {},
   };
@@ -108,171 +100,148 @@ function sendEvent(eventType, eventData, eventContext) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
     keepalive: true,
-  }).catch(() => {});
+  }).catch(function() {});
 }
 
-// Page View
-analytics.subscribe('page_viewed', (event) => {
+analytics.subscribe('page_viewed', function(event) {
   sendEvent('page_view', {
     page_type: 'page',
-    url: event.context?.document?.location?.href,
-    title: event.context?.document?.title,
-    referrer: event.context?.document?.referrer,
+    url: event.context.document.location.href,
+    title: event.context.document.title,
+    referrer: event.context.document.referrer,
   }, event.context);
 });
 
-// Product Viewed
-analytics.subscribe('product_viewed', (event) => {
-  const variant = event.data?.productVariant;
+analytics.subscribe('product_viewed', function(event) {
+  var variant = event.data.productVariant;
   sendEvent('viewed_product', {
-    product_id: variant?.product?.id,
-    product_title: variant?.product?.title || variant?.title,
-    product_url: variant?.product?.url,
-    product_type: variant?.product?.type,
-    product_vendor: variant?.product?.vendor,
-    price: variant?.price?.amount,
-    currency: variant?.price?.currencyCode,
-    variant_id: variant?.id,
-    variant_title: variant?.title,
-    image_url: variant?.image?.src || null,
-    sku: variant?.sku,
+    product_id: variant.product.id,
+    product_title: variant.product.title || variant.title,
+    product_url: variant.product.url,
+    product_type: variant.product.type,
+    product_vendor: variant.product.vendor,
+    price: variant.price.amount,
+    currency: variant.price.currencyCode,
+    variant_id: variant.id,
+    variant_title: variant.title,
+    image_url: variant.image ? variant.image.src : null,
+    sku: variant.sku,
   }, event.context);
 });
 
-// Collection Viewed
-analytics.subscribe('collection_viewed', (event) => {
-  const collection = event.data?.collection;
+analytics.subscribe('collection_viewed', function(event) {
+  var collection = event.data.collection;
   sendEvent('viewed_collection', {
-    collection_id: collection?.id,
-    collection_title: collection?.title,
-    collection_url: event.context?.document?.location?.href,
+    collection_id: collection.id,
+    collection_title: collection.title,
+    collection_url: event.context.document.location.href,
   }, event.context);
 });
 
-// Search Submitted
-analytics.subscribe('search_submitted', (event) => {
+analytics.subscribe('search_submitted', function(event) {
   sendEvent('submitted_search', {
-    query: event.data?.searchResult?.query,
-    results_count: event.data?.searchResult?.productVariants?.length || 0,
+    query: event.data.searchResult.query,
+    results_count: event.data.searchResult.productVariants ? event.data.searchResult.productVariants.length : 0,
   }, event.context);
 });
 
-// Product Added to Cart
-analytics.subscribe('product_added_to_cart', (event) => {
-  const cartLine = event.data?.cartLine;
-  const merch = cartLine?.merchandise;
+analytics.subscribe('product_added_to_cart', function(event) {
+  var cartLine = event.data.cartLine;
+  var merch = cartLine.merchandise;
   sendEvent('added_to_cart', {
-    product_id: merch?.product?.id,
-    product_title: merch?.product?.title || merch?.title,
-    variant_id: merch?.id,
-    variant_title: merch?.title,
-    price: cartLine?.cost?.totalAmount?.amount,
-    currency: cartLine?.cost?.totalAmount?.currencyCode,
-    quantity: cartLine?.quantity || 1,
-    sku: merch?.sku,
-    image_url: merch?.image?.src || null,
+    product_id: merch.product.id,
+    product_title: merch.product.title || merch.title,
+    variant_id: merch.id,
+    variant_title: merch.title,
+    price: cartLine.cost.totalAmount.amount,
+    currency: cartLine.cost.totalAmount.currencyCode,
+    quantity: cartLine.quantity || 1,
+    sku: merch.sku,
+    image_url: merch.image ? merch.image.src : null,
   }, event.context);
 });
 
-// Cart Viewed
-analytics.subscribe('cart_viewed', (event) => {
-  const cart = event.data?.cart;
-  sendEvent('cart_viewed', {
-    cart_total: cart?.cost?.totalAmount?.amount,
-    currency: cart?.cost?.totalAmount?.currencyCode,
-    item_count: cart?.lines?.length || 0,
-    items: (cart?.lines || []).map((line) => ({
-      product_id: line.merchandise?.product?.id,
-      title: line.merchandise?.product?.title || line.merchandise?.title,
-      quantity: line.quantity,
-      price: line.cost?.totalAmount?.amount,
-    })),
-  }, event.context);
-});
-
-// Checkout Started
-analytics.subscribe('checkout_started', (event) => {
-  const checkout = event.data?.checkout;
+analytics.subscribe('checkout_started', function(event) {
+  var checkout = event.data.checkout;
   sendEvent('checkout_started', {
-    checkout_id: checkout?.token,
-    total_price: checkout?.totalPrice?.amount,
-    subtotal_price: checkout?.subtotalPrice?.amount,
-    currency: checkout?.currencyCode,
-    item_count: checkout?.lineItems?.length || 0,
-    items: (checkout?.lineItems || []).map((item) => ({
-      product_id: item.variant?.product?.id,
-      title: item.title,
-      quantity: item.quantity,
-      price: item.variant?.price?.amount,
-      variant_title: item.variant?.title,
-      sku: item.variant?.sku,
-      image_url: item.variant?.image?.src || null,
-    })),
+    checkout_id: checkout.token,
+    total_price: checkout.totalPrice.amount,
+    subtotal_price: checkout.subtotalPrice.amount,
+    currency: checkout.currencyCode,
+    item_count: checkout.lineItems.length,
+    items: checkout.lineItems.map(function(item) {
+      return {
+        product_id: item.variant.product.id,
+        title: item.title,
+        quantity: item.quantity,
+        price: item.variant.price.amount,
+        variant_title: item.variant.title,
+        sku: item.variant.sku,
+      };
+    }),
   }, event.context);
 });
 
-// Email captured at checkout
-analytics.subscribe('checkout_contact_info_submitted', (event) => {
-  const checkout = event.data?.checkout;
+analytics.subscribe('checkout_contact_info_submitted', function(event) {
+  var checkout = event.data.checkout;
   sendEvent('email_captured', {
-    email: checkout?.email,
-    phone: checkout?.phone,
-    checkout_id: checkout?.token,
-    total_price: checkout?.totalPrice?.amount,
-    currency: checkout?.currencyCode,
+    email: checkout.email,
+    phone: checkout.phone,
+    checkout_id: checkout.token,
+    total_price: checkout.totalPrice.amount,
+    currency: checkout.currencyCode,
   }, event.context);
 });
 
-// Shipping info
-analytics.subscribe('checkout_shipping_info_submitted', (event) => {
-  const checkout = event.data?.checkout;
-  const address = checkout?.shippingAddress;
+analytics.subscribe('checkout_shipping_info_submitted', function(event) {
+  var checkout = event.data.checkout;
+  var address = checkout.shippingAddress;
   sendEvent('checkout_shipping_submitted', {
-    checkout_id: checkout?.token,
-    city: address?.city,
-    province: address?.province,
-    country: address?.country,
-    zip: address?.zip,
+    checkout_id: checkout.token,
+    city: address.city,
+    province: address.province,
+    country: address.country,
+    zip: address.zip,
   }, event.context);
 });
 
-// Payment info
-analytics.subscribe('payment_info_submitted', (event) => {
-  const checkout = event.data?.checkout;
+analytics.subscribe('payment_info_submitted', function(event) {
+  var checkout = event.data.checkout;
   sendEvent('payment_submitted', {
-    checkout_id: checkout?.token,
-    total_price: checkout?.totalPrice?.amount,
-    currency: checkout?.currencyCode,
+    checkout_id: checkout.token,
+    total_price: checkout.totalPrice.amount,
+    currency: checkout.currencyCode,
   }, event.context);
 });
 
-// Checkout Completed
-analytics.subscribe('checkout_completed', (event) => {
-  const checkout = event.data?.checkout;
+analytics.subscribe('checkout_completed', function(event) {
+  var checkout = event.data.checkout;
   sendEvent('checkout_completed', {
-    checkout_id: checkout?.token,
-    order_id: checkout?.order?.id,
-    email: checkout?.email,
-    phone: checkout?.phone,
-    total_price: checkout?.totalPrice?.amount,
-    subtotal_price: checkout?.subtotalPrice?.amount,
-    total_shipping: checkout?.shippingLine?.price?.amount,
-    total_tax: checkout?.totalTax?.amount,
-    currency: checkout?.currencyCode,
-    item_count: checkout?.lineItems?.length || 0,
-    discount_codes: (checkout?.discountApplications || []).map((d) => d.title),
-    first_name: checkout?.shippingAddress?.firstName,
-    last_name: checkout?.shippingAddress?.lastName,
-    city: checkout?.shippingAddress?.city,
-    country: checkout?.shippingAddress?.country,
-    items: (checkout?.lineItems || []).map((item) => ({
-      product_id: item.variant?.product?.id,
-      title: item.title,
-      quantity: item.quantity,
-      price: item.variant?.price?.amount,
-      variant_title: item.variant?.title,
-      sku: item.variant?.sku,
-    })),
+    checkout_id: checkout.token,
+    order_id: checkout.order ? checkout.order.id : null,
+    email: checkout.email,
+    phone: checkout.phone,
+    total_price: checkout.totalPrice.amount,
+    subtotal_price: checkout.subtotalPrice.amount,
+    total_shipping: checkout.shippingLine ? checkout.shippingLine.price.amount : null,
+    total_tax: checkout.totalTax ? checkout.totalTax.amount : null,
+    currency: checkout.currencyCode,
+    item_count: checkout.lineItems.length,
+    discount_codes: (checkout.discountApplications || []).map(function(d) { return d.title; }),
+    first_name: checkout.shippingAddress ? checkout.shippingAddress.firstName : null,
+    last_name: checkout.shippingAddress ? checkout.shippingAddress.lastName : null,
+    city: checkout.shippingAddress ? checkout.shippingAddress.city : null,
+    country: checkout.shippingAddress ? checkout.shippingAddress.country : null,
+    items: checkout.lineItems.map(function(item) {
+      return {
+        product_id: item.variant.product.id,
+        title: item.title,
+        quantity: item.quantity,
+        price: item.variant.price.amount,
+        variant_title: item.variant.title,
+        sku: item.variant.sku,
+      };
+    }),
   }, event.context);
 });
 `;
