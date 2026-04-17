@@ -472,7 +472,35 @@ export async function POST(request: NextRequest) {
             .eq('session_id', session_id)
             .eq('organization_id', store.organization_id);
         } catch {}
+
+        // Link any prior events that share the same visitor_id (across sessions)
+        try {
+          await supabase
+            .from('contact_events')
+            .update({ contact_id: contactId })
+            .is('contact_id', null)
+            .eq('anonymous_id', visitor_id)
+            .eq('organization_id', store.organization_id);
+        } catch {}
       }
+    }
+
+    // Returning-visitor re-identification:
+    // If this pixel event has no email but we've seen this visitor before
+    // and they were identified, attach the event to the known contact.
+    if (!contactId && visitor_id) {
+      try {
+        const { data: prior } = await supabase
+          .from('contact_events')
+          .select('contact_id')
+          .eq('organization_id', store.organization_id)
+          .eq('anonymous_id', visitor_id)
+          .not('contact_id', 'is', null)
+          .order('occurred_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if ((prior as any)?.contact_id) contactId = (prior as any).contact_id;
+      } catch {}
     }
     
     // 3. Registrar atividade

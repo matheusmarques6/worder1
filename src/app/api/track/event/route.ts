@@ -209,6 +209,38 @@ export async function POST(request: NextRequest) {
       contactId = contact?.id || null;
     }
 
+    // Returning-visitor re-identification:
+    // A visitor we've identified before will have prior events with the same
+    // anonymous_id (visitorId) that are linked to a contact. Look that up so
+    // a new "added_to_cart" from the same browser attaches to the known contact.
+    const visitorAnonId = anonymousId || visitorId;
+    if (!contactId && visitorAnonId) {
+      const { data: prior } = await supabase
+        .from('contact_events')
+        .select('contact_id')
+        .eq('organization_id', organizationId)
+        .eq('anonymous_id', visitorAnonId)
+        .not('contact_id', 'is', null)
+        .order('occurred_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      contactId = (prior as any)?.contact_id || null;
+    }
+
+    // Secondary fallback: match by session_id when visitor cookie changed
+    if (!contactId && sessionId) {
+      const { data: prior } = await supabase
+        .from('contact_events')
+        .select('contact_id')
+        .eq('organization_id', organizationId)
+        .eq('session_id', sessionId)
+        .not('contact_id', 'is', null)
+        .order('occurred_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      contactId = (prior as any)?.contact_id || null;
+    }
+
     // ---- Map event type ----
     const mappedEventType = EVENT_TYPE_MAP[eventType] || eventType;
 
