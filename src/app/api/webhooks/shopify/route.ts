@@ -1007,34 +1007,73 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
 }
 
 async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
-  console.log(`[Shopify] Processing checkout: ${checkout.token}`);
-  
+  console.log(`[Shopify] Processing checkout: ${checkout.token} (id=${checkout.id}, email=${checkout.email || 'none'})`);
+
   if (!store.sync_checkouts) {
     console.log('[Shopify] Checkout sync disabled, skipping');
     return;
   }
-  
+
   const supabase = getSupabase();
-  
-  // Salvar checkout para detecção de abandono
-  await supabase.from('shopify_checkouts').upsert({
+
+  const checkoutKey = String(checkout.id || checkout.token);
+  const recoveryUrl = checkout.abandoned_checkout_url || checkout.recovery_url || null;
+  const safeFloat = (v: any) => {
+    const n = parseFloat(v ?? '0');
+    return isNaN(n) ? 0 : n;
+  };
+
+  // Salvar checkout para detecção de abandono.
+  // Escrevemos em ambas as colunas de URL (recovery_url + abandoned_checkout_url)
+  // porque diferentes versões do schema usaram nomes distintos.
+  const checkoutRow: Record<string, any> = {
     store_id: store.id,
     organization_id: store.organization_id,
-    shopify_checkout_id: String(checkout.id || checkout.token),
-    shopify_checkout_token: checkout.token,
+    shopify_checkout_id: checkoutKey,
+    shopify_checkout_token: checkout.token || null,
     email: checkout.email || null,
     phone: checkout.phone || checkout.billing_address?.phone || null,
-    total_price: parseFloat(checkout.total_price || '0'),
-    subtotal_price: parseFloat(checkout.subtotal_price || '0'),
-    currency: checkout.currency,
-    line_items: checkout.line_items,
-    abandoned_checkout_url: checkout.abandoned_checkout_url,
+    total_price: safeFloat(checkout.total_price),
+    subtotal_price: safeFloat(checkout.subtotal_price),
+    total_tax: safeFloat(checkout.total_tax),
+    total_discounts: safeFloat(checkout.total_discounts),
+    currency: checkout.currency || 'BRL',
+    line_items: checkout.line_items || [],
+    recovery_url: recoveryUrl,
+    abandoned_checkout_url: recoveryUrl,
     status: 'pending',
-    shopify_created_at: checkout.created_at,
+    shopify_created_at: checkout.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
-  }, {
-    onConflict: 'store_id,shopify_checkout_id',
-  });
+  };
+
+  const { error: upsertErr } = await supabase
+    .from('shopify_checkouts')
+    .upsert(checkoutRow, { onConflict: 'store_id,shopify_checkout_id' });
+
+  if (upsertErr) {
+    console.error(`[Shopify] shopify_checkouts upsert FAILED for ${checkoutKey}:`, upsertErr);
+    // Tenta novamente sem colunas que possam não existir em schemas antigos
+    const fallbackRow: Record<string, any> = {
+      store_id: checkoutRow.store_id,
+      organization_id: checkoutRow.organization_id,
+      shopify_checkout_id: checkoutRow.shopify_checkout_id,
+      email: checkoutRow.email,
+      phone: checkoutRow.phone,
+      total_price: checkoutRow.total_price,
+      currency: checkoutRow.currency,
+      line_items: checkoutRow.line_items,
+      status: 'pending',
+      updated_at: checkoutRow.updated_at,
+    };
+    const { error: fallbackErr } = await supabase
+      .from('shopify_checkouts')
+      .upsert(fallbackRow, { onConflict: 'store_id,shopify_checkout_id' });
+    if (fallbackErr) {
+      console.error(`[Shopify] shopify_checkouts FALLBACK upsert also failed:`, fallbackErr);
+    } else {
+      console.log(`[Shopify] shopify_checkouts saved via fallback row for ${checkoutKey}`);
+    }
+  }
 
   // Se tem email, criar/atualizar contato
   let contactId: string | null = null;
@@ -1053,8 +1092,60 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       updated_at: checkout.created_at,
     };
 
-    const contact = await syncContactFromShopify(customerData, store, 'checkout');
-    contactId = contact?.id || null;
+    try {
+      const contact = await syncContactFromShopify(customerData, store, 'checkout');
+      contactId = contact?.id || null;
+    } catch (contactErr) {
+      console.error(`[Shopify] syncContactFromShopify failed for checkout ${checkoutKey}:`, contactErr);
+    }
+
+    // Backfill: vincular contact_id no shopify_checkouts e em qualquer
+    // contact_event órfão que já tenha sido criado para esse checkout.
+    if (contactId) {
+      await supabase
+        .from('shopify_checkouts')
+        .update({ contact_id: contactId, updated_at: new Date().toISOString() })
+        .eq('store_id', store.id)
+        .eq('shopify_checkout_id', checkoutKey)
+        .is('contact_id', null);
+
+      await supabase
+        .from('contact_events')
+        .update({ contact_id: contactId })
+        .eq('organization_id', store.organization_id)
+        .eq('shopify_resource_id', checkoutKey)
+        .eq('shopify_resource_type', 'checkout')
+        .is('contact_id', null);
+
+      // Atividade visível na timeline do contato (lê de contact_activities)
+      try {
+        const itemsCount = checkout.line_items?.length || 0;
+        const totalPrice = safeFloat(checkout.total_price);
+        await trackActivity({
+          organizationId: store.organization_id,
+          contactId,
+          type: 'checkout_started',
+          title: itemsCount > 0
+            ? `Iniciou checkout com ${itemsCount} item${itemsCount > 1 ? 'ns' : ''}`
+            : 'Iniciou um checkout',
+          description: totalPrice > 0
+            ? `Valor: R$ ${totalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+            : undefined,
+          metadata: {
+            checkout_id: checkoutKey,
+            checkout_token: checkout.token,
+            total_price: totalPrice,
+            currency: checkout.currency || 'BRL',
+            items_count: itemsCount,
+            recovery_url: recoveryUrl,
+          },
+          source: 'shopify',
+          sourceId: checkoutKey,
+        });
+      } catch (actErr) {
+        console.warn('[Shopify] trackActivity for checkout failed (non-critical):', actErr);
+      }
+    }
   }
 
   // CDP: checkout_started event

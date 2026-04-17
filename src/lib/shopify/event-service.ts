@@ -102,6 +102,30 @@ export async function createEvent(input: CreateEventInput): Promise<EventRecord 
       .maybeSingle();
 
     if (existing) {
+      // Backfill contact_id when the new call has it but the original didn't.
+      // Common case: checkouts/create fires before email is captured (no contact),
+      // then checkouts/update fires with the same idempotency key after the
+      // contact has been resolved. Without this, the event stays orphaned and
+      // never shows up on the contact's timeline.
+      const patch: Record<string, any> = {};
+      if (!existing.contact_id && record.contact_id) {
+        patch.contact_id = record.contact_id;
+      }
+      if (!existing.session_id && record.session_id) {
+        patch.session_id = record.session_id;
+      }
+      if (!existing.anonymous_id && record.anonymous_id) {
+        patch.anonymous_id = record.anonymous_id;
+      }
+      if (Object.keys(patch).length > 0) {
+        const { data: updated } = await supabase
+          .from('contact_events')
+          .update(patch)
+          .eq('id', existing.id)
+          .select()
+          .maybeSingle();
+        return (updated || { ...existing, ...patch }) as EventRecord;
+      }
       return existing as EventRecord;
     }
   }
