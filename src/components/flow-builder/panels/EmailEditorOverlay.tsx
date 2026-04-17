@@ -38,6 +38,17 @@ export function EmailEditorOverlay({ templateId, triggerType, organizationId, on
 
   useEffect(() => { fetchTemplate(); }, [fetchTemplate]);
 
+  const handleRename = async (name: string) => {
+    try {
+      await fetch(`/api/email/templates/${templateId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      setTemplate((prev: any) => prev ? { ...prev, name } : prev);
+    } catch {}
+  };
+
   const handleSave = async (design: Record<string, any>, html: string) => {
     try {
       const res = await fetch(`/api/email/templates/${templateId}`, {
@@ -84,6 +95,7 @@ export function EmailEditorOverlay({ templateId, triggerType, organizationId, on
         templateName={template.name || 'Template'}
         design={template.design_json || template.design}
         onSave={handleSave}
+        onRename={handleRename}
         onBack={onClose}
         flowContext={triggerType && organizationId ? {
           templateId,

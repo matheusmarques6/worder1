@@ -75,6 +75,16 @@ export default function EditTemplatePage() {
         templateName={template.name || 'Template'}
         design={template.design_json || template.design}
         onSave={handleSave}
+        onRename={async (name) => {
+          try {
+            await fetch(`/api/email/templates/${templateId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name }),
+            })
+            setTemplate((prev: any) => prev ? { ...prev, name } : prev)
+          } catch {}
+        }}
         onBack={() => router.push('/email/templates')}
       />
     </div>

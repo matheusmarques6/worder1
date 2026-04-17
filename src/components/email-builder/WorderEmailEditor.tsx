@@ -24,7 +24,7 @@ interface WorderEmailEditorProps {
   design?: EmailDocument | Record<string, any>
   onSave: (design: Record<string, any>, html: string) => Promise<boolean>
   onBack: () => void
-  // Flow context — when editing inside a flow, enables real data preview
+  onRename?: (name: string) => void
   flowContext?: {
     templateId: string
     triggerType: string
@@ -430,7 +430,9 @@ function allBlocks(doc: EmailDocument): EmailBlock[] {
 
 const LAYOUT_ICONS: Record<string, typeof Square> = { Square, Columns, PanelLeft, PanelRight, LayoutGrid }
 
-export default function WorderEmailEditor({ templateName, design, onSave, onBack, flowContext }: WorderEmailEditorProps) {
+export default function WorderEmailEditor({ templateName, design, onSave, onBack, onRename, flowContext }: WorderEmailEditorProps) {
+  const [editableName, setEditableName] = useState(templateName)
+  const [editingName, setEditingName] = useState(false)
   // ── State ──
   const [doc, setDoc] = useState<EmailDocument>(() => {
     if (design) return migrateV1toV2(design)
@@ -1235,7 +1237,33 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/worder-favicon.svg" alt="Worder" className="w-7 h-7 flex-shrink-0" />
           <div className="h-5 w-px bg-zinc-700" />
-          <span className="text-sm font-semibold text-white truncate max-w-[280px]">{templateName}</span>
+          {editingName ? (
+            <input
+              autoFocus
+              type="text"
+              value={editableName}
+              onChange={(e) => setEditableName(e.target.value)}
+              onBlur={() => {
+                setEditingName(false)
+                const trimmed = editableName.trim()
+                if (trimmed && trimmed !== templateName && onRename) onRename(trimmed)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                if (e.key === 'Escape') { setEditableName(templateName); setEditingName(false) }
+              }}
+              className="text-sm font-semibold text-white bg-zinc-700 border border-zinc-600 rounded px-2 py-0.5 max-w-[280px] outline-none focus:border-brand-500"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setEditingName(true); setEditableName(editableName || templateName) }}
+              className="text-sm font-semibold text-white truncate max-w-[280px] hover:bg-zinc-700 px-2 py-0.5 rounded transition-colors cursor-text"
+              title="Clique para renomear"
+            >
+              {editableName || templateName}
+            </button>
+          )}
           <span className="text-[9px] px-1.5 py-0.5 bg-white/10 text-white rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
         </div>
 
