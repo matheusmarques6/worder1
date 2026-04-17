@@ -156,7 +156,6 @@ export default function SignupPage() {
           {/* Logo */}
           <div className="flex flex-col gap-1 mb-8">
             <WorderLogo size="md" />
-            <p className="text-xs text-gray-400">by Convertfy</p>
           </div>
 
           {/* Welcome Text */}

@@ -1,158 +1,107 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { useRouter } from 'next/navigation';
-import Image from 'next/image';
-import Link from 'next/link';
+import { useState } from 'react'
+import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
+import Image from 'next/image'
+import Link from 'next/link'
 import {
-  Mail,
-  Lock,
-  Eye,
-  EyeOff,
-  ArrowRight,
-  Zap,
-  BarChart3,
-  MessageSquare,
-  Users,
-  CheckCircle,
-  TrendingUp,
-  DollarSign,
-  AlertCircle,
-} from 'lucide-react';
-
-// Worder Logo Component
-const WorderLogo = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => {
-  // Logo original: 900x173 (proporção ~5.2:1)
-  const sizes = {
-    sm: { width: 100, height: 19 },
-    md: { width: 130, height: 25 },
-    lg: { width: 180, height: 35 },
-  };
-  
-  return (
-    <Image
-      src="/logo.png"
-      alt="Worder"
-      width={sizes[size].width}
-      height={sizes[size].height}
-      className="object-contain"
-      priority
-    />
-  );
-};
+  Mail, Lock, Eye, EyeOff, ArrowRight, Zap, BarChart3,
+  MessageSquare, Users, AlertCircle,
+} from 'lucide-react'
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const router = useRouter()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
+    e.preventDefault()
+    setIsLoading(true)
+    setError('')
 
     try {
       const response = await fetch('/api/auth', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'login',
-          email,
-          password,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro ao fazer login');
-      }
-
-      // Redirect to dashboard on success
-      router.push('/dashboard');
-      router.refresh();
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', email, password }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Erro ao fazer login')
+      router.push('/dashboard')
+      router.refresh()
     } catch (err: any) {
-      console.error('Login error:', err);
-      setError(err.message || 'Erro ao fazer login. Verifique suas credenciais.');
-      setIsLoading(false);
+      setError(err.message || 'Erro ao fazer login. Verifique suas credenciais.')
+      setIsLoading(false)
     }
-  };
+  }
 
   const features = [
-    { icon: BarChart3, title: 'Analytics Financeiro', description: 'Receita, lucro e ROI em tempo real' },
-    { icon: Zap, title: 'Automações', description: 'Fluxos de e-mail e WhatsApp' },
-    { icon: MessageSquare, title: 'WhatsApp Business', description: 'Conversas centralizadas' },
-    { icon: Users, title: 'CRM Completo', description: 'Pipeline visual de vendas' },
-  ];
+    { icon: BarChart3, title: 'Analytics Financeiro', desc: 'Receita, lucro e ROI em tempo real' },
+    { icon: Zap, title: 'Automações', desc: 'Fluxos de e-mail e WhatsApp' },
+    { icon: MessageSquare, title: 'WhatsApp Business', desc: 'Conversas centralizadas' },
+    { icon: Users, title: 'CRM Completo', desc: 'Pipeline visual de vendas' },
+  ]
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Left Side - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
+    <div className="min-h-screen flex">
+      {/* Left — Login Form */}
+      <div className="w-full lg:w-[480px] xl:w-[520px] flex flex-col justify-center px-8 sm:px-12 lg:px-16 bg-white">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md"
+          className="w-full max-w-sm mx-auto"
         >
           {/* Logo */}
-          <div className="flex flex-col gap-1 mb-8">
-            <WorderLogo size="md" />
-            <p className="text-xs text-gray-400">by Convertfy</p>
+          <div className="mb-10 flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center">
+              <span className="text-white font-bold text-sm">W</span>
+            </div>
+            <span className="text-xl font-bold text-gray-900">Worder</span>
           </div>
 
-          {/* Welcome Text */}
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900">Bem-vindo de volta</h2>
-            <p className="text-gray-500 mt-2">
-              Acesse sua conta para gerenciar suas campanhas
-            </p>
-          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Bem-vindo de volta</h1>
+          <p className="text-sm text-gray-500 mb-8">
+            Acesse sua conta para gerenciar sua operação.
+          </p>
 
-          {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-2">
-                Email
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-gray-400" />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="seu@email.com"
-                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   required
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none transition-all"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-2">
-                Senha
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Senha</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-gray-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   required
+                  className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
@@ -161,17 +110,20 @@ export default function LoginPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 rounded border-gray-200 bg-white text-primary-500 focus:ring-primary-500/20"
+                  className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500/20"
                 />
                 <span className="text-sm text-gray-500">Lembrar de mim</span>
               </label>
-              <Link href="/forgot-password" className="text-sm text-brand-600 hover:text-brand-500 transition-colors">
+              <Link
+                href="/forgot-password"
+                className="text-sm text-brand-600 hover:text-brand-700 font-medium transition-colors"
+              >
                 Esqueceu a senha?
               </Link>
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{error}</span>
               </div>
@@ -180,47 +132,33 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-xl text-gray-900 font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary-500/25"
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-brand-500 hover:bg-brand-600 rounded-lg text-white font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
                   Entrar
-                  <ArrowRight className="w-5 h-5" />
+                  <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
 
-          {/* Demo Account */}
-          <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-xl">
-            <p className="text-sm text-gray-500 mb-2">Conta demo:</p>
-            <div className="flex items-center gap-2 text-sm">
-              <code className="px-2 py-1 bg-white rounded text-gray-600">demo@worder.com</code>
-              <code className="px-2 py-1 bg-white rounded text-gray-600">demo123</code>
-            </div>
-          </div>
-
-          {/* Sign Up Link */}
-          <p className="mt-6 text-center text-gray-500">
+          <p className="mt-8 text-center text-sm text-gray-500">
             Não tem uma conta?{' '}
-            <Link href="/signup" className="text-brand-600 hover:text-brand-500 transition-colors font-medium">
+            <Link href="/signup" className="text-brand-600 hover:text-brand-700 font-semibold transition-colors">
               Criar conta grátis
             </Link>
           </p>
         </motion.div>
       </div>
 
-      {/* Right Side - Features */}
-      <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-dark-900 via-dark-900 to-primary-950/30 items-center justify-center p-12 relative overflow-hidden">
-        {/* Background Effects */}
-        <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-brand-50 rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent-500/10 rounded-full blur-3xl" />
-          {/* Grid pattern */}
-          <div className="absolute inset-0 grid-pattern opacity-30" />
-        </div>
+      {/* Right — Feature showcase */}
+      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 items-center justify-center p-12 relative overflow-hidden">
+        {/* Subtle glow */}
+        <div className="absolute top-1/3 left-1/3 w-[500px] h-[500px] bg-brand-500/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-brand-600/8 rounded-full blur-[100px]" />
 
         <div className="relative z-10 max-w-lg">
           <motion.div
@@ -228,87 +166,52 @@ export default function LoginPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            {/* Large Logo */}
-            <div className="mb-8">
-              <WorderLogo size="lg" />
-              <p className="text-sm text-gray-400 mt-1">by Convertfy</p>
-            </div>
-            
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+            <Image
+              src="/logo.png"
+              alt="Worder"
+              width={160}
+              height={31}
+              className="object-contain mb-8"
+            />
+
+            <h2 className="text-3xl font-bold text-white mb-3">
               Transforme dados em{' '}
-              <span className="text-gradient-worder">receita</span>
+              <span className="text-brand-400">receita</span>
             </h2>
-            <p className="text-lg text-gray-600 mb-8">
-              Plataforma completa para e-commerce: analytics financeiro, automações, CRM e WhatsApp em um só lugar.
+            <p className="text-gray-400 text-lg mb-10 leading-relaxed">
+              Plataforma completa para e-commerce: analytics financeiro,
+              automações, CRM e WhatsApp em um só lugar.
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {features.map((feature, index) => (
+          <div className="grid grid-cols-2 gap-3">
+            {features.map((f, i) => (
               <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
+                key={f.title}
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 + index * 0.1 }}
-                className="p-4 bg-gray-50 backdrop-blur-sm border border-gray-200 rounded-xl hover:border-brand-300 transition-all"
+                transition={{ delay: 0.3 + i * 0.08 }}
+                className="p-4 bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl hover:bg-white/8 transition-colors"
               >
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center mb-3">
-                  <feature.icon className="w-5 h-5 text-brand-600" />
+                <div className="w-9 h-9 rounded-lg bg-brand-500/15 flex items-center justify-center mb-3">
+                  <f.icon className="w-[18px] h-[18px] text-brand-400" />
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-1">{feature.title}</h3>
-                <p className="text-sm text-gray-500">{feature.description}</p>
+                <h3 className="font-semibold text-white text-sm mb-0.5">{f.title}</h3>
+                <p className="text-xs text-gray-400">{f.desc}</p>
               </motion.div>
             ))}
           </div>
 
-          {/* Stats */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ delay: 0.7 }}
-            className="mt-8 flex items-center gap-8"
+            className="mt-10 text-xs text-gray-500 text-center"
           >
-            {[
-              { value: '500+', label: 'Lojas ativas' },
-              { value: 'R$ 50M+', label: 'Receita gerada' },
-              { value: '42%', label: 'Aumento médio' },
-            ].map((stat) => (
-              <div key={stat.label}>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                <p className="text-sm text-gray-500">{stat.label}</p>
-              </div>
-            ))}
-          </motion.div>
-
-          {/* Testimonial */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className="mt-8 p-4 bg-gray-50 backdrop-blur-sm border border-gray-200 rounded-xl"
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-                <span className="text-gray-900 font-semibold text-sm">MS</span>
-              </div>
-              <div>
-                <p className="font-medium text-gray-900">Marina Santos</p>
-                <p className="text-xs text-gray-500">CEO, ModaStyle</p>
-              </div>
-              <div className="ml-auto flex items-center gap-0.5">
-                {[...Array(5)].map((_, i) => (
-                  <svg key={i} className="w-4 h-4 text-accent-400 fill-accent-400" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ))}
-              </div>
-            </div>
-            <p className="text-sm text-gray-600">
-              "O Worder transformou nossa operação. Aumentamos 65% a receita de email marketing em 3 meses."
-            </p>
-          </motion.div>
+            Usado por e-commerces que querem crescer com dados.
+          </motion.p>
         </div>
       </div>
     </div>
-  );
+  )
 }

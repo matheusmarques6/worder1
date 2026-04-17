@@ -157,9 +157,8 @@ export default function OnboardingPage() {
         {/* Header */}
         <div className="pt-8 pb-4 px-8 text-center">
           {/* Logo */}
-          <div className="flex flex-col items-center gap-1 mb-6">
+          <div className="flex flex-col items-center mb-6">
             <WorderLogo />
-            <p className="text-xs text-gray-400">by Convertfy</p>
           </div>
 
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">

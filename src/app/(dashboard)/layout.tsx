@@ -490,7 +490,6 @@ export default function DashboardLayout({
       <div className="px-4 py-5 border-b border-gray-800/50">
         <Link href="/dashboard" className="flex items-center gap-2">
           <Image src="/logo.png" alt="Worder" width={collapsed ? 32 : 100} height={collapsed ? 6 : 19} className="object-contain" priority />
-          {!collapsed && <span className="text-gray-500 text-[10px]">by Convertfy</span>}
         </Link>
       </div>
 

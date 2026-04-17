@@ -216,18 +216,6 @@ export function Sidebar() {
               className="object-contain"
               priority
             />
-            <AnimatePresence>
-              {!sidebarCollapsed && (
-                <motion.span
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="text-[10px] text-gray-400"
-                >
-                  by Convertfy
-                </motion.span>
-              )}
-            </AnimatePresence>
           </Link>
           <button
             onClick={toggleSidebar}
