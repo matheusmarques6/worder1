@@ -112,9 +112,14 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
                             <p className="text-xs font-medium text-gray-800">{tag.name}</p>
                             <code className="text-[10px] font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{tag.value}</code>
                           </div>
-                          {tag.sample && (
-                            <p className="text-[10px] text-gray-400 mt-0.5">Ex: {tag.sample}</p>
-                          )}
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {tag.sample && (
+                              <p className="text-[10px] text-gray-400">Ex: {tag.sample}</p>
+                            )}
+                            {tag.hint && (
+                              <p className="text-[10px] text-violet-500">{tag.hint}</p>
+                            )}
+                          </div>
                         </div>
                         <span className="text-[10px] text-gray-300 group-hover:text-brand-500 flex-shrink-0 ml-2 transition-colors font-medium">
                           {copiedTag === tag.value ? '✓ copiado' : 'inserir'}

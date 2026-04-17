@@ -1,24 +1,23 @@
 export interface MergeTagGroup {
   name: string
   icon: string
-  tags: { name: string; value: string; sample: string }[]
+  tags: { name: string; value: string; sample: string; hint?: string }[]
 }
 
 export const MERGE_TAGS: MergeTagGroup[] = [
   {
     name: 'Contato', icon: 'User',
     tags: [
-      { name: 'Primeiro Nome', value: '{{first_name}}', sample: 'Maria' },
+      { name: 'Primeiro Nome', value: '{{first_name}}', sample: 'Maria', hint: 'Padrão: "Cliente" se vazio' },
       { name: 'Sobrenome', value: '{{last_name}}', sample: 'Silva' },
+      { name: 'Nome Completo', value: '{{full_name}}', sample: 'Maria Silva', hint: 'Padrão: "Cliente" se vazio' },
       { name: 'Email', value: '{{email}}', sample: 'maria@email.com' },
       { name: 'Telefone', value: '{{phone}}', sample: '+5531999999999' },
       { name: 'Empresa', value: '{{company}}', sample: 'Acme Corp' },
-      { name: 'Cargo', value: '{{position}}', sample: 'Gerente' },
       { name: 'Cidade', value: '{{city}}', sample: 'São Paulo' },
       { name: 'Estado', value: '{{state}}', sample: 'SP' },
       { name: 'País', value: '{{country}}', sample: 'Brasil' },
       { name: 'Aniversário', value: '{{birthday}}', sample: '15/03' },
-      { name: 'Gênero', value: '{{gender}}', sample: 'Feminino' },
       { name: 'Origem', value: '{{source}}', sample: 'shopify' },
       { name: 'Tags', value: '{{tags}}', sample: 'VIP, Recorrente' },
     ],
@@ -35,7 +34,7 @@ export const MERGE_TAGS: MergeTagGroup[] = [
   {
     name: 'Último Pedido', icon: 'Package',
     tags: [
-      { name: 'Nº do Pedido', value: '{{order_number}}', sample: '#1234' },
+      { name: 'Nº do Pedido', value: '{{order_number}}', sample: '#1234', hint: 'Do pedido mais recente' },
       { name: 'Total', value: '{{order_total}}', sample: 'R$ 199,90' },
       { name: 'Data', value: '{{order_date}}', sample: '30/03/2026' },
       { name: 'Status', value: '{{order_status}}', sample: 'paid' },
@@ -65,30 +64,32 @@ export const MERGE_TAGS: MergeTagGroup[] = [
   {
     name: 'Evento (Automações)', icon: 'Zap',
     tags: [
-      { name: 'Nome do Produto', value: '{{event.ProductName}}', sample: 'Camiseta Premium' },
-      { name: 'Preço', value: '{{event.Price}}', sample: 'R$ 89,90' },
-      { name: 'Imagem do Produto', value: '{{event.ImageURL}}', sample: 'https://cdn.shopify.com/image.jpg' },
+      { name: 'Nome do Produto', value: '{{event.ProductName}}', sample: 'Camiseta Premium', hint: 'Dados do gatilho da automação' },
+      { name: 'Preço do Produto', value: '{{event.Price}}', sample: 'R$ 89,90' },
+      { name: 'Imagem do Produto', value: '{{event.ImageURL}}', sample: 'https://cdn.shopify.com/...' },
       { name: 'URL do Produto', value: '{{event.ProductURL}}', sample: 'https://loja.com/produto' },
-      { name: 'Nº do Pedido', value: '{{event.OrderId}}', sample: '#1234' },
+      { name: 'ID do Pedido', value: '{{event.OrderId}}', sample: '#1234' },
       { name: 'Valor Total', value: '{{event.Value}}', sample: 'R$ 199,90' },
       { name: 'Moeda', value: '{{event.Currency}}', sample: 'BRL' },
       { name: 'Qtd. de Itens', value: '{{event.ItemCount}}', sample: '3' },
       { name: 'URL do Checkout', value: '{{event.CheckoutURL}}', sample: 'https://loja.com/checkout' },
+      { name: 'Email do Cliente', value: '{{event.email}}', sample: 'maria@email.com' },
+      { name: 'Nome do Cliente', value: '{{event.customer_name}}', sample: 'Maria Silva' },
       { name: 'Código de Desconto', value: '{{event.DiscountCode}}', sample: 'BEMVINDO10' },
     ],
   },
   {
     name: 'Personalizado', icon: 'Tag',
     tags: [
-      { name: 'Campo Custom', value: '{{custom.nome_do_campo|valor padrão}}', sample: 'valor padrão' },
+      { name: 'Campo Custom', value: '{{custom.nome_do_campo|valor padrão}}', sample: 'valor padrão', hint: 'Use | para definir fallback' },
     ],
   },
   {
     name: 'Sistema', icon: 'Link',
     tags: [
-      { name: 'Descadastrar', value: '{{unsubscribe_url}}', sample: '#' },
+      { name: 'Link Descadastrar', value: '{{unsubscribe_url}}', sample: '#', hint: 'Obrigatório em todo email' },
       { name: 'Ver no Navegador', value: '{{view_in_browser_url}}', sample: '#' },
-      { name: 'Data Atual', value: '{{current_date}}', sample: '10/04/2026' },
+      { name: 'Data Atual', value: '{{current_date}}', sample: '17/04/2026' },
       { name: 'Ano Atual', value: '{{current_year}}', sample: '2026' },
     ],
   },

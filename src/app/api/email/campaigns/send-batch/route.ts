@@ -224,14 +224,20 @@ export async function POST(req: NextRequest) {
       const prepped: Prepped[] = [];
 
       for (const contact of chunk) {
-        // Build merge data
+        // Build merge data with sensible defaults (never empty in visible fields)
+        const fn = contact.first_name || ''
+        const ln = contact.last_name || ''
+        const fullName = [fn, ln].filter(Boolean).join(' ') || 'Cliente'
+
         const mergeData: Record<string, string> = {
-          first_name: contact.first_name || '',
-          last_name: contact.last_name || '',
+          first_name: fn || 'Cliente',
+          last_name: ln,
+          full_name: fullName,
           email: contact.email || '',
           phone: contact.phone || '',
-          'contact.first_name': contact.first_name || '',
-          'contact.last_name': contact.last_name || '',
+          'contact.first_name': fn || 'Cliente',
+          'contact.last_name': ln,
+          'contact.full_name': fullName,
           'contact.email': contact.email || '',
           'contact.phone': contact.phone || '',
           company: contact.company || '',
