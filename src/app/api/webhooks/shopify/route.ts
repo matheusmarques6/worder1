@@ -243,32 +243,37 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
     return;
   }
 
-  // Auto-link anonymous pixel events to this contact by email
+  // Auto-link anonymous pixel events to this contact by email.
+  // Strategy: find sessions with matching email, then link events from those sessions only.
   if (contact.id && customerData.email) {
     try {
-      // Link contact_events where email matches in properties
-      await supabase
-        .from('contact_events')
-        .update({ contact_id: contact.id })
-        .is('contact_id', null)
-        .eq('organization_id', store.organization_id)
-        .eq('event_source', 'pixel');
-
-      // Link contact_activities by email in metadata
-      await supabase
-        .from('contact_activities')
-        .update({ contact_id: contact.id })
-        .is('contact_id', null)
-        .eq('organization_id', store.organization_id)
-        .eq('source', 'pixel');
-
-      // Link sessions
-      await supabase
+      const { data: orphanSessions } = await supabase
         .from('contact_sessions')
-        .update({ contact_id: contact.id })
+        .select('session_id')
         .is('contact_id', null)
         .ilike('email', customerData.email)
-        .eq('organization_id', store.organization_id);
+        .eq('organization_id', store.organization_id)
+        .limit(50);
+
+      const sessionIds = (orphanSessions || []).map((s: any) => s.session_id).filter(Boolean);
+
+      if (sessionIds.length > 0) {
+        await supabase
+          .from('contact_sessions')
+          .update({ contact_id: contact.id })
+          .is('contact_id', null)
+          .ilike('email', customerData.email)
+          .eq('organization_id', store.organization_id);
+
+        await supabase
+          .from('contact_events')
+          .update({ contact_id: contact.id })
+          .is('contact_id', null)
+          .in('session_id', sessionIds)
+          .eq('organization_id', store.organization_id);
+
+        console.log(`[Shopify] Linked ${sessionIds.length} orphan sessions to contact ${contact.id}`);
+      }
     } catch (linkErr) {
       console.warn('[Shopify] Failed to link anonymous events:', linkErr);
     }
