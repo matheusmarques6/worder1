@@ -365,8 +365,106 @@ function InputBlockPreview({ block, children }: { block: Block; children?: React
   )
 }
 
+// ── Inline editable primitive (Klaviyo-style) ────────────────────────────────
+// Renders a contentEditable element whose content stays in sync with `value`
+// without overwriting the user's in-progress edit while focused.
+function InlineEditable({
+  value,
+  onCommit,
+  tag = 'div',
+  style,
+  className,
+  editable,
+  autoFocus,
+  singleLine,
+  placeholder,
+}: {
+  value: string
+  onCommit: (v: string) => void
+  tag?: string
+  style?: React.CSSProperties
+  className?: string
+  editable: boolean
+  autoFocus?: boolean
+  singleLine?: boolean
+  placeholder?: string
+}) {
+  const ref = useRef<HTMLElement | null>(null)
+
+  // Sync external value → DOM, but never while the user is editing this node.
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    if (document.activeElement === el) return
+    if (el.innerText !== (value ?? '')) {
+      el.innerText = value ?? ''
+    }
+  }, [value])
+
+  // Auto-focus and place caret at end when entering edit mode.
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    if (editable && autoFocus && document.activeElement !== el) {
+      el.focus()
+      const sel = window.getSelection()
+      if (sel) {
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        range.collapse(false)
+        sel.removeAllRanges()
+        sel.addRange(range)
+      }
+    }
+  }, [editable, autoFocus])
+
+  const Tag = tag as any
+  // Don't pass children — React would otherwise reconcile DOM text and
+  // overwrite the user's in-progress contentEditable edits. innerText is
+  // managed entirely via the useEffect above.
+  return (
+    <Tag
+      ref={ref}
+      contentEditable={editable}
+      suppressContentEditableWarning
+      data-placeholder={placeholder || ''}
+      onKeyDown={(e: React.KeyboardEvent<HTMLElement>) => {
+        if (e.key === 'Escape') { (e.currentTarget as HTMLElement).blur(); return }
+        if (singleLine && e.key === 'Enter') { e.preventDefault(); (e.currentTarget as HTMLElement).blur() }
+      }}
+      onBlur={(e: React.FocusEvent<HTMLElement>) => {
+        const txt = e.currentTarget.innerText.replace(/\u00A0/g, ' ')
+        if (txt !== (value ?? '')) onCommit(txt)
+      }}
+      onClick={(e: React.MouseEvent) => { if (editable) e.stopPropagation() }}
+      className={`worder-inline-editable ${className || ''}`}
+      style={{
+        outline: 'none',
+        cursor: editable ? 'text' : 'inherit',
+        minHeight: '1em',
+        ...style,
+      }}
+    />
+  )
+}
+
+function InlineEditableStyles() {
+  return (
+    <style dangerouslySetInnerHTML={{ __html: `
+      .worder-inline-editable:empty:before {
+        content: attr(data-placeholder);
+        color: rgba(0,0,0,0.3);
+        pointer-events: none;
+      }
+      .worder-inline-editable[contenteditable="true"]:focus {
+        box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.15) inset;
+      }
+    ` }} />
+  )
+}
+
 // ── Block Renderer (canvas) ────────────────────────────────────────────────────
-function BlockPreview({ block }: { block: Block }) {
+function BlockPreview({ block, selected, onContentChange }: { block: Block; selected?: boolean; onContentChange?: (key: string, value: string) => void }) {
   const p = block.props
   const blockStyle: React.CSSProperties = {
     marginTop: p.marginTop || 0, marginBottom: p.marginBottom ?? 8,
@@ -380,9 +478,22 @@ function BlockPreview({ block }: { block: Block }) {
   const phCssVar = { ['--worder-ph-color' as any]: p.placeholderColor || '#9CA3AF' } as React.CSSProperties
   switch (block.type) {
     case 'text': {
-      const Tag = (p.tag === 'h1' || p.tag === 'h2' || p.tag === 'h3') ? p.tag : 'p' as any
-      return <Tag
-        style={{ ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textDecoration: p.textDecoration || 'none', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit', minHeight: '1em', margin: 0, marginBottom: blockStyle.marginBottom ?? 8 }}>{p.content}</Tag>
+      const Tag = (p.tag === 'h1' || p.tag === 'h2' || p.tag === 'h3') ? p.tag : 'p'
+      const textStyle: React.CSSProperties = { ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textDecoration: p.textDecoration || 'none', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit', minHeight: '1em', margin: 0, marginBottom: blockStyle.marginBottom ?? 8 }
+      if (onContentChange) {
+        return (
+          <InlineEditable
+            tag={Tag}
+            value={p.content || ''}
+            editable={!!selected}
+            autoFocus={!!selected}
+            placeholder="Digite seu texto..."
+            onCommit={(v) => onContentChange('content', v)}
+            style={textStyle}
+          />
+        )
+      }
+      return <Tag style={textStyle}>{p.content}</Tag>
     }
     case 'email':
       return <InputBlockPreview block={block}><><InputPreviewStyles /><input readOnly placeholder={p.placeholder || 'Seu email'} className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
@@ -395,20 +506,36 @@ function BlockPreview({ block }: { block: Block }) {
       return <InputBlockPreview block={block}><><InputPreviewStyles /><input readOnly placeholder={p.placeholder || ''} className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
     case 'date-input':
       return <InputBlockPreview block={block}><><InputPreviewStyles /><input type="date" className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
-    case 'button':
+    case 'button': {
+      const btnStyle: React.CSSProperties = {
+        backgroundColor: p.bgColor || '#F97316', color: p.textColor || '#fff',
+        borderRadius: p.borderRadius || 8, width: p.fullWidth ? '100%' : 'auto',
+        fontSize: p.fontSize || 15, fontWeight: 700,
+        padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`,
+        border: p.btnBorderWidth ? `${p.btnBorderWidth}px solid ${p.btnBorderColor || '#E5E7EB'}` : 'none',
+        cursor: 'pointer', transition: 'background-color 0.2s',
+        display: 'inline-block', textAlign: 'center' as const,
+      }
       return <div style={{ ...blockStyle, textAlign: p.fullWidth ? undefined : (p.align || 'center') as any }}>
-        <button
-          onMouseEnter={e => { if (p.hoverColor) (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.hoverColor }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.bgColor || '#F97316' }}
-          style={{
-            backgroundColor: p.bgColor || '#F97316', color: p.textColor || '#fff',
-            borderRadius: p.borderRadius || 8, width: p.fullWidth ? '100%' : 'auto',
-            fontSize: p.fontSize || 15, fontWeight: 700,
-            padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`,
-            border: p.btnBorderWidth ? `${p.btnBorderWidth}px solid ${p.btnBorderColor || '#E5E7EB'}` : 'none',
-            cursor: 'pointer', transition: 'background-color 0.2s',
-          }}>{p.text || 'Enviar'}</button>
+        {onContentChange ? (
+          <InlineEditable
+            tag="button"
+            value={p.text || ''}
+            editable={!!selected}
+            autoFocus={!!selected}
+            singleLine
+            placeholder="Clique para editar..."
+            onCommit={(v) => onContentChange('text', v)}
+            style={btnStyle}
+          />
+        ) : (
+          <button
+            onMouseEnter={e => { if (p.hoverColor) (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.hoverColor }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.bgColor || '#F97316' }}
+            style={btnStyle}>{p.text || 'Enviar'}</button>
+        )}
       </div>
+    }
     case 'image': {
       const imgEl = p.src
         ? <img src={p.src} alt={p.alt || ''} style={{ width: `${p.imgWidth || 100}%`, maxHeight: p.maxHeight || 300, objectFit: 'contain', borderRadius: p.borderRadius || 0, display: 'inline-block' }} />
@@ -1645,20 +1772,71 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
 }
 
 // ── Sortable Block Wrapper ────────────────────────────────────────────────────
-function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate }: {
+function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate, onContentChange, onPropChange }: {
   block: Block; isSelected: boolean; onSelect: () => void; onDelete: () => void; onDuplicate: () => void
+  onContentChange: (key: string, value: string) => void
+  onPropChange: (key: string, value: any) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id })
+  const p = block.props
+  const isText = block.type === 'text'
+  const isButton = block.type === 'button'
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
-      className={`group relative rounded-md cursor-pointer transition ${isSelected ? 'ring-2 ring-orange-400 ring-offset-1' : 'hover:ring-1 hover:ring-gray-300'}`}>
-      <div {...attributes} {...listeners} className="absolute -left-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing p-0.5 text-gray-300 hover:text-gray-500 z-10">
-        <GripVertical className="w-3.5 h-3.5" />
-      </div>
-      <BlockPreview block={block} />
+      className={`group relative rounded-md transition ${isSelected ? 'ring-2 ring-orange-400 ring-offset-[3px] ring-offset-white' : 'hover:ring-2 hover:ring-orange-200 hover:ring-offset-[2px] hover:ring-offset-white cursor-pointer'}`}>
+      {/* Drag handle — hidden while selected to keep the canvas calm */}
+      {!isSelected && (
+        <div {...attributes} {...listeners} className="absolute -left-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing p-1 rounded bg-white shadow-sm text-gray-400 hover:text-gray-700 z-10 transition-opacity" title="Arraste para reordenar">
+          <GripVertical className="w-3.5 h-3.5" />
+        </div>
+      )}
+      {/* Floating inline format toolbar (text only, when selected) */}
+      {isSelected && isText && (
+        <div
+          onMouseDown={e => e.preventDefault() /* keep caret inside contentEditable */}
+          className="absolute left-1/2 -translate-x-1/2 -top-11 z-20 flex items-center gap-0.5 bg-gray-900 text-white rounded-lg shadow-lg px-1 py-1">
+          <button onClick={(e) => { e.stopPropagation(); onPropChange('fontWeight', p.fontWeight === 'bold' ? 'normal' : 'bold') }}
+            className={`px-2 py-1 text-xs font-bold rounded hover:bg-white/10 ${p.fontWeight === 'bold' ? 'bg-white/20' : ''}`} title="Negrito">B</button>
+          <button onClick={(e) => { e.stopPropagation(); onPropChange('fontStyle', p.fontStyle === 'italic' ? 'normal' : 'italic') }}
+            className={`px-2 py-1 text-xs italic rounded hover:bg-white/10 ${p.fontStyle === 'italic' ? 'bg-white/20' : ''}`} title="Itálico">I</button>
+          <button onClick={(e) => { e.stopPropagation(); onPropChange('textDecoration', p.textDecoration === 'underline' ? 'none' : 'underline') }}
+            className={`px-2 py-1 text-xs underline rounded hover:bg-white/10 ${p.textDecoration === 'underline' ? 'bg-white/20' : ''}`} title="Sublinhado">U</button>
+          <div className="w-px h-4 bg-white/20 mx-0.5" />
+          {['left','center','right'].map(a => (
+            <button key={a} onClick={(e) => { e.stopPropagation(); onPropChange('align', a) }}
+              className={`px-2 py-1 text-[10px] rounded hover:bg-white/10 ${p.align === a ? 'bg-white/20' : ''}`} title={`Alinhar ${a}`}>
+              {a === 'left' ? '⇤' : a === 'center' ? '≡' : '⇥'}
+            </button>
+          ))}
+          <div className="w-px h-4 bg-white/20 mx-0.5" />
+          <select value={p.tag || 'p'} onChange={(e) => { e.stopPropagation(); onPropChange('tag', e.target.value) }}
+            onClick={e => e.stopPropagation()}
+            className="bg-transparent text-[11px] px-1 py-0.5 rounded focus:outline-none cursor-pointer hover:bg-white/10" title="Estilo">
+            <option value="h1" className="text-gray-900">H1</option>
+            <option value="h2" className="text-gray-900">H2</option>
+            <option value="h3" className="text-gray-900">H3</option>
+            <option value="p" className="text-gray-900">P</option>
+          </select>
+        </div>
+      )}
+      {/* Floating toolbar for button blocks */}
+      {isSelected && isButton && (
+        <div
+          onMouseDown={e => e.preventDefault()}
+          className="absolute left-1/2 -translate-x-1/2 -top-11 z-20 flex items-center gap-1 bg-gray-900 text-white rounded-lg shadow-lg px-2 py-1.5 text-[11px]">
+          <span className="text-white/60">Editando botão — clique fora p/ concluir</span>
+        </div>
+      )}
+      {/* Type label (shown on hover for orientation) */}
+      {!isSelected && (
+        <div className="absolute -top-5 left-0 hidden group-hover:block text-[10px] font-semibold text-orange-500 uppercase tracking-wider">
+          {block.type.replace('-', ' ')}
+        </div>
+      )}
+      <BlockPreview block={block} selected={isSelected} onContentChange={onContentChange} />
       <div className="absolute -top-2 right-2 hidden group-hover:flex items-center gap-0.5 bg-white border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5 z-10">
-        <button onClick={e => { e.stopPropagation(); onDuplicate() }} className="p-1 text-gray-400 hover:text-blue-500 rounded" title="Duplicar"><Plus className="w-3 h-3" /></button>
+        <button onClick={e => { e.stopPropagation(); onDuplicate() }} className="p-1 text-gray-400 hover:text-blue-500 rounded" title="Duplicar"><Copy className="w-3 h-3" /></button>
         <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1 text-gray-400 hover:text-red-500 rounded" title="Remover"><Trash2 className="w-3 h-3" /></button>
       </div>
     </div>
@@ -1876,6 +2054,7 @@ export default function PopupEditorPage() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
+      <InlineEditableStyles />
       {/* Top bar — Omnisend-inspired with Worder identity */}
       <header className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200 shrink-0">
         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -2102,9 +2281,11 @@ export default function PopupEditorPage() {
         </aside>
 
         {/* Center canvas — dark Omnisend-inspired background with subtle gradient for depth */}
-        <main className="flex-1 flex flex-col items-center overflow-y-auto" style={{
-          background: 'radial-gradient(ellipse at center, #2a2f3a 0%, #1a1e26 100%)',
-        }}>
+        <main className="flex-1 flex flex-col items-center overflow-y-auto"
+          onClick={() => setSelectedBlockId(null)}
+          style={{
+            background: 'radial-gradient(ellipse at center, #2a2f3a 0%, #1a1e26 100%)',
+          }}>
           <div className="flex-1 flex items-center justify-center w-full p-8">
             {/* Popup container — total width stays s.width; when side image is
                 enabled the interior splits 50/50 (Omnisend-style) instead of
@@ -2150,7 +2331,9 @@ export default function PopupEditorPage() {
                         <SortablePopupBlock key={block.id} block={block} isSelected={selectedBlockId === block.id}
                           onSelect={() => setSelectedBlockId(block.id)}
                           onDelete={() => deleteBlock(block.id)}
-                          onDuplicate={() => duplicateBlock(block.id)} />
+                          onDuplicate={() => duplicateBlock(block.id)}
+                          onContentChange={(k, v) => updateBlock({ ...block, props: { ...block.props, [k]: v } })}
+                          onPropChange={(k, v) => updateBlock({ ...block, props: { ...block.props, [k]: v } })} />
                       ))}
                       {activeStep.blocks.length === 0 && (
                         <div className="py-16 text-center border-2 border-dashed border-gray-200 rounded-xl">
