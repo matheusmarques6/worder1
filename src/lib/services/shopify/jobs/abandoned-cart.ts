@@ -140,6 +140,26 @@ async function detectAbandonedCartsFromDB(
         .eq('id', checkout.id);
       abandoned++;
 
+      // Last-mile contact resolution: if email was captured but contact_id
+      // is still null, look it up now and backfill the link.
+      if (!checkout.contact_id && checkout.email) {
+        try {
+          const { data: c } = await supabase
+            .from('contacts')
+            .select('id')
+            .eq('organization_id', store.organization_id)
+            .ilike('email', checkout.email)
+            .maybeSingle();
+          if (c?.id) {
+            checkout.contact_id = c.id;
+            await supabase
+              .from('shopify_checkouts')
+              .update({ contact_id: c.id })
+              .eq('id', checkout.id);
+          }
+        } catch {}
+      }
+
       // Create CDP event
       await createAbandonedCheckoutEvent(storeConfig, checkout);
 

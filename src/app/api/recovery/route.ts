@@ -379,7 +379,7 @@ async function handleCartTab(opts: {
     const itemList = Array.from(itemsMap.values());
 
     return {
-      id: b.key,
+      id: `cart-${b.key}`,
       type: 'cart' as const,
       status: 'abandoned' as const,
       email: contact?.email || null,

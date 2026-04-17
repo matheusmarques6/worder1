@@ -35,6 +35,11 @@ export async function GET(
       ]),
     ];
 
+    // Cart-type items from contact_events aggregation (prefixed 'cart-')
+    if (params.id.startsWith('cart-')) {
+      return await buildCartDetail(params.id.slice(5), orgIds);
+    }
+
     const { data: checkout, error } = await supabaseAdmin
       .from('shopify_checkouts')
       .select(
@@ -145,4 +150,138 @@ export async function GET(
       { status: 500 }
     );
   }
+}
+
+/**
+ * Build a detail payload for a cart-type item (pixel aggregation).
+ * The key is the bucket identifier we used in handleCartTab — session_id,
+ * anonymous_id, or contact_id. We re-query contact_events to get all the
+ * relevant added_to_cart events and aggregate back into a detail shape.
+ */
+async function buildCartDetail(key: string, orgIds: string[]): Promise<NextResponse> {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Try to match the key as session_id first, then anonymous_id, then contact_id
+  let events: any[] = [];
+  for (const field of ['session_id', 'anonymous_id', 'contact_id']) {
+    const { data } = await supabaseAdmin
+      .from('contact_events')
+      .select('id, contact_id, store_id, event_type, properties, monetary_value, currency, session_id, anonymous_id, occurred_at')
+      .in('organization_id', orgIds)
+      .eq('event_type', 'added_to_cart')
+      .eq(field, key)
+      .gte('occurred_at', since)
+      .order('occurred_at', { ascending: false })
+      .limit(50);
+    if (data && data.length > 0) {
+      events = data;
+      break;
+    }
+  }
+
+  if (events.length === 0) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const first = events[0];
+  let contact: any = null;
+  if (first.contact_id) {
+    const { data } = await supabaseAdmin
+      .from('contacts')
+      .select('id, email, first_name, last_name, phone, total_orders, total_spent')
+      .eq('id', first.contact_id)
+      .maybeSingle();
+    contact = data;
+  }
+
+  let store: any = null;
+  if (first.store_id) {
+    const { data } = await supabaseAdmin
+      .from('shopify_stores')
+      .select('id, shop_domain, shop_name, currency')
+      .eq('id', first.store_id)
+      .maybeSingle();
+    store = data;
+  }
+
+  // Dedupe products
+  const itemsMap = new Map<string, any>();
+  let value = 0;
+  const currency = first.currency || 'BRL';
+  for (const ev of events) {
+    const p = ev.properties || {};
+    const pid = String(p.product_id || p.ProductID || p.title || p.ProductName || ev.id);
+    const qty = Number(p.quantity || p.Quantity || 1);
+    const price = Number(p.price || p.ItemPrice || 0);
+    const title = p.product_title || p.ProductName || p.title || p.name || 'Produto';
+    const variant = p.variant_title || p.VariantName || null;
+    const sku = p.sku || p.SKU || null;
+    const img = p.image_url || p.ImageURL || p.image?.src || null;
+    if (!itemsMap.has(pid)) {
+      itemsMap.set(pid, {
+        title,
+        variant_title: variant,
+        quantity: qty,
+        price,
+        image_url: img,
+        sku,
+        product_id: p.product_id || p.ProductID || null,
+        variant_id: p.variant_id || p.VariantID || null,
+      });
+      value += price * qty;
+    }
+  }
+  const items = Array.from(itemsMap.values());
+
+  const name =
+    [contact?.first_name, contact?.last_name].filter(Boolean).join(' ') ||
+    contact?.email ||
+    'Desconhecido';
+
+  // Earliest & latest events for timestamps
+  const sorted = [...events].sort((a, b) => (a.occurred_at < b.occurred_at ? -1 : 1));
+  const firstAt = sorted[0].occurred_at;
+  const lastAt = sorted[sorted.length - 1].occurred_at;
+
+  return NextResponse.json({
+    id: `cart-${key}`,
+    type: 'cart',
+    status: 'abandoned',
+    contact_id: first.contact_id,
+    contact: {
+      id: contact?.id || null,
+      name,
+      email: contact?.email || null,
+      phone: contact?.phone || null,
+      total_orders: contact?.total_orders ?? null,
+      total_spent: contact?.total_spent ?? null,
+    },
+    store: store
+      ? { id: store.id, shop_domain: store.shop_domain, shop_name: store.shop_name }
+      : null,
+    totals: {
+      total_price: value,
+      subtotal_price: value,
+      total_tax: 0,
+      total_discounts: 0,
+      currency,
+    },
+    items,
+    recovery_url: null,
+    timestamps: {
+      created_at: firstAt,
+      updated_at: lastAt,
+      abandoned_at: lastAt,
+      recovered_at: null,
+      converted_at: null,
+    },
+    events: events.slice(0, 20).map((e: any) => ({
+      id: e.id,
+      event_type: e.event_type,
+      occurred_at: e.occurred_at,
+      properties: e.properties,
+      monetary_value: e.monetary_value,
+      currency: e.currency,
+    })),
+  });
 }
