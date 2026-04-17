@@ -1313,7 +1313,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       <div className="flex items-center justify-between px-4 h-[52px] bg-zinc-900 flex-shrink-0 z-20">
         <div className="flex items-center gap-2.5 min-w-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/worder-favicon.svg" alt="Worder" className="w-7 h-7 flex-shrink-0" />
+          <img src="/logo.svg" alt="Worder" className="h-7 flex-shrink-0" />
           <div className="h-5 w-px bg-zinc-700" />
           {editingName ? (
             <input

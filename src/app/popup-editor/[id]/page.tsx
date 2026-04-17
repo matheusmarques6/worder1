@@ -1882,11 +1882,8 @@ export default function PopupEditorPage() {
           <button onClick={() => router.back()} className="flex-shrink-0 p-1.5 rounded-md hover:bg-gray-100" title="Voltar">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </button>
-          <div className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 shadow-sm">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M5.5 7L3 17L7 17L8.5 11L10 17L14 17L15.5 11L17 17L21 17L18.5 7L14.5 7L13 12L11.5 7L7.5 7L5.5 7Z" fill="white" />
-            </svg>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="Worder" className="h-8 flex-shrink-0" />
           <div className="h-5 w-px bg-gray-200 flex-shrink-0" />
           <div className="flex items-center gap-2 min-w-0">
             {editingName ? (

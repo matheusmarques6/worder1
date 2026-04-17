@@ -150,9 +150,9 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
         {/* Worder brand mark */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/worder-favicon.svg"
+          src="/logo.svg"
           alt="Worder"
-          className="w-7 h-7 flex-shrink-0"
+          className="h-7 flex-shrink-0"
         />
         <div className="h-5 w-px bg-zinc-700" />
 
