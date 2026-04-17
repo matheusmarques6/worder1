@@ -14,6 +14,8 @@ interface BlockPropertiesProps {
   block: EmailBlock
   onChange: (key: string, value: any) => void
   onSaveAsReusable?: () => void
+  selectedSubElement?: string | null
+  onSelectSubElement?: (subEl: string | null) => void
 }
 
 /* ─── Reusable Field Components ─── */
@@ -134,7 +136,7 @@ const ALIGN_OPTIONS = [
 
 /* ─── Main Component ─── */
 
-export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockPropertiesProps) {
+export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSubElement, onSelectSubElement }: BlockPropertiesProps) {
   const p = block.props
   const [showConditions, setShowConditions] = useState(!!p._condition_enabled)
   const [showMediaLib, setShowMediaLib] = useState(false)
@@ -709,7 +711,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
       )
 
     case 'product-grid':
-      return <ProductBlockProperties p={p} onChange={onChange} commonTail={commonTail} />
+      return <ProductBlockProperties p={p} onChange={onChange} commonTail={commonTail} selectedSubElement={selectedSubElement} onSelectSubElement={onSelectSubElement} />
 
     case 'abandoned-cart':
       return (
@@ -1290,19 +1292,243 @@ export function BlockProperties({ block, onChange, onSaveAsReusable }: BlockProp
 // Product Block Properties (Klaviyo-style)
 // ══════════════════════════════════════════
 
-function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange: (k: string, v: any) => void; commonTail: () => JSX.Element }) {
+function ProductBlockProperties({ p, onChange, commonTail, selectedSubElement, onSelectSubElement }: {
+  p: any; onChange: (k: string, v: any) => void; commonTail: () => JSX.Element;
+  selectedSubElement?: string | null; onSelectSubElement?: (subEl: string | null) => void
+}) {
   const [showViewFeeds, setShowViewFeeds] = useState(false)
   const [showCreateFeed, setShowCreateFeed] = useState(false)
   const [showBrowseProducts, setShowBrowseProducts] = useState(false)
-  const [textTab, setTextTab] = useState<'name' | 'price'>('name')
 
+  const subElementLabels: Record<string, string> = {
+    title: 'Titulo',
+    name: 'Nome do Produto',
+    price: 'Preco',
+    button: 'Botao',
+    image: 'Imagem',
+  }
+
+  // ── Sub-element focused panels ──
+  if (selectedSubElement && subElementLabels[selectedSubElement]) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={() => onSelectSubElement?.(null)}
+          className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-800 transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+          Voltar para Produtos
+        </button>
+
+        <div className="flex items-center gap-2 pb-3 border-b border-zinc-100">
+          <div className="w-7 h-7 rounded-md bg-zinc-100 flex items-center justify-center">
+            {selectedSubElement === 'name' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#52525b" strokeWidth="2"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>}
+            {selectedSubElement === 'title' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#52525b" strokeWidth="2"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>}
+            {selectedSubElement === 'price' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#52525b" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
+            {selectedSubElement === 'button' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#52525b" strokeWidth="2"><rect x="3" y="8" width="18" height="8" rx="2"/><path d="M8 12h8"/></svg>}
+            {selectedSubElement === 'image' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#52525b" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>}
+          </div>
+          <p className="text-[13px] font-semibold text-zinc-800">{subElementLabels[selectedSubElement]}</p>
+        </div>
+
+        <p className="text-[10px] text-zinc-400">Clique nos elementos no canvas para editar individualmente.</p>
+
+        {/* ── Title sub-panel ── */}
+        {selectedSubElement === 'title' && (
+          <div className="space-y-3">
+            <Field label="Texto do titulo">
+              <TextInput value={p.title || ''} onChange={v => onChange('title', v)} placeholder="Titulo da secao" />
+            </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Tamanho">
+                <NumberInput value={p.titleFontSize || 18} onChange={v => onChange('titleFontSize', v)} min={12} max={36} />
+              </Field>
+              <Field label="Peso">
+                <SelectInput value={p.titleWeight || 'bold'} onChange={v => onChange('titleWeight', v)} options={[
+                  { value: 'normal', label: 'Normal' }, { value: '500', label: 'Medium' }, { value: '600', label: 'Semibold' }, { value: 'bold', label: 'Bold' },
+                ]} />
+              </Field>
+            </div>
+            <Field label="Cor">
+              <ColorInput value={p.titleColor || '#111827'} onChange={v => onChange('titleColor', v)} />
+            </Field>
+            <Field label="Alinhamento">
+              <div className="flex gap-1">
+                {['left', 'center', 'right'].map(a => (
+                  <button key={a} onClick={() => onChange('titleAlign', a)}
+                    className={`flex-1 py-1.5 text-xs rounded border transition-colors ${(p.titleAlign || 'center') === a ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}`}>
+                    {a === 'left' ? 'Esquerda' : a === 'center' ? 'Centro' : 'Direita'}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          </div>
+        )}
+
+        {/* ── Name sub-panel ── */}
+        {selectedSubElement === 'name' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Tamanho">
+                <NumberInput value={p.nameFontSize || 14} onChange={v => onChange('nameFontSize', v)} min={8} max={32} />
+              </Field>
+              <Field label="Peso">
+                <SelectInput value={p.nameWeight || '600'} onChange={v => onChange('nameWeight', v)} options={[
+                  { value: '400', label: 'Normal 400' }, { value: '500', label: 'Medium 500' }, { value: '600', label: 'Semibold 600' }, { value: '700', label: 'Bold 700' },
+                ]} />
+              </Field>
+            </div>
+            <Field label="Cor">
+              <ColorInput value={p.nameColor || '#111827'} onChange={v => onChange('nameColor', v)} />
+            </Field>
+            <Toggle value={p.showName !== false} onChange={v => onChange('showName', v)} label="Exibir nome" />
+            {p.showName !== false && (
+              <div className="space-y-1.5 pl-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" checked={!p.nameLinkEnabled} onChange={() => onChange('nameLinkEnabled', false)}
+                    className="w-3.5 h-3.5 text-zinc-700 border-gray-300" />
+                  <span className="text-xs text-zinc-600">Sem link</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" checked={p.nameLinkEnabled === true} onChange={() => onChange('nameLinkEnabled', true)}
+                    className="w-3.5 h-3.5 text-zinc-700 border-gray-300" />
+                  <span className="text-xs text-zinc-600">Link para o produto</span>
+                </label>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Price sub-panel ── */}
+        {selectedSubElement === 'price' && (
+          <div className="space-y-3">
+            <Toggle value={p.showPrice !== false} onChange={v => onChange('showPrice', v)} label="Exibir preco" />
+            {p.showPrice !== false && (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Tamanho">
+                    <NumberInput value={p.priceFontSize || 16} onChange={v => onChange('priceFontSize', v)} min={8} max={48} />
+                  </Field>
+                  <Field label="Peso">
+                    <SelectInput value={p.priceWeight || '700'} onChange={v => onChange('priceWeight', v)} options={[
+                      { value: '400', label: 'Normal 400' }, { value: '500', label: 'Medium 500' }, { value: '600', label: 'Semibold 600' }, { value: '700', label: 'Bold 700' },
+                    ]} />
+                  </Field>
+                </div>
+                <Field label="Cor do preco">
+                  <ColorInput value={p.priceColor || '#F97316'} onChange={v => onChange('priceColor', v)} />
+                </Field>
+              </>
+            )}
+            <Toggle value={p.showComparePrice === true} onChange={v => onChange('showComparePrice', v)} label="Preco original (riscado)" />
+            {p.showComparePrice && (
+              <Field label="Cor do preco original">
+                <ColorInput value={p.comparePriceColor || '#9CA3AF'} onChange={v => onChange('comparePriceColor', v)} />
+              </Field>
+            )}
+          </div>
+        )}
+
+        {/* ── Button sub-panel ── */}
+        {selectedSubElement === 'button' && (
+          <div className="space-y-3">
+            <Toggle value={p.showButton !== false} onChange={v => onChange('showButton', v)} label="Exibir botao" />
+            {p.showButton !== false && (
+              <>
+                <Field label="Texto">
+                  <TextInput value={p.buttonText || 'Comprar'} onChange={v => onChange('buttonText', v)} placeholder="Texto do botao" />
+                </Field>
+                <Field label="Cor de fundo">
+                  <ColorInput value={p.buttonColor || '#F97316'} onChange={v => onChange('buttonColor', v)} />
+                </Field>
+                <Field label="Cor do texto">
+                  <ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} />
+                </Field>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Tamanho">
+                    <NumberInput value={p.buttonFontSize || 12} onChange={v => onChange('buttonFontSize', v)} min={10} max={20} />
+                  </Field>
+                  <Field label="Raio">
+                    <NumberInput value={p.buttonRadius || 6} onChange={v => onChange('buttonRadius', v)} min={0} max={50} />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Padding H">
+                    <NumberInput value={p.buttonPaddingH ?? 16} onChange={v => onChange('buttonPaddingH', v)} min={4} max={40} />
+                  </Field>
+                  <Field label="Padding V">
+                    <NumberInput value={p.buttonPaddingV ?? 6} onChange={v => onChange('buttonPaddingV', v)} min={2} max={20} />
+                  </Field>
+                </div>
+                <Field label="Alinhamento">
+                  <div className="flex gap-1">
+                    {[
+                      { v: 'left', label: 'Esquerda' },
+                      { v: 'center', label: 'Centro' },
+                      { v: 'right', label: 'Direita' },
+                      { v: 'full', label: 'Total' },
+                    ].map(a => (
+                      <button key={a.v} onClick={() => onChange('buttonAlign', a.v)}
+                        className={`flex-1 py-1.5 text-[10px] rounded border transition-colors ${(p.buttonAlign || 'left') === a.v ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}`}>
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+                <Toggle value={p.buttonFullWidth} onChange={v => onChange('buttonFullWidth', v)} label="Largura total" />
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Image sub-panel ── */}
+        {selectedSubElement === 'image' && (
+          <div className="space-y-3">
+            <Field label="Proporcao">
+              <div className="flex border border-zinc-200 rounded-md overflow-hidden">
+                {([
+                  { value: 'square' as const, label: 'Quadrado' },
+                  { value: 'portrait' as const, label: 'Retrato' },
+                  { value: 'landscape' as const, label: 'Paisagem' },
+                ]).map(opt => (
+                  <button key={opt.value} onClick={() => onChange('imageRatio', opt.value)}
+                    className={`flex-1 h-[28px] text-[11px] font-medium transition-all ${(p.imageRatio || 'square') === opt.value ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <Field label="Raio da borda">
+              <NumberInput value={p.productBorderRadius || 8} onChange={v => onChange('productBorderRadius', v)} min={0} max={24} />
+            </Field>
+            <Field label="Altura maxima (px)">
+              <NumberInput value={p.maxImageHeight || 300} onChange={v => onChange('maxImageHeight', v)} min={80} max={600} />
+            </Field>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Main product block panel (no sub-element selected) ──
   return (
     <div className="space-y-4">
+      {/* Info banner */}
+      <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+        <div className="w-7 h-7 rounded-md bg-zinc-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3h-8l-2 4h12z"/></svg>
+        </div>
+        <div>
+          <p className="text-[11px] text-zinc-600 leading-snug">Os detalhes dos produtos serao preenchidos automaticamente.</p>
+          <p className="text-[10px] text-zinc-400 mt-1">Clique nos elementos no canvas para editar individualmente.</p>
+        </div>
+      </div>
+
       {/* ── Dynamic / Static radio cards ── */}
       <div className="space-y-2">
         {[
-          { value: 'dynamic', label: 'Dinâmico', desc: 'Exibir produtos usando um feed de produtos.' },
-          { value: 'static', label: 'Estático', desc: 'Escolher produtos fixos para todos os destinatários.' },
+          { value: 'dynamic', label: 'Dinamico', desc: 'Exibir produtos usando um feed de produtos.' },
+          { value: 'static', label: 'Estatico', desc: 'Escolher produtos fixos para todos os destinatarios.' },
         ].map(opt => (
           <label key={opt.value}
             className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${p.mode === opt.value ? 'border-zinc-900 bg-zinc-50/30' : 'border-gray-200 hover:border-gray-300'}`}>
@@ -1336,7 +1562,7 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
                       {p.feedType === 'bestsellers' && 'Exibir produtos mais vendidos de todas as categorias.'}
                       {p.feedType === 'newest' && 'Exibir produtos mais recentes de todas as categorias.'}
                       {p.feedType === 'cart_items' && 'Exibir produtos do carrinho do cliente.'}
-                      {p.feedType === 'recommendations' && 'Exibir produtos recomendados baseado no histórico.'}
+                      {p.feedType === 'recommendations' && 'Exibir produtos recomendados baseado no historico.'}
                       {p.feedType === 'most_viewed' && 'Exibir produtos mais vistos.'}
                       {!p.feedType && 'Feed configurado.'}
                     </p>
@@ -1346,7 +1572,7 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
               <div className="flex gap-2">
                 <button onClick={() => setShowViewFeeds(true)}
                   className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
-                  Alterar seleção
+                  Alterar selecao
                 </button>
                 <button onClick={() => setShowCreateFeed(true)}
                   className="text-xs font-medium text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
@@ -1358,7 +1584,7 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
             /* Nenhum feed selecionado */
             <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center bg-gray-50">
               <p className="text-xs font-medium text-gray-600 mb-1">Nenhum feed de produtos configurado</p>
-              <p className="text-[10px] text-gray-400 mb-3">Crie um feed para definir quais produtos serão exibidos para cada contato.</p>
+              <p className="text-[10px] text-gray-400 mb-3">Crie um feed para definir quais produtos serao exibidos para cada contato.</p>
               <div className="flex gap-2 justify-center">
                 <button onClick={() => setShowCreateFeed(true)}
                   className="text-xs font-semibold text-white bg-zinc-900 rounded-lg px-4 py-2 hover:bg-zinc-800 transition-colors">
@@ -1392,211 +1618,96 @@ function ProductBlockProperties({ p, onChange, commonTail }: { p: any; onChange:
         </div>
       )}
 
-      {/* ── Detalhes do produto (checkboxes) ── */}
+      {/* ── Detalhes do produto (clickable rows that open sub-panels) ── */}
       <div>
-        <p className="text-[12px] font-medium text-gray-700 mb-2">Detalhes do produto</p>
-
+        <p className="text-[12px] font-medium text-gray-700 mb-2">Elementos do produto</p>
+        <p className="text-[10px] text-zinc-400 mb-2">Clique para editar o estilo de cada elemento.</p>
         <div className="space-y-1">
-          <Field label="Começar pelo item número">
-            <SelectInput value={String(p.startItem || 1)} onChange={v => onChange('startItem', Number(v))} options={[
-              { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' },
-            ]} />
-          </Field>
-        </div>
-
-        <div className="space-y-2 mt-3">
-          {/* Nome do produto */}
-          <div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={p.showName !== false} onChange={e => onChange('showName', e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-zinc-700 focus:ring-zinc-500" />
-              <span className="text-xs font-medium text-gray-700">Nome do produto</span>
-            </label>
-            {p.showName !== false && (
-              <div className="ml-6 mt-1 space-y-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" checked={!p.nameLinkEnabled} onChange={() => onChange('nameLinkEnabled', false)}
-                    className="w-3.5 h-3.5 text-zinc-700 border-gray-300" />
-                  <span className="text-xs text-gray-600">Sem link</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" checked={p.nameLinkEnabled === true} onChange={() => onChange('nameLinkEnabled', true)}
-                    className="w-3.5 h-3.5 text-zinc-700 border-gray-300" />
-                  <span className="text-xs text-gray-600">Link para o produto</span>
-                </label>
+          {[
+            { key: 'name', label: 'Nome', propKey: 'showName', preview: `${p.nameFontSize || 14}px, ${p.nameWeight || '600'}` },
+            { key: 'price', label: 'Preco', propKey: 'showPrice', preview: `${p.priceFontSize || 16}px, ${p.priceWeight || '700'}` },
+            { key: 'button', label: 'Botao', propKey: 'showButton', preview: p.buttonText || 'Comprar' },
+            { key: 'image', label: 'Imagem', propKey: null, preview: p.imageRatio || 'square' },
+          ].map(item => (
+            <button key={item.key}
+              onClick={() => onSelectSubElement?.(item.key)}
+              className="w-full flex items-center justify-between px-3 py-2.5 border border-zinc-100 rounded-lg hover:border-zinc-300 hover:bg-zinc-50/50 transition-all group"
+            >
+              <div className="flex items-center gap-2.5">
+                {item.propKey && (
+                  <input type="checkbox" checked={p[item.propKey] !== false}
+                    onClick={e => e.stopPropagation()}
+                    onChange={e => onChange(item.propKey!, e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500" />
+                )}
+                <span className="text-[13px] font-medium text-zinc-700">{item.label}</span>
               </div>
-            )}
-          </div>
-
-          {/* Price */}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={p.showPrice !== false} onChange={e => onChange('showPrice', e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-zinc-700 focus:ring-zinc-500" />
-            <span className="text-xs font-medium text-gray-700">Preço</span>
-          </label>
-
-          {/* Original price */}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={p.showComparePrice === true} onChange={e => onChange('showComparePrice', e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-zinc-700 focus:ring-zinc-500" />
-            <span className="text-xs font-medium text-gray-700">Preço original para produtos em promoção</span>
-          </label>
-
-          {/* Rating */}
-          <label className="flex items-center gap-2 cursor-pointer opacity-50">
-            <input type="checkbox" checked={false} disabled className="w-4 h-4 rounded border-gray-300" />
-            <span className="text-xs text-gray-500">Avaliação</span>
-          </label>
-
-          {/* Button */}
-          <div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={p.showButton !== false} onChange={e => onChange('showButton', e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-zinc-700 focus:ring-zinc-500" />
-              <span className="text-xs font-medium text-gray-700">Botão</span>
-            </label>
-            {p.showButton !== false && (
-              <div className="ml-6 mt-1">
-                <label className="text-[11px] text-gray-500">Texto do botão</label>
-                <input type="text" value={p.buttonText || 'COMPRAR AGORA'} onChange={e => onChange('buttonText', e.target.value)}
-                  className="w-full mt-0.5 border border-gray-200 rounded-md px-2.5 py-1.5 text-sm text-gray-900 focus:border-zinc-900 focus:outline-none" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-zinc-400">{item.preview}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-300 group-hover:text-zinc-500"><path d="M9 18l6-6-6-6"/></svg>
               </div>
-            )}
-          </div>
+            </button>
+          ))}
         </div>
       </div>
 
       {/* ── Layout ── */}
-      <div>
-        <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">Layout</p>
-        <div className="flex border border-zinc-200 rounded-md overflow-hidden mb-3">
-          {([
-            { value: 'list' as const, label: 'Lista' },
-            { value: 'grid' as const, label: 'Grade' },
-          ]).map(opt => (
-            <button key={opt.value} onClick={() => onChange('layout', opt.value)}
-              className={`flex-1 h-[28px] text-[12px] font-medium transition-all ${(p.layout || 'grid') === opt.value ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        {(p.layout || 'grid') === 'grid' && (
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <Field label="Colunas">
-              <SelectInput value={String(p.columns || 2)} onChange={v => onChange('columns', Number(v))} options={[
-                { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
-              ]} />
-            </Field>
-            <Field label="Linhas">
-              <SelectInput value={String(p.rows || 2)} onChange={v => onChange('rows', Number(v))} options={[
-                { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
-              ]} />
-            </Field>
+      <details className="group border border-zinc-100 rounded-lg" open>
+        <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+          Layout <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+        </summary>
+        <div className="px-3 pb-3 space-y-3">
+          <div className="flex border border-zinc-200 rounded-md overflow-hidden">
+            {([
+              { value: 'list' as const, label: 'Lista' },
+              { value: 'grid' as const, label: 'Grade' },
+            ]).map(opt => (
+              <button key={opt.value} onClick={() => onChange('layout', opt.value)}
+                className={`flex-1 h-[28px] text-[12px] font-medium transition-all ${(p.layout || 'grid') === opt.value ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
+                {opt.label}
+              </button>
+            ))}
           </div>
-        )}
-        {(p.layout || 'grid') === 'list' && (
-          <Field label="Numero de produtos">
-            <NumberInput value={(p.columns || 2) * (p.rows || 2)} onChange={v => { onChange('columns', 1); onChange('rows', v) }} min={1} max={12} />
-          </Field>
-        )}
-        <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mt-3 mb-2">Imagem</p>
-        <div className="flex border border-zinc-200 rounded-md overflow-hidden mb-2">
-          {([
-            { value: 'square' as const, label: 'Quadrado' },
-            { value: 'portrait' as const, label: 'Retrato' },
-            { value: 'landscape' as const, label: 'Paisagem' },
-          ]).map(opt => (
-            <button key={opt.value} onClick={() => onChange('imageRatio', opt.value)}
-              className={`flex-1 h-[28px] text-[12px] font-medium transition-all ${(p.imageRatio || 'square') === opt.value ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        <Field label="Raio da imagem">
-          <NumberInput value={p.productBorderRadius || 8} onChange={v => onChange('productBorderRadius', v)} min={0} max={24} />
-        </Field>
-        <div className="mt-2 space-y-1">
+          {(p.layout || 'grid') === 'grid' && (
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Colunas">
+                <SelectInput value={String(p.columns || 2)} onChange={v => onChange('columns', Number(v))} options={[
+                  { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
+                ]} />
+              </Field>
+              <Field label="Linhas">
+                <SelectInput value={String(p.rows || 2)} onChange={v => onChange('rows', Number(v))} options={[
+                  { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
+                ]} />
+              </Field>
+            </div>
+          )}
+          {(p.layout || 'grid') === 'list' && (
+            <Field label="Numero de produtos">
+              <NumberInput value={(p.columns || 2) * (p.rows || 2)} onChange={v => { onChange('columns', 1); onChange('rows', v) }} min={1} max={12} />
+            </Field>
+          )}
           <Toggle value={p.stackOnMobile !== false} onChange={v => onChange('stackOnMobile', v)} label="Empilhar no mobile" />
-          <Toggle value={p.showSeparator || false} onChange={v => onChange('showSeparator', v)} label="Mostrar separador entre produtos" />
+          <Toggle value={p.showSeparator || false} onChange={v => onChange('showSeparator', v)} label="Separador entre produtos" />
           {p.showSeparator && (
             <Field label="Cor do separador"><ColorInput value={p.separatorColor || '#E5E7EB'} onChange={v => onChange('separatorColor', v)} /></Field>
           )}
-        </div>
-        <Field label="Espaco entre produtos (px)">
-          <NumberInput value={p.productPadding || 12} onChange={v => onChange('productPadding', v)} min={0} max={32} />
-        </Field>
-      </div>
-
-      {/* ── Borda do produto (+) ── */}
-      <details className="group border border-gray-100 rounded-lg">
-        <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[12px] font-medium text-gray-700 hover:bg-gray-50 rounded-lg">
-          Borda do produto <span className="text-gray-300 group-open:hidden">+</span>
-        </summary>
-        <div className="px-3 pb-3 space-y-2">
-          <ColorInput value={p.productBorderColor || '#E5E7EB'} onChange={v => onChange('productBorderColor', v)} />
-          <NumberInput value={p.productBorderRadius || 8} onChange={v => onChange('productBorderRadius', v)} min={0} max={32} />
+          <Field label="Espaco entre produtos (px)">
+            <NumberInput value={p.productPadding || 12} onChange={v => onChange('productPadding', v)} min={0} max={32} />
+          </Field>
         </div>
       </details>
 
-      {/* ── Text tabs [Name] [Price] ── */}
-      <div>
-        <p className="text-[12px] font-medium text-gray-700 mb-2">Text</p>
-        <div className="flex border border-gray-200 rounded-lg overflow-hidden mb-3">
-          <button onClick={() => setTextTab('name')}
-            className={`flex-1 py-2 text-xs font-medium transition-colors ${textTab === 'name' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'}`}>
-            Name
-          </button>
-          <button onClick={() => setTextTab('price')}
-            className={`flex-1 py-2 text-xs font-medium transition-colors ${textTab === 'price' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'}`}>
-            Price
-          </button>
+      {/* ── Borda do produto ── */}
+      <details className="group border border-zinc-100 rounded-lg">
+        <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+          Borda do produto <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+        </summary>
+        <div className="px-3 pb-3 space-y-2">
+          <Field label="Cor"><ColorInput value={p.productBorderColor || '#E5E7EB'} onChange={v => onChange('productBorderColor', v)} /></Field>
+          <Field label="Raio"><NumberInput value={p.productBorderRadius || 8} onChange={v => onChange('productBorderRadius', v)} min={0} max={32} /></Field>
         </div>
-        {textTab === 'name' && (
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Size"><NumberInput value={p.nameFontSize || 14} onChange={v => onChange('nameFontSize', v)} min={8} max={32} /></Field>
-              <Field label="Weight">
-                <SelectInput value={p.nameWeight || '400'} onChange={v => onChange('nameWeight', v)} options={[
-                  { value: '400', label: 'Normal 400' }, { value: '500', label: 'Medium 500' }, { value: '600', label: 'Semibold 600' }, { value: '700', label: 'Bold 700' },
-                ]} />
-              </Field>
-            </div>
-            <Field label="Color"><ColorInput value={p.nameColor || '#111827'} onChange={v => onChange('nameColor', v)} /></Field>
-          </div>
-        )}
-        {textTab === 'price' && (
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Size"><NumberInput value={p.priceFontSize || 16} onChange={v => onChange('priceFontSize', v)} min={8} max={48} /></Field>
-              <Field label="Weight">
-                <SelectInput value={p.priceWeight || '700'} onChange={v => onChange('priceWeight', v)} options={[
-                  { value: '400', label: 'Normal 400' }, { value: '500', label: 'Medium 500' }, { value: '600', label: 'Semibold 600' }, { value: '700', label: 'Bold 700' },
-                ]} />
-              </Field>
-            </div>
-            <Field label="Color"><ColorInput value={p.priceColor || '#F97316'} onChange={v => onChange('priceColor', v)} /></Field>
-            <Field label="Cor preço comparativo"><ColorInput value={p.comparePriceColor || '#9CA3AF'} onChange={v => onChange('comparePriceColor', v)} /></Field>
-          </div>
-        )}
-      </div>
-
-      {/* ── Estilos do botão ── */}
-      {p.showButton !== false && (
-        <div>
-          <p className="text-[12px] font-medium text-gray-700 mb-2">Estilos do botão</p>
-          <div className="space-y-2">
-            <Field label="Cor de fundo"><ColorInput value={p.buttonColor || '#F97316'} onChange={v => onChange('buttonColor', v)} /></Field>
-            <Field label="Cor do texto"><ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} /></Field>
-            <Field label="Raio da borda"><NumberInput value={p.buttonRadius || 6} onChange={v => onChange('buttonRadius', v)} min={0} max={50} /></Field>
-            <Field label="Tamanho da fonte"><NumberInput value={p.buttonFontSize || 12} onChange={v => onChange('buttonFontSize', v)} min={10} max={20} /></Field>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Padding H"><NumberInput value={p.buttonPaddingH ?? 16} onChange={v => onChange('buttonPaddingH', v)} min={4} max={40} /></Field>
-              <Field label="Padding V"><NumberInput value={p.buttonPaddingV ?? 6} onChange={v => onChange('buttonPaddingV', v)} min={2} max={20} /></Field>
-            </div>
-            <Toggle value={p.buttonFullWidth} onChange={v => onChange('buttonFullWidth', v)} label="Largura total" />
-          </div>
-        </div>
-      )}
+      </details>
 
       {commonTail()}
 

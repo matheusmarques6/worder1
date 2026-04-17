@@ -208,6 +208,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     defaultProps: {
       mode: 'dynamic', feedType: '', feedId: '', feedName: '',
       title: 'Recomendados Para Voce',
+      titleFontSize: 18, titleWeight: 'bold', titleColor: '#111827', titleAlign: 'center',
       columns: 2, rows: 2, maxImageHeight: 300,
       layout: 'grid' as 'grid' | 'list',
       imageRatio: 'square' as 'square' | 'portrait' | 'landscape',

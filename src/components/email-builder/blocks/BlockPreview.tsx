@@ -423,6 +423,11 @@ export function BlockPreview({
         const imgHeight = imgRatio === 'portrait' ? (p.maxImageHeight || 300) * 1.3 : imgRatio === 'landscape' ? (p.maxImageHeight || 300) * 0.65 : (p.maxImageHeight || 300)
         // eslint-disable-next-line react-hooks/rules-of-hooks
         const gridId = `pgrid-${block.id.replace(/[^a-z0-9]/gi,'')}`
+        const subClick = (el: string) => (e: React.MouseEvent) => {
+          e.stopPropagation()
+          onSelectSubElement?.(el)
+        }
+        const subRing = (el: string) => selectedSubElement === el ? 'outline outline-2 outline-zinc-900 outline-offset-1 rounded-sm' : 'hover:outline hover:outline-1 hover:outline-zinc-300 hover:outline-offset-1 rounded-sm cursor-pointer'
         return (
           <div
             style={{
@@ -435,17 +440,19 @@ export function BlockPreview({
               <style dangerouslySetInnerHTML={{ __html: `@container (max-width: 420px) { .${gridId} { grid-template-columns: 1fr !important; } }` }} />
             )}
             {p.title && (
-              <p
-                style={{
-                  fontSize: 18,
-                  fontWeight: 'bold',
-                  color: '#111827',
-                  textAlign: 'center',
-                  margin: '0 0 16px',
-                }}
-              >
-                {p.title}
-              </p>
+              <div onClick={subClick('title')} className={subRing('title')}>
+                <p
+                  style={{
+                    fontSize: p.titleFontSize || 18,
+                    fontWeight: p.titleWeight || 'bold',
+                    color: p.titleColor || '#111827',
+                    textAlign: (p.titleAlign as React.CSSProperties['textAlign']) || 'center',
+                    margin: '0 0 16px',
+                  }}
+                >
+                  {p.title}
+                </p>
+              </div>
             )}
             <div
               className={gridId}
@@ -470,7 +477,7 @@ export function BlockPreview({
                     gap: isListLayout ? 12 : undefined,
                   }}
                 >
-                  <div
+                  <div onClick={subClick('image')} className={subRing('image')}
                     style={{
                       background: '#F3F4F6',
                       height: isListLayout ? 80 : imgHeight,
@@ -482,6 +489,7 @@ export function BlockPreview({
                       color: '#9CA3AF',
                       fontSize: 12,
                       overflow: 'hidden',
+                      transition: 'outline-color 0.15s',
                     }}
                   >
                     {staticProd?.image_url ? (
@@ -492,19 +500,22 @@ export function BlockPreview({
                   </div>
                   <div style={{ padding: p.productPadding ?? 8 }}>
                     {p.showName !== false && (
-                      <p
-                        style={{
-                          margin: 0,
-                          fontWeight: p.nameWeight || '600',
-                          fontSize: p.nameFontSize || 14,
-                          color: p.nameColor || '#111827',
-                        }}
-                      >
-                        {staticProd?.title || 'Nome do produto'}
-                      </p>
+                      <div onClick={subClick('name')} className={subRing('name')}>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontWeight: p.nameWeight || '600',
+                            fontSize: p.nameFontSize || 14,
+                            color: p.nameColor || '#111827',
+                            padding: '2px 0',
+                          }}
+                        >
+                          {staticProd?.title || 'Nome do produto'}
+                        </p>
+                      </div>
                     )}
                     {p.showPrice !== false && (
-                      <div style={{ marginTop: 4 }}>
+                      <div onClick={subClick('price')} className={subRing('price')} style={{ marginTop: 4, padding: '2px 0' }}>
                         {p.showComparePrice && (
                           <span
                             style={{
@@ -529,23 +540,24 @@ export function BlockPreview({
                       </div>
                     )}
                     {p.showButton !== false && (
-                      <a
-                        href="#"
-                        onClick={preventDefault}
-                        style={{
-                          display: p.buttonFullWidth ? 'block' : 'inline-block',
-                          marginTop: 8,
-                          padding: `${p.buttonPaddingV ?? 6}px ${p.buttonPaddingH ?? 16}px`,
-                          background: p.buttonColor || '#F97316',
-                          color: p.buttonTextColor || '#FFFFFF',
-                          borderRadius: p.buttonRadius ?? 6,
-                          fontSize: p.buttonFontSize || 12,
-                          fontWeight: 600,
-                          textDecoration: 'none',
-                        }}
-                      >
-                        {p.buttonText || 'Comprar'}
-                      </a>
+                      <div onClick={subClick('button')} className={subRing('button')} style={{ marginTop: 8, textAlign: p.buttonAlign as any || undefined }}>
+                        <a
+                          href="#"
+                          onClick={preventDefault}
+                          style={{
+                            display: p.buttonFullWidth ? 'block' : 'inline-block',
+                            padding: `${p.buttonPaddingV ?? 6}px ${p.buttonPaddingH ?? 16}px`,
+                            background: p.buttonColor || '#F97316',
+                            color: p.buttonTextColor || '#FFFFFF',
+                            borderRadius: p.buttonRadius ?? 6,
+                            fontSize: p.buttonFontSize || 12,
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                          }}
+                        >
+                          {p.buttonText || 'Comprar'}
+                        </a>
+                      </div>
                     )}
                   </div>
                 </div>

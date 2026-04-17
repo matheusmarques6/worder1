@@ -439,6 +439,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     return JSON.parse(JSON.stringify(DEFAULT_DOCUMENT))
   })
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
+  const [selectedSubElement, setSelectedSubElement] = useState<string | null>(null)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [saving, setSaving] = useState(false)
@@ -526,6 +527,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const selectBlock = useCallback((blockId: string) => {
     setSelectedBlockId(blockId)
     setSelectedSectionId(null)
+    setSelectedSubElement(null)
   }, [])
 
   const selectSection = useCallback((sectionId: string) => {
@@ -536,6 +538,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const clearSelection = useCallback(() => {
     setSelectedBlockId(null)
     setSelectedSectionId(null)
+    setSelectedSubElement(null)
   }, [])
 
   // ── Section Operations ──
@@ -1384,6 +1387,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                     setSaveBlockName('')
                     setShowSaveBlockModal(true)
                   }}
+                  selectedSubElement={selectedSubElement}
+                  onSelectSubElement={setSelectedSubElement}
                 />
               </div>
             </>
@@ -1717,6 +1722,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                         onSelect={() => selectBlock(block.id)}
                                         onClone={() => cloneBlock(block.id)}
                                         onDelete={() => removeBlock(block.id)}
+                                        selectedSubElement={selectedBlockId === block.id ? selectedSubElement : null}
+                                        onSelectSubElement={setSelectedSubElement}
                                       />
                                     </SortableBlock>
                                     )
