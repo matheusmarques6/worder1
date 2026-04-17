@@ -238,12 +238,27 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
 
+    // Verify ownership before deleting
+    const auth = await getAuthClient()
+    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { data: seg } = await supabase
+      .from('customer_segments')
+      .select('organization_id')
+      .eq('id', id)
+      .single()
+
+    if (!seg || seg.organization_id !== auth.user.organization_id) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+
     await supabase.from('segment_members').delete().eq('segment_id', id)
 
     const { error } = await supabase
       .from('customer_segments')
       .delete()
       .eq('id', id)
+      .eq('organization_id', auth.user.organization_id)
 
     if (error) throw error
 

@@ -1,15 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getAuthClient } from '@/lib/api-utils'
 
 export async function POST(request: NextRequest) {
   try {
-    const { feed_id, feed_type, contact_id, organization_id, max_products = 4 } = await request.json()
+    // Allow internal calls (from send-batch worker) or authenticated users
+    const isInternal = request.headers.get('X-Internal') === 'true'
+    let orgId: string | null = null
 
-    if (!organization_id) {
-      return NextResponse.json({ products: [] })
+    if (isInternal) {
+      const body = await request.json()
+      orgId = body.organization_id
+      if (!orgId) return NextResponse.json({ products: [] })
+      var { feed_id, feed_type, contact_id, max_products = 4 } = body
+    } else {
+      const auth = await getAuthClient()
+      if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      const body = await request.json()
+      orgId = auth.user.organization_id
+      var { feed_id, feed_type, contact_id, max_products = 4 } = body
     }
-
-    const orgId = organization_id
     const type = feed_type || 'bestsellers'
     const limit = max_products
 
@@ -106,7 +116,7 @@ export async function POST(request: NextRequest) {
     if (feed_id) {
       try {
         const { data: feed } = await supabaseAdmin.from('product_feeds')
-          .select('filters').eq('id', feed_id).single()
+          .select('filters').eq('id', feed_id).eq('organization_id', orgId).single()
         if (feed && feed.filters && Array.isArray(feed.filters) && feed.filters.length > 0) {
           for (const filter of feed.filters as any[]) {
             if (filter.field === 'category' && filter.value !== 'all') {
