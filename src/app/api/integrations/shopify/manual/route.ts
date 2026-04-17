@@ -196,6 +196,12 @@ export async function POST(request: NextRequest) {
       pixel_installed: false,
       webhook_secret: cleanClientSecret,
       embed_installed: false,
+      // Enable all sync flags by default — essential for checkouts/orders/customers
+      sync_orders: true,
+      sync_customers: true,
+      sync_checkouts: true,
+      sync_products: true,
+      sync_refunds: true,
       settings: {
         theme_editor_url: `https://${shopDomain}/admin/themes/current/editor?context=apps`,
         tracking_endpoint: `${APP_URL}/api/shopify/track`,

@@ -199,6 +199,12 @@ export async function GET(request: NextRequest) {
       status: 'active',
       installed_at: new Date().toISOString(),
       last_sync_at: new Date().toISOString(),
+      // Enable all sync flags by default
+      sync_orders: true,
+      sync_customers: true,
+      sync_checkouts: true,
+      sync_products: true,
+      sync_refunds: true,
     };
 
     let storeId: string;

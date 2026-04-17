@@ -86,13 +86,25 @@ export default function RecoveryPage() {
       const res = await fetch(`/api/recovery?${params}`)
       if (res.ok) {
         const data = await res.json()
+        // Map API-level status → UI-friendly status
+        // API: pending | abandoned | recovered | converted
+        // UI:  pending | sent    | recovered | expired | failed
+        const statusMap: Record<string, RecoveryItem['status']> = {
+          pending: 'pending',
+          abandoned: 'pending',
+          recovered: 'recovered',
+          converted: 'recovered',
+          expired: 'expired',
+          failed: 'failed',
+          sent: 'sent',
+        }
         const rawItems = (data.items || []).map((item: any) => ({
           id: item.id,
-          customer_name: item.contacts?.first_name ? `${item.contacts.first_name} ${item.contacts?.last_name || ''}`.trim() : item.customer_name || 'Cliente',
-          customer_email: item.contacts?.email || item.customer_email || '',
-          customer_phone: item.customer_phone || '',
+          customer_name: item.contact_name || item.customer_name || 'Cliente',
+          customer_email: item.email || item.customer_email || '',
+          customer_phone: item.phone || item.customer_phone || '',
           amount: parseFloat(item.value || item.amount || '0'),
-          status: item.status || 'pending',
+          status: statusMap[item.status] || 'pending',
           type: item.type || activeTab,
           created_at: item.created_at,
           recovered_at: item.recovered_at,
