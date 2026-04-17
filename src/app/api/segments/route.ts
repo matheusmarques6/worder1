@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Listar todos de TODAS as orgs do usuário
-    let listQuery = supabase
+    let listQuery: any = supabase
       .from('customer_segments')
       .select('*')
       .in('organization_id', orgIds)
@@ -84,11 +84,13 @@ export async function GET(request: NextRequest) {
       listQuery = listQuery.or(`store_id.eq.${storeId},store_id.is.null`)
     }
 
-    if (activeOnly) {
-      listQuery = listQuery.or('is_active.eq.true,is_active.is.null')
-    }
+    const { data: rawSegments, error } = await listQuery
 
-    const { data: segments, error } = await listQuery
+    // Filter active-only in JS to avoid PostgREST duplicate .or() issues
+    let segments = rawSegments
+    if (activeOnly && segments) {
+      segments = segments.filter((s: any) => s.is_active !== false)
+    }
 
     if (error) throw error
 
