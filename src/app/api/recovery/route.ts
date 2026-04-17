@@ -118,38 +118,64 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message || 'Failed to fetch' }, { status: 500 });
     }
 
-    // Compute stats for the checkout tab (matching the filter of the displayed items)
-    let stats = { total: 0, pending: 0, abandoned: 0, converted: 0, recovered: 0 };
-    let revenueRecovered = 0;
-
-    try {
-      const { data: allItems } = await supabaseAdmin
-        .from('shopify_checkouts')
-        .select('status, total_price, email, created_at')
-        .in('organization_id', orgIds)
-        .in('store_id', activeStoreIds)
-        .not('email', 'is', null)
-        .neq('email', '')
-        .in('status', ['pending', 'abandoned', 'recovered']);
-
-      if (allItems) {
-        const abandonmentCutoff = Date.now() - 15 * 60 * 1000; // 15min threshold
-        for (const it of allItems as any[]) {
-          // Treat pending >15min old as effectively abandoned for stats
-          const createdMs = it.created_at ? new Date(it.created_at).getTime() : 0;
-          const effectiveStatus = (it.status === 'pending' && createdMs && createdMs < abandonmentCutoff)
-            ? 'abandoned'
-            : it.status;
-          if (effectiveStatus === 'pending') stats.pending++;
-          else if (effectiveStatus === 'abandoned') stats.abandoned++;
-          else if (effectiveStatus === 'recovered') {
-            stats.recovered++;
-            revenueRecovered += Number(it.total_price) || 0;
+    // ── Live conversion check: catch checkouts whose customer already placed ──
+    // an order but our webhook/cron didn't update status yet. Cross-reference
+    // emails against shopify_orders so Shopify + Worder lists match perfectly.
+    const checkoutEmails = [...new Set(
+      (items || []).map((c: any) => c.email?.toLowerCase()).filter(Boolean)
+    )] as string[];
+    const convertedEmails = new Set<string>();
+    if (checkoutEmails.length > 0) {
+      try {
+        const { data: orders } = await supabaseAdmin
+          .from('shopify_orders')
+          .select('email')
+          .in('store_id', activeStoreIds)
+          .in('email', checkoutEmails);
+        for (const o of (orders || []) as any[]) {
+          if (o.email) convertedEmails.add(String(o.email).toLowerCase());
+        }
+      } catch {}
+      // Also check contact_events for placed_order events
+      if (convertedEmails.size < checkoutEmails.length) {
+        try {
+          const remaining = checkoutEmails.filter(e => !convertedEmails.has(e));
+          if (remaining.length > 0) {
+            const { data: events } = await supabaseAdmin
+              .from('contact_events')
+              .select('properties')
+              .in('organization_id', orgIds)
+              .in('event_type', ['placed_order', 'order_paid'])
+              .in('store_id', activeStoreIds)
+              .limit(500);
+            for (const ev of (events || []) as any[]) {
+              const evEmail = (ev.properties?.email || ev.properties?.Email || '').toLowerCase();
+              if (evEmail && remaining.includes(evEmail)) convertedEmails.add(evEmail);
+            }
+          }
+        } catch {}
+      }
+      // Fire-and-forget: mark the stale rows as converted in the DB
+      if (convertedEmails.size > 0) {
+        for (const c of (items || []) as any[]) {
+          if (c.email && convertedEmails.has(c.email.toLowerCase()) && c.status !== 'converted') {
+            supabaseAdmin.from('shopify_checkouts')
+              .update({ status: 'converted', converted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+              .eq('id', c.id)
+              .then(() => {}, () => {});
           }
         }
-        stats.total = stats.pending + stats.abandoned + stats.recovered;
       }
-    } catch {}
+    }
+
+    // Filter out the converted ones from the results
+    const filteredItems = (items || []).filter((c: any) =>
+      !(c.email && convertedEmails.has(c.email.toLowerCase()))
+    );
+
+    // Stats are computed after the conversion check below so they match
+    let stats = { total: 0, pending: 0, abandoned: 0, converted: 0, recovered: 0 };
+    let revenueRecovered = 0;
 
     // Backfill contact_id by email when the checkout wasn't linked at webhook time
     // (Shopify often fires checkouts/create BEFORE the customer submits email)
@@ -181,9 +207,23 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Normalize items to a simpler shape
+    // Compute stats from the filtered (post-conversion-check) items
     const abandonmentCutoff = Date.now() - 15 * 60 * 1000;
-    const normalized = (items || []).map((c: any) => {
+    for (const it of filteredItems as any[]) {
+      const createdMs = it.created_at ? new Date(it.created_at).getTime() : 0;
+      const effectiveStatus = (it.status === 'pending' && createdMs && createdMs < abandonmentCutoff)
+        ? 'abandoned' : it.status;
+      if (effectiveStatus === 'pending') stats.pending++;
+      else if (effectiveStatus === 'abandoned') stats.abandoned++;
+      else if (effectiveStatus === 'recovered') {
+        stats.recovered++;
+        revenueRecovered += Number(it.total_price) || 0;
+      }
+    }
+    stats.total = filteredItems.length;
+
+    // Normalize items to a simpler shape — use filteredItems (excludes live-detected converts)
+    const normalized = filteredItems.map((c: any) => {
       const ci = Array.isArray(c.contacts) ? c.contacts[0] : c.contacts
       const contact = ci || (c.email ? contactsByEmail.get(String(c.email).toLowerCase()) : null)
       const name =
@@ -226,7 +266,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       items: normalized,
-      total: count || 0,
+      total: filteredItems.length,
       stats: {
         ...stats,
         revenue_recovered: revenueRecovered,
