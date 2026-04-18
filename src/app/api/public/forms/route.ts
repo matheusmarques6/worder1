@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     // Get published forms for this org
     let query = supabaseAdmin
       .from('crm_forms')
-      .select('id, name, form_type, status')
+      .select('id, name, form_type, status, store_id')
       .eq('organization_id', store.organization_id)
       .eq('status', status)
 
@@ -40,7 +40,9 @@ export async function GET(req: NextRequest) {
       query = query.eq('form_type', type)
     }
 
-    const { data: forms } = await query
+    // If form has store_id, only show on matching store; forms without store_id show on all stores
+    const { data: allForms } = await query
+    const forms = (allForms || []).filter(f => !f.store_id || f.store_id === store.id)
 
     const headers = new Headers()
     headers.set('Access-Control-Allow-Origin', '*')

@@ -496,7 +496,7 @@
 
     try {
       var xhr = new XMLHttpRequest();
-      xhr.open('GET', popupEndpoint + '/api/public/forms?domain=' + encodeURIComponent(domain) + '&status=published&type=popup', true);
+      xhr.open('GET', popupEndpoint + '/api/public/forms?domain=' + encodeURIComponent(domain) + '&status=published', true);
       xhr.onload = function () {
         if (xhr.status !== 200) return;
         try {

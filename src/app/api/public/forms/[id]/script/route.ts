@@ -339,9 +339,13 @@ function show(){
   content.innerHTML='<form id="wf-form-'+FID+'">'+renderStep(0)+'</form>';
   pop.appendChild(content);
   if(hasSide){
-    var side=document.createElement("div");
-    side.style.cssText="width:"+(st.sideImage.width||50)+"%;flex-shrink:0;background:url("+st.sideImage.src+") center/cover no-repeat";
-    if(st.sideImage.position==="left")pop.insertBefore(side,content);else pop.appendChild(side);
+    var sideUrl=st.sideImage.src;
+    if(sideUrl&&!/^(https?:|\/)/i.test(sideUrl))sideUrl="";
+    if(sideUrl){
+      var side=document.createElement("div");
+      side.style.cssText="width:"+(st.sideImage.width||50)+"%;flex-shrink:0;background:url("+encodeURI(sideUrl)+") center/cover no-repeat";
+      if(st.sideImage.position==="left")pop.insertBefore(side,content);else pop.appendChild(side);
+    }
   }
   ov.appendChild(pop);
   if(formType==="embed"){
@@ -370,7 +374,7 @@ function show(){
       var btn=e.target.closest("[data-action]");
       if(!btn)return;
       var act=btn.getAttribute("data-action");
-      if(act==="next-step"){e.preventDefault();curStep++;content.innerHTML='<form id="wf-form-'+FID+'">'+renderStep(curStep)+'</form>';bindForm()}
+      if(act==="next-step"){e.preventDefault();if(curStep<steps.length-1){curStep++;content.innerHTML='<form id="wf-form-'+FID+'">'+renderStep(curStep)+'</form>';bindForm()}}
       if(act==="close"){e.preventDefault();close()}
       if(act==="url"&&btn.dataset.url){e.preventDefault();window.open(btn.dataset.url,"_blank")}
     });
@@ -381,6 +385,14 @@ function show(){
     if(!f)return;
     f.addEventListener("submit",function(e){
       e.preventDefault();
+      var reqInputs=f.querySelectorAll("[required]");
+      var valid=true;
+      reqInputs.forEach(function(inp){inp.style.borderColor=""});
+      reqInputs.forEach(function(inp){
+        if(!inp.value||!inp.value.trim()){valid=false;inp.style.borderColor="#EF4444";inp.focus()}
+        if(inp.type==="email"&&inp.value&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inp.value)){valid=false;inp.style.borderColor="#EF4444";inp.focus()}
+      });
+      if(!valid)return;
       var fd=new FormData(f);
       fd.forEach(function(v,k){
         if(allData[k]!==undefined){
@@ -494,7 +506,11 @@ var s=document.createElement("style");s.textContent="@keyframes wfFade{from{opac
 })();`
 
     return new Response(script, {
-      headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'public, max-age=300' },
+      headers: {
+        'Content-Type': 'application/javascript',
+        'Cache-Control': 'public, max-age=300',
+        'Access-Control-Allow-Origin': '*',
+      },
     })
   } catch {
     return new Response('/* Error */', { headers: { 'Content-Type': 'application/javascript' } })
