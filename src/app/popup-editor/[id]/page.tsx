@@ -2184,17 +2184,17 @@ function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
-      className={`group relative rounded-md transition ${isSelected ? 'ring-2 ring-orange-400 ring-offset-[3px] ring-offset-white' : 'hover:ring-2 hover:ring-orange-200 hover:ring-offset-[2px] hover:ring-offset-white cursor-pointer'}`}>
-      {/* Drag handle — hidden while selected to keep the canvas calm */}
-      {!isSelected && (
-        <div {...attributes} {...listeners} className="absolute -left-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing p-1 rounded bg-white shadow-sm text-gray-400 hover:text-gray-700 z-10 transition-opacity" title="Arraste para reordenar">
-          <GripVertical className="w-3.5 h-3.5" />
-        </div>
-      )}
+      className={`group relative rounded transition ${isSelected ? 'ring-2 ring-gray-400/60 ring-offset-2 ring-offset-white' : 'hover:ring-1 hover:ring-gray-300 cursor-pointer'}`}>
+      {/* Drag handle — inside block bounds, on left edge */}
+      <div {...attributes} {...listeners}
+        className="absolute left-0 top-0 bottom-0 w-6 z-10 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing transition-opacity"
+        title="Arraste para reordenar">
+        <GripVertical className="w-3.5 h-3.5 text-gray-400" />
+      </div>
       {/* Floating inline format toolbar (text only, when selected) */}
       {isSelected && isText && (
         <div
-          onMouseDown={e => e.preventDefault() /* keep caret inside contentEditable */}
+          onMouseDown={e => e.preventDefault()}
           className="absolute left-1/2 -translate-x-1/2 -top-11 z-20 flex items-center gap-0.5 bg-gray-900 text-white rounded-lg shadow-lg px-1 py-1">
           <button onClick={(e) => { e.stopPropagation(); onPropChange('fontWeight', p.fontWeight === 'bold' ? 'normal' : 'bold') }}
             className={`px-2 py-1 text-xs font-bold rounded hover:bg-white/10 ${p.fontWeight === 'bold' ? 'bg-white/20' : ''}`} title="Negrito">B</button>
@@ -2228,17 +2228,14 @@ function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate
           <span className="text-white/60">Editando botão — clique fora p/ concluir</span>
         </div>
       )}
-      {/* Type label (shown on hover for orientation) */}
-      {!isSelected && (
-        <div className="absolute -top-5 left-0 hidden group-hover:block text-[10px] font-semibold text-orange-500 uppercase tracking-wider">
-          {block.type.replace('-', ' ')}
+      <BlockPreview block={block} selected={isSelected} onContentChange={onContentChange} />
+      {/* Action buttons on hover */}
+      {isSelected && (
+        <div className="absolute -top-2 right-1 flex items-center gap-0.5 bg-white border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5 z-10">
+          <button onClick={e => { e.stopPropagation(); onDuplicate() }} className="p-1 text-gray-400 hover:text-gray-700 rounded" title="Duplicar"><Copy className="w-3 h-3" /></button>
+          <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1 text-gray-400 hover:text-red-500 rounded" title="Remover"><Trash2 className="w-3 h-3" /></button>
         </div>
       )}
-      <BlockPreview block={block} selected={isSelected} onContentChange={onContentChange} />
-      <div className="absolute -top-2 right-2 hidden group-hover:flex items-center gap-0.5 bg-white border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5 z-10">
-        <button onClick={e => { e.stopPropagation(); onDuplicate() }} className="p-1 text-gray-400 hover:text-blue-500 rounded" title="Duplicar"><Copy className="w-3 h-3" /></button>
-        <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1 text-gray-400 hover:text-red-500 rounded" title="Remover"><Trash2 className="w-3 h-3" /></button>
-      </div>
     </div>
   )
 }
@@ -2743,32 +2740,62 @@ export default function PopupEditorPage() {
           </div>
 
           {/* Step tabs — clean bottom bar */}
-          <div className="flex items-center gap-0 px-4 h-[44px] bg-white border-t border-gray-200 w-full shrink-0">
-            <div className="flex items-center gap-0">
-              {design.steps.map((step, i) => (
-                <div key={step.id} className="flex items-center">
-                  <button onClick={() => { setActiveStepIdx(i); setShowSuccess(false); setSelectedBlockId(null) }}
-                    className={`px-4 h-[44px] text-[13px] font-medium whitespace-nowrap border-b-2 transition-colors ${!showSuccess && activeStepIdx === i ? 'text-gray-900 border-gray-900' : 'text-gray-400 border-transparent hover:text-gray-600'}`}>
-                    {step.name}
-                  </button>
-                  {i < design.steps.length && <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0 mx-0.5" />}
-                </div>
-              ))}
+          <div className="flex items-center gap-0 px-3 h-[44px] bg-white border-t border-gray-200 w-full shrink-0">
+            <div className="flex items-center gap-0.5">
+              {design.steps.map((step, i) => {
+                const isActive = !showSuccess && activeStepIdx === i
+                return (
+                  <div key={step.id} className="flex items-center gap-0.5 group/step">
+                    <button onClick={() => { setActiveStepIdx(i); setShowSuccess(false); setSelectedBlockId(null) }}
+                      className={`px-3.5 h-[32px] text-[12px] font-medium whitespace-nowrap rounded-md transition-colors ${isActive ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}`}>
+                      {step.name}
+                    </button>
+                    {/* Per-step actions */}
+                    {isActive && design.steps.length > 0 && (
+                      <div className="flex items-center gap-0">
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            const clone: Step = { id: uid(), name: `${step.name} (cópia)`, blocks: JSON.parse(JSON.stringify(step.blocks)) }
+                            setDesign(d => {
+                              const next = [...d.steps]
+                              next.splice(i + 1, 0, clone)
+                              return { ...d, steps: next }
+                            })
+                            setActiveStepIdx(i + 1)
+                          }}
+                          className="p-1 text-gray-400 hover:text-gray-700 rounded transition-colors" title="Clonar etapa">
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        {design.steps.length > 1 && (
+                          <button
+                            onClick={e => {
+                              e.stopPropagation()
+                              setDesign(d => ({ ...d, steps: d.steps.filter((_, j) => j !== i) }))
+                              setActiveStepIdx(Math.max(0, i - 1))
+                            }}
+                            className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors" title="Excluir etapa">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {i < design.steps.length - 1 && (
+                      <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0" />
+                    )}
+                  </div>
+                )
+              })}
+              {design.steps.length > 0 && <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0" />}
               <button onClick={() => { setShowSuccess(true); setSelectedBlockId(null) }}
-                className={`px-4 h-[44px] text-[13px] font-medium whitespace-nowrap border-b-2 transition-colors ${showSuccess ? 'text-gray-900 border-gray-900' : 'text-gray-400 border-transparent hover:text-gray-600'}`}>
-                Sucesso
+                className={`px-3.5 h-[32px] text-[12px] font-medium whitespace-nowrap rounded-md transition-colors flex items-center gap-1.5 ${showSuccess ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}`}>
+                <Check className="w-3 h-3" /> Sucesso
               </button>
             </div>
             <div className="flex-1" />
-            <div className="flex items-center gap-1">
-              <button onClick={addStep} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-md font-medium transition-colors">
-                <Plus className="w-3.5 h-3.5" /> Adicionar etapa
-              </button>
-              {design.steps.length > 1 && !showSuccess && (
-                <button onClick={() => { setDesign(d => ({ ...d, steps: d.steps.filter((_, i) => i !== activeStepIdx) })); setActiveStepIdx(Math.max(0, activeStepIdx - 1)) }}
-                  className="p-1.5 text-gray-400 hover:text-red-500 rounded-md transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-              )}
-            </div>
+            <button onClick={addStep} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md font-medium transition-colors">
+              <Plus className="w-3 h-3" /> Etapa
+            </button>
           </div>
         </main>
 
