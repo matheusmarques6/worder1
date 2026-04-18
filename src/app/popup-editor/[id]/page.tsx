@@ -2354,15 +2354,15 @@ export default function PopupEditorPage() {
     <div className="h-screen flex flex-col bg-gray-100">
       <InlineEditableStyles />
       {/* Top bar — Omnisend-inspired with Worder identity */}
-      <header className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200 shrink-0">
+      <header className="flex items-center justify-between px-5 h-[52px] bg-white border-b border-gray-200 shrink-0">
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <button onClick={() => router.back()} className="flex-shrink-0 p-1.5 rounded-md hover:bg-gray-100" title="Voltar">
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          <button onClick={() => router.back()} className="flex-shrink-0 p-1.5 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors" title="Voltar">
+            <ArrowLeft className="w-[18px] h-[18px]" />
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Worder" className="h-8 flex-shrink-0" />
-          <div className="h-5 w-px bg-gray-200 flex-shrink-0" />
-          <div className="flex items-center gap-2 min-w-0">
+          <img src="/logo.svg" alt="Worder" className="h-7 flex-shrink-0" />
+          <div className="h-5 w-px bg-gray-200 flex-shrink-0 mx-1" />
+          <div className="flex items-center gap-2.5 min-w-0">
             {editingName ? (
               <input
                 autoFocus
@@ -2370,45 +2370,42 @@ export default function PopupEditorPage() {
                 onChange={e => setFormName(e.target.value)}
                 onBlur={() => setEditingName(false)}
                 onKeyDown={e => { if (e.key === 'Enter') setEditingName(false) }}
-                className="text-[15px] font-semibold text-gray-900 bg-transparent border-b-2 border-orange-400 outline-none min-w-[200px] max-w-[400px]"
+                className="text-[14px] font-medium text-gray-900 bg-transparent border-b border-gray-400 outline-none min-w-[200px] max-w-[400px] pb-0.5"
               />
             ) : (
               <button
                 onClick={() => setEditingName(true)}
-                className="group flex items-center gap-2 text-[15px] font-semibold text-gray-900 hover:text-orange-600 transition-colors"
-                title="Renomear popup"
+                className="group flex items-center gap-1.5 text-[14px] font-medium text-gray-900 hover:text-gray-600 transition-colors"
+                title="Renomear"
               >
-                <span className="truncate max-w-[320px]">{formName}</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-0 group-hover:opacity-60 transition-opacity flex-shrink-0">
+                <span className="truncate max-w-[280px]">{formName}</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-0 group-hover:opacity-50 transition-opacity flex-shrink-0">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
               </button>
             )}
             {formStatus === 'published' && (
-              <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-700 rounded-full flex-shrink-0">ATIVO</span>
+              <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-600 rounded flex-shrink-0 tracking-wide">ATIVO</span>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Undo/Redo */}
-          <button onClick={undo} disabled={historyIdx <= 0} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Desfazer"><Undo2 className="w-4 h-4" /></button>
-          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-1.5 text-gray-400 hover:text-gray-700 rounded disabled:opacity-30" title="Refazer"><Redo2 className="w-4 h-4" /></button>
-          <div className="h-5 w-px bg-gray-200" />
-          {/* Desktop/Mobile */}
-          <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
-            <button onClick={() => setPreview('desktop')} className={`p-1.5 rounded transition-all ${preview === 'desktop' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}><Monitor className="w-4 h-4" /></button>
-            <button onClick={() => setPreview('mobile')} className={`p-1.5 rounded transition-all ${preview === 'mobile' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}><Smartphone className="w-4 h-4" /></button>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <button onClick={undo} disabled={historyIdx <= 0} className="p-2 text-gray-400 hover:text-gray-700 rounded-md disabled:opacity-25 transition-colors" title="Desfazer"><Undo2 className="w-4 h-4" /></button>
+          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-2 text-gray-400 hover:text-gray-700 rounded-md disabled:opacity-25 transition-colors" title="Refazer"><Redo2 className="w-4 h-4" /></button>
+          <div className="h-5 w-px bg-gray-200 mx-1" />
+          <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+            <button onClick={() => setPreview('desktop')} className={`p-1.5 rounded-md transition-all ${preview === 'desktop' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-700'}`} title="Desktop"><Monitor className="w-4 h-4" /></button>
+            <button onClick={() => setPreview('mobile')} className={`p-1.5 rounded-md transition-all ${preview === 'mobile' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-700'}`} title="Mobile"><Smartphone className="w-4 h-4" /></button>
           </div>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:border-gray-300 transition-colors">
+          <div className="h-5 w-px bg-gray-200 mx-1" />
+          <button onClick={() => setShowPreview(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
             <Eye className="w-4 h-4" /> Preview
           </button>
-          <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-50">
+          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-gray-600 hover:text-gray-900 bg-white border border-gray-200 hover:border-gray-300 rounded-lg transition-colors disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar
           </button>
-          <button onClick={handlePublish} className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors shadow-sm ${formStatus === 'published' ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700'}`}>
+          <button onClick={handlePublish} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${formStatus === 'published' ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-gray-900 text-white hover:bg-gray-800'}`}>
             <Power className="w-4 h-4" /> {formStatus === 'published' ? 'Desativar' : 'Ativar'}
           </button>
         </div>
@@ -2416,18 +2413,18 @@ export default function PopupEditorPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar — all controls (Klaviyo-style hub + drill-down panels) */}
-        <aside className="w-[340px] bg-white border-r border-gray-200 flex flex-col shrink-0">
+        <aside className="w-[300px] bg-white border-r border-gray-200 flex flex-col shrink-0">
           {selectedBlock ? (
             <>
-              {/* Block editor header with type icon */}
-              <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-gray-100 shrink-0 bg-gradient-to-b from-gray-50/50 to-white">
+              {/* Block editor header */}
+              <div className="flex items-center gap-2.5 px-4 h-[44px] border-b border-gray-100 shrink-0">
                 <button onClick={() => setSelectedBlockId(null)}
                   title="Voltar"
-                  className="p-1.5 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100 transition-colors">
+                  className="p-1 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100 transition-colors">
                   <ArrowLeft className="w-4 h-4" />
                 </button>
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <h2 className="text-[14px] font-semibold text-gray-900 truncate">
+                  <h2 className="text-[13px] font-semibold text-gray-900 truncate">
                     {(() => {
                       const labels: Record<string, string> = {
                         email: 'Email', phone: 'Telefone', 'name-input': 'Nome',
@@ -2452,68 +2449,41 @@ export default function PopupEditorPage() {
             </>
           ) : leftView === 'hub' ? (
             <>
-              {/* Hub view: 3 big cards (Styles, Targeting, Blocks) */}
-              <div className="flex items-center px-5 py-4 border-b border-gray-100 shrink-0">
-                <h2 className="text-[15px] font-semibold text-gray-900">Visão geral</h2>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                <button onClick={() => setLeftView('blocks')}
-                  className="w-full flex items-center gap-3.5 px-4 py-4 border border-gray-200 rounded-xl hover:border-orange-300 hover:bg-orange-50/40 hover:shadow-sm transition-all text-left group">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center flex-shrink-0 group-hover:from-orange-100 group-hover:to-orange-200 transition-colors">
-                    <LayoutGrid className="w-5 h-5 text-orange-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13.5px] font-semibold text-gray-900">Adicionar blocos</p>
-                    <p className="text-[11.5px] text-gray-500 mt-0.5">Inputs, texto, botões, imagens</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-orange-500 flex-shrink-0 transition-colors" />
-                </button>
-
-                <button onClick={() => setLeftView('styles')}
-                  className="w-full flex items-center gap-3.5 px-4 py-4 border border-gray-200 rounded-xl hover:border-purple-300 hover:bg-purple-50/30 hover:shadow-sm transition-all text-left group">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center flex-shrink-0 group-hover:from-purple-100 group-hover:to-purple-200 transition-colors">
-                    <Palette className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13.5px] font-semibold text-gray-900">Estilos</p>
-                    <p className="text-[11.5px] text-gray-500 mt-0.5">Layout, cores, imagem lateral</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-purple-500 flex-shrink-0 transition-colors" />
-                </button>
-
-                <button onClick={() => setLeftView('targeting')}
-                  className="w-full flex items-center gap-3.5 px-4 py-4 border border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-sm transition-all text-left group">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center flex-shrink-0 group-hover:from-blue-100 group-hover:to-blue-200 transition-colors">
-                    <Target className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13.5px] font-semibold text-gray-900">Segmentação e comportamento</p>
-                    <p className="text-[11.5px] text-gray-500 mt-0.5">Quando e para quem exibir</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 flex-shrink-0 transition-colors" />
-                </button>
-
-                {/* Status summary card */}
-                <div className="mt-4 p-4 rounded-xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className={`w-2 h-2 rounded-full ${formStatus === 'published' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                    <p className="text-[11.5px] font-semibold text-gray-800">
-                      {formStatus === 'published' ? 'Publicado' : 'Em rascunho'}
-                    </p>
-                  </div>
-                  <p className="text-[11px] text-gray-500 leading-relaxed">
-                    {formStatus === 'published'
-                      ? 'O popup está ativo e sendo exibido para visitantes.'
-                      : 'Finalize a configuração e clique em Ativar para publicar.'}
-                  </p>
+              {/* Hub view — Klaviyo-style minimal nav rows */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="py-2">
+                  <button onClick={() => setLeftView('styles')}
+                    className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left group">
+                    <Palette className="w-[18px] h-[18px] text-gray-400 group-hover:text-gray-600 flex-shrink-0 transition-colors" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13.5px] font-medium text-gray-900">Estilos</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                  </button>
+                  <button onClick={() => setLeftView('targeting')}
+                    className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left group">
+                    <Target className="w-[18px] h-[18px] text-gray-400 group-hover:text-gray-600 flex-shrink-0 transition-colors" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13.5px] font-medium text-gray-900">Segmentação e comportamento</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                  </button>
+                  <button onClick={() => setLeftView('blocks')}
+                    className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left group">
+                    <LayoutGrid className="w-[18px] h-[18px] text-gray-400 group-hover:text-gray-600 flex-shrink-0 transition-colors" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13.5px] font-medium text-gray-900">Adicionar blocos</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                  </button>
                 </div>
               </div>
             </>
           ) : leftView === 'styles' ? (
             <>
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 shrink-0">
+              <div className="flex items-center gap-2.5 px-4 h-[44px] border-b border-gray-100 shrink-0">
                 <button onClick={() => setLeftView('hub')}
-                  className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors">
+                  className="p-1 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100 transition-colors">
                   <ArrowLeft className="w-4 h-4" />
                 </button>
                 <h2 className="text-[13px] font-semibold text-gray-900 flex-1">Estilos</h2>
@@ -2524,12 +2494,12 @@ export default function PopupEditorPage() {
             </>
           ) : leftView === 'targeting' ? (
             <>
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 shrink-0">
+              <div className="flex items-center gap-2.5 px-4 h-[44px] border-b border-gray-100 shrink-0">
                 <button onClick={() => setLeftView('hub')}
-                  className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors">
+                  className="p-1 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100 transition-colors">
                   <ArrowLeft className="w-4 h-4" />
                 </button>
-                <h2 className="text-[13px] font-semibold text-gray-900 flex-1">Segmentacao e comportamento</h2>
+                <h2 className="text-[13px] font-semibold text-gray-900 flex-1">Segmentação e comportamento</h2>
               </div>
               <div className="flex-1 overflow-y-auto">
                 <BehaviorPanel beh={design.behavior} onChange={b => setDesign(d => ({ ...d, behavior: b }))} formId={formId} />
@@ -2537,32 +2507,23 @@ export default function PopupEditorPage() {
             </>
           ) : (
             <>
-              <div className="flex items-center gap-2 px-4 py-3.5 border-b border-gray-100 shrink-0">
+              <div className="flex items-center gap-2.5 px-4 h-[44px] border-b border-gray-100 shrink-0">
                 <button onClick={() => setLeftView('hub')}
-                  className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors">
+                  className="p-1 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100 transition-colors">
                   <ArrowLeft className="w-4 h-4" />
                 </button>
                 <h2 className="text-[13px] font-semibold text-gray-900 flex-1">Adicionar blocos</h2>
               </div>
-              <div className="flex-1 overflow-y-auto px-3 py-4">
-                <p className="px-1 pb-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Itens</p>
-                <div className="grid grid-cols-2 gap-2">
+              <div className="flex-1 overflow-y-auto px-4 py-4">
+                <div className="grid grid-cols-2 gap-1.5">
                   {BLOCK_TYPES.map(bt => (
                     <button key={bt.type} onClick={() => addBlock(bt.type)}
                       title={`Adicionar ${bt.label}`}
-                      className="group flex flex-col items-center gap-2 py-4 px-2 rounded-xl border border-gray-200 bg-white hover:border-orange-400 hover:bg-orange-50/40 hover:shadow-sm transition-all text-gray-600 hover:text-orange-600 cursor-grab active:cursor-grabbing">
-                      <div className="w-9 h-9 rounded-lg bg-gray-50 group-hover:bg-orange-100 flex items-center justify-center transition-colors">
-                        <bt.icon className="w-4 h-4" />
-                      </div>
+                      className="group flex flex-col items-center gap-1.5 py-3.5 px-2 rounded-lg border border-gray-100 bg-white hover:border-gray-300 hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900">
+                      <bt.icon className="w-5 h-5" />
                       <span className="text-[11px] font-medium leading-tight text-center">{bt.label}</span>
                     </button>
                   ))}
-                </div>
-                <p className="px-1 pt-5 pb-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Dica</p>
-                <div className="mx-1 p-3 rounded-lg bg-blue-50/50 border border-blue-100">
-                  <p className="text-[11px] text-blue-900/80 leading-relaxed">
-                    Clique em um bloco para adicionar ou arraste para reorganizar na tela.
-                  </p>
                 </div>
               </div>
             </>
@@ -2573,13 +2534,13 @@ export default function PopupEditorPage() {
         <main className="flex-1 flex flex-col items-center overflow-y-auto"
           onClick={() => setSelectedBlockId(null)}
           style={{
-            background: 'radial-gradient(ellipse at center, #2a2f3a 0%, #1a1e26 100%)',
+            backgroundColor: '#e8eaed',
           }}>
           <div className="flex-1 flex items-center justify-center w-full p-8">
             {/* Popup container — total width stays s.width; when side image is
                 enabled the interior splits 50/50 (Omnisend-style) instead of
                 appending image width on top. Default min-height: 500px. */}
-            <div className="relative flex overflow-hidden shadow-2xl" style={{
+            <div className="relative flex overflow-hidden shadow-xl ring-1 ring-black/[0.06]" style={{
               width: preview === 'mobile' ? 360 : s.width,
               maxWidth: '95%',
               minHeight: s.minHeight ?? 500,
@@ -2653,30 +2614,33 @@ export default function PopupEditorPage() {
             </div>
           </div>
 
-          {/* Step tabs - pinned to bottom, floating above dark canvas */}
-          <div className="flex items-center gap-1.5 px-6 py-3 bg-white/95 backdrop-blur-sm border-t border-gray-800/20 w-full shrink-0 shadow-xl">
-            {design.steps.map((step, i) => (
-              <div key={step.id} className="flex items-center gap-1.5">
-                <button onClick={() => { setActiveStepIdx(i); setShowSuccess(false); setSelectedBlockId(null) }}
-                  className={`px-4 py-1.5 text-[13px] rounded-lg font-semibold whitespace-nowrap transition-all ${!showSuccess && activeStepIdx === i ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-700 bg-gray-100 hover:bg-gray-200'}`}>
-                  {step.name}
-                </button>
-                {i < design.steps.length - 1 && <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />}
-              </div>
-            ))}
-            <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
-            <button onClick={() => { setShowSuccess(true); setSelectedBlockId(null) }}
-              className={`px-4 py-1.5 text-[13px] rounded-lg font-semibold whitespace-nowrap transition-all ${showSuccess ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-700 bg-gray-100 hover:bg-gray-200'}`}>
-              Sucesso
-            </button>
+          {/* Step tabs — clean bottom bar */}
+          <div className="flex items-center gap-0 px-4 h-[44px] bg-white border-t border-gray-200 w-full shrink-0">
+            <div className="flex items-center gap-0">
+              {design.steps.map((step, i) => (
+                <div key={step.id} className="flex items-center">
+                  <button onClick={() => { setActiveStepIdx(i); setShowSuccess(false); setSelectedBlockId(null) }}
+                    className={`px-4 h-[44px] text-[13px] font-medium whitespace-nowrap border-b-2 transition-colors ${!showSuccess && activeStepIdx === i ? 'text-gray-900 border-gray-900' : 'text-gray-400 border-transparent hover:text-gray-600'}`}>
+                    {step.name}
+                  </button>
+                  {i < design.steps.length && <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0 mx-0.5" />}
+                </div>
+              ))}
+              <button onClick={() => { setShowSuccess(true); setSelectedBlockId(null) }}
+                className={`px-4 h-[44px] text-[13px] font-medium whitespace-nowrap border-b-2 transition-colors ${showSuccess ? 'text-gray-900 border-gray-900' : 'text-gray-400 border-transparent hover:text-gray-600'}`}>
+                Sucesso
+              </button>
+            </div>
             <div className="flex-1" />
-            <button onClick={addStep} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors">
-              <Plus className="w-3.5 h-3.5" /> Adicionar etapa
-            </button>
-            {design.steps.length > 1 && !showSuccess && (
-              <button onClick={() => { setDesign(d => ({ ...d, steps: d.steps.filter((_, i) => i !== activeStepIdx) })); setActiveStepIdx(Math.max(0, activeStepIdx - 1)) }}
-                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
-            )}
+            <div className="flex items-center gap-1">
+              <button onClick={addStep} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-md font-medium transition-colors">
+                <Plus className="w-3.5 h-3.5" /> Adicionar etapa
+              </button>
+              {design.steps.length > 1 && !showSuccess && (
+                <button onClick={() => { setDesign(d => ({ ...d, steps: d.steps.filter((_, i) => i !== activeStepIdx) })); setActiveStepIdx(Math.max(0, activeStepIdx - 1)) }}
+                  className="p-1.5 text-gray-400 hover:text-red-500 rounded-md transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+              )}
+            </div>
           </div>
         </main>
 
