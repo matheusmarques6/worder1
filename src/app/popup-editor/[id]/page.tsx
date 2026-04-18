@@ -11,6 +11,10 @@ import {
   AtSign, ShieldCheck, Phone, TextCursorInput, User, Calendar,
   CircleDot, CheckSquare, Type, MousePointerClick, ImageIcon, Minus,
   GripHorizontal, Tag, Clock, Eye, Settings, Palette, Upload, LayoutGrid,
+  AlignLeft, AlignCenter, AlignRight, AlignJustify,
+  Bold, Italic, Underline, Link2, ExternalLink, Sparkles,
+  SlidersHorizontal, Layers, Square, Sun, CornerDownRight,
+  MoveHorizontal, MoveVertical, Check,
 } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -479,7 +483,7 @@ function BlockPreview({ block, selected, onContentChange }: { block: Block; sele
   switch (block.type) {
     case 'text': {
       const Tag = (p.tag === 'h1' || p.tag === 'h2' || p.tag === 'h3') ? p.tag : 'p'
-      const textStyle: React.CSSProperties = { ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textDecoration: p.textDecoration || 'none', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit', minHeight: '1em', margin: 0, marginBottom: blockStyle.marginBottom ?? 8 }
+      const textStyle: React.CSSProperties = { ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textDecoration: p.textDecoration || 'none', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit', letterSpacing: p.letterSpacing != null ? `${p.letterSpacing}px` : undefined, minHeight: '1em', margin: 0, marginBottom: blockStyle.marginBottom ?? 8 }
       if (onContentChange) {
         return (
           <InlineEditable
@@ -510,9 +514,14 @@ function BlockPreview({ block, selected, onContentChange }: { block: Block; sele
       const btnStyle: React.CSSProperties = {
         backgroundColor: p.bgColor || '#F97316', color: p.textColor || '#fff',
         borderRadius: p.borderRadius || 8, width: p.fullWidth ? '100%' : 'auto',
-        fontSize: p.fontSize || 15, fontWeight: 700,
+        fontSize: p.fontSize || 15,
+        fontWeight: p.btnFontWeight || 700,
+        fontFamily: p.fontFamily || 'inherit',
+        letterSpacing: p.btnLetterSpacing != null ? `${p.btnLetterSpacing}px` : undefined,
+        textTransform: p.textTransform || 'none',
         padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`,
-        border: p.btnBorderWidth ? `${p.btnBorderWidth}px solid ${p.btnBorderColor || '#E5E7EB'}` : 'none',
+        border: p.btnBorderWidth ? `${p.btnBorderWidth}px ${p.btnBorderStyle || 'solid'} ${p.btnBorderColor || '#E5E7EB'}` : 'none',
+        boxShadow: p.btnShadow || undefined,
         cursor: 'pointer', transition: 'background-color 0.2s',
         display: 'inline-block', textAlign: 'center' as const,
       }
@@ -586,7 +595,7 @@ function BlockPreview({ block, selected, onContentChange }: { block: Block; sele
   }
 }
 
-// ── Block Props Editor (Omnisend-style per-block panels) ──────────────────────
+// ── Block Props Editor (Klaviyo-style per-block panels) ──────────────────────
 function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void }) {
   const up = (key: string, val: any) => onChange({ ...block, props: { ...block.props, [key]: val } })
   const p = block.props
@@ -596,40 +605,45 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
   const blockLabel: Record<string, string> = {
     email: 'Email', phone: 'Telefone', 'name-input': 'Nome', 'text-input': 'Campo',
     'date-input': 'Data', dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
-    'legal-consent': 'Consentimento', text: 'Texto', button: 'Botão', image: 'Imagem',
+    'legal-consent': 'Consentimento', text: 'Conteúdo', button: 'Botão', image: 'Imagem',
     spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem',
   }
 
-  const AlignButtons = ({ value, onChange: oc }: { value: string; onChange: (v: string) => void }) => (
-    <div className="flex border border-gray-200 rounded-lg overflow-hidden">
-      {['left', 'center', 'right', 'full'].map(a => (
-        <button key={a} onClick={() => oc(a === 'full' ? 'full' : a)}
-          className={`flex-1 py-1.5 text-xs font-medium ${value === a ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
-          {a === 'left' ? 'Esq' : a === 'center' ? 'Centro' : a === 'right' ? 'Dir' : 'Total'}
-        </button>
-      ))}
+  // ── Polished primitives (Klaviyo-level) ──────────────────────────────────
+  const AlignButtons = ({ value, onChange: oc, showFull = true }: { value: string; onChange: (v: string) => void; showFull?: boolean }) => {
+    const opts: Array<{ v: string; I: React.ComponentType<any>; label: string }> = [
+      { v: 'left', I: AlignLeft, label: 'Esquerda' },
+      { v: 'center', I: AlignCenter, label: 'Centro' },
+      { v: 'right', I: AlignRight, label: 'Direita' },
+    ]
+    if (showFull) opts.push({ v: 'full', I: AlignJustify, label: 'Preencher' })
+    return (
+      <div className="inline-flex border border-gray-200 rounded-lg overflow-hidden bg-white w-full">
+        {opts.map(({ v, I, label }) => (
+          <button key={v} onClick={() => oc(v)} title={label}
+            className={`flex-1 py-2 flex items-center justify-center transition-colors ${value === v ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+            <I className="w-3.5 h-3.5" />
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  // Inline toggle row — label on left, switch on right
+  const Toggle = ({ label, checked, onChange: oc, hint }: { label: string; checked: boolean; onChange: (v: boolean) => void; hint?: string }) => (
+    <div className="flex items-start gap-3 py-1 min-w-0">
+      <div className="flex-1 min-w-0">
+        <p className="text-[13px] text-gray-800 leading-tight">{label}</p>
+        {hint && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{hint}</p>}
+      </div>
+      <button type="button" onClick={() => oc(!checked)}
+        className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-brand-500' : 'bg-gray-200'}`}>
+        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+      </button>
     </div>
   )
 
-  const ColorField = ({ label, value, onChange: oc }: { label: string; value: string; onChange: (v: string) => void }) => (
-    <Field label={label}>
-      <div className="flex items-center gap-2">
-        <input type="text" className={inp} value={value || ''} onChange={e => oc(e.target.value)} placeholder="#000000" />
-        <input type="color" value={value || '#000000'} onChange={e => oc(e.target.value)} className="w-8 h-8 rounded border border-gray-200 p-0.5 cursor-pointer flex-shrink-0" />
-      </div>
-    </Field>
-  )
-
-  const Toggle = ({ label, checked, onChange: oc }: { label: string; checked: boolean; onChange: (v: boolean) => void }) => (
-    <label className="flex items-center justify-between gap-3 cursor-pointer py-0.5 w-full">
-      <span className="text-[13px] text-gray-800">{label}</span>
-      <div className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-emerald-500' : 'bg-gray-200'}`} onClick={() => oc(!checked)}>
-        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
-      </div>
-    </label>
-  )
-
-  // Labeled field with helper text below — Klaviyo style
+  // Labeled field with helper text
   const LabeledField = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
     <div>
       <label className="block text-[12px] font-medium text-gray-800">{label}</label>
@@ -638,13 +652,16 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     </div>
   )
 
-  // Collapsible section with title (plus/chevron icon) — Klaviyo style
-  const Group = ({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) => {
+  // Collapsible section
+  const Group = ({ title, children, defaultOpen = true, icon }: { title: string; children: React.ReactNode; defaultOpen?: boolean; icon?: React.ReactNode }) => {
     const [open, setOpen] = useState(defaultOpen)
     return (
       <div className="border-t border-gray-100 first:border-t-0">
         <button onClick={() => setOpen(!open)} className="flex items-center justify-between w-full py-3 text-[13px] font-semibold text-gray-800 hover:text-gray-900">
-          <span>{title}</span>
+          <span className="flex items-center gap-2">
+            {icon && <span className="text-gray-400">{icon}</span>}
+            {title}
+          </span>
           <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? '' : '-rotate-90'}`} />
         </button>
         {open && <div className="pb-4 space-y-3">{children}</div>}
@@ -652,19 +669,113 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     )
   }
 
-  // Klaviyo-style clean color field (hex input with color square on right)
-  const CleanColor = ({ label, value, onChange: oc }: { label: string; value: string; onChange: (v: string) => void }) => (
-    <LabeledField label={label}>
-      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500/20">
-        <input type="text" className="flex-1 px-3 py-2 text-[13px] font-mono text-gray-800 outline-none" value={value || ''} onChange={e => oc(e.target.value)} placeholder="#000000" />
-        <label className="relative w-9 h-9 border-l border-gray-200 cursor-pointer flex items-center justify-center flex-shrink-0" style={{ backgroundColor: value || '#FFFFFF' }}>
-          <input type="color" value={value || '#000000'} onChange={e => oc(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
-        </label>
-      </div>
+  // Color row — uses shared ColorPicker
+  const ColorRow = ({ label, value, onChange: oc, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) => (
+    <LabeledField label={label} hint={hint}>
+      <ColorPicker value={value || ''} onChange={oc} />
     </LabeledField>
   )
+  // Legacy alias used by older renderers (maps to new polished ColorRow).
+  const CleanColor = ColorRow
+  // Legacy simple color field (kept as alias to ColorRow for consistency).
+  const ColorField = ColorRow
 
-  // 4-side padding control (compact top/right/bottom/left grid)
+  // Number input with unit badge
+  const UnitInput = ({ value, onChange: oc, unit = 'px', min = 0, max = 999, step = 1, className = '' }: { value: number; onChange: (v: number) => void; unit?: string; min?: number; max?: number; step?: number; className?: string }) => (
+    <div className={`relative ${className}`}>
+      <input type="number" min={min} max={max} step={step}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 pr-8 text-[13px] text-gray-800 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-colors"
+        value={value} onChange={e => oc(+e.target.value)} />
+      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-gray-400">{unit}</span>
+    </div>
+  )
+
+  // Stepper — number with +/- buttons. Good for small integer values.
+  const Stepper = ({ value, onChange: oc, min = 0, max = 999, step = 1, unit }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; unit?: string }) => (
+    <div className="inline-flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+      <button type="button" onClick={() => oc(Math.max(min, value - step))}
+        className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors">
+        <Minus className="w-3 h-3" />
+      </button>
+      <input type="number" min={min} max={max} step={step}
+        value={value}
+        onChange={e => oc(+e.target.value)}
+        className="w-12 h-8 text-center text-[12px] text-gray-800 bg-transparent outline-none border-x border-gray-200" />
+      <button type="button" onClick={() => oc(Math.min(max, value + step))}
+        className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors">
+        <Plus className="w-3 h-3" />
+      </button>
+      {unit && <span className="px-2 text-[10px] text-gray-400 border-l border-gray-200 h-8 flex items-center">{unit}</span>}
+    </div>
+  )
+
+  // Slider with live value badge
+  const Slider = ({ value, onChange: oc, min = 0, max = 100, step = 1, unit = 'px' }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; unit?: string }) => (
+    <div className="flex items-center gap-3">
+      <input type="range" min={min} max={max} step={step} value={value} onChange={e => oc(+e.target.value)}
+        className="flex-1 accent-brand-500 h-1" />
+      <div className="flex items-center gap-1 w-[64px] justify-end">
+        <input type="number" min={min} max={max} step={step} value={value} onChange={e => oc(+e.target.value)}
+          className="w-10 px-1.5 py-1 text-[11px] text-gray-800 border border-gray-200 rounded text-center outline-none focus:border-brand-500" />
+        <span className="text-[10px] text-gray-400">{unit}</span>
+      </div>
+    </div>
+  )
+
+  // Segmented control with labels (or icons if provided)
+  const Segmented = <T extends string,>({ value, onChange: oc, options }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label?: string; icon?: React.ReactNode; title?: string }> }) => (
+    <div className="flex border border-gray-200 rounded-lg overflow-hidden bg-white">
+      {options.map(opt => (
+        <button key={opt.value} type="button" onClick={() => oc(opt.value)} title={opt.title}
+          className={`flex-1 py-2 px-2 flex items-center justify-center gap-1.5 text-[12px] font-medium transition-colors ${value === opt.value ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+          {opt.icon}
+          {opt.label && <span className="truncate">{opt.label}</span>}
+        </button>
+      ))}
+    </div>
+  )
+
+  // Text-format controls: Bold / Italic / Underline
+  const TextFormat = ({ keyWeight = 'fontWeight', keyStyle = 'fontStyle', keyDeco = 'textDecoration' }: { keyWeight?: string; keyStyle?: string; keyDeco?: string }) => (
+    <div className="inline-flex items-center gap-0.5 border border-gray-200 rounded-lg p-0.5 bg-white">
+      <button onClick={() => up(keyWeight, p[keyWeight] === 'bold' ? 'normal' : 'bold')}
+        className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${p[keyWeight] === 'bold' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`} title="Negrito">
+        <Bold className="w-3.5 h-3.5" />
+      </button>
+      <button onClick={() => up(keyStyle, p[keyStyle] === 'italic' ? 'normal' : 'italic')}
+        className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${p[keyStyle] === 'italic' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`} title="Itálico">
+        <Italic className="w-3.5 h-3.5" />
+      </button>
+      <button onClick={() => up(keyDeco, p[keyDeco] === 'underline' ? 'none' : 'underline')}
+        className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${p[keyDeco] === 'underline' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`} title="Sublinhado">
+        <Underline className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  )
+
+  // Font family select with preview
+  const FontSelect = ({ value, onChange: oc }: { value: string; onChange: (v: string) => void }) => {
+    const fonts = [
+      { v: 'inherit', l: 'Padrão' },
+      { v: "'Inter', sans-serif", l: 'Inter' },
+      { v: "'Montserrat', sans-serif", l: 'Montserrat' },
+      { v: "'Poppins', sans-serif", l: 'Poppins' },
+      { v: "'Roboto', sans-serif", l: 'Roboto' },
+      { v: "'Open Sans', sans-serif", l: 'Open Sans' },
+      { v: 'Georgia, serif', l: 'Georgia' },
+      { v: "'Times New Roman', serif", l: 'Times New Roman' },
+      { v: 'Arial, sans-serif', l: 'Arial' },
+      { v: "'Helvetica Neue', sans-serif", l: 'Helvetica' },
+    ]
+    return (
+      <select className={sel} value={value || 'inherit'} onChange={e => oc(e.target.value)}
+        style={{ fontFamily: value || 'inherit' }}>
+        {fonts.map(f => <option key={f.v} value={f.v} style={{ fontFamily: f.v }}>{f.l}</option>)}
+      </select>
+    )
+  }
+
+  // 4-side padding control with visual box
   const PaddingControl = ({ prefix, defaults }: { prefix: 'padding' | 'inputPad'; defaults?: { t?: number; r?: number; b?: number; l?: number } }) => {
     const keyT = prefix === 'padding' ? 'paddingTop' : 'inputPadTop'
     const keyR = prefix === 'padding' ? 'paddingRight' : 'inputPadRight'
@@ -673,7 +784,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     const d = defaults || {}
     const Num = ({ k, def }: { k: string; def: number }) => (
       <div className="relative">
-        <input type="number" min={0} max={80}
+        <input type="number" min={0} max={120}
           className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-gray-800 text-center outline-none focus:border-brand-500"
           value={p[k] ?? def} onChange={e => up(k, +e.target.value)} />
         <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span>
@@ -686,7 +797,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
         <div />
         <Num k={keyL} def={d.l ?? 0} />
         <div className="flex items-center justify-center">
-          <div className="w-6 h-6 rounded-sm bg-gray-100 border border-gray-200" />
+          <div className="w-7 h-7 rounded-sm bg-gradient-to-br from-gray-100 to-gray-50 border border-gray-200" />
         </div>
         <Num k={keyR} def={d.r ?? 0} />
         <div />
@@ -696,23 +807,37 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     )
   }
 
-  // Section header with Omnisend-style visual weight
+  // Section header (uppercase with icon)
   const SectionHeader = ({ title, icon }: { title: string; icon?: React.ReactNode }) => (
-    <div className="flex items-center gap-2 pt-1 pb-0.5">
-      {icon}
+    <div className="flex items-center gap-2 pt-1 pb-1">
+      {icon && <span className="text-gray-500">{icon}</span>}
       <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">{title}</p>
     </div>
+  )
+
+  // Border-style control with visual previews
+  const BorderStyleControl = () => (
+    <Segmented value={p.borderStyle || 'solid'} onChange={v => up('borderStyle', v)} options={[
+      { value: 'solid', label: '───', title: 'Sólida' },
+      { value: 'dashed', label: '╌╌╌', title: 'Tracejada' },
+      { value: 'dotted', label: '· · ·', title: 'Pontilhada' },
+    ]} />
   )
 
   // Unified input "Input" tab renderer (Omnisend-style clean sections)
   const renderInputConfig = () => {
     // Lock email/phone mapping since the type implies the target
     const lockedMap = block.type === 'email' ? 'email' : block.type === 'phone' ? 'phone' : null
+    const typeIcon = block.type === 'email' ? <AtSign className="w-3 h-3" />
+      : block.type === 'phone' ? <Phone className="w-3 h-3" />
+      : block.type === 'date-input' ? <Calendar className="w-3 h-3" />
+      : block.type === 'name-input' ? <User className="w-3 h-3" />
+      : <TextCursorInput className="w-3 h-3" />
     return (
       <div className="space-y-5">
-        {/* Conteúdo section */}
+        {/* Content section */}
         <div className="space-y-3">
-          <SectionHeader title="Conteúdo" />
+          <SectionHeader title="Conteúdo" icon={typeIcon} />
 
           <LabeledField label="Mapear para" hint="Onde o valor deste campo será salvo no perfil do contato.">
             <select className={sel} value={lockedMap || p.mapTo || ''} disabled={!!lockedMap} onChange={e => up('mapTo', e.target.value)}>
@@ -727,15 +852,15 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
             </LabeledField>
           )}
 
-          <LabeledField label="Placeholder">
-            <input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} placeholder="Texto exibido quando vazio" />
+          <LabeledField label="Placeholder" hint="Texto de dica exibido quando o campo está vazio.">
+            <input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} placeholder="Ex: Seu email" />
           </LabeledField>
 
           {block.type === 'phone' && (
-            <LabeledField label="País padrão">
+            <LabeledField label="Código do país padrão">
               <select className={sel} value={p.countryCode || '+55'} onChange={e => up('countryCode', e.target.value)}>
                 <option value="+55">Brasil (+55)</option>
-                <option value="+1">EUA (+1)</option>
+                <option value="+1">EUA / Canadá (+1)</option>
                 <option value="+351">Portugal (+351)</option>
                 <option value="+44">Reino Unido (+44)</option>
                 <option value="+34">Espanha (+34)</option>
@@ -746,20 +871,20 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           )}
 
           <div className="pt-1">
-            <Toggle label="Mostrar label no formulário" checked={p.showLabel || false} onChange={v => up('showLabel', v)} />
+            <Toggle label="Mostrar label acima do campo" hint="Exibe um texto descritivo antes do input." checked={p.showLabel || false} onChange={v => up('showLabel', v)} />
           </div>
           {p.showLabel && (
             <LabeledField label="Texto do label">
-              <input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} />
+              <input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} placeholder="Ex: Seu melhor email" />
             </LabeledField>
           )}
         </div>
 
-        {/* Validação section */}
+        {/* Validation section */}
         <div className="pt-4 border-t border-gray-100 space-y-3">
-          <SectionHeader title="Validação" />
+          <SectionHeader title="Validação" icon={<ShieldCheck className="w-3 h-3" />} />
 
-          <Toggle label="Campo obrigatório" checked={block.type === 'email' ? true : !!p.required} onChange={v => up('required', v)} />
+          <Toggle label="Campo obrigatório" hint={block.type === 'email' ? 'Email é sempre obrigatório.' : 'Impede o envio quando vazio.'} checked={block.type === 'email' ? true : !!p.required} onChange={v => { if (block.type !== 'email') up('required', v) }} />
           {(p.required || block.type === 'email') && (
             <LabeledField label="Mensagem quando vazio" hint="Exibida quando o usuário não preenche o campo.">
               <input className={inp} value={p.requiredMsg || 'Este campo é obrigatório'} onChange={e => up('requiredMsg', e.target.value)} />
@@ -774,24 +899,28 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 
         {/* Layout section */}
         <div className="pt-4 border-t border-gray-100 space-y-3">
-          <SectionHeader title="Layout" />
-          <LabeledField label="Alinhamento do input">
-            <AlignButtons value={p.align || 'full'} onChange={v => up('align', v)} />
+          <SectionHeader title="Layout" icon={<LayoutGrid className="w-3 h-3" />} />
+          <LabeledField label="Largura">
+            <Segmented value={p.align || 'full'} onChange={v => up('align', v)} options={[
+              { value: 'left', label: 'Esq', icon: <AlignLeft className="w-3 h-3" /> },
+              { value: 'center', label: 'Centro', icon: <AlignCenter className="w-3 h-3" /> },
+              { value: 'right', label: 'Dir', icon: <AlignRight className="w-3 h-3" /> },
+              { value: 'full', label: 'Preencher', icon: <AlignJustify className="w-3 h-3" /> },
+            ]} />
           </LabeledField>
 
-          <Group title="Espaçamento externo" defaultOpen={false}>
+          <LabeledField label="Espaçamento externo" hint="Margem ao redor do campo (fora da borda).">
             <PaddingControl prefix="padding" defaults={{ b: 8 }} />
-          </Group>
+          </LabeledField>
         </div>
 
         {/* Tip about Field settings */}
         {onApplyToAllInputs && (
-          <div className="mx-3 p-3 rounded-lg bg-blue-50/60 border border-blue-100 flex items-start gap-2.5">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-500 flex-shrink-0 mt-0.5">
-              <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
-            </svg>
+          <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-100 flex items-start gap-2.5">
+            <Sparkles className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
             <p className="text-[11px] text-blue-900/80 leading-relaxed">
-              Use a aba <span className="font-semibold">Fields</span> para editar cores, borda e tipografia. O botão "Aplicar a todos" replica o estilo em todos os inputs.
+              Edite cores, borda e tipografia do campo na aba <span className="font-semibold">Fields</span>.
+              Use o botão <span className="font-semibold">"Aplicar a todos"</span> lá para replicar o estilo em todos os inputs.
             </p>
           </div>
         )}
@@ -801,12 +930,6 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 
   // Unified "Fields" tab renderer (Klaviyo-style grouped sections)
   const renderInputFields = () => {
-    const CornerBtn = ({ value, label }: { value: string; label: string }) => (
-      <button onClick={() => up('corners', value)}
-        className={`flex-1 py-2 text-[11px] font-medium transition-colors ${p.corners === value ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
-        {label}
-      </button>
-    )
     const handleApplyToAll = () => {
       if (!onApplyToAllInputs) return
       if (confirm('Aplicar estes estilos a TODOS os campos de input do popup?')) {
@@ -814,116 +937,112 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
       }
     }
     return (
-      <div>
+      <div className="space-y-5">
         {onApplyToAllInputs && (
           <button onClick={handleApplyToAll}
-            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg transition-colors mb-4">
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-[12px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg transition-colors">
+            <Sparkles className="w-3.5 h-3.5" />
             Aplicar estes estilos a todos os inputs
           </button>
         )}
 
-        <Group title="Estilo" defaultOpen={true}>
-          <LabeledField label="Tipo de borda">
+        {/* Shape section */}
+        <div className="space-y-3">
+          <SectionHeader title="Forma" icon={<Square className="w-3 h-3" />} />
+          <LabeledField label="Estilo do campo">
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => up('inputStyle', 'solid')}
-                className={`py-3 rounded-lg border-2 transition-colors ${p.inputStyle !== 'underline' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                <div className="w-12 h-4 mx-auto rounded border border-gray-700" />
+                className={`py-4 rounded-lg border-2 transition-colors flex items-center justify-center ${p.inputStyle !== 'underline' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                <div className="w-16 h-5 rounded border border-gray-700 bg-white" />
               </button>
               <button onClick={() => up('inputStyle', 'underline')}
-                className={`py-3 rounded-lg border-2 transition-colors ${p.inputStyle === 'underline' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                <div className="w-12 h-4 mx-auto border-b-2 border-dashed border-gray-700" />
+                className={`py-4 rounded-lg border-2 transition-colors flex items-center justify-center ${p.inputStyle === 'underline' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                <div className="w-16 h-5 border-b-2 border-gray-700" />
               </button>
             </div>
           </LabeledField>
 
           {p.inputStyle !== 'underline' && (
-            <LabeledField label="Cantos">
-              <div className="flex border border-gray-200 rounded-lg overflow-hidden">
-                <CornerBtn value="none" label="Reto" />
-                <CornerBtn value="small" label="Peq" />
-                <CornerBtn value="medium" label="Med" />
-                <CornerBtn value="large" label="Grd" />
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                <input type="number" className="flex-1 px-2 py-1.5 border border-gray-200 rounded-md text-[12px] outline-none focus:border-brand-500"
-                  value={p.cornerRadius ?? 8} onChange={e => { up('cornerRadius', +e.target.value); up('corners', 'custom') }} min={0} max={50} placeholder="Personalizado" />
-                <span className="text-[11px] text-gray-400">px</span>
-              </div>
+            <LabeledField label="Raio dos cantos">
+              <Slider value={p.cornerRadius ?? 8} onChange={v => { up('cornerRadius', v); up('corners', 'custom') }} min={0} max={50} unit="px" />
             </LabeledField>
           )}
-        </Group>
+        </div>
 
-        <Group title="Cores" defaultOpen={true}>
-          <CleanColor label="Cor de fundo" value={p.backgroundColor || '#FFFFFF'} onChange={v => up('backgroundColor', v)} />
-          <CleanColor label="Cor do texto" value={p.textColor || '#111827'} onChange={v => up('textColor', v)} />
-          <CleanColor label="Cor do placeholder" value={p.placeholderColor || '#9CA3AF'} onChange={v => up('placeholderColor', v)} />
-          <CleanColor label="Cor do label" value={p.labelColor || '#374151'} onChange={v => up('labelColor', v)} />
-          <CleanColor label="Cor de erro" value={p.errorColor || '#EF4444'} onChange={v => up('errorColor', v)} />
-        </Group>
+        {/* Colors */}
+        <div className="pt-4 border-t border-gray-100 space-y-3">
+          <SectionHeader title="Cores" icon={<Palette className="w-3 h-3" />} />
+          <ColorRow label="Fundo" value={p.backgroundColor || '#FFFFFF'} onChange={v => up('backgroundColor', v)} />
+          <ColorRow label="Texto digitado" value={p.textColor || '#111827'} onChange={v => up('textColor', v)} />
+          <ColorRow label="Placeholder" value={p.placeholderColor || '#9CA3AF'} onChange={v => up('placeholderColor', v)} />
+          <ColorRow label="Label" value={p.labelColor || '#374151'} onChange={v => up('labelColor', v)} />
+          <ColorRow label="Erro" hint="Cor usada ao exibir mensagens de validação." value={p.errorColor || '#EF4444'} onChange={v => up('errorColor', v)} />
+        </div>
 
-        <Group title="Tipografia" defaultOpen={false}>
-          <div className="grid grid-cols-[1fr_70px] gap-2">
-            <LabeledField label="Fonte">
-              <select className={sel} value={p.fontFamily || 'inherit'} onChange={e => up('fontFamily', e.target.value)}>
-                <option value="inherit">Padrao</option>
-                <option value="Arial, sans-serif">Arial</option>
-                <option value="'Helvetica Neue', sans-serif">Helvetica</option>
-                <option value="Georgia, serif">Georgia</option>
-                <option value="'Times New Roman', serif">Times</option>
-                <option value="'Inter', sans-serif">Inter</option>
-                <option value="'Montserrat', sans-serif">Montserrat</option>
-                <option value="'Poppins', sans-serif">Poppins</option>
-                <option value="'Roboto', sans-serif">Roboto</option>
-                <option value="'Open Sans', sans-serif">Open Sans</option>
+        {/* Border */}
+        {p.inputStyle !== 'underline' && (
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Borda" icon={<Square className="w-3 h-3" />} />
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledField label="Largura">
+                <UnitInput value={p.borderWidth ?? 1} onChange={v => up('borderWidth', v)} min={0} max={8} />
+              </LabeledField>
+              <LabeledField label="Estilo">
+                <BorderStyleControl />
+              </LabeledField>
+            </div>
+            {(p.borderWidth ?? 1) > 0 && (
+              <ColorRow label="Cor da borda" value={p.borderColor || '#E5E7EB'} onChange={v => up('borderColor', v)} />
+            )}
+          </div>
+        )}
+
+        {/* Typography */}
+        <div className="pt-4 border-t border-gray-100 space-y-3">
+          <SectionHeader title="Tipografia" icon={<Type className="w-3 h-3" />} />
+          <LabeledField label="Fonte">
+            <FontSelect value={p.fontFamily || 'inherit'} onChange={v => up('fontFamily', v)} />
+          </LabeledField>
+          <div className="grid grid-cols-2 gap-2">
+            <LabeledField label="Tamanho">
+              <UnitInput value={p.fontSize || 14} onChange={v => up('fontSize', v)} min={10} max={32} />
+            </LabeledField>
+            <LabeledField label="Peso">
+              <select className={sel} value={String(p.inputFontWeight || '400')} onChange={e => up('inputFontWeight', e.target.value)}>
+                <option value="400">400 (regular)</option>
+                <option value="500">500 (médio)</option>
+                <option value="600">600 (semi)</option>
+                <option value="700">700 (negrito)</option>
               </select>
             </LabeledField>
-            <LabeledField label="Tamanho">
-              <input type="number" className={inp} value={p.fontSize || 14} onChange={e => up('fontSize', +e.target.value)} min={10} max={32} />
-            </LabeledField>
           </div>
-
-          <LabeledField label="Decoracao">
-            <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-1 w-fit">
-              <button onClick={() => up('bold', !p.bold)} className={`px-3 py-1 text-sm font-bold rounded ${p.bold ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'}`}>B</button>
-              <button onClick={() => up('italic', !p.italic)} className={`px-3 py-1 text-sm italic rounded ${p.italic ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'}`}>I</button>
-              <button onClick={() => up('underline', !p.underline)} className={`px-3 py-1 text-sm underline rounded ${p.underline ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'}`}>U</button>
-            </div>
-          </LabeledField>
-
-          <LabeledField label="Alinhamento do texto">
-            <div className="flex border border-gray-200 rounded-lg overflow-hidden">
-              {['left', 'center', 'right'].map(a => (
-                <button key={a} onClick={() => up('textAlign', a)}
-                  className={`flex-1 py-1.5 text-xs font-medium transition-colors ${p.textAlign === a ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
-                  {a === 'left' ? 'Esq' : a === 'center' ? 'Centro' : 'Dir'}
+          <div className="flex items-center gap-3">
+            <LabeledField label="Formatação">
+              <div className="inline-flex items-center gap-0.5 border border-gray-200 rounded-lg p-0.5 bg-white">
+                <button onClick={() => up('bold', !p.bold)} className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${p.bold ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`} title="Negrito">
+                  <Bold className="w-3.5 h-3.5" />
                 </button>
-              ))}
-            </div>
-          </LabeledField>
-        </Group>
-
-        <Group title="Borda" defaultOpen={false}>
-          <div className="grid grid-cols-2 gap-2">
-            <LabeledField label="Largura">
-              <div className="relative">
-                <input type="number" className={inp + ' pr-7'} value={p.borderWidth ?? 1} onChange={e => up('borderWidth', +e.target.value)} min={0} max={10} />
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span>
+                <button onClick={() => up('italic', !p.italic)} className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${p.italic ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`} title="Itálico">
+                  <Italic className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => up('underline', !p.underline)} className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${p.underline ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`} title="Sublinhado">
+                  <Underline className="w-3.5 h-3.5" />
+                </button>
               </div>
             </LabeledField>
-            <LabeledField label="Estilo">
-              <select className={sel} value={p.borderStyle || 'solid'} onChange={e => up('borderStyle', e.target.value)}>
-                <option value="solid">Solido</option>
-                <option value="dashed">Tracejado</option>
-                <option value="dotted">Pontilhado</option>
-              </select>
-            </LabeledField>
+            <div className="flex-1">
+              <LabeledField label="Alinhamento">
+                <AlignButtons value={p.textAlign || 'left'} onChange={v => up('textAlign', v)} showFull={false} />
+              </LabeledField>
+            </div>
           </div>
-          <CleanColor label="Cor da borda" value={p.borderColor || '#E5E7EB'} onChange={v => up('borderColor', v)} />
-        </Group>
+        </div>
 
-        <Group title="Espacamento interno" defaultOpen={false}>
+        {/* Inner padding */}
+        <div className="pt-4 border-t border-gray-100 space-y-3">
+          <SectionHeader title="Espaçamento interno" icon={<MoveHorizontal className="w-3 h-3" />} />
           <PaddingControl prefix="inputPad" defaults={{ t: 12, r: 16, b: 12, l: 16 }} />
-        </Group>
+        </div>
       </div>
     )
   }
@@ -936,199 +1055,253 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     switch (block.type) {
 
       case 'text':
-        return <>
-          <LabeledField label="Estilo do texto">
-            <select className={sel} value={p.tag || 'p'} onChange={e => up('tag', e.target.value)}>
-              <option value="h1">Título grande</option>
-              <option value="h2">Título médio</option>
-              <option value="h3">Título pequeno</option>
-              <option value="p">Parágrafo</option>
-            </select>
-          </LabeledField>
-          <LabeledField label="Conteúdo">
-            <textarea className={inp} rows={3} value={p.content || ''} onChange={e => up('content', e.target.value)} />
-          </LabeledField>
-          <div className="grid grid-cols-2 gap-2">
-            <LabeledField label="Fonte">
-              <select className={sel} value={p.fontFamily || 'inherit'} onChange={e => up('fontFamily', e.target.value)}>
-                <option value="inherit">Padrão</option>
-                <option value="'Inter', sans-serif">Inter</option>
-                <option value="'Montserrat', sans-serif">Montserrat</option>
-                <option value="'Poppins', sans-serif">Poppins</option>
-                <option value="'Roboto', sans-serif">Roboto</option>
-                <option value="'Open Sans', sans-serif">Open Sans</option>
-                <option value="Georgia, serif">Georgia</option>
-                <option value="Arial, sans-serif">Arial</option>
-              </select>
+        return <div className="space-y-5">
+          {/* Content section */}
+          <div className="space-y-3">
+            <SectionHeader title="Conteúdo" icon={<Type className="w-3 h-3" />} />
+            <LabeledField label="Estilo do texto">
+              <Segmented value={p.tag || 'p'} onChange={v => up('tag', v)} options={[
+                { value: 'h1', label: 'H1', title: 'Título grande' },
+                { value: 'h2', label: 'H2', title: 'Título médio' },
+                { value: 'h3', label: 'H3', title: 'Título pequeno' },
+                { value: 'p', label: 'P', title: 'Parágrafo' },
+              ]} />
             </LabeledField>
-            <LabeledField label="Tamanho">
-              <div className="relative">
-                <input type="number" className={inp + ' pr-8'} value={p.fontSize || 16} onChange={e => up('fontSize', +e.target.value)} />
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span>
+            <LabeledField label="Texto" hint="Também editável clicando diretamente no texto no canvas.">
+              <textarea className={inp} rows={3} value={p.content || ''} onChange={e => up('content', e.target.value)} />
+            </LabeledField>
+          </div>
+
+          {/* Typography section */}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Tipografia" icon={<Type className="w-3 h-3" />} />
+            <LabeledField label="Fonte">
+              <FontSelect value={p.fontFamily || 'inherit'} onChange={v => up('fontFamily', v)} />
+            </LabeledField>
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledField label="Tamanho">
+                <UnitInput value={p.fontSize || 16} onChange={v => up('fontSize', v)} min={8} max={120} />
+              </LabeledField>
+              <LabeledField label="Altura da linha">
+                <UnitInput value={Number(p.lineHeight || 1.4)} onChange={v => up('lineHeight', v)} min={0.8} max={3} step={0.1} unit="×" />
+              </LabeledField>
+            </div>
+            <LabeledField label="Peso">
+              <Segmented value={String(p.fontWeight || 'normal')} onChange={v => up('fontWeight', v)} options={[
+                { value: 'normal', label: '400' },
+                { value: '500', label: '500' },
+                { value: '600', label: '600' },
+                { value: 'bold', label: '700' },
+                { value: '800', label: '800' },
+              ]} />
+            </LabeledField>
+            <div className="flex items-center gap-3">
+              <LabeledField label="Formatação"><TextFormat /></LabeledField>
+              <div className="flex-1">
+                <LabeledField label="Alinhamento">
+                  <AlignButtons value={p.align || 'left'} onChange={v => up('align', v)} showFull={false} />
+                </LabeledField>
+              </div>
+            </div>
+            <LabeledField label="Espaçamento entre letras">
+              <Slider value={p.letterSpacing ?? 0} onChange={v => up('letterSpacing', v)} min={-2} max={10} step={0.5} unit="px" />
+            </LabeledField>
+          </div>
+
+          {/* Colors */}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Cores" icon={<Palette className="w-3 h-3" />} />
+            <ColorRow label="Cor do texto" value={p.color || '#111827'} onChange={v => up('color', v)} />
+            <ColorRow label="Cor dos links" value={p.linkColor || '#F97316'} onChange={v => up('linkColor', v)} />
+            <ColorRow label="Cor de fundo do bloco" hint="Aplicado a todo o bloco de texto." value={p.blockBg || ''} onChange={v => up('blockBg', v)} />
+          </div>
+        </div>
+
+      case 'button':
+        return <div className="space-y-5">
+          {/* Content & action */}
+          <div className="space-y-3">
+            <SectionHeader title="Conteúdo" icon={<MousePointerClick className="w-3 h-3" />} />
+            <LabeledField label="Texto" hint="Também editável diretamente no botão no canvas.">
+              <input className={inp} value={p.text || ''} onChange={e => up('text', e.target.value)} />
+            </LabeledField>
+            <LabeledField label="Ação ao clicar">
+              <Segmented value={p.action || 'submit'} onChange={v => up('action', v)} options={[
+                { value: 'submit', label: 'Enviar', title: 'Submeter formulário' },
+                { value: 'next-step', label: 'Próxima', title: 'Ir para a próxima etapa' },
+                { value: 'url', label: 'URL', title: 'Abrir link' },
+                { value: 'close', label: 'Fechar', title: 'Fechar popup' },
+              ]} />
+            </LabeledField>
+            {p.action === 'url' && (
+              <LabeledField label="URL de destino" hint="Abre em nova aba quando clicado.">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 flex items-center border border-gray-200 rounded-lg focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500/20">
+                    <Link2 className="w-3.5 h-3.5 text-gray-400 ml-3" />
+                    <input className="flex-1 px-2 py-2 text-[13px] text-gray-800 outline-none bg-transparent" value={p.url || ''} onChange={e => up('url', e.target.value)} placeholder="https://..." />
+                  </div>
+                </div>
+              </LabeledField>
+            )}
+          </div>
+
+          {/* Colors */}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Cores" icon={<Palette className="w-3 h-3" />} />
+            <ColorRow label="Fundo" value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
+            <ColorRow label="Texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
+            <ColorRow label="Hover (opcional)" hint="Cor de fundo ao passar o mouse." value={p.hoverColor || ''} onChange={v => up('hoverColor', v)} />
+          </div>
+
+          {/* Typography */}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Tipografia" icon={<Type className="w-3 h-3" />} />
+            <LabeledField label="Fonte">
+              <FontSelect value={p.fontFamily || 'inherit'} onChange={v => up('fontFamily', v)} />
+            </LabeledField>
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledField label="Tamanho">
+                <UnitInput value={p.fontSize || 15} onChange={v => up('fontSize', v)} min={10} max={48} />
+              </LabeledField>
+              <LabeledField label="Peso">
+                <select className={sel} value={String(p.btnFontWeight || '700')} onChange={e => up('btnFontWeight', e.target.value)}>
+                  <option value="400">400 (regular)</option>
+                  <option value="500">500 (médio)</option>
+                  <option value="600">600 (semi)</option>
+                  <option value="700">700 (negrito)</option>
+                  <option value="800">800 (extra)</option>
+                </select>
+              </LabeledField>
+            </div>
+            <LabeledField label="Espaçamento entre letras">
+              <Slider value={p.btnLetterSpacing ?? 0} onChange={v => up('btnLetterSpacing', v)} min={-1} max={8} step={0.5} unit="px" />
+            </LabeledField>
+          </div>
+
+          {/* Shape & border */}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Forma & borda" icon={<Square className="w-3 h-3" />} />
+            <LabeledField label="Raio da borda">
+              <Slider value={p.borderRadius ?? 8} onChange={v => up('borderRadius', v)} min={0} max={50} unit="px" />
+            </LabeledField>
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledField label="Largura da borda">
+                <UnitInput value={p.btnBorderWidth ?? 0} onChange={v => up('btnBorderWidth', v)} min={0} max={8} />
+              </LabeledField>
+              <LabeledField label="Estilo">
+                <BorderStyleControl />
+              </LabeledField>
+            </div>
+            {(p.btnBorderWidth || 0) > 0 && (
+              <ColorRow label="Cor da borda" value={p.btnBorderColor || '#E5E7EB'} onChange={v => up('btnBorderColor', v)} />
+            )}
+          </div>
+
+          {/* Size & spacing */}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Tamanho & espaçamento" icon={<MoveHorizontal className="w-3 h-3" />} />
+            <LabeledField label="Largura">
+              <Segmented value={p.fullWidth ? 'full' : 'auto'} onChange={v => up('fullWidth', v === 'full')} options={[
+                { value: 'auto', label: 'Auto', title: 'Largura automática' },
+                { value: 'full', label: 'Preencher', title: 'Preencher container' },
+              ]} />
+            </LabeledField>
+            {!p.fullWidth && (
+              <LabeledField label="Alinhamento">
+                <AlignButtons value={p.align || 'center'} onChange={v => up('align', v)} showFull={false} />
+              </LabeledField>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledField label="Padding vertical">
+                <UnitInput value={p.paddingV ?? 14} onChange={v => up('paddingV', v)} min={4} max={40} />
+              </LabeledField>
+              <LabeledField label="Padding horizontal">
+                <UnitInput value={p.paddingH ?? 28} onChange={v => up('paddingH', v)} min={4} max={80} />
+              </LabeledField>
+            </div>
+          </div>
+        </div>
+
+      case 'image':
+        return <div className="space-y-5">
+          {/* Source */}
+          <div className="space-y-3">
+            <SectionHeader title="Imagem" icon={<ImageIcon className="w-3 h-3" />} />
+            <LabeledField label="Arquivo" hint="JPG, PNG, GIF ou WebP. Máx 2000px.">
+              {p.src ? (
+                <div className="space-y-2">
+                  <div className="relative rounded-xl overflow-hidden border border-gray-200 bg-[linear-gradient(45deg,#f3f4f6_25%,transparent_25%,transparent_75%,#f3f4f6_75%),linear-gradient(45deg,#f3f4f6_25%,transparent_25%,transparent_75%,#f3f4f6_75%)] bg-[length:16px_16px] bg-[0_0,8px_8px]">
+                    <img src={p.src} alt="" className="w-full h-36 object-contain" />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => onOpenMedia?.(url => up('src', url))}
+                      className="flex-1 py-2 text-[12px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors">
+                      Substituir
+                    </button>
+                    <button onClick={() => up('src', '')} className="flex-1 py-2 text-[12px] font-semibold text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50 hover:border-red-200 transition-colors">
+                      Remover
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => onOpenMedia?.(url => up('src', url))}
+                  className="w-full border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/30 transition-colors group">
+                  <div className="w-12 h-12 rounded-xl bg-gray-50 group-hover:bg-brand-100 flex items-center justify-center mx-auto mb-3 transition-colors">
+                    <Upload className="w-5 h-5 text-gray-400 group-hover:text-brand-500" />
+                  </div>
+                  <span className="text-[13px] font-semibold text-gray-700 block">Escolher imagem</span>
+                  <span className="text-[11px] text-gray-400">da biblioteca ou enviar nova</span>
+                </button>
+              )}
+            </LabeledField>
+            <LabeledField label="Texto alternativo" hint="Descreva a imagem para acessibilidade e SEO.">
+              <input className={inp} value={p.alt || ''} onChange={e => up('alt', e.target.value)} placeholder="Ex: Desconto de 10% em primeiros pedidos" />
+            </LabeledField>
+            <LabeledField label="Link ao clicar (opcional)">
+              <div className="flex items-center border border-gray-200 rounded-lg focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500/20">
+                <Link2 className="w-3.5 h-3.5 text-gray-400 ml-3" />
+                <input className="flex-1 px-2 py-2 text-[13px] text-gray-800 outline-none bg-transparent" value={p.href || ''} onChange={e => up('href', e.target.value)} placeholder="https://..." />
               </div>
             </LabeledField>
           </div>
-          <LabeledField label="Altura da linha">
-            <select className={sel} value={String(p.lineHeight || 1.5)} onChange={e => up('lineHeight', +e.target.value)}>
-              <option value="1">Simples (1.0)</option>
-              <option value="1.2">1.2</option>
-              <option value="1.5">1.5</option>
-              <option value="1.8">1.8</option>
-              <option value="2">Duplo (2.0)</option>
-            </select>
-          </LabeledField>
-          <LabeledField label="Cor do texto">
-            <ColorPicker value={p.color || '#111827'} onChange={v => up('color', v)} />
-          </LabeledField>
-          <LabeledField label="Cor do link">
-            <ColorPicker value={p.linkColor || '#0094EB'} onChange={v => up('linkColor', v)} />
-          </LabeledField>
-          <LabeledField label="Formatação">
-            <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-1 bg-gray-50/50">
-              {[
-                { v: 'bold', l: 'B', s: 'font-bold', k: 'fontWeight' },
-                { v: 'italic', l: 'I', s: 'italic', k: 'fontStyle' },
-                { v: 'underline', l: 'U', s: 'underline', k: 'textDecoration' },
-              ].map(f => {
-                const active = p[f.k] === f.v;
-                return (
-                  <button key={f.v}
-                    onClick={() => up(f.k, active ? 'normal' : f.v)}
-                    className={`flex-1 py-1.5 text-sm rounded transition-colors ${f.s} ${active ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
-                    {f.l}
-                  </button>
-                );
-              })}
-            </div>
-          </LabeledField>
-          <LabeledField label="Alinhamento">
-            <AlignButtons value={p.align || 'left'} onChange={v => up('align', v)} />
-          </LabeledField>
-        </>
 
-      case 'button':
-        return <>
-          <LabeledField label="Ação do botão">
-            <select className={sel} value={p.action || 'submit'} onChange={e => up('action', e.target.value)}>
-              <option value="submit">Enviar formulário</option>
-              <option value="url">Abrir link</option>
-              <option value="next-step">Próxima etapa</option>
-              <option value="close">Fechar popup</option>
-            </select>
-          </LabeledField>
-          {p.action === 'url' && (
-            <LabeledField label="URL">
-              <input className={inp} value={p.url || ''} onChange={e => up('url', e.target.value)} placeholder="https://" />
+          {/* Layout */}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Layout" icon={<LayoutGrid className="w-3 h-3" />} />
+            <LabeledField label="Alinhamento">
+              <AlignButtons value={p.align || 'center'} onChange={v => up('align', v)} showFull={false} />
             </LabeledField>
-          )}
-          <LabeledField label="Texto">
-            <input className={inp} value={p.text || ''} onChange={e => up('text', e.target.value)} />
-          </LabeledField>
-
-          <Group title="Cores" defaultOpen={true}>
-            <LabeledField label="Cor de fundo">
-              <ColorPicker value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
+            <LabeledField label="Largura">
+              <Slider value={p.imgWidth ?? 100} onChange={v => up('imgWidth', v)} min={10} max={100} unit="%" />
             </LabeledField>
-            <LabeledField label="Cor do texto">
-              <ColorPicker value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
+            <LabeledField label="Altura máxima">
+              <Slider value={p.maxHeight ?? 300} onChange={v => up('maxHeight', v)} min={50} max={800} unit="px" />
             </LabeledField>
-            <LabeledField label="Cor no hover">
-              <ColorPicker value={p.hoverColor || ''} onChange={v => up('hoverColor', v)} />
+            <LabeledField label="Ajuste da imagem" hint="Como a imagem se acomoda dentro do espaço.">
+              <Segmented value={p.objectFit || 'contain'} onChange={v => up('objectFit', v)} options={[
+                { value: 'contain', label: 'Conter', title: 'Preserva proporção dentro da caixa' },
+                { value: 'cover', label: 'Cobrir', title: 'Preenche a caixa, pode cortar' },
+                { value: 'fill', label: 'Preencher', title: 'Estica para preencher' },
+              ]} />
             </LabeledField>
-          </Group>
+          </div>
 
-          <Group title="Tipografia & estilo" defaultOpen={false}>
-            <div className="grid grid-cols-2 gap-2">
-              <LabeledField label="Tamanho fonte">
-                <div className="relative">
-                  <input type="number" className={inp + ' pr-8'} value={p.fontSize || 15} onChange={e => up('fontSize', +e.target.value)} min={10} max={30} />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span>
-                </div>
-              </LabeledField>
-              <LabeledField label="Raio da borda">
-                <div className="relative">
-                  <input type="number" className={inp + ' pr-8'} value={p.borderRadius || 8} onChange={e => up('borderRadius', +e.target.value)} min={0} max={50} />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span>
-                </div>
-              </LabeledField>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <LabeledField label="Largura borda">
-                <div className="relative">
-                  <input type="number" className={inp + ' pr-8'} value={p.btnBorderWidth ?? 0} onChange={e => up('btnBorderWidth', +e.target.value)} min={0} max={5} />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span>
-                </div>
-              </LabeledField>
-              <LabeledField label="Cor da borda">
-                <ColorPicker value={p.btnBorderColor || '#E5E7EB'} onChange={v => up('btnBorderColor', v)} />
-              </LabeledField>
-            </div>
-          </Group>
-
-          <LabeledField label="Alinhamento do botão">
-            <AlignButtons value={p.fullWidth ? 'full' : (p.align || 'full')} onChange={v => { up('fullWidth', v === 'full'); if (v !== 'full') up('align', v) }} />
-          </LabeledField>
-        </>
-
-      case 'image':
-        return <>
-          <LabeledField label="Imagem" hint="JPG, PNG ou GIF — máximo 2000px.">
-            {p.src ? (
-              <div className="space-y-2">
-                <div className="relative rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
-                  <img src={p.src} alt="" className="w-full h-32 object-contain" />
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => onOpenMedia?.(url => up('src', url))}
-                    className="flex-1 py-2 text-[12px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors">
-                    Substituir
-                  </button>
-                  <button onClick={() => up('src', '')} className="flex-1 py-2 text-[12px] font-semibold text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50 hover:border-red-200 transition-colors">
-                    Remover
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => onOpenMedia?.(url => up('src', url))}
-                className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/30 transition-colors">
-                <ImageIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <span className="text-[12px] text-gray-500">Escolher imagem da biblioteca</span>
-              </button>
-            )}
-          </LabeledField>
-          <LabeledField label="Texto alternativo" hint="Descreva a imagem para acessibilidade.">
-            <input className={inp} value={p.alt || ''} onChange={e => up('alt', e.target.value)} placeholder="Descreva a imagem" />
-          </LabeledField>
-          <LabeledField label="Link (opcional)" hint="URL ao clicar na imagem.">
-            <input className={inp} value={p.href || ''} onChange={e => up('href', e.target.value)} placeholder="https://" />
-          </LabeledField>
-          <LabeledField label="Alinhamento">
-            <AlignButtons value={p.align || 'center'} onChange={v => up('align', v)} />
-          </LabeledField>
-
-          <Group title="Dimensões" defaultOpen={false}>
-            <div className="grid grid-cols-2 gap-2">
-              <LabeledField label="Largura">
-                <div className="relative">
-                  <input type="number" className={inp + ' pr-7'} value={p.imgWidth ?? 100} onChange={e => up('imgWidth', +e.target.value)} min={10} max={100} />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">%</span>
-                </div>
-              </LabeledField>
-              <LabeledField label="Altura máx">
-                <div className="relative">
-                  <input type="number" className={inp + ' pr-8'} value={p.maxHeight ?? 300} onChange={e => up('maxHeight', +e.target.value)} min={50} max={800} />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span>
-                </div>
-              </LabeledField>
-            </div>
+          {/* Style */}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Estilo" icon={<Sparkles className="w-3 h-3" />} />
             <LabeledField label="Raio da borda">
-              <div className="relative">
-                <input type="number" className={inp + ' pr-8'} value={p.borderRadius ?? 0} onChange={e => up('borderRadius', +e.target.value)} min={0} max={50} />
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span>
-              </div>
+              <Slider value={p.borderRadius ?? 0} onChange={v => up('borderRadius', v)} min={0} max={100} unit="px" />
             </LabeledField>
-          </Group>
-        </>
+            <LabeledField label="Sombra">
+              <Segmented value={p.shadow || ''} onChange={v => up('shadow', v)} options={[
+                { value: '', label: 'Nenhuma' },
+                { value: '0 1px 3px rgba(0,0,0,0.08)', label: 'Leve' },
+                { value: '0 4px 12px rgba(0,0,0,0.12)', label: 'Média' },
+                { value: '0 12px 32px rgba(0,0,0,0.18)', label: 'Forte' },
+              ]} />
+            </LabeledField>
+          </div>
+        </div>
 
       case '__unused__':
         return <>
@@ -1136,116 +1309,202 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
         </>
 
       case 'dropdown': case 'radio': case 'checkbox':
-        return <>
-          <Field label="Campo do perfil" hint="Onde salvar a resposta no contato.">
-            <select className={sel} value={p.mapTo || 'custom'} onChange={e => up('mapTo', e.target.value)}>
-              <option value="custom">Campo personalizado</option>
-              {PROFILE_FIELDS.filter(f => f.value !== 'custom').map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-            </select>
-          </Field>
-          {p.mapTo === 'custom' && (
-            <Field label="Nome do campo"><input className={inp} value={p.mapToCustom || p.label || ''} onChange={e => up('mapToCustom', e.target.value)} placeholder="ex: preferencia" /></Field>
-          )}
-          {block.type === 'dropdown' && (
-            <Field label="Placeholder"><input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} placeholder="Escolha uma opcao..." /></Field>
-          )}
-          <Field label="Label"><input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} /></Field>
-          <ToggleRow label="Mostrar label" checked={p.showLabel !== false} onChange={v => up('showLabel', v)} />
-          <Field label="Opcoes" hint="Uma opcao por linha. Arraste para reordenar.">
-            <div className="space-y-1">
+        return <div className="space-y-5">
+          {/* Content */}
+          <div className="space-y-3">
+            <SectionHeader title="Conteúdo" icon={<CheckSquare className="w-3 h-3" />} />
+            <LabeledField label="Label">
+              <input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value)} placeholder="Ex: Qual sua preferência?" />
+            </LabeledField>
+            <Toggle label="Mostrar label" checked={p.showLabel !== false} onChange={v => up('showLabel', v)} />
+            {block.type === 'dropdown' && (
+              <LabeledField label="Placeholder">
+                <input className={inp} value={p.placeholder || ''} onChange={e => up('placeholder', e.target.value)} placeholder="Escolha uma opção..." />
+              </LabeledField>
+            )}
+          </div>
+
+          {/* Options */}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Opções" icon={<LayoutGrid className="w-3 h-3" />} />
+            <div className="space-y-1.5">
               {(p.options || []).map((opt: string, i: number) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-gray-300 w-4 text-center flex-shrink-0">{i + 1}</span>
+                <div key={i} className="flex items-center gap-1.5 group">
+                  <div className="w-6 h-6 flex items-center justify-center rounded bg-gray-50 border border-gray-200 text-[10px] font-semibold text-gray-400 flex-shrink-0">{i + 1}</div>
                   <input className={inp + ' flex-1'} value={opt} onChange={e => {
                     const next = [...(p.options || [])]; next[i] = e.target.value; up('options', next)
-                  }} />
+                  }} placeholder={`Opção ${i + 1}`} />
                   <button onClick={() => { const next = [...(p.options || [])]; if (i > 0) { [next[i-1], next[i]] = [next[i], next[i-1]]; up('options', next) } }}
-                    className="p-1 text-gray-300 hover:text-gray-600" title="Mover para cima">
+                    className="p-1.5 text-gray-300 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors" title="Mover para cima" disabled={i === 0}>
                     <ChevronDown className="w-3 h-3 rotate-180" />
                   </button>
+                  <button onClick={() => { const next = [...(p.options || [])]; if (i < next.length - 1) { [next[i+1], next[i]] = [next[i], next[i+1]]; up('options', next) } }}
+                    className="p-1.5 text-gray-300 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors" title="Mover para baixo" disabled={i === (p.options || []).length - 1}>
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
                   <button onClick={() => up('options', (p.options || []).filter((_: any, j: number) => j !== i))}
-                    className="p-1 text-gray-300 hover:text-red-500" title="Remover">
-                    <X className="w-3 h-3" />
+                    className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="Remover">
+                    <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
               ))}
-              <button onClick={() => up('options', [...(p.options || []), `Opcao ${(p.options || []).length + 1}`])}
-                className="w-full py-1.5 text-[11px] font-medium text-brand-600 border border-dashed border-brand-300 rounded-lg hover:bg-brand-50">
-                + Adicionar opcao
+              <button onClick={() => up('options', [...(p.options || []), `Opção ${(p.options || []).length + 1}`])}
+                className="w-full py-2 text-[12px] font-semibold text-brand-600 border-2 border-dashed border-brand-200 rounded-lg hover:bg-brand-50 hover:border-brand-400 transition-colors flex items-center justify-center gap-1.5">
+                <Plus className="w-3.5 h-3.5" /> Adicionar opção
               </button>
             </div>
-          </Field>
-          <ToggleRow label="Campo obrigatorio" checked={p.required || false} onChange={v => up('required', v)} />
-          {block.type === 'radio' && <Field label="Direcao">
-            <select className={sel} value={p.layout || 'vertical'} onChange={e => up('layout', e.target.value)}>
-              <option value="vertical">Vertical</option><option value="horizontal">Horizontal</option>
-            </select>
-          </Field>}
-        </>
+            {block.type === 'radio' && (
+              <LabeledField label="Direção">
+                <Segmented value={p.layout || 'vertical'} onChange={v => up('layout', v)} options={[
+                  { value: 'vertical', label: 'Vertical' },
+                  { value: 'horizontal', label: 'Horizontal' },
+                ]} />
+              </LabeledField>
+            )}
+          </div>
+
+          {/* Mapping */}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Mapeamento de perfil" icon={<User className="w-3 h-3" />} />
+            <LabeledField label="Campo do perfil" hint="Onde salvar a resposta no contato.">
+              <select className={sel} value={p.mapTo || 'custom'} onChange={e => up('mapTo', e.target.value)}>
+                <option value="custom">Campo personalizado</option>
+                {PROFILE_FIELDS.filter(f => f.value !== 'custom').map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </select>
+            </LabeledField>
+            {p.mapTo === 'custom' && (
+              <LabeledField label="Nome do campo personalizado">
+                <input className={inp} value={p.mapToCustom || p.label || ''} onChange={e => up('mapToCustom', e.target.value)} placeholder="ex: preferencia" />
+              </LabeledField>
+            )}
+            <Toggle label="Campo obrigatório" checked={!!p.required} onChange={v => up('required', v)} />
+          </div>
+        </div>
 
       case 'legal-consent':
-        return <>
-          <Field label="Texto de consentimento" hint="Suporta HTML basico. Use &lt;a href=&quot;url&quot;&gt;link&lt;/a&gt; para links.">
-            <textarea className={inp} rows={4} value={p.text || ''} onChange={e => up('text', e.target.value)}
-              placeholder='Aceito receber comunicacoes e concordo com a <a href="/politica">politica de privacidade</a>.' />
-          </Field>
-          <ToggleRow label="Obrigatorio" checked={p.required !== false} onChange={v => up('required', v)} />
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 12} onChange={e => up('fontSize', +e.target.value)} min={10} max={18} /></Field>
-            <Field label="Altura linha">
-              <select className={sel} value={String(p.lineHeight || 1.4)} onChange={e => up('lineHeight', +e.target.value)}>
-                <option value="1.2">1.2</option><option value="1.4">1.4</option><option value="1.6">1.6</option><option value="1.8">1.8</option>
-              </select>
-            </Field>
+        return <div className="space-y-5">
+          <div className="space-y-3">
+            <SectionHeader title="Conteúdo" icon={<ShieldCheck className="w-3 h-3" />} />
+            <LabeledField label="Texto de consentimento" hint='Suporta HTML. Use <a href="url">link</a> para links.'>
+              <textarea className={inp} rows={4} value={p.text || ''} onChange={e => up('text', e.target.value)}
+                placeholder='Aceito receber comunicações e concordo com a <a href="/politica">política de privacidade</a>.' />
+            </LabeledField>
+            <Toggle label="Obrigatório" checked={p.required !== false} onChange={v => up('required', v)} hint="Usuário precisa marcar para enviar." />
           </div>
-          <PanelColorField label="Cor do texto" value={p.color || '#6B7280'} onChange={v => up('color', v)} />
-          <PanelColorField label="Cor dos links" value={p.linkColor || '#F97316'} onChange={v => up('linkColor', v)} />
-        </>
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Estilo" icon={<Type className="w-3 h-3" />} />
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledField label="Tamanho">
+                <UnitInput value={p.fontSize || 12} onChange={v => up('fontSize', v)} min={10} max={18} />
+              </LabeledField>
+              <LabeledField label="Altura linha">
+                <UnitInput value={Number(p.lineHeight || 1.4)} onChange={v => up('lineHeight', v)} min={1} max={2.4} step={0.1} unit="×" />
+              </LabeledField>
+            </div>
+            <ColorRow label="Cor do texto" value={p.color || '#6B7280'} onChange={v => up('color', v)} />
+            <ColorRow label="Cor dos links" value={p.linkColor || '#F97316'} onChange={v => up('linkColor', v)} />
+          </div>
+        </div>
 
       case 'coupon':
-        return <>
-          <Field label="Codigo do cupom"><input className={inp} value={p.code || ''} onChange={e => up('code', e.target.value)} /></Field>
-          <Field label="Descricao"><input className={inp} value={p.description || ''} onChange={e => up('description', e.target.value)} /></Field>
-          <PanelColorField label="Cor do fundo" value={p.bgColor || '#FFF7ED'} onChange={v => up('bgColor', v)} />
-          <PanelColorField label="Cor da borda" value={p.borderColor || '#F97316'} onChange={v => up('borderColor', v)} />
-          <PanelColorField label="Cor do codigo" value={p.codeColor || '#F97316'} onChange={v => up('codeColor', v)} />
-          <Field label="Tamanho fonte"><input type="number" className={inp} value={p.fontSize || 20} onChange={e => up('fontSize', +e.target.value)} min={14} max={36} /></Field>
-          <Field label="Raio borda"><input type="number" className={inp} value={p.borderRadius ?? 8} onChange={e => up('borderRadius', +e.target.value)} min={0} max={20} /></Field>
-        </>
+        return <div className="space-y-5">
+          <div className="space-y-3">
+            <SectionHeader title="Conteúdo" icon={<Tag className="w-3 h-3" />} />
+            <LabeledField label="Código do cupom" hint="Exibido em destaque para ser copiado.">
+              <input className={inp + ' font-mono tracking-wider uppercase'} value={p.code || ''} onChange={e => up('code', e.target.value.toUpperCase())} placeholder="DESCONTO10" />
+            </LabeledField>
+            <LabeledField label="Descrição">
+              <input className={inp} value={p.description || ''} onChange={e => up('description', e.target.value)} placeholder="Seu cupom de desconto:" />
+            </LabeledField>
+          </div>
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Cores" icon={<Palette className="w-3 h-3" />} />
+            <ColorRow label="Fundo" value={p.bgColor || '#FFF7ED'} onChange={v => up('bgColor', v)} />
+            <ColorRow label="Borda" value={p.borderColor || '#F97316'} onChange={v => up('borderColor', v)} />
+            <ColorRow label="Código" value={p.codeColor || '#F97316'} onChange={v => up('codeColor', v)} />
+          </div>
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Estilo" icon={<Sparkles className="w-3 h-3" />} />
+            <LabeledField label="Tamanho do código">
+              <Slider value={p.fontSize || 20} onChange={v => up('fontSize', v)} min={14} max={48} unit="px" />
+            </LabeledField>
+            <LabeledField label="Raio da borda">
+              <Slider value={p.borderRadius ?? 8} onChange={v => up('borderRadius', v)} min={0} max={30} unit="px" />
+            </LabeledField>
+            <LabeledField label="Estilo da borda">
+              <BorderStyleControl />
+            </LabeledField>
+          </div>
+        </div>
 
       case 'spacer':
-        return <Field label={`Altura: ${p.height || 16}px`}>
-          <input type="range" min={4} max={120} value={p.height || 16} onChange={e => up('height', +e.target.value)} className="w-full accent-brand-500" />
-        </Field>
+        return <div className="space-y-5">
+          <div className="space-y-3">
+            <SectionHeader title="Espaçador" icon={<MoveVertical className="w-3 h-3" />} />
+            <LabeledField label="Altura" hint="Espaço em branco entre blocos.">
+              <Slider value={p.height || 24} onChange={v => up('height', v)} min={4} max={200} unit="px" />
+            </LabeledField>
+            <div className="grid grid-cols-4 gap-2">
+              {[8, 16, 24, 48].map(h => (
+                <button key={h} onClick={() => up('height', h)}
+                  className={`py-2.5 rounded-lg border text-[12px] font-medium transition-colors ${p.height === h ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                  {h}px
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
 
       case 'line':
-        return <>
-          <ColorField label="Cor" value={p.color || '#E5E7EB'} onChange={v => up('color', v)} />
-          <Field label="Espessura"><input type="number" className={inp} value={p.thickness || 1} onChange={e => up('thickness', +e.target.value)} min={1} max={5} /></Field>
-          <Field label="Estilo">
-            <select className={sel} value={p.style || 'solid'} onChange={e => up('style', e.target.value)}>
-              <option value="solid">Sólido</option><option value="dashed">Tracejado</option><option value="dotted">Pontilhado</option>
-            </select>
-          </Field>
-        </>
+        return <div className="space-y-5">
+          <div className="space-y-3">
+            <SectionHeader title="Linha divisória" icon={<GripHorizontal className="w-3 h-3" />} />
+            <ColorRow label="Cor" value={p.color || '#E5E7EB'} onChange={v => up('color', v)} />
+            <LabeledField label="Espessura">
+              <Slider value={p.thickness || 1} onChange={v => up('thickness', v)} min={1} max={12} unit="px" />
+            </LabeledField>
+            <LabeledField label="Estilo">
+              <Segmented value={p.style || 'solid'} onChange={v => up('style', v)} options={[
+                { value: 'solid', label: 'Sólida' },
+                { value: 'dashed', label: 'Tracejada' },
+                { value: 'dotted', label: 'Pontilhada' },
+                { value: 'double', label: 'Dupla' },
+              ]} />
+            </LabeledField>
+            <LabeledField label="Largura">
+              <Slider value={p.width ?? 100} onChange={v => up('width', v)} min={20} max={100} unit="%" />
+            </LabeledField>
+          </div>
+        </div>
 
       case 'countdown':
-        return <>
-          <Field label="Data de término"><input type="datetime-local" className={inp} value={p.endDate || ''} onChange={e => up('endDate', e.target.value)} /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <ColorField label="Cor números" value={p.numberColor || '#FFFFFF'} onChange={v => up('numberColor', v)} />
-            <ColorField label="Cor labels" value={p.labelColor || '#9CA3AF'} onChange={v => up('labelColor', v)} />
+        return <div className="space-y-5">
+          <div className="space-y-3">
+            <SectionHeader title="Contagem regressiva" icon={<Clock className="w-3 h-3" />} />
+            <LabeledField label="Data de término" hint="Popup exibe tempo restante até esta data.">
+              <input type="datetime-local" className={inp} value={p.endDate || ''} onChange={e => up('endDate', e.target.value)} />
+            </LabeledField>
+            <LabeledField label="Tamanho dos números">
+              <Slider value={p.fontSize || 28} onChange={v => up('fontSize', v)} min={16} max={72} unit="px" />
+            </LabeledField>
           </div>
-          <ColorField label="Cor fundo" value={p.boxColor || '#1F2937'} onChange={v => up('boxColor', v)} />
-          <Field label="Tamanho números"><input type="number" className={inp} value={p.fontSize || 28} onChange={e => up('fontSize', +e.target.value)} min={16} max={48} /></Field>
-          <div className="grid grid-cols-4 gap-1">
-            {['days', 'hours', 'minutes', 'seconds'].map(k => (
-              <Field key={k} label={k === 'days' ? 'Dias' : k === 'hours' ? 'Horas' : k === 'minutes' ? 'Min' : 'Seg'}>
-                <input className={inp} value={(p.labels || {})[k] || ''} onChange={e => up('labels', { ...(p.labels || {}), [k]: e.target.value })} />
-              </Field>
-            ))}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Cores" icon={<Palette className="w-3 h-3" />} />
+            <ColorRow label="Fundo" value={p.boxColor || '#1F2937'} onChange={v => up('boxColor', v)} />
+            <ColorRow label="Números" value={p.numberColor || '#FFFFFF'} onChange={v => up('numberColor', v)} />
+            <ColorRow label="Rótulos" value={p.labelColor || '#9CA3AF'} onChange={v => up('labelColor', v)} />
           </div>
-        </>
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Rótulos" icon={<Type className="w-3 h-3" />} />
+            <div className="grid grid-cols-4 gap-2">
+              {['days', 'hours', 'minutes', 'seconds'].map(k => (
+                <LabeledField key={k} label={k === 'days' ? 'Dias' : k === 'hours' ? 'Horas' : k === 'minutes' ? 'Min' : 'Seg'}>
+                  <input className={inp + ' text-center uppercase text-[11px]'} value={(p.labels || {})[k] || ''} onChange={e => up('labels', { ...(p.labels || {}), [k]: e.target.value })} />
+                </LabeledField>
+              ))}
+            </div>
+          </div>
+        </div>
 
       default:
         return <p className="text-sm text-gray-400">Selecione um bloco</p>
