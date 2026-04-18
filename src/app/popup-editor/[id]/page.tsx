@@ -14,7 +14,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Bold, Italic, Underline, Link2, ExternalLink, Sparkles,
   SlidersHorizontal, Layers, Square, Sun, CornerDownRight,
-  MoveHorizontal, MoveVertical, Check,
+  MoveHorizontal, MoveVertical, Check, MoreHorizontal, Pencil,
 } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -2260,12 +2260,23 @@ function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess,
 }) {
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
+  const [menuIdx, setMenuIdx] = useState<number | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
-  const startEdit = (i: number, current: string) => { setEditingIdx(i); setDraft(current) }
+  const startEdit = (i: number, current: string) => { setEditingIdx(i); setDraft(current); setMenuIdx(null) }
   const commit = () => {
     if (editingIdx != null && draft.trim()) onRenameStep(editingIdx, draft.trim())
     setEditingIdx(null)
   }
+
+  useEffect(() => {
+    if (menuIdx == null) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuIdx(null)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuIdx])
 
   return (
     <div className="relative flex items-center justify-center h-[48px] bg-white border-t border-gray-200 w-full shrink-0 px-4">
@@ -2276,12 +2287,10 @@ function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess,
           const isEditing = editingIdx === i
           return (
             <div key={step.id} className="flex items-center">
-              <div className={`flex items-center gap-0.5 rounded-lg transition-colors ${isActive ? 'bg-gray-900' : 'hover:bg-gray-100'}`}>
-                {/* Step number badge */}
+              <div className={`relative flex items-center gap-0.5 rounded-lg transition-colors ${isActive ? 'bg-gray-900' : 'hover:bg-gray-100'}`}>
                 <span className={`flex items-center justify-center w-5 h-5 ml-1.5 rounded-full text-[10px] font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'}`}>
                   {i + 1}
                 </span>
-                {/* Editable label */}
                 {isEditing ? (
                   <input
                     autoFocus
@@ -2300,25 +2309,33 @@ function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess,
                     {step.name}
                   </button>
                 )}
-                {/* Actions — only on active step */}
                 {isActive && !isEditing && (
-                  <div className="flex items-center gap-0 pr-1">
-                    <button onClick={() => startEdit(i, step.name)} title="Renomear"
-                      className="p-1 text-white/60 hover:text-white rounded transition-colors">
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
+                  <div className="relative pr-1">
+                    <button onClick={() => setMenuIdx(menuIdx === i ? null : i)}
+                      className="p-1 text-white/50 hover:text-white rounded transition-colors">
+                      <MoreHorizontal className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={() => onCloneStep(i)} title="Clonar etapa"
-                      className="p-1 text-white/60 hover:text-white rounded transition-colors">
-                      <Copy className="w-3 h-3" />
-                    </button>
-                    {steps.length > 1 && (
-                      <button onClick={() => onDeleteStep(i)} title="Excluir etapa"
-                        className="p-1 text-white/60 hover:text-red-300 rounded transition-colors">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
+                    {menuIdx === i && (
+                      <div ref={menuRef}
+                        className="absolute top-full right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                        <button onClick={() => startEdit(i, step.name)}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-gray-700 hover:bg-gray-50 transition-colors">
+                          <Pencil className="w-3.5 h-3.5 text-gray-400" /> Renomear
+                        </button>
+                        <button onClick={() => { onCloneStep(i); setMenuIdx(null) }}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-gray-700 hover:bg-gray-50 transition-colors">
+                          <Copy className="w-3.5 h-3.5 text-gray-400" /> Duplicar etapa
+                        </button>
+                        {steps.length > 1 && (
+                          <>
+                            <div className="h-px bg-gray-100 my-1" />
+                            <button onClick={() => { onDeleteStep(i); setMenuIdx(null) }}
+                              className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-red-600 hover:bg-red-50 transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" /> Excluir etapa
+                            </button>
+                          </>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
@@ -2328,17 +2345,14 @@ function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess,
           )
         })}
 
-        {/* Separator between regular steps and success */}
         {steps.length > 0 && <div className="w-px h-5 bg-gray-200 mx-2" />}
 
-        {/* Success step */}
         <button onClick={onSelectSuccess}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium whitespace-nowrap transition-colors ${showSuccess ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
           <Check className="w-3 h-3" /> Sucesso
         </button>
       </div>
 
-      {/* Add step button — positioned absolutely on right */}
       <button onClick={onAddStep}
         className="absolute right-4 flex items-center gap-1.5 px-2.5 h-7 text-[11px] font-medium text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md transition-colors">
         <Plus className="w-3 h-3" /> Etapa
