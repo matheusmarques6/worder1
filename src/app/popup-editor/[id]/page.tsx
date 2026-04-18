@@ -2185,11 +2185,13 @@ function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
       className={`group relative rounded transition ${isSelected ? 'ring-2 ring-gray-400/60 ring-offset-2 ring-offset-white' : 'hover:ring-1 hover:ring-gray-300 cursor-pointer'}`}>
-      {/* Drag handle — inside block bounds, on left edge */}
+      {/* Visible drag handle pill — sits at top-center of the block, inside bounds */}
       <div {...attributes} {...listeners}
-        className="absolute left-0 top-0 bottom-0 w-6 z-10 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing transition-opacity"
-        title="Arraste para reordenar">
-        <GripVertical className="w-3.5 h-3.5 text-gray-400" />
+        className={`absolute left-1/2 -translate-x-1/2 top-0.5 z-10 flex items-center gap-1 px-2 h-5 bg-white border border-gray-200 rounded shadow-sm text-[10px] font-medium text-gray-500 cursor-grab active:cursor-grabbing transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+        title="Arraste para reordenar"
+        onClick={e => e.stopPropagation()}>
+        <GripHorizontal className="w-3 h-3" />
+        <span>Arrastar</span>
       </div>
       {/* Floating inline format toolbar (text only, when selected) */}
       {isSelected && isText && (
@@ -2229,9 +2231,9 @@ function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate
         </div>
       )}
       <BlockPreview block={block} selected={isSelected} onContentChange={onContentChange} />
-      {/* Action buttons on hover */}
+      {/* Action buttons — visible while selected, top-right corner */}
       {isSelected && (
-        <div className="absolute -top-2 right-1 flex items-center gap-0.5 bg-white border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5 z-10">
+        <div className="absolute top-0.5 right-0.5 flex items-center gap-0.5 bg-white border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5 z-10">
           <button onClick={e => { e.stopPropagation(); onDuplicate() }} className="p-1 text-gray-400 hover:text-gray-700 rounded" title="Duplicar"><Copy className="w-3 h-3" /></button>
           <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1 text-gray-400 hover:text-red-500 rounded" title="Remover"><Trash2 className="w-3 h-3" /></button>
         </div>
@@ -2243,6 +2245,107 @@ function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate
 // ── Media Library Modal (uses shared component) ─────────────────────────────
 import { MediaLibraryModal } from '@/components/shared/MediaLibraryModal'
 import { ColorPicker } from '@/components/email-builder/ui/ColorPicker'
+
+// ── Step Bar (Omnisend-style, centered, editable step names) ──────────────────
+function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess, onRenameStep, onCloneStep, onDeleteStep, onAddStep }: {
+  steps: Step[]
+  activeIdx: number
+  showSuccess: boolean
+  onSelectStep: (i: number) => void
+  onSelectSuccess: () => void
+  onRenameStep: (i: number, name: string) => void
+  onCloneStep: (i: number) => void
+  onDeleteStep: (i: number) => void
+  onAddStep: () => void
+}) {
+  const [editingIdx, setEditingIdx] = useState<number | null>(null)
+  const [draft, setDraft] = useState('')
+
+  const startEdit = (i: number, current: string) => { setEditingIdx(i); setDraft(current) }
+  const commit = () => {
+    if (editingIdx != null && draft.trim()) onRenameStep(editingIdx, draft.trim())
+    setEditingIdx(null)
+  }
+
+  return (
+    <div className="relative flex items-center justify-center h-[48px] bg-white border-t border-gray-200 w-full shrink-0 px-4">
+      {/* Centered step pills */}
+      <div className="flex items-center gap-1">
+        {steps.map((step, i) => {
+          const isActive = !showSuccess && activeIdx === i
+          const isEditing = editingIdx === i
+          return (
+            <div key={step.id} className="flex items-center">
+              <div className={`flex items-center gap-0.5 rounded-lg transition-colors ${isActive ? 'bg-gray-900' : 'hover:bg-gray-100'}`}>
+                {/* Step number badge */}
+                <span className={`flex items-center justify-center w-5 h-5 ml-1.5 rounded-full text-[10px] font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                  {i + 1}
+                </span>
+                {/* Editable label */}
+                {isEditing ? (
+                  <input
+                    autoFocus
+                    value={draft}
+                    onChange={e => setDraft(e.target.value)}
+                    onBlur={commit}
+                    onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditingIdx(null) }}
+                    className="bg-transparent text-[12px] font-medium text-white px-2 py-1 outline-none border-b border-white/40 min-w-[80px] max-w-[180px]"
+                  />
+                ) : (
+                  <button
+                    onClick={() => onSelectStep(i)}
+                    onDoubleClick={() => startEdit(i, step.name)}
+                    title="Duplo clique para renomear"
+                    className={`px-2 py-1.5 text-[12px] font-medium whitespace-nowrap transition-colors ${isActive ? 'text-white' : 'text-gray-600'}`}>
+                    {step.name}
+                  </button>
+                )}
+                {/* Actions — only on active step */}
+                {isActive && !isEditing && (
+                  <div className="flex items-center gap-0 pr-1">
+                    <button onClick={() => startEdit(i, step.name)} title="Renomear"
+                      className="p-1 text-white/60 hover:text-white rounded transition-colors">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
+                    </button>
+                    <button onClick={() => onCloneStep(i)} title="Clonar etapa"
+                      className="p-1 text-white/60 hover:text-white rounded transition-colors">
+                      <Copy className="w-3 h-3" />
+                    </button>
+                    {steps.length > 1 && (
+                      <button onClick={() => onDeleteStep(i)} title="Excluir etapa"
+                        className="p-1 text-white/60 hover:text-red-300 rounded transition-colors">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              {i < steps.length - 1 && <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0 mx-1" />}
+            </div>
+          )
+        })}
+
+        {/* Separator between regular steps and success */}
+        {steps.length > 0 && <div className="w-px h-5 bg-gray-200 mx-2" />}
+
+        {/* Success step */}
+        <button onClick={onSelectSuccess}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium whitespace-nowrap transition-colors ${showSuccess ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+          <Check className="w-3 h-3" /> Sucesso
+        </button>
+      </div>
+
+      {/* Add step button — positioned absolutely on right */}
+      <button onClick={onAddStep}
+        className="absolute right-4 flex items-center gap-1.5 px-2.5 h-7 text-[11px] font-medium text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md transition-colors">
+        <Plus className="w-3 h-3" /> Etapa
+      </button>
+    </div>
+  )
+}
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function PopupEditorPage() {
@@ -2739,64 +2842,27 @@ export default function PopupEditorPage() {
             </div>
           </div>
 
-          {/* Step tabs — clean bottom bar */}
-          <div className="flex items-center gap-0 px-3 h-[44px] bg-white border-t border-gray-200 w-full shrink-0">
-            <div className="flex items-center gap-0.5">
-              {design.steps.map((step, i) => {
-                const isActive = !showSuccess && activeStepIdx === i
-                return (
-                  <div key={step.id} className="flex items-center gap-0.5 group/step">
-                    <button onClick={() => { setActiveStepIdx(i); setShowSuccess(false); setSelectedBlockId(null) }}
-                      className={`px-3.5 h-[32px] text-[12px] font-medium whitespace-nowrap rounded-md transition-colors ${isActive ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}`}>
-                      {step.name}
-                    </button>
-                    {/* Per-step actions */}
-                    {isActive && design.steps.length > 0 && (
-                      <div className="flex items-center gap-0">
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            const clone: Step = { id: uid(), name: `${step.name} (cópia)`, blocks: JSON.parse(JSON.stringify(step.blocks)) }
-                            setDesign(d => {
-                              const next = [...d.steps]
-                              next.splice(i + 1, 0, clone)
-                              return { ...d, steps: next }
-                            })
-                            setActiveStepIdx(i + 1)
-                          }}
-                          className="p-1 text-gray-400 hover:text-gray-700 rounded transition-colors" title="Clonar etapa">
-                          <Copy className="w-3 h-3" />
-                        </button>
-                        {design.steps.length > 1 && (
-                          <button
-                            onClick={e => {
-                              e.stopPropagation()
-                              setDesign(d => ({ ...d, steps: d.steps.filter((_, j) => j !== i) }))
-                              setActiveStepIdx(Math.max(0, i - 1))
-                            }}
-                            className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors" title="Excluir etapa">
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {i < design.steps.length - 1 && (
-                      <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0" />
-                    )}
-                  </div>
-                )
-              })}
-              {design.steps.length > 0 && <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0" />}
-              <button onClick={() => { setShowSuccess(true); setSelectedBlockId(null) }}
-                className={`px-3.5 h-[32px] text-[12px] font-medium whitespace-nowrap rounded-md transition-colors flex items-center gap-1.5 ${showSuccess ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}`}>
-                <Check className="w-3 h-3" /> Sucesso
-              </button>
-            </div>
-            <div className="flex-1" />
-            <button onClick={addStep} className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md font-medium transition-colors">
-              <Plus className="w-3 h-3" /> Etapa
-            </button>
-          </div>
+          {/* Step bar — Omnisend-style centered with editable names */}
+          <StepBar
+            steps={design.steps}
+            activeIdx={activeStepIdx}
+            showSuccess={showSuccess}
+            onSelectStep={i => { setActiveStepIdx(i); setShowSuccess(false); setSelectedBlockId(null) }}
+            onSelectSuccess={() => { setShowSuccess(true); setSelectedBlockId(null) }}
+            onRenameStep={(i, name) => setDesign(d => ({ ...d, steps: d.steps.map((s, j) => j === i ? { ...s, name } : s) }))}
+            onCloneStep={i => {
+              const step = design.steps[i]
+              const clone: Step = { id: uid(), name: `${step.name} (cópia)`, blocks: JSON.parse(JSON.stringify(step.blocks)) }
+              setDesign(d => { const next = [...d.steps]; next.splice(i + 1, 0, clone); return { ...d, steps: next } })
+              setActiveStepIdx(i + 1)
+            }}
+            onDeleteStep={i => {
+              if (design.steps.length <= 1) return
+              setDesign(d => ({ ...d, steps: d.steps.filter((_, j) => j !== i) }))
+              setActiveStepIdx(Math.max(0, i - 1))
+            }}
+            onAddStep={addStep}
+          />
         </main>
 
       </div>
