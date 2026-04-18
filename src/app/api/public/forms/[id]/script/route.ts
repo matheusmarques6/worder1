@@ -414,6 +414,33 @@ function show(){
         sc(ck,"1",freq.showAfterDays||30);
         if(freq.stopAfterSubmission)sc(ck,"1",365);
         sc("_wf_sub","1",365);
+        // Fire client-side pixels (Facebook/GA) using tracking data returned by server
+        try{
+          var tr=res&&res.tracking||{};
+          var evts=tr.events||[];
+          if(tr.facebook_pixel_id&&typeof window.fbq==="function"){
+            evts.forEach(function(ev){
+              if(ev.platforms&&ev.platforms.facebook){
+                var fbData={};
+                if(ev.value)fbData.value=parseFloat(ev.value)||0;
+                if(ev.currency)fbData.currency=ev.currency;
+                window.fbq("trackCustom",ev.name||"Lead",fbData);
+              }
+            });
+            if(evts.length===0)window.fbq("track","Lead");
+          }
+          if((tr.google_analytics_id||tr.google_ads_id)&&typeof window.gtag==="function"){
+            evts.forEach(function(ev){
+              if(ev.platforms&&ev.platforms.google){
+                var gaData={};
+                if(ev.value)gaData.value=parseFloat(ev.value)||0;
+                if(ev.currency)gaData.currency=ev.currency;
+                window.gtag("event",ev.name||"generate_lead",gaData);
+              }
+            });
+            if(evts.length===0)window.gtag("event","generate_lead",{});
+          }
+        }catch(err){}
         // Prefer server-provided redirect_url, fallback to configured postSubmit
         var act=postSubmit.action||"show-success";
         var redirectUrl=(res&&res.redirect_url)||postSubmit.redirectUrl||"";

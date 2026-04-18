@@ -191,9 +191,32 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    // ---- Rate limit anti-spam ----
     const ip = getClientIp(request)
     const formId = params.id
+
+    // Impression tracking: lightweight path, no rate-limit, just increments counter
+    const rawBody = await request.json().catch(() => ({}))
+    if (rawBody && rawBody._track === 'impression') {
+      try {
+        const sb = getSupabaseClient()
+        if (sb) {
+          const { data: current } = await sb
+            .from('crm_forms')
+            .select('impressions_count')
+            .eq('id', formId)
+            .maybeSingle()
+          await sb
+            .from('crm_forms')
+            .update({ impressions_count: (current?.impressions_count || 0) + 1 })
+            .eq('id', formId)
+        }
+      } catch {}
+      const r = NextResponse.json({ ok: true })
+      r.headers.set('Access-Control-Allow-Origin', '*')
+      return r
+    }
+
+    // ---- Rate limit anti-spam ----
     // 10 submissions / minuto por IP/form (já é generoso para usuários legítimos)
     const rl = await checkRateLimit(`form:${formId}:${ip}`, {
       limit: 10,
@@ -222,7 +245,7 @@ export async function POST(
       return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
     }
 
-    const body = await request.json()
+    const body = rawBody
     const { answers, utm_source, utm_medium, utm_campaign, utm_term, utm_content } = body
 
     if (!answers || typeof answers !== 'object') {
