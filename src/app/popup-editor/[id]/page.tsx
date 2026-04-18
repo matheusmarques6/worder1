@@ -396,6 +396,8 @@ function InlineEditable({
   const ref = useRef<HTMLElement | null>(null)
 
   // Sync external value → DOM, but never while the user is editing this node.
+  // Depends on `tag` too because changing the tag remounts the element, and
+  // the fresh DOM node starts with empty innerText.
   useEffect(() => {
     const el = ref.current
     if (!el) return
@@ -403,7 +405,7 @@ function InlineEditable({
     if (el.innerText !== (value ?? '')) {
       el.innerText = value ?? ''
     }
-  }, [value])
+  }, [value, tag])
 
   // Auto-focus and place caret at end when entering edit mode.
   useEffect(() => {
@@ -483,7 +485,26 @@ function BlockPreview({ block, selected, onContentChange }: { block: Block; sele
   switch (block.type) {
     case 'text': {
       const Tag = (p.tag === 'h1' || p.tag === 'h2' || p.tag === 'h3') ? p.tag : 'p'
-      const textStyle: React.CSSProperties = { ...blockStyle, fontSize: p.fontSize || 16, color: p.color || '#111827', fontWeight: p.fontWeight || 'normal', fontStyle: p.fontStyle || 'normal', textDecoration: p.textDecoration || 'none', textAlign: p.align || 'left', lineHeight: p.lineHeight || 1.4, fontFamily: p.fontFamily || 'inherit', letterSpacing: p.letterSpacing != null ? `${p.letterSpacing}px` : undefined, minHeight: '1em', margin: 0, marginBottom: blockStyle.marginBottom ?? 8 }
+      const textStyle: React.CSSProperties = {
+        ...blockStyle,
+        fontSize: p.fontSize || 16,
+        color: p.color || '#111827',
+        fontWeight: p.fontWeight || 'normal',
+        fontStyle: p.fontStyle || 'normal',
+        textDecoration: p.textDecoration || 'none',
+        textAlign: p.align || 'left',
+        lineHeight: p.lineHeight || 1.4,
+        fontFamily: p.fontFamily || 'inherit',
+        letterSpacing: p.letterSpacing != null ? `${p.letterSpacing}px` : undefined,
+        paddingTop: p.blockPadTop ?? 0,
+        paddingRight: p.blockPadRight ?? 0,
+        paddingBottom: p.blockPadBottom ?? 0,
+        paddingLeft: p.blockPadLeft ?? 0,
+        minHeight: '1em',
+        margin: 0,
+        marginTop: blockStyle.marginTop ?? 0,
+        marginBottom: blockStyle.marginBottom ?? 8,
+      }
       if (onContentChange) {
         return (
           <InlineEditable
@@ -777,11 +798,12 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
   }
 
   // 4-side padding control with visual box
-  const PaddingControl = ({ prefix, defaults }: { prefix: 'padding' | 'inputPad'; defaults?: { t?: number; r?: number; b?: number; l?: number } }) => {
-    const keyT = prefix === 'padding' ? 'paddingTop' : 'inputPadTop'
-    const keyR = prefix === 'padding' ? 'paddingRight' : 'inputPadRight'
-    const keyB = prefix === 'padding' ? 'paddingBottom' : 'inputPadBottom'
-    const keyL = prefix === 'padding' ? 'paddingLeft' : 'inputPadLeft'
+  const PaddingControl = ({ prefix, defaults }: { prefix: 'padding' | 'inputPad' | 'blockPad'; defaults?: { t?: number; r?: number; b?: number; l?: number } }) => {
+    const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+    const keyT = prefix === 'padding' ? 'paddingTop' : `${prefix}${cap('top')}`
+    const keyR = prefix === 'padding' ? 'paddingRight' : `${prefix}${cap('right')}`
+    const keyB = prefix === 'padding' ? 'paddingBottom' : `${prefix}${cap('bottom')}`
+    const keyL = prefix === 'padding' ? 'paddingLeft' : `${prefix}${cap('left')}`
     const d = defaults || {}
     const Num = ({ k, def }: { k: string; def: number }) => (
       <div className="relative">
@@ -808,11 +830,10 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     )
   }
 
-  // Section header (uppercase with icon)
-  const SectionHeader = ({ title, icon }: { title: string; icon?: React.ReactNode }) => (
-    <div className="flex items-center gap-2 pt-1 pb-1">
-      {icon && <span className="text-gray-500">{icon}</span>}
-      <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">{title}</p>
+  // Section header (uppercase, minimal — no icons)
+  const SectionHeader = ({ title }: { title: string; icon?: React.ReactNode }) => (
+    <div className="pt-1 pb-1">
+      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">{title}</p>
     </div>
   )
 
@@ -829,16 +850,11 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
   const renderInputConfig = () => {
     // Lock email/phone mapping since the type implies the target
     const lockedMap = block.type === 'email' ? 'email' : block.type === 'phone' ? 'phone' : null
-    const typeIcon = block.type === 'email' ? <AtSign className="w-3 h-3" />
-      : block.type === 'phone' ? <Phone className="w-3 h-3" />
-      : block.type === 'date-input' ? <Calendar className="w-3 h-3" />
-      : block.type === 'name-input' ? <User className="w-3 h-3" />
-      : <TextCursorInput className="w-3 h-3" />
     return (
       <div className="space-y-5">
         {/* Content section */}
         <div className="space-y-3">
-          <SectionHeader title="Conteúdo" icon={typeIcon} />
+          <SectionHeader title="Conteúdo" />
 
           <LabeledField label="Mapear para" hint="Onde o valor deste campo será salvo no perfil do contato.">
             <select className={sel} value={lockedMap || p.mapTo || ''} disabled={!!lockedMap} onChange={e => up('mapTo', e.target.value)}>
@@ -1105,16 +1121,36 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
               </div>
             </div>
             <LabeledField label="Espaçamento entre letras">
-              <Slider value={p.letterSpacing ?? 0} onChange={v => up('letterSpacing', v)} min={-2} max={10} step={0.5} unit="px" />
+              <UnitInput value={p.letterSpacing ?? 0} onChange={v => up('letterSpacing', v)} min={-2} max={20} step={0.5} />
             </LabeledField>
           </div>
 
           {/* Colors */}
           <div className="pt-4 border-t border-gray-100 space-y-3">
-            <SectionHeader title="Cores" icon={<Palette className="w-3 h-3" />} />
+            <SectionHeader title="Cores" />
             <ColorRow label="Cor do texto" value={p.color || '#111827'} onChange={v => up('color', v)} />
             <ColorRow label="Cor dos links" value={p.linkColor || '#F97316'} onChange={v => up('linkColor', v)} />
             <ColorRow label="Cor de fundo do bloco" hint="Aplicado a todo o bloco de texto." value={p.blockBg || ''} onChange={v => up('blockBg', v)} />
+          </div>
+
+          {/* Spacing */}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <SectionHeader title="Espaçamento" />
+            <LabeledField label="Margem externa" hint="Espaço acima e abaixo do bloco de texto.">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-[10px] text-gray-400 block mb-1">Topo</span>
+                  <UnitInput value={p.marginTop ?? 0} onChange={v => up('marginTop', v)} min={0} max={200} />
+                </div>
+                <div>
+                  <span className="text-[10px] text-gray-400 block mb-1">Base</span>
+                  <UnitInput value={p.marginBottom ?? 8} onChange={v => up('marginBottom', v)} min={0} max={200} />
+                </div>
+              </div>
+            </LabeledField>
+            <LabeledField label="Preenchimento interno" hint="Espaço entre a borda e o texto (padding).">
+              <PaddingControl prefix="blockPad" defaults={{ t: 0, r: 0, b: 0, l: 0 }} />
+            </LabeledField>
           </div>
         </div>
 
@@ -2391,16 +2427,7 @@ export default function PopupEditorPage() {
                   <ArrowLeft className="w-4 h-4" />
                 </button>
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {(() => {
-                    const blockMeta = BLOCK_TYPES.find(bt => bt.type === selectedBlock.type)
-                    const Icon = blockMeta?.icon
-                    return Icon ? (
-                      <div className="w-7 h-7 rounded-md bg-orange-50 flex items-center justify-center flex-shrink-0">
-                        <Icon className="w-3.5 h-3.5 text-orange-600" />
-                      </div>
-                    ) : null
-                  })()}
-                  <h2 className="text-[13.5px] font-semibold text-gray-900 truncate">
+                  <h2 className="text-[14px] font-semibold text-gray-900 truncate">
                     {(() => {
                       const labels: Record<string, string> = {
                         email: 'Email', phone: 'Telefone', 'name-input': 'Nome',
