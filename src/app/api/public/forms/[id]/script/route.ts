@@ -414,6 +414,41 @@ function show(){
         sc(ck,"1",freq.showAfterDays||30);
         if(freq.stopAfterSubmission)sc(ck,"1",365);
         sc("_wf_sub","1",365);
+        // Bridge captured data to Worder tracking so visitor_id is linked to this
+        // contact. All subsequent viewed_product / added_to_cart events from this
+        // browser will then be attributed to this identified visitor.
+        try{
+          var idData={};
+          var fullNameVal=allData.full_name||"";
+          var fn=allData.first_name||(fullNameVal?String(fullNameVal).trim().split(/\s+/)[0]:"");
+          var ln=allData.last_name||(fullNameVal?String(fullNameVal).trim().split(/\s+/).slice(1).join(" "):"");
+          if(allData.email)idData.email=allData.email;
+          if(allData.phone)idData.phone=allData.phone;
+          if(fn)idData.firstName=fn;
+          if(ln)idData.lastName=ln;
+          idData.source="popup_form";
+          idData.properties={form_id:FID,form_name:"${String(form.name || '').replace(/"/g, '\\"')}"};
+          if(idData.email||idData.phone){
+            if(window.worder&&typeof window.worder.identify==="function"){
+              window.worder.identify(idData);
+            } else {
+              // Worder tracking script not yet loaded — POST identify directly as fallback
+              var trackEp=(window.__worder&&window.__worder.config&&window.__worder.config.endpoint)||(BU+"/api/track");
+              fetch(trackEp+"/identify",{method:"POST",headers:{"Content-Type":"application/json"},keepalive:true,body:JSON.stringify({
+                storeDomain:(window.__worder&&window.__worder.config&&window.__worder.config.shopDomain)||location.hostname,
+                email:idData.email||null,phone:idData.phone||null,
+                firstName:idData.firstName||null,lastName:idData.lastName||null,
+                source:"popup_form",properties:idData.properties,
+                timestamp:new Date().toISOString()
+              })}).catch(function(){});
+            }
+            // Persist email in 1st-party cookie so identity survives future sessions
+            if(idData.email){
+              var ed=new Date();ed.setTime(ed.getTime()+730*24*60*60*1000);
+              document.cookie="__worder_id_email="+encodeURIComponent(idData.email)+";expires="+ed.toUTCString()+";path=/;SameSite=Lax";
+            }
+          }
+        }catch(err){}
         // Fire client-side pixels (Facebook/GA) using tracking data returned by server
         try{
           var tr=res&&res.tracking||{};

@@ -38,36 +38,65 @@ export async function POST(request: NextRequest) {
     const {
       accountId,
       storeId,
+      storeDomain,
       email,
       phone,
       firstName,
       lastName,
       shopifyCustomerId,
-      anonymousId,
+      // Accept both anonymousId (canonical) and visitorId (worder.js legacy name)
+      anonymousId: anonymousIdRaw,
+      visitorId,
       sessionId,
       source,
       properties,
     } = body;
+    const anonymousId = anonymousIdRaw || visitorId;
 
-    if (!accountId || !storeId || (!email && !phone)) {
+    if ((!accountId && !storeId && !storeDomain) || (!email && !phone)) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields (store identifier + email or phone)' },
         { status: 400, headers: CORS_HEADERS }
       );
     }
 
     const supabase = getSupabaseAdmin();
 
-    // Validate store and get org ID
-    const { data: store } = await supabase
-      .from('shopify_stores')
-      .select('id, organization_id')
-      .eq('id', storeId)
-      .maybeSingle();
+    // Resolve store by any of: storeId, accountId, or storeDomain
+    let store: { id: string; organization_id: string } | null = null;
+
+    if (storeId) {
+      const { data } = await supabase
+        .from('shopify_stores')
+        .select('id, organization_id')
+        .eq('id', storeId)
+        .maybeSingle();
+      store = data;
+    }
+
+    if (!store && accountId) {
+      const { data } = await supabase
+        .from('shopify_stores')
+        .select('id, organization_id')
+        .eq('organization_id', accountId)
+        .limit(1)
+        .maybeSingle();
+      store = data;
+    }
+
+    if (!store && storeDomain) {
+      const domain = String(storeDomain).replace(/^https?:\/\//, '').replace(/\/$/, '');
+      const { data } = await supabase
+        .from('shopify_stores')
+        .select('id, organization_id')
+        .eq('shop_domain', domain)
+        .maybeSingle();
+      store = data;
+    }
 
     if (!store) {
       return NextResponse.json(
-        { error: 'Invalid store' },
+        { error: 'Store not found' },
         { status: 404, headers: CORS_HEADERS }
       );
     }
