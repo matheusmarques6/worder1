@@ -615,6 +615,36 @@ export async function POST(
         .eq('id', submission.id)
     }
 
+    // 8.4. Aplicar audiencia (tags + listId) do formulario no contato
+    if (contactId) {
+      try {
+        const audienceCfg: any = (popupBehavior as any)?.audience || {}
+        const audienceTags: string[] = Array.isArray(audienceCfg.tags) ? audienceCfg.tags.filter(Boolean) : (Array.isArray(form.tags) ? form.tags : [])
+        const audienceListId: string | null = audienceCfg.listId || form.list_id || null
+
+        if (audienceTags.length > 0) {
+          const { data: existing } = await supabase
+            .from('contacts')
+            .select('tags')
+            .eq('id', contactId)
+            .maybeSingle()
+          const current: string[] = Array.isArray(existing?.tags) ? existing.tags : []
+          const merged = Array.from(new Set([...current, ...audienceTags]))
+          await supabase.from('contacts').update({ tags: merged }).eq('id', contactId)
+        }
+
+        if (audienceListId) {
+          await supabase.from('list_contacts').upsert({
+            organization_id: form.organization_id,
+            list_id: audienceListId,
+            contact_id: contactId,
+          }, { onConflict: 'list_id,contact_id', ignoreDuplicates: true })
+        }
+      } catch (e: any) {
+        console.warn('[Form Submit] audience apply failed:', e?.message)
+      }
+    }
+
     // 8.5. CDP: gravar evento form_submitted
     if (contactId) {
       try {

@@ -85,6 +85,12 @@ interface PopupDesign {
     clickOutsideClose?: { desktop: boolean; mobile: boolean }
     customTrigger?: boolean
   }
+  postSubmit?: {
+    action: 'close' | 'redirect' | 'show-success'
+    redirectUrl: string
+    closeDelay: number
+  }
+  successMessage?: string
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
@@ -218,6 +224,8 @@ const defaultDesign: PopupDesign = {
     clickOutsideClose: { desktop: true, mobile: true },
     customTrigger: false,
   },
+  postSubmit: { action: 'show-success', redirectUrl: '', closeDelay: 4 },
+  successMessage: '',
 }
 
 // ── Small helpers ──────────────────────────────────────────────────────────────
@@ -1669,6 +1677,23 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
             </div>
           </div>
 
+          {/* Device visibility */}
+          <div className="border border-gray-100 rounded-lg p-3">
+            <span className="text-xs font-semibold text-gray-700 block mb-2">Visibilidade por dispositivo</span>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={!p.hideOnDesktop} onChange={e => up('hideOnDesktop', !e.target.checked)} className="accent-brand-500" />
+                <Monitor className="w-3.5 h-3.5 text-gray-500" />
+                <span className="text-xs text-gray-700">Exibir no desktop</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={!p.hideOnMobile} onChange={e => up('hideOnMobile', !e.target.checked)} className="accent-brand-500" />
+                <Smartphone className="w-3.5 h-3.5 text-gray-500" />
+                <span className="text-xs text-gray-700">Exibir no mobile</span>
+              </label>
+            </div>
+          </div>
+
           <button onClick={onDelete} className="w-full py-2.5 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 mt-2 flex items-center justify-center gap-2">
             <Trash2 className="w-4 h-4" /> Remover bloco
           </button>
@@ -1679,8 +1704,16 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 }
 
 // ── Behavior Panel ─────────────────────────────────────────────────────────────
-function BehaviorPanel({ beh, onChange, formId }: { beh: PopupDesign['behavior']; onChange: (b: PopupDesign['behavior']) => void; formId: string }) {
-  const [tab, setTab] = useState<'display' | 'targeting'>('display')
+function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, successMessage, onSuccessMessageChange }: {
+  beh: PopupDesign['behavior']
+  onChange: (b: PopupDesign['behavior']) => void
+  formId: string
+  postSubmit: NonNullable<PopupDesign['postSubmit']>
+  onPostSubmitChange: (ps: NonNullable<PopupDesign['postSubmit']>) => void
+  successMessage: string
+  onSuccessMessageChange: (v: string) => void
+}) {
+  const [tab, setTab] = useState<'display' | 'targeting' | 'postsubmit'>('display')
   const setG = (key: keyof PopupDesign['behavior'], val: any) =>
     onChange({ ...beh, [key]: { ...((beh as any)[key] || {}), ...val } })
 
@@ -1703,7 +1736,7 @@ function BehaviorPanel({ beh, onChange, formId }: { beh: PopupDesign['behavior']
 
   return (
     <div>
-      {/* Sub-tabs: Display | Targeting */}
+      {/* Sub-tabs: Display | Targeting | Post-submit */}
       <div className="flex border-b border-gray-200">
         <button onClick={() => setTab('display')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${tab === 'display' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
           Exibicao
@@ -1711,9 +1744,61 @@ function BehaviorPanel({ beh, onChange, formId }: { beh: PopupDesign['behavior']
         <button onClick={() => setTab('targeting')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${tab === 'targeting' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
           Segmentacao
         </button>
+        <button onClick={() => setTab('postsubmit')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${tab === 'postsubmit' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
+          Apos envio
+        </button>
       </div>
 
-      {tab === 'display' ? (
+      {tab === 'postsubmit' ? (
+        <div>
+          <Section title="Acao apos envio" defaultOpen>
+            <div className="space-y-2">
+              {[
+                { value: 'show-success', label: 'Mostrar mensagem de sucesso', hint: 'Exibe a etapa de sucesso configurada dentro do popup.' },
+                { value: 'close', label: 'Fechar formulario', hint: 'Fecha o popup imediatamente apos o envio.' },
+                { value: 'redirect', label: 'Redirecionar para URL', hint: 'Envia o visitante para uma pagina especifica.' },
+              ].map(opt => (
+                <label key={opt.value} className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${postSubmit.action === opt.value ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <input type="radio" name="postAction" value={opt.value} checked={postSubmit.action === opt.value}
+                    onChange={() => onPostSubmitChange({ ...postSubmit, action: opt.value as any })}
+                    className="accent-brand-500 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-[13px] font-medium text-gray-900">{opt.label}</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{opt.hint}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {postSubmit.action === 'redirect' && (
+              <div className="pt-3 border-t border-gray-100 mt-3">
+                <Field label="URL de destino" hint="Inicie com https:// para URLs externas ou /rota para URLs internas.">
+                  <input type="url" className={inp} placeholder="https://..."
+                    value={postSubmit.redirectUrl || ''}
+                    onChange={e => onPostSubmitChange({ ...postSubmit, redirectUrl: e.target.value })} />
+                </Field>
+              </div>
+            )}
+
+            {postSubmit.action === 'show-success' && (
+              <div className="pt-3 border-t border-gray-100 mt-3 space-y-3">
+                <Field label="Fechar automaticamente apos" hint="Segundos ate fechar o popup. Zero mantem aberto ate o visitante fechar.">
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={0} max={60} className={inp + ' w-24'}
+                      value={postSubmit.closeDelay ?? 4}
+                      onChange={e => onPostSubmitChange({ ...postSubmit, closeDelay: +e.target.value })} />
+                    <span className="text-[12px] text-gray-500">segundos</span>
+                  </div>
+                </Field>
+                <Field label="Mensagem curta (opcional)" hint="Salva em success_message. Editavel como bloco de texto na etapa de sucesso.">
+                  <input className={inp} placeholder="Inscricao confirmada!"
+                    value={successMessage} onChange={e => onSuccessMessageChange(e.target.value)} />
+                </Field>
+              </div>
+            )}
+          </Section>
+        </div>
+      ) : tab === 'display' ? (
         <div>
           <Section title="Quando exibir" defaultOpen>
             <ToggleRow label="Quando o visitante estiver saindo da pagina" hint="Detecta movimento do mouse em direcao a barra de enderecos."
@@ -1885,6 +1970,23 @@ function BehaviorPanel({ beh, onChange, formId }: { beh: PopupDesign['behavior']
                   onChange={e => setG('location', { excludeCountries: e.target.value.split('\n').map(c => c.trim().toUpperCase()).filter(Boolean) })} />
               )}
             </div>
+          </Section>
+
+          <Section title="Audiencia">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">Tags e listas aplicadas ao contato quando o formulario for enviado.</p>
+            <Field label="Tags (separadas por virgula)" hint="Ex: newsletter, promo. Adicionadas ao contato criado.">
+              <input className={inp} placeholder="newsletter, promo"
+                value={(beh.audience?.tags || []).join(', ')}
+                onChange={e => setG('audience', { tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })} />
+            </Field>
+            <Field label="ID da lista (opcional)" hint="UUID da lista de contatos; o contato sera associado a ela.">
+              <input className={inp} placeholder="uuid da lista"
+                value={beh.audience?.listId || ''}
+                onChange={e => setG('audience', { listId: e.target.value })} />
+            </Field>
+            <ToggleRow label="Double opt-in" hint="Envia email de confirmacao antes de marcar como inscrito."
+              checked={!!beh.audience?.doubleOptIn}
+              onChange={v => setG('audience', { doubleOptIn: v })} />
           </Section>
 
           <Section title="Parametros UTM">
@@ -2229,6 +2331,13 @@ export default function PopupEditorPage() {
             utm: { ...defaultDesign.behavior.utm!, ...((saved.behavior || {}).utm || {}) },
             clickOutsideClose: { ...defaultDesign.behavior.clickOutsideClose!, ...((saved.behavior || {}).clickOutsideClose || {}) },
           },
+          postSubmit: { ...defaultDesign.postSubmit!, ...(saved.postSubmit || {}) },
+          successMessage: saved.successMessage || form.success_message || '',
+        }
+        // Seed postSubmit.redirectUrl from top-level form.redirect_url if not already set
+        if (!merged.postSubmit!.redirectUrl && form.redirect_url) {
+          merged.postSubmit!.redirectUrl = form.redirect_url
+          if (merged.postSubmit!.action === 'show-success') merged.postSubmit!.action = 'redirect'
         }
         setDesign(merged)
       }
@@ -2243,7 +2352,18 @@ export default function PopupEditorPage() {
       await fetch(`/api/forms/${formId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: formName, design_json: design, form_type: design.formType, behavior: design.behavior, status: formStatus }),
+        body: JSON.stringify({
+          name: formName,
+          design_json: design,
+          form_type: design.formType,
+          behavior: design.behavior,
+          status: formStatus,
+          success_message: design.successMessage || null,
+          redirect_url: design.postSubmit?.action === 'redirect' ? (design.postSubmit.redirectUrl || null) : null,
+          audience: design.behavior.audience || null,
+          tags: design.behavior.audience?.tags || [],
+          list_id: design.behavior.audience?.listId || null,
+        }),
       })
     } finally { setSaving(false) }
   }, [formId, design, formStatus, formName])
@@ -2502,7 +2622,15 @@ export default function PopupEditorPage() {
                 <h2 className="text-[13px] font-semibold text-gray-900 flex-1">Segmentação e comportamento</h2>
               </div>
               <div className="flex-1 overflow-y-auto">
-                <BehaviorPanel beh={design.behavior} onChange={b => setDesign(d => ({ ...d, behavior: b }))} formId={formId} />
+                <BehaviorPanel
+                  beh={design.behavior}
+                  onChange={b => setDesign(d => ({ ...d, behavior: b }))}
+                  formId={formId}
+                  postSubmit={design.postSubmit || defaultDesign.postSubmit!}
+                  onPostSubmitChange={ps => setDesign(d => ({ ...d, postSubmit: ps }))}
+                  successMessage={design.successMessage || ''}
+                  onSuccessMessageChange={v => setDesign(d => ({ ...d, successMessage: v }))}
+                />
               </div>
             </>
           ) : (
