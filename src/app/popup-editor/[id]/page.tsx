@@ -2317,7 +2317,7 @@ function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess,
                     </button>
                     {menuIdx === i && (
                       <div ref={menuRef}
-                        className="absolute top-full right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                        className="absolute bottom-full right-0 mb-2 w-44 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[60]">
                         <button onClick={() => startEdit(i, step.name)}
                           className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-gray-700 hover:bg-gray-50 transition-colors">
                           <Pencil className="w-3.5 h-3.5 text-gray-400" /> Renomear
