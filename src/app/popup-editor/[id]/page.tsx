@@ -546,10 +546,11 @@ function BlockPreview({ block, selected, onContentChange }: { block: Block; sele
       </div>
     }
     case 'image': {
+      const imgStyle: React.CSSProperties = { width: `${p.imgWidth || 100}%`, maxHeight: p.maxHeight || 300, objectFit: (p.objectFit || 'contain') as any, borderRadius: p.borderRadius || 0, display: 'inline-block', boxShadow: p.shadow || undefined }
       const imgEl = p.src
-        ? <img src={p.src} alt={p.alt || ''} style={{ width: `${p.imgWidth || 100}%`, maxHeight: p.maxHeight || 300, objectFit: 'contain', borderRadius: p.borderRadius || 0, display: 'inline-block' }} />
+        ? <img src={p.src} alt={p.alt || ''} style={imgStyle} />
         : <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-300"><ImageIcon className="w-10 h-10" /></div>
-      return <div style={{ ...blockStyle, textAlign: (p.align || 'center') as any, padding: p.padding || 0 }}>
+      return <div style={{ ...blockStyle, boxShadow: undefined, textAlign: (p.align || 'center') as any, padding: p.padding || 0 }}>
         {p.href ? <a href={p.href} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block' }}>{imgEl}</a> : imgEl}
       </div>
     }
@@ -1271,12 +1272,14 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
             <LabeledField label="Alinhamento">
               <AlignButtons value={p.align || 'center'} onChange={v => up('align', v)} showFull={false} />
             </LabeledField>
-            <LabeledField label="Largura">
-              <Slider value={p.imgWidth ?? 100} onChange={v => up('imgWidth', v)} min={10} max={100} unit="%" />
-            </LabeledField>
-            <LabeledField label="Altura máxima">
-              <Slider value={p.maxHeight ?? 300} onChange={v => up('maxHeight', v)} min={50} max={800} unit="px" />
-            </LabeledField>
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledField label="Largura">
+                <UnitInput value={p.imgWidth ?? 100} onChange={v => up('imgWidth', v)} min={10} max={100} unit="%" />
+              </LabeledField>
+              <LabeledField label="Altura máxima">
+                <UnitInput value={p.maxHeight ?? 300} onChange={v => up('maxHeight', v)} min={50} max={800} />
+              </LabeledField>
+            </div>
             <LabeledField label="Ajuste da imagem" hint="Como a imagem se acomoda dentro do espaço.">
               <Segmented value={p.objectFit || 'contain'} onChange={v => up('objectFit', v)} options={[
                 { value: 'contain', label: 'Conter', title: 'Preserva proporção dentro da caixa' },
@@ -1290,7 +1293,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           <div className="pt-4 border-t border-gray-100 space-y-3">
             <SectionHeader title="Estilo" icon={<Sparkles className="w-3 h-3" />} />
             <LabeledField label="Raio da borda">
-              <Slider value={p.borderRadius ?? 0} onChange={v => up('borderRadius', v)} min={0} max={100} unit="px" />
+              <UnitInput value={p.borderRadius ?? 0} onChange={v => up('borderRadius', v)} min={0} max={100} />
             </LabeledField>
             <LabeledField label="Sombra">
               <Segmented value={p.shadow || ''} onChange={v => up('shadow', v)} options={[
