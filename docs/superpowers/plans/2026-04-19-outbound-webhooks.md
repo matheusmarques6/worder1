@@ -215,6 +215,87 @@ git commit -m "feat(webhooks): add webhook_deliveries table with RLS and indexes
 
 ---
 
+### Task 3.5: Migration — RPCs `dispatch_insert_deliveries` e `claim_webhook_delivery`
+
+Estas RPCs são necessárias porque (a) o `INSERT ... ON CONFLICT DO NOTHING RETURNING` precisa ser SQL puro pra garantir semântica correta de retorno (o `ignoreDuplicates` do supabase-js retorna apenas linhas novas, mas a versão do PostgREST varia em comportamento — RPC explícito remove ambiguidade), e (b) a reivindicação atômica do worker precisa de `attempt_count = attempt_count + 1` numa só statement, o que o cliente JS não consegue expressar via `.update()`.
+
+**Files:**
+- Create: `supabase/migrations/20260419_webhook_rpcs.sql`
+
+- [ ] **Step 1: Criar arquivo**
+
+```sql
+-- ================================================
+-- Outbound Webhooks: RPCs
+-- ================================================
+
+-- Insert idempotente em batch; retorna IDs realmente inseridos.
+CREATE OR REPLACE FUNCTION dispatch_insert_deliveries(p_rows jsonb)
+RETURNS TABLE (id uuid) LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN QUERY
+  INSERT INTO webhook_deliveries (
+    subscription_id, organization_id, store_id, event_type, event_id,
+    payload, url, status
+  )
+  SELECT
+    (r->>'subscription_id')::uuid,
+    (r->>'organization_id')::uuid,
+    (r->>'store_id')::uuid,
+    r->>'event_type',
+    r->>'event_id',
+    (r->'payload')::jsonb,
+    r->>'url',
+    COALESCE(r->>'status', 'pending')
+  FROM jsonb_array_elements(p_rows) AS r
+  ON CONFLICT (subscription_id, event_id) DO NOTHING
+  RETURNING webhook_deliveries.id;
+END;
+$$;
+
+-- Reivindicação atômica do worker: claim + increment de attempt_count + lease.
+-- Retorna a linha completa se reivindicada, NULL caso contrário.
+CREATE OR REPLACE FUNCTION claim_webhook_delivery(p_id uuid)
+RETURNS SETOF webhook_deliveries LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE webhook_deliveries
+  SET
+    status = 'in_flight',
+    attempt_count = attempt_count + 1,
+    in_flight_until = now() + interval '10 seconds',
+    last_attempt_at = now(),
+    updated_at = now()
+  WHERE id = p_id
+    AND status IN ('pending', 'retrying')
+    AND (in_flight_until IS NULL OR in_flight_until < now())
+  RETURNING *;
+END;
+$$;
+```
+
+- [ ] **Step 2: Aplicar migration**
+
+- [ ] **Step 3: Smoke test (SQL editor):**
+
+```sql
+-- Insere 2 vezes a mesma linha; só uma deve voltar
+SELECT * FROM dispatch_insert_deliveries('[
+  {"subscription_id":"...uuid...","organization_id":"...","store_id":"...","event_type":"order.created","event_id":"evt_x","payload":{},"url":"https://x"},
+  {"subscription_id":"...uuid...","organization_id":"...","store_id":"...","event_type":"order.created","event_id":"evt_x","payload":{},"url":"https://x"}
+]'::jsonb);
+-- Esperado: 1 linha
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add supabase/migrations/20260419_webhook_rpcs.sql
+git commit -m "feat(webhooks): RPCs for idempotent insert and atomic claim"
+```
+
+---
+
 ### Task 4: Migration — `browse_abandoned_emissions`
 
 **Files:**
@@ -1070,6 +1151,26 @@ describe('dispatchToOutbound', () => {
     expect(mockEnqueue).toHaveBeenCalledTimes(2);
   });
 
+  it('strips _webhook_dispatch_meta do payload antes de persistir', async () => {
+    mockSubs.mockReturnValue([
+      { id: 's1', store_id: 'store1', organization_id: 'o', url: 'https://a', events: ['order.created'] },
+    ]);
+    mockInsertDeliveries.mockResolvedValue({ data: [{ id: 'd1' }], error: null });
+
+    await dispatchToOutbound({
+      eventType: 'order.created',
+      organizationId: 'o', storeId: 'store1',
+      sourceEventId: '1', source: 'shopify',
+      store: { id: 'store1', shop_domain: 'x', name: 'X' },
+      data: { order_id: '123', _webhook_dispatch_meta: { secret: 'leak' } },
+    });
+
+    const inserted = mockInsertDeliveries.mock.calls[0][0];
+    const payload = inserted[0].payload;
+    expect(payload.data._webhook_dispatch_meta).toBeUndefined();
+    expect(payload.data.order_id).toBe('123');
+  });
+
   it('eventos sem subscription matching não fazem INSERT nem enqueue', async () => {
     mockSubs.mockReturnValue([]);
     await dispatchToOutbound({
@@ -1123,15 +1224,19 @@ export async function dispatchToOutbound(input: DispatchInput): Promise<void> {
   if (!subs || subs.length === 0) return;
 
   const eventId = deriveEventId(input.source, input.sourceEventId, input.eventType);
+
+  // CRÍTICO: remove meta interna do payload final (não pode vazar pro cliente)
+  const { _webhook_dispatch_meta, ...cleanData } = input.data;
+
   const envelope = buildEnvelope({
     eventId,
     event: input.eventType,
     organizationId: input.organizationId,
     store: input.store,
-    data: input.data,
+    data: cleanData,
   });
 
-  // 2. INSERT batch (UNIQUE engole dups via ON CONFLICT)
+  // 2. INSERT batch via RPC com ON CONFLICT DO NOTHING RETURNING
   const rows = subs.map((s) => ({
     subscription_id: s.id,
     organization_id: s.organization_id,
@@ -1144,9 +1249,7 @@ export async function dispatchToOutbound(input: DispatchInput): Promise<void> {
   }));
 
   const { data: inserted, error: insertError } = await supabaseAdmin
-    .from('webhook_deliveries')
-    .upsert(rows, { onConflict: 'subscription_id,event_id', ignoreDuplicates: true })
-    .select('id');
+    .rpc('dispatch_insert_deliveries', { p_rows: rows });
 
   if (insertError) {
     console.error('[outbound-dispatcher] failed to insert deliveries:', insertError);
@@ -1238,17 +1341,16 @@ git commit -m "feat(webhooks): outbound dispatcher with EventBus integration"
 ### Task 12: Worker — `/api/workers/webhook-delivery` (atomic claim + POST)
 
 **Files:**
+- Create: `src/lib/webhooks/response-classifier.ts` (lógica isolada — Next.js App Router não permite exports arbitrários em `route.ts`)
+- Create: `src/lib/webhooks/__tests__/response-classifier.test.ts`
 - Create: `src/app/api/workers/webhook-delivery/route.ts`
-- Create: `src/app/api/workers/webhook-delivery/__tests__/route.test.ts`
 
-- [ ] **Step 1: Escrever teste**
-
-Escopo do teste: smoke test da lógica de claim e classificação de status. Testes mais profundos (real HTTP) ficam pra integration.
+- [ ] **Step 1: Escrever teste do classifier (módulo standalone)**
 
 ```typescript
-// src/app/api/workers/webhook-delivery/__tests__/route.test.ts
+// src/lib/webhooks/__tests__/response-classifier.test.ts
 import { describe, it, expect } from 'vitest';
-import { classifyResponse } from '../route';
+import { classifyResponse } from '../response-classifier';
 
 describe('classifyResponse', () => {
   it('2xx → delivered', () => {
@@ -1278,7 +1380,51 @@ describe('classifyResponse', () => {
 });
 ```
 
-- [ ] **Step 2: Implementar**
+- [ ] **Step 2: Implementar `response-classifier.ts`**
+
+```typescript
+// src/lib/webhooks/response-classifier.ts
+export type DeliveryOutcome = 'delivered' | 'failed' | 'retrying';
+
+export function classifyResponse(
+  status: number,
+  attempt: number,
+  maxAttempts: number = 5
+): DeliveryOutcome {
+  if (status >= 200 && status < 300) return 'delivered';
+  const retryable = status >= 500 || status === 408 || status === 429;
+  if (retryable && attempt < maxAttempts) return 'retrying';
+  return 'failed';
+}
+```
+
+Rodar `pnpm test src/lib/webhooks/__tests__/response-classifier.test.ts` — passar.
+
+- [ ] **Step 3: Helper de bytea (decode hex de Postgres pra Buffer)**
+
+`src/lib/webhooks/bytea.ts`:
+```typescript
+// supabase-js retorna bytea como string hex no formato '\x...' OU já decodificado dependendo do driver.
+// Centralizar a normalização aqui.
+export function byteaToBuffer(value: unknown): Buffer {
+  if (Buffer.isBuffer(value)) return value;
+  if (typeof value === 'string') {
+    if (value.startsWith('\\x')) return Buffer.from(value.slice(2), 'hex');
+    if (/^[0-9a-fA-F]+$/.test(value)) return Buffer.from(value, 'hex');
+    // base64 fallback (alguns drivers retornam assim)
+    return Buffer.from(value, 'base64');
+  }
+  if (value && typeof value === 'object' && 'data' in (value as any)) {
+    // Caso o driver retorne { type: 'Buffer', data: [...] }
+    return Buffer.from((value as any).data);
+  }
+  throw new Error('Unknown bytea encoding');
+}
+```
+
+Adicionar testes em `src/lib/webhooks/__tests__/bytea.test.ts` cobrindo cada formato de encoding (hex prefixed `\\x`, hex puro, base64, Buffer já decoded).
+
+- [ ] **Step 4: Implementar route handler**
 
 ```typescript
 // src/app/api/workers/webhook-delivery/route.ts
@@ -1287,44 +1433,49 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { decryptSecret } from '@/lib/webhooks/secret-store';
 import { buildSignatureHeader } from '@/lib/webhooks/signature';
 import { safeFetch } from '@/lib/webhooks/safe-fetch';
+import { classifyResponse } from '@/lib/webhooks/response-classifier';
+import { byteaToBuffer } from '@/lib/webhooks/bytea';
+import { Receiver } from '@upstash/qstash'; // adicionar dep: pnpm add @upstash/qstash
 
 export const dynamic = 'force-dynamic';
 
 const RETRY_DELAYS_SEC = [60, 300, 1800, 7200, 21600]; // 1m, 5m, 30m, 2h, 6h
 
-type Status = 'delivered' | 'failed' | 'retrying';
-
-export function classifyResponse(status: number, attempt: number, maxAttempts: number = 5): Status {
-  if (status >= 200 && status < 300) return 'delivered';
-  const retryable = status >= 500 || status === 408 || status === 429;
-  if (retryable && attempt < maxAttempts) return 'retrying';
-  return 'failed';
-}
+const qstashReceiver = process.env.QSTASH_CURRENT_SIGNING_KEY && process.env.QSTASH_NEXT_SIGNING_KEY
+  ? new Receiver({
+      currentSigningKey: process.env.QSTASH_CURRENT_SIGNING_KEY,
+      nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY,
+    })
+  : null;
 
 export async function POST(req: NextRequest) {
-  // Auth básica: header interno OU bearer do QStash (validação simplificada)
-  const internal = req.headers.get('X-Internal-Request') === 'true';
-  // Em produção, validar assinatura QStash via @upstash/qstash; aqui simplificado.
+  // Auth: assinatura QStash OBRIGATÓRIA em produção.
+  const rawBody = await req.text();
+  const signature = req.headers.get('upstash-signature');
 
-  const body = await req.json();
+  if (process.env.NODE_ENV === 'production' || qstashReceiver) {
+    if (!signature || !qstashReceiver) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+    const valid = await qstashReceiver.verify({ signature, body: rawBody });
+    if (!valid) return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
+  }
+
+  const body = JSON.parse(rawBody);
   const deliveryId = body.deliveryId;
   if (!deliveryId) return NextResponse.json({ error: 'deliveryId required' }, { status: 400 });
 
-  // 1. Reivindicar atomicamente
-  const { data: claimed, error: claimError } = await supabaseAdmin
-    .from('webhook_deliveries')
-    .update({
-      status: 'in_flight',
-      in_flight_until: new Date(Date.now() + 10_000).toISOString(),
-      last_attempt_at: new Date().toISOString(),
-      attempt_count: (await getCurrentAttemptCount(deliveryId)) + 1,
-    })
-    .eq('id', deliveryId)
-    .in('status', ['pending', 'retrying'])
-    .select('*')
-    .single();
+  // 1. Reivindicar atomicamente via RPC (incrementa attempt_count na mesma statement)
+  const { data: claimedRows, error: claimError } = await supabaseAdmin
+    .rpc('claim_webhook_delivery', { p_id: deliveryId });
 
-  if (claimError || !claimed) {
+  if (claimError) {
+    console.error('[worker] claim failed:', claimError);
+    return NextResponse.json({ error: 'claim failed' }, { status: 500 });
+  }
+
+  const claimed = claimedRows?.[0];
+  if (!claimed) {
     return NextResponse.json({ skipped: true, reason: 'not_claimable' }, { status: 200 });
   }
 
@@ -1336,27 +1487,28 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (!sub) {
-    await markFailed(deliveryId, claimed.attempt_count, 'subscription not found');
+    await markFailed(deliveryId, 'subscription not found');
     return NextResponse.json({ ok: false }, { status: 200 });
   }
 
-  // 3. Descriptografar secrets
-  const primarySecret = decryptSecret(Buffer.from(sub.secret_encrypted));
+  // 3. Descriptografar secrets (bytea normalization)
+  const primarySecret = decryptSecret(byteaToBuffer(sub.secret_encrypted));
   const previousSecret = sub.secret_previous_encrypted &&
     sub.secret_previous_expires_at && new Date(sub.secret_previous_expires_at) > new Date()
-    ? decryptSecret(Buffer.from(sub.secret_previous_encrypted))
+    ? decryptSecret(byteaToBuffer(sub.secret_previous_encrypted))
     : null;
 
-  // 4. Construir headers
-  const rawBody = JSON.stringify(claimed.payload);
+  // 4. Construir headers (atenção: rawBody aqui é o payload HTTP do POST de saída,
+  // distinto do rawBody da requisição recebida — usamos nome diferente)
+  const outboundBody = JSON.stringify(claimed.payload);
   const timestamp = Math.floor(Date.now() / 1000).toString();
-  const signature = buildSignatureHeader(primarySecret, previousSecret, timestamp, rawBody);
+  const sigHeader = buildSignatureHeader(primarySecret, previousSecret, timestamp, outboundBody);
 
   const headers = {
     'Content-Type': 'application/json',
     'X-Worder-Event': claimed.event_type,
     'X-Worder-Event-Id': claimed.event_id,
-    'X-Worder-Signature': signature,
+    'X-Worder-Signature': sigHeader,
     'X-Worder-Timestamp': timestamp,
     'X-Worder-Delivery-Id': claimed.id,
     'User-Agent': 'Worder-Webhooks/1.0',
@@ -1368,43 +1520,38 @@ export async function POST(req: NextRequest) {
     result = await safeFetch(claimed.url, {
       method: 'POST',
       headers,
-      body: rawBody,
+      body: outboundBody,
       timeoutMs: 10_000,
     });
   } catch (err: any) {
     // Erro de rede / DNS / SSRF → trata como retryable se attempt < max, senão failed
-    const status: Status = claimed.attempt_count < claimed.max_attempts ? 'retrying' : 'failed';
-    await updateAfterAttempt(deliveryId, claimed.attempt_count, {
-      status,
+    const outcome = claimed.attempt_count < claimed.max_attempts ? 'retrying' : 'failed';
+    await updateAfterAttempt(deliveryId, {
+      status: outcome,
       error_message: err.message?.slice(0, 500) ?? 'unknown error',
-      next_retry_at: status === 'retrying'
-        ? new Date(Date.now() + RETRY_DELAYS_SEC[Math.min(claimed.attempt_count, RETRY_DELAYS_SEC.length - 1)] * 1000).toISOString()
+      next_retry_at: outcome === 'retrying'
+        ? new Date(Date.now() + RETRY_DELAYS_SEC[Math.min(claimed.attempt_count - 1, RETRY_DELAYS_SEC.length - 1)] * 1000).toISOString()
         : null,
     });
     return NextResponse.json({ ok: false, error: err.message }, { status: 200 });
   }
 
   // 6. Classificar e atualizar
-  const status = classifyResponse(result.status, claimed.attempt_count, claimed.max_attempts);
-  await updateAfterAttempt(deliveryId, claimed.attempt_count, {
-    status,
+  const outcome = classifyResponse(result.status, claimed.attempt_count, claimed.max_attempts);
+  await updateAfterAttempt(deliveryId, {
+    status: outcome,
     response_code: result.status,
     response_body: result.body,
-    delivered_at: status === 'delivered' ? new Date().toISOString() : null,
-    next_retry_at: status === 'retrying'
-      ? new Date(Date.now() + RETRY_DELAYS_SEC[Math.min(claimed.attempt_count, RETRY_DELAYS_SEC.length - 1)] * 1000).toISOString()
+    delivered_at: outcome === 'delivered' ? new Date().toISOString() : null,
+    next_retry_at: outcome === 'retrying'
+      ? new Date(Date.now() + RETRY_DELAYS_SEC[Math.min(claimed.attempt_count - 1, RETRY_DELAYS_SEC.length - 1)] * 1000).toISOString()
       : null,
   });
 
-  return NextResponse.json({ ok: true, status, code: result.status });
+  return NextResponse.json({ ok: true, status: outcome, code: result.status });
 }
 
-async function getCurrentAttemptCount(id: string): Promise<number> {
-  const { data } = await supabaseAdmin.from('webhook_deliveries').select('attempt_count').eq('id', id).single();
-  return data?.attempt_count ?? 0;
-}
-
-async function updateAfterAttempt(id: string, attemptCount: number, patch: Record<string, any>) {
+async function updateAfterAttempt(id: string, patch: Record<string, any>) {
   await supabaseAdmin
     .from('webhook_deliveries')
     .update({
@@ -1415,7 +1562,7 @@ async function updateAfterAttempt(id: string, attemptCount: number, patch: Recor
     .eq('id', id);
 }
 
-async function markFailed(id: string, attemptCount: number, errorMessage: string) {
+async function markFailed(id: string, errorMessage: string) {
   await supabaseAdmin
     .from('webhook_deliveries')
     .update({
@@ -1427,6 +1574,12 @@ async function markFailed(id: string, attemptCount: number, errorMessage: string
     .eq('id', id);
 }
 ```
+
+**Importante:** Adicionar `@upstash/qstash` em `package.json`:
+```bash
+pnpm add @upstash/qstash
+```
+E configurar env vars na Vercel: `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY` (do dashboard Upstash).
 
 - [ ] **Step 3: Rodar testes unit do classifier**
 
@@ -1459,13 +1612,23 @@ git commit -m "feat(webhooks): delivery worker with atomic claim and HMAC sign"
 
 ```typescript
 // src/app/api/cron/webhook-deliveries-sweeper/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { enqueueWebhookDelivery } from '@/lib/queue';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+function isAuthorized(req: NextRequest): boolean {
+  // Vercel Cron: header Authorization: Bearer <CRON_SECRET>
+  const authHeader = req.headers.get('authorization');
+  return authHeader === `Bearer ${process.env.CRON_SECRET}`;
+}
+
+export async function GET(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
   const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const now = new Date().toISOString();
 
@@ -1527,12 +1690,16 @@ git commit -m "feat(webhooks): sweeper cron for stuck deliveries"
 
 ```typescript
 // src/app/api/cron/webhook-deliveries-prune/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
 
   const { count: deliveriesCount } = await supabaseAdmin
@@ -1976,9 +2143,21 @@ import { enqueueWebhookDelivery } from '@/lib/queue';
 
 export async function POST(_: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
+
+  // 1. Auth: usuário tem que estar logado
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  // 2. SELECT via cliente do usuário (RLS aplica) — se não retorna, ele não tem acesso
   const { data: original, error } = await supabase
     .from('webhook_deliveries').select('*').eq('id', params.id).single();
   if (error || !original) return NextResponse.json({ error: 'not found' }, { status: 404 });
+
+  // 3. Defesa em profundidade: confirmar org membership antes de usar service role
+  const userOrgId = user.user_metadata?.organization_id;
+  if (!userOrgId || userOrgId !== original.organization_id) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
 
   // Cria nova linha (preserva histórico) com event_id sufixado
   const newRow = {
@@ -2004,6 +2183,89 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
 ```bash
 git add src/app/api/webhooks-admin/
 git commit -m "feat(webhooks): test, replay, and deliveries listing endpoints"
+```
+
+---
+
+### Task 19.5: Migration + endpoint pro consentimento PII (LGPD)
+
+Spec §11 exige consentimento PII registrado em `audit_logs` na primeira criação de webhook. Tratado como task própria pra não esconder trabalho dentro da Task 20.
+
+**Files:**
+- Create: `supabase/migrations/20260419_webhook_pii_consent.sql`
+- Create: `src/app/api/webhooks-admin/consent/route.ts`
+
+- [ ] **Step 1: Migration**
+
+```sql
+-- Garante que audit_logs existe (se não, cria mínimo viável)
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id         uuid REFERENCES auth.users(id),
+  action          text NOT NULL,
+  metadata        jsonb DEFAULT '{}'::jsonb,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_org_action
+  ON audit_logs(organization_id, action, created_at DESC);
+
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "org_members_read_audit" ON audit_logs
+  FOR SELECT USING (auth.jwt() ->> 'organization_id' = organization_id::text);
+```
+
+(Se `audit_logs` já existe com schema diferente, pular o CREATE — verificar antes.)
+
+- [ ] **Step 2: Endpoint GET (verifica) + POST (registra)**
+
+```typescript
+// src/app/api/webhooks-admin/consent/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
+
+const CONSENT_ACTION = 'webhook_pii_consent_accepted';
+
+export async function GET() {
+  const supabase = createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from('audit_logs').select('id, created_at')
+    .eq('action', CONSENT_ACTION).limit(1).maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ accepted: !!data, accepted_at: data?.created_at ?? null });
+}
+
+export async function POST() {
+  const supabase = createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const { error } = await supabase.from('audit_logs').insert({
+    organization_id: user.user_metadata?.organization_id,
+    user_id: user.id,
+    action: CONSENT_ACTION,
+    metadata: { ip: 'redacted', user_agent: 'redacted', spec_version: '1' },
+  });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}
+```
+
+- [ ] **Step 3: Validação aceitação no POST de criação de subscription (Task 18)**
+
+Adicionar no início do handler `POST /api/webhooks-admin/subscriptions`:
+```typescript
+const { data: priorConsent } = await supabase
+  .from('audit_logs').select('id').eq('action', 'webhook_pii_consent_accepted').limit(1).maybeSingle();
+if (!priorConsent) return NextResponse.json({ error: 'pii_consent_required' }, { status: 412 });
+```
+(412 Precondition Failed → frontend abre modal de consentimento, usuário aceita, retry POST.)
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add supabase/migrations/20260419_webhook_pii_consent.sql src/app/api/webhooks-admin/consent/ src/app/api/webhooks-admin/subscriptions/route.ts
+git commit -m "feat(webhooks): PII consent enforcement with audit_logs"
 ```
 
 ---
@@ -2115,6 +2377,8 @@ Cobertura:
 
 - [ ] **Step 2: Implementar detector**
 
+`contact_events.store_id` existe (confirmado em `supabase/migrations/20260330_shopify_graphql_cdp.sql:17`), então o detector usa o store_id real do evento — isso garante atribuição correta em orgs com múltiplas lojas.
+
 ```typescript
 // src/lib/services/browse-abandoned/detector.ts
 import { supabaseAdmin } from '@/lib/supabase-admin';
@@ -2124,32 +2388,29 @@ const MIN_MIN = parseInt(process.env.BROWSE_ABANDONED_MIN_MIN || '30');
 const MAX_HOURS = parseInt(process.env.BROWSE_ABANDONED_MAX_HOURS || '4');
 
 export async function runBrowseAbandonedDetection() {
-  // Busca orgs que têm pelo menos 1 sub ativa em browse.abandoned
-  const { data: orgs } = await supabaseAdmin
+  // Busca subscriptions ativas em browse.abandoned, agrupadas por (org, store)
+  const { data: subs } = await supabaseAdmin
     .from('webhook_subscriptions')
     .select('organization_id, store_id')
     .eq('status', 'active')
     .contains('events', ['browse.abandoned']);
 
-  const uniqueOrgStores = new Map<string, { org: string; stores: Set<string> }>();
-  for (const row of orgs ?? []) {
-    const entry = uniqueOrgStores.get(row.organization_id) || { org: row.organization_id, stores: new Set() };
-    entry.stores.add(row.store_id);
-    uniqueOrgStores.set(row.organization_id, entry);
-  }
+  // Set de (org, store) que devem ser detectados
+  const targets = new Set((subs ?? []).map((r) => `${r.organization_id}:${r.store_id}`));
+  const orgs = new Set((subs ?? []).map((r) => r.organization_id));
 
   let totalEmitted = 0;
-  for (const { org, stores } of uniqueOrgStores.values()) {
-    totalEmitted += await processOrg(org, [...stores]);
+  for (const org of orgs) {
+    totalEmitted += await processOrg(org, targets);
   }
-  return { totalEmitted, orgsProcessed: uniqueOrgStores.size };
+  return { totalEmitted, orgsProcessed: orgs.size };
 }
 
-async function processOrg(orgId: string, storeIds: string[]): Promise<number> {
-  // Query candidates
+async function processOrg(orgId: string, targetStores: Set<string>): Promise<number> {
   const minTime = new Date(Date.now() - MAX_HOURS * 3600 * 1000).toISOString();
   const maxTime = new Date(Date.now() - MIN_MIN * 60 * 1000).toISOString();
 
+  // RPC retorna view_event_id, contact_id, product_id, store_id, viewed_at
   const { data: candidates, error } = await supabaseAdmin.rpc('detect_browse_abandoned', {
     p_organization_id: orgId,
     p_min_time: minTime,
@@ -2162,35 +2423,39 @@ async function processOrg(orgId: string, storeIds: string[]): Promise<number> {
 
   let emitted = 0;
   for (const cand of candidates ?? []) {
+    // Pula candidatos cuja loja não tem subscription
+    if (!cand.store_id || !targetStores.has(`${orgId}:${cand.store_id}`)) continue;
+
     // Atomic emit gate
-    const { data: insertedEmission, error: insertError } = await supabaseAdmin
+    const { error: insertError } = await supabaseAdmin
       .from('browse_abandoned_emissions')
       .insert({
         organization_id: orgId,
         contact_id: cand.contact_id,
         product_id: cand.product_id,
         view_event_id: cand.view_event_id,
-      })
-      .select('id')
-      .single();
+      });
 
     if (insertError) {
-      // ON CONFLICT — já emitido, pula
-      if (insertError.code === '23505') continue;
+      if (insertError.code === '23505') continue; // já emitido
       console.warn('[browse-abandoned] insert failed:', insertError);
       continue;
     }
 
-    // Emit (precisa do store_id; usar primeiro disponível pra simplificar v1)
+    // Buscar dados da loja pra meta do dispatch
+    const { data: store } = await supabaseAdmin
+      .from('shopify_stores').select('id, shop_domain, name')
+      .eq('id', cand.store_id).single();
+
     await EventBus.emit(EventType.BROWSE_ABANDONED, {
       organization_id: orgId,
       contact_id: cand.contact_id,
       data: {
         _webhook_dispatch_meta: {
-          store_id: storeIds[0],
+          store_id: cand.store_id,
           source: 'browse_detector',
           source_event_id: cand.view_event_id,
-          store: { id: storeIds[0], shop_domain: '', name: '' }, // worker enriquece se vazio
+          store: store ?? { id: cand.store_id, shop_domain: '', name: '' },
         },
         contact_id: cand.contact_id,
         product_id: cand.product_id,
@@ -2206,8 +2471,10 @@ async function processOrg(orgId: string, storeIds: string[]): Promise<number> {
 
 - [ ] **Step 3: Criar função RPC no Postgres pra query de detecção**
 
+Schema real: `contact_events` usa coluna `properties` (JSONB) pro payload, não `payload`. Confirmar em `supabase/migrations/20260330_shopify_graphql_cdp.sql:24` antes de aplicar.
+
 ```sql
--- Migration extra: detect_browse_abandoned RPC
+-- supabase/migrations/20260419_browse_abandoned_rpc.sql
 CREATE OR REPLACE FUNCTION detect_browse_abandoned(
   p_organization_id uuid,
   p_min_time timestamptz,
@@ -2216,25 +2483,29 @@ CREATE OR REPLACE FUNCTION detect_browse_abandoned(
 RETURNS TABLE (
   view_event_id uuid,
   contact_id uuid,
+  store_id uuid,
   product_id text,
   viewed_at timestamptz
 ) LANGUAGE sql STABLE AS $$
   SELECT
     v.id AS view_event_id,
     v.contact_id,
-    v.payload->>'product_id' AS product_id,
+    v.store_id,
+    v.properties->>'product_id' AS product_id,
     v.created_at AS viewed_at
   FROM contact_events v
   WHERE v.organization_id = p_organization_id
     AND v.event_type = 'viewed_product'
     AND v.created_at BETWEEN p_min_time AND p_max_time
-    AND v.payload->>'product_id' IS NOT NULL
+    AND v.properties->>'product_id' IS NOT NULL
+    AND v.contact_id IS NOT NULL
+    AND v.store_id IS NOT NULL
     AND NOT EXISTS (
       SELECT 1 FROM contact_events x
       WHERE x.contact_id = v.contact_id
         AND x.event_type IN ('added_to_cart', 'placed_order')
         AND x.created_at > v.created_at
-        AND (x.event_type = 'placed_order' OR x.payload->>'product_id' = v.payload->>'product_id')
+        AND (x.event_type = 'placed_order' OR x.properties->>'product_id' = v.properties->>'product_id')
     );
 $$;
 ```
@@ -2262,12 +2533,15 @@ git commit -m "feat(webhooks): browse abandoned detector with atomic emit gate"
 
 ```typescript
 // src/app/api/cron/browse-abandoned/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { runBrowseAbandonedDetection } from '@/lib/services/browse-abandoned/detector';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
   const result = await runBrowseAbandonedDetection();
   return NextResponse.json(result);
 }
@@ -2343,10 +2617,12 @@ Esperado: todos os testes de `src/lib/webhooks/` e `src/app/api/workers/webhook-
 - [ ] **Validar pgsodium na prod (se for usar):** decisão pendente — v1 lança com AES-256-GCM app-level. Migrar pra pgsodium depois é trivial.
 
 - [ ] **Checklist de produção:**
-  - `WEBHOOK_SECRET_ENCRYPTION_KEY` setada na Vercel?
+  - `WEBHOOK_SECRET_ENCRYPTION_KEY` setada na Vercel? (32 bytes base64)
   - `QSTASH_TOKEN` setada?
+  - `QSTASH_CURRENT_SIGNING_KEY` e `QSTASH_NEXT_SIGNING_KEY` setadas? (verificação de assinatura no worker)
+  - `CRON_SECRET` setada? (proteção dos endpoints de cron)
   - Crons no `vercel.json` ativos?
-  - Migration aplicada na prod DB?
+  - Migrations aplicadas na prod DB? (subscriptions, deliveries, browse_emissions, RPCs, audit_logs/consent)
 
 ---
 
