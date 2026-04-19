@@ -1,140 +1,141 @@
-# Outbound Webhooks — Design Spec
+# Webhooks de Saída (Outbound) — Spec de Design
 
-**Status:** Approved (brainstorming)
-**Date:** 2026-04-19
-**Owner:** Matheus Marques
-**Related code:** `src/lib/events.ts`, `src/app/api/webhooks/shopify/route.ts`
+**Status:** Aprovado (brainstorming)
+**Data:** 2026-04-19
+**Responsável:** Matheus Marques
+**Código relacionado:** `src/lib/events.ts`, `src/app/api/webhooks/shopify/route.ts`
 
 ---
 
-## 1. Problem
+## 1. Problema
 
-Worder receives inbound webhooks from many providers (Shopify, WhatsApp Cloud/Evolution, Resend, Klaviyo, custom flows) but has **no outbound mechanism** for third-party systems to subscribe to Worder events. Customers integrating ERPs, BI tools, fulfillment apps, or internal automations have no standard contract to listen to "order paid", "tracking created", "browse abandoned", etc.
+O Worder recebe webhooks de várias plataformas (Shopify, WhatsApp Cloud/Evolution, Resend, Klaviyo, flows custom) mas **não tem mecanismo de saída** para sistemas externos se inscreverem em eventos do Worder. Clientes integrando ERPs, BIs, apps de fulfillment ou automações internas não têm contrato padrão pra escutar "pedido pago", "rastreio criado", "browse abandonado" etc.
 
-This spec defines the v1 outbound webhook system: normalized events emitted by Worder, per-store subscriptions, signed delivery with retries, and a customer-facing UI to manage subscriptions and inspect delivery logs.
+Esse spec define o sistema de webhooks de saída v1: contrato de eventos normalizado, assinaturas por loja, entrega assinada com retries, e UI para gerenciar inscrições e inspecionar logs de entrega.
 
-## 2. Goals & Non-Goals
+## 2. Objetivos e Não-Objetivos
 
-### Goals
-- Allow customers to subscribe their external systems to Worder events via configurable HTTP webhooks.
-- Provide a stable, normalized event contract decoupled from upstream providers (so swapping Shopify for another commerce engine doesn't break integrators).
-- Deliver reliably (at-least-once, exponential retry, crash-safe persistence).
-- Expose a UI for subscription management, delivery logs, manual replay, and live testing.
-- Cover 10 high-value events for the BR commerce use case (orders, payments, shipping, browse abandonment).
-- Be safe by default: no SSRF, no plaintext secrets at rest, RLS on all tables containing PII, LGPD-aware retention.
+### Objetivos
+- Permitir que clientes inscrevam sistemas externos em eventos do Worder via webhooks HTTP configuráveis.
+- Fornecer contrato de evento estável e normalizado, desacoplado dos provedores upstream (trocar Shopify por outro motor de e-commerce não quebra integradores).
+- Entregar com confiabilidade (at-least-once, retry exponencial, persistência crash-safe).
+- Expor UI para gestão de assinaturas, logs de entrega, reenvio manual e teste ao vivo.
+- Cobrir 10 eventos de alto valor pro cenário de e-commerce BR (pedidos, pagamentos, envio, browse abandonment).
+- Seguro por padrão: sem SSRF, sem segredos em texto puro no banco, RLS em todas as tabelas com PII, retenção LGPD-aware.
 
-### Non-Goals (v1)
-- No formal Dead Letter Queue UI (deliveries that fail all retries simply stay in `failed` status; manual replay is supported).
-- No multi-store subscriptions in a single record (subscription is strictly per-store).
-- No event versioning beyond `version: "1"` flag (breaking changes will require a v2 spec).
-- No internal-only event subscriptions (e.g., `automation.triggered`); only the 10 events listed.
-- No automated LGPD data-erasure propagation across delivery history. Retention is the safety net (see §7).
+### Não-Objetivos (v1)
+- Sem UI formal de Dead Letter Queue (entregas que falham todos os retries simplesmente ficam em `failed`; reenvio manual existe).
+- Sem assinatura multi-loja num único registro (assinatura é estritamente por loja).
+- Sem versionamento além do flag `version: "1"` (mudanças quebradoras vão exigir um spec v2).
+- Sem inscrições em eventos internos (`automation.triggered`, etc.); só os 10 eventos listados.
+- Sem propagação automática de exclusão LGPD nas entregas históricas. A retenção é a rede de segurança (ver §7).
 
-## 3. Event Catalog (v1)
+## 3. Catálogo de Eventos (v1)
 
-10 normalized event types:
+10 tipos de eventos normalizados:
 
-| Event | Source | Notes |
+| Evento | Origem | Observações |
 |---|---|---|
-| `order.created` | Shopify webhook (`orders/create`) | Already emitted via EventBus |
-| `order.paid` | Shopify webhook (`orders/paid`) | Already emitted via EventBus |
-| `order.fulfilled` | Shopify webhook (`orders/fulfilled`) | Already emitted via EventBus |
-| `order.cancelled` | Shopify webhook (`orders/cancelled`) | Already emitted via EventBus |
-| `checkout.abandoned` | `abandoned-cart.ts` cron | Needs `EventBus.emit` instrumentation |
-| `customer.created` | Shopify webhook + contact creation | Needs explicit emit on first creation |
-| `shipment.tracking_created` | Shopify `fulfillments/create` (`processFulfillmentEvent` at `route.ts:1081`) | Needs EventBus emit (today only writes CDP event) |
-| `payment.pix.abandoned` | `abandoned-cart.ts` cron, filtered by `payment_gateway` | New emit path |
-| `payment.boleto.abandoned` | `abandoned-cart.ts` cron, filtered by `payment_gateway` | New emit path |
-| `browse.abandoned` | **New cron detector** | Detects `viewed_product` without subsequent `added_to_cart`/`placed_order` within 30min–4h window |
+| `order.created` | Webhook Shopify (`orders/create`) | Já emitido via EventBus |
+| `order.paid` | Webhook Shopify (`orders/paid`) | Já emitido via EventBus |
+| `order.fulfilled` | Webhook Shopify (`orders/fulfilled`) | Já emitido via EventBus |
+| `order.cancelled` | Webhook Shopify (`orders/cancelled`) | Já emitido via EventBus |
+| `checkout.abandoned` | Cron `abandoned-cart.ts` | Precisa instrumentar com `EventBus.emit` |
+| `customer.created` | Webhook Shopify + criação de contato | Precisa de emit explícito na primeira criação |
+| `shipment.tracking_created` | Shopify `fulfillments/create` (`processFulfillmentEvent` em `route.ts:1081`) | Precisa de emit no EventBus (hoje só grava CDP event) |
+| `payment.pix.abandoned` | Cron `abandoned-cart.ts`, filtrado por `payment_gateway` | Caminho de emit novo |
+| `payment.boleto.abandoned` | Cron `abandoned-cart.ts`, filtrado por `payment_gateway` | Caminho de emit novo |
+| `browse.abandoned` | **Detector cron novo** | Detecta `viewed_product` sem `added_to_cart`/`placed_order` subsequente, na janela 30min–4h |
 
-## 4. Architecture
+## 4. Arquitetura
 
-The dispatcher uses a **transactional outbox** to guarantee no events are lost if the process dies between EventBus emission and QStash enqueue.
+O dispatcher usa um **outbox transacional** pra garantir que nenhum evento seja perdido se o processo morrer entre a emissão no EventBus e o enqueue do QStash.
 
 ```
-[Shopify webhook] ──┐                ┌────────────────────────────┐
-                    │                │  outbound_dispatcher        │
-[WhatsApp webhook]──┼─► EventBus ───►│  (sync listener, blocks     │
-                    │  .emit(...)    │   inbound handler return)   │
-[Browse detector]───┘                │                             │
-   (new cron)                        │  1. derive deterministic    │
-                                     │     event_id (idempotent)   │
-                                     │  2. INSERT webhook_deliv.   │
-                                     │     (status='pending') —    │
-                                     │     UNIQUE(sub_id,event_id) │
-                                     │     swallows duplicates     │
-                                     │  3. enqueue QStash job      │
-                                     │     using delivery.id as    │
-                                     │     dedup key               │
-                                     └──────────────┬──────────────┘
-                                                    │
-                  ┌─────────────────────────────────┤
-                  │ Stuck-delivery sweeper          │
+[Webhook Shopify]──┐                ┌────────────────────────────┐
+                   │                │  outbound_dispatcher        │
+[Webhook WhatsApp]─┼─► EventBus ───►│  (listener síncrono, bloqueia│
+                   │  .emit(...)    │   o handler de inbound)     │
+[Browse detector]──┘                │                             │
+   (cron novo)                      │  1. deriva event_id         │
+                                    │     determinístico (idemp.) │
+                                    │  2. INSERT webhook_deliv.   │
+                                    │     (status='pending') —    │
+                                    │     UNIQUE(sub_id,event_id) │
+                                    │     engole duplicatas       │
+                                    │  3. enfileira job no QStash │
+                                    │     usando delivery.id como │
+                                    │     dedup key               │
+                                    └──────────────┬──────────────┘
+                                                   │
+                  ┌────────────────────────────────┤
+                  │ Sweeper de entregas presas      │
                   │ /api/cron/webhook-deliveries-   │
-                  │ sweeper (every 5min)            │
-                  │ Re-enqueues `pending`/`retrying`│
-                  │ rows with no QStash activity in │
-                  │ last 5min (handles enqueue      │
-                  │ failure between INSERT and POST)│
+                  │ sweeper (a cada 5min)           │
+                  │ Reenfileira linhas `pending`/   │
+                  │ `retrying` sem atividade no     │
+                  │ QStash nos últimos 5min (cobre  │
+                  │ falha de enqueue entre INSERT   │
+                  │ e POST)                         │
                   └─────────────────────────────────┘
-                                                    ▼
-                                     ┌────────────────────────────┐
-                                     │  /api/workers/webhook-      │
-                                     │  delivery (POST per job)    │
-                                     │                             │
-                                     │  - claim row atomically:    │
-                                     │    UPDATE...SET status=     │
-                                     │    'in_flight' WHERE id=$1  │
-                                     │    AND status IN ('pending',│
-                                     │    'retrying') RETURNING *  │
-                                     │    (no row → another worker │
-                                     │    has it, abort)           │
-                                     │  - sign HMAC SHA-256        │
-                                     │  - POST customer URL        │
-                                     │  - 2xx → delivered          │
-                                     │  - 4xx (≠408/429) → failed  │
-                                     │  - 5xx/timeout/429 →        │
-                                     │    QStash retries           │
-                                     └────────────────────────────┘
+                                                   ▼
+                                    ┌────────────────────────────┐
+                                    │  /api/workers/webhook-      │
+                                    │  delivery (POST por job)    │
+                                    │                             │
+                                    │  - reivindica linha atomica.│
+                                    │    UPDATE...SET status=     │
+                                    │    'in_flight' WHERE id=$1  │
+                                    │    AND status IN ('pending',│
+                                    │    'retrying') RETURNING *  │
+                                    │    (sem linha → outro worker│
+                                    │    pegou, aborta)           │
+                                    │  - assina HMAC SHA-256      │
+                                    │  - POST pra URL do cliente  │
+                                    │  - 2xx → delivered          │
+                                    │  - 4xx (≠408/429) → failed  │
+                                    │  - 5xx/timeout/429 →        │
+                                    │    QStash retenta           │
+                                    └────────────────────────────┘
 ```
 
-**Crash-safety invariants:**
-- Inbound webhook handler MUST `await` `outbound_dispatcher.dispatch(...)` before responding 200. The dispatcher's only async fallible step is the QStash enqueue — if it fails, the row is already in `pending` and the sweeper will re-enqueue it within 5min.
-- Browse-abandoned detector runs from cron (no inbound handler to race with) and follows the same INSERT-then-enqueue order.
-- QStash message dedup key = `delivery.id` UUID, so sweeper re-enqueues are safe (QStash will not double-deliver within its dedup window).
+**Invariantes de crash-safety:**
+- O handler de webhook de inbound DEVE `await` em `outbound_dispatcher.dispatch(...)` antes de responder 200. O único passo assíncrono falível do dispatcher é o enqueue no QStash — se ele falhar, a linha já está em `pending` e o sweeper vai reenfileirar em até 5min.
+- O detector de browse abandoned roda do cron (sem handler de inbound pra correr risco) e segue a mesma ordem INSERT-depois-enqueue.
+- Dedup key da mensagem QStash = UUID do `delivery.id`, então reenfileiramentos do sweeper são seguros (QStash não vai entregar duplicado dentro da janela de dedup).
 
-### New Components
+### Componentes Novos
 
-| Path | Purpose |
+| Caminho | Propósito |
 |---|---|
-| `src/lib/webhooks/outbound-dispatcher.ts` | Single EventBus listener; derives deterministic event_id, finds matching subscriptions, INSERTs deliveries (UNIQUE swallows dups), enqueues jobs |
-| `src/lib/webhooks/event-id.ts` | Deterministic `event_id` derivation: `evt_` + base32(sha256(source + ":" + source_event_id + ":" + event_type)) |
-| `src/lib/webhooks/payload-builder.ts` | Builds normalized payload per event_type (versioned schema); enforces 256KB max with truncation strategy (see §7) |
-| `src/lib/webhooks/signature.ts` | HMAC SHA-256 sign (with primary + previous secret during rotation) + constant-time verify |
-| `src/lib/webhooks/safe-fetch.ts` | Custom undici Agent with `connect` hook validating resolved IP against blocklist; `redirect: 'manual'` enforced |
-| `src/lib/webhooks/secret-store.ts` | Encrypts secrets with `pgsodium`/app KMS at write; decrypts in worker only |
-| `src/app/api/workers/webhook-delivery/route.ts` | QStash worker: claims row atomically, POSTs to customer URL via safe-fetch, updates delivery status |
-| `src/app/api/cron/webhook-deliveries-sweeper/route.ts` | Re-enqueues stuck `pending`/`retrying` rows |
-| `src/lib/services/browse-abandoned/detector.ts` | New cron detector (15min cadence); orgs processed sequentially within tick |
-| `src/app/api/cron/browse-abandoned/route.ts` | Cron entrypoint |
-| `src/app/(dashboard)/settings/webhooks/page.tsx` | List UI |
-| `src/app/(dashboard)/settings/webhooks/new/page.tsx` | Create form |
-| `src/app/(dashboard)/settings/webhooks/[id]/edit/page.tsx` | Edit form |
-| `src/app/(dashboard)/settings/webhooks/[id]/deliveries/page.tsx` | Delivery log UI |
-| `src/app/api/webhooks-admin/subscriptions/route.ts` (+`/[id]`) | CRUD API for subscriptions |
-| `src/app/api/webhooks-admin/deliveries/[id]/replay/route.ts` | Manual replay endpoint |
-| `src/app/api/webhooks-admin/subscriptions/[id]/test/route.ts` | "Test delivery" endpoint (sends fake payload) |
+| `src/lib/webhooks/outbound-dispatcher.ts` | Listener único do EventBus; deriva event_id determinístico, busca subscriptions ativas, faz INSERT das deliveries (UNIQUE engole dups), enfileira jobs |
+| `src/lib/webhooks/event-id.ts` | Derivação determinística do `event_id`: `evt_` + base32(sha256(source + ":" + source_event_id + ":" + event_type)) |
+| `src/lib/webhooks/payload-builder.ts` | Constrói payload normalizado por event_type (schema versionado); aplica limite de 256KB com truncamento (ver §7) |
+| `src/lib/webhooks/signature.ts` | Assina HMAC SHA-256 (com secret primário + anterior durante rotação) + verify de tempo constante |
+| `src/lib/webhooks/safe-fetch.ts` | Agent custom do undici com hook `connect` validando IP resolvido contra blocklist; `redirect: 'manual'` forçado |
+| `src/lib/webhooks/secret-store.ts` | Cripta secrets com `pgsodium`/KMS no write; descripta só dentro do worker |
+| `src/app/api/workers/webhook-delivery/route.ts` | Worker QStash: reivindica linha atomicamente, faz POST pra URL do cliente via safe-fetch, atualiza status |
+| `src/app/api/cron/webhook-deliveries-sweeper/route.ts` | Reenfileira linhas `pending`/`retrying` presas |
+| `src/lib/services/browse-abandoned/detector.ts` | Detector cron novo (cadência 15min); orgs processadas sequencialmente por tick |
+| `src/app/api/cron/browse-abandoned/route.ts` | Entrypoint do cron |
+| `src/app/(dashboard)/settings/webhooks/page.tsx` | UI da lista |
+| `src/app/(dashboard)/settings/webhooks/new/page.tsx` | Form de criação |
+| `src/app/(dashboard)/settings/webhooks/[id]/edit/page.tsx` | Form de edição |
+| `src/app/(dashboard)/settings/webhooks/[id]/deliveries/page.tsx` | UI de log de entregas |
+| `src/app/api/webhooks-admin/subscriptions/route.ts` (+`/[id]`) | API CRUD pras subscriptions |
+| `src/app/api/webhooks-admin/deliveries/[id]/replay/route.ts` | Endpoint de reenvio manual |
+| `src/app/api/webhooks-admin/subscriptions/[id]/test/route.ts` | Endpoint "Testar entrega" (manda payload fake) |
 
-### Why a single EventBus listener (vs. inline calls in each handler)
+### Por que listener único no EventBus (vs. chamada inline em cada handler)
 
-Centralizing in `outbound_dispatcher` ensures:
-- A new event type is added in **one place**, not N handlers.
-- Future automation features (deal events, segment events) become webhook-able for free.
-- Handlers stay focused on their domain logic.
+Centralizar no `outbound_dispatcher` garante:
+- Adicionar event type novo é **um lugar só**, não N handlers.
+- Features futuras de automação (eventos de deal, eventos de segmento) viram webhook-able de graça.
+- Handlers ficam focados na lógica do domínio deles.
 
-The cost: a small audit pass to ensure every event we want to expose actually emits on the EventBus today (~4 handlers — see §8).
+O custo: uma auditoria pequena pra garantir que todo evento que a gente quer expor realmente emite no EventBus hoje (~4 handlers — ver §8).
 
-## 5. Data Model
+## 5. Modelo de Dados
 
 ### `webhook_subscriptions`
 
@@ -146,11 +147,11 @@ CREATE TABLE webhook_subscriptions (
   name                     text NOT NULL,
   url                      text NOT NULL,
 
-  -- Encrypted at-rest via pgsodium (or app-level KMS if pgsodium unavailable).
-  -- Plaintext only ever exists in worker memory during the POST.
+  -- Criptografado em repouso via pgsodium (ou KMS app-level se pgsodium indisponível).
+  -- Texto puro só existe na memória do worker durante o POST.
   secret_encrypted         bytea NOT NULL,
-  secret_previous_encrypted bytea,                     -- grace-period rotation
-  secret_previous_expires_at timestamptz,              -- when old secret stops being signed with
+  secret_previous_encrypted bytea,                     -- período de graça da rotação
+  secret_previous_expires_at timestamptz,              -- quando o secret antigo para de ser assinado
 
   events                   text[] NOT NULL,
   status                   text NOT NULL DEFAULT 'active',
@@ -178,9 +179,9 @@ CREATE INDEX idx_webhook_subs_lookup ON webhook_subscriptions(store_id, status)
 CREATE INDEX idx_webhook_subs_org ON webhook_subscriptions(organization_id);
 ```
 
-**Secret rotation:** when user clicks "Regenerate", the new secret becomes `secret_encrypted`, the old one moves to `secret_previous_encrypted` with `secret_previous_expires_at = now() + 24h`. During the grace period, deliveries include **two signatures** (`X-Worder-Signature: sha256=<new>, sha256=<old>`) so receivers have time to swap. After expiry, the old one is cleared.
+**Rotação de secret:** quando o usuário clica "Regenerar", o secret novo vira `secret_encrypted`, o antigo vai pra `secret_previous_encrypted` com `secret_previous_expires_at = now() + 24h`. Durante o período de graça, as entregas incluem **duas assinaturas** (`X-Worder-Signature: sha256=<novo>, sha256=<antigo>`) pros receivers terem tempo de trocar. Após expirar, o antigo é apagado.
 
-**RLS:** SELECT/INSERT/UPDATE/DELETE allowed only when `auth.jwt() ->> 'organization_id' = organization_id::text` (follow existing pattern in repo). The `secret_encrypted` and `secret_previous_encrypted` columns are excluded from API-exposed views — only the dispatcher (service role) reads them.
+**RLS:** SELECT/INSERT/UPDATE/DELETE permitidos só quando `auth.jwt() ->> 'organization_id' = organization_id::text` (segue padrão existente do repo). As colunas `secret_encrypted` e `secret_previous_encrypted` são excluídas das views expostas pela API — só o dispatcher (service role) lê elas.
 
 ### `webhook_deliveries`
 
@@ -191,22 +192,22 @@ CREATE TABLE webhook_deliveries (
   organization_id  uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   store_id         uuid NOT NULL REFERENCES shopify_stores(id) ON DELETE CASCADE,
   event_type       text NOT NULL,
-  event_id         text NOT NULL,                    -- deterministic, see §4
+  event_id         text NOT NULL,                    -- determinístico, ver §4
   payload          jsonb NOT NULL,
   url              text NOT NULL,
 
   status           text NOT NULL DEFAULT 'pending',
   attempt_count    int NOT NULL DEFAULT 0,
   max_attempts     int NOT NULL DEFAULT 5,
-  in_flight_until  timestamptz,                      -- claim lease (10s TTL); released on completion or expiry
+  in_flight_until  timestamptz,                      -- lease da reivindicação (TTL 10s); liberado ao concluir ou expirar
 
   response_code    int,
-  response_body    text,                             -- truncated to 2KB
+  response_body    text,                             -- truncado em 2KB
   error_message    text,
 
   next_retry_at    timestamptz,
   delivered_at     timestamptz,
-  last_attempt_at  timestamptz,                      -- for sweeper "no activity in 5min" check
+  last_attempt_at  timestamptz,                      -- pro check do sweeper "sem atividade nos últimos 5min"
   created_at       timestamptz NOT NULL DEFAULT now(),
   updated_at       timestamptz NOT NULL DEFAULT now(),
 
@@ -216,8 +217,8 @@ CREATE TABLE webhook_deliveries (
     'checkout.abandoned', 'customer.created', 'shipment.tracking_created',
     'payment.pix.abandoned', 'payment.boleto.abandoned', 'browse.abandoned'
   )),
-  -- Idempotency: same source event → same delivery row per subscription.
-  -- Dispatcher's INSERT uses ON CONFLICT DO NOTHING.
+  -- Idempotência: mesmo evento de origem → mesma linha de delivery por subscription.
+  -- INSERT do dispatcher usa ON CONFLICT DO NOTHING.
   CONSTRAINT unique_delivery_per_event UNIQUE (subscription_id, event_id)
 );
 
@@ -225,29 +226,29 @@ CREATE INDEX idx_webhook_deliv_sub ON webhook_deliveries(subscription_id, create
 CREATE INDEX idx_webhook_deliv_status ON webhook_deliveries(status, next_retry_at)
   WHERE status IN ('pending', 'retrying');
 CREATE INDEX idx_webhook_deliv_org ON webhook_deliveries(organization_id, created_at DESC);
--- Sweeper index: stuck rows whose claim lease expired or never enqueued
+-- Índice do sweeper: linhas presas com lease expirada ou nunca enfileiradas
 CREATE INDEX idx_webhook_deliv_stuck ON webhook_deliveries(last_attempt_at NULLS FIRST)
   WHERE status IN ('pending', 'retrying', 'in_flight');
 ```
 
-**RLS:** identical to `webhook_subscriptions` (org-scoped). The dashboard reads this table directly; without RLS, any authenticated user could read other orgs' delivery payloads (which contain order PII).
+**RLS:** idêntica à `webhook_subscriptions` (escopada por org). O dashboard lê essa tabela direto; sem RLS, qualquer usuário autenticado conseguiria ler payloads de entrega de outras orgs (que contêm PII de pedidos).
 
 ```sql
 ALTER TABLE webhook_deliveries ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "org members read own deliveries" ON webhook_deliveries
+CREATE POLICY "membros da org leem suas entregas" ON webhook_deliveries
   FOR SELECT USING (auth.jwt() ->> 'organization_id' = organization_id::text);
--- INSERT/UPDATE only via service role (dispatcher/worker); no client-side write.
+-- INSERT/UPDATE só via service role (dispatcher/worker); sem write client-side.
 ```
 
-**Retention (LGPD-aware):** delivered/failed deliveries older than **30 days** are pruned by a daily cron (`/api/cron/webhook-deliveries-prune`). This is the LGPD safety net — deleted customers may appear in delivery history for up to 30 days, which is documented in the integrator agreement. Pruning also covers payload bloat from large orders.
+**Retenção (LGPD-aware):** entregas `delivered`/`failed` com mais de **30 dias** são purgadas por cron diário (`/api/cron/webhook-deliveries-prune`). Essa é a rede de segurança LGPD — clientes deletados podem aparecer no histórico de entrega por até 30 dias, o que está documentado no termo do integrador. O purge também controla o crescimento de payload de pedidos grandes.
 
-**Why denormalize `organization_id` and `store_id`:** dashboard queries must not require a join (and FKs ensure integrity).
+**Por que desnormalizar `organization_id` e `store_id`:** queries do dashboard não podem exigir join (e as FKs garantem integridade).
 
-**Why store `url` and `payload`:** snapshots survive subscription edits (URL change must not retroactively rewrite history) and are needed to render replay UI.
+**Por que armazenar `url` e `payload`:** snapshots sobrevivem a edições da subscription (mudança de URL não pode reescrever histórico) e são necessários pra renderizar a UI de reenvio.
 
 ### `browse_abandoned_emissions`
 
-Dedicated table to gate browse-abandoned emissions — keeps the `contact_events` table clean (no synthetic markers) and provides O(1) idempotency.
+Tabela dedicada pra controlar emissões de browse-abandoned — mantém a tabela `contact_events` limpa (sem markers sintéticos) e fornece idempotência O(1).
 
 ```sql
 CREATE TABLE browse_abandoned_emissions (
@@ -255,7 +256,7 @@ CREATE TABLE browse_abandoned_emissions (
   organization_id  uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   contact_id       uuid NOT NULL,
   product_id       text NOT NULL,
-  view_event_id    uuid NOT NULL,                   -- references contact_events.id
+  view_event_id    uuid NOT NULL,                   -- referencia contact_events.id
   emitted_at       timestamptz NOT NULL DEFAULT now(),
 
   CONSTRAINT unique_browse_abandoned_emission
@@ -265,9 +266,9 @@ CREATE TABLE browse_abandoned_emissions (
 CREATE INDEX idx_browse_aband_org_emitted ON browse_abandoned_emissions(organization_id, emitted_at DESC);
 ```
 
-Retention: pruned at 7 days (we never need to dedup beyond the 4h detection window, but keep a buffer).
+Retenção: purgada em 7 dias (a gente nunca precisa deduplicar além da janela de detecção de 4h, mas mantém um buffer).
 
-## 6. Payload Contract
+## 6. Contrato de Payload
 
 ```json
 {
@@ -282,7 +283,7 @@ Retention: pruned at 7 days (we never need to dedup beyond the 4h detection wind
     "shop_domain": "minhaloja.myshopify.com",
     "name": "Minha Loja"
   },
-  "data": { /* event-specific schema */ }
+  "data": { /* schema específico do evento */ }
 }
 ```
 
@@ -292,104 +293,104 @@ Retention: pruned at 7 days (we never need to dedup beyond the 4h detection wind
 Content-Type: application/json
 X-Worder-Event: order.created
 X-Worder-Event-Id: evt_01HQABC123...
-X-Worder-Signature: sha256=<hmac_hex_primary>[, sha256=<hmac_hex_previous>]
+X-Worder-Signature: sha256=<hmac_hex_primario>[, sha256=<hmac_hex_anterior>]
 X-Worder-Timestamp: 1745086425
-X-Worder-Delivery-Id: <delivery uuid>
+X-Worder-Delivery-Id: <uuid da delivery>
 User-Agent: Worder-Webhooks/1.0
 ```
 
-### Signature
+### Assinatura
 
-`HMAC_SHA256(subscription.secret, X-Worder-Timestamp + "." + raw_request_body)` — same construction as Stripe.
+`HMAC_SHA256(subscription.secret, X-Worder-Timestamp + "." + raw_request_body)` — mesma construção do Stripe.
 
-During the 24h secret rotation grace period, the header includes **two** comma-separated signatures (primary + previous) so receivers can roll over without downtime.
+Durante o período de graça de 24h da rotação de secret, o header inclui **duas** assinaturas separadas por vírgula (primária + anterior) pros receivers conseguirem fazer rollover sem downtime.
 
-Receivers MUST:
-1. Reject if `|now - X-Worder-Timestamp| > 5 min` (replay protection).
-2. Recompute HMAC and constant-time compare against **any** `sha256=` value in `X-Worder-Signature` (split on comma, trim, strip `sha256=` prefix). Match on any → accept.
+Os receivers DEVEM:
+1. Rejeitar se `|now - X-Worder-Timestamp| > 5 min` (proteção contra replay).
+2. Recomputar o HMAC e fazer comparação de tempo constante contra **qualquer** valor `sha256=` no header `X-Worder-Signature` (split por vírgula, trim, retira o prefixo `sha256=`). Match em qualquer → aceita.
 
-### Idempotency
+### Idempotência
 
-`event_id` is **deterministic**: derived as `evt_` + base32(sha256(`source` + `:` + `source_event_id` + `:` + `event_type`)). For example, a Shopify `orders/create` for order `5678901234` always produces the same `event_id`, so re-firing the inbound webhook (Shopify retries) results in the dispatcher's `INSERT ... ON CONFLICT DO NOTHING` no-op. Receivers can additionally dedup on `X-Worder-Event-Id`.
+`event_id` é **determinístico**: derivado como `evt_` + base32(sha256(`source` + `:` + `source_event_id` + `:` + `event_type`)). Por exemplo, um `orders/create` da Shopify pro pedido `5678901234` sempre produz o mesmo `event_id`, então re-disparar o webhook de inbound (Shopify retentando) resulta em no-op no `INSERT ... ON CONFLICT DO NOTHING` do dispatcher. Receivers podem adicionalmente deduplicar pelo `X-Worder-Event-Id`.
 
-Note: at-least-once also means the worker can legitimately retry a delivery for transient failures — receivers MUST be idempotent on `X-Worder-Event-Id`.
+Nota: at-least-once também significa que o worker pode legitimamente retentar uma delivery por falha transitória — receivers DEVEM ser idempotentes no `X-Worder-Event-Id`.
 
-### `data` schemas (v1)
+### Schemas do `data` (v1)
 
-Per-event TypeScript interfaces live in `src/lib/webhooks/event-schemas.ts`. The shapes mirror existing internal types where possible (e.g., `order.*` mirrors `PlacedOrderProperties` from `src/lib/shopify/event-types.ts`) plus a `payment_method` field on order/checkout/payment events.
+Interfaces TypeScript por evento ficam em `src/lib/webhooks/event-schemas.ts`. Os formatos espelham os tipos internos existentes quando possível (ex: `order.*` espelha `PlacedOrderProperties` de `src/lib/shopify/event-types.ts`) mais um campo `payment_method` em eventos de order/checkout/payment.
 
-## 7. Delivery Semantics
+## 7. Semântica de Entrega
 
-- **At-least-once** via QStash. Receivers MUST be idempotent (use `X-Worder-Event-Id` as dedup key).
-- **Retry schedule:** 1min → 5min → 30min → 2h → 6h (configured in QStash job options). Max 5 attempts.
-- **Status transitions:**
-  - `pending` → `in_flight` (worker claims with `UPDATE ... SET status='in_flight', in_flight_until=now()+10s WHERE id=$1 AND status IN ('pending','retrying') RETURNING *` — no row returned means another worker has it; abort)
-  - `in_flight` → `delivered` (2xx received)
-  - `in_flight` → `failed` (4xx ≠ 408/429, OR max attempts exhausted)
-  - `in_flight` → `retrying` (5xx, 408, 429, timeout, network error; `next_retry_at` set; QStash schedules retry)
-  - `in_flight` → `pending` (sweeper, if `in_flight_until < now()` and worker never recorded outcome — claim lease expired)
-- **Concurrency:** the atomic claim above is the source of truth. `UPDATE ... RETURNING` with the status guard is single-statement atomic in Postgres and prevents two workers from both POSTing. QStash provides best-effort single-delivery per message but the claim is the durable guarantee.
-- **Timeout:** 10s per request (matches `in_flight_until` lease).
-- **Body truncation:** `response_body` truncated to 2KB.
-- **Payload size limit:** 256KB max (QStash default body limit). `payload-builder` enforces this. Strategy when exceeded:
-  - For `order.*` with very large `items[]`: truncate to first 100 items and add `_truncated: { items: true, original_count: N }` marker in payload.
-  - For other events: emit a slim payload with only the IDs and a `_truncated: true` flag; integrators can refetch full data via Worder API. Logged as warning.
-- **Stuck-delivery sweeper:** `/api/cron/webhook-deliveries-sweeper` runs every 5min. Re-enqueues rows where `status IN ('pending','retrying','in_flight')` AND (`last_attempt_at IS NULL` OR `last_attempt_at < now() - interval '5 min'`) AND (`in_flight_until IS NULL` OR `in_flight_until < now()`). Handles the rare case where dispatcher INSERT succeeded but QStash enqueue failed.
-- **Pruning (LGPD):** `/api/cron/webhook-deliveries-prune` runs daily, deletes rows in `delivered`/`failed` status older than 30 days.
+- **At-least-once** via QStash. Receivers DEVEM ser idempotentes (usar `X-Worder-Event-Id` como dedup key).
+- **Schedule de retry:** 1min → 5min → 30min → 2h → 6h (configurado nas opções do job QStash). Máximo 5 tentativas.
+- **Transições de status:**
+  - `pending` → `in_flight` (worker reivindica com `UPDATE ... SET status='in_flight', in_flight_until=now()+10s WHERE id=$1 AND status IN ('pending','retrying') RETURNING *` — sem linha retornada significa que outro worker pegou; aborta)
+  - `in_flight` → `delivered` (2xx recebido)
+  - `in_flight` → `failed` (4xx ≠ 408/429, OU max attempts atingido)
+  - `in_flight` → `retrying` (5xx, 408, 429, timeout, erro de rede; `next_retry_at` setado; QStash agenda retry)
+  - `in_flight` → `pending` (sweeper, se `in_flight_until < now()` e o worker nunca registrou outcome — lease da reivindicação expirou)
+- **Concorrência:** a reivindicação atômica acima é a fonte de verdade. `UPDATE ... RETURNING` com o guard de status é single-statement atômico no Postgres e impede dois workers de ambos fazerem POST. O QStash dá best-effort de single-delivery por mensagem, mas a reivindicação é a garantia durável.
+- **Timeout:** 10s por requisição (bate com o lease `in_flight_until`).
+- **Truncamento de body:** `response_body` truncado em 2KB.
+- **Limite de tamanho de payload:** 256KB máximo (limite default do QStash). O `payload-builder` aplica isso. Estratégia quando excede:
+  - Pra `order.*` com muitos `items[]`: trunca pros primeiros 100 itens e adiciona marker `_truncated: { items: true, original_count: N }` no payload.
+  - Pros outros eventos: emite payload enxuto só com IDs e flag `_truncated: true`; integrador pode buscar dados completos via API do Worder. Logado como warning.
+- **Sweeper de entregas presas:** `/api/cron/webhook-deliveries-sweeper` roda a cada 5min. Reenfileira linhas onde `status IN ('pending','retrying','in_flight')` AND (`last_attempt_at IS NULL` OR `last_attempt_at < now() - interval '5 min'`) AND (`in_flight_until IS NULL` OR `in_flight_until < now()`). Cobre o caso raro do dispatcher conseguir INSERT mas o enqueue do QStash falhar.
+- **Purge (LGPD):** `/api/cron/webhook-deliveries-prune` roda diário, deleta linhas em `delivered`/`failed` com mais de 30 dias.
 
-## 8. Handler Audit (EventBus instrumentation)
+## 8. Auditoria de Handlers (instrumentação no EventBus)
 
-| Handler | Today | v1 Change |
+| Handler | Hoje | Mudança v1 |
 |---|---|---|
-| `shopify/route.ts` — `processOrderCreated/Paid/Fulfilled/Cancelled` | Emits on EventBus | Add `customer.created` emit on first contact creation in `syncContactFromShopify` |
-| `shopify/route.ts` — `processFulfillmentEvent` (line 1081) | Writes CDP event only | Add `EventBus.emit(SHIPMENT_TRACKING_CREATED, ...)` when `tracking_number` present |
-| `abandoned-cart.ts:35` — `detectAbandonedCarts` | Writes CDP event only | Add `EventBus.emit(CHECKOUT_ABANDONED, ...)` always; conditionally emit `PAYMENT_PIX_ABANDONED` or `PAYMENT_BOLETO_ABANDONED` based on stored `payment_gateway` |
-| `browse-abandoned/detector.ts` (new) | n/a | Emits `BROWSE_ABANDONED` |
+| `shopify/route.ts` — `processOrderCreated/Paid/Fulfilled/Cancelled` | Emite no EventBus | Adicionar emit de `customer.created` na primeira criação de contato em `syncContactFromShopify` |
+| `shopify/route.ts` — `processFulfillmentEvent` (linha 1081) | Só grava CDP event | Adicionar `EventBus.emit(SHIPMENT_TRACKING_CREATED, ...)` quando `tracking_number` presente |
+| `abandoned-cart.ts:35` — `detectAbandonedCarts` | Só grava CDP event | Adicionar `EventBus.emit(CHECKOUT_ABANDONED, ...)` sempre; condicionalmente emitir `PAYMENT_PIX_ABANDONED` ou `PAYMENT_BOLETO_ABANDONED` baseado no `payment_gateway` armazenado |
+| `browse-abandoned/detector.ts` (novo) | n/a | Emite `BROWSE_ABANDONED` |
 
-New `EventType` enum entries to add in `src/lib/events.ts`:
+Entradas novas no enum `EventType` em `src/lib/events.ts`:
 - `SHIPMENT_TRACKING_CREATED = 'shipment.tracking_created'`
 - `PAYMENT_PIX_ABANDONED = 'payment.pix.abandoned'`
 - `PAYMENT_BOLETO_ABANDONED = 'payment.boleto.abandoned'`
 - `BROWSE_ABANDONED = 'browse.abandoned'`
 
-(The existing `CART_ABANDONED` is renamed/aliased to `CHECKOUT_ABANDONED` in the outbound contract — internal enum stays for backward compatibility.)
+(O `CART_ABANDONED` existente é renomeado/aliasado pra `CHECKOUT_ABANDONED` no contrato de saída — o enum interno fica pra compat.)
 
-## 9. Browse Abandoned Detector
+## 9. Detector de Browse Abandoned
 
-**Cron cadence:** every 15 minutes via `/api/cron/browse-abandoned`.
+**Cadência do cron:** a cada 15 minutos via `/api/cron/browse-abandoned`.
 
-**Concurrency:** orgs are processed **sequentially** within a single tick. Per-tick budget at 100 active orgs is well under cron timeout. If load grows, switch to a per-org QStash fan-out (out of v1 scope).
+**Concorrência:** orgs processadas **sequencialmente** dentro de um único tick. Budget por tick com 100 orgs ativas tá bem abaixo do timeout do cron. Se a carga crescer, migra pra fan-out por org via QStash (fora do escopo v1).
 
-**Algorithm (per organization with at least one active subscription to `browse.abandoned`):**
+**Algoritmo (por org com pelo menos uma subscription ativa em `browse.abandoned`):**
 
 ```
 1. Query contact_events WHERE
      event_type = 'viewed_product'
      AND created_at BETWEEN (now - 4h) AND (now - 30min)
      AND organization_id = $1
-   (joined LEFT to filter out contacts with subsequent add_to_cart/placed_order
-    in a single query — see SQL below)
+   (joined com LEFT pra filtrar contatos com add_to_cart/placed_order
+    subsequente em uma só query — ver SQL abaixo)
 
-2. For each candidate row, attempt:
+2. Pra cada linha candidata, tenta:
      INSERT INTO browse_abandoned_emissions
        (organization_id, contact_id, product_id, view_event_id)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (contact_id, product_id, view_event_id) DO NOTHING
      RETURNING id
-   If a row is returned → first emission, fire EventBus.emit(BROWSE_ABANDONED, payload).
-   If NULL → already emitted, skip.
+   Se retorna linha → primeira emissão, dispara EventBus.emit(BROWSE_ABANDONED, payload).
+   Se NULL → já emitido, pula.
 
-3. EventBus.emit triggers the outbound dispatcher in the same process.
+3. EventBus.emit aciona o outbound dispatcher no mesmo processo.
 ```
 
-**Why a dedicated table (not `contact_events` markers):**
-- `INSERT ... ON CONFLICT DO NOTHING RETURNING` is the **atomic emit gate** — race-free even if two ticks overlap.
-- Keeps `contact_events` clean of synthetic markers (segmentation/automation queries don't need to filter them).
-- O(1) lookup via the unique constraint vs. O(N) scan of `contact_events`.
+**Por que tabela dedicada (não markers em `contact_events`):**
+- `INSERT ... ON CONFLICT DO NOTHING RETURNING` é o **gate atômico de emissão** — sem race condition mesmo se dois ticks sobreporem.
+- Mantém `contact_events` limpa de markers sintéticos (queries de segmentação/automação não precisam filtrar isso).
+- Lookup O(1) via constraint unique vs. scan O(N) em `contact_events`.
 
-**Window rationale:** under 30min is too eager (still browsing); over 4h is too late for retargeting value. Both bounds configurable via env vars (`BROWSE_ABANDONED_MIN_MIN`, `BROWSE_ABANDONED_MAX_HOURS`).
+**Justificativa da janela:** abaixo de 30min é cedo demais (ainda navegando); acima de 4h é tarde demais pra retargeting. Ambos limites configuráveis via env vars (`BROWSE_ABANDONED_MIN_MIN`, `BROWSE_ABANDONED_MAX_HOURS`).
 
-**Detection query sketch (single bulk query):**
+**Sketch da query de detecção (single bulk query):**
 ```sql
 SELECT v.id, v.contact_id, v.payload->>'product_id' AS product_id, v.created_at
 FROM contact_events v
@@ -407,104 +408,104 @@ WHERE v.organization_id = $1
 
 ## 10. UI
 
-**Location:** `src/app/(dashboard)/settings/webhooks/`
+**Localização:** `src/app/(dashboard)/settings/webhooks/`
 
-### Screen 1 — List (`/settings/webhooks`)
+### Tela 1 — Lista (`/settings/webhooks`)
 
-Table of subscriptions with: name, store, URL, event count, last delivery status (green check / yellow / red X). Filters: store, status. Action: `[+ Novo webhook]`.
+Tabela de subscriptions com: nome, loja, URL, contagem de eventos, status da última entrega (check verde / amarelo / X vermelho). Filtros: loja, status. Ação: `[+ Novo webhook]`.
 
-### Screen 2 — Create/Edit (`/settings/webhooks/new`, `/[id]/edit`)
+### Tela 2 — Criar/Editar (`/settings/webhooks/new`, `/[id]/edit`)
 
-Form fields:
-- Name (free text)
-- **Store** (required dropdown — subscriptions are strictly per-store)
-- URL (validated as https://)
-- Events (checkboxes grouped: Pedidos / Checkout & Pagamento / Cliente & Comportamento / Logística)
-- Secret (auto-generated on creation, copyable, regenerate button)
-- Status toggle (Ativo / Pausado)
-- `[Testar entrega]` — sends a synthetic event payload to the URL to validate
+Campos do form:
+- Nome (texto livre)
+- **Loja** (dropdown obrigatório — subscriptions são estritamente por loja)
+- URL (validada como https://)
+- Eventos (checkboxes agrupados: Pedidos / Checkout & Pagamento / Cliente & Comportamento / Logística)
+- Secret (gerado automaticamente na criação, copiável, botão de regenerar)
+- Toggle de status (Ativo / Pausado)
+- `[Testar entrega]` — manda payload sintético pra URL pra validar
 
-### Screen 3 — Deliveries (`/settings/webhooks/[id]/deliveries`)
+### Tela 3 — Entregas (`/settings/webhooks/[id]/deliveries`)
 
-Table of last 100 deliveries with: status icon, event_type, timestamp, response_code, latency. Click a row → drawer with full request (URL, headers, body) and response (code, body), tentativa list, `[Reenviar agora]` button.
+Tabela das últimas 100 entregas com: ícone de status, event_type, timestamp, response_code, latência. Click numa linha → drawer com requisição completa (URL, headers, body) e response (code, body), lista de tentativas, botão `[Reenviar agora]`.
 
-Top-level action: `[Reenviar tudo]` (re-queues all `failed` deliveries).
+Ação no topo: `[Reenviar tudo]` (re-enfileira todas as entregas `failed`).
 
-### Empty/error states
-- No subscriptions yet → CTA card explaining what webhooks are + `[Criar primeiro webhook]`.
-- Subscription with 5+ consecutive failures → warning banner on list and detail.
+### Estados de empty/erro
+- Sem subscriptions ainda → CTA card explicando o que são webhooks + `[Criar primeiro webhook]`.
+- Subscription com 5+ falhas seguidas → banner de aviso na lista e detalhe.
 
-## 11. Security
+## 11. Segurança
 
-### Secret handling
-- **Generation:** 32-byte cryptographically random (`crypto.randomBytes(32)`), prefixed `whsec_` and base64url-encoded.
-- **At rest:** encrypted via `pgsodium` (preferred — Supabase native) or app-level KMS wrapping if pgsodium unavailable. Never stored in plaintext.
-- **Display:** plaintext shown **once** on creation in a one-time-view toast. Subsequent UI shows last 6 chars only (`whsec_••••••XYZ`).
-- **Rotation:** "Regenerate" creates new secret; old becomes `secret_previous` with 24h grace; signature header includes both during grace window. After 24h, old secret is purged. UI confirms with "Old secret will work for 24h to allow rollover."
+### Manuseio do secret
+- **Geração:** 32 bytes criptograficamente aleatórios (`crypto.randomBytes(32)`), prefixado com `whsec_` e codificado em base64url.
+- **Em repouso:** criptografado via `pgsodium` (preferencial — nativo do Supabase) ou wrapping KMS app-level se pgsodium indisponível. Nunca armazenado em texto puro.
+- **Display:** texto puro mostrado **uma vez** na criação num toast one-time-view. UI subsequente mostra só os últimos 6 chars (`whsec_••••••XYZ`).
+- **Rotação:** "Regenerar" cria um secret novo; antigo vira `secret_previous` com 24h de graça; header de assinatura inclui ambos durante a janela de graça. Após 24h, o antigo é purgado. UI confirma com "O secret antigo continuará funcionando por 24h pra permitir rollover."
 
-### URL validation & SSRF defense
-URL validation runs at **create time** AND inside `safe-fetch` at **delivery time** (DNS rebinding defense — TOCTOU-safe via `undici` Agent `connect` hook).
+### Validação de URL e defesa SSRF
+Validação de URL roda no **create time** E dentro do `safe-fetch` no **delivery time** (defesa contra DNS rebinding — TOCTOU-safe via hook `connect` do Agent do `undici`).
 
-- **Scheme:** `https://` only. (`http://localhost:*` allowed when `NODE_ENV !== 'production'` for testing.)
-- **Blocked IPv4 ranges:** `0.0.0.0/8`, `10.0.0.0/8`, `127.0.0.0/8`, `169.254.0.0/16` (link-local + AWS/GCP/Azure metadata at `169.254.169.254`), `172.16.0.0/12`, `192.168.0.0/16`, `224.0.0.0/4` (multicast), `240.0.0.0/4` (reserved).
-- **Blocked IPv6 ranges:** `::1/128` (loopback), `fc00::/7` (unique local), `fe80::/10` (link-local), `::ffff:0:0/96` IPv4-mapped private equivalents, `2001:db8::/32` (documentation).
-- **Blocked hostnames:** `metadata.google.internal`, `metadata.aws.internal`, `metadata.azure.com` (defense in depth — most are caught by IP block but DNS may resolve them differently).
-- **Implementation:** `safe-fetch.ts` builds an `undici` `Agent` with a custom `connect` callback that resolves the hostname, validates every returned IP against the blocklist, and rejects before opening the socket. **Redirects disabled** (`redirect: 'manual'`) — if the customer URL responds with a 3xx, the worker treats it as a non-retryable failure and surfaces the redirect Location in `error_message`.
-- **Note on Node `fetch`:** Node's built-in `fetch` doesn't expose DNS results before connect, which is why we use `undici` directly with a `dispatcher` option.
+- **Scheme:** só `https://`. (`http://localhost:*` permitido quando `NODE_ENV !== 'production'` pra teste.)
+- **Ranges IPv4 bloqueados:** `0.0.0.0/8`, `10.0.0.0/8`, `127.0.0.0/8`, `169.254.0.0/16` (link-local + metadata AWS/GCP/Azure em `169.254.169.254`), `172.16.0.0/12`, `192.168.0.0/16`, `224.0.0.0/4` (multicast), `240.0.0.0/4` (reservado).
+- **Ranges IPv6 bloqueados:** `::1/128` (loopback), `fc00::/7` (unique local), `fe80::/10` (link-local), `::ffff:0:0/96` equivalentes IPv4-mapped privados, `2001:db8::/32` (documentação).
+- **Hostnames bloqueados:** `metadata.google.internal`, `metadata.aws.internal`, `metadata.azure.com` (defesa em profundidade — a maioria é pega pelo block de IP, mas DNS pode resolver eles diferente).
+- **Implementação:** `safe-fetch.ts` constrói um `Agent` do `undici` com callback `connect` custom que resolve o hostname, valida cada IP retornado contra a blocklist, e rejeita antes de abrir o socket. **Redirects desabilitados** (`redirect: 'manual'`) — se a URL do cliente responder com 3xx, o worker trata como falha não-retentável e expõe o Location do redirect em `error_message`.
+- **Nota sobre `fetch` do Node:** o `fetch` built-in do Node não expõe resultados de DNS antes do connect, motivo pelo qual usamos `undici` direto com a opção `dispatcher`.
 
-### Other
-- **RLS:** enforced on `webhook_subscriptions` AND `webhook_deliveries` AND `browse_abandoned_emissions` (all org-scoped). Service-role only used by dispatcher and worker.
-- **Replay protection:** 5-minute timestamp window enforced on receiver side; documented in integration guide.
-- **Replay endpoint authorization:** manual replay requires the user to be a member of the org owning the subscription (server-side check on user JWT vs. delivery's `organization_id`).
-- **Rate limiting on test endpoint:** 10 test deliveries per subscription per hour.
-- **PII / LGPD:** `customer.created` and `order.*` payloads contain PII (name, email, phone, possibly CPF in shipping address). This is the explicit purpose of the integration. Mitigations:
-  - Org admins must accept a "Webhook payloads contain PII" consent on first webhook creation (one-time modal, recorded in `audit_logs`).
-  - 30-day delivery payload retention (§7) is the data-erasure safety net.
-  - Documentation explicitly tells integrators their endpoint is responsible for LGPD compliance on the receiving side.
+### Outros
+- **RLS:** aplicada em `webhook_subscriptions` E `webhook_deliveries` E `browse_abandoned_emissions` (todas escopadas por org). Service-role só usado pelo dispatcher e worker.
+- **Proteção de replay:** janela de 5 minutos de timestamp aplicada do lado do receiver; documentada no guia de integração.
+- **Autorização do endpoint de replay:** reenvio manual exige que o usuário seja membro da org dona da subscription (check server-side do JWT do usuário vs. `organization_id` da delivery).
+- **Rate limit no endpoint de teste:** 10 entregas de teste por subscription por hora.
+- **PII / LGPD:** payloads de `customer.created` e `order.*` contêm PII (nome, email, telefone, possivelmente CPF no endereço de envio). Esse é o propósito explícito da integração. Mitigações:
+  - Admins da org devem aceitar consentimento "Payloads de webhook contêm PII" na primeira criação de webhook (modal one-time, registrado em `audit_logs`).
+  - Retenção de 30 dias do payload de delivery (§7) é a rede de segurança pra apagamento.
+  - Documentação fala explicitamente que o endpoint do integrador é responsável pela conformidade LGPD do lado de quem recebe.
 
-## 12. Testing
+## 12. Testes
 
-### Unit tests
-- `outbound-dispatcher.test.ts` — N matching subscriptions → N deliveries inserted; non-matching events ignored; **same source event fired twice → ON CONFLICT DO NOTHING swallows duplicate (one row per sub)**
-- `event-id.test.ts` — deterministic derivation; same (source, source_event_id, event_type) → same `event_id`
-- `signature.test.ts` — HMAC matches reference vectors; constant-time verify; rejects tampered body; **dual-signature header during rotation accepts both**
-- `payload-builder.test.ts` — every event_type produces a payload conforming to its schema; **>256KB triggers truncation strategy correctly**
-- `safe-fetch.test.ts` — blocks IPv4 private ranges, IPv6 private ranges, cloud metadata hostnames; redirect attempts surface as failures
-- `secret-store.test.ts` — encrypt → decrypt round-trip; rotation flow (primary/previous/expiry) advances correctly
-- `browse-abandoned/detector.test.ts` — window edges, exclusion by add_to_cart, exclusion by order; **`browse_abandoned_emissions` ON CONFLICT prevents double emission across overlapping ticks**
-- `worker.test.ts` — atomic claim works (two concurrent workers, only one processes); 2xx → delivered; 4xx → failed; 5xx → retrying with `next_retry_at`; 4xx 408/429 treated as retryable; expired in_flight lease released by sweeper
+### Testes unit
+- `outbound-dispatcher.test.ts` — N subscriptions matching → N deliveries inseridas; eventos não-matching ignorados; **mesmo evento de origem disparado 2x → ON CONFLICT DO NOTHING engole duplicata (uma linha por sub)**
+- `event-id.test.ts` — derivação determinística; mesma (source, source_event_id, event_type) → mesmo `event_id`
+- `signature.test.ts` — HMAC bate com vetores de referência; verify de tempo constante; rejeita body adulterado; **header dual-signature durante rotação aceita ambos**
+- `payload-builder.test.ts` — todo event_type produz payload conforme schema; **>256KB dispara estratégia de truncamento corretamente**
+- `safe-fetch.test.ts` — bloqueia ranges IPv4 privados, ranges IPv6 privados, hostnames de metadata cloud; tentativas de redirect aparecem como falha
+- `secret-store.test.ts` — round-trip encrypt → decrypt; fluxo de rotação (primário/anterior/expiry) avança certo
+- `browse-abandoned/detector.test.ts` — bordas da janela, exclusão por add_to_cart, exclusão por order; **ON CONFLICT em `browse_abandoned_emissions` impede emissão dupla em ticks que sobrepõem**
+- `worker.test.ts` — reivindicação atômica funciona (dois workers concorrentes, só um processa); 2xx → delivered; 4xx → failed; 5xx → retrying com `next_retry_at`; 4xx 408/429 tratados como retentáveis; lease in_flight expirado liberado pelo sweeper
 
-### Integration tests
-- Subscription test endpoint posting to a mock server (`webhook.site`-style or in-process) — confirm signature validates and 2xx response transitions delivery to `delivered`
-- Idempotency: same delivery row processed twice never POSTs twice (status check in worker)
+### Testes de integração
+- Endpoint de teste de subscription postando pra mock server (`webhook.site` ou in-process) — confirma que assinatura valida e response 2xx transiciona delivery pra `delivered`
+- Idempotência: mesma linha de delivery processada 2x nunca faz POST 2x (check de status no worker)
 
-### Manual smoke
-- Create subscription via UI pointing at `https://webhook.site/<id>`
-- Trigger test order in Shopify dev store
-- Verify payload received, signature valid, delivery row marked `delivered`
-- Pause subscription, trigger another event, verify no delivery created
-- Trigger event with deliberately failing URL (return 500), verify retry sequence
+### Smoke manual
+- Criar subscription via UI apontando pra `https://webhook.site/<id>`
+- Disparar pedido teste na dev store da Shopify
+- Verificar payload recebido, assinatura válida, linha de delivery marcada `delivered`
+- Pausar subscription, disparar outro evento, verificar que nenhuma delivery foi criada
+- Disparar evento com URL deliberadamente falha (retorna 500), verificar sequência de retry
 
-## 13. Rollout Plan
+## 13. Plano de Rollout
 
-| Phase | Scope | Estimate |
+| Fase | Escopo | Estimativa |
 |---|---|---|
-| 1. Foundation | Migrations, dispatcher, worker, HMAC, unit tests | 2-3 days |
-| 2. Event coverage | Instrument 4 handlers (audit §8), add new EventType entries | 1-2 days |
-| 3. UI | List, create/edit, deliveries log, drawer, replay, test endpoint | 2-3 days |
-| 4. Browse abandoned | Detector + cron + tests | 1-2 days |
-| 5. Docs | Public integrator guide (payload reference, HMAC validation in Node/PHP/Python) | 0.5 day |
+| 1. Fundação | Migrations, dispatcher, worker, HMAC, testes unit | 2-3 dias |
+| 2. Cobertura de eventos | Instrumentar 4 handlers (auditoria §8), adicionar entradas novas no EventType | 1-2 dias |
+| 3. UI | Lista, criar/editar, log de entregas, drawer, replay, endpoint de teste | 2-3 dias |
+| 4. Browse abandoned | Detector + cron + testes | 1-2 dias |
+| 5. Docs | Guia público pro integrador (referência de payload, validação HMAC em Node/PHP/Python) | 0.5 dia |
 
-**Total:** ~9-12 focused days.
+**Total:** ~9-12 dias de trabalho focado.
 
-## 14. Open Questions / Future Work (post-v1)
+## 14. Perguntas em Aberto / Trabalho Futuro (pós-v1)
 
-- Formal DLQ UI with bulk replay and date filters
-- Event versioning strategy when v2 schema is needed
-- Internal event subscriptions (`automation.triggered`, `deal.stage_changed`, etc.)
-- Webhook templates for popular integrations (Slack, Discord, Make, n8n) — pre-filled URL + selected events
-- Per-event payload customization (subset of fields)
-- Batched delivery (multiple events in a single POST) — for high-volume integrators
-- Metrics dashboard: delivery success rate per subscription, p50/p95 latency, top failing URLs
-- Per-org browse-abandoned cron sharding via QStash fan-out (when org count exceeds single-tick budget)
-- Active LGPD data-erasure propagation (today: best-effort via 30-day retention prune)
+- UI formal de DLQ com reenvio em massa e filtros de data
+- Estratégia de versionamento quando schema v2 for necessário
+- Inscrições em eventos internos (`automation.triggered`, `deal.stage_changed`, etc.)
+- Templates de webhook pras integrações populares (Slack, Discord, Make, n8n) — URL pré-preenchida + eventos selecionados
+- Customização de payload por evento (subset de fields)
+- Entrega em batch (múltiplos eventos num só POST) — pra integradores de alto volume
+- Dashboard de métricas: taxa de sucesso de entrega por subscription, latência p50/p95, top URLs com falha
+- Sharding do cron de browse-abandoned por org via QStash fan-out (quando a contagem de orgs exceder o budget de single-tick)
+- Propagação ativa de apagamento LGPD (hoje: best-effort via purge de retenção de 30 dias)
