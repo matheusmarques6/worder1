@@ -60,7 +60,6 @@ export async function POST(
     .from('saved_blocks')
     .update({
       block_json: ver.block_json,
-      updated_at: new Date().toISOString(),
     })
     .eq('id', params.id)
     .eq('organization_id', auth.user.organization_id)

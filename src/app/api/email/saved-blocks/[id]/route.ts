@@ -27,7 +27,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (!auth) return authError()
     const body = await request.json()
 
-    const updateData: Record<string, any> = { updated_at: new Date().toISOString() }
+    const updateData: Record<string, any> = {}
     if (body.name !== undefined) updateData.name = body.name
     if (body.category !== undefined) updateData.category = body.category
     if (body.block_json !== undefined) updateData.block_json = body.block_json
