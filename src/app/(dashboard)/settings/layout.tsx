@@ -12,6 +12,7 @@ const tabs = [
   { title: 'Atribuição', href: '/settings/attribution' },
   { title: 'Dados', href: '/settings/lgpd' },
   { title: 'API', href: '/settings/api' },
+  { title: 'Webhooks', href: '/settings/webhooks' },
   { title: 'Segurança', href: '/settings/security' },
 ]
 
