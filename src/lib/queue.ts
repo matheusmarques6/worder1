@@ -525,6 +525,34 @@ export async function enqueueShopifyWebhook(
   }
 }
 
+/**
+ * Enfileira uma tentativa de entrega de webhook de saída.
+ * Chamado pelo outbound-dispatcher logo após inserir a linha em
+ * webhook_deliveries. O QStash fará retries próprios (5) e, caso o
+ * enqueue aqui falhe, o cron sweeper reenfileira a delivery.
+ */
+export async function enqueueWebhookDelivery(
+  deliveryId: string
+): Promise<string | null> {
+  const client = getQStashClient();
+  if (!client) {
+    throw new Error('QSTASH_TOKEN not configured');
+  }
+
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) {
+    throw new Error('APP_URL not configured');
+  }
+
+  const response = await client.publishJSON({
+    url: `${baseUrl}/api/workers/webhook-delivery`,
+    body: { deliveryId },
+    retries: 5,
+  });
+
+  return response.messageId;
+}
+
 export default {
   isQStashConfigured,
   enqueueAutomationRun,
@@ -532,6 +560,7 @@ export default {
   enqueueEmailSend,
   enqueueWhatsAppSend,
   enqueueShopifyWebhook,
+  enqueueWebhookDelivery,
   verifyQStashSignature,
   calculateDelaySeconds,
   scheduleAutomationRun,
