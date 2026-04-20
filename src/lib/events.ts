@@ -163,6 +163,32 @@ class EventBusClass {
       // 1. Registrar o evento no log
       await this.logEvent(eventType, payload);
 
+      // 1.5. Outbound webhooks dispatch (fallback silencioso — não pode
+      // quebrar o fluxo de automação). Só dispatcha eventos do catálogo v1
+      // e quando o handler origem setou _webhook_dispatch_meta no payload.
+      try {
+        const OUTBOUND_V1_CATALOG = new Set([
+          'order.created', 'order.paid', 'order.fulfilled', 'order.cancelled',
+          'checkout.abandoned', 'customer.created', 'shipment.tracking_created',
+          'payment.pix.abandoned', 'payment.boleto.abandoned', 'browse.abandoned',
+        ]);
+        if (OUTBOUND_V1_CATALOG.has(eventType) && payload.data?._webhook_dispatch_meta) {
+          const meta = payload.data._webhook_dispatch_meta;
+          const { dispatchToOutbound } = await import('./webhooks/outbound-dispatcher');
+          await dispatchToOutbound({
+            eventType: eventType as any,
+            organizationId: payload.organization_id,
+            storeId: meta.store_id,
+            sourceEventId: meta.source_event_id,
+            source: meta.source,
+            store: meta.store,
+            data: payload.data,
+          });
+        }
+      } catch (err) {
+        console.error('[EventBus] outbound dispatch failed:', err);
+      }
+
       // 2. Buscar automações ativas que correspondem ao trigger
       const triggerType = EVENT_TO_TRIGGER_MAP[eventType];
       const automations = await this.findMatchingAutomations(
