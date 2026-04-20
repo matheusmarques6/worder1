@@ -57,6 +57,12 @@ export enum EventType {
   
   // Webhooks customizados
   WEBHOOK_RECEIVED = 'webhook.received',
+
+  // E-commerce — pagamentos e logística (outbound webhooks v1)
+  SHIPMENT_TRACKING_CREATED = 'shipment.tracking_created',
+  PAYMENT_PIX_ABANDONED = 'payment.pix.abandoned',
+  PAYMENT_BOLETO_ABANDONED = 'payment.boleto.abandoned',
+  BROWSE_ABANDONED = 'browse.abandoned',
 }
 
 // Mapeamento de EventType para trigger_type do banco
@@ -90,6 +96,10 @@ const EVENT_TO_TRIGGER_MAP: Record<EventType, string> = {
   [EventType.SEGMENT_ENTERED]: 'trigger_segment',
   [EventType.SEGMENT_LEFT]: 'trigger_segment_left',
   [EventType.WEBHOOK_RECEIVED]: 'trigger_webhook',
+  [EventType.SHIPMENT_TRACKING_CREATED]: 'trigger_shipment_tracking',
+  [EventType.PAYMENT_PIX_ABANDONED]: 'trigger_payment_pix_abandoned',
+  [EventType.PAYMENT_BOLETO_ABANDONED]: 'trigger_payment_boleto_abandoned',
+  [EventType.BROWSE_ABANDONED]: 'trigger_browse_abandoned',
 };
 
 // ============================================
