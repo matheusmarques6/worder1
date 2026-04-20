@@ -251,7 +251,7 @@ export function SyncConfigTab({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+        <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
       </div>
     )
   }
@@ -261,15 +261,15 @@ export function SyncConfigTab({
       {/* ========================================
           Customer Sync Section
       ======================================== */}
-      <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-2xl">
+      <div className="p-5 bg-gray-50 border border-gray-200 rounded-2xl">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-500/20 rounded-lg">
               <Users className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-white">Novos Clientes</h3>
-              <p className="text-xs text-dark-400">
+              <h3 className="text-base font-semibold text-gray-900">Novos Clientes</h3>
+              <p className="text-xs text-gray-500">
                 Criar contato quando cliente se cadastrar na Shopify
               </p>
             </div>
@@ -281,16 +281,16 @@ export function SyncConfigTab({
               onChange={(e) => setConfig(prev => ({ ...prev, sync_new_customers: e.target.checked }))}
               className="sr-only peer"
             />
-            <div className="w-11 h-6 bg-dark-600 rounded-full peer peer-checked:bg-primary-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+            <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-primary-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
           </label>
         </div>
 
         {config.sync_new_customers && (
-          <div className="space-y-4 pt-4 border-t border-dark-700">
+          <div className="space-y-4 pt-4 border-t border-gray-200">
             {/* Contact Type */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Tipo do Contato
                 </label>
                 <select
@@ -299,7 +299,7 @@ export function SyncConfigTab({
                     ...prev, 
                     customer_contact_type: e.target.value as any 
                   }))}
-                  className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
                 >
                   <option value="lead">Lead</option>
                   <option value="customer">Customer</option>
@@ -308,7 +308,7 @@ export function SyncConfigTab({
               </div>
               
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Criar Deal para Cliente?
                 </label>
                 <select
@@ -317,7 +317,7 @@ export function SyncConfigTab({
                     ...prev, 
                     create_deal_for_customer: e.target.value === 'yes' 
                   }))}
-                  className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
                 >
                   <option value="no">Não criar deal</option>
                   <option value="yes">Sim, criar deal</option>
@@ -329,7 +329,7 @@ export function SyncConfigTab({
             {config.create_deal_for_customer && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-dark-400 mb-2">
+                  <label className="block text-sm text-gray-500 mb-2">
                     Pipeline
                   </label>
                   <select
@@ -339,7 +339,7 @@ export function SyncConfigTab({
                       customer_pipeline_id: e.target.value || null,
                       customer_stage_id: null,
                     }))}
-                    className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
+                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
                   >
                     <option value="">Selecione...</option>
                     {pipelines.map(p => (
@@ -349,7 +349,7 @@ export function SyncConfigTab({
                 </div>
                 
                 <div>
-                  <label className="block text-sm text-dark-400 mb-2">
+                  <label className="block text-sm text-gray-500 mb-2">
                     Estágio Inicial
                   </label>
                   <select
@@ -359,7 +359,7 @@ export function SyncConfigTab({
                       customer_stage_id: e.target.value || null 
                     }))}
                     disabled={!config.customer_pipeline_id}
-                    className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50 transition-colors"
+                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50 transition-colors"
                   >
                     <option value="">Selecione...</option>
                     {getStagesForPipeline(config.customer_pipeline_id).map(s => (
@@ -372,7 +372,7 @@ export function SyncConfigTab({
 
             {/* Tags */}
             <div>
-              <label className="block text-sm text-dark-400 mb-2">
+              <label className="block text-sm text-gray-500 mb-2">
                 Tags Automáticas
               </label>
               <div className="flex flex-wrap gap-2 mb-2">
@@ -398,11 +398,11 @@ export function SyncConfigTab({
                   onChange={(e) => setNewCustomerTag(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addTag('customer', newCustomerTag)}
                   placeholder="Nova tag..."
-                  className="flex-1 px-4 py-2 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                  className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
                 />
                 <button
                   onClick={() => addTag('customer', newCustomerTag)}
-                  className="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-xl text-white text-sm transition-colors"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-white text-sm transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
@@ -415,15 +415,15 @@ export function SyncConfigTab({
       {/* ========================================
           Order Sync Section
       ======================================== */}
-      <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-2xl">
+      <div className="p-5 bg-gray-50 border border-gray-200 rounded-2xl">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-green-500/20 rounded-lg">
               <ShoppingBag className="w-5 h-5 text-green-400" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-white">Novos Pedidos</h3>
-              <p className="text-xs text-dark-400">
+              <h3 className="text-base font-semibold text-gray-900">Novos Pedidos</h3>
+              <p className="text-xs text-gray-500">
                 Criar deal quando um pedido for criado
               </p>
             </div>
@@ -435,15 +435,15 @@ export function SyncConfigTab({
               onChange={(e) => setConfig(prev => ({ ...prev, sync_new_orders: e.target.checked }))}
               className="sr-only peer"
             />
-            <div className="w-11 h-6 bg-dark-600 rounded-full peer peer-checked:bg-primary-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+            <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-primary-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
           </label>
         </div>
 
         {config.sync_new_orders && (
-          <div className="space-y-4 pt-4 border-t border-dark-700">
+          <div className="space-y-4 pt-4 border-t border-gray-200">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Pipeline de Vendas
                 </label>
                 <select
@@ -453,7 +453,7 @@ export function SyncConfigTab({
                     order_pipeline_id: e.target.value || null,
                     order_stage_id: null,
                   }))}
-                  className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
                 >
                   <option value="">Selecione...</option>
                   {pipelines.map(p => (
@@ -463,7 +463,7 @@ export function SyncConfigTab({
               </div>
               
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Estágio Inicial
                 </label>
                 <select
@@ -473,7 +473,7 @@ export function SyncConfigTab({
                     order_stage_id: e.target.value || null 
                   }))}
                   disabled={!config.order_pipeline_id}
-                  className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50 transition-colors"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50 transition-colors"
                 >
                   <option value="">Selecione...</option>
                   {getStagesForPipeline(config.order_pipeline_id).map(s => (
@@ -485,7 +485,7 @@ export function SyncConfigTab({
 
             {/* Tags */}
             <div>
-              <label className="block text-sm text-dark-400 mb-2">
+              <label className="block text-sm text-gray-500 mb-2">
                 Tags Automáticas
               </label>
               <div className="flex flex-wrap gap-2 mb-2">
@@ -511,11 +511,11 @@ export function SyncConfigTab({
                   onChange={(e) => setNewOrderTag(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addTag('order', newOrderTag)}
                   placeholder="Nova tag..."
-                  className="flex-1 px-4 py-2 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
+                  className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
                 />
                 <button
                   onClick={() => addTag('order', newOrderTag)}
-                  className="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-xl text-white text-sm transition-colors"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-white text-sm transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
@@ -528,15 +528,15 @@ export function SyncConfigTab({
       {/* ========================================
           Abandoned Checkout Section
       ======================================== */}
-      <div className="p-5 bg-dark-800/50 border border-dark-700 rounded-2xl">
+      <div className="p-5 bg-gray-50 border border-gray-200 rounded-2xl">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-amber-500/20 rounded-lg">
               <ShoppingCart className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-white">Carrinho Abandonado</h3>
-              <p className="text-xs text-dark-400">
+              <h3 className="text-base font-semibold text-gray-900">Carrinho Abandonado</h3>
+              <p className="text-xs text-gray-500">
                 Criar deal quando checkout for abandonado
               </p>
             </div>
@@ -548,15 +548,15 @@ export function SyncConfigTab({
               onChange={(e) => setConfig(prev => ({ ...prev, sync_abandoned_checkouts: e.target.checked }))}
               className="sr-only peer"
             />
-            <div className="w-11 h-6 bg-dark-600 rounded-full peer peer-checked:bg-primary-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+            <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-primary-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
           </label>
         </div>
 
         {config.sync_abandoned_checkouts && (
-          <div className="space-y-4 pt-4 border-t border-dark-700">
+          <div className="space-y-4 pt-4 border-t border-gray-200">
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Pipeline
                 </label>
                 <select
@@ -566,7 +566,7 @@ export function SyncConfigTab({
                     abandoned_pipeline_id: e.target.value || null,
                     abandoned_stage_id: null,
                   }))}
-                  className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
                 >
                   <option value="">Selecione...</option>
                   {pipelines.map(p => (
@@ -576,7 +576,7 @@ export function SyncConfigTab({
               </div>
               
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Estágio
                 </label>
                 <select
@@ -586,7 +586,7 @@ export function SyncConfigTab({
                     abandoned_stage_id: e.target.value || null 
                   }))}
                   disabled={!config.abandoned_pipeline_id}
-                  className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50 transition-colors"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50 transition-colors"
                 >
                   <option value="">Selecione...</option>
                   {getStagesForPipeline(config.abandoned_pipeline_id).map(s => (
@@ -596,7 +596,7 @@ export function SyncConfigTab({
               </div>
               
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Delay (minutos)
                 </label>
                 <input
@@ -608,7 +608,7 @@ export function SyncConfigTab({
                   }))}
                   min={15}
                   max={1440}
-                  className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-white text-sm focus:outline-none focus:border-primary-500 transition-colors"
                 />
               </div>
             </div>
@@ -619,7 +619,7 @@ export function SyncConfigTab({
       {/* ========================================
           Save Button
       ======================================== */}
-      <div className="flex items-center justify-between pt-4 border-t border-dark-700">
+      <div className="flex items-center justify-between pt-4 border-t border-gray-200">
         {error && (
           <div className="flex items-center gap-2 text-red-400 text-sm">
             <AlertCircle className="w-4 h-4" />
@@ -639,7 +639,7 @@ export function SyncConfigTab({
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-white font-medium transition-colors"
+          className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded-xl text-gray-900 font-medium transition-colors"
         >
           {saving ? (
             <>

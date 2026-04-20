@@ -68,10 +68,10 @@ function ConversationItem({
       animate={{ opacity: 1, x: 0 }}
       onClick={onClick}
       className={`
-        flex items-start gap-3 p-4 cursor-pointer border-b border-dark-700/30 transition-all
+        flex items-start gap-3 p-4 cursor-pointer border-b border-gray-200/30 transition-all
         ${isSelected 
-          ? 'bg-primary-500/10 border-l-2 border-l-primary-500' 
-          : 'hover:bg-dark-800/50 border-l-2 border-l-transparent'
+          ? 'bg-brand-50 border-l-2 border-l-primary-500' 
+          : 'hover:bg-gray-50 border-l-2 border-l-transparent'
         }
       `}
     >
@@ -86,7 +86,7 @@ function ConversationItem({
         ) : (
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 
                           flex items-center justify-center">
-            <span className="text-white font-semibold text-sm">
+            <span className="text-gray-900 font-semibold text-sm">
               {getInitials(conversation.contact_name || conversation.phone_number)}
             </span>
           </div>
@@ -95,7 +95,7 @@ function ConversationItem({
         {/* Bot indicator */}
         {conversation.is_bot_active && (
           <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-primary-500 rounded-full 
-                          flex items-center justify-center border-2 border-dark-900">
+                          flex items-center justify-center border-2 border-gray-200">
             <Bot className="w-3 h-3 text-white" />
           </div>
         )}
@@ -104,24 +104,24 @@ function ConversationItem({
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2 mb-1">
-          <span className={`font-medium truncate ${hasUnread ? 'text-white' : 'text-dark-200'}`}>
+          <span className={`font-medium truncate ${hasUnread ? 'text-white' : 'text-gray-700'}`}>
             {name}
           </span>
           <span className={`text-xs flex-shrink-0 ${
-            hasUnread ? 'text-primary-400 font-medium' : 'text-dark-500'
+            hasUnread ? 'text-brand-600 font-medium' : 'text-gray-400'
           }`}>
             {formatTime(conversation.last_message_at)}
           </span>
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <p className={`text-sm truncate ${hasUnread ? 'text-dark-300' : 'text-dark-500'}`}>
+          <p className={`text-sm truncate ${hasUnread ? 'text-gray-600' : 'text-gray-400'}`}>
             {conversation.last_message_preview || 'Nova conversa'}
           </p>
           
           {hasUnread && (
             <span className="flex-shrink-0 px-2 py-0.5 bg-primary-500 rounded-full 
-                           text-[10px] font-bold text-white min-w-[20px] text-center">
+                           text-[10px] font-bold text-gray-900 min-w-[20px] text-center">
               {conversation.unread_count > 99 ? '99+' : conversation.unread_count}
             </span>
           )}
@@ -133,13 +133,13 @@ function ConversationItem({
             {conversation.contact_tags.slice(0, 2).map((tag, i) => (
               <span 
                 key={i}
-                className="px-2 py-0.5 bg-dark-700/50 rounded text-[10px] text-dark-300 truncate max-w-[80px]"
+                className="px-2 py-0.5 bg-gray-100 rounded text-[10px] text-gray-600 truncate max-w-[80px]"
               >
                 {tag}
               </span>
             ))}
             {conversation.contact_tags.length > 2 && (
-              <span className="px-2 py-0.5 bg-dark-700/50 rounded text-[10px] text-dark-400">
+              <span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] text-gray-500">
                 +{conversation.contact_tags.length - 2}
               </span>
             )}
@@ -152,7 +152,7 @@ function ConversationItem({
             <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
               conversation.priority === 'urgent' ? 'bg-error-500/20 text-error-400' :
               conversation.priority === 'high' ? 'bg-warning-500/20 text-warning-400' :
-              'bg-dark-700/50 text-dark-400'
+              'bg-gray-100 text-gray-500'
             }`}>
               {conversation.priority === 'urgent' ? 'Urgente' : 
                conversation.priority === 'high' ? 'Alta' : 'Baixa'}
@@ -174,19 +174,19 @@ export function ConversationList({
   if (isLoading && conversations.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+        <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
       </div>
     )
   }
 
   if (conversations.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-dark-400 p-8">
-        <div className="w-16 h-16 rounded-2xl bg-dark-800/50 flex items-center justify-center mb-4">
+      <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-8">
+        <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
           <MessageSquare className="w-8 h-8 opacity-50" />
         </div>
         <p className="text-sm font-medium">Nenhuma conversa</p>
-        <p className="text-xs text-dark-500 mt-1 text-center">
+        <p className="text-xs text-gray-400 mt-1 text-center">
           Aguardando novas mensagens ou inicie uma nova conversa
         </p>
       </div>

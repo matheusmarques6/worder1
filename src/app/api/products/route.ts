@@ -100,17 +100,63 @@ export async function GET(request: NextRequest) {
 
     // Buscar produtos de cada loja
     const allProducts: any[] = [];
+    let allCollections: any[] = [];
+    const storePrimaryDomains = new Map<string, string>();
 
     for (const store of stores) {
       if (!store.shop_domain || !store.access_token) continue;
 
       try {
+        // Fetch primary domain (custom domain instead of myshopify)
+        let primaryDomain = store.shop_domain
+        try {
+          const { body: shopData } = await shopifyFetch(store.shop_domain, store.access_token, '/shop.json')
+          if (shopData?.shop?.domain) {
+            primaryDomain = shopData.shop.domain
+          }
+        } catch {}
+
         let endpoint = '/products.json?limit=250';
         if (search) {
           endpoint += `&title=${encodeURIComponent(search)}`;
         }
 
         const { body } = await shopifyFetch(store.shop_domain, store.access_token, endpoint);
+
+        // Fetch collections
+        let collections: any[] = []
+        try {
+          const { body: customCols } = await shopifyFetch(store.shop_domain, store.access_token, '/custom_collections.json?limit=250')
+          const { body: smartCols } = await shopifyFetch(store.shop_domain, store.access_token, '/smart_collections.json?limit=250')
+          collections = [
+            ...(customCols.custom_collections || []).map((c: any) => ({ id: c.id, title: c.title, handle: c.handle, products_count: c.products_count || 0 })),
+            ...(smartCols.smart_collections || []).map((c: any) => ({ id: c.id, title: c.title, handle: c.handle, products_count: c.products_count || 0 })),
+          ]
+        } catch (err) {
+          console.error('Error fetching collections:', err)
+        }
+
+        // Fetch collects to map products to collections
+        let collects: any[] = []
+        try {
+          const { body: collectsData } = await shopifyFetch(store.shop_domain, store.access_token, '/collects.json?limit=250')
+          collects = collectsData.collects || []
+        } catch {}
+
+        // Build product -> collection titles map
+        const productCollections = new Map<string, string[]>()
+        for (const collect of collects) {
+          const colTitle = collections.find(c => c.id === collect.collection_id)?.title
+          if (colTitle) {
+            const existing = productCollections.get(String(collect.product_id)) || []
+            existing.push(colTitle)
+            productCollections.set(String(collect.product_id), existing)
+          }
+        }
+
+        // Store per-store data for the response
+        storePrimaryDomains.set(store.id, primaryDomain)
+        allCollections = [...allCollections, ...collections]
 
         const products = (body.products || []).map((product: any) => {
           // Verificar se tem custo cadastrado
@@ -138,11 +184,13 @@ export async function GET(request: NextRequest) {
           return {
             id: product.id,
             title: product.title,
+            handle: product.handle,
             vendor: product.vendor,
             product_type: product.product_type,
             status: product.status,
             tags: product.tags?.split(',').map((t: string) => t.trim()) || [],
             image: product.image?.src || product.images?.[0]?.src || null,
+            url: `https://${primaryDomain}/products/${product.handle}`,
 
             // Preços
             price_min: Math.min(...prices),
@@ -157,6 +205,9 @@ export async function GET(request: NextRequest) {
             cost: productCost?.cost_amount || null,
             cost_currency: productCost?.cost_currency || 'BRL',
             cost_id: productCost?.id || null,
+
+            // Coleções
+            collections: productCollections.get(String(product.id)) || (product.product_type ? [product.product_type] : []),
 
             // Loja
             store_id: store.id,
@@ -193,7 +244,8 @@ export async function GET(request: NextRequest) {
           ? Math.round((withCostCount / allProducts.length) * 100)
           : 0,
       },
-      stores: stores.map(s => ({ id: s.id, name: s.shop_name, domain: s.shop_domain })),
+      collections: allCollections,
+      stores: stores.map(s => ({ id: s.id, name: s.shop_name, domain: s.shop_domain, primaryDomain: storePrimaryDomains.get(s.id) || s.shop_domain })),
     });
 
   } catch (error: any) {

@@ -1,11 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import crypto from 'crypto';
+
 export const dynamic = 'force-dynamic';
+
+const SHOPIFY_CLIENT_ID = process.env.SHOPIFY_CLIENT_ID || '';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || '';
+
+// Scopes declared here must be allowed in the Partner Dashboard for this app.
+// 'read_checkouts' was removed — it's not a valid Shopify scope (checkouts
+// data is exposed via order/checkout webhooks and through the orders scope).
+// 'read_all_orders' requires separate approval and has been dropped.
+// Added: write_discounts/read_discounts + write_price_rules so flows can
+// generate coupon codes, and read_draft_orders for CRM completeness.
+const SCOPES = [
+  'read_orders', 'read_draft_orders',
+  'read_customers', 'write_customers',
+  'read_products', 'read_inventory',
+  'read_discounts', 'write_discounts',
+  'read_price_rules', 'write_price_rules',
+  'write_pixels', 'read_customer_events',
+  'read_shipping', 'read_fulfillments',
+  'read_marketing_events',
+].join(',');
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const organizationId = auth.user.organization_id;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -15,16 +37,40 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Shop domain required' }, { status: 400 });
     }
 
-    const clientId = process.env.SHOPIFY_CLIENT_ID;
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/shopify/callback`;
-    const scopes = 'read_products,read_orders,read_customers,write_customers';
-    const state = Buffer.from(JSON.stringify({ organizationId, userId: auth.user.id })).toString('base64');
+    // Normalize domain
+    const normalizedShop = shop.includes('.myshopify.com')
+      ? shop
+      : `${shop}.myshopify.com`;
 
-    const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${clientId}&scope=${scopes}&redirect_uri=${redirectUri}&state=${state}`;
+    // Generate secure random state
+    const state = crypto.randomBytes(32).toString('hex');
+
+    // Save state in oauth_states table (correct column: state_token)
+    const supabase = getSupabaseAdmin();
+    await supabase.from('oauth_states').insert({
+      state_token: state,
+      data: {
+        organization_id: auth.user.organization_id,
+        user_id: auth.user.id,
+        provider: 'shopify',
+        shop: normalizedShop,
+      },
+      expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    });
+
+    // Build OAuth authorization URL
+    const redirectUri = `${APP_URL}/api/integrations/shopify/callback`;
+    const authUrl = `https://${normalizedShop}/admin/oauth/authorize?` +
+      new URLSearchParams({
+        client_id: SHOPIFY_CLIENT_ID,
+        scope: SCOPES,
+        redirect_uri: redirectUri,
+        state,
+      }).toString();
 
     return NextResponse.json({ authUrl });
   } catch (error: any) {
-    console.error('Shopify Auth GET error:', error);
+    console.error('[Shopify Auth] Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { AIAgent, DEFAULT_PERSONA, DEFAULT_SETTINGS } from '@/lib/ai/types'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 // =====================================================
@@ -17,6 +18,12 @@ function getSupabase() {
 
 export async function GET(request: NextRequest) {
   try {
+    // ✅ CORREÇÃO: Validar autenticação
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
     const supabase = getSupabase()
 
     // Parâmetros
@@ -26,8 +33,13 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
+    // ✅ CORREÇÃO: Validar organization_id contra o usuário autenticado
     if (!organizationId) {
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    }
+
+    if (organizationId !== auth.user.organization_id) {
+      return NextResponse.json({ error: 'Acesso não autorizado a esta organização' }, { status: 403 })
     }
 
     // Query

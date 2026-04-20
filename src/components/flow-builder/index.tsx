@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import '@/styles/flow-builder.css';
@@ -62,9 +62,60 @@ export function FlowBuilder({
   const showHistoryPanel = useFlowStore((state) => state.showHistoryPanel);
   const toggleHistoryPanel = useFlowStore((state) => state.toggleHistoryPanel);
   const isFullscreen = useFlowStore((state) => state.isFullscreen);
+  const showAnalytics = useFlowStore((state) => state.showAnalytics);
+  const setAnalyticsData = useFlowStore((state) => state.setAnalyticsData);
+  const analyticsTimeframe = useFlowStore((state) => state.analyticsTimeframe);
 
   // Local state for saved automation ID
   const [savedAutomationId, setSavedAutomationId] = useState<string | undefined>(automationId);
+
+  // Fetch analytics when toggle is on
+  useEffect(() => {
+    if (!showAnalytics || !savedAutomationId || savedAutomationId === 'new') return;
+
+    const fetchAnalytics = async () => {
+      try {
+        const res = await fetch(
+          `/api/automations/${savedAutomationId}/stats?timeframe=${analyticsTimeframe}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.nodeStats) {
+            setAnalyticsData(data.nodeStats);
+          }
+        }
+      } catch {
+        // Non-blocking
+      }
+    };
+
+    fetchAnalytics();
+  }, [showAnalytics, savedAutomationId, analyticsTimeframe, setAnalyticsData]);
+
+  // Auto-save: debounced save when flow changes
+  const isDirty = useFlowStore((state) => state.isDirty);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!isDirty || !savedAutomationId || savedAutomationId === 'new') return;
+
+    // Clear previous timer
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+
+    // Debounce: save after 2 seconds of no changes
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        await onSave();
+        useFlowStore.getState().setDirty(false);
+      } catch {
+        // Silent fail — user can still manual save
+      }
+    }, 2000);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [isDirty, savedAutomationId, onSave]);
 
   // Convert legacy nodes to new format
   const convertLegacyNodes = useCallback((legacyNodes: any[]): FlowNode[] => {
@@ -86,6 +137,7 @@ export function FlowBuilder({
           description: node.data?.description || definition?.description || '',
           category,
           nodeType: node.type,
+          icon: node.data?.icon || definition?.icon?.displayName || '',
           config: node.data?.config || {},
           status: node.data?.status,
         },
@@ -118,8 +170,30 @@ export function FlowBuilder({
       edges: convertedEdges,
     });
 
+    // Keyboard shortcuts
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger in input/textarea
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        useFlowStore.getState().undo();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        useFlowStore.getState().redo();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        useFlowStore.getState().redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
     // Cleanup on unmount
     return () => {
+      window.removeEventListener('keydown', handleKeyDown);
       resetStore();
     };
   }, []);
@@ -154,7 +228,7 @@ export function FlowBuilder({
 
   return (
     <ReactFlowProvider>
-      <div className="h-screen w-screen flex flex-col bg-dark-900 overflow-hidden">
+      <div className="h-screen w-screen flex flex-col bg-white overflow-hidden">
         {/* Toolbar */}
         <Toolbar
           onSave={handleSave}
@@ -165,18 +239,19 @@ export function FlowBuilder({
 
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Sidebar - hidden in fullscreen */}
-          {!isFullscreen && <Sidebar />}
+          {/* Left panel: Sidebar OR Properties Panel (Klaviyo style) */}
+          {!isFullscreen && (
+            showPropertiesPanel ? (
+              <PropertiesPanel organizationId={organizationId} automationId={savedAutomationId} />
+            ) : (
+              <Sidebar />
+            )
+          )}
 
           {/* Canvas */}
-          <div className="flex-1 relative bg-dark-800">
+          <div className="flex-1 relative">
             <Canvas />
           </div>
-
-          {/* Properties Panel - hidden in fullscreen */}
-          {showPropertiesPanel && !isFullscreen && (
-            <PropertiesPanel organizationId={organizationId} automationId={savedAutomationId} />
-          )}
         </div>
 
         {/* Execution Panel */}
@@ -191,17 +266,17 @@ export function FlowBuilder({
         {/* Execution Panel - Fallback for unsaved automations */}
         {showTestModal && (!savedAutomationId || savedAutomationId === 'new' || !organizationId) && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-md shadow-xl">
-              <h3 className="text-lg font-semibold text-white mb-2">
+            <div className="bg-white border border-gray-300 rounded-xl p-6 max-w-md shadow-xl">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Salve a automação primeiro
               </h3>
-              <p className="text-dark-300 text-sm mb-4">
+              <p className="text-gray-600 text-sm mb-4">
                 Para testar a automação, você precisa salvá-la primeiro.
               </p>
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={handleCloseTestModal}
-                  className="px-4 py-2 rounded-lg text-dark-300 hover:text-white hover:bg-dark-700 transition-colors"
+                  className="px-4 py-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                 >
                   Fechar
                 </button>
@@ -210,7 +285,7 @@ export function FlowBuilder({
                     handleCloseTestModal();
                     await handleSave();
                   }}
-                  className="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
                 >
                   Salvar Agora
                 </button>
@@ -231,17 +306,17 @@ export function FlowBuilder({
         {/* History Panel - Fallback for unsaved automations */}
         {showHistoryPanel && (!savedAutomationId || savedAutomationId === 'new' || !organizationId) && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-md shadow-xl">
-              <h3 className="text-lg font-semibold text-white mb-2">
+            <div className="bg-white border border-gray-300 rounded-xl p-6 max-w-md shadow-xl">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Automação não salva
               </h3>
-              <p className="text-dark-300 text-sm mb-4">
+              <p className="text-gray-600 text-sm mb-4">
                 O histórico de execuções só está disponível após salvar a automação.
               </p>
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={handleCloseHistoryPanel}
-                  className="px-4 py-2 rounded-lg text-dark-300 hover:text-white hover:bg-dark-700 transition-colors"
+                  className="px-4 py-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                 >
                   Fechar
                 </button>
@@ -250,7 +325,7 @@ export function FlowBuilder({
                     handleCloseHistoryPanel();
                     await handleSave();
                   }}
-                  className="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
                 >
                   Salvar Agora
                 </button>
@@ -269,8 +344,7 @@ export function FlowBuilder({
 
 export function getFlowDataForSave() {
   const state = useFlowStore.getState();
-  
-  // Convert back to legacy format
+
   const legacyNodes = state.nodes.map((node) => ({
     id: node.id,
     type: node.type,
@@ -278,6 +352,9 @@ export function getFlowDataForSave() {
     data: {
       label: node.data.label,
       description: node.data.description,
+      category: node.data.category,
+      nodeType: node.data.nodeType,
+      icon: node.data.icon,
       config: node.data.config,
     },
   }));
@@ -290,9 +367,23 @@ export function getFlowDataForSave() {
     targetHandle: edge.targetHandle,
   }));
 
+  // Extract trigger info from trigger node
+  const triggerNode = legacyNodes.find((n) => n.type?.startsWith('trigger_'));
+  const triggerConfig = triggerNode?.data.config || {};
+
   return {
     name: state.automationName,
     status: state.automationStatus,
+    trigger_type: triggerNode?.type || 'manual',
+    trigger_config: triggerConfig,
+    trigger_filters: triggerConfig.triggerFilters || [],
+    audience_filters: triggerConfig.audienceFilters || [],
+    exit_conditions: triggerConfig.exitConditions || [],
+    frequency_config: {
+      type: triggerConfig.frequencyType || 'once',
+      value: triggerConfig.frequencyValue,
+      unit: triggerConfig.frequencyUnit,
+    },
     nodes: legacyNodes,
     edges: legacyEdges,
   };

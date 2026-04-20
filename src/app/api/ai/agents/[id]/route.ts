@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 // =====================================================
@@ -19,11 +20,17 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    // ✅ CORREÇÃO: Validar autenticação
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
     const supabase = getSupabase()
     const agentId = params.id
 
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
+    // ✅ CORREÇÃO: Usar organization_id do usuário autenticado
+    const organizationId = auth.user.organization_id
 
     if (!organizationId) {
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
@@ -61,11 +68,18 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    // ✅ CORREÇÃO: Validar autenticação
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
     const supabase = getSupabase()
     const agentId = params.id
     const body = await request.json()
 
-    const { organization_id } = body
+    // ✅ CORREÇÃO: Usar organization_id do usuário autenticado
+    const organization_id = auth.user.organization_id
 
     if (!organization_id) {
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
@@ -139,11 +153,18 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    // ✅ CORREÇÃO: Validar autenticação
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
     const supabase = getSupabase()
     const agentId = params.id
     const body = await request.json()
 
-    const { organization_id } = body
+    // ✅ CORREÇÃO: Usar organization_id do usuário autenticado
+    const organization_id = auth.user.organization_id
 
     if (!organization_id) {
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
@@ -207,11 +228,17 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    // ✅ CORREÇÃO: Validar autenticação
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
     const supabase = getSupabase()
     const agentId = params.id
 
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
+    // ✅ CORREÇÃO: Usar organization_id do usuário autenticado
+    const organizationId = auth.user.organization_id
 
     if (!organizationId) {
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })

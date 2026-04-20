@@ -73,7 +73,11 @@ export async function executeAction(
       
       case 'action_email':
         return await executeSendEmail(config, context, organizationId);
-      
+
+      case 'send_email':
+        // Alias for action_email - used by flow templates
+        return await executeSendEmail(config, context, organizationId);
+
       case 'action_whatsapp':
         return await executeSendWhatsApp(config, context, organizationId);
       

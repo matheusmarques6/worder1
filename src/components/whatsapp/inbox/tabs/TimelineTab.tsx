@@ -208,11 +208,11 @@ export function TimelineTab({
     <div className="p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium text-white flex items-center gap-2">
-          <Activity className="w-4 h-4 text-primary-400" />
+        <h4 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+          <Activity className="w-4 h-4 text-brand-600" />
           Timeline
           {timelineItems.length > 0 && (
-            <span className="px-1.5 py-0.5 text-xs bg-dark-700 rounded-md">
+            <span className="px-1.5 py-0.5 text-xs bg-gray-100 rounded-md">
               {timelineItems.length}
             </span>
           )}
@@ -223,7 +223,7 @@ export function TimelineTab({
           <div className="relative">
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className="p-1.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors
+              className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors
                          flex items-center gap-1"
             >
               <Filter className="w-4 h-4" />
@@ -231,8 +231,8 @@ export function TimelineTab({
             </button>
             
             {showFilters && (
-              <div className="absolute right-0 top-full mt-1 w-32 bg-dark-700 rounded-lg shadow-lg 
-                              border border-dark-600 py-1 z-10">
+              <div className="absolute right-0 top-full mt-1 w-32 bg-gray-100 rounded-lg shadow-lg 
+                              border border-gray-300 py-1 z-10">
                 {filterOptions.map(option => (
                   <button
                     key={option.value}
@@ -242,8 +242,8 @@ export function TimelineTab({
                     }}
                     className={`w-full px-3 py-1.5 text-left text-sm transition-colors ${
                       filter === option.value 
-                        ? 'text-primary-400 bg-primary-500/10' 
-                        : 'text-dark-300 hover:text-white hover:bg-dark-600'
+                        ? 'text-brand-600 bg-brand-50' 
+                        : 'text-gray-600 hover:text-white hover:bg-gray-200'
                     }`}
                   >
                     {option.label}
@@ -256,7 +256,7 @@ export function TimelineTab({
           {/* Refresh */}
           <button
             onClick={onRefresh}
-            className="p-1.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+            className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -274,7 +274,7 @@ export function TimelineTab({
             organizationId={organizationId}
             disabled={isAddingComment}
             rows={1}
-            className="bg-dark-800 border-dark-700 text-white placeholder:text-dark-500 
+            className="bg-white border-gray-200 text-white placeholder:text-gray-400 
                        focus:border-primary-500 focus:ring-primary-500/20"
           />
         </div>
@@ -297,7 +297,7 @@ export function TimelineTab({
       {filteredItems.length > 0 ? (
         <div className="relative">
           {/* Linha vertical */}
-          <div className="absolute left-[19px] top-0 bottom-0 w-px bg-dark-700" />
+          <div className="absolute left-[19px] top-0 bottom-0 w-px bg-gray-100" />
           
           <div className="space-y-3">
             {filteredItems.map((item, index) => (
@@ -307,11 +307,11 @@ export function TimelineTab({
         </div>
       ) : (
         <div className="text-center py-8">
-          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-dark-700/50 
+          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 
                           flex items-center justify-center">
-            <Activity className="w-6 h-6 text-dark-500" />
+            <Activity className="w-6 h-6 text-gray-400" />
           </div>
-          <p className="text-sm text-dark-400">
+          <p className="text-sm text-gray-500">
             {filter === 'all' ? 'Nenhuma atividade' : `Nenhum item de ${filterOptions.find(f => f.value === filter)?.label}`}
           </p>
         </div>
@@ -335,13 +335,13 @@ function TimelineItem({ item }: { item: any }) {
 
       {/* Conteúdo */}
       <div className="flex-1 min-w-0 pb-3">
-        <div className="p-3 bg-dark-800/50 rounded-xl">
-          <p className="text-sm text-white">
+        <div className="p-3 bg-gray-50 rounded-xl">
+          <p className="text-sm text-gray-700">
             {item.title}
           </p>
           
           {item.description && item.itemType !== 'comment' && (
-            <p className="text-xs text-dark-400 mt-1 line-clamp-2">
+            <p className="text-xs text-gray-500 mt-1 line-clamp-2">
               {item.description}
             </p>
           )}
@@ -349,11 +349,11 @@ function TimelineItem({ item }: { item: any }) {
           {item.itemType === 'comment' && (
             <MentionText 
               text={item.content} 
-              className="text-xs text-dark-300 mt-1 block" 
+              className="text-xs text-gray-600 mt-1 block" 
             />
           )}
           
-          <div className="flex items-center gap-2 mt-2 text-xs text-dark-500">
+          <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
             <span>{formatRelativeTime(item.created_at)}</span>
             {item.created_by_name && (
               <>

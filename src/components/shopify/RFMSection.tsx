@@ -104,38 +104,38 @@ export function RFMSection({ data }: RFMSectionProps) {
     <div className="space-y-6">
       {/* KPIs Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 bg-dark-700/30 rounded-xl border border-dark-600/50">
-          <div className="flex items-center gap-2 text-dark-400 text-sm mb-1">
+        <div className="p-4 bg-gray-100/30 rounded-xl border border-gray-300/50">
+          <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
             <Users className="w-4 h-4" />
             Total de Clientes
           </div>
-          <p className="text-2xl font-bold text-white">{formatNumber(totalCustomers)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatNumber(totalCustomers)}</p>
         </div>
         
-        <div className="p-4 bg-dark-700/30 rounded-xl border border-dark-600/50">
-          <div className="flex items-center gap-2 text-dark-400 text-sm mb-1">
+        <div className="p-4 bg-gray-100/30 rounded-xl border border-gray-300/50">
+          <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
             <DollarSign className="w-4 h-4" />
             Receita Total
           </div>
-          <p className="text-2xl font-bold text-white">{formatCurrency(totalRevenue)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
         </div>
 
-        <div className="p-4 bg-dark-700/30 rounded-xl border border-dark-600/50">
-          <div className="flex items-center gap-2 text-dark-400 text-sm mb-1">
+        <div className="p-4 bg-gray-100/30 rounded-xl border border-gray-300/50">
+          <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
             <ShoppingCart className="w-4 h-4" />
             Média de Pedidos
           </div>
-          <p className="text-2xl font-bold text-white">{avgOrdersOverall.toFixed(1)}</p>
+          <p className="text-2xl font-bold text-gray-900">{avgOrdersOverall.toFixed(1)}</p>
         </div>
 
-        <div className="p-4 bg-primary-500/10 rounded-xl border border-primary-500/30">
-          <div className="flex items-center gap-2 text-primary-400 text-sm mb-1">
+        <div className="p-4 bg-brand-50 rounded-xl border border-brand-300">
+          <div className="flex items-center gap-2 text-brand-600 text-sm mb-1">
             <Crown className="w-4 h-4" />
             Campeões
           </div>
-          <p className="text-2xl font-bold text-primary-400">
+          <p className="text-2xl font-bold text-brand-600">
             {champions?.count || 0}
-            <span className="text-sm font-normal text-dark-400 ml-2">
+            <span className="text-sm font-normal text-gray-500 ml-2">
               ({champions?.percentage || 0}%)
             </span>
           </p>
@@ -144,7 +144,7 @@ export function RFMSection({ data }: RFMSectionProps) {
 
       {/* Segments Grid */}
       <div>
-        <h4 className="text-sm font-medium text-dark-300 mb-3">Distribuição por Segmento</h4>
+        <h4 className="text-sm font-medium text-gray-600 mb-3">Distribuição por Segmento</h4>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
           {segments.map((segment, index) => {
             const Icon = SEGMENT_ICONS[segment.segment] || Users
@@ -159,8 +159,8 @@ export function RFMSection({ data }: RFMSectionProps) {
                 className={`
                   p-3 rounded-xl transition-all cursor-default
                   ${isHighlight 
-                    ? 'bg-dark-700/50 border border-primary-500/30 hover:border-primary-500/50' 
-                    : 'bg-dark-700/30 border border-dark-600/30 hover:border-dark-500/50'
+                    ? 'bg-gray-100 border border-brand-300 hover:border-brand-400' 
+                    : 'bg-gray-100/30 border border-gray-300/30 hover:border-gray-300/50'
                   }
                 `}
               >
@@ -174,17 +174,17 @@ export function RFMSection({ data }: RFMSectionProps) {
                       style={{ color: segment.color }}
                     />
                   </div>
-                  <span className="text-xl font-bold text-white">{segment.count}</span>
+                  <span className="text-xl font-bold text-gray-900">{segment.count}</span>
                 </div>
-                <p className="text-xs text-dark-400 truncate" title={segment.label}>
+                <p className="text-xs text-gray-500 truncate" title={segment.label}>
                   {segment.label}
                 </p>
                 <div className="mt-2 flex items-center justify-between text-xs">
-                  <span className="text-dark-500">{segment.percentage}%</span>
-                  <span className="text-dark-400">{formatCurrency(segment.totalRevenue)}</span>
+                  <span className="text-gray-400">{segment.percentage}%</span>
+                  <span className="text-gray-500">{formatCurrency(segment.totalRevenue)}</span>
                 </div>
                 {/* Progress bar */}
-                <div className="mt-2 h-1 bg-dark-600/50 rounded-full overflow-hidden">
+                <div className="mt-2 h-1 bg-gray-200/50 rounded-full overflow-hidden">
                   <div 
                     className="h-full rounded-full transition-all"
                     style={{ 
@@ -205,13 +205,13 @@ export function RFMSection({ data }: RFMSectionProps) {
         {/* Campeões */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-primary-500/10 to-accent-500/5 border border-primary-500/20">
           <div className="flex items-center gap-2 mb-2">
-            <Crown className="w-5 h-5 text-primary-400" />
-            <span className="font-medium text-white">Campeões</span>
+            <Crown className="w-5 h-5 text-brand-600" />
+            <span className="font-medium text-gray-900">Campeões</span>
           </div>
-          <p className="text-sm text-dark-300 mb-3">
+          <p className="text-sm text-gray-600 mb-3">
             {champions?.count || 0} clientes que compram frequentemente e gastam muito.
           </p>
-          <p className="text-xs text-primary-400">
+          <p className="text-xs text-brand-600">
             💡 Ofereça programa VIP exclusivo
           </p>
         </div>
@@ -220,9 +220,9 @@ export function RFMSection({ data }: RFMSectionProps) {
         <div className="p-4 rounded-xl bg-gradient-to-br from-red-500/10 to-orange-500/5 border border-red-500/20">
           <div className="flex items-center gap-2 mb-2">
             <TrendingDown className="w-5 h-5 text-red-400" />
-            <span className="font-medium text-white">Em Risco</span>
+            <span className="font-medium text-gray-900">Em Risco</span>
           </div>
-          <p className="text-sm text-dark-300 mb-3">
+          <p className="text-sm text-gray-600 mb-3">
             {(atRisk?.count || 0) + (cantLose?.count || 0)} clientes valiosos que pararam de comprar.
           </p>
           <p className="text-xs text-red-400">
@@ -234,9 +234,9 @@ export function RFMSection({ data }: RFMSectionProps) {
         <div className="p-4 rounded-xl bg-gradient-to-br from-accent-500/10 to-primary-500/5 border border-accent-500/20">
           <div className="flex items-center gap-2 mb-2">
             <Star className="w-5 h-5 text-accent-400" />
-            <span className="font-medium text-white">Potenciais Leais</span>
+            <span className="font-medium text-gray-900">Potenciais Leais</span>
           </div>
-          <p className="text-sm text-dark-300 mb-3">
+          <p className="text-sm text-gray-600 mb-3">
             {segments.find(s => s.segment === 'potential_loyalist')?.count || 0} clientes com potencial de crescimento.
           </p>
           <p className="text-xs text-accent-400">
@@ -248,11 +248,11 @@ export function RFMSection({ data }: RFMSectionProps) {
       {/* Top Customers Table */}
       {topCustomers.length > 0 && (
         <div>
-          <h4 className="text-sm font-medium text-dark-300 mb-3">Top 10 Clientes por Receita</h4>
+          <h4 className="text-sm font-medium text-gray-600 mb-3">Top 10 Clientes por Receita</h4>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-dark-500 uppercase border-b border-dark-700/50">
+                <tr className="text-left text-xs text-gray-400 uppercase border-b border-gray-200">
                   <th className="pb-3 pr-4">Cliente</th>
                   <th className="pb-3 pr-4">Segmento</th>
                   <th className="pb-3 pr-4 text-right">Gasto Total</th>
@@ -268,7 +268,7 @@ export function RFMSection({ data }: RFMSectionProps) {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: index * 0.05 }}
-                    className="border-b border-dark-700/30 hover:bg-dark-700/20"
+                    className="border-b border-gray-200/30 hover:bg-gray-100/20"
                   >
                     <td className="py-3 pr-4">
                       <span className="text-white truncate block max-w-[150px]" title={customer.email}>
@@ -276,21 +276,21 @@ export function RFMSection({ data }: RFMSectionProps) {
                       </span>
                     </td>
                     <td className="py-3 pr-4">
-                      <span className="px-2 py-1 rounded text-xs bg-dark-600/50 text-dark-300">
+                      <span className="px-2 py-1 rounded text-xs bg-gray-200/50 text-gray-600">
                         {customer.segment}
                       </span>
                     </td>
-                    <td className="py-3 pr-4 text-right font-medium text-primary-400">
+                    <td className="py-3 pr-4 text-right font-medium text-brand-600">
                       {formatCurrency(customer.totalSpent)}
                     </td>
-                    <td className="py-3 pr-4 text-right text-dark-300">
+                    <td className="py-3 pr-4 text-right text-gray-600">
                       {customer.totalOrders}
                     </td>
-                    <td className="py-3 pr-4 text-right text-dark-400">
+                    <td className="py-3 pr-4 text-right text-gray-500">
                       {customer.daysSinceLast}d atrás
                     </td>
                     <td className="py-3 text-center">
-                      <span className="font-mono text-xs text-dark-400 bg-dark-700/50 px-2 py-1 rounded">
+                      <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
                         {customer.rfmScore}
                       </span>
                     </td>

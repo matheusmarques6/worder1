@@ -1,1268 +1,819 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import { useAuthStore } from '@/stores'
 import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Users,
-  ShoppingCart,
-  Filter,
-  Download,
-  RefreshCw,
-  Target,
-  Package,
-  CreditCard,
-  BarChart3,
-  Store,
-  Activity,
-  ChevronDown,
-  AlertCircle,
-  Link as LinkIcon,
-  Plus,
-  Loader2,
-  X,
-  CheckCircle,
-  Clock,
-  Percent,
-  Award,
-  ChevronRight,
-  Wallet,
-  Smartphone,
-  FileText,
-} from 'lucide-react'
-import {
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ComposedChart,
-  Bar,
-  Legend,
-  Area,
 } from 'recharts'
-import { useStoreStore } from '@/stores'
+import { RefreshCw, ChevronDown, TrendingUp, TrendingDown, Info, ExternalLink, Download } from 'lucide-react'
 
+// ──────────────────────────────────────────────────────────────
 // Types
-interface DashboardMetrics {
-  receita: number
-  receitaChange: number
-  custos: number
-  custosChange: number
-  productCosts: number
-  fees: number
-  marketing: number
-  marketingChange: number
-  impostos: number
-  impostosChange: number
-  margem: number
-  margemChange: number
-  lucro: number
-  lucroChange: number
-  pedidos: number
-  pedidosPagos: number
-  pedidosChange: number
-  ticketMedio: number
-  ticketMedioChange: number
-  unidadesVendidas: number
-  cac: number
-  roi: number
-  pedidosPendentes: number
-  valorPendente: number
-  recurringRate: number
-  totalCustomers: number
-  recurringCustomers: number
-}
+// ──────────────────────────────────────────────────────────────
 
-interface SalesBreakdown {
-  subtotal: number
-  shipping: number
-  taxes: number
-  discounts: number
-  total: number
-}
+type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | '90d' | 'month'
+type Granularity = 'daily' | 'weekly' | 'monthly'
+type ChartTab = 'revenue' | 'orders'
 
-interface ChartData {
-  date: string
-  receita: number
-  custos: number
-  marketing: number
-  impostos: number
-  lucro: number
-}
-
-interface StoreMetrics {
+interface RecentCampaign {
   id: string
   name: string
-  domain: string
-  pedidos: number
-  receita: number
-  custos: number
-  lucro: number
-  margem: number
-}
-
-interface TopProduct {
-  productId: string
-  title: string
-  image: string | null
-  quantity: number
+  status: string
+  sends: number
+  openRate: number
+  clickRate: number
   revenue: number
-  cost: number
-  profit: number
-  rank: number
-  margin: number
 }
 
-interface PaymentMethod {
-  count: number
-  value: number
+interface TopAutomation {
+  id: string
+  name: string
+  status: string
+  sends: number
+  conversionRate: number
+  revenue: number
 }
 
-// Date range options
-const dateRanges = [
-  { id: 'today', label: 'Hoje' },
-  { id: 'yesterday', label: 'Ontem' },
-  { id: '7d', label: '7 Dias' },
-  { id: '30d', label: 'Este mês' },
-  { id: '90d', label: '90 Dias' },
-  { id: 'all', label: 'Todo período' },
-  { id: 'custom', label: 'Customizado' },
+interface Overview {
+  worderRevenue: number
+  worderOrders: number
+  worderShare: number
+  worderDelta: number
+  campaignsRevenue: number
+  campaignsOrders: number
+  automationsRevenue: number
+  automationsOrders: number
+  storeRevenue: number
+  storeOrders: number
+  series: Array<{ label: string; campanhas: number; automacoes: number; fora: number }>
+  sparklines: { campanhas: number[]; automacoes: number[] }
+  channels: { email: number; whatsapp: number; sms: number }
+  recentCampaigns: RecentCampaign[]
+  topAutomations: TopAutomation[]
+  hasShopify: boolean
+}
+
+const EMPTY_OVERVIEW: Overview = {
+  worderRevenue: 0, worderOrders: 0, worderShare: 0, worderDelta: 0,
+  campaignsRevenue: 0, campaignsOrders: 0,
+  automationsRevenue: 0, automationsOrders: 0,
+  storeRevenue: 0, storeOrders: 0,
+  series: [],
+  sparklines: { campanhas: [], automacoes: [] },
+  channels: { email: 0, whatsapp: 0, sms: 0 },
+  recentCampaigns: [], topAutomations: [],
+  hasShopify: false,
+}
+
+const RANGE_OPTIONS: Array<{ value: RangeKey; label: string }> = [
+  { value: 'today', label: 'Hoje' },
+  { value: 'yesterday', label: 'Ontem' },
+  { value: '7d', label: 'Últimos 7 dias' },
+  { value: '30d', label: 'Últimos 30 dias' },
+  { value: '90d', label: 'Últimos 90 dias' },
+  { value: 'month', label: 'Este mês' },
 ]
 
-// Format helpers
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
+const GRANULARITY_OPTIONS: Array<{ value: Granularity; label: string }> = [
+  { value: 'daily', label: 'Diário' },
+  { value: 'weekly', label: 'Semanal' },
+  { value: 'monthly', label: 'Mensal' },
+]
+
+// ──────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────
+
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Bom dia'
+  if (h < 18) return 'Boa tarde'
+  return 'Boa noite'
 }
 
-const formatCompactCurrency = (value: number) => {
-  if (Math.abs(value) >= 1000000) {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-      notation: 'compact',
-      maximumFractionDigits: 1,
-    }).format(value)
-  }
-  if (Math.abs(value) >= 10000) {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value)
-  }
-  return formatCurrency(value)
+function formatBRL(v: number): string {
+  const rounded = Math.round(v)
+  if (rounded === 0) return 'R$ 0'
+  return 'R$ ' + rounded.toLocaleString('pt-BR')
 }
 
-const formatNumber = (value: number) => {
-  return new Intl.NumberFormat('pt-BR').format(value)
+function formatBRLCompact(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+  if (v >= 1000) return `${Math.round(v / 1000)}k`
+  return `${Math.round(v)}`
 }
 
-const formatPercent = (value: number) => {
-  return `${value.toFixed(1)}%`
+function formatPct(v: number, digits = 1): string {
+  return `${v.toFixed(digits)}%`
 }
 
-// Empty State Component
-const EmptyState = ({
-  title,
-  description,
-  actionLabel,
-  onAction,
-  icon: Icon = AlertCircle
-}: {
-  title: string
-  description: string
-  actionLabel?: string
-  onAction?: () => void
-  icon?: React.ElementType
-}) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    className="flex flex-col items-center justify-center py-16 px-8 bg-dark-800/40 rounded-2xl border border-dark-700/30 border-dashed"
-  >
-    <div className="w-16 h-16 rounded-2xl bg-dark-700/50 flex items-center justify-center mb-4">
-      <Icon className="w-8 h-8 text-dark-400" />
-    </div>
-    <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
-    <p className="text-dark-400 text-center max-w-md mb-6">{description}</p>
-    {actionLabel && onAction && (
-      <button
-        onClick={onAction}
-        className="flex items-center gap-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-xl font-medium transition-colors"
-      >
-        <Plus className="w-4 h-4" />
-        {actionLabel}
-      </button>
-    )}
-  </motion.div>
-)
-
-// KPI Card Component
-const KPICard = ({
-  title,
-  value,
-  subValue,
-  change,
-  icon: Icon,
-  iconColor = 'text-primary-400',
-  iconBg = 'bg-primary-500/20',
-  highlight = false,
-  loading = false,
-}: {
-  title: string
-  value: string
-  subValue?: string
-  change?: number
-  icon: React.ElementType
-  iconColor?: string
-  iconBg?: string
-  highlight?: boolean
-  loading?: boolean
-}) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    className={`
-      relative rounded-xl p-4 transition-all duration-300 overflow-hidden
-      ${highlight
-        ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/20'
-        : 'bg-dark-800/60 border border-dark-700/50 hover:border-dark-600'
-      }
-    `}
-  >
-    {loading ? (
-      <div className="flex items-center justify-center py-6">
-        <Loader2 className="w-6 h-6 animate-spin text-dark-400" />
-      </div>
-    ) : (
-      <>
-        <div className="flex items-center justify-between mb-3">
-          <div className={`p-2 rounded-lg ${highlight ? 'bg-white/20' : iconBg}`}>
-            <Icon className={`w-4 h-4 ${highlight ? 'text-white' : iconColor}`} />
-          </div>
-          {change !== undefined && (
-            <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
-              highlight
-                ? change >= 0 ? 'bg-white/20 text-white' : 'bg-red-500/30 text-red-200'
-                : change >= 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-            }`}>
-              {change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-              {Math.abs(change).toFixed(1)}%
-            </div>
-          )}
-        </div>
-        <p className={`text-xs font-medium mb-1 ${highlight ? 'text-white/80' : 'text-dark-400'}`}>
-          {title}
-        </p>
-        <p className="text-xl font-bold text-white truncate">{value}</p>
-        {subValue && (
-          <p className={`text-xs mt-1 ${highlight ? 'text-white/60' : 'text-dark-500'}`}>{subValue}</p>
-        )}
-      </>
-    )}
-  </motion.div>
-)
-
-// Stat Card Component - Smaller
-const StatCard = ({
-  title,
-  value,
-  subValue,
-  icon: Icon,
-  iconColor = 'text-primary-400',
-  iconBg = 'bg-primary-500/20',
-  valueColor = 'text-white',
-}: {
-  title: string
-  value: string
-  subValue?: string
-  icon: React.ElementType
-  iconColor?: string
-  iconBg?: string
-  valueColor?: string
-}) => (
-  <div className="p-4 bg-dark-800/40 rounded-xl border border-dark-700/30">
-    <div className="flex items-center gap-3">
-      <div className={`p-2 rounded-lg ${iconBg}`}>
-        <Icon className={`w-5 h-5 ${iconColor}`} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs text-dark-400">{title}</p>
-        <div className="flex items-baseline gap-2">
-          <p className={`text-lg font-bold ${valueColor}`}>{value}</p>
-          {subValue && <span className="text-xs text-dark-500">{subValue}</span>}
-        </div>
-      </div>
-    </div>
-  </div>
-)
-
-// Custom Date Picker Modal
-const DatePickerModal = ({
-  isOpen,
-  onClose,
-  onApply
-}: {
-  isOpen: boolean
-  onClose: () => void
-  onApply: (start: string, end: string) => void
-}) => {
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-
-  if (!isOpen) return null
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="relative bg-dark-900 rounded-2xl border border-dark-700 p-6 w-full max-w-md"
-      >
-        <button onClick={onClose} className="absolute top-4 right-4 text-dark-400 hover:text-white">
-          <X className="w-5 h-5" />
-        </button>
-        <h3 className="text-lg font-semibold text-white mb-4">Período Customizado</h3>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-dark-400 mb-2">Data Inicial</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-4 py-2 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-dark-400 mb-2">Data Final</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-4 py-2 bg-dark-800 border border-dark-700 rounded-xl text-white focus:outline-none focus:border-primary-500"
-            />
-          </div>
-          <button
-            onClick={() => {
-              if (startDate && endDate) {
-                onApply(startDate, endDate)
-                onClose()
-              }
-            }}
-            disabled={!startDate || !endDate}
-            className="w-full py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-700 disabled:text-dark-500 text-white rounded-xl font-medium transition-colors"
-          >
-            Aplicar
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  )
+function timeAgoShort(date: Date): string {
+  const mins = Math.floor((Date.now() - date.getTime()) / 60000)
+  if (mins < 1) return 'agora mesmo'
+  if (mins < 60) return `há ${mins} min`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `há ${hours} h`
+  return `há ${Math.floor(hours / 24)} d`
 }
+
+// Count-up (ease-out cubic), used only on the hero number.
+function useCountUp(target: number, duration = 1800): number {
+  const [val, setVal] = useState(target * 0.6)
+  const raf = useRef<number | null>(null)
+  useEffect(() => {
+    const start = performance.now()
+    const from = target * 0.6
+    const tick = (now: number) => {
+      const p = Math.min((now - start) / duration, 1)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setVal(from + (target - from) * eased)
+      if (p < 1) raf.current = requestAnimationFrame(tick)
+    }
+    raf.current = requestAnimationFrame(tick)
+    return () => { if (raf.current) cancelAnimationFrame(raf.current) }
+  }, [target, duration])
+  return val
+}
+
+// ──────────────────────────────────────────────────────────────
+// Dashboard
+// ──────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [selectedRange, setSelectedRange] = useState('today')
-  const [isLoading, setIsLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [showDatePicker, setShowDatePicker] = useState(false)
-  const [customDateRange, setCustomDateRange] = useState<{ start: string; end: string } | null>(null)
-  const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const { user } = useAuthStore()
+  const firstName = (user?.name?.split(' ')[0]) || user?.email?.split('@')[0] || 'por aí'
 
-  const { currentStore, stores, _hasHydrated } = useStoreStore()
-
-  // Data states
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
-  const [chartData, setChartData] = useState<ChartData[]>([])
-  const [storesMetrics, setStoresMetrics] = useState<StoreMetrics[]>([])
-  const [topProducts, setTopProducts] = useState<TopProduct[]>([])
-  const [paymentMethods, setPaymentMethods] = useState<Record<string, PaymentMethod>>({
-    credit_card: { count: 0, value: 0 },
-    debit: { count: 0, value: 0 },
-    pix: { count: 0, value: 0 },
-    boleto: { count: 0, value: 0 },
-    other: { count: 0, value: 0 },
-  })
-  const [salesBreakdown, setSalesBreakdown] = useState<SalesBreakdown>({
-    subtotal: 0,
-    shipping: 0,
-    taxes: 0,
-    discounts: 0,
-    total: 0,
-  })
-  const [showRFMAnalysis, setShowRFMAnalysis] = useState(false)
-  const [rfmLoading, setRfmLoading] = useState(false)
-
-  // Fetch dashboard data
-  const fetchDashboardData = useCallback(async () => {
-    try {
-      setIsLoading(true)
-
-      const params = new URLSearchParams()
-      params.append('range', selectedRange)
-      if (customDateRange) {
-        params.append('startDate', customDateRange.start)
-        params.append('endDate', customDateRange.end)
-      }
-      if (currentStore?.id) {
-        params.append('storeId', currentStore.id)
-      }
-
-      const response = await fetch(`/api/dashboard/metrics?${params.toString()}`)
-      const data = await response.json()
-
-      if (response.ok) {
-        setMetrics(data.metrics || null)
-        setChartData(data.chartData || [])
-        setStoresMetrics(data.stores || [])
-        setTopProducts(data.topProducts || [])
-        setPaymentMethods(data.paymentMethods || {
-          credit_card: { count: 0, value: 0 },
-          debit: { count: 0, value: 0 },
-          pix: { count: 0, value: 0 },
-          boleto: { count: 0, value: 0 },
-          other: { count: 0, value: 0 },
-        })
-        setSalesBreakdown(data.salesBreakdown || {
-          subtotal: 0,
-          shipping: 0,
-          taxes: 0,
-          discounts: 0,
-          total: 0,
-        })
-      }
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error)
-      setMetrics(null)
-      setChartData([])
-      setStoresMetrics([])
-      setTopProducts([])
-    } finally {
-      setIsLoading(false)
-      setIsRefreshing(false)
-    }
-  }, [selectedRange, customDateRange, currentStore])
+  // Persist filter choices across sessions so users land where they
+  // left off. Defaults to 30d / weekly / revenue on first visit.
+  const [range, setRange] = useState<RangeKey>('30d')
+  const [granularity, setGranularity] = useState<Granularity>('weekly')
+  const [tab, setTab] = useState<ChartTab>('revenue')
 
   useEffect(() => {
-    if (!_hasHydrated) return
-    fetchDashboardData()
-  }, [fetchDashboardData, _hasHydrated])
+    try {
+      const r = localStorage.getItem('wd:range') as RangeKey | null
+      const g = localStorage.getItem('wd:granularity') as Granularity | null
+      const t = localStorage.getItem('wd:chartTab') as ChartTab | null
+      if (r && RANGE_OPTIONS.some((o) => o.value === r)) setRange(r)
+      if (g && GRANULARITY_OPTIONS.some((o) => o.value === g)) setGranularity(g)
+      if (t === 'revenue' || t === 'orders') setTab(t)
+    } catch {}
+  }, [])
 
-  const handleRangeChange = (rangeId: string) => {
-    if (rangeId === 'custom') {
-      setShowDatePicker(true)
-    } else {
-      setSelectedRange(rangeId)
-      setCustomDateRange(null)
+  useEffect(() => { try { localStorage.setItem('wd:range', range) } catch {} }, [range])
+  useEffect(() => { try { localStorage.setItem('wd:granularity', granularity) } catch {} }, [granularity])
+  useEffect(() => { try { localStorage.setItem('wd:chartTab', tab) } catch {} }, [tab])
+  const [data, setData] = useState<Overview>(EMPTY_OVERVIEW)
+  const [loading, setLoading] = useState(true)
+  const [lastFetch, setLastFetch] = useState<Date>(new Date())
+  const [, setNow] = useState<Date>(new Date())
+  const [toast, setToast] = useState<string | null>(null)
+
+  // "Atualizado há N min" tick
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30000)
+    return () => clearInterval(t)
+  }, [])
+
+  // Transient toast for shortcut / export feedback.
+  const showToast = (msg: string) => {
+    setToast(msg)
+    window.setTimeout(() => setToast(null), 1800)
+  }
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/dashboard/overview?range=${range}&granularity=${granularity}`, { cache: 'no-store' })
+      if (res.ok) {
+        const json = (await res.json()) as Overview
+        setData({ ...EMPTY_OVERVIEW, ...json })
+      }
+    } catch {
+      setData(EMPTY_OVERVIEW)
+    } finally {
+      setLoading(false)
+      setLastFetch(new Date())
+      setNow(new Date())
     }
   }
 
-  const handleRefresh = () => {
-    setIsRefreshing(true)
-    fetchDashboardData()
+  useEffect(() => { fetchData() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [range, granularity])
+
+  // Keyboard shortcut: "R" refreshes (ignored while typing in inputs).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault()
+        fetchData()
+        showToast('Atualizado')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, granularity])
+
+  // CSV export — exports the current period's time-series plus channel
+  // totals and KPIs. Opens a download without leaving the page.
+  const exportCSV = () => {
+    const rows: string[][] = []
+    rows.push(['Dashboard Worder — export', new Date().toISOString()])
+    rows.push([])
+    rows.push(['Período', range, 'Granularidade', granularity])
+    rows.push([])
+    rows.push(['KPIs'])
+    rows.push(['Receita via Worder', String(data.worderRevenue)])
+    rows.push(['% do faturamento', data.worderShare.toFixed(2) + '%'])
+    rows.push(['Pedidos via Worder', String(data.worderOrders)])
+    rows.push(['Campanhas (receita)', String(data.campaignsRevenue)])
+    rows.push(['Campanhas (pedidos)', String(data.campaignsOrders)])
+    rows.push(['Automações (receita)', String(data.automationsRevenue)])
+    rows.push(['Automações (pedidos)', String(data.automationsOrders)])
+    rows.push(['Receita total da loja', String(data.storeRevenue)])
+    rows.push(['Pedidos totais', String(data.storeOrders)])
+    rows.push([])
+    rows.push(['Canal', 'Receita'])
+    rows.push(['Email', String(data.channels.email)])
+    rows.push(['WhatsApp', String(data.channels.whatsapp)])
+    rows.push(['SMS', String(data.channels.sms)])
+    rows.push([])
+    rows.push(['Período', 'Campanhas', 'Automações', 'Fora da Worder'])
+    for (const s of data.series) {
+      rows.push([s.label, String(s.campanhas), String(s.automacoes), String(s.fora)])
+    }
+
+    const esc = (v: string) => {
+      if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+        return '"' + v.replace(/"/g, '""') + '"'
+      }
+      return v
+    }
+    const csv = rows.map((r) => r.map(esc).join(',')).join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `worder-dashboard-${range}-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    showToast('CSV baixado')
   }
 
-  const hasStoreConnected = stores.length > 0
+  const heroAnim = useCountUp(data.worderRevenue)
 
-  // Calculate totals from payment methods
-  const totalPaymentValue = Object.values(paymentMethods).reduce((sum, m) => sum + m.value, 0)
+  // Chart data — use revenue or order counts per bucket
+  const chartRows = data.series.map((p) => {
+    if (tab === 'revenue') return p
+    const totalOrdersStore = data.storeOrders || 0
+    const aov = totalOrdersStore > 0 && data.storeRevenue > 0 ? data.storeRevenue / totalOrdersStore : 1
+    return {
+      label: p.label,
+      campanhas: Math.round(p.campanhas / (aov || 1)),
+      automacoes: Math.round(p.automacoes / (aov || 1)),
+      fora: Math.round(p.fora / (aov || 1)),
+    }
+  })
+
+  const channelTotal = data.channels.email + data.channels.whatsapp + data.channels.sms || 1
+  const channelPct = {
+    email: (data.channels.email / channelTotal) * 100,
+    whatsapp: (data.channels.whatsapp / channelTotal) * 100,
+    sms: (data.channels.sms / channelTotal) * 100,
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Financeiro</h1>
-          <p className="text-dark-400 mt-1">Visão geral das suas métricas financeiras</p>
-        </div>
+    <div className="min-h-screen bg-[#FAFAFA]" style={{ fontFamily: '"DM Sans", system-ui, -apple-system, sans-serif' }}>
+      <div className="w-full px-8 py-10 lg:px-12 lg:py-12 pb-16">
+        {/* ── Greeting ── */}
+        <header className="mb-11">
+          <h1 className="text-[26px] font-bold text-[#18181B] leading-tight" style={{ letterSpacing: '-0.03em' }}>
+            {getGreeting()}, {firstName}
+          </h1>
+          <p className="text-[14px] text-[#A1A1AA] mt-1">Aqui está o resumo da sua operação.</p>
+        </header>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {/* Date Range Selector */}
-          <div className="flex items-center bg-dark-800/50 border border-dark-700/50 rounded-xl p-1 overflow-x-auto max-w-full">
-            {dateRanges.map((range) => (
-              <button
-                key={range.id}
-                onClick={() => handleRangeChange(range.id)}
-                className={`px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
-                  (selectedRange === range.id && !customDateRange) || (range.id === 'custom' && customDateRange)
-                    ? 'bg-dark-700 text-white'
-                    : 'text-dark-400 hover:text-white'
-                }`}
-              >
-                {range.label}
-              </button>
-            ))}
+        {/* ── Onboarding banner: shown until a Shopify store is connected ── */}
+        {!loading && !data.hasShopify && (
+          <div
+            className="mb-11 rounded-[14px] bg-white px-6 py-5 flex items-center justify-between gap-4 flex-wrap"
+            style={{ border: '1px solid #E4E4E7' }}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="text-[14px] font-bold text-[#18181B]" style={{ letterSpacing: '-0.01em' }}>
+                Conecte sua loja para liberar a dashboard
+              </div>
+              <p className="text-[13px] text-[#71717A] mt-1 leading-relaxed">
+                Vincule sua Shopify para ver receita, pedidos e atribuição das suas campanhas e automações em tempo real.
+              </p>
+            </div>
+            <Link
+              href="/integrations"
+              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-[#18181B] hover:bg-[#27272A] transition-colors px-4 py-2 rounded-[8px] shrink-0"
+            >
+              Conectar Shopify <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
           </div>
+        )}
 
-          {/* Actions */}
-          <div className="relative">
+        {/* ── Section header ── */}
+        <div className="flex items-start justify-between gap-6 mb-6 flex-wrap">
+          <div>
+            <h2 className="text-[20px] font-bold text-[#18181B] leading-tight" style={{ letterSpacing: '-0.02em' }}>
+              Desempenho de vendas
+            </h2>
             <button
-              onClick={() => setShowActionsMenu(!showActionsMenu)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 hover:bg-dark-700/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white transition-all"
+              className="inline-flex items-center gap-1 text-[13px] text-[#71717A] hover:text-[#3F3F46] mt-1 transition-colors"
+              title="Receita atribuída: pedidos realizados dentro da janela de atribuição após clique em email, WhatsApp ou SMS enviados pela Worder."
             >
-              Ações
-              <ChevronDown className={`w-4 h-4 transition-transform ${showActionsMenu ? 'rotate-180' : ''}`} />
+              <Info className="w-3.5 h-3.5" />
+              Como calculamos as vendas
             </button>
+          </div>
 
-            {showActionsMenu && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowActionsMenu(false)} />
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="absolute right-0 top-full mt-2 w-48 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden z-20"
-                >
-                  <button
-                    onClick={() => { handleRefresh(); setShowActionsMenu(false) }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-dark-300 hover:text-white hover:bg-dark-700/50 transition-colors"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    Atualizar Dados
-                  </button>
-                  <button
-                    onClick={() => setShowActionsMenu(false)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-dark-300 hover:text-white hover:bg-dark-700/50 transition-colors border-t border-dark-700"
-                  >
-                    <Download className="w-4 h-4" />
-                    Exportar PDF
-                  </button>
-                </motion.div>
-              </>
-            )}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={fetchData}
+              className="inline-flex items-center gap-1.5 text-[12.5px] text-[#A1A1AA] hover:text-[#52525B] transition-colors"
+              title="Atualizar"
+            >
+              <RefreshCw className={`w-[13px] h-[13px] ${loading ? 'animate-spin' : ''}`} />
+              Atualizado {timeAgoShort(lastFetch)}
+            </button>
+            <RangeSelect value={range} onChange={setRange} />
+            <GranularitySelect value={granularity} onChange={setGranularity} />
+            <button
+              onClick={exportCSV}
+              className="inline-flex items-center gap-1.5 text-[13.5px] font-medium text-[#52525B] hover:text-[#18181B] bg-white px-3 py-2 rounded-[8px] hover:border-[#D4D4D8] transition-colors"
+              style={{ border: '1px solid #E4E4E7' }}
+              title="Exportar CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Exportar</span>
+            </button>
           </div>
         </div>
-      </div>
 
-      {!hasStoreConnected ? (
-        <EmptyState
-          title="Nenhuma loja conectada"
-          description="Conecte sua loja Shopify para começar a ver seus dados financeiros em tempo real."
-          actionLabel="Conectar Loja Shopify"
-          onAction={() => window.dispatchEvent(new CustomEvent('openAddStoreModal'))}
-          icon={Store}
-        />
-      ) : (
-        <>
-          {/* Main KPI Cards - Row 1 */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            <KPICard
-              title="Receita Líquida"
-              value={metrics ? formatCompactCurrency(metrics.receita) : 'R$ 0,00'}
-              change={metrics?.receitaChange}
-              icon={DollarSign}
-              highlight
-              loading={isLoading}
-            />
-            <KPICard
-              title="Custo dos Produtos"
-              value={metrics ? formatCompactCurrency(metrics.custos) : 'R$ 0,00'}
-              change={metrics?.custosChange}
-              icon={Package}
-              iconColor="text-orange-400"
-              iconBg="bg-orange-500/20"
-              loading={isLoading}
-            />
-            <KPICard
-              title="Marketing"
-              value={metrics ? formatCompactCurrency(metrics.marketing) : 'R$ 0,00'}
-              subValue="Atualizado há 10 minutos"
-              change={metrics?.marketingChange}
-              icon={Target}
-              iconColor="text-blue-400"
-              iconBg="bg-blue-500/20"
-              loading={isLoading}
-            />
-            <KPICard
-              title="Taxas e Impostos"
-              value={metrics ? formatCompactCurrency(metrics.impostos) : 'R$ 0,00'}
-              change={metrics?.impostosChange}
-              icon={Percent}
-              iconColor="text-purple-400"
-              iconBg="bg-purple-500/20"
-              loading={isLoading}
-            />
-          </div>
-
-          {/* Main Content Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Financial Chart - Takes 2 columns */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="lg:col-span-2 p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+        {/* ── KPI Stack + Bar Chart ── */}
+        <div className="flex gap-5 mb-14 flex-wrap lg:flex-nowrap">
+          {/* KPI stack (340px) */}
+          <div className="flex flex-col gap-3.5 w-full lg:w-[340px] lg:flex-shrink-0">
+            {/* Hero card */}
+            <div
+              className="relative overflow-hidden rounded-[14px] text-white px-[26px] py-6"
+              style={{ background: 'linear-gradient(135deg, #F97316 0%, #EA580C 60%, #C2410C 100%)' }}
             >
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-white">Resumo Financeiro</h3>
-                </div>
-                <div className="flex items-center gap-6 text-sm">
-                  <div className="text-right">
-                    <p className="text-dark-400 text-xs">Receita Bruta</p>
-                    <p className="text-lg font-bold text-white">
-                      {metrics ? formatCurrency(metrics.receita * 1.15) : 'R$ 0,00'}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-dark-400 text-xs">Receita total pela data de aprovação do pedido</p>
-                    <p className="text-lg font-bold text-white">
-                      {metrics ? formatCurrency(metrics.receita) : 'R$ 0,00'}
-                    </p>
-                  </div>
-                </div>
+              <div
+                aria-hidden
+                className="absolute pointer-events-none"
+                style={{ top: -30, right: -30, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }}
+              />
+              <div className="flex items-center justify-between relative">
+                <span className="text-[13px] font-semibold">Receita via Worder</span>
+                {data.worderDelta !== 0 && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[12px] font-bold px-[10px] py-[3px] rounded-full"
+                    style={{ background: 'rgba(255,255,255,0.18)' }}
+                    title={`${data.worderDelta > 0 ? 'Crescimento' : 'Queda'} em relação ao período anterior`}
+                  >
+                    {data.worderDelta > 0
+                      ? <TrendingUp className="w-3 h-3" />
+                      : <TrendingDown className="w-3 h-3" />}
+                    {data.worderDelta > 0 ? '+' : ''}{data.worderDelta}%
+                  </span>
+                )}
               </div>
-
-              {isLoading ? (
-                <div className="h-[280px] flex items-center justify-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-dark-400" />
-                </div>
-              ) : chartData.length > 0 ? (
-                <div className="h-[280px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis dataKey="date" stroke="#6b7280" fontSize={12} />
-                      <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1f2937',
-                          border: '1px solid #374151',
-                          borderRadius: '12px',
-                        }}
-                        formatter={(value: number) => formatCurrency(value)}
-                      />
-                      <Legend />
-                      <Bar dataKey="custos" name="Custos" fill="#f97316" stackId="stack" radius={[0, 0, 0, 0]} />
-                      <Bar dataKey="marketing" name="Marketing" fill="#22c55e" stackId="stack" radius={[0, 0, 0, 0]} />
-                      <Bar dataKey="impostos" name="Impostos" fill="#3b82f6" stackId="stack" radius={[0, 0, 0, 0]} />
-                      <Bar dataKey="lucro" name="Lucro" fill="#eab308" stackId="stack" radius={[4, 4, 0, 0]} />
-                      <Area type="monotone" dataKey="receita" name="Receita" fill="url(#colorReceita)" stroke="#f97316" strokeWidth={2} strokeDasharray="5 5" />
-                      <defs>
-                        <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#f97316" stopOpacity={0.1} />
-                          <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="h-[280px] flex items-center justify-center">
-                  <div className="text-center">
-                    <BarChart3 className="w-12 h-12 text-dark-500 mx-auto mb-3" />
-                    <p className="text-dark-400">Nenhum dado disponível</p>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-
-            {/* Right Column - Lucro + Ranking */}
-            <div className="space-y-6">
-              {/* Lucro Líquido Card */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-5 bg-dark-800/40 rounded-2xl border border-dark-700/30"
+              <div
+                className="text-[34px] font-bold mt-2"
+                style={{ letterSpacing: '-0.04em', fontVariantNumeric: 'tabular-nums', minHeight: 41 }}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-base font-semibold text-white">Lucro Líquido</h3>
-                  <button className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1">
-                    Ver detalhes <ChevronRight className="w-3 h-3" />
-                  </button>
-                </div>
-
-                {isLoading ? (
-                  <div className="py-6 flex justify-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-dark-400" />
-                  </div>
+                {loading && data.worderRevenue === 0 ? (
+                  <span className="inline-block w-36 h-7 rounded bg-white/15 animate-pulse" />
                 ) : (
-                  <>
-                    <div className="flex items-end justify-between">
-                      <div>
-                        <p className={`text-3xl font-bold ${metrics && metrics.lucro >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {metrics ? formatCurrency(metrics.lucro) : 'R$ 0,00'}
-                        </p>
-                        {metrics?.lucroChange !== undefined && (
-                          <div className={`flex items-center gap-1 mt-1 ${metrics.lucroChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {metrics.lucroChange >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                            <span className="text-xs font-medium">
-                              {Math.abs(metrics.lucroChange).toFixed(1)}% {metrics.lucroChange >= 0 ? 'a mais' : 'a menos'} neste período
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      {/* Mini bar chart */}
-                      <div className="flex items-end gap-0.5 h-16">
-                        {chartData.slice(-7).map((d, i) => (
-                          <div
-                            key={i}
-                            className={`w-3 rounded-t ${d.lucro >= 0 ? 'bg-green-500/60' : 'bg-red-500/60'}`}
-                            style={{ height: `${Math.min(Math.max(Math.abs(d.lucro) / (Math.abs(metrics?.lucro || 1) + 1) * 50 + 20, 15), 100)}%` }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 pt-4 border-t border-dark-700/50 flex items-center justify-between">
-                      <span className="text-xs text-dark-400">Incluir valores adicionais</span>
-                      <button className="w-10 h-5 bg-dark-700 rounded-full relative">
-                        <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-dark-500 rounded-full transition-all" />
-                      </button>
-                    </div>
-                  </>
-                )}
-              </motion.div>
-
-              {/* Ranking de Produtos */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-5 bg-dark-800/40 rounded-2xl border border-dark-700/30"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-base font-semibold text-white">Ranking de produtos</h3>
-                  <select className="text-xs bg-dark-700 border border-dark-600 rounded-lg px-2 py-1 text-dark-300">
-                    <option>Lucro Líquido</option>
-                    <option>Receita</option>
-                    <option>Quantidade</option>
-                  </select>
-                </div>
-
-                {isLoading ? (
-                  <div className="py-6 flex justify-center">
-                    <Loader2 className="w-6 h-6 animate-spin text-dark-400" />
-                  </div>
-                ) : topProducts.length > 0 ? (
-                  <div className="space-y-3">
-                    {topProducts.slice(0, 5).map((product) => (
-                      <div key={product.productId} className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-dark-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                          {product.image ? (
-                            <img src={product.image} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <Package className="w-5 h-5 text-dark-500" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-white truncate">
-                            #{product.rank} - {product.title}
-                          </p>
-                          <p className="text-xs text-green-400">
-                            {formatCurrency(product.profit)} ({product.quantity})
-                          </p>
-                          <p className="text-[10px] text-dark-500">Lucro Líquido</p>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-dark-500" />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-6 text-center">
-                    <Award className="w-8 h-8 text-dark-500 mx-auto mb-2" />
-                    <p className="text-xs text-dark-400">Nenhum produto vendido</p>
-                  </div>
-                )}
-              </motion.div>
-            </div>
-          </div>
-
-          {/* Stats Row */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <StatCard
-              title="Pedidos aprovados"
-              value={formatCurrency(metrics?.receita || 0)}
-              subValue={`(${metrics?.pedidosPagos || 0})`}
-              icon={CheckCircle}
-              iconColor="text-green-400"
-              iconBg="bg-green-500/20"
-            />
-            <StatCard
-              title="Margem de lucro"
-              value={formatPercent(metrics?.margem || 0)}
-              icon={Percent}
-              iconColor="text-blue-400"
-              iconBg="bg-blue-500/20"
-              valueColor={metrics && metrics.margem >= 20 ? 'text-green-400' : 'text-yellow-400'}
-            />
-            <StatCard
-              title="Pedidos pendentes"
-              value={formatCurrency(metrics?.valorPendente || 0)}
-              subValue={`(${metrics?.pedidosPendentes || 0})`}
-              icon={Clock}
-              iconColor="text-yellow-400"
-              iconBg="bg-yellow-500/20"
-            />
-            <StatCard
-              title="Clientes recorrentes"
-              value={formatPercent(metrics?.recurringRate || 0)}
-              subValue={`${metrics?.recurringCustomers || 0} de ${metrics?.totalCustomers || 0}`}
-              icon={Users}
-              iconColor="text-purple-400"
-              iconBg="bg-purple-500/20"
-              valueColor={metrics && metrics.recurringRate >= 20 ? 'text-green-400' : 'text-yellow-400'}
-            />
-            <StatCard
-              title="Ticket médio"
-              value={formatCurrency(metrics?.ticketMedio || 0)}
-              icon={ShoppingCart}
-              iconColor="text-primary-400"
-              iconBg="bg-primary-500/20"
-            />
-            <StatCard
-              title="ROI"
-              value={metrics?.roi ? `${metrics.roi.toFixed(1)}%` : '-'}
-              icon={TrendingUp}
-              iconColor="text-green-400"
-              iconBg="bg-green-500/20"
-            />
-          </div>
-
-          {/* Payment Methods */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
-          >
-            <h3 className="text-lg font-semibold text-white mb-4">Métodos de Pagamento</h3>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 rounded-lg bg-blue-500/20">
-                    <CreditCard className="w-5 h-5 text-blue-400" />
-                  </div>
-                  <span className="text-sm font-medium text-white">Cartões</span>
-                </div>
-                <p className="text-xl font-bold text-white">{formatCompactCurrency(paymentMethods.credit_card?.value || 0)}</p>
-                <p className="text-xs text-dark-400">{paymentMethods.credit_card?.count || 0} pedidos</p>
-                {totalPaymentValue > 0 && (
-                  <div className="mt-2 h-1.5 bg-dark-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-blue-500 rounded-full"
-                      style={{ width: `${(paymentMethods.credit_card?.value || 0) / totalPaymentValue * 100}%` }}
-                    />
-                  </div>
+                  formatBRL(heroAnim)
                 )}
               </div>
-
-              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 rounded-lg bg-green-500/20">
-                    <Smartphone className="w-5 h-5 text-green-400" />
-                  </div>
-                  <span className="text-sm font-medium text-white">Pix</span>
-                </div>
-                <p className="text-xl font-bold text-white">{formatCompactCurrency(paymentMethods.pix?.value || 0)}</p>
-                <p className="text-xs text-dark-400">{paymentMethods.pix?.count || 0} pedidos</p>
-                {totalPaymentValue > 0 && (
-                  <div className="mt-2 h-1.5 bg-dark-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-green-500 rounded-full"
-                      style={{ width: `${(paymentMethods.pix?.value || 0) / totalPaymentValue * 100}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 rounded-lg bg-yellow-500/20">
-                    <FileText className="w-5 h-5 text-yellow-400" />
-                  </div>
-                  <span className="text-sm font-medium text-white">Boletos</span>
-                </div>
-                <p className="text-xl font-bold text-white">{formatCompactCurrency(paymentMethods.boleto?.value || 0)}</p>
-                <p className="text-xs text-dark-400">{paymentMethods.boleto?.count || 0} pedidos</p>
-                {totalPaymentValue > 0 && (
-                  <div className="mt-2 h-1.5 bg-dark-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-yellow-500 rounded-full"
-                      style={{ width: `${(paymentMethods.boleto?.value || 0) / totalPaymentValue * 100}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 rounded-lg bg-purple-500/20">
-                    <Wallet className="w-5 h-5 text-purple-400" />
-                  </div>
-                  <span className="text-sm font-medium text-white">Outros</span>
-                </div>
-                <p className="text-xl font-bold text-white">{formatCompactCurrency(paymentMethods.other?.value || 0)}</p>
-                <p className="text-xs text-dark-400">{paymentMethods.other?.count || 0} pedidos</p>
-                {totalPaymentValue > 0 && (
-                  <div className="mt-2 h-1.5 bg-dark-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-purple-500 rounded-full"
-                      style={{ width: `${(paymentMethods.other?.value || 0) / totalPaymentValue * 100}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Sales Breakdown */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
-          >
-            <h3 className="text-lg font-semibold text-white mb-4">Detalhamento do Total de Vendas</h3>
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                <p className="text-xs text-dark-400 mb-1">Subtotal (Produtos)</p>
-                <p className="text-xl font-bold text-white">{formatCompactCurrency(salesBreakdown.subtotal)}</p>
-                {salesBreakdown.total > 0 && (
-                  <p className="text-xs text-dark-500 mt-1">
-                    {((salesBreakdown.subtotal / salesBreakdown.total) * 100).toFixed(1)}% do total
-                  </p>
-                )}
-              </div>
-              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                <p className="text-xs text-dark-400 mb-1">Frete</p>
-                <p className="text-xl font-bold text-blue-400">{formatCompactCurrency(salesBreakdown.shipping)}</p>
-                {salesBreakdown.total > 0 && (
-                  <p className="text-xs text-dark-500 mt-1">
-                    {((salesBreakdown.shipping / salesBreakdown.total) * 100).toFixed(1)}% do total
-                  </p>
-                )}
-              </div>
-              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                <p className="text-xs text-dark-400 mb-1">Impostos</p>
-                <p className="text-xl font-bold text-orange-400">{formatCompactCurrency(salesBreakdown.taxes)}</p>
-                {salesBreakdown.total > 0 && (
-                  <p className="text-xs text-dark-500 mt-1">
-                    {((salesBreakdown.taxes / salesBreakdown.total) * 100).toFixed(1)}% do total
-                  </p>
-                )}
-              </div>
-              <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                <p className="text-xs text-dark-400 mb-1">Descontos</p>
-                <p className="text-xl font-bold text-red-400">-{formatCompactCurrency(salesBreakdown.discounts)}</p>
-                {salesBreakdown.total > 0 && (
-                  <p className="text-xs text-dark-500 mt-1">
-                    {((salesBreakdown.discounts / (salesBreakdown.total + salesBreakdown.discounts)) * 100).toFixed(1)}% aplicado
-                  </p>
-                )}
-              </div>
-              <div className="p-4 bg-gradient-to-br from-primary-500/20 to-accent-500/20 rounded-xl border border-primary-500/30">
-                <p className="text-xs text-primary-300 mb-1">Total Vendas</p>
-                <p className="text-xl font-bold text-white">{formatCompactCurrency(salesBreakdown.total)}</p>
-                <p className="text-xs text-dark-400 mt-1">{metrics?.pedidosPagos || 0} pedidos</p>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* RFM Analysis Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-white">Métricas Avançadas - Análise RFM</h3>
-                <p className="text-sm text-dark-400 mt-1">
-                  Recência, Frequência e Valor Monetário dos clientes
-                </p>
-              </div>
-              {!showRFMAnalysis && (
-                <button
-                  onClick={() => {
-                    setRfmLoading(true)
-                    setShowRFMAnalysis(true)
-                    // Simulate loading - in real implementation would fetch RFM data
-                    setTimeout(() => setRfmLoading(false), 1500)
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-xl font-medium transition-colors"
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  Carregar Análise
-                </button>
-              )}
-            </div>
-
-            {showRFMAnalysis && (
-              <>
-                {rfmLoading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-center">
-                      <Loader2 className="w-8 h-8 animate-spin text-primary-400 mx-auto mb-3" />
-                      <p className="text-dark-400">Analisando dados de clientes...</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                      {/* Recency */}
-                      <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2 rounded-lg bg-blue-500/20">
-                            <Clock className="w-5 h-5 text-blue-400" />
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-white">Recência</h4>
-                            <p className="text-xs text-dark-400">Última compra</p>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-dark-300">Últimos 7 dias</span>
-                            <span className="text-sm font-medium text-green-400">{Math.round((metrics?.totalCustomers || 0) * 0.15)} clientes</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-dark-300">8-30 dias</span>
-                            <span className="text-sm font-medium text-yellow-400">{Math.round((metrics?.totalCustomers || 0) * 0.35)} clientes</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-dark-300">31-90 dias</span>
-                            <span className="text-sm font-medium text-orange-400">{Math.round((metrics?.totalCustomers || 0) * 0.30)} clientes</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-dark-300">+90 dias</span>
-                            <span className="text-sm font-medium text-red-400">{Math.round((metrics?.totalCustomers || 0) * 0.20)} clientes</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Frequency */}
-                      <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2 rounded-lg bg-green-500/20">
-                            <Activity className="w-5 h-5 text-green-400" />
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-white">Frequência</h4>
-                            <p className="text-xs text-dark-400">Número de compras</p>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-dark-300">1 compra</span>
-                            <span className="text-sm font-medium text-white">{(metrics?.totalCustomers || 0) - (metrics?.recurringCustomers || 0)} clientes</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-dark-300">2-3 compras</span>
-                            <span className="text-sm font-medium text-blue-400">{Math.round((metrics?.recurringCustomers || 0) * 0.6)} clientes</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-dark-300">4-6 compras</span>
-                            <span className="text-sm font-medium text-green-400">{Math.round((metrics?.recurringCustomers || 0) * 0.3)} clientes</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-dark-300">+7 compras</span>
-                            <span className="text-sm font-medium text-purple-400">{Math.round((metrics?.recurringCustomers || 0) * 0.1)} clientes</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Monetary */}
-                      <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2 rounded-lg bg-yellow-500/20">
-                            <DollarSign className="w-5 h-5 text-yellow-400" />
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-white">Valor Monetário</h4>
-                            <p className="text-xs text-dark-400">Gasto total</p>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-dark-300">Até R$ 100</span>
-                            <span className="text-sm font-medium text-white">{Math.round((metrics?.totalCustomers || 0) * 0.25)} clientes</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-dark-300">R$ 100 - R$ 500</span>
-                            <span className="text-sm font-medium text-blue-400">{Math.round((metrics?.totalCustomers || 0) * 0.40)} clientes</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-dark-300">R$ 500 - R$ 1.000</span>
-                            <span className="text-sm font-medium text-green-400">{Math.round((metrics?.totalCustomers || 0) * 0.25)} clientes</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-dark-300">+R$ 1.000</span>
-                            <span className="text-sm font-medium text-yellow-400">{Math.round((metrics?.totalCustomers || 0) * 0.10)} clientes</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Customer Segments Summary */}
-                    <div className="p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/10 rounded-xl border border-primary-500/20">
-                      <h4 className="font-medium text-white mb-3">Segmentos de Clientes</h4>
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-green-400">{Math.round((metrics?.totalCustomers || 0) * 0.10)}</p>
-                          <p className="text-xs text-dark-400">Campeões</p>
-                          <p className="text-[10px] text-dark-500">Alta recência, freq. e valor</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-blue-400">{Math.round((metrics?.totalCustomers || 0) * 0.20)}</p>
-                          <p className="text-xs text-dark-400">Leais</p>
-                          <p className="text-[10px] text-dark-500">Compram regularmente</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-yellow-400">{Math.round((metrics?.totalCustomers || 0) * 0.35)}</p>
-                          <p className="text-xs text-dark-400">Potenciais</p>
-                          <p className="text-[10px] text-dark-500">Recentes, mas esporádicos</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-red-400">{Math.round((metrics?.totalCustomers || 0) * 0.35)}</p>
-                          <p className="text-xs text-dark-400">Em Risco</p>
-                          <p className="text-[10px] text-dark-500">Não compram há tempo</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <button
-                        onClick={() => setShowRFMAnalysis(false)}
-                        className="text-sm text-dark-400 hover:text-white flex items-center gap-1"
-                      >
-                        <X className="w-4 h-4" />
-                        Fechar análise
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </motion.div>
-
-          {/* Stores Table */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-6 bg-dark-800/40 rounded-2xl border border-dark-700/30"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <h3 className="text-lg font-semibold text-white">TODAS AS LOJAS</h3>
-                <span className="px-2 py-0.5 bg-dark-700 text-dark-300 text-sm rounded-full">
-                  {stores.length}
+              <div className="flex items-center justify-between mt-3 relative">
+                <span className="text-[13px] font-semibold opacity-[0.85]">
+                  {formatPct(data.worderShare)} do faturamento
+                </span>
+                <span className="text-[12px] opacity-50">
+                  {data.worderOrders.toLocaleString('pt-BR')} pedidos
                 </span>
               </div>
             </div>
 
-            {/* Mobile: Cards */}
-            <div className="lg:hidden space-y-4">
-              {stores.map((store) => {
-                const storeData = storesMetrics.find(s => s.id === store.id)
-                return (
-                  <div key={store.id} className="p-4 bg-dark-800/50 rounded-xl border border-dark-700/50">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-                        <Store className="w-5 h-5 text-white" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-white truncate">{store.name}</p>
-                        <p className="text-xs text-dark-400 truncate">{store.domain}</p>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <p className="text-dark-400 text-xs">Pedidos</p>
-                        <p className="text-white font-medium">{storeData?.pedidos || 0}</p>
-                      </div>
-                      <div>
-                        <p className="text-dark-400 text-xs">Receita</p>
-                        <p className="text-white font-medium">{formatCompactCurrency(storeData?.receita || 0)}</p>
-                      </div>
-                      <div>
-                        <p className="text-dark-400 text-xs">Lucro</p>
-                        <p className={`font-medium ${storeData && storeData.lucro >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {formatCompactCurrency(storeData?.lucro || 0)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-dark-400 text-xs">Margem</p>
-                        <p className={`font-medium ${storeData && storeData.margem >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {formatPercent(storeData?.margem || 0)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
+            {/* Campanhas + Automações */}
+            <div className="flex gap-3.5">
+              <MiniKPI
+                label="Campanhas"
+                value={data.campaignsRevenue}
+                sub={`${data.campaignsOrders.toLocaleString('pt-BR')} pedidos`}
+                spark={data.sparklines?.campanhas}
+              />
+              <MiniKPI
+                label="Automações"
+                value={data.automationsRevenue}
+                sub={`${data.automationsOrders.toLocaleString('pt-BR')} pedidos`}
+                spark={data.sparklines?.automacoes}
+              />
             </div>
 
-            {/* Desktop: Table */}
-            <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-sm text-dark-400 border-b border-dark-700/50">
-                    <th className="pb-4 font-medium">LOJA</th>
-                    <th className="pb-4 font-medium text-right">PEDIDOS</th>
-                    <th className="pb-4 font-medium text-right">RECEITA</th>
-                    <th className="pb-4 font-medium text-right">CUSTO TOTAL</th>
-                    <th className="pb-4 font-medium text-right">LUCRO</th>
-                    <th className="pb-4 font-medium text-right">MARGEM</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stores.map((store) => {
-                    const storeData = storesMetrics.find(s => s.id === store.id)
-                    return (
-                      <tr key={store.id} className="border-b border-dark-700/30">
-                        <td className="py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-                              <Store className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-white">{store.name}</p>
-                              <p className="text-xs text-dark-400">{store.domain}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-4 text-right text-dark-300">{storeData?.pedidos || 0}</td>
-                        <td className="py-4 text-right text-dark-300">{formatCurrency(storeData?.receita || 0)}</td>
-                        <td className="py-4 text-right text-dark-300">{formatCurrency(storeData?.custos || 0)}</td>
-                        <td className="py-4 text-right">
-                          <span className={storeData && storeData.lucro >= 0 ? 'text-green-400' : 'text-red-400'}>
-                            {formatCurrency(storeData?.lucro || 0)}
-                          </span>
-                        </td>
-                        <td className="py-4 text-right">
-                          <span className={storeData && storeData.margem >= 0 ? 'text-green-400' : 'text-red-400'}>
-                            {formatPercent(storeData?.margem || 0)}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+            {/* Receita total da loja */}
+            <div className="rounded-[12px] bg-white px-5 py-[18px] transition-colors hover:bg-[#FAFAFA]" style={{ border: '1px solid #E4E4E7' }}>
+              <div className="text-[12px] font-semibold text-[#71717A] mb-2">Receita total da loja</div>
+              <div
+                className="text-[24px] font-bold text-[#18181B]"
+                style={{ letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}
+              >
+                {formatBRL(data.storeRevenue)}
+              </div>
+              <div className="text-[12px] text-[#A1A1AA] mt-[6px]">
+                {data.storeOrders.toLocaleString('pt-BR')} pedidos
+              </div>
             </div>
-          </motion.div>
-        </>
+          </div>
+
+          {/* Chart (flex 1) */}
+          <div className="flex-1 min-w-0 rounded-[14px] bg-white px-7 py-6" style={{ border: '1px solid #E4E4E7' }}>
+            {/* Tabs + Legend */}
+            <div className="flex items-center justify-between mb-5" style={{ borderBottom: '2px solid #E4E4E7' }}>
+              <div className="flex">
+                {(['revenue', 'orders'] as ChartTab[]).map((t) => {
+                  const active = tab === t
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setTab(t)}
+                      className="text-[14px] px-6 py-2 -mb-[2px] transition-colors"
+                      style={{
+                        fontWeight: active ? 700 : 400,
+                        color: active ? '#18181B' : '#A1A1AA',
+                        borderBottom: active ? '2px solid #18181B' : '2px solid transparent',
+                      }}
+                    >
+                      {t === 'revenue' ? 'Receita' : 'Pedidos'}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="flex items-center gap-4 pb-2">
+                <LegendDot color="#18181B" label="Campanhas" />
+                <LegendDot color="#71717A" label="Automações" />
+                <LegendDot color="#E4E4E7" label="Fora da Worder" border="#D4D4D8" />
+              </div>
+            </div>
+
+            <div className="h-[280px]">
+              {loading && chartRows.length === 0 ? (
+                <div className="h-full w-full flex items-center justify-center text-[13px] text-[#A1A1AA]">
+                  Carregando…
+                </div>
+              ) : chartRows.every((p) => p.campanhas + p.automacoes + p.fora === 0) ? (
+                <div className="h-full w-full flex flex-col items-center justify-center text-[13px] text-[#A1A1AA] gap-2">
+                  <span>Nenhuma venda registrada no período.</span>
+                  <Link href="/campaigns/new" className="text-[#52525B] hover:text-[#18181B] underline underline-offset-2">
+                    Criar primeira campanha
+                  </Link>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartRows} margin={{ top: 12, right: 8, left: -10, bottom: 0 }}>
+                    <CartesianGrid vertical={false} stroke="#F4F4F5" strokeWidth={0.5} />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={{ stroke: '#E4E4E7' }}
+                      tick={{ fontSize: 11.5, fill: '#A1A1AA' }}
+                      dy={8}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 11, fill: '#A1A1AA' } as any}
+                      tickFormatter={(v) => (tab === 'revenue' ? formatBRLCompact(v) : String(v))}
+                      width={56}
+                    />
+                    <Tooltip
+                      cursor={{ fill: '#F4F4F5' }}
+                      content={<RichTooltip isRevenue={tab === 'revenue'} />}
+                      wrapperStyle={{ outline: 'none' }}
+                    />
+                    <Bar dataKey="campanhas" stackId="a" fill="#18181B" barSize={34} />
+                    <Bar dataKey="automacoes" stackId="a" fill="#71717A" barSize={34} />
+                    <Bar dataKey="fora" stackId="a" fill="#E4E4E7" radius={[3, 3, 0, 0]} barSize={34} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Receita por canal ── */}
+        <section className="rounded-[14px] bg-white px-7 py-6 mb-14" style={{ border: '1px solid #E4E4E7' }}>
+          <h3 className="text-[16px] font-bold text-[#18181B] mb-[22px]">Receita por canal</h3>
+          <div
+            className="relative w-full h-[5px] rounded-[5px] overflow-hidden flex"
+            style={{ background: '#F4F4F5' }}
+          >
+            <div style={{ width: `${channelPct.email}%`, background: '#18181B' }} />
+            <div style={{ width: `${channelPct.whatsapp}%`, background: '#71717A' }} />
+            <div style={{ width: `${channelPct.sms}%`, background: '#D4D4D8' }} />
+          </div>
+          <div className="grid grid-cols-3 gap-5 mt-6">
+            <ChannelItem label="Email" value={data.channels.email} pct={channelPct.email} color="#18181B" />
+            <ChannelItem label="WhatsApp" value={data.channels.whatsapp} pct={channelPct.whatsapp} color="#71717A" />
+            <ChannelItem label="SMS" value={data.channels.sms} pct={channelPct.sms} color="#D4D4D8" />
+          </div>
+        </section>
+
+        {/* ── Rankings ── */}
+        <section className="flex gap-5 flex-wrap lg:flex-nowrap">
+          <RankingCard
+            title="Campanhas recentes"
+            seeAllHref="/campaigns"
+            items={data.recentCampaigns}
+            itemHref={(c: RecentCampaign) => `/campaigns/${c.id}`}
+            renderDetails={(c: RecentCampaign) =>
+              `${c.sends.toLocaleString('pt-BR')} envios · Abertura ${formatPct(c.openRate)} · Clique ${formatPct(c.clickRate)}`
+            }
+            emptyLabel="Ainda sem campanhas enviadas."
+            emptyHref="/campaigns/new"
+            emptyAction="Criar campanha"
+          />
+          <RankingCard
+            title="Top automações"
+            seeAllHref="/automations"
+            items={data.topAutomations}
+            itemHref={(a: TopAutomation) => `/automations/${a.id}`}
+            renderDetails={(a: TopAutomation) =>
+              `${a.sends.toLocaleString('pt-BR')} envios · Conversão ${formatPct(a.conversionRate)}`
+            }
+            emptyLabel="Ainda sem automações ativas."
+            emptyHref="/automations"
+            emptyAction="Criar automação"
+          />
+        </section>
+      </div>
+
+      {/* Floating toast for keyboard shortcut + export feedback */}
+      {toast && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-[10px] text-[13px] font-medium text-white shadow-lg"
+          style={{ background: '#18181B' }}
+          role="status"
+          aria-live="polite"
+        >
+          {toast}
+        </div>
       )}
+    </div>
+  )
+}
 
-      {/* Date Picker Modal */}
-      <DatePickerModal
-        isOpen={showDatePicker}
-        onClose={() => setShowDatePicker(false)}
-        onApply={(start, end) => {
-          setCustomDateRange({ start, end })
-          setSelectedRange('custom')
-        }}
+// ──────────────────────────────────────────────────────────────
+// Sub-components
+// ──────────────────────────────────────────────────────────────
+
+function MiniKPI({ label, value, sub, spark }: { label: string; value: number; sub: string; spark?: number[] }) {
+  return (
+    <div className="flex-1 rounded-[12px] bg-white px-5 py-[18px] transition-colors hover:bg-[#FAFAFA] relative overflow-hidden" style={{ border: '1px solid #E4E4E7' }}>
+      <div className="text-[12px] font-semibold text-[#71717A] mb-2">{label}</div>
+      <div className="text-[19px] font-bold text-[#18181B]" style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+        {formatBRL(value)}
+      </div>
+      <div className="text-[12px] text-[#A1A1AA] mt-[6px]">{sub}</div>
+      {spark && spark.length > 1 && spark.some((v) => v > 0) && (
+        <div className="mt-2 -mx-1 -mb-1 h-[22px] opacity-60">
+          <Sparkline values={spark} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Lightweight inline SVG sparkline — no deps, no tooltip, purely visual.
+function Sparkline({ values }: { values: number[] }) {
+  const w = 100
+  const h = 22
+  const max = Math.max(...values, 1)
+  const min = Math.min(...values, 0)
+  const span = Math.max(max - min, 1)
+  const step = values.length > 1 ? w / (values.length - 1) : 0
+  const points = values
+    .map((v, i) => `${(i * step).toFixed(2)},${(h - ((v - min) / span) * h).toFixed(2)}`)
+    .join(' ')
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-full block">
+      <polyline points={points} fill="none" stroke="#A1A1AA" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// Rich tooltip used by the stacked bar chart — shows a breakdown by
+// category with color dots, tabular-nums values, and a separator above
+// the total so it reads like the Klaviyo / Linear tooltip style.
+function RichTooltip({ active, payload, label, isRevenue }: any) {
+  if (!active || !payload || !payload.length) return null
+  const rows: Array<{ name: string; value: number; color: string }> = []
+  const keyMap: Record<string, { name: string; color: string }> = {
+    campanhas: { name: 'Campanhas', color: '#18181B' },
+    automacoes: { name: 'Automações', color: '#71717A' },
+    fora: { name: 'Fora da Worder', color: '#D4D4D8' },
+  }
+  for (const p of payload) {
+    const k = p?.dataKey as string
+    const meta = keyMap[k]
+    if (!meta) continue
+    rows.push({ name: meta.name, value: Number(p?.value) || 0, color: meta.color })
+  }
+  const total = rows.reduce((s, r) => s + r.value, 0)
+  const fmt = (v: number) => (isRevenue ? formatBRL(v) : v.toLocaleString('pt-BR'))
+
+  return (
+    <div
+      className="min-w-[200px]"
+      style={{
+        background: 'white',
+        border: '1px solid #E4E4E7',
+        borderRadius: 10,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+        padding: '10px 12px',
+      }}
+    >
+      <div className="text-[11.5px] font-semibold text-[#71717A] mb-2">{label}</div>
+      <div className="space-y-1.5">
+        {rows.map((r) => (
+          <div key={r.name} className="flex items-center justify-between gap-6 text-[12.5px]">
+            <span className="flex items-center gap-2 text-[#52525B]">
+              <span className="inline-block w-2 h-2 rounded-[2px]" style={{ background: r.color }} />
+              {r.name}
+            </span>
+            <span className="font-semibold text-[#18181B]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {fmt(r.value)}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 pt-2 flex items-center justify-between text-[12.5px]" style={{ borderTop: '1px solid #F4F4F5' }}>
+        <span className="text-[#71717A] font-semibold">Total</span>
+        <span className="font-bold text-[#18181B]" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(total)}</span>
+      </div>
+    </div>
+  )
+}
+
+function LegendDot({ color, label, border }: { color: string; label: string; border?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[12px] text-[#71717A]">
+      <span
+        className="inline-block w-[10px] h-[10px] rounded-[2px]"
+        style={{ background: color, ...(border ? { border: `1px solid ${border}` } : {}) }}
       />
+      {label}
+    </span>
+  )
+}
+
+function ChannelItem({ label, value, pct, color }: { label: string; value: number; pct: number; color: string }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-[13px] font-semibold text-[#71717A]">
+        <span className="inline-block w-2 h-2 rounded-full" style={{ background: color }} />
+        {label}
+      </div>
+      <div className="text-[22px] font-bold text-[#18181B] mt-2" style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+        {formatBRL(value)}
+      </div>
+      <div className="text-[12px] text-[#A1A1AA] mt-1">{formatPct(pct)}</div>
+    </div>
+  )
+}
+
+function RangeSelect({ value, onChange }: { value: RangeKey; onChange: (v: RangeKey) => void }) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as RangeKey)}
+        className="appearance-none bg-white text-[13.5px] font-medium text-[#18181B] px-4 py-2 pr-8 rounded-[8px] cursor-pointer hover:border-[#D4D4D8] transition-colors focus:outline-none focus:border-[#A1A1AA]"
+        style={{ border: '1px solid #E4E4E7' }}
+      >
+        {RANGE_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A1A1AA] pointer-events-none" />
+    </div>
+  )
+}
+
+function GranularitySelect({ value, onChange }: { value: Granularity; onChange: (v: Granularity) => void }) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as Granularity)}
+        className="appearance-none bg-white text-[13.5px] font-medium text-[#18181B] px-4 py-2 pr-8 rounded-[8px] cursor-pointer hover:border-[#D4D4D8] transition-colors focus:outline-none focus:border-[#A1A1AA]"
+        style={{ border: '1px solid #E4E4E7' }}
+      >
+        {GRANULARITY_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A1A1AA] pointer-events-none" />
+    </div>
+  )
+}
+
+function RankingCard<T extends { id: string; name: string; status: string; revenue: number }>({
+  title,
+  seeAllHref,
+  items,
+  itemHref,
+  renderDetails,
+  emptyLabel,
+  emptyHref,
+  emptyAction,
+}: {
+  title: string
+  seeAllHref: string
+  items: T[]
+  itemHref?: (item: T) => string
+  renderDetails: (item: T) => string
+  emptyLabel: string
+  emptyHref: string
+  emptyAction: string
+}) {
+  return (
+    <div className="flex-1 min-w-0 rounded-[14px] bg-white px-7 py-6" style={{ border: '1px solid #E4E4E7' }}>
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-[16px] font-bold text-[#18181B]">{title}</h3>
+        <Link href={seeAllHref} className="text-[13px] font-semibold text-[#52525B] hover:text-[#18181B] transition-colors">
+          Ver todas
+        </Link>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="py-10 text-center">
+          <p className="text-[13px] text-[#A1A1AA]">{emptyLabel}</p>
+          <Link href={emptyHref} className="inline-block mt-2 text-[13px] font-semibold text-[#52525B] hover:text-[#18181B] underline underline-offset-2">
+            {emptyAction}
+          </Link>
+        </div>
+      ) : (
+        items.map((item) => {
+          const row = (
+            <>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-semibold text-[#18181B] truncate">{item.name}</div>
+                  <div className="text-[12.5px] text-[#A1A1AA] mt-[5px]">{renderDetails(item)}</div>
+                </div>
+                <span
+                  className="text-[11.5px] font-semibold text-[#52525B] px-[10px] py-[2px] rounded-full shrink-0"
+                  style={{ background: '#F4F4F5' }}
+                >
+                  {item.status}
+                </span>
+              </div>
+              <div className="text-[16px] font-bold text-[#18181B] mt-[5px]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {formatBRL(item.revenue)}
+              </div>
+            </>
+          )
+          const commonClass = 'block py-4 -mx-2 px-2 rounded-[6px] transition-colors'
+          if (itemHref) {
+            return (
+              <Link
+                key={item.id}
+                href={itemHref(item)}
+                className={`${commonClass} hover:bg-[#FAFAFA]`}
+                style={{ borderTop: '1px solid #F4F4F5' }}
+              >
+                {row}
+              </Link>
+            )
+          }
+          return (
+            <div key={item.id} className={commonClass} style={{ borderTop: '1px solid #F4F4F5' }}>
+              {row}
+            </div>
+          )
+        })
+      )}
     </div>
   )
 }

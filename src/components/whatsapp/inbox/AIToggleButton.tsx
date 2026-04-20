@@ -67,7 +67,7 @@ export function AIToggleButton({
             p-2 rounded-lg transition-all duration-200
             ${isEnabled 
               ? 'bg-gradient-to-r from-violet-500/20 to-purple-500/20 text-violet-400 border border-violet-500/30 hover:from-violet-500/30 hover:to-purple-500/30' 
-              : 'bg-dark-700/50 text-dark-400 hover:text-dark-300 hover:bg-dark-700'
+              : 'bg-gray-100 text-gray-500 hover:text-gray-600 hover:bg-gray-100'
             }
             disabled:opacity-50 disabled:cursor-not-allowed
             ${className}
@@ -90,7 +90,7 @@ export function AIToggleButton({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 5 }}
               className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 
-                         bg-dark-800 border border-dark-700 rounded-lg text-xs text-white whitespace-nowrap z-50"
+                         bg-white border border-gray-200 rounded-lg text-xs text-gray-600 whitespace-nowrap z-50"
             >
               {isEnabled ? 'Pausar IA' : 'Ativar IA'}
               <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 
@@ -112,7 +112,7 @@ export function AIToggleButton({
           flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 w-full
           ${isEnabled 
             ? 'bg-gradient-to-r from-violet-500/10 to-purple-500/10 border border-violet-500/30' 
-            : 'bg-dark-700/30 border border-dark-700/50'
+            : 'bg-gray-100/30 border border-gray-200'
           }
           hover:scale-[1.02] active:scale-[0.98]
           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100
@@ -123,7 +123,7 @@ export function AIToggleButton({
           p-2 rounded-lg
           ${isEnabled 
             ? 'bg-violet-500/20 text-violet-400' 
-            : 'bg-dark-700 text-dark-400'
+            : 'bg-gray-100 text-gray-500'
           }
         `}>
           {isLoading ? (
@@ -136,17 +136,17 @@ export function AIToggleButton({
         </div>
         
         <div className="flex-1 text-left">
-          <div className={`text-sm font-medium ${isEnabled ? 'text-violet-300' : 'text-dark-300'}`}>
+          <div className={`text-sm font-medium ${isEnabled ? 'text-violet-300' : 'text-gray-600'}`}>
             Agente IA
           </div>
-          <div className={`text-xs ${isEnabled ? 'text-violet-400/70' : 'text-dark-500'}`}>
+          <div className={`text-xs ${isEnabled ? 'text-violet-400/70' : 'text-gray-400'}`}>
             {isEnabled ? 'Respondendo automaticamente' : 'Pausado'}
           </div>
         </div>
 
         <div className={`
           w-10 h-5 rounded-full p-0.5 transition-colors duration-200
-          ${isEnabled ? 'bg-violet-500' : 'bg-dark-600'}
+          ${isEnabled ? 'bg-violet-500' : 'bg-gray-200'}
         `}>
           <motion.div
             animate={{ x: isEnabled ? 20 : 0 }}
@@ -167,7 +167,7 @@ export function AIToggleButton({
         flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200
         ${isEnabled 
           ? 'bg-gradient-to-r from-violet-500/10 to-purple-500/10 text-violet-400 border border-violet-500/30 hover:from-violet-500/20 hover:to-purple-500/20' 
-          : 'bg-dark-700/50 text-dark-400 hover:text-white hover:bg-dark-700'
+          : 'bg-gray-100 text-gray-500 hover:text-white hover:bg-gray-100'
         }
         disabled:opacity-50 disabled:cursor-not-allowed
         ${className}
@@ -205,7 +205,7 @@ export function AIStatusBadge({
     <div className="relative" title={enabled ? 'IA ativa' : 'IA pausada'}>
       <div className={`
         ${sizeClasses[size]} rounded-full
-        ${enabled ? 'bg-violet-500' : 'bg-dark-500'}
+        ${enabled ? 'bg-violet-500' : 'bg-gray-300'}
       `} />
       {enabled && (
         <div className={`

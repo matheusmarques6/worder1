@@ -118,7 +118,7 @@ const getNodeColor = (color: string) => {
     orange: { bg: 'bg-orange-500/20', border: 'border-orange-500/50', text: 'text-orange-400', glow: 'shadow-orange-500/30', solid: 'bg-orange-500' },
     violet: { bg: 'bg-violet-500/20', border: 'border-violet-500/50', text: 'text-violet-400', glow: 'shadow-violet-500/30', solid: 'bg-violet-500' },
     green: { bg: 'bg-green-500/20', border: 'border-green-500/50', text: 'text-green-400', glow: 'shadow-green-500/30', solid: 'bg-green-500' },
-    slate: { bg: 'bg-dark-600/20', border: 'border-dark-600/50', text: 'text-dark-500', glow: 'shadow-dark-600/30', solid: 'bg-dark-600' },
+    slate: { bg: 'bg-gray-200/20', border: 'border-gray-300/50', text: 'text-gray-400', glow: 'shadow-gray-300/30', solid: 'bg-gray-200' },
     indigo: { bg: 'bg-indigo-500/20', border: 'border-indigo-500/50', text: 'text-indigo-400', glow: 'shadow-indigo-500/30', solid: 'bg-indigo-500' },
     red: { bg: 'bg-red-500/20', border: 'border-red-500/50', text: 'text-red-400', glow: 'shadow-red-500/30', solid: 'bg-red-500' },
   };
@@ -223,7 +223,7 @@ function CanvasNode({
             isRunning && 'ring-2 ring-amber-500 shadow-2xl shadow-amber-500/20 animate-pulse',
             isSuccess && 'ring-2 ring-green-500 shadow-xl shadow-green-500/20',
             isError && 'ring-2 ring-red-500 shadow-xl shadow-red-500/20',
-            isSkipped && 'ring-1 ring-dark-600 opacity-60',
+            isSkipped && 'ring-1 ring-gray-300 opacity-60',
             // Seleção (só se não tiver status)
             !executionStatus && isSelected 
               ? `ring-2 ring-white/50 shadow-2xl ${colors.glow}` 
@@ -237,7 +237,7 @@ function CanvasNode({
               isRunning && 'bg-amber-500',
               isSuccess && 'bg-green-500',
               isError && 'bg-red-500',
-              isSkipped && 'bg-dark-600',
+              isSkipped && 'bg-gray-200',
             )}>
               {isRunning && <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />}
               {isSuccess && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
@@ -248,7 +248,7 @@ function CanvasNode({
 
           {/* Duração se disponível */}
           {executionStatus?.duration && (isSuccess || isError) && (
-            <div className="absolute -bottom-2 right-2 z-20 px-1.5 py-0.5 bg-dark-800 border border-dark-700 rounded text-[9px] text-dark-400">
+            <div className="absolute -bottom-2 right-2 z-20 px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[9px] text-gray-500">
               {executionStatus.duration}ms
             </div>
           )}
@@ -268,8 +268,8 @@ function CanvasNode({
           <div className={cn(
             'p-4',
             isTrigger 
-              ? 'bg-dark-950/95 border-x-2 border-b-2 border-dark-800/50 rounded-b-2xl' 
-              : `bg-dark-900/90 border-2 ${colors.border} rounded-2xl`
+              ? 'bg-gray-50/95 border-x-2 border-b-2 border-gray-200 rounded-b-2xl' 
+              : `bg-white/90 border-2 ${colors.border} rounded-2xl`
           )}>
             <div className="flex items-center gap-3">
               {/* Ícone */}
@@ -282,11 +282,11 @@ function CanvasNode({
               
               {/* Label */}
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-white text-sm truncate">
+                <p className="font-semibold text-gray-900 text-sm truncate">
                   {node.data.label || nodeType?.label}
                 </p>
                 {node.data.description && (
-                  <p className="text-xs text-dark-500 truncate mt-0.5">
+                  <p className="text-xs text-gray-400 truncate mt-0.5">
                     {node.data.description}
                   </p>
                 )}
@@ -295,20 +295,20 @@ function CanvasNode({
 
             {/* Config Preview */}
             {node.data.config && Object.keys(node.data.config).length > 0 && (
-              <div className="mt-3 pt-3 border-t border-white/10">
+              <div className="mt-3 pt-3 border-t border-gray-200">
                 <div className="flex flex-wrap gap-1.5">
                   {node.data.config.tagName && (
-                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 text-[10px] rounded-full">
+                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-600 text-[10px] rounded-full">
                       #{node.data.config.tagName}
                     </span>
                   )}
                   {node.data.config.delay && (
-                    <span className="px-2 py-0.5 bg-dark-600/20 text-dark-400 text-[10px] rounded-full">
+                    <span className="px-2 py-0.5 bg-gray-200/20 text-gray-500 text-[10px] rounded-full">
                       ⏱ {node.data.config.delay.value} {node.data.config.delay.unit}
                     </span>
                   )}
                   {node.data.config.subject && (
-                    <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 text-[10px] rounded-full truncate max-w-[150px]">
+                    <span className="px-2 py-0.5 bg-violet-500/20 text-violet-600 text-[10px] rounded-full truncate max-w-[150px]">
                       📧 {node.data.config.subject}
                     </span>
                   )}
@@ -332,7 +332,7 @@ function CanvasNode({
                 ? 'bg-emerald-500 border-4 border-white scale-150 shadow-lg shadow-emerald-500/50' 
                 : isConnecting 
                   ? 'bg-emerald-500/50 border-4 border-emerald-300 scale-125 animate-pulse shadow-lg shadow-emerald-500/30' 
-                  : 'bg-[#1a1a1a] border-4 border-[#333333] hover:border-emerald-400 hover:bg-emerald-500 hover:scale-110'
+                  : 'bg-white border-4 border-gray-200 hover:border-emerald-400 hover:bg-emerald-500 hover:scale-110'
             )}
           >
             <div className={cn(
@@ -351,7 +351,7 @@ function CanvasNode({
               'w-8 h-8 rounded-full',
               'flex items-center justify-center',
               'transition-all duration-150 cursor-crosshair z-20',
-              'bg-[#1a1a1a] border-4 border-[#333333] hover:border-primary-500 hover:bg-primary-500 hover:scale-110'
+              'bg-white border-4 border-gray-200 hover:border-primary-500 hover:bg-primary-500 hover:scale-110'
             )}
           >
             <div className="w-2 h-2 rounded-full bg-gray-500" />
@@ -592,7 +592,7 @@ function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps)
               cy={from.y}
               r="5"
               fill={solidColor}
-              stroke="#0a0a0a"
+              stroke="#e5e7eb"
               strokeWidth="2"
             />
             
@@ -602,7 +602,7 @@ function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps)
               cy={to.y}
               r="5"
               fill={solidColor}
-              stroke="#0a0a0a"
+              stroke="#e5e7eb"
               strokeWidth="2"
             />
           </g>
@@ -643,7 +643,7 @@ function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps)
               cy={from.y}
               r="6"
               fill="#818cf8"
-              stroke="#0a0a0a"
+              stroke="#e5e7eb"
               strokeWidth="2"
             />
             
@@ -653,7 +653,7 @@ function ConnectionLines({ edges, nodes, tempConnection }: ConnectionLinesProps)
               cy={to.y}
               r="6"
               fill="#818cf8"
-              stroke="#0a0a0a"
+              stroke="#e5e7eb"
               strokeWidth="2"
               opacity="0.7"
             />
@@ -687,10 +687,10 @@ function NodePalette({ onAddNode }: NodePaletteProps) {
   };
 
   return (
-    <div className="w-64 bg-[#111111] border-r border-[#222222] overflow-y-auto flex-shrink-0">
-      <div className="p-4 border-b border-[#222222]">
-        <h3 className="font-semibold text-white">Blocos</h3>
-        <p className="text-xs text-[#555555] mt-1">Arraste para o canvas</p>
+    <div className="w-64 bg-gray-50 border-r border-gray-200 overflow-y-auto flex-shrink-0">
+      <div className="p-4 border-b border-gray-200">
+        <h3 className="font-semibold text-gray-900">Blocos</h3>
+        <p className="text-xs text-gray-500 mt-1">Arraste para o canvas</p>
       </div>
 
       <div className="p-2 space-y-1">
@@ -701,16 +701,16 @@ function NodePalette({ onAddNode }: NodePaletteProps) {
               className={cn(
                 'w-full flex items-center justify-between p-3 rounded-lg',
                 'text-left transition-all duration-150',
-                expanded === section.id ? 'bg-[#1a1a1a]' : 'hover:bg-[#1a1a1a]'
+                expanded === section.id ? 'bg-white' : 'hover:bg-white'
               )}
             >
               <div className="flex items-center gap-2">
-                <section.icon className="w-4 h-4 text-[#666666]" />
-                <span className="text-sm font-medium text-white">{section.label}</span>
+                <section.icon className="w-4 h-4 text-gray-400" />
+                <span className="text-sm font-medium text-gray-900">{section.label}</span>
               </div>
               <ChevronRight
                 className={cn(
-                  'w-4 h-4 text-[#555555] transition-transform',
+                  'w-4 h-4 text-gray-500 transition-transform',
                   expanded === section.id && 'rotate-90'
                 )}
               />
@@ -737,9 +737,9 @@ function NodePalette({ onAddNode }: NodePaletteProps) {
                           onClick={() => onAddNode(node.type)}
                           className={cn(
                             'w-full flex items-center gap-3 p-2.5 rounded-xl',
-                            'bg-[#0a0a0a] border border-[#1a1a1a]',
+                            'bg-white border border-gray-200',
                             'cursor-grab active:cursor-grabbing',
-                            'hover:border-[#333333] hover:bg-[#141414]',
+                            'hover:border-gray-200 hover:bg-gray-50',
                             'transition-all duration-150 group'
                           )}
                         >
@@ -749,7 +749,7 @@ function NodePalette({ onAddNode }: NodePaletteProps) {
                           <div className={cn('p-2.5 rounded-xl', colors.bg)}>
                             <node.icon className={cn('w-4 h-4', colors.text)} />
                           </div>
-                          <span className="text-sm text-[#888888] group-hover:text-white transition-colors">
+                          <span className="text-sm text-gray-500 group-hover:text-gray-900 transition-colors">
                             {node.label}
                           </span>
                         </button>
@@ -897,12 +897,12 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
   // Componente de Select estilizado
   const StyledSelect = ({ label, value, onChange, options, placeholder, disabled = false }: any) => (
     <div>
-      <label className="text-sm font-medium text-white mb-2 block">{label}</label>
+      <label className="text-sm font-medium text-gray-900 mb-2 block">{label}</label>
       <select
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="w-full bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50 disabled:opacity-50"
+        className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-brand-400 disabled:opacity-50"
       >
         <option value="">{placeholder || 'Selecionar...'}</option>
         {options.map((opt: any) => (
@@ -944,9 +944,9 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
   };
 
   return (
-    <div className="w-80 bg-[#111111] border-l border-[#222222] overflow-y-auto flex-shrink-0">
+    <div className="w-80 bg-gray-50 border-l border-gray-200 overflow-y-auto flex-shrink-0">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-[#222222]">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200">
         <div className="flex items-center gap-3">
           {isTrigger && (
             <span className={cn('px-2 py-0.5 text-[10px] font-bold rounded', colors.solid, 'text-white')}>
@@ -957,13 +957,13 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
             <Icon className={cn('w-4 h-4', colors.text)} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-white">{nodeType?.label}</h3>
-            <p className="text-xs text-[#555555]">Configurações</p>
+            <h3 className="text-sm font-semibold text-gray-900">{nodeType?.label}</h3>
+            <p className="text-xs text-gray-500">Configurações</p>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-[#1a1a1a] text-[#555555] hover:text-white transition-colors"
+          className="p-1.5 rounded-lg hover:bg-white text-gray-500 hover:text-gray-900 transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
@@ -1019,7 +1019,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
           <div className="space-y-3">
             <CredentialAlert service="Shopify" configPath="/settings?tab=integrations" integrationId="shopify" />
             <div>
-              <label className="text-sm font-medium text-white mb-2 block">Tempo de abandono</label>
+              <label className="text-sm font-medium text-gray-900 mb-2 block">Tempo de abandono</label>
               <div className="flex gap-2">
                 <Input
                   type="number"
@@ -1030,7 +1030,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 <select
                   value={node.data.config?.abandonTimeUnit || 'minutes'}
                   onChange={(e) => updateConfig('abandonTimeUnit', e.target.value)}
-                  className="bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white"
+                  className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700"
                 >
                   <option value="minutes">Minutos</option>
                   <option value="hours">Horas</option>
@@ -1069,9 +1069,9 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 id="requireEmail"
                 checked={node.data.config?.requireEmail ?? true}
                 onChange={(e) => updateConfig('requireEmail', e.target.checked)}
-                className="rounded bg-[#0d0d0d] border-[#333333]"
+                className="rounded bg-white border-gray-200"
               />
-              <label htmlFor="requireEmail" className="text-sm text-white">Obrigatório ter email</label>
+              <label htmlFor="requireEmail" className="text-sm text-gray-700">Obrigatório ter email</label>
             </div>
           </div>
         )}
@@ -1136,7 +1136,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
               onChange={(e) => updateConfig('segmentName', e.target.value)}
               placeholder="Ex: Clientes VIP"
             />
-            <p className="text-xs text-[#555555]">
+            <p className="text-xs text-gray-500">
               O segmento será avaliado automaticamente quando houver mudanças nos contatos.
             </p>
           </div>
@@ -1146,17 +1146,17 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         {node.type === 'trigger_webhook' && (
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium text-white mb-2 block">URL do Webhook</label>
+              <label className="text-sm font-medium text-gray-900 mb-2 block">URL do Webhook</label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={webhookUrl}
                   readOnly
-                  className="flex-1 bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-xs text-[#666666] font-mono"
+                  className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-400 font-mono"
                 />
                 <button
                   onClick={() => navigator.clipboard.writeText(webhookUrl)}
-                  className="px-3 py-2 bg-[#1a1a1a] hover:bg-[#222222] rounded-lg text-white text-xs"
+                  className="px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-gray-700 text-xs"
                 >
                   Copiar
                 </button>
@@ -1168,9 +1168,9 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 id="validatePayload"
                 checked={node.data.config?.validatePayload ?? true}
                 onChange={(e) => updateConfig('validatePayload', e.target.checked)}
-                className="rounded bg-[#0d0d0d] border-[#333333]"
+                className="rounded bg-white border-gray-200"
               />
-              <label htmlFor="validatePayload" className="text-sm text-white">Validar assinatura</label>
+              <label htmlFor="validatePayload" className="text-sm text-gray-700">Validar assinatura</label>
             </div>
           </div>
         )}
@@ -1280,7 +1280,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
               placeholder="Olá {{contact.first_name}}!"
               rows={3}
             />
-            <p className="text-xs text-[#555555]">
+            <p className="text-xs text-gray-500">
               {(node.data.config?.message || '').length}/160 caracteres
             </p>
           </div>
@@ -1496,7 +1496,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         {/* Logic: Aguardar */}
         {node.type === 'logic_delay' && (
           <div className="space-y-3">
-            <label className="text-sm font-medium text-white">Tempo de espera</label>
+            <label className="text-sm font-medium text-gray-900">Tempo de espera</label>
             <div className="flex gap-2">
               <Input
                 type="number"
@@ -1521,7 +1521,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                     },
                   })
                 }
-                className="bg-[#0d0d0d] border border-[#222222] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50"
+                className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-brand-400"
               >
                 <option value="minutes">Minutos</option>
                 <option value="hours">Horas</option>
@@ -1556,7 +1556,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 placeholder="Valor para comparar..."
               />
             )}
-            <p className="text-xs text-[#555555]">
+            <p className="text-xs text-gray-500">
               ✅ Verdadeiro → Caminho verde<br />
               ❌ Falso → Caminho vermelho
             </p>
@@ -1567,7 +1567,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         {node.type === 'logic_split' && (
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium text-white mb-2 block">
+              <label className="text-sm font-medium text-gray-900 mb-2 block">
                 Divisão: {node.data.config?.splitPercentage || 50}% / {100 - (node.data.config?.splitPercentage || 50)}%
               </label>
               <input
@@ -1579,7 +1579,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 onChange={(e) => updateConfig('splitPercentage', parseInt(e.target.value))}
                 className="w-full"
               />
-              <div className="flex justify-between text-xs text-[#555555] mt-1">
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
                 <span className="text-emerald-400">Caminho A: {node.data.config?.splitPercentage || 50}%</span>
                 <span className="text-red-400">Caminho B: {100 - (node.data.config?.splitPercentage || 50)}%</span>
               </div>
@@ -1618,7 +1618,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
                 placeholder="Valor para filtrar..."
               />
             )}
-            <p className="text-xs text-[#555555]">
+            <p className="text-xs text-gray-500">
               Apenas contatos que passarem no filtro continuam no fluxo.
             </p>
           </div>
@@ -1626,7 +1626,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
       </div>
 
       {/* Botão de excluir */}
-      <div className="p-4 border-t border-white/10">
+      <div className="p-4 border-t border-gray-200">
         <Button variant="ghost" className="w-full text-red-400 hover:bg-red-500/10" onClick={onDelete}>
           <Trash2 className="w-4 h-4 mr-2" />
           Excluir bloco
@@ -2131,21 +2131,21 @@ export function AutomationCanvas({
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#0a0a0a]">
+    <div className="h-full flex flex-col bg-white">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#222222] bg-[#111111] flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50 flex-shrink-0">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={onBack}>
             <ArrowRight className="w-4 h-4 mr-2 rotate-180" />
             Voltar
           </Button>
-          <div className="w-px h-6 bg-[#222222]" />
+          <div className="w-px h-6 bg-gray-200" />
           
           <input
             type="text"
             value={automationName}
             onChange={(e) => onNameChange(e.target.value)}
-            className="bg-transparent border-none text-lg font-semibold text-white focus:outline-none focus:ring-2 focus:ring-primary/50 rounded px-2 py-1 min-w-[200px]"
+            className="bg-transparent border-none text-lg font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/50 rounded px-2 py-1 min-w-[200px]"
             placeholder="Nome da automação"
           />
           
@@ -2160,14 +2160,14 @@ export function AutomationCanvas({
           <div className="flex items-center gap-1 mr-4">
             <button
               onClick={() => setZoom((z) => Math.max(z - 0.1, 0.25))}
-              className="p-2 rounded-lg hover:bg-[#1a1a1a] text-[#555555] hover:text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-white text-gray-500 hover:text-gray-900 transition-colors"
             >
               <ZoomOut className="w-4 h-4" />
             </button>
-            <span className="text-xs text-[#555555] w-12 text-center">{Math.round(zoom * 100)}%</span>
+            <span className="text-xs text-gray-500 w-12 text-center">{Math.round(zoom * 100)}%</span>
             <button
               onClick={() => setZoom((z) => Math.min(z + 0.1, 2))}
-              className="p-2 rounded-lg hover:bg-[#1a1a1a] text-[#555555] hover:text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-white text-gray-500 hover:text-gray-900 transition-colors"
             >
               <ZoomIn className="w-4 h-4" />
             </button>
@@ -2212,14 +2212,14 @@ export function AutomationCanvas({
       </div>
 
       {/* Tabs - Canvas vs Execuções */}
-      <div className="flex items-center gap-1 px-4 py-2 border-b border-[#222222] bg-[#0f0f0f] flex-shrink-0">
+      <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0">
         <button
           onClick={() => setActiveTab('canvas')}
           className={cn(
             'flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all',
             activeTab === 'canvas'
               ? 'bg-primary-500 text-white'
-              : 'text-[#666666] hover:text-white hover:bg-[#1a1a1a]'
+              : 'text-gray-400 hover:text-gray-900 hover:bg-gray-100'
           )}
         >
           <Zap className="w-4 h-4" />
@@ -2231,7 +2231,7 @@ export function AutomationCanvas({
             'flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all',
             activeTab === 'executions'
               ? 'bg-primary-500 text-white'
-              : 'text-[#666666] hover:text-white hover:bg-[#1a1a1a]'
+              : 'text-gray-400 hover:text-gray-900 hover:bg-gray-100'
           )}
         >
           <History className="w-4 h-4" />
@@ -2250,10 +2250,10 @@ export function AutomationCanvas({
       )}
       
       {activeTab === 'executions' && (!automationId || automationId === 'new') && (
-        <div className="flex-1 flex items-center justify-center bg-[#0a0a0a]">
+        <div className="flex-1 flex items-center justify-center bg-white">
           <div className="text-center">
-            <History className="w-12 h-12 text-[#333333] mx-auto mb-3" />
-            <p className="text-[#666666]">Salve a automação primeiro para ver as execuções</p>
+            <History className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-400">Salve a automação primeiro para ver as execuções</p>
           </div>
         </div>
       )}
@@ -2265,7 +2265,7 @@ export function AutomationCanvas({
 
         <div
           ref={canvasRef}
-          className="flex-1 relative overflow-hidden bg-[#0a0a0a]"
+          className="flex-1 relative overflow-hidden bg-white"
           onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -2292,8 +2292,8 @@ export function AutomationCanvas({
             onClick={handleCanvasClick}
             style={{
               backgroundImage: `
-                linear-gradient(to right, #1a1a1a 1px, transparent 1px),
-                linear-gradient(to bottom, #1a1a1a 1px, transparent 1px)
+                linear-gradient(to right, #e5e7eb 1px, transparent 1px),
+                linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
               `,
               backgroundSize: `${24 * zoom}px ${24 * zoom}px`,
               backgroundPosition: `${pan.x}px ${pan.y}px`,
@@ -2327,11 +2327,11 @@ export function AutomationCanvas({
           {nodes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center">
-                <div className="w-16 h-16 rounded-2xl bg-[#111111] border border-[#222222] flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 rounded-2xl bg-gray-50 border border-gray-200 flex items-center justify-center mx-auto mb-4">
                   <Zap className="w-8 h-8 text-[#444444]" />
                 </div>
-                <h3 className="text-lg font-semibold text-white mb-2">Canvas vazio</h3>
-                <p className="text-[#555555] text-sm">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Canvas vazio</h3>
+                <p className="text-gray-500 text-sm">
                   Arraste um gatilho da sidebar para começar
                 </p>
               </div>
@@ -2341,8 +2341,8 @@ export function AutomationCanvas({
           {/* Mensagem de ajuda quando conectando */}
           {connectingFrom && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-              <div className="bg-[#111111] border border-primary-500/50 rounded-lg px-4 py-2 shadow-lg">
-                <p className="text-sm text-white">
+              <div className="bg-gray-50 border border-brand-400 rounded-lg px-4 py-2 shadow-lg">
+                <p className="text-sm text-gray-700">
                   🔗 Clique no <span className="text-emerald-400 font-semibold">ponto verde</span> de outro bloco para conectar
                 </p>
               </div>
@@ -2352,8 +2352,8 @@ export function AutomationCanvas({
           {/* Indicador de modo pan */}
           {isSpacePressed && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-              <div className="bg-[#111111] border border-cyan-500/50 rounded-lg px-4 py-2 shadow-lg">
-                <p className="text-sm text-white">
+              <div className="bg-gray-50 border border-cyan-500/50 rounded-lg px-4 py-2 shadow-lg">
+                <p className="text-sm text-gray-700">
                   ✋ Modo <span className="text-cyan-400 font-semibold">mover tela</span> — arraste para navegar
                 </p>
               </div>
@@ -2362,7 +2362,7 @@ export function AutomationCanvas({
 
           {/* Indicador de zoom */}
           <div className="absolute bottom-4 right-4 z-20 pointer-events-none">
-            <div className="bg-[#111111]/80 border border-[#333333] rounded-lg px-3 py-1.5 text-xs text-[#666666]">
+            <div className="bg-gray-50/80 border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-400">
               {Math.round(zoom * 100)}%
             </div>
           </div>
@@ -2371,9 +2371,9 @@ export function AutomationCanvas({
           {!connectingFrom && !isSpacePressed && nodes.length > 0 && (
             <div className="absolute bottom-4 left-4 z-20 pointer-events-none">
               <div className="flex gap-2 text-[10px] text-[#444444]">
-                <span className="bg-[#111111]/60 border border-[#222222] rounded px-1.5 py-0.5">Scroll = Zoom</span>
-                <span className="bg-[#111111]/60 border border-[#222222] rounded px-1.5 py-0.5">Espaço + Arrastar = Mover</span>
-                <span className="bg-[#111111]/60 border border-[#222222] rounded px-1.5 py-0.5">ESC = Cancelar</span>
+                <span className="bg-gray-50/60 border border-gray-200 rounded px-1.5 py-0.5">Scroll = Zoom</span>
+                <span className="bg-gray-50/60 border border-gray-200 rounded px-1.5 py-0.5">Espaço + Arrastar = Mover</span>
+                <span className="bg-gray-50/60 border border-gray-200 rounded px-1.5 py-0.5">ESC = Cancelar</span>
               </div>
             </div>
           )}
@@ -2446,7 +2446,7 @@ export function AutomationListItem({
   const Icon = triggerType?.icon || Zap;
 
   return (
-    <div className="group p-4 bg-[#0d0d0d] hover:bg-[#111111] border border-[#1a1a1a] hover:border-[#222222] rounded-xl transition-all">
+    <div className="group p-4 bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-200 rounded-xl transition-all">
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-4">
           <div className={cn('p-3 rounded-xl', colors.bg)}>
@@ -2454,7 +2454,7 @@ export function AutomationListItem({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-white">{automation.name}</h3>
+              <h3 className="font-semibold text-gray-900">{automation.name}</h3>
               <Badge
                 variant={automation.status === 'active' ? 'success' : automation.status === 'paused' ? 'warning' : 'default'}
               >
@@ -2462,10 +2462,10 @@ export function AutomationListItem({
               </Badge>
             </div>
             {automation.description && (
-              <p className="text-sm text-[#555555] mt-1">{automation.description}</p>
+              <p className="text-sm text-gray-500 mt-1">{automation.description}</p>
             )}
             {automation.stats && (
-              <div className="flex items-center gap-4 mt-3 text-xs text-[#555555]">
+              <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
                 <span>{automation.stats.sent?.toLocaleString()} enviados</span>
                 <span>{automation.stats.converted?.toLocaleString()} conversões</span>
                 {automation.stats.revenue && (
@@ -2503,14 +2503,14 @@ export function AutomationTemplateCard({ template, onSelect }: { template: (type
   const Icon = triggerType?.icon || Zap;
 
   return (
-    <button onClick={onSelect} className="w-full p-4 rounded-xl bg-[#0d0d0d] border border-[#1a1a1a] hover:border-[#333333] hover:bg-[#111111] transition-all text-left group">
+    <button onClick={onSelect} className="w-full p-4 rounded-xl bg-white border border-gray-200 hover:border-gray-200 hover:bg-gray-50 transition-all text-left group">
       <div className="flex items-center gap-3">
         <div className={cn('p-2.5 rounded-lg', colors.bg)}>
           <Icon className={cn('w-5 h-5', colors.text)} />
         </div>
         <div>
-          <h4 className="font-medium text-white group-hover:text-primary transition-colors">{template.name}</h4>
-          <p className="text-xs text-[#555555]">{template.description}</p>
+          <h4 className="font-medium text-gray-900 group-hover:text-primary transition-colors">{template.name}</h4>
+          <p className="text-xs text-gray-500">{template.description}</p>
         </div>
       </div>
     </button>

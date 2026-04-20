@@ -195,7 +195,7 @@ function KPICard({
   format?: 'currency' | 'percent' | 'number' | 'days'
 }) {
   const colorClasses = {
-    primary: 'bg-primary-500/20 text-primary-400',
+    primary: 'bg-brand-100 text-brand-600',
     green: 'bg-green-500/20 text-green-400',
     amber: 'bg-amber-500/20 text-amber-400',
     red: 'bg-red-500/20 text-red-400',
@@ -216,16 +216,16 @@ function KPICard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5"
+      className="bg-gray-50 border border-gray-200 rounded-2xl p-5"
     >
       <div className={`w-10 h-10 rounded-xl ${colorClasses[color]} flex items-center justify-center mb-3`}>
         <Icon className="w-5 h-5" />
       </div>
-      <div className="text-2xl font-bold text-white mb-1">{formatValue()}</div>
-      <div className="text-sm text-dark-400 mb-2">{label}</div>
+      <div className="text-2xl font-bold text-gray-900 mb-1">{formatValue()}</div>
+      <div className="text-sm text-gray-500 mb-2">{label}</div>
       {(subtext || variation !== undefined) && (
         <div className="flex items-center gap-2">
-          {subtext && <span className="text-xs text-dark-500">{subtext}</span>}
+          {subtext && <span className="text-xs text-gray-400">{subtext}</span>}
           {variation !== undefined && variation !== 0 && (
             <span className={`text-xs flex items-center gap-1 ${variation > 0 ? 'text-green-400' : 'text-red-400'}`}>
               {variation > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -271,11 +271,11 @@ function PipelineSelector({
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white hover:bg-dark-800 transition-colors min-w-[200px]"
+        className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 hover:bg-white transition-colors min-w-[200px]"
       >
-        <BarChart3 className="w-4 h-4 text-dark-400" />
+        <BarChart3 className="w-4 h-4 text-gray-500" />
         <span className="flex-1 text-left font-medium">{displayText}</span>
-        <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       <AnimatePresence>
@@ -286,19 +286,19 @@ function PipelineSelector({
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="absolute left-0 top-full mt-2 w-72 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
+              className="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-20 overflow-hidden"
             >
-              <div className="p-2 border-b border-dark-700/50">
+              <div className="p-2 border-b border-gray-200">
                 <div className="flex gap-2">
                   <button
                     onClick={selectAll}
-                    className="flex-1 px-3 py-1.5 text-xs font-medium text-dark-400 hover:text-white bg-dark-700/50 rounded-lg transition-colors"
+                    className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-white bg-gray-100 rounded-lg transition-colors"
                   >
                     Todos
                   </button>
                   <button
                     onClick={selectNone}
-                    className="flex-1 px-3 py-1.5 text-xs font-medium text-dark-400 hover:text-white bg-dark-700/50 rounded-lg transition-colors"
+                    className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-white bg-gray-100 rounded-lg transition-colors"
                   >
                     Nenhum
                   </button>
@@ -309,13 +309,13 @@ function PipelineSelector({
                   <button
                     key={pipeline.id}
                     onClick={() => togglePipeline(pipeline.id)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-700/50 transition-colors"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 transition-colors"
                   >
                     <div
                       className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
                         selectedIds.includes(pipeline.id) || selectedIds.length === 0
                           ? 'bg-primary-500 border-primary-500'
-                          : 'border-dark-600'
+                          : 'border-gray-300'
                       }`}
                     >
                       {(selectedIds.includes(pipeline.id) || selectedIds.length === 0) && (
@@ -326,7 +326,7 @@ function PipelineSelector({
                       className="w-3 h-3 rounded-full"
                       style={{ backgroundColor: pipeline.color || '#6366f1' }}
                     />
-                    <span className="text-sm text-white">{pipeline.name}</span>
+                    <span className="text-sm text-gray-700">{pipeline.name}</span>
                   </button>
                 ))}
               </div>
@@ -346,7 +346,7 @@ function CommitLevelSection({ data }: { data: CommitLevel[] }) {
 
   if (safeData.length === 0) {
     return (
-      <div className="bg-dark-800/30 border border-dark-700/30 rounded-xl p-4 text-center text-dark-400">
+      <div className="bg-gray-50 border border-gray-200/30 rounded-xl p-4 text-center text-gray-500">
         Sem dados de forecast
       </div>
     )
@@ -359,13 +359,13 @@ function CommitLevelSection({ data }: { data: CommitLevel[] }) {
           key={level.level}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-dark-800/30 border border-dark-700/30 rounded-xl p-4"
+          className="bg-gray-50 border border-gray-200/30 rounded-xl p-4"
         >
-          <div className="text-xs text-dark-400 mb-2">{level.label}</div>
-          <div className="text-xl font-bold text-white">{formatCurrency(level.value)}</div>
+          <div className="text-xs text-gray-500 mb-2">{level.label}</div>
+          <div className="text-xl font-bold text-gray-900">{formatCurrency(level.value)}</div>
           <div className="flex items-center gap-2 mt-2">
             <div 
-              className="h-1.5 rounded-full flex-1 bg-dark-700"
+              className="h-1.5 rounded-full flex-1 bg-gray-100"
             >
               <div 
                 className="h-full rounded-full transition-all duration-500"
@@ -375,7 +375,7 @@ function CommitLevelSection({ data }: { data: CommitLevel[] }) {
                 }}
               />
             </div>
-            <span className="text-xs text-dark-500">{level.dealCount} deals</span>
+            <span className="text-xs text-gray-400">{level.dealCount} deals</span>
           </div>
         </motion.div>
       ))}
@@ -402,32 +402,32 @@ function PipelineComparisonTable({ data }: { data: PipelineMetrics[] }) {
     : 0
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl overflow-hidden">
-      <div className="px-5 py-4 border-b border-dark-700/50">
-        <h3 className="text-lg font-semibold text-white">Comparativo por Pipeline</h3>
+    <div className="bg-gray-50 border border-gray-200 rounded-2xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900">Comparativo por Pipeline</h3>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-dark-700/50">
-              <th className="text-left px-5 py-3 text-xs font-medium text-dark-400 uppercase">Pipeline</th>
-              <th className="text-right px-5 py-3 text-xs font-medium text-dark-400 uppercase">Valor Total</th>
-              <th className="text-right px-5 py-3 text-xs font-medium text-dark-400 uppercase">Win Rate</th>
-              <th className="text-right px-5 py-3 text-xs font-medium text-dark-400 uppercase">Ciclo</th>
-              <th className="text-right px-5 py-3 text-xs font-medium text-dark-400 uppercase">Ticket</th>
-              <th className="text-right px-5 py-3 text-xs font-medium text-dark-400 uppercase">Deals</th>
+            <tr className="border-b border-gray-200">
+              <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase">Pipeline</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Valor Total</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Win Rate</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Ciclo</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Ticket</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Deals</th>
             </tr>
           </thead>
           <tbody>
             {safeData.map((pipeline, index) => (
-              <tr key={pipeline.id} className="border-b border-dark-700/30 hover:bg-dark-700/20">
+              <tr key={pipeline.id} className="border-b border-gray-200/30 hover:bg-gray-100/20">
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: pipeline.color }} />
-                    <span className="text-sm font-medium text-white">{pipeline.name}</span>
+                    <span className="text-sm font-medium text-gray-900">{pipeline.name}</span>
                   </div>
                 </td>
-                <td className="text-right px-5 py-3 text-sm text-white font-medium">
+                <td className="text-right px-5 py-3 text-sm text-gray-700 font-medium">
                   {formatCurrency(pipeline.metrics.totalValue)}
                 </td>
                 <td className="text-right px-5 py-3">
@@ -435,30 +435,30 @@ function PipelineComparisonTable({ data }: { data: PipelineMetrics[] }) {
                     {pipeline.metrics.winRate.toFixed(1)}%
                   </span>
                 </td>
-                <td className="text-right px-5 py-3 text-sm text-dark-300">
+                <td className="text-right px-5 py-3 text-sm text-gray-600">
                   {pipeline.metrics.avgCycleDays.toFixed(0)}d
                 </td>
-                <td className="text-right px-5 py-3 text-sm text-dark-300">
+                <td className="text-right px-5 py-3 text-sm text-gray-600">
                   {formatCurrency(pipeline.metrics.avgTicket)}
                 </td>
-                <td className="text-right px-5 py-3 text-sm text-dark-300">
+                <td className="text-right px-5 py-3 text-sm text-gray-600">
                   {pipeline.metrics.totalDeals}
                 </td>
               </tr>
             ))}
-            <tr className="bg-dark-700/30">
+            <tr className="bg-gray-100/30">
               <td className="px-5 py-3">
-                <span className="text-sm font-semibold text-white">Total</span>
+                <span className="text-sm font-semibold text-gray-900">Total</span>
               </td>
-              <td className="text-right px-5 py-3 text-sm text-white font-semibold">
+              <td className="text-right px-5 py-3 text-sm text-gray-900 font-semibold">
                 {formatCurrency(totals.totalValue)}
               </td>
-              <td className="text-right px-5 py-3 text-sm text-white font-semibold">
+              <td className="text-right px-5 py-3 text-sm text-gray-900 font-semibold">
                 {avgWinRate.toFixed(1)}%
               </td>
-              <td className="text-right px-5 py-3 text-sm text-dark-300">-</td>
-              <td className="text-right px-5 py-3 text-sm text-dark-300">-</td>
-              <td className="text-right px-5 py-3 text-sm text-white font-semibold">
+              <td className="text-right px-5 py-3 text-sm text-gray-600">-</td>
+              <td className="text-right px-5 py-3 text-sm text-gray-600">-</td>
+              <td className="text-right px-5 py-3 text-sm text-gray-900 font-semibold">
                 {totals.totalDeals}
               </td>
             </tr>
@@ -491,8 +491,8 @@ function PipelineCharts({ data }: { data: PipelineMetrics[] }) {
   return (
     <div className="grid grid-cols-2 gap-6">
       {/* Bar Chart - Value by Pipeline */}
-      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
-        <h3 className="text-sm font-semibold text-white mb-4">Valor por Pipeline</h3>
+      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Valor por Pipeline</h3>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={barData} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
@@ -513,8 +513,8 @@ function PipelineCharts({ data }: { data: PipelineMetrics[] }) {
       </div>
 
       {/* Pie Chart - Deals by Pipeline */}
-      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
-        <h3 className="text-sm font-semibold text-white mb-4">Deals por Pipeline</h3>
+      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Deals por Pipeline</h3>
         <ResponsiveContainer width="100%" height={200}>
           <RechartsPieChart>
             <Pie
@@ -549,9 +549,9 @@ function SalesFunnel({ data }: { data: FunnelStage[] }) {
   
   if (safeData.length === 0) {
     return (
-      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
-        <h3 className="text-lg font-semibold text-white mb-4">Funil de Vendas</h3>
-        <div className="text-center text-dark-400 py-8">Sem dados de funil</div>
+      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Funil de Vendas</h3>
+        <div className="text-center text-gray-500 py-8">Sem dados de funil</div>
       </div>
     )
   }
@@ -559,23 +559,23 @@ function SalesFunnel({ data }: { data: FunnelStage[] }) {
   const maxValue = Math.max(...safeData.map(s => s.value || 0))
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
-      <h3 className="text-lg font-semibold text-white mb-4">Funil de Vendas</h3>
+    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Funil de Vendas</h3>
       <div className="space-y-3">
         {safeData.map((stage, index) => (
           <div key={stage.id} className="group">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color || '#6366f1' }} />
-                <span className="text-sm font-medium text-white">{stage.name}</span>
-                <span className="text-xs text-dark-500">({stage.count})</span>
+                <span className="text-sm font-medium text-gray-900">{stage.name}</span>
+                <span className="text-xs text-gray-400">({stage.count})</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-white">{formatCurrency(stage.value)}</span>
-                <span className="text-xs text-dark-500">{stage.probability}%</span>
+                <span className="text-sm font-medium text-gray-900">{formatCurrency(stage.value)}</span>
+                <span className="text-xs text-gray-400">{stage.probability}%</span>
               </div>
             </div>
-            <div className="relative h-8 bg-dark-700/50 rounded-lg overflow-hidden">
+            <div className="relative h-8 bg-gray-100 rounded-lg overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: maxValue > 0 ? `${(stage.value / maxValue) * 100}%` : '0%' }}
@@ -584,7 +584,7 @@ function SalesFunnel({ data }: { data: FunnelStage[] }) {
                 style={{ backgroundColor: stage.color || '#6366f1' }}
               />
               <div className="absolute inset-0 flex items-center px-3">
-                <span className="text-xs text-white/80">
+                <span className="text-xs text-gray-600/80">
                   Ponderado: {formatCurrency(stage.weightedValue)}
                 </span>
               </div>
@@ -601,8 +601,8 @@ function TimelineChart({ data }: { data: any[] }) {
   if (!data || data.length === 0) return null
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
-      <h3 className="text-lg font-semibold text-white mb-4">Evolução de Deals e Valor</h3>
+    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Evolução de Deals e Valor</h3>
       <ResponsiveContainer width="100%" height={250}>
         <AreaChart data={data}>
           <defs>
@@ -633,11 +633,11 @@ function TimelineChart({ data }: { data: any[] }) {
       <div className="flex items-center justify-center gap-6 mt-4">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-green-500" />
-          <span className="text-xs text-dark-400">Valor Ganho</span>
+          <span className="text-xs text-gray-500">Valor Ganho</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-red-500" />
-          <span className="text-xs text-dark-400">Valor Perdido</span>
+          <span className="text-xs text-gray-500">Valor Perdido</span>
         </div>
       </div>
     </div>
@@ -651,12 +651,12 @@ function VelocitySection({ data }: { data: VelocityStage[] }) {
   
   if (safeData.length === 0) {
     return (
-      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
-        <h3 className="text-lg font-semibold text-white mb-4">Velocidade por Estágio</h3>
-        <div className="flex flex-col items-center justify-center py-8 text-dark-400">
+      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Velocidade por Estágio</h3>
+        <div className="flex flex-col items-center justify-center py-8 text-gray-500">
           <Clock className="w-8 h-8 mb-2 opacity-50" />
           <p className="text-sm">Sem dados de velocidade ainda</p>
-          <p className="text-xs text-dark-500">Mova deals entre estágios para começar a medir</p>
+          <p className="text-xs text-gray-400">Mova deals entre estágios para começar a medir</p>
         </div>
       </div>
     )
@@ -665,16 +665,16 @@ function VelocitySection({ data }: { data: VelocityStage[] }) {
   const maxDays = Math.max(...safeData.map(v => v.avgDays || 0))
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
-      <h3 className="text-lg font-semibold text-white mb-4">Velocidade por Estágio</h3>
+    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Velocidade por Estágio</h3>
       <div className="space-y-3">
         {safeData.map((stage, index) => (
           <div key={stage.stageId}>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm text-white">{stage.stageName}</span>
-              <span className="text-sm font-medium text-dark-300">{stage.avgDays.toFixed(1)} dias</span>
+              <span className="text-sm text-gray-700">{stage.stageName}</span>
+              <span className="text-sm font-medium text-gray-600">{stage.avgDays.toFixed(1)} dias</span>
             </div>
-            <div className="h-2 bg-dark-700/50 rounded-full overflow-hidden">
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: maxDays > 0 ? `${(stage.avgDays / maxDays) * 100}%` : '0%' }}
@@ -694,28 +694,28 @@ function DealsSection({ topDeals, dealsAtRisk }: { topDeals: TopDeal[]; dealsAtR
   return (
     <div className="grid grid-cols-2 gap-6">
       {/* Top Deals */}
-      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <Award className="w-5 h-5 text-amber-400" />
-          <h3 className="text-lg font-semibold text-white">Top 5 Deals</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Top 5 Deals</h3>
         </div>
         {topDeals.length === 0 ? (
-          <div className="text-center text-dark-400 py-6 text-sm">Nenhum deal em aberto</div>
+          <div className="text-center text-gray-500 py-6 text-sm">Nenhum deal em aberto</div>
         ) : (
           <div className="space-y-3">
             {topDeals.map((deal, index) => (
-              <div key={deal.id} className="flex items-center gap-3 p-3 bg-dark-700/30 rounded-xl">
+              <div key={deal.id} className="flex items-center gap-3 p-3 bg-gray-100/30 rounded-xl">
                 <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs font-bold">
                   {index + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-white truncate">{deal.title}</div>
+                  <div className="text-sm font-medium text-gray-900 truncate">{deal.title}</div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: deal.stageColor }} />
-                    <span className="text-xs text-dark-400">{deal.stageName}</span>
+                    <span className="text-xs text-gray-500">{deal.stageName}</span>
                   </div>
                 </div>
-                <div className="text-sm font-semibold text-white">{formatCurrency(deal.value)}</div>
+                <div className="text-sm font-semibold text-gray-900">{formatCurrency(deal.value)}</div>
               </div>
             ))}
           </div>
@@ -723,13 +723,13 @@ function DealsSection({ topDeals, dealsAtRisk }: { topDeals: TopDeal[]; dealsAtR
       </div>
 
       {/* Deals at Risk */}
-      <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <AlertTriangle className="w-5 h-5 text-red-400" />
-          <h3 className="text-lg font-semibold text-white">Deals em Risco</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Deals em Risco</h3>
         </div>
         {dealsAtRisk.length === 0 ? (
-          <div className="text-center text-dark-400 py-6 text-sm">
+          <div className="text-center text-gray-500 py-6 text-sm">
             <span className="text-green-400">✓</span> Nenhum deal parado
           </div>
         ) : (
@@ -737,14 +737,14 @@ function DealsSection({ topDeals, dealsAtRisk }: { topDeals: TopDeal[]; dealsAtR
             {dealsAtRisk.slice(0, 5).map(deal => (
               <div key={deal.id} className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-white truncate">{deal.title}</div>
+                  <div className="text-sm font-medium text-gray-900 truncate">{deal.title}</div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-red-400">{deal.daysSinceUpdate} dias parado</span>
-                    <span className="text-xs text-dark-500">•</span>
-                    <span className="text-xs text-dark-400">{deal.stageName}</span>
+                    <span className="text-xs text-gray-400">•</span>
+                    <span className="text-xs text-gray-500">{deal.stageName}</span>
                   </div>
                 </div>
-                <div className="text-sm font-semibold text-white">{formatCurrency(deal.value)}</div>
+                <div className="text-sm font-semibold text-gray-900">{formatCurrency(deal.value)}</div>
               </div>
             ))}
           </div>
@@ -771,10 +771,10 @@ function InsightsSection({ insights }: { insights: Insight[] }) {
   }
 
   return (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5">
+    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-4">
         <Lightbulb className="w-5 h-5 text-amber-400" />
-        <h3 className="text-lg font-semibold text-white">Insights</h3>
+        <h3 className="text-lg font-semibold text-gray-900">Insights</h3>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {insights.map((insight, index) => (
@@ -783,7 +783,7 @@ function InsightsSection({ insights }: { insights: Insight[] }) {
             className={`flex items-start gap-3 p-3 rounded-xl border ${bgMap[insight.type]}`}
           >
             <div className="mt-0.5">{iconMap[insight.type]}</div>
-            <p className="text-sm text-white">{insight.message}</p>
+            <p className="text-sm text-gray-700">{insight.message}</p>
           </div>
         ))}
       </div>
@@ -862,7 +862,7 @@ export default function AnalyticsPage() {
   if (!organizationId || !storeId) {
     return (
       <div className="flex items-center justify-center h-96">
-        <p className="text-dark-400">Selecione uma loja para ver analytics</p>
+        <p className="text-gray-500">Selecione uma loja para ver analytics</p>
       </div>
     )
   }
@@ -872,8 +872,8 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Analytics de Vendas</h1>
-          <p className="text-dark-400 mt-1">Análise completa do seu pipeline de vendas</p>
+          <h1 className="text-2xl font-bold text-gray-900">Analytics de Vendas</h1>
+          <p className="text-gray-500 mt-1">Análise completa do seu pipeline de vendas</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -890,10 +890,10 @@ export default function AnalyticsPage() {
           <div className="relative">
             <button
               onClick={() => setShowPeriodDropdown(!showPeriodDropdown)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white hover:bg-dark-800 transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 hover:bg-white transition-colors"
             >
               <span className="font-medium">{periods.find(p => p.value === period)?.label}</span>
-              <ChevronDown className={`w-4 h-4 text-dark-400 transition-transform ${showPeriodDropdown ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showPeriodDropdown ? 'rotate-180' : ''}`} />
             </button>
 
             <AnimatePresence>
@@ -904,7 +904,7 @@ export default function AnalyticsPage() {
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="absolute right-0 top-full mt-2 w-48 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-20 overflow-hidden"
+                    className="absolute right-0 top-full mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-xl z-20 overflow-hidden"
                   >
                     {periods.map(p => (
                       <button
@@ -915,8 +915,8 @@ export default function AnalyticsPage() {
                         }}
                         className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
                           period === p.value
-                            ? 'bg-primary-500/20 text-primary-400'
-                            : 'text-white hover:bg-dark-700/50'
+                            ? 'bg-brand-100 text-brand-600'
+                            : 'text-white hover:bg-gray-100'
                         }`}
                       >
                         {p.label}
@@ -932,7 +932,7 @@ export default function AnalyticsPage() {
           <button
             onClick={fetchData}
             disabled={loading}
-            className="p-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-dark-400 hover:text-white hover:bg-dark-800 transition-colors disabled:opacity-50"
+            className="p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 hover:text-white hover:bg-white transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -942,7 +942,7 @@ export default function AnalyticsPage() {
       {/* Loading State */}
       {loading && !data && (
         <div className="flex items-center justify-center h-96">
-          <RefreshCw className="w-8 h-8 text-primary-400 animate-spin" />
+          <RefreshCw className="w-8 h-8 text-brand-600 animate-spin" />
         </div>
       )}
 
@@ -1027,7 +1027,7 @@ export default function AnalyticsPage() {
 
           {/* Commit Level Section */}
           <div>
-            <h3 className="text-lg font-semibold text-white mb-4">Forecast por Commit Level</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Forecast por Commit Level</h3>
             <CommitLevelSection data={data.byCommitLevel} />
           </div>
 

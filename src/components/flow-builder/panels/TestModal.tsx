@@ -267,11 +267,11 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
       case 'error':
         return <XCircle className="w-4 h-4 text-red-400" />;
       case 'skipped':
-        return <SkipForward className="w-4 h-4 text-white/30" />;
+        return <SkipForward className="w-4 h-4 text-gray-400" />;
       case 'waiting':
         return <Clock className="w-4 h-4 text-amber-400" />;
       default:
-        return <Clock className="w-4 h-4 text-white/40" />;
+        return <Clock className="w-4 h-4 text-gray-400" />;
     }
   };
 
@@ -292,18 +292,18 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-xl bg-[#111111] border border-white/10 shadow-2xl"
+          className="w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-xl bg-gray-50 border border-gray-200 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <div className="flex items-center gap-3">
               <Zap className="w-5 h-5 text-amber-400" />
-              <h2 className="text-lg font-semibold text-white">Testar Automação</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Testar Automação</h2>
             </div>
             <button
               onClick={onClose}
-              className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -313,7 +313,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
           <div className="p-4 space-y-4 max-h-[calc(90vh-140px)] overflow-y-auto">
             {/* Contact Selection */}
             <div>
-              <label className="block text-sm font-medium text-white/70 mb-2">
+              <label className="block text-sm font-medium text-gray-900/70 mb-2">
                 Contato para Teste
               </label>
               <div className="flex items-center gap-3">
@@ -322,9 +322,9 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                     type="checkbox"
                     checked={useSampleData}
                     onChange={(e) => setUseSampleData(e.target.checked)}
-                    className="rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500"
+                    className="rounded border-gray-300 bg-gray-50 text-blue-500 focus:ring-blue-500"
                   />
-                  <span className="text-sm text-white/70">Usar dados de exemplo</span>
+                  <span className="text-sm text-gray-700/70">Usar dados de exemplo</span>
                 </label>
               </div>
 
@@ -334,7 +334,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                   onChange={(e) => setSelectedContactId(e.target.value)}
                   className={cn(
                     'w-full mt-2 px-3 py-2 rounded-lg',
-                    'bg-[#0a0a0a] border border-white/10 text-white',
+                    'bg-white border border-gray-200 text-gray-900',
                     'focus:outline-none focus:border-blue-500/50'
                   )}
                 >
@@ -355,11 +355,11 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
             {/* Trigger Data Input */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-white/70">
+                <label className="text-sm font-medium text-gray-900/70">
                   Dados do Gatilho (JSON)
                 </label>
                 {triggerNode && (
-                  <span className="text-xs text-white/40 bg-white/5 px-2 py-0.5 rounded">
+                  <span className="text-xs text-gray-600/40 bg-gray-50 px-2 py-0.5 rounded">
                     {triggerNode.data?.label || triggerNode.data?.nodeType}
                   </span>
                 )}
@@ -370,13 +370,13 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                 placeholder='{"key": "value"}'
                 className={cn(
                   'w-full h-40 px-3 py-2 rounded-lg font-mono text-sm',
-                  'bg-[#0a0a0a] border border-white/10 text-white',
-                  'placeholder-white/30',
+                  'bg-white border border-gray-200 text-gray-900',
+                  'placeholder-gray-400',
                   'focus:outline-none focus:border-blue-500/50',
                   'resize-none'
                 )}
               />
-              <p className="mt-1 text-xs text-white/40">
+              <p className="mt-1 text-xs text-gray-600/40">
                 Estes dados simularão o evento que dispara a automação
               </p>
             </div>
@@ -412,7 +412,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                       )}>
                         {result.success ? 'Teste bem sucedido!' : 'Teste falhou'}
                       </p>
-                      <p className="text-sm text-white/50">
+                      <p className="text-sm text-gray-700/50">
                         Duração: {result.totalDuration}ms • ID: {result.executionId}
                       </p>
                     </div>
@@ -421,15 +421,15 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
 
                 {/* Contact Used */}
                 {result.contact && (
-                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                  <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
                     <div className="flex items-center gap-2 text-sm">
-                      <User className="w-4 h-4 text-white/40" />
-                      <span className="text-white/70">Contato:</span>
-                      <span className="text-white">
+                      <User className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-700">Contato:</span>
+                      <span className="text-gray-900">
                         {result.contact.full_name || result.contact.first_name || result.contact.email}
                       </span>
                       {result.contact.email && (
-                        <span className="text-white/40">({result.contact.email})</span>
+                        <span className="text-gray-400">({result.contact.email})</span>
                       )}
                     </div>
                   </div>
@@ -437,7 +437,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
 
                 {/* Node Results */}
                 <div>
-                  <h3 className="text-sm font-medium text-white/70 mb-2">
+                  <h3 className="text-sm font-medium text-gray-900/70 mb-2">
                     Resultado por Nó ({result.steps?.length || 0} passos)
                   </h3>
                   <div className="space-y-2">
@@ -448,26 +448,26 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                       return (
                         <div
                           key={step.nodeId}
-                          className="rounded-lg border border-white/10 overflow-hidden"
+                          className="rounded-lg border border-gray-200 overflow-hidden"
                         >
                           {/* Node Header */}
                           <button
                             onClick={() => toggleNodeExpand(step.nodeId)}
-                            className="w-full flex items-center gap-3 p-3 hover:bg-white/5 transition-colors"
+                            className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors"
                           >
                             {getStatusIcon(step.status)}
-                            <span className="flex-1 text-left text-sm text-white/80">
+                            <span className="flex-1 text-left text-sm text-gray-700/80">
                               {node?.data?.label || step.nodeId}
                             </span>
                             {step.duration !== undefined && (
-                              <span className="text-xs text-white/40">
+                              <span className="text-xs text-gray-600/40">
                                 {step.duration}ms
                               </span>
                             )}
                             {isExpanded ? (
-                              <ChevronDown className="w-4 h-4 text-white/40" />
+                              <ChevronDown className="w-4 h-4 text-gray-400" />
                             ) : (
-                              <ChevronRight className="w-4 h-4 text-white/40" />
+                              <ChevronRight className="w-4 h-4 text-gray-400" />
                             )}
                           </button>
 
@@ -478,16 +478,16 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
                                 exit={{ height: 0, opacity: 0 }}
-                                className="border-t border-white/10"
+                                className="border-t border-gray-200"
                               >
-                                <div className="p-3 bg-[#0a0a0a]">
+                                <div className="p-3 bg-white">
                                   {step.error && (
                                     <div className="mb-2 p-2 rounded bg-red-500/20 text-red-300 text-xs">
                                       {step.error}
                                     </div>
                                   )}
                                   {step.output && (
-                                    <pre className="text-xs text-white/60 overflow-x-auto">
+                                    <pre className="text-xs text-gray-600/60 overflow-x-auto">
                                       {JSON.stringify(step.output, null, 2)}
                                     </pre>
                                   )}
@@ -507,8 +507,8 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
             {isRunning && (
               <div className="flex flex-col items-center justify-center py-8">
                 <Loader2 className="w-8 h-8 text-blue-400 animate-spin mb-3" />
-                <p className="text-white/60">Executando teste...</p>
-                <p className="text-white/40 text-sm mt-1">
+                <p className="text-gray-500">Executando teste...</p>
+                <p className="text-gray-400 text-sm mt-1">
                   Isso pode levar alguns segundos
                 </p>
               </div>
@@ -516,13 +516,13 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-4 border-t border-white/10">
+          <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200">
             <button
               onClick={onClose}
               className={cn(
                 'px-4 py-2 rounded-lg',
-                'text-sm font-medium text-white/60',
-                'hover:bg-white/10 hover:text-white',
+                'text-sm font-medium text-gray-900/60',
+                'hover:bg-gray-100 hover:text-gray-900',
                 'transition-colors'
               )}
             >

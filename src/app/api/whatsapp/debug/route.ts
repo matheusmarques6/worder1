@@ -5,13 +5,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host';
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY!;
 const WEBHOOK_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app';
 
 export async function GET(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action') || 'status';
   const instanceName = searchParams.get('instance');
@@ -87,6 +91,9 @@ export async function GET(request: NextRequest) {
 
 // POST - Ações de debug
 export async function POST(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+
   try {
     const body = await request.json();
     const { action, instanceName } = body;

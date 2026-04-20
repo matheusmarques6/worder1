@@ -49,13 +49,13 @@ const TASK_TYPES = [
   { value: 'email', label: 'E-mail', icon: Mail, color: 'text-amber-400' },
   { value: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, color: 'text-green-400' },
   { value: 'meeting', label: 'Reunião', icon: Video, color: 'text-purple-400' },
-  { value: 'task', label: 'Tarefa', icon: CheckSquare, color: 'text-primary-400' },
+  { value: 'task', label: 'Tarefa', icon: CheckSquare, color: 'text-brand-600' },
   { value: 'followup', label: 'Follow-up', icon: Bell, color: 'text-pink-400' },
   { value: 'payment', label: 'Cobrança', icon: DollarSign, color: 'text-emerald-400' },
 ]
 
 const PRIORITIES = [
-  { value: 'low', label: 'Baixa', color: 'bg-dark-500 text-dark-300' },
+  { value: 'low', label: 'Baixa', color: 'bg-gray-300 text-gray-600' },
   { value: 'normal', label: 'Normal', color: 'bg-blue-500/20 text-blue-400' },
   { value: 'high', label: 'Alta', color: 'bg-amber-500/20 text-amber-400' },
   { value: 'urgent', label: 'Urgente', color: 'bg-error-500/20 text-error-400' },
@@ -165,21 +165,21 @@ export function CreateTaskModal({
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto"
+          className="bg-white border border-gray-200 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto"
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-dark-700">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div className="flex items-center gap-3">
-              <div className={`p-2 bg-dark-700 rounded-xl ${selectedType?.color}`}>
+              <div className={`p-2 bg-gray-100 rounded-xl ${selectedType?.color}`}>
                 <TypeIcon className="w-5 h-5" />
               </div>
-              <h3 className="text-lg font-semibold text-white">Nova Tarefa</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Nova Tarefa</h3>
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <X className="w-5 h-5 text-dark-400" />
+              <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
 
@@ -188,7 +188,7 @@ export function CreateTaskModal({
             {(contactName || dealTitle) && (
               <div className="flex flex-wrap gap-2">
                 {contactName && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-500/10 text-primary-400 rounded-lg text-sm">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 text-brand-600 rounded-lg text-sm">
                     <User className="w-3.5 h-3.5" />
                     {contactName}
                   </span>
@@ -204,7 +204,7 @@ export function CreateTaskModal({
 
             {/* Título */}
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Título *
               </label>
               <input
@@ -212,7 +212,7 @@ export function CreateTaskModal({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Ex: Ligar para confirmar proposta"
-                className="w-full px-4 py-2.5 bg-dark-700 border border-dark-600 rounded-xl 
+                className="w-full px-4 py-2.5 bg-gray-100 border border-gray-300 rounded-xl 
                            text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 
                            transition-colors"
                 autoFocus
@@ -221,7 +221,7 @@ export function CreateTaskModal({
 
             {/* Tipo */}
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Tipo
               </label>
               <div className="grid grid-cols-4 gap-2">
@@ -234,12 +234,12 @@ export function CreateTaskModal({
                       onClick={() => setType(t.value)}
                       className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
                         type === t.value
-                          ? 'bg-dark-700 border-primary-500'
-                          : 'bg-dark-800 border-dark-600 hover:border-dark-500'
+                          ? 'bg-gray-100 border-primary-500'
+                          : 'bg-white border-gray-300 hover:border-gray-300'
                       }`}
                     >
                       <Icon className={`w-5 h-5 ${t.color}`} />
-                      <span className="text-xs text-dark-300">{t.label}</span>
+                      <span className="text-xs text-gray-600">{t.label}</span>
                     </button>
                   )
                 })}
@@ -249,7 +249,7 @@ export function CreateTaskModal({
             {/* Data e Hora */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   <Calendar className="w-4 h-4 inline mr-1.5" />
                   Data *
                 </label>
@@ -257,12 +257,12 @@ export function CreateTaskModal({
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-dark-700 border border-dark-600 rounded-xl 
+                  className="w-full px-4 py-2.5 bg-gray-100 border border-gray-300 rounded-xl 
                              text-white focus:outline-none focus:border-primary-500 transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">
+                <label className="block text-sm font-medium text-gray-600 mb-2">
                   <Clock className="w-4 h-4 inline mr-1.5" />
                   Hora
                 </label>
@@ -270,7 +270,7 @@ export function CreateTaskModal({
                   type="time"
                   value={dueTime}
                   onChange={(e) => setDueTime(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-dark-700 border border-dark-600 rounded-xl 
+                  className="w-full px-4 py-2.5 bg-gray-100 border border-gray-300 rounded-xl 
                              text-white focus:outline-none focus:border-primary-500 transition-colors"
                 />
               </div>
@@ -278,7 +278,7 @@ export function CreateTaskModal({
 
             {/* Prioridade */}
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Prioridade
               </label>
               <div className="flex gap-2">
@@ -290,7 +290,7 @@ export function CreateTaskModal({
                     className={`flex-1 py-2 px-3 rounded-xl border text-sm font-medium transition-all ${
                       priority === p.value
                         ? `${p.color} border-current`
-                        : 'bg-dark-800 border-dark-600 text-dark-400 hover:border-dark-500'
+                        : 'bg-white border-gray-300 text-gray-500 hover:border-gray-300'
                     }`}
                   >
                     {p.label}
@@ -300,18 +300,18 @@ export function CreateTaskModal({
             </div>
 
             {/* Lembrete */}
-            <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-xl">
+            <div className="flex items-center justify-between p-4 bg-gray-100 rounded-xl">
               <div className="flex items-center gap-3">
-                <Bell className="w-5 h-5 text-dark-400" />
-                <span className="text-sm text-dark-300">Lembrete</span>
+                <Bell className="w-5 h-5 text-gray-500" />
+                <span className="text-sm text-gray-600">Lembrete</span>
               </div>
               <div className="flex items-center gap-3">
                 {setReminder && (
                   <select
                     value={reminderMinutes}
                     onChange={(e) => setReminderMinutes(e.target.value)}
-                    className="px-3 py-1.5 bg-dark-600 border border-dark-500 rounded-lg 
-                               text-sm text-white focus:outline-none"
+                    className="px-3 py-1.5 bg-gray-200 border border-gray-300 rounded-lg 
+                               text-sm text-gray-700 focus:outline-none"
                   >
                     <option value="15">15 min antes</option>
                     <option value="30">30 min antes</option>
@@ -323,7 +323,7 @@ export function CreateTaskModal({
                   type="button"
                   onClick={() => setSetReminder(!setReminder)}
                   className={`w-12 h-6 rounded-full transition-colors ${
-                    setReminder ? 'bg-primary-500' : 'bg-dark-600'
+                    setReminder ? 'bg-primary-500' : 'bg-gray-200'
                   }`}
                 >
                   <div
@@ -337,7 +337,7 @@ export function CreateTaskModal({
 
             {/* Descrição */}
             <div>
-              <label className="block text-sm font-medium text-dark-300 mb-2">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
                 Descrição (opcional)
               </label>
               <textarea
@@ -345,7 +345,7 @@ export function CreateTaskModal({
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Detalhes adicionais..."
                 rows={3}
-                className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-xl 
+                className="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl 
                            text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 
                            resize-none transition-colors"
               />
@@ -363,8 +363,8 @@ export function CreateTaskModal({
             <div className="flex gap-3 pt-2">
               <button
                 onClick={onClose}
-                className="flex-1 py-3 bg-dark-700 text-dark-300 rounded-xl 
-                           hover:bg-dark-600 hover:text-white transition-colors font-medium"
+                className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl 
+                           hover:bg-gray-200 hover:text-white transition-colors font-medium"
               >
                 Cancelar
               </button>

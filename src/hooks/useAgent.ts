@@ -114,17 +114,23 @@ export function useAgent(agentId: string, organizationId: string): UseAgentRetur
     }
   }, [agentId, organizationId])
 
-  // Initial fetch
+  // Initial fetch - ✅ CORREÇÃO: Usar Promise.allSettled para não falhar se um der erro
   useEffect(() => {
     const loadAll = async () => {
       setLoading(true)
       setError(null)
-      await Promise.all([
+      const results = await Promise.allSettled([
         fetchAgent(),
         fetchSources(),
         fetchActions(),
         fetchIntegrations(),
       ])
+      // Log any rejected promises
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.error(`[useAgent] Fetch ${index} failed:`, result.reason)
+        }
+      })
       setLoading(false)
     }
     loadAll()

@@ -93,7 +93,7 @@ export default function BotSelector({
         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
           isBotActive
             ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-            : 'bg-dark-700 text-dark-300 hover:bg-dark-600 hover:text-white'
+            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-white'
         }`}
       >
         {changing ? (
@@ -106,36 +106,36 @@ export default function BotSelector({
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-64 bg-dark-800 border border-dark-700 rounded-xl shadow-xl z-50 overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
           {/* Opção de desativar */}
           <button
             onClick={() => handleSelectAgent(null)}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-dark-700 transition-colors ${
-              !isBotActive ? 'bg-dark-700/50' : ''
+            className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-100 transition-colors ${
+              !isBotActive ? 'bg-gray-100' : ''
             }`}
           >
             <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
               <Power className="w-4 h-4 text-red-400" />
             </div>
             <div>
-              <p className="text-sm font-medium text-white">Desativar Bot</p>
-              <p className="text-xs text-dark-400">Responder manualmente</p>
+              <p className="text-sm font-medium text-gray-900">Desativar Bot</p>
+              <p className="text-xs text-gray-500">Responder manualmente</p>
             </div>
           </button>
 
-          <div className="border-t border-dark-700" />
+          <div className="border-t border-gray-200" />
 
           {/* Lista de agentes */}
           {loading ? (
             <div className="px-4 py-6 text-center">
-              <Loader2 className="w-6 h-6 animate-spin text-dark-400 mx-auto" />
-              <p className="text-xs text-dark-500 mt-2">Carregando agentes...</p>
+              <Loader2 className="w-6 h-6 animate-spin text-gray-500 mx-auto" />
+              <p className="text-xs text-gray-400 mt-2">Carregando agentes...</p>
             </div>
           ) : agents.length === 0 ? (
             <div className="px-4 py-6 text-center">
-              <Bot className="w-8 h-8 text-dark-500 mx-auto mb-2" />
-              <p className="text-sm text-dark-400">Nenhum agente criado</p>
-              <p className="text-xs text-dark-500 mt-1">Crie um agente em Configurações</p>
+              <Bot className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">Nenhum agente criado</p>
+              <p className="text-xs text-gray-400 mt-1">Crie um agente em Configurações</p>
             </div>
           ) : (
             <div className="max-h-60 overflow-y-auto">
@@ -143,31 +143,31 @@ export default function BotSelector({
                 <button
                   key={agent.id}
                   onClick={() => handleSelectAgent(agent)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-dark-700 transition-colors ${
-                    currentAgentId === agent.id ? 'bg-primary-500/10' : ''
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-100 transition-colors ${
+                    currentAgentId === agent.id ? 'bg-brand-50' : ''
                   }`}
                 >
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                     currentAgentId === agent.id 
-                      ? 'bg-primary-500/20' 
-                      : 'bg-dark-600'
+                      ? 'bg-brand-100' 
+                      : 'bg-gray-200'
                   }`}>
                     <Bot className={`w-4 h-4 ${
                       currentAgentId === agent.id 
-                        ? 'text-primary-400' 
-                        : 'text-dark-400'
+                        ? 'text-brand-600' 
+                        : 'text-gray-500'
                     }`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-medium truncate ${
                       currentAgentId === agent.id 
-                        ? 'text-primary-400' 
+                        ? 'text-brand-600' 
                         : 'text-white'
                     }`}>
                       {agent.name}
                     </p>
                     {agent.description && (
-                      <p className="text-xs text-dark-400 truncate">{agent.description}</p>
+                      <p className="text-xs text-gray-500 truncate">{agent.description}</p>
                     )}
                   </div>
                 </button>

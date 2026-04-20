@@ -94,12 +94,14 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching automations:', error);
-      return NextResponse.json({ automations: [] });
+      // ✅ CORREÇÃO: Retornar erro real em vez de array vazio
+      return NextResponse.json({ error: error.message, automations: [] }, { status: 500 });
     }
     return NextResponse.json({ automations: data || [] });
   } catch (error: any) {
     console.error('Automation GET error:', error);
-    return NextResponse.json({ automations: [] });
+    // ✅ CORREÇÃO: Retornar erro real
+    return NextResponse.json({ error: error.message, automations: [] }, { status: 500 });
   }
 }
 
@@ -138,6 +140,10 @@ export async function POST(request: NextRequest) {
       description: data.description || null,
       trigger_type: data.trigger_type || 'manual',
       trigger_config: data.trigger_config || {},
+      trigger_filters: data.trigger_filters || [],
+      audience_filters: data.audience_filters || [],
+      exit_conditions: data.exit_conditions || [],
+      frequency_config: data.frequency_config || { type: 'once' },
       nodes: data.nodes || [],
       edges: data.edges || [],
       status: data.status || 'draft',
@@ -192,6 +198,10 @@ export async function PUT(request: NextRequest) {
     if (data.description !== undefined) updateData.description = data.description;
     if (data.trigger_type !== undefined) updateData.trigger_type = data.trigger_type;
     if (data.trigger_config !== undefined) updateData.trigger_config = data.trigger_config;
+    if (data.trigger_filters !== undefined) updateData.trigger_filters = data.trigger_filters;
+    if (data.audience_filters !== undefined) updateData.audience_filters = data.audience_filters;
+    if (data.exit_conditions !== undefined) updateData.exit_conditions = data.exit_conditions;
+    if (data.frequency_config !== undefined) updateData.frequency_config = data.frequency_config;
     if (data.nodes !== undefined) updateData.nodes = data.nodes;
     if (data.edges !== undefined) updateData.edges = data.edges;
     

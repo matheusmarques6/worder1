@@ -302,28 +302,28 @@ export function CreateDealRuleModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           onClick={e => e.stopPropagation()}
-          className="w-full max-w-xl bg-dark-800 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden"
+          className="w-full max-w-xl bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-5 border-b border-dark-700">
+          <div className="flex items-center justify-between p-5 border-b border-gray-200">
             <div className="flex items-center gap-3">
               {Icon && (
-                <div className="p-2 bg-primary-500/20 rounded-lg">
-                  <Icon className="w-5 h-5 text-primary-400" />
+                <div className="p-2 bg-brand-100 rounded-lg">
+                  <Icon className="w-5 h-5 text-brand-600" />
                 </div>
               )}
               <div>
-                <h2 className="text-lg font-semibold text-white">
+                <h2 className="text-lg font-semibold text-gray-900">
                   {rule ? 'Editar Regra' : 'Nova Regra'} - Criar Deal
                 </h2>
                 {sourceType && (
-                  <p className="text-sm text-dark-400">{SOURCE_NAMES[sourceType]}</p>
+                  <p className="text-sm text-gray-500">{SOURCE_NAMES[sourceType]}</p>
                 )}
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -340,7 +340,7 @@ export function CreateDealRuleModal({
 
             {/* Name */}
             <div>
-              <label className="block text-sm text-dark-400 mb-2">
+              <label className="block text-sm text-gray-500 mb-2">
                 Nome da Regra <span className="text-red-400">*</span>
               </label>
               <input
@@ -348,14 +348,14 @@ export function CreateDealRuleModal({
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Ex: Pedido pago > R$500"
-                className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
               />
             </div>
 
             {/* Source Selection */}
             {!selectedSource && (
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Fonte <span className="text-red-400">*</span>
                 </label>
                 <div className="grid grid-cols-3 gap-3">
@@ -373,13 +373,13 @@ export function CreateDealRuleModal({
                         className={`
                           p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2
                           ${isSelected
-                            ? 'border-primary-500 bg-primary-500/10'
-                            : 'border-dark-700 hover:border-dark-600 bg-dark-900'
+                            ? 'border-primary-500 bg-brand-50'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
                           }
                         `}
                       >
-                        <IntIcon className={`w-6 h-6 ${isSelected ? 'text-primary-400' : 'text-dark-400'}`} />
-                        <span className={`text-sm ${isSelected ? 'text-primary-400' : 'text-dark-300'}`}>
+                        <IntIcon className={`w-6 h-6 ${isSelected ? 'text-brand-600' : 'text-gray-500'}`} />
+                        <span className={`text-sm ${isSelected ? 'text-brand-600' : 'text-gray-600'}`}>
                           {SOURCE_NAMES[integration.type]}
                         </span>
                       </button>
@@ -392,7 +392,7 @@ export function CreateDealRuleModal({
             {/* Event Selection */}
             {sourceType && (
               <div>
-                <label className="block text-sm text-dark-400 mb-2">
+                <label className="block text-sm text-gray-500 mb-2">
                   Evento que Dispara <span className="text-red-400">*</span>
                 </label>
                 <div className="space-y-2">
@@ -404,20 +404,20 @@ export function CreateDealRuleModal({
                       className={`
                         w-full p-4 rounded-xl border-2 transition-all text-left
                         ${triggerEvent === event.id
-                          ? 'border-primary-500 bg-primary-500/10'
-                          : 'border-dark-700 hover:border-dark-600 bg-dark-900'
+                          ? 'border-primary-500 bg-brand-50'
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
                         }
                       `}
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className={`font-medium ${triggerEvent === event.id ? 'text-primary-400' : 'text-white'}`}>
+                          <p className={`font-medium ${triggerEvent === event.id ? 'text-brand-600' : 'text-white'}`}>
                             {event.label}
                           </p>
-                          <p className="text-sm text-dark-400">{event.description}</p>
+                          <p className="text-sm text-gray-500">{event.description}</p>
                         </div>
                         {triggerEvent === event.id && (
-                          <CheckCircle className="w-5 h-5 text-primary-400" />
+                          <CheckCircle className="w-5 h-5 text-brand-600" />
                         )}
                       </div>
                     </button>
@@ -428,67 +428,67 @@ export function CreateDealRuleModal({
 
             {/* Filters */}
             <div>
-              <label className="block text-sm text-dark-400 mb-2">
+              <label className="block text-sm text-gray-500 mb-2">
                 Filtros (opcional)
               </label>
-              <div className="p-4 bg-dark-900 border border-dark-700 rounded-xl space-y-4">
+              <div className="p-4 bg-white border border-gray-200 rounded-xl space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-dark-500 mb-1">Valor Mínimo (R$)</label>
+                    <label className="block text-xs text-gray-400 mb-1">Valor Mínimo (R$)</label>
                     <input
                       type="number"
                       value={minValue}
                       onChange={e => setMinValue(e.target.value)}
                       placeholder="0"
-                      className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-dark-500 mb-1">Valor Máximo (R$)</label>
+                    <label className="block text-xs text-gray-400 mb-1">Valor Máximo (R$)</label>
                     <input
                       type="number"
                       value={maxValue}
                       onChange={e => setMaxValue(e.target.value)}
                       placeholder="Sem limite"
-                      className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs text-dark-500 mb-1">Tags do Cliente (incluir)</label>
+                  <label className="block text-xs text-gray-400 mb-1">Tags do Cliente (incluir)</label>
                   <input
                     type="text"
                     value={includeTags}
                     onChange={e => setIncludeTags(e.target.value)}
                     placeholder="vip, premium (separados por vírgula)"
-                    className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
                   />
-                  <p className="text-xs text-dark-500 mt-1">Apenas clientes com estas tags</p>
+                  <p className="text-xs text-gray-400 mt-1">Apenas clientes com estas tags</p>
                 </div>
 
                 <div>
-                  <label className="block text-xs text-dark-500 mb-1">Tags do Cliente (excluir)</label>
+                  <label className="block text-xs text-gray-400 mb-1">Tags do Cliente (excluir)</label>
                   <input
                     type="text"
                     value={excludeTags}
                     onChange={e => setExcludeTags(e.target.value)}
                     placeholder="teste, spam (separados por vírgula)"
-                    className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
                   />
-                  <p className="text-xs text-dark-500 mt-1">Ignorar clientes com estas tags</p>
+                  <p className="text-xs text-gray-400 mt-1">Ignorar clientes com estas tags</p>
                 </div>
               </div>
             </div>
 
             {/* Pipeline & Stage */}
             <div>
-              <label className="block text-sm text-dark-400 mb-2">
+              <label className="block text-sm text-gray-500 mb-2">
                 Destino do Deal <span className="text-red-400">*</span>
               </label>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-dark-500 mb-1">Pipeline</label>
+                  <label className="block text-xs text-gray-400 mb-1">Pipeline</label>
                   <div className="relative">
                     <select
                       value={pipelineId}
@@ -496,24 +496,24 @@ export function CreateDealRuleModal({
                         setPipelineId(e.target.value)
                         setStageId('')
                       }}
-                      className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
                     >
                       <option value="">Selecionar...</option>
                       {pipelines.map(p => (
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400 pointer-events-none" />
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs text-dark-500 mb-1">Estágio Inicial</label>
+                  <label className="block text-xs text-gray-400 mb-1">Estágio Inicial</label>
                   <div className="relative">
                     <select
                       value={stageId}
                       onChange={e => setStageId(e.target.value)}
-                      className="w-full px-4 py-3 bg-dark-900 border border-dark-700 rounded-xl text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
                       disabled={!pipelineId}
                     >
                       <option value="">Selecionar...</option>
@@ -521,24 +521,24 @@ export function CreateDealRuleModal({
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400 pointer-events-none" />
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
                   </div>
                 </div>
               </div>
-              <p className="text-xs text-dark-500 mt-2">Deals criados entrarão neste estágio</p>
+              <p className="text-xs text-gray-400 mt-2">Deals criados entrarão neste estágio</p>
             </div>
 
             {/* Options */}
-            <div className="flex items-center justify-between p-4 bg-dark-900 border border-dark-700 rounded-xl">
+            <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl">
               <div>
-                <p className="text-sm text-white">Evitar duplicados</p>
-                <p className="text-xs text-dark-500">Não criar deal se já existir um aberto para o contato</p>
+                <p className="text-sm text-gray-700">Evitar duplicados</p>
+                <p className="text-xs text-gray-400">Não criar deal se já existir um aberto para o contato</p>
               </div>
               <button
                 type="button"
                 onClick={() => setAvoidDuplicates(!avoidDuplicates)}
                 className={`relative w-12 h-6 rounded-full transition-colors ${
-                  avoidDuplicates ? 'bg-primary-500' : 'bg-dark-700'
+                  avoidDuplicates ? 'bg-primary-500' : 'bg-gray-100'
                 }`}
               >
                 <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${
@@ -548,16 +548,16 @@ export function CreateDealRuleModal({
             </div>
 
             {/* Active Toggle */}
-            <div className="flex items-center justify-between p-4 bg-dark-900 border border-dark-700 rounded-xl">
+            <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl">
               <div>
-                <p className="text-sm text-white">Regra Ativa</p>
-                <p className="text-xs text-dark-500">Regras inativas não criam deals</p>
+                <p className="text-sm text-gray-700">Regra Ativa</p>
+                <p className="text-xs text-gray-400">Regras inativas não criam deals</p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsEnabled(!isEnabled)}
                 className={`relative w-12 h-6 rounded-full transition-colors ${
-                  isEnabled ? 'bg-green-500' : 'bg-dark-700'
+                  isEnabled ? 'bg-green-500' : 'bg-gray-100'
                 }`}
               >
                 <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${
@@ -568,11 +568,11 @@ export function CreateDealRuleModal({
           </form>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-5 border-t border-dark-700">
+          <div className="flex items-center justify-end gap-3 p-5 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2.5 text-dark-300 hover:text-white transition-colors"
+              className="px-6 py-2.5 text-gray-600 hover:text-white transition-colors"
             >
               Cancelar
             </button>

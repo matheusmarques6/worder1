@@ -152,9 +152,9 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
   };
 
   return (
-    <div className="h-full flex flex-col bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
+    <div className="h-full flex flex-col bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* Header */}
-      <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
+      <div className="p-3 border-b border-gray-200 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div 
             className="w-8 h-8 rounded-full flex items-center justify-center text-lg"
@@ -163,17 +163,17 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
             {template.icon}
           </div>
           <div>
-            <p className="text-sm font-medium text-white">
+            <p className="text-sm font-medium text-gray-900">
               {formData.storeName || 'Seu Agente'}
             </p>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-gray-500">
               Tom: {toneEmoji[persona.tone]} {persona.tone}
             </p>
           </div>
         </div>
         <button
           onClick={handleReset}
-          className="p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+          className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-50 rounded-lg transition-colors"
           title="Resetar conversa"
         >
           <RefreshCw className="w-4 h-4" />
@@ -195,7 +195,7 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
                   max-w-[85%] px-3 py-2 rounded-2xl text-sm
                   ${message.role === 'user'
                     ? 'bg-blue-600 text-white rounded-br-sm'
-                    : 'bg-zinc-800 text-zinc-100 rounded-bl-sm'
+                    : 'bg-gray-50 text-gray-900 rounded-bl-sm'
                   }
                 `}
               >
@@ -212,7 +212,7 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
             animate={{ opacity: 1 }}
             className="flex justify-start"
           >
-            <div className="bg-zinc-800 px-4 py-2 rounded-2xl rounded-bl-sm">
+            <div className="bg-gray-50 px-4 py-2 rounded-2xl rounded-bl-sm">
               <div className="flex gap-1">
                 <span className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                 <span className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -226,7 +226,7 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t border-zinc-800">
+      <div className="p-3 border-t border-gray-200">
         <div className="flex gap-2">
           <input
             type="text"
@@ -234,18 +234,18 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Digite uma mensagem..."
-            className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
+            className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-zinc-500 focus:outline-none focus:border-gray-200"
             disabled={isTyping}
           />
           <button
             onClick={handleSend}
             disabled={!inputValue.trim() || isTyping}
-            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 text-white rounded-lg transition-colors"
+            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 text-white rounded-lg transition-colors"
           >
             <Send className="w-4 h-4" />
           </button>
         </div>
-        <p className="text-xs text-zinc-600 mt-2 text-center">
+        <p className="text-xs text-gray-400 mt-2 text-center">
           Preview simulado • Respostas reais podem variar
         </p>
       </div>

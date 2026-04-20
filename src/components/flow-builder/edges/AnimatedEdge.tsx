@@ -45,7 +45,7 @@ function AnimatedEdgeComponent({
         path={edgePath}
         markerEnd={markerEnd}
         style={{
-          stroke: selected ? '#60a5fa' : '#525252',
+          stroke: selected ? '#3b82f6' : '#d1d5db',
           strokeWidth: selected ? 2 : 1.5,
           ...style,
         }}

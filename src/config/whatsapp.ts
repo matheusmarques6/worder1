@@ -42,8 +42,8 @@ export const WHATSAPP_CONFIG = {
   quotaAlertThreshold: 0.8,   // Alertar em 80% da quota
   errorAlertThreshold: 10,    // Alertar após 10 erros
   
-  // Meta API
-  apiVersion: 'v18.0',
+  // Meta API - Atualizado para v21.0 (Março 2026)
+  apiVersion: 'v21.0',
   apiBaseUrl: 'https://graph.facebook.com'
 } as const
 

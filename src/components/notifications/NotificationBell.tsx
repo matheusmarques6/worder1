@@ -41,7 +41,7 @@ export function NotificationBell({ organizationId, userId, className }: Notifica
         <Bell className="w-5 h-5 text-gray-600 dark:text-gray-400" />
         {unreadCount > 0 && (
           <>
-            <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">
+            <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-gray-900 bg-red-500 rounded-full">
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
             <span className="absolute -top-0.5 -right-0.5 w-[18px] h-[18px] bg-red-500 rounded-full animate-ping opacity-75" />

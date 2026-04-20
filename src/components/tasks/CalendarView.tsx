@@ -140,17 +140,17 @@ export function CalendarView({ tasks, onTaskClick }: CalendarViewProps) {
   }
 
   return (
-    <div className="bg-dark-800/30 rounded-xl border border-dark-700/50">
+    <div className="bg-gray-50 rounded-xl border border-gray-200">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-dark-700/50">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200">
         <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold text-white">
+          <h2 className="text-lg font-semibold text-gray-900">
             {MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}
           </h2>
           <button
             onClick={goToToday}
-            className="px-3 py-1 text-sm bg-dark-700 text-dark-300 rounded-lg 
-                       hover:bg-dark-600 transition-colors"
+            className="px-3 py-1 text-sm bg-gray-100 text-gray-600 rounded-lg 
+                       hover:bg-gray-200 transition-colors"
           >
             Hoje
           </button>
@@ -158,13 +158,13 @@ export function CalendarView({ tasks, onTaskClick }: CalendarViewProps) {
 
         <div className="flex items-center gap-2">
           {/* View Toggle */}
-          <div className="flex bg-dark-700 rounded-lg p-1">
+          <div className="flex bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setViewMode('month')}
               className={`px-3 py-1 text-sm rounded-md transition-colors ${
                 viewMode === 'month' 
                   ? 'bg-primary-500 text-white' 
-                  : 'text-dark-300 hover:text-white'
+                  : 'text-gray-600 hover:text-white'
               }`}
             >
               Mês
@@ -174,7 +174,7 @@ export function CalendarView({ tasks, onTaskClick }: CalendarViewProps) {
               className={`px-3 py-1 text-sm rounded-md transition-colors ${
                 viewMode === 'week' 
                   ? 'bg-primary-500 text-white' 
-                  : 'text-dark-300 hover:text-white'
+                  : 'text-gray-600 hover:text-white'
               }`}
             >
               Semana
@@ -184,13 +184,13 @@ export function CalendarView({ tasks, onTaskClick }: CalendarViewProps) {
           {/* Navigation */}
           <button
             onClick={goToPrevious}
-            className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+            className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
           <button
             onClick={goToNext}
-            className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+            className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
           >
             <ChevronRight className="w-5 h-5" />
           </button>
@@ -198,9 +198,9 @@ export function CalendarView({ tasks, onTaskClick }: CalendarViewProps) {
       </div>
 
       {/* Days of Week Header */}
-      <div className="grid grid-cols-7 border-b border-dark-700/50">
+      <div className="grid grid-cols-7 border-b border-gray-200">
         {DAYS_OF_WEEK.map(day => (
-          <div key={day} className="py-2 text-center text-sm font-medium text-dark-400">
+          <div key={day} className="py-2 text-center text-sm font-medium text-gray-500">
             {day}
           </div>
         ))}
@@ -218,8 +218,8 @@ export function CalendarView({ tasks, onTaskClick }: CalendarViewProps) {
           return (
             <div
               key={index}
-              className={`min-h-[120px] p-2 border-r border-b border-dark-700/30 
-                          ${!currentMonth ? 'bg-dark-900/30' : ''} 
+              className={`min-h-[120px] p-2 border-r border-b border-gray-200/30 
+                          ${!currentMonth ? 'bg-white/30' : ''} 
                           ${today ? 'bg-primary-500/5' : ''}`}
             >
               {/* Day Number */}
@@ -228,7 +228,7 @@ export function CalendarView({ tasks, onTaskClick }: CalendarViewProps) {
                   ? 'w-7 h-7 flex items-center justify-center bg-primary-500 text-white rounded-full mx-auto' 
                   : currentMonth 
                     ? 'text-white' 
-                    : 'text-dark-600'
+                    : 'text-gray-400'
               }`}>
                 {date.getDate()}
               </div>
@@ -245,7 +245,7 @@ export function CalendarView({ tasks, onTaskClick }: CalendarViewProps) {
                 ))}
                 
                 {dayTasks.length > 3 && (
-                  <div className="text-[10px] text-dark-400 text-center">
+                  <div className="text-[10px] text-gray-500 text-center">
                     +{dayTasks.length - 3} mais
                   </div>
                 )}
@@ -256,7 +256,7 @@ export function CalendarView({ tasks, onTaskClick }: CalendarViewProps) {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 p-3 border-t border-dark-700/50 text-xs text-dark-400">
+      <div className="flex items-center gap-4 p-3 border-t border-gray-200 text-xs text-gray-500">
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-red-500" />
           <span>Urgente</span>
@@ -301,10 +301,10 @@ function TaskPill({
       className={`w-full text-left px-2 py-1 rounded text-[11px] truncate 
                   flex items-center gap-1 transition-colors
                   ${task.status === 'completed' 
-                    ? 'bg-dark-700/50 text-dark-500 line-through' 
+                    ? 'bg-gray-100 text-gray-400 line-through' 
                     : isOverdue 
                       ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30' 
-                      : 'bg-dark-700 text-dark-200 hover:bg-dark-600'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
     >
       <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
@@ -313,7 +313,7 @@ function TaskPill({
       <Icon className="w-3 h-3 flex-shrink-0" />
       <span className="truncate">{task.title}</span>
       {task.due_time && (
-        <span className="text-[10px] text-dark-500 ml-auto flex-shrink-0">
+        <span className="text-[10px] text-gray-400 ml-auto flex-shrink-0">
           {task.due_time.slice(0, 5)}
         </span>
       )}

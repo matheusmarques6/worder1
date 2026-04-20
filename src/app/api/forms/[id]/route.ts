@@ -80,6 +80,7 @@ export async function PUT(
       name, description, status, pipeline_id, stage_id,
       theme, logo_url, success_message, redirect_url,
       facebook_pixel_id, google_ads_id, google_analytics_id,
+      design_json, form_type, behavior, audience, tags, list_id, store_id,
     } = body
 
     const updates: Record<string, any> = { updated_at: new Date().toISOString() }
@@ -96,6 +97,13 @@ export async function PUT(
     if (facebook_pixel_id !== undefined) updates.facebook_pixel_id = facebook_pixel_id
     if (google_ads_id !== undefined) updates.google_ads_id = google_ads_id
     if (google_analytics_id !== undefined) updates.google_analytics_id = google_analytics_id
+    if (design_json !== undefined) updates.design_json = design_json
+    if (form_type !== undefined) updates.form_type = form_type
+    if (behavior !== undefined) updates.behavior = behavior
+    if (audience !== undefined) updates.audience = audience
+    if (tags !== undefined) updates.tags = tags
+    if (list_id !== undefined) updates.list_id = list_id
+    if (store_id !== undefined) updates.store_id = store_id
 
     const { data: form, error } = await supabase
       .from('crm_forms')

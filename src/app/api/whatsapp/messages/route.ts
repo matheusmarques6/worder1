@@ -164,6 +164,9 @@ export async function POST(request: NextRequest) {
       .from('whatsapp_messages')
       .insert({
         conversation_id,
+        organization_id: orgId,
+        store_id: conversation.store_id, // ✅ CORREÇÃO: Adicionar store_id
+        instance_id: conversation.instance_id, // ✅ CORREÇÃO: Adicionar instance_id
         wa_message_id: result.messages?.[0]?.id,
         direction: 'outbound',
         type: template_name ? 'template' : (media_url ? type : 'text'),

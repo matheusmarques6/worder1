@@ -131,11 +131,26 @@ export class ExecutionEngine {
       // Build execution order
       const executionOrder = this.buildExecutionOrder(workflow);
       
+      // Get exit conditions from the trigger node config or workflow settings
+      const triggerNode = workflow.nodes.find(n => n.data.category === 'trigger');
+      const exitConditions: Array<{ type: string; eventType?: string; field?: string; operator?: string; value?: string }> =
+        triggerNode?.data.config?.exitConditions || [];
+
       // Execute nodes in order
       for (const node of executionOrder) {
         // Skip if already processed (from branching)
         if (nodeResults[node.id]?.status === 'skipped') {
           continue;
+        }
+
+        // Check exit conditions before each node (except trigger itself)
+        if (exitConditions.length > 0 && node.data.category !== 'trigger' && !this.isTest) {
+          const shouldExit = await this.checkExitConditions(exitConditions, context, options.organizationId);
+          if (shouldExit) {
+            return this.createResult(executionId, 'cancelled', startedAt, nodeResults, context, {
+              error: 'Exit condition met — automation cancelled',
+            });
+          }
         }
 
         const nodeStartTime = Date.now();
@@ -345,6 +360,73 @@ export class ExecutionEngine {
         this.collectDescendants(workflow, edge.target, collected);
       }
     }
+  }
+
+  /**
+   * Check exit conditions — returns true if automation should stop
+   */
+  private async checkExitConditions(
+    exitConditions: Array<{ type: string; eventType?: string; field?: string; operator?: string; value?: string }>,
+    context: Partial<VariableContext>,
+    organizationId?: string
+  ): Promise<boolean> {
+    for (const cond of exitConditions) {
+      try {
+        if (cond.type === 'event' && cond.eventType) {
+          // Check if a specific event occurred for this contact since the run started
+          const contactId = context.contact?.id;
+          if (contactId && organizationId) {
+            const { data: events } = await this.supabase
+              .from('contact_events')
+              .select('id')
+              .eq('contact_id', contactId)
+              .eq('event_type', cond.eventType)
+              .gte('occurred_at', (context as any).workflow?.startedAt || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+              .limit(1);
+
+            if (events && events.length > 0) {
+              console.log(`[ExitCondition] Event "${cond.eventType}" found for contact ${contactId} — exiting`);
+              return true;
+            }
+          }
+        } else if (cond.type === 'property' && cond.field) {
+          // Check if a contact property matches
+          const contactId = context.contact?.id;
+          if (contactId && organizationId) {
+            const { data: contact } = await this.supabase
+              .from('contacts')
+              .select(cond.field)
+              .eq('id', contactId)
+              .single();
+
+            if (contact) {
+              const currentValue = String((contact as Record<string, any>)[cond.field] || '');
+              const operator = cond.operator || 'equals';
+              const targetValue = cond.value || '';
+
+              let matches = false;
+              switch (operator) {
+                case 'equals': matches = currentValue === targetValue; break;
+                case 'not_equals': matches = currentValue !== targetValue; break;
+                case 'is_set': matches = currentValue !== '' && currentValue !== 'null'; break;
+                case 'is_not_set': matches = currentValue === '' || currentValue === 'null'; break;
+                case 'contains': matches = currentValue.includes(targetValue); break;
+                case 'greater_than': matches = parseFloat(currentValue) > parseFloat(targetValue); break;
+                case 'less_than': matches = parseFloat(currentValue) < parseFloat(targetValue); break;
+              }
+
+              if (matches) {
+                console.log(`[ExitCondition] Property "${cond.field}" ${operator} "${targetValue}" matched — exiting`);
+                return true;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[ExitCondition] Error checking condition:', err);
+      }
+    }
+    return false;
   }
 
   /**

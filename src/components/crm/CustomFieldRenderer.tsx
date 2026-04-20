@@ -63,8 +63,8 @@ export function CustomFieldRenderer({
 }: CustomFieldRendererProps) {
   const Icon = FIELD_ICONS[field.field_type] || Type
 
-  const baseInputClass = `w-full px-4 py-3 bg-dark-800/50 border rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors ${
-    error ? 'border-red-500' : 'border-dark-700'
+  const baseInputClass = `w-full px-4 py-3 bg-gray-50 border rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors ${
+    error ? 'border-red-500' : 'border-gray-200'
   } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`
 
   const renderField = () => {
@@ -148,12 +148,12 @@ export function CustomFieldRenderer({
             disabled={disabled}
             className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
               value 
-                ? 'bg-primary-500/20 border-primary-500/50 text-primary-400' 
-                : 'bg-dark-800/50 border-dark-700 text-dark-400'
-            } ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-dark-600'}`}
+                ? 'bg-brand-100 border-brand-400 text-brand-600' 
+                : 'bg-gray-50 border-gray-200 text-gray-500'
+            } ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-gray-300'}`}
           >
             <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-              value ? 'bg-primary-500 border-primary-500' : 'border-dark-500'
+              value ? 'bg-primary-500 border-primary-500' : 'border-gray-300'
             }`}>
               {value && <CheckSquare className="w-3 h-3 text-white" />}
             </div>
@@ -177,7 +177,7 @@ export function CustomFieldRenderer({
                 </option>
               ))}
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400 pointer-events-none" />
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
           </div>
         )
 
@@ -191,14 +191,14 @@ export function CustomFieldRenderer({
                 {selectedValues.map((v: string) => (
                   <span
                     key={v}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-500/20 text-primary-400 rounded-lg text-sm"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-brand-100 text-brand-600 rounded-lg text-sm"
                   >
                     {v}
                     {!disabled && (
                       <button
                         type="button"
                         onClick={() => onChange(selectedValues.filter((sv: string) => sv !== v))}
-                        className="hover:text-primary-300"
+                        className="hover:text-brand-500"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -215,7 +215,7 @@ export function CustomFieldRenderer({
                   type="button"
                   onClick={() => !disabled && onChange([...selectedValues, option])}
                   disabled={disabled}
-                  className="px-3 py-1.5 bg-dark-800/50 border border-dark-700 hover:border-dark-600 rounded-lg text-sm text-dark-300 hover:text-white transition-colors disabled:opacity-50"
+                  className="px-3 py-1.5 bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-lg text-sm text-gray-600 hover:text-white transition-colors disabled:opacity-50"
                 >
                   <Plus className="w-3 h-3 inline mr-1" />
                   {option}
@@ -241,7 +241,7 @@ export function CustomFieldRenderer({
 
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-2 text-sm font-medium text-dark-300">
+      <label className="flex items-center gap-2 text-sm font-medium text-gray-600">
         <Icon className="w-4 h-4" />
         {field.field_name}
         {field.is_required && <span className="text-red-400">*</span>}
@@ -250,7 +250,7 @@ export function CustomFieldRenderer({
       {renderField()}
       
       {field.help_text && (
-        <p className="text-xs text-dark-500">{field.help_text}</p>
+        <p className="text-xs text-gray-400">{field.help_text}</p>
       )}
       
       {error && (
@@ -321,8 +321,8 @@ export function CustomFieldsForm({
       <div className="animate-pulse space-y-4">
         {[1, 2].map((i) => (
           <div key={i} className="space-y-2">
-            <div className="h-4 w-24 bg-dark-700 rounded" />
-            <div className="h-12 bg-dark-700 rounded-xl" />
+            <div className="h-4 w-24 bg-gray-100 rounded" />
+            <div className="h-12 bg-gray-100 rounded-xl" />
           </div>
         ))}
       </div>
@@ -343,7 +343,7 @@ export function CustomFieldsForm({
 
   return (
     <div className="space-y-4">
-      <h4 className="text-sm font-medium text-dark-400 uppercase tracking-wider">
+      <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wider">
         Campos Personalizados
       </h4>
       

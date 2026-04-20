@@ -125,14 +125,14 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-dark-700">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500/20 to-accent-500/20 flex items-center justify-center">
-            <Bot className="w-5 h-5 text-primary-400" />
+            <Bot className="w-5 h-5 text-brand-600" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">Agentes de IA</h2>
-            <p className="text-sm text-dark-400">Gerencie seus assistentes inteligentes</p>
+            <h2 className="text-lg font-semibold text-gray-900">Agentes de IA</h2>
+            <p className="text-sm text-gray-500">Gerencie seus assistentes inteligentes</p>
           </div>
         </div>
 
@@ -146,34 +146,34 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 p-4 border-b border-dark-700">
-        <div className="bg-dark-800/50 rounded-xl p-4">
-          <div className="flex items-center gap-2 text-dark-400 mb-1">
+      <div className="grid grid-cols-4 gap-4 p-4 border-b border-gray-200">
+        <div className="bg-gray-50 rounded-xl p-4">
+          <div className="flex items-center gap-2 text-gray-500 mb-1">
             <Bot className="w-4 h-4" />
             <span className="text-xs">Total de Agentes</span>
           </div>
-          <p className="text-2xl font-bold text-white">{agents.length}</p>
+          <p className="text-2xl font-bold text-gray-900">{agents.length}</p>
         </div>
-        <div className="bg-dark-800/50 rounded-xl p-4">
+        <div className="bg-gray-50 rounded-xl p-4">
           <div className="flex items-center gap-2 text-green-400 mb-1">
             <Power className="w-4 h-4" />
             <span className="text-xs">Ativos</span>
           </div>
-          <p className="text-2xl font-bold text-white">{activeAgents}</p>
+          <p className="text-2xl font-bold text-gray-900">{activeAgents}</p>
         </div>
-        <div className="bg-dark-800/50 rounded-xl p-4">
+        <div className="bg-gray-50 rounded-xl p-4">
           <div className="flex items-center gap-2 text-blue-400 mb-1">
             <MessageSquare className="w-4 h-4" />
             <span className="text-xs">Mensagens</span>
           </div>
-          <p className="text-2xl font-bold text-white">{totalMessages.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-gray-900">{totalMessages.toLocaleString()}</p>
         </div>
-        <div className="bg-dark-800/50 rounded-xl p-4">
+        <div className="bg-gray-50 rounded-xl p-4">
           <div className="flex items-center gap-2 text-purple-400 mb-1">
             <TrendingUp className="w-4 h-4" />
             <span className="text-xs">Conversas</span>
           </div>
-          <p className="text-2xl font-bold text-white">{totalConversations.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-gray-900">{totalConversations.toLocaleString()}</p>
         </div>
       </div>
 
@@ -181,13 +181,13 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
       <div className="flex items-center gap-4 p-4">
         {/* Search */}
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar agentes..."
-            className="w-full pl-10 pr-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500/50"
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-brand-400"
           />
         </div>
 
@@ -198,7 +198,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
               const next = filterStatus === 'all' ? 'active' : filterStatus === 'active' ? 'inactive' : 'all'
               setFilterStatus(next)
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-dark-800/50 border border-dark-700/50 rounded-xl text-dark-300 hover:text-white transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-600 hover:text-white transition-colors"
           >
             <Filter className="w-4 h-4" />
             <span className="text-sm">
@@ -213,16 +213,16 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
       <div className="flex-1 overflow-y-auto p-4">
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+            <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-12">
             <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
             <p className="text-white mb-2">Erro ao carregar agentes</p>
-            <p className="text-sm text-dark-400 mb-4">{error}</p>
+            <p className="text-sm text-gray-500 mb-4">{error}</p>
             <button
               onClick={fetchAgents}
-              className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-xl"
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-white rounded-xl"
             >
               Tentar novamente
             </button>
@@ -230,12 +230,12 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
         ) : filteredAgents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-500/10 to-accent-500/10 flex items-center justify-center mb-4">
-              <Sparkles className="w-10 h-10 text-primary-400" />
+              <Sparkles className="w-10 h-10 text-brand-600" />
             </div>
-            <h3 className="text-lg font-medium text-white mb-2">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
               {searchQuery || filterStatus !== 'all' ? 'Nenhum agente encontrado' : 'Crie seu primeiro agente'}
             </h3>
-            <p className="text-sm text-dark-400 text-center max-w-md mb-6">
+            <p className="text-sm text-gray-500 text-center max-w-md mb-6">
               {searchQuery || filterStatus !== 'all'
                 ? 'Tente ajustar os filtros de busca.'
                 : 'Agentes de IA podem responder automaticamente às mensagens dos seus clientes, 24 horas por dia.'}
@@ -259,10 +259,10 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
                 animate={{ opacity: 1, y: 0 }}
                 whileHover={{ scale: 1.01 }}
                 onClick={() => setSelectedAgentId(agent.id)}
-                className={`bg-dark-800/50 border rounded-xl p-4 cursor-pointer transition-all ${
+                className={`bg-gray-50 border rounded-xl p-4 cursor-pointer transition-all ${
                   agent.is_active 
-                    ? 'border-dark-700/50 hover:border-primary-500/30' 
-                    : 'border-dark-800 opacity-70 hover:opacity-100'
+                    ? 'border-gray-200 hover:border-brand-300' 
+                    : 'border-gray-200 opacity-70 hover:opacity-100'
                 }`}
               >
                 <div className="flex items-start gap-4">
@@ -270,29 +270,29 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
                     agent.is_active 
                       ? 'bg-gradient-to-br from-primary-500/20 to-accent-500/20' 
-                      : 'bg-dark-700'
+                      : 'bg-gray-100'
                   }`}>
-                    <Bot className={`w-6 h-6 ${agent.is_active ? 'text-primary-400' : 'text-dark-500'}`} />
+                    <Bot className={`w-6 h-6 ${agent.is_active ? 'text-brand-600' : 'text-gray-400'}`} />
                   </div>
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-white font-medium truncate">{agent.name}</h3>
+                      <h3 className="text-gray-900 font-medium truncate">{agent.name}</h3>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
                         agent.is_active 
                           ? 'bg-green-500/20 text-green-400' 
-                          : 'bg-dark-700 text-dark-500'
+                          : 'bg-gray-100 text-gray-400'
                       }`}>
                         {agent.is_active ? 'Ativo' : 'Inativo'}
                       </span>
                     </div>
                     
                     {agent.description && (
-                      <p className="text-sm text-dark-400 truncate mb-2">{agent.description}</p>
+                      <p className="text-sm text-gray-500 truncate mb-2">{agent.description}</p>
                     )}
 
-                    <div className="flex items-center gap-4 text-xs text-dark-500">
+                    <div className="flex items-center gap-4 text-xs text-gray-400">
                       <span className="flex items-center gap-1">
                         <Sparkles className="w-3 h-3" />
                         {agent.provider} • {agent.model}
@@ -315,7 +315,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
                       className={`p-2 rounded-lg transition-colors ${
                         agent.is_active
                           ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                          : 'bg-dark-700 text-dark-500 hover:text-white'
+                          : 'bg-gray-100 text-gray-400 hover:text-white'
                       }`}
                       title={agent.is_active ? 'Desativar' : 'Ativar'}
                     >
@@ -328,7 +328,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
                           e.stopPropagation()
                           setMenuOpenId(menuOpenId === agent.id ? null : agent.id)
                         }}
-                        className="p-2 rounded-lg bg-dark-700/50 text-dark-400 hover:text-white transition-colors"
+                        className="p-2 rounded-lg bg-gray-100 text-gray-500 hover:text-white transition-colors"
                       >
                         <MoreVertical className="w-4 h-4" />
                       </button>
@@ -339,7 +339,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.95 }}
-                            className="absolute right-0 top-full mt-1 bg-dark-800 border border-dark-700 rounded-xl shadow-xl overflow-hidden z-10"
+                            className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden z-10"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
@@ -347,7 +347,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
                                 setSelectedAgentId(agent.id)
                                 setMenuOpenId(null)
                               }}
-                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-dark-300 hover:text-white hover:bg-dark-700 transition-colors"
+                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:text-white hover:bg-gray-100 transition-colors"
                             >
                               <Settings className="w-4 h-4" />
                               Configurar

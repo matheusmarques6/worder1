@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const { data, error } = await supabase
-      .from('integration_connections')
+      .from('installed_integrations')
       .select(`*, integration:integrations(*)`)
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false });

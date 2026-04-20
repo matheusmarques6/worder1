@@ -260,36 +260,36 @@ export function CustomFieldsManager({
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-dark-900 rounded-2xl border border-dark-700 w-full max-w-2xl max-h-[90vh] overflow-hidden"
+          className="bg-white rounded-2xl border border-gray-200 w-full max-w-2xl max-h-[90vh] overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-dark-700">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary-500/20">
-                <Settings className="w-5 h-5 text-primary-400" />
+              <div className="p-2 rounded-lg bg-brand-100">
+                <Settings className="w-5 h-5 text-brand-600" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-white">Campos Personalizados</h2>
-                <p className="text-sm text-dark-400">
+                <h2 className="text-xl font-semibold text-gray-900">Campos Personalizados</h2>
+                <p className="text-sm text-gray-500">
                   {entityType === 'contact' ? 'Contatos' : 'Deals'}
                 </p>
               </div>
             </div>
-            <button onClick={handleClose} className="p-2 hover:bg-dark-800 rounded-lg transition-colors">
-              <X className="w-5 h-5 text-dark-400" />
+            <button onClick={handleClose} className="p-2 hover:bg-white rounded-lg transition-colors">
+              <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
           
           {/* Content */}
           <div className="p-6 overflow-y-auto max-h-[60vh]">
             {loading ? (
-              <div className="text-center py-8 text-dark-400">Carregando...</div>
+              <div className="text-center py-8 text-gray-500">Carregando...</div>
             ) : (
               <div className="space-y-4">
                 {/* Fields List */}
                 {fields.length === 0 && !showAddForm && (
-                  <div className="text-center py-8 text-dark-400">
+                  <div className="text-center py-8 text-gray-500">
                     <Settings className="w-12 h-12 mx-auto mb-4 opacity-50" />
                     <p>Nenhum campo personalizado criado</p>
                     <p className="text-sm">Clique em "Adicionar Campo" para começar</p>
@@ -300,26 +300,26 @@ export function CustomFieldsManager({
                   <div
                     key={field.id}
                     className={`
-                      flex items-center gap-4 p-4 bg-dark-800 rounded-xl border transition-colors
-                      ${editingField?.id === field.id ? 'border-primary-500' : 'border-dark-700'}
+                      flex items-center gap-4 p-4 bg-white rounded-xl border transition-colors
+                      ${editingField?.id === field.id ? 'border-primary-500' : 'border-gray-200'}
                     `}
                   >
-                    <GripVertical className="w-4 h-4 text-dark-500 cursor-grab" />
+                    <GripVertical className="w-4 h-4 text-gray-400 cursor-grab" />
                     
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-white">{field.label}</span>
+                        <span className="font-medium text-gray-900">{field.label}</span>
                         {field.isRequired && (
                           <span className="text-xs text-red-400">*</span>
                         )}
-                        <span className="text-xs text-dark-500">({field.key})</span>
+                        <span className="text-xs text-gray-400">({field.key})</span>
                       </div>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs px-2 py-0.5 bg-dark-700 rounded text-dark-300">
+                        <span className="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-600">
                           {FIELD_TYPES.find(t => t.key === field.type)?.label || field.type}
                         </span>
                         {field.options && field.options.length > 0 && (
-                          <span className="text-xs text-dark-400">
+                          <span className="text-xs text-gray-500">
                             {field.options.length} opções
                           </span>
                         )}
@@ -329,9 +329,9 @@ export function CustomFieldsManager({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleEditField(field)}
-                        className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                       >
-                        <Settings className="w-4 h-4 text-dark-400" />
+                        <Settings className="w-4 h-4 text-gray-500" />
                       </button>
                       <button
                         onClick={() => handleDeleteField(field)}
@@ -345,29 +345,29 @@ export function CustomFieldsManager({
                 
                 {/* Add/Edit Form */}
                 {(showAddForm || editingField) && (
-                  <div className="p-4 bg-dark-800/50 rounded-xl border border-dark-700 space-y-4">
-                    <h3 className="font-medium text-white">
+                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-4">
+                    <h3 className="font-medium text-gray-900">
                       {editingField ? 'Editar Campo' : 'Novo Campo'}
                     </h3>
                     
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-sm text-dark-400 mb-1 block">Nome do Campo *</label>
+                        <label className="text-sm text-gray-500 mb-1 block">Nome do Campo *</label>
                         <input
                           type="text"
                           value={formData.label}
                           onChange={(e) => setFormData(prev => ({ ...prev, label: e.target.value }))}
                           placeholder="Ex: CPF, Data de Nascimento..."
-                          className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500"
+                          className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500"
                         />
                       </div>
                       
                       <div>
-                        <label className="text-sm text-dark-400 mb-1 block">Tipo</label>
+                        <label className="text-sm text-gray-500 mb-1 block">Tipo</label>
                         <select
                           value={formData.type}
                           onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
-                          className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500"
+                          className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500"
                         >
                           {FIELD_TYPES.map(type => (
                             <option key={type.key} value={type.key}>{type.label}</option>
@@ -378,7 +378,7 @@ export function CustomFieldsManager({
                     
                     {formData.type === 'select' && (
                       <div>
-                        <label className="text-sm text-dark-400 mb-1 block">
+                        <label className="text-sm text-gray-500 mb-1 block">
                           Opções (separadas por vírgula)
                         </label>
                         <input
@@ -386,31 +386,31 @@ export function CustomFieldsManager({
                           value={formData.options}
                           onChange={(e) => setFormData(prev => ({ ...prev, options: e.target.value }))}
                           placeholder="Opção 1, Opção 2, Opção 3"
-                          className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500"
+                          className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500"
                         />
                       </div>
                     )}
                     
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-sm text-dark-400 mb-1 block">Placeholder</label>
+                        <label className="text-sm text-gray-500 mb-1 block">Placeholder</label>
                         <input
                           type="text"
                           value={formData.placeholder}
                           onChange={(e) => setFormData(prev => ({ ...prev, placeholder: e.target.value }))}
                           placeholder="Texto de exemplo..."
-                          className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500"
+                          className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500"
                         />
                       </div>
                       
                       <div>
-                        <label className="text-sm text-dark-400 mb-1 block">Texto de Ajuda</label>
+                        <label className="text-sm text-gray-500 mb-1 block">Texto de Ajuda</label>
                         <input
                           type="text"
                           value={formData.helpText}
                           onChange={(e) => setFormData(prev => ({ ...prev, helpText: e.target.value }))}
                           placeholder="Instruções para o usuário..."
-                          className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500"
+                          className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary-500"
                         />
                       </div>
                     </div>
@@ -420,9 +420,9 @@ export function CustomFieldsManager({
                         type="checkbox"
                         checked={formData.isRequired}
                         onChange={(e) => setFormData(prev => ({ ...prev, isRequired: e.target.checked }))}
-                        className="w-4 h-4 rounded border-dark-600 bg-dark-700 text-primary-500"
+                        className="w-4 h-4 rounded border-gray-300 bg-gray-100 text-primary-500"
                       />
-                      <span className="text-sm text-dark-300">Campo obrigatório</span>
+                      <span className="text-sm text-gray-600">Campo obrigatório</span>
                     </label>
                     
                     <div className="flex justify-end gap-2">
@@ -432,7 +432,7 @@ export function CustomFieldsManager({
                           setEditingField(null)
                           resetForm()
                         }}
-                        className="px-4 py-2 text-dark-400 hover:text-white transition-colors"
+                        className="px-4 py-2 text-gray-500 hover:text-white transition-colors"
                       >
                         Cancelar
                       </button>
@@ -452,8 +452,8 @@ export function CustomFieldsManager({
           </div>
           
           {/* Footer */}
-          <div className="flex items-center justify-between p-6 border-t border-dark-700">
-            <button onClick={handleClose} className="px-4 py-2 text-dark-400 hover:text-white transition-colors">
+          <div className="flex items-center justify-between p-6 border-t border-gray-200">
+            <button onClick={handleClose} className="px-4 py-2 text-gray-500 hover:text-white transition-colors">
               Fechar
             </button>
             {!showAddForm && !editingField && (

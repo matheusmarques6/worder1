@@ -8,22 +8,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { enqueueAutomationRun } from '@/lib/queue';
+
 export const dynamic = 'force-dynamic';
 
 // ============================================
 // CONFIG
 // ============================================
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // ============================================
 // GET - Check delayed runs (Cron)
 // ============================================
 
 export async function GET(request: NextRequest) {
+  const supabase = getSupabase();
+
   // Verificar autorização
   const isVercelCron = request.headers.get('x-vercel-cron') === '1';
   const isInternal = request.headers.get('X-Internal-Request') === 'true';
@@ -46,6 +51,7 @@ export async function GET(request: NextRequest) {
 
     // Buscar runs que estão em 'waiting' e já passaram do tempo
     // JUNTO com a automação para verificar status
+    const supabase = getSupabase();
     const { data: runs, error } = await supabase
       .from('automation_runs')
       .select('id, automation_id, current_node_id, waiting_until, automations!inner(id, status)')

@@ -97,7 +97,7 @@ function TaskSection({
           )}
         </div>
         <Icon className={`w-4 h-4 ${iconColor}`} />
-        <span className="font-medium text-white">{title}</span>
+        <span className="font-medium text-gray-900">{title}</span>
         <span className={`px-2 py-0.5 text-xs rounded-full ${bgColor} ${iconColor}`}>
           {tasks.length}
         </span>
@@ -271,15 +271,15 @@ export default function TasksPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Tarefas</h1>
-          <p className="text-dark-400 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900">Tarefas</h1>
+          <p className="text-gray-500 mt-1">
             Gerencie suas atividades e compromissos
           </p>
         </div>
         
         <div className="flex items-center gap-3">
           {/* View Toggle */}
-          <div className="flex bg-dark-700 rounded-xl p-1">
+          <div className="flex bg-gray-100 rounded-xl p-1">
             {VIEW_OPTIONS.map(option => (
               <button
                 key={option.id}
@@ -287,7 +287,7 @@ export default function TasksPage() {
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
                   viewMode === option.id
                     ? 'bg-primary-500 text-white'
-                    : 'text-dark-400 hover:text-white'
+                    : 'text-gray-500 hover:text-white'
                 }`}
               >
                 <option.icon className="w-4 h-4" />
@@ -299,8 +299,8 @@ export default function TasksPage() {
           <button
             onClick={handleRefresh}
             disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-dark-700 text-white rounded-xl 
-                       hover:bg-dark-600 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-900 rounded-xl 
+                       hover:bg-gray-200 transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Atualizar</span>
@@ -320,23 +320,23 @@ export default function TasksPage() {
       {/* Stats Cards */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className={`bg-dark-800/50 border rounded-xl p-4 transition-colors cursor-pointer
-                          ${statusFilter === '' && !hasActiveFilters ? 'border-primary-500/50' : 'border-dark-700/50 hover:border-dark-600'}`}
+          <div className={`bg-gray-50 border rounded-xl p-4 transition-colors cursor-pointer
+                          ${statusFilter === '' && !hasActiveFilters ? 'border-brand-400' : 'border-gray-200 hover:border-gray-300'}`}
                onClick={() => { setStatusFilter(''); }}
           >
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary-500/10 rounded-lg">
-                <ListTodo className="w-5 h-5 text-primary-400" />
+              <div className="p-2 bg-brand-50 rounded-lg">
+                <ListTodo className="w-5 h-5 text-brand-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-white">{stats.total}</p>
-                <p className="text-xs text-dark-400">Total</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                <p className="text-xs text-gray-500">Total</p>
               </div>
             </div>
           </div>
 
-          <div className={`bg-dark-800/50 border rounded-xl p-4 transition-colors cursor-pointer
-                          ${statusFilter === '' && stats.overdue > 0 ? 'border-red-500/50' : 'border-dark-700/50 hover:border-dark-600'}`}
+          <div className={`bg-gray-50 border rounded-xl p-4 transition-colors cursor-pointer
+                          ${statusFilter === '' && stats.overdue > 0 ? 'border-red-500/50' : 'border-gray-200 hover:border-gray-300'}`}
                onClick={() => { setStatusFilter(''); }}
           >
             <div className="flex items-center gap-3">
@@ -345,49 +345,49 @@ export default function TasksPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-error-400">{stats.overdue}</p>
-                <p className="text-xs text-dark-400">Atrasadas</p>
+                <p className="text-xs text-gray-500">Atrasadas</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-amber-500/10 rounded-lg">
                 <Calendar className="w-5 h-5 text-amber-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-amber-400">{stats.due_today}</p>
-                <p className="text-xs text-dark-400">Hoje</p>
+                <p className="text-xs text-gray-500">Hoje</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-500/10 rounded-lg">
                 <Clock className="w-5 h-5 text-blue-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-blue-400">{stats.due_tomorrow}</p>
-                <p className="text-xs text-dark-400">Amanhã</p>
+                <p className="text-xs text-gray-500">Amanhã</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-purple-500/10 rounded-lg">
                 <Calendar className="w-5 h-5 text-purple-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-white">{stats.due_this_week}</p>
-                <p className="text-xs text-dark-400">Esta semana</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.due_this_week}</p>
+                <p className="text-xs text-gray-500">Esta semana</p>
               </div>
             </div>
           </div>
 
-          <div className={`bg-dark-800/50 border rounded-xl p-4 transition-colors cursor-pointer
-                          ${statusFilter === 'completed' ? 'border-green-500/50' : 'border-dark-700/50 hover:border-dark-600'}`}
+          <div className={`bg-gray-50 border rounded-xl p-4 transition-colors cursor-pointer
+                          ${statusFilter === 'completed' ? 'border-green-500/50' : 'border-gray-200 hover:border-gray-300'}`}
                onClick={() => setStatusFilter(statusFilter === 'completed' ? '' : 'completed')}
           >
             <div className="flex items-center gap-3">
@@ -396,7 +396,7 @@ export default function TasksPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-success-400">{stats.completed}</p>
-                <p className="text-xs text-dark-400">Concluídas</p>
+                <p className="text-xs text-gray-500">Concluídas</p>
               </div>
             </div>
           </div>
@@ -407,19 +407,19 @@ export default function TasksPage() {
       <div className="flex flex-col md:flex-row gap-4">
         {/* Search */}
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar tarefas, contatos, deals..."
-            className="w-full pl-10 pr-10 py-2.5 bg-dark-800 border border-dark-700 rounded-xl 
-                       text-white placeholder:text-dark-500 focus:outline-none focus:border-primary-500"
+            className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl 
+                       text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-dark-500 hover:text-white"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-white"
             >
               <X className="w-4 h-4" />
             </button>
@@ -431,8 +431,8 @@ export default function TasksPage() {
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-colors ${
             showFilters || hasActiveFilters
-              ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-              : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+              ? 'bg-brand-100 text-brand-600 border border-brand-300'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
           <Filter className="w-4 h-4" />
@@ -452,16 +452,16 @@ export default function TasksPage() {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="p-4 bg-dark-800/50 border border-dark-700/50 rounded-xl space-y-4">
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-4">
               <div className="flex flex-wrap gap-4">
                 {/* Status Filter */}
                 <div>
-                  <label className="block text-xs text-dark-400 mb-1.5">Status</label>
+                  <label className="block text-xs text-gray-500 mb-1.5">Status</label>
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm 
-                               text-white focus:outline-none focus:border-primary-500 min-w-[140px]"
+                    className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm 
+                               text-gray-900 focus:outline-none focus:border-primary-500 min-w-[140px]"
                   >
                     <option value="">Todos</option>
                     <option value="pending">Pendentes</option>
@@ -472,12 +472,12 @@ export default function TasksPage() {
 
                 {/* Type Filter */}
                 <div>
-                  <label className="block text-xs text-dark-400 mb-1.5">Tipo</label>
+                  <label className="block text-xs text-gray-500 mb-1.5">Tipo</label>
                   <select
                     value={typeFilter}
                     onChange={(e) => setTypeFilter(e.target.value)}
-                    className="px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm 
-                               text-white focus:outline-none focus:border-primary-500 min-w-[140px]"
+                    className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm 
+                               text-gray-900 focus:outline-none focus:border-primary-500 min-w-[140px]"
                   >
                     <option value="">Todos</option>
                     <option value="task">Tarefa</option>
@@ -492,12 +492,12 @@ export default function TasksPage() {
 
                 {/* Priority Filter */}
                 <div>
-                  <label className="block text-xs text-dark-400 mb-1.5">Prioridade</label>
+                  <label className="block text-xs text-gray-500 mb-1.5">Prioridade</label>
                   <select
                     value={priorityFilter}
                     onChange={(e) => setPriorityFilter(e.target.value)}
-                    className="px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm 
-                               text-white focus:outline-none focus:border-primary-500 min-w-[140px]"
+                    className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm 
+                               text-gray-900 focus:outline-none focus:border-primary-500 min-w-[140px]"
                   >
                     <option value="">Todas</option>
                     <option value="urgent">Urgente</option>
@@ -509,12 +509,12 @@ export default function TasksPage() {
 
                 {/* Assigned Filter */}
                 <div>
-                  <label className="block text-xs text-dark-400 mb-1.5">Atribuição</label>
+                  <label className="block text-xs text-gray-500 mb-1.5">Atribuição</label>
                   <select
                     value={assignedFilter}
                     onChange={(e) => setAssignedFilter(e.target.value)}
-                    className="px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm 
-                               text-white focus:outline-none focus:border-primary-500 min-w-[140px]"
+                    className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm 
+                               text-gray-900 focus:outline-none focus:border-primary-500 min-w-[140px]"
                   >
                     <option value="">Todos</option>
                     <option value={user?.id || ''}>Minhas tarefas</option>
@@ -524,13 +524,13 @@ export default function TasksPage() {
               </div>
 
               {hasActiveFilters && (
-                <div className="flex items-center justify-between pt-2 border-t border-dark-700/50">
-                  <span className="text-sm text-dark-400">
+                <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                  <span className="text-sm text-gray-500">
                     {filteredTasks.length} tarefa(s) encontrada(s)
                   </span>
                   <button
                     onClick={clearFilters}
-                    className="text-sm text-primary-400 hover:text-primary-300"
+                    className="text-sm text-brand-600 hover:text-brand-500"
                   >
                     Limpar filtros
                   </button>
@@ -544,17 +544,17 @@ export default function TasksPage() {
       {/* Content */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+          <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
         </div>
       ) : filteredTasks.length === 0 ? (
         <div className="text-center py-12">
-          <div className="w-16 h-16 bg-dark-800 rounded-full flex items-center justify-center mx-auto mb-4">
-            <ListTodo className="w-8 h-8 text-dark-600" />
+          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
+            <ListTodo className="w-8 h-8 text-gray-400" />
           </div>
-          <h3 className="text-lg font-medium text-white mb-2">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
             {hasActiveFilters ? 'Nenhuma tarefa encontrada' : 'Nenhuma tarefa ainda'}
           </h3>
-          <p className="text-dark-400 max-w-sm mx-auto mb-6">
+          <p className="text-gray-500 max-w-sm mx-auto mb-6">
             {hasActiveFilters 
               ? 'Tente ajustar os filtros para encontrar tarefas'
               : 'Crie sua primeira tarefa para organizar suas atividades'
@@ -612,8 +612,8 @@ export default function TasksPage() {
               <TaskSection
                 title="Próximas"
                 icon={Calendar}
-                iconColor="text-primary-400"
-                bgColor="bg-primary-500/10"
+                iconColor="text-brand-600"
+                bgColor="bg-brand-50"
                 tasks={filteredGrouped.upcoming}
                 defaultOpen={false}
                 onComplete={handleComplete}

@@ -151,21 +151,21 @@ export function ShopifySettingsModal({
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-4xl max-h-[90vh] bg-dark-900 border border-dark-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+          className="w-full max-w-4xl max-h-[90vh] bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
         >
           {/* ========================================
               Header
           ======================================== */}
-          <div className="flex items-center justify-between p-5 border-b border-dark-700 flex-shrink-0">
+          <div className="flex items-center justify-between p-5 border-b border-gray-200 flex-shrink-0">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-[#96bf48]/20 flex items-center justify-center">
                 <ShoppingCart className="w-7 h-7 text-[#96bf48]" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-xl font-bold text-gray-900">
                   Configurações Shopify
                 </h2>
-                <p className="text-sm text-dark-400">
+                <p className="text-sm text-gray-500">
                   {store.shop_name || store.shop_domain}
                 </p>
               </div>
@@ -183,7 +183,7 @@ export function ShopifySettingsModal({
               </div>
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-dark-700 rounded-lg text-dark-400 hover:text-white transition-colors"
+                className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -193,15 +193,15 @@ export function ShopifySettingsModal({
           {/* ========================================
               Tabs Navigation
           ======================================== */}
-          <div className="flex border-b border-dark-700 flex-shrink-0">
+          <div className="flex border-b border-gray-200 flex-shrink-0">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors relative ${
                   activeTab === tab.id
-                    ? 'text-primary-400'
-                    : 'text-dark-400 hover:text-white'
+                    ? 'text-brand-600'
+                    : 'text-gray-500 hover:text-white'
                 }`}
               >
                 {tab.icon}

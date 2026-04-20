@@ -626,7 +626,7 @@ ${agentFunction.handoffRules}
       onClick={onClose}
     >
       <motion.div 
-        className="relative w-full max-w-5xl max-h-[90vh] bg-zinc-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-zinc-800"
+        className="relative w-full max-w-5xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-200"
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -634,15 +634,15 @@ ${agentFunction.handoffRules}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header - fixo */}
-        <div className="flex-shrink-0 h-16 border-b border-zinc-800 flex items-center justify-between px-6">
+        <div className="flex-shrink-0 h-16 border-b border-gray-200 flex items-center justify-between px-6">
           <div className="flex items-center gap-4">
             <button
               onClick={onClose}
-              className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+              className="p-2 text-gray-500 hover:text-white hover:bg-gray-50 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
-            <h1 className="text-lg font-semibold text-white">Criar Agente de IA</h1>
+            <h1 className="text-lg font-semibold text-gray-900">Criar Agente de IA</h1>
           </div>
 
           {/* Steps indicator */}
@@ -663,7 +663,7 @@ ${agentFunction.handoffRules}
                         ? 'bg-green-500/20 text-green-400'
                         : isCurrent
                         ? 'bg-blue-500/20 text-blue-400'
-                        : 'bg-zinc-800 text-zinc-500'
+                        : 'bg-gray-50 text-gray-500'
                       }
                     `}
                   >
@@ -676,7 +676,7 @@ ${agentFunction.handoffRules}
                   </button>
                   
                   {index < STEPS.length - 1 && (
-                    <ChevronRight className="w-3 h-3 text-zinc-600 mx-0.5" />
+                    <ChevronRight className="w-3 h-3 text-gray-400 mx-0.5" />
                   )}
                 </div>
               );
@@ -685,9 +685,9 @@ ${agentFunction.handoffRules}
 
           {/* Store indicator */}
           {storeId && storeAnalysis && (
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-zinc-800 rounded-full">
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-full">
               <Store className="w-4 h-4 text-green-400" />
-              <span className="text-sm text-zinc-300">{storeAnalysis.storeName}</span>
+              <span className="text-sm text-gray-700">{storeAnalysis.storeName}</span>
             </div>
           )}
         </div>
@@ -726,7 +726,7 @@ ${agentFunction.handoffRules}
         </div>
 
         {/* Mobile step indicator - fixo no bottom */}
-        <div className="md:hidden flex-shrink-0 h-14 border-t border-zinc-800 bg-zinc-900 flex items-center justify-center gap-2 px-4">
+        <div className="md:hidden flex-shrink-0 h-14 border-t border-gray-200 bg-white flex items-center justify-center gap-2 px-4">
           {STEPS.map((step) => (
             <div
               key={step.id}
@@ -736,7 +736,7 @@ ${agentFunction.handoffRules}
                   ? 'w-6 bg-blue-500'
                   : currentStep > step.id
                   ? 'bg-green-500'
-                  : 'bg-zinc-700'
+                  : 'bg-gray-100'
                 }
               `}
             />

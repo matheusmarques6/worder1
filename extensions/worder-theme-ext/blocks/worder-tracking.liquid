@@ -1,0 +1,68 @@
+<!-- Worder Tracking — App Embed Block -->
+<!-- Auto-configured: uses shop domain to resolve account. No manual setup needed. -->
+
+<script>
+  window.__worder = window.__worder || {};
+  window.__worder.config = {
+    shopDomain: {{ shop.permanent_domain | json }},
+    endpoint: "https://worder1.vercel.app/api/track",
+  };
+
+  // === AUTOMATIC IDENTIFICATION ===
+
+  {% if customer %}
+    window.__worder.customer = {
+      email: {{ customer.email | json }},
+      firstName: {{ customer.first_name | json }},
+      lastName: {{ customer.last_name | json }},
+      phone: {{ customer.phone | json }},
+      shopifyCustomerId: {{ customer.id | json }},
+      ordersCount: {{ customer.orders_count | json }},
+      totalSpent: {{ customer.total_spent | json }},
+      tags: {{ customer.tags | json }},
+      acceptsMarketing: {{ customer.accepts_marketing | json }},
+    };
+  {% endif %}
+
+  {% if template contains 'product' and product %}
+    window.__worder.product = {
+      id: {{ product.id | json }},
+      title: {{ product.title | json }},
+      handle: {{ product.handle | json }},
+      vendor: {{ product.vendor | json }},
+      type: {{ product.type | json }},
+      price: {{ product.price | money_without_currency | json }},
+      compareAtPrice: {{ product.compare_at_price | money_without_currency | json }},
+      url: {{ product.url | json }},
+      imageUrl: {{ product.featured_image | image_url: width: 600 | json }},
+      tags: {{ product.tags | json }},
+      available: {{ product.available | json }},
+      selectedVariantId: {{ product.selected_or_first_available_variant.id | json }},
+      selectedVariantTitle: {{ product.selected_or_first_available_variant.title | json }},
+      sku: {{ product.selected_or_first_available_variant.sku | json }},
+    };
+  {% endif %}
+
+  {% if template contains 'collection' and collection %}
+    window.__worder.collection = {
+      id: {{ collection.id | json }},
+      title: {{ collection.title | json }},
+      handle: {{ collection.handle | json }},
+      url: {{ collection.url | json }},
+      productsCount: {{ collection.products_count | json }},
+    };
+  {% endif %}
+
+  window.__worder.template = {{ template | json }};
+  window.__worder.pageTitle = {{ page_title | json }};
+</script>
+
+<script src="{{ 'worder.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Worder Tracking",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}

@@ -1,0 +1,1318 @@
+'use client'
+
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star } from 'lucide-react'
+import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, useDroppable, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { BlockPalette } from './panels/BlockPalette'
+import { BlockPreview } from './blocks/BlockPreview'
+import { BlockProperties } from './panels/BlockProperties'
+import { MergeTagPicker } from './modals/MergeTagPicker'
+import { SendTestModal } from './modals/SendTestModal'
+import { PreviewModal } from './modals/PreviewModal'
+import { EmailPreviewMode } from '../flow-builder/panels/EmailPreviewMode'
+import { SectionProperties } from './panels/SectionProperties'
+import {
+  BLOCK_DEFS, SECTION_LAYOUTS, createBlock, createSection, migrateV1toV2, DEFAULT_DOCUMENT,
+  type EmailBlock, type EmailDocument, type EmailSection,
+} from './config/types'
+import { renderDocumentToHtml } from '@/lib/email/render-html'
+
+interface WorderEmailEditorProps {
+  templateName: string
+  design?: EmailDocument | Record<string, any>
+  onSave: (design: Record<string, any>, html: string) => Promise<boolean>
+  onBack: () => void
+  // Flow context — when editing inside a flow, enables real data preview
+  flowContext?: {
+    templateId: string
+    triggerType: string
+    organizationId: string
+  }
+}
+
+// ── Sortable Block Wrapper (drag from anywhere on the block) ──
+function SortableBlock({
+  blockId, children, isSelected, onSelect, onClone, onDelete,
+  isUniversal, savedBlockName, onSaveAsUniversal, onUnlink,
+  visibility,
+}: {
+  blockId: string;
+  children: React.ReactNode;
+  isSelected: boolean;
+  onSelect: () => void;
+  onClone: () => void;
+  onDelete: () => void;
+  isUniversal: boolean;
+  savedBlockName?: string;
+  onSaveAsUniversal: () => void;
+  onUnlink: () => void;
+  visibility?: 'all' | 'desktop' | 'mobile' | string;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: blockId,
+    data: { type: 'block', blockId },
+  })
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1, zIndex: isDragging ? 50 : 'auto' }}
+      onClick={e => { e.stopPropagation(); onSelect() }}
+      className={`relative group cursor-grab active:cursor-grabbing ${isSelected ? 'ring-2 ring-brand-500 ring-offset-1' : isUniversal ? 'hover:ring-1 hover:ring-violet-300' : 'hover:ring-1 hover:ring-brand-300'}`}
+    >
+      {/* Universal badge — always visible when linked to saved block */}
+      {isUniversal && (
+        <div
+          className="absolute left-1 top-1 z-20 flex items-center gap-1 px-1.5 py-0.5 bg-violet-500 text-white text-[10px] font-semibold rounded shadow-sm"
+          title={savedBlockName ? `Bloco universal: ${savedBlockName}` : 'Bloco universal'}
+        >
+          <Star className="w-2.5 h-2.5 fill-white" />
+          <span className="uppercase tracking-wide">Universal</span>
+        </div>
+      )}
+
+      {/* Device-visibility badge — shows the user that this block is
+          hidden on one of the devices. Won't render on 'all' (default). */}
+      {visibility === 'desktop' && (
+        <div
+          className="absolute left-1 bottom-1 z-20 flex items-center gap-1 px-1.5 py-0.5 bg-zinc-900/80 text-white text-[10px] font-semibold rounded shadow-sm"
+          title="Visível apenas em desktop (oculto no mobile)"
+        >
+          <span>🖥 Só desktop</span>
+        </div>
+      )}
+      {visibility === 'mobile' && (
+        <div
+          className="absolute left-1 bottom-1 z-20 flex items-center gap-1 px-1.5 py-0.5 bg-zinc-900/80 text-white text-[10px] font-semibold rounded shadow-sm"
+          title="Visível apenas em mobile (oculto no desktop)"
+        >
+          <span>📱 Só mobile</span>
+        </div>
+      )}
+
+      {/* Hover toolbar — horizontal pill floating at top-right of the
+          block. Positioned inside the block bounds so it never gets
+          clipped by narrow columns (the previous -right-9 version
+          drifted off-canvas when the block was in a sidebar column).
+          Klaviyo-style: always accessible on hover. */}
+      <div
+        className={`absolute right-2 top-2 flex items-center gap-0.5 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg shadow-md p-1 z-20 transition-opacity ${
+          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {isUniversal ? (
+          <button
+            onClick={e => { e.stopPropagation(); onUnlink() }}
+            className="p-1.5 text-violet-600 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+            title="Desvincular do bloco universal (editar só aqui)"
+          >
+            <X className="w-3.5 h-3.5" strokeWidth={2.25} />
+          </button>
+        ) : (
+          <button
+            onClick={e => { e.stopPropagation(); onSaveAsUniversal() }}
+            className="p-1.5 text-gray-500 hover:text-violet-600 hover:bg-violet-50 rounded transition-colors"
+            title="Salvar como bloco universal"
+          >
+            <Star className="w-3.5 h-3.5" strokeWidth={2.25} />
+          </button>
+        )}
+        <button
+          onClick={e => { e.stopPropagation(); onClone() }}
+          className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+          title="Duplicar"
+        >
+          <Copy className="w-3.5 h-3.5" strokeWidth={2.25} />
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); onDelete() }}
+          className="p-1.5 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+          title="Excluir"
+        >
+          <Trash2 className="w-3.5 h-3.5" strokeWidth={2.25} />
+        </button>
+      </div>
+
+      {/* Universal overlay tint — subtle indicator the whole block is linked */}
+      {isUniversal && !isSelected && (
+        <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-violet-200/60 rounded-[1px]" />
+      )}
+
+      {children}
+    </div>
+  )
+}
+
+// ── Sortable Section Wrapper (drag sections to reorder) ──
+function SortableSection({ sectionId, children, isSelected }: { sectionId: string; children: React.ReactNode; isSelected: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: sectionId,
+    data: { type: 'section', sectionId },
+  })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1, zIndex: isDragging ? 40 : 'auto' }}
+      className="relative group/sectiondrag"
+    >
+      {/* Drag handle inside the section at top-right — always accessible */}
+      <div
+        {...attributes}
+        {...listeners}
+        className={`absolute right-2 top-2 cursor-grab active:cursor-grabbing p-1.5 rounded-md z-30 transition-all ${isSelected ? 'opacity-100 bg-indigo-100 text-indigo-600' : 'opacity-0 group-hover/sectiondrag:opacity-100 bg-white/90 text-gray-400 hover:text-indigo-500 border border-gray-200 shadow-sm'}`}
+        title="Arrastar seção"
+      >
+        <GripVertical className="w-3.5 h-3.5" />
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// ── Droppable Column (accept blocks into empty columns) ──
+function DroppableColumn({ columnId, sectionId, children }: { columnId: string; sectionId: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `column-${columnId}`,
+    data: { type: 'column', columnId, sectionId },
+  })
+  return (
+    <div ref={setNodeRef} className={`${isOver ? 'ring-2 ring-brand-400 ring-inset bg-brand-50/30' : ''}`}>
+      {children}
+    </div>
+  )
+}
+
+// ── Inline Color Picker (click to open, doesn't close on drag) ──
+function InlineColorPicker({ value, onChange, label }: { value: string; onChange: (v: string) => void; label?: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return
+    const handler = (e: MouseEvent) => { if (!node.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+  return (
+    <div ref={ref} className="relative">
+      {label && <label className="block text-[11px] font-medium text-gray-500 mb-1">{label}</label>}
+      <div className="flex items-center gap-1.5">
+        <button onClick={() => setOpen(!open)} className="w-8 h-8 rounded-lg border-2 border-gray-200 cursor-pointer flex-shrink-0 hover:border-gray-400 transition-colors" style={{ backgroundColor: value || '#ffffff' }} />
+        <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} placeholder="#000000"
+          className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
+      </div>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-50 bg-white rounded-xl shadow-xl border border-gray-200 p-3" onMouseDown={e => e.stopPropagation()}>
+          <input type="color" value={value || '#ffffff'} onChange={e => onChange(e.target.value)}
+            className="w-48 h-36 rounded-lg cursor-pointer border-0 p-0 block" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Styles Tab ──
+function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch<React.SetStateAction<EmailDocument>> }) {
+  const s = doc.settings
+  const update = (key: string, value: any) => setDoc(prev => ({ ...prev, settings: { ...prev.settings, [key]: value } }))
+
+  const FONTS = [
+    { value: "'DM Sans', Arial, sans-serif", label: 'DM Sans' },
+    { value: "Arial, Helvetica, sans-serif", label: 'Arial' },
+    { value: "Georgia, Times, serif", label: 'Georgia' },
+    { value: "Verdana, Geneva, sans-serif", label: 'Verdana' },
+    { value: "'Inter', Arial, sans-serif", label: 'Inter' },
+    { value: "'Montserrat', Arial, sans-serif", label: 'Montserrat' },
+    { value: "'Roboto', Arial, sans-serif", label: 'Roboto' },
+    { value: "Tahoma, Geneva, sans-serif", label: 'Tahoma' },
+    { value: "'Trebuchet MS', sans-serif", label: 'Trebuchet MS' },
+  ]
+
+  return (
+    <div className="overflow-y-auto h-full">
+      {/* ── Layout & Fundos ── */}
+      <div className="p-4 space-y-4 border-b border-gray-100">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Layout</p>
+        <div className="space-y-3">
+          <InlineColorPicker label="Fundo do Email" value={s.backgroundColor} onChange={v => update('backgroundColor', v)} />
+          <InlineColorPicker label="Fundo do Conteúdo" value={s.contentBackgroundColor} onChange={v => update('contentBackgroundColor', v)} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Largura (px)</label>
+              <input type="number" value={s.contentWidth} onChange={e => update('contentWidth', Number(e.target.value))} min={400} max={800}
+                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Bordas</label>
+              <input type="number" value={s.borderRadius} onChange={e => update('borderRadius', Number(e.target.value))} min={0} max={24}
+                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Tipografia ── */}
+      <div className="p-4 space-y-4 border-b border-gray-100">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tipografia</p>
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 mb-1.5">Fonte Global</label>
+          <select value={s.fontFamily} onChange={e => update('fontFamily', e.target.value)}
+            className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all"
+            style={{ fontFamily: s.fontFamily }}>
+            {FONTS.map(f => <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          {[
+            { key: 'body', label: 'Body', defaults: { fontSize: 15, color: '#374151', lineHeight: 1.6 } },
+            { key: 'h1', label: 'Título H1', defaults: { fontSize: 28, color: '#111827', lineHeight: 1.3 } },
+            { key: 'h2', label: 'Título H2', defaults: { fontSize: 22, color: '#111827', lineHeight: 1.3 } },
+            { key: 'h3', label: 'Título H3', defaults: { fontSize: 18, color: '#111827', lineHeight: 1.4 } },
+            { key: 'h4', label: 'Título H4', defaults: { fontSize: 16, color: '#374151', lineHeight: 1.4 } },
+          ].map(style => {
+            const tsKey = style.key as 'body' | 'h1' | 'h2' | 'h3' | 'h4'
+            const ts = s.textStyles?.[tsKey] || style.defaults
+            const updateTS = (field: string, val: any) => {
+              const textStyles: Record<string, any> = { ...(s.textStyles || {}) }
+              textStyles[style.key] = { ...ts, [field]: val }
+              update('textStyles', textStyles)
+            }
+            return (
+              <details key={style.key} className="group border border-gray-100 rounded-lg overflow-hidden">
+                <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-gray-50/80 transition-colors">
+                  <span className="text-[12px] font-medium text-gray-700">{style.label}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-gray-400">{ts.fontSize}px</span>
+                    <div className="w-3 h-3 rounded-full border border-gray-200" style={{ backgroundColor: ts.color }} />
+                  </div>
+                </summary>
+                <div className="px-3 pb-3 pt-1 space-y-2 bg-gray-50/40">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[10px] text-gray-400">Tamanho</label>
+                      <input type="number" value={ts.fontSize} onChange={e => updateTS('fontSize', Number(e.target.value))} min={8} max={72}
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400">Altura</label>
+                      <input type="number" value={ts.lineHeight} onChange={e => updateTS('lineHeight', Number(e.target.value))} min={0.8} max={3} step={0.1}
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400">Cor</label>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => {
+                          const input = document.createElement('input')
+                          input.type = 'color'; input.value = ts.color
+                          input.addEventListener('input', (e) => updateTS('color', (e.target as HTMLInputElement).value))
+                          input.click()
+                        }} className="w-8 h-[30px] rounded-lg border border-gray-200 cursor-pointer flex-shrink-0" style={{ backgroundColor: ts.color }} />
+                        <input type="text" value={ts.color} onChange={e => updateTS('color', e.target.value)}
+                          className="flex-1 min-w-0 px-1.5 py-1.5 border border-gray-200 rounded-lg text-[10px] font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </details>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Links ── */}
+      <div className="p-4 space-y-3 border-b border-gray-100">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Links</p>
+        <InlineColorPicker label="Cor do Link" value={s.textStyles?.link?.color || '#F97316'} onChange={v => {
+          const textStyles = { ...(s.textStyles || {}) }
+          textStyles.link = { ...(textStyles.link || {}), color: v }
+          update('textStyles', textStyles)
+        }} />
+        <label className="flex items-center gap-2.5 cursor-pointer">
+          <div className={`relative w-9 h-5 rounded-full transition-colors ${s.textStyles?.link?.underline !== false ? 'bg-brand-500' : 'bg-gray-200'}`}>
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${s.textStyles?.link?.underline !== false ? 'translate-x-4' : 'translate-x-0.5'}`} />
+          </div>
+          <span className="text-[12px] text-gray-700">Sublinhado</span>
+        </label>
+      </div>
+
+      {/* ── Botões ── */}
+      <div className="p-4 space-y-3">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Botões Padrão</p>
+        {(['primary', 'secondary'] as const).map(variant => {
+          const bs = s.buttonStyles?.[variant] || { bgColor: variant === 'primary' ? '#F97316' : '#FFFFFF', textColor: variant === 'primary' ? '#FFFFFF' : '#F97316', borderRadius: 8, fontWeight: 'bold' }
+          const updateBS = (field: string, val: any) => {
+            const buttonStyles: Record<string, any> = { ...(s.buttonStyles || {}) }
+            buttonStyles[variant] = { ...bs, [field]: val }
+            update('buttonStyles', buttonStyles)
+          }
+          return (
+            <details key={variant} className="group border border-gray-100 rounded-lg overflow-hidden">
+              <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-gray-50/80 transition-colors">
+                <span className="text-[12px] font-medium text-gray-700">{variant === 'primary' ? 'Primário' : 'Secundário'}</span>
+                <div className="flex items-center gap-2">
+                  <div className="px-3 py-0.5 rounded text-[10px] font-semibold" style={{ backgroundColor: bs.bgColor, color: bs.textColor, border: '1px solid #e5e7eb' }}>
+                    Aa
+                  </div>
+                </div>
+              </summary>
+              <div className="px-3 pb-3 pt-1 space-y-2.5 bg-gray-50/40">
+                <div className="grid grid-cols-2 gap-2">
+                  <InlineColorPicker label="Fundo" value={bs.bgColor} onChange={v => updateBS('bgColor', v)} />
+                  <InlineColorPicker label="Texto" value={bs.textColor} onChange={v => updateBS('textColor', v)} />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-400">Raio</label>
+                    <input type="number" value={bs.borderRadius} onChange={e => updateBS('borderRadius', Number(e.target.value))} min={0} max={50}
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400">Peso</label>
+                    <select value={bs.fontWeight} onChange={e => updateBS('fontWeight', e.target.value)}
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
+                      <option value="normal">Normal</option>
+                      <option value="600">Semibold</option>
+                      <option value="bold">Bold</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </details>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Helpers ──
+function findBlockLocation(doc: EmailDocument, blockId: string): { sectionIdx: number; columnIdx: number; blockIdx: number } | null {
+  for (let si = 0; si < doc.sections.length; si++) {
+    for (let ci = 0; ci < doc.sections[si].columns.length; ci++) {
+      const bi = doc.sections[si].columns[ci].blocks.findIndex(b => b.id === blockId)
+      if (bi !== -1) return { sectionIdx: si, columnIdx: ci, blockIdx: bi }
+    }
+  }
+  return null
+}
+
+function allBlocks(doc: EmailDocument): EmailBlock[] {
+  return doc.sections.flatMap(s => s.columns.flatMap(c => c.blocks))
+}
+
+const LAYOUT_ICONS: Record<string, typeof Square> = { Square, Columns, PanelLeft, PanelRight, LayoutGrid }
+
+export default function WorderEmailEditor({ templateName, design, onSave, onBack, flowContext }: WorderEmailEditorProps) {
+  // ── State ──
+  const [doc, setDoc] = useState<EmailDocument>(() => {
+    if (design) return migrateV1toV2(design)
+    return JSON.parse(JSON.stringify(DEFAULT_DOCUMENT))
+  })
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
+  const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
+  const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [leftTab, setLeftTab] = useState<'content' | 'styles'>('content')
+  const [previewHtml, setPreviewHtml] = useState('')
+  const [showPreview, setShowPreview] = useState(false)
+  const [showFlowPreview, setShowFlowPreview] = useState(false)
+  const [showMergeTags, setShowMergeTags] = useState(false)
+  const [showSendTest, setShowSendTest] = useState(false)
+  const [showSaveBlockModal, setShowSaveBlockModal] = useState(false)
+  const [showColumnModal, setShowColumnModal] = useState(false)
+  const [columnModalCols, setColumnModalCols] = useState(2)
+  const [columnModalLayout, setColumnModalLayout] = useState<number[]>([50, 50])
+  const [saveBlockName, setSaveBlockName] = useState('')
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+
+  // Undo/Redo — frames + idx as separate state. We use a single ref to
+  // hold the "live" idx that's safe to read synchronously from any
+  // callback (avoids the setState-inside-setState antipattern that
+  // triggered React error #300 in production).
+  const [history, setHistory] = useState<string[]>(() => [JSON.stringify(
+    design ? migrateV1toV2(design) : DEFAULT_DOCUMENT
+  )])
+  const [historyIdx, setHistoryIdx] = useState(0)
+  const historyIdxRef = useRef(0)
+  const historyRef = useRef<string[]>(history)
+  useEffect(() => { historyIdxRef.current = historyIdx }, [historyIdx])
+  useEffect(() => { historyRef.current = history }, [history])
+
+  const selectedBlock = selectedBlockId ? allBlocks(doc).find(b => b.id === selectedBlockId) || null : null
+  const selectedSection = selectedSectionId ? doc.sections.find(s => s.id === selectedSectionId) || null : null
+
+  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }, [])
+
+  const pushHistory = useCallback((newDoc: EmailDocument) => {
+    const json = JSON.stringify(newDoc)
+    // Compute next frames + idx synchronously, then commit both
+    // setState calls separately. No nested updaters.
+    const prev = historyRef.current
+    const truncated = prev.slice(0, historyIdxRef.current + 1)
+    const next = [...truncated, json].slice(-40)
+    const newIdx = next.length - 1
+    historyRef.current = next
+    historyIdxRef.current = newIdx
+    setHistory(next)
+    setHistoryIdx(newIdx)
+  }, [])
+
+  const updateDoc = useCallback((newDoc: EmailDocument) => {
+    setDoc(newDoc)
+    pushHistory(newDoc)
+  }, [pushHistory])
+
+  const undo = useCallback(() => {
+    const cur = historyIdxRef.current
+    if (cur <= 0) return
+    const nextIdx = cur - 1
+    const frames = historyRef.current
+    const snapshot = frames[nextIdx]
+    if (!snapshot) return
+    historyIdxRef.current = nextIdx
+    setHistoryIdx(nextIdx)
+    try { setDoc(JSON.parse(snapshot)) } catch {}
+  }, [])
+
+  const redo = useCallback(() => {
+    const cur = historyIdxRef.current
+    const frames = historyRef.current
+    if (cur >= frames.length - 1) return
+    const nextIdx = cur + 1
+    const snapshot = frames[nextIdx]
+    if (!snapshot) return
+    historyIdxRef.current = nextIdx
+    setHistoryIdx(nextIdx)
+    try { setDoc(JSON.parse(snapshot)) } catch {}
+  }, [])
+
+  // ── Selection helpers ──
+  const selectBlock = useCallback((blockId: string) => {
+    setSelectedBlockId(blockId)
+    setSelectedSectionId(null)
+  }, [])
+
+  const selectSection = useCallback((sectionId: string) => {
+    setSelectedSectionId(sectionId)
+    setSelectedBlockId(null)
+  }, [])
+
+  const clearSelection = useCallback(() => {
+    setSelectedBlockId(null)
+    setSelectedSectionId(null)
+  }, [])
+
+  // ── Section Operations ──
+  const addSection = useCallback((columnWidths: number[] = [100]) => {
+    const section = createSection(columnWidths)
+    updateDoc({ ...doc, sections: [...doc.sections, section] })
+    selectSection(section.id)
+  }, [doc, updateDoc, selectSection])
+
+  const removeSection = useCallback((sectionId: string) => {
+    updateDoc({ ...doc, sections: doc.sections.filter(s => s.id !== sectionId) })
+    if (selectedSectionId === sectionId) clearSelection()
+  }, [doc, updateDoc, selectedSectionId, clearSelection])
+
+  const cloneSection = useCallback((sectionId: string) => {
+    const idx = doc.sections.findIndex(s => s.id === sectionId)
+    if (idx === -1) return
+    const clone = JSON.parse(JSON.stringify(doc.sections[idx]))
+    clone.id = 's_' + Date.now().toString(36)
+    clone.columns = clone.columns.map((c: any) => ({ ...c, id: 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), blocks: c.blocks.map((b: any) => ({ ...b, id: 'b_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5) })) }))
+    const sections = [...doc.sections]
+    sections.splice(idx + 1, 0, clone)
+    updateDoc({ ...doc, sections })
+    selectSection(clone.id)
+  }, [doc, updateDoc, selectSection])
+
+  const updateSectionStyles = useCallback((sectionId: string, patch: Partial<EmailSection['styles']>) => {
+    setDoc(prev => ({
+      ...prev,
+      sections: prev.sections.map(s => s.id === sectionId ? { ...s, styles: { ...s.styles, ...patch } } : s),
+    }))
+  }, [])
+
+  // ── Block Operations ──
+  const addBlock = useCallback((type: string, targetSectionId?: string, targetColumnId?: string) => {
+    const block = createBlock(type as any)
+    const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
+
+    if (targetSectionId && targetColumnId) {
+      // Add to specific column
+      const section = sections.find(s => s.id === targetSectionId)
+      if (section) {
+        const column = section.columns.find(c => c.id === targetColumnId)
+        if (column) {
+          column.blocks.push(block)
+          updateDoc({ ...doc, sections })
+          selectBlock(block.id)
+          return
+        }
+      }
+    }
+
+    if (sections.length === 0) {
+      const section = createSection([100])
+      section.columns[0].blocks.push(block)
+      sections.push(section)
+    } else {
+      const lastSection = sections[sections.length - 1]
+      lastSection.columns[0].blocks.push(block)
+    }
+    updateDoc({ ...doc, sections })
+    selectBlock(block.id)
+  }, [doc, updateDoc, selectBlock])
+
+  const addSavedBlock = useCallback((blockJson: any, savedBlockId?: string, savedBlockName?: string) => {
+    if (!blockJson) return
+    // Restore a fresh block id so duplicates have their own instance, but
+    // KEEP the link to the saved_block (_savedBlockId) so edits propagate.
+    const restored: EmailBlock = {
+      ...blockJson,
+      id: 'b_' + Math.random().toString(36).substring(2, 9),
+      ...(savedBlockId ? { _savedBlockId: savedBlockId, _savedBlockName: savedBlockName } : {}),
+    }
+    const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
+    if (sections.length === 0) {
+      const section = createSection([100])
+      section.columns[0].blocks.push(restored)
+      sections.push(section)
+    } else {
+      const lastSection = sections[sections.length - 1]
+      lastSection.columns[0].blocks.push(restored)
+    }
+    updateDoc({ ...doc, sections })
+    selectBlock(restored.id)
+  }, [doc, updateDoc, selectBlock])
+
+  const removeBlock = useCallback((id: string) => {
+    const loc = findBlockLocation(doc, id)
+    if (!loc) return
+    const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
+    sections[loc.sectionIdx].columns[loc.columnIdx].blocks.splice(loc.blockIdx, 1)
+    updateDoc({ ...doc, sections })
+    if (selectedBlockId === id) setSelectedBlockId(null)
+  }, [doc, selectedBlockId, updateDoc])
+
+  const cloneBlock = useCallback((id: string) => {
+    const loc = findBlockLocation(doc, id)
+    if (!loc) return
+    const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
+    const original = sections[loc.sectionIdx].columns[loc.columnIdx].blocks[loc.blockIdx]
+    const clone: EmailBlock = { ...JSON.parse(JSON.stringify(original)), id: 'b_' + Math.random().toString(36).substring(2, 9) }
+    sections[loc.sectionIdx].columns[loc.columnIdx].blocks.splice(loc.blockIdx + 1, 0, clone)
+    updateDoc({ ...doc, sections })
+    selectBlock(clone.id)
+  }, [doc, updateDoc, selectBlock])
+
+  // ── Universal Blocks (Klaviyo-style) ──
+  // Open the "Save as Universal" modal pre-filled with the selected block
+  const saveBlockAsUniversal = useCallback((id: string) => {
+    setSelectedBlockId(id)
+    setSaveBlockName('')
+    setShowSaveBlockModal(true)
+  }, [])
+
+  // Unlink: keep the current block instance but drop its _savedBlockId so
+  // further edits only affect THIS email (not the saved library entry).
+  const unlinkUniversalBlock = useCallback((id: string) => {
+    const loc = findBlockLocation(doc, id)
+    if (!loc) return
+    const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
+    const b = sections[loc.sectionIdx].columns[loc.columnIdx].blocks[loc.blockIdx]
+    delete b._savedBlockId
+    delete b._savedBlockName
+    updateDoc({ ...doc, sections })
+    showToast('Bloco desvinculado — edições agora ficam só neste email')
+  }, [doc, updateDoc, showToast])
+
+  // Debounced propagation queue for universal blocks — when user edits a
+  // linked block, we PATCH the saved_blocks entry so every email using it
+  // picks up the change. We debounce so rapid keystrokes make one request.
+  const universalSyncTimersRef = useRef<Map<string, any>>(new Map())
+  const scheduleUniversalSync = useCallback((savedBlockId: string, block: EmailBlock) => {
+    const timers = universalSyncTimersRef.current
+    if (timers.has(savedBlockId)) clearTimeout(timers.get(savedBlockId))
+    const t = setTimeout(async () => {
+      timers.delete(savedBlockId)
+      try {
+        // Never persist the link fields back into the saved_block body
+        const clean: EmailBlock = { ...block } as EmailBlock
+        delete (clean as any)._savedBlockId
+        delete (clean as any)._savedBlockName
+        await fetch(`/api/email/saved-blocks/${savedBlockId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ block_json: clean }),
+        })
+      } catch (err) {
+        console.warn('[UniversalBlock] sync failed', err)
+      }
+    }, 600)
+    timers.set(savedBlockId, t)
+  }, [])
+
+  const updateProp = useCallback((id: string, key: string, value: any) => {
+    setDoc(prev => {
+      const next = {
+        ...prev,
+        sections: prev.sections.map(s => ({
+          ...s,
+          columns: s.columns.map(c => ({
+            ...c,
+            blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, [key]: value } } : b),
+          })),
+        })),
+      }
+      // If this block is linked to a saved_block, propagate the mutation.
+      const edited = allBlocks(next).find(b => b.id === id)
+      if (edited?._savedBlockId) scheduleUniversalSync(edited._savedBlockId, edited)
+      return next
+    })
+  }, [scheduleUniversalSync])
+
+  const [activeDragId, setActiveDragId] = useState<string | null>(null)
+
+  // ── DnD: supports reorder within column, cross-column, cross-section, and section reordering ──
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveDragId(event.active.id as string)
+  }, [])
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    setActiveDragId(null)
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const activeData = active.data.current
+    const overData = over.data.current
+
+    // ── Section reordering ──
+    if (activeData?.type === 'section' && overData?.type === 'section') {
+      const oldIdx = doc.sections.findIndex(s => s.id === active.id)
+      const newIdx = doc.sections.findIndex(s => s.id === over.id)
+      if (oldIdx !== -1 && newIdx !== -1 && oldIdx !== newIdx) {
+        updateDoc({ ...doc, sections: arrayMove(doc.sections, oldIdx, newIdx) })
+      }
+      return
+    }
+
+    // ── Block reordering / cross-column move ──
+    const activeLoc = findBlockLocation(doc, active.id as string)
+    if (!activeLoc) return
+
+    const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
+
+    // Check if dropped onto an empty column droppable
+    if (overData?.type === 'column') {
+      const targetSectionIdx = sections.findIndex(s => s.id === overData.sectionId)
+      const targetSection = sections[targetSectionIdx]
+      if (targetSection) {
+        const targetColIdx = targetSection.columns.findIndex((c: any) => c.id === overData.columnId)
+        if (targetColIdx !== -1) {
+          const srcBlocks = sections[activeLoc.sectionIdx].columns[activeLoc.columnIdx].blocks
+          const [moved] = srcBlocks.splice(activeLoc.blockIdx, 1)
+          sections[targetSectionIdx].columns[targetColIdx].blocks.push(moved)
+          updateDoc({ ...doc, sections })
+        }
+      }
+      return
+    }
+
+    const overLoc = findBlockLocation(doc, over.id as string)
+    if (!overLoc) return
+
+    // Same column — simple reorder
+    if (activeLoc.sectionIdx === overLoc.sectionIdx && activeLoc.columnIdx === overLoc.columnIdx) {
+      const blocks = sections[activeLoc.sectionIdx].columns[activeLoc.columnIdx].blocks
+      const [moved] = blocks.splice(activeLoc.blockIdx, 1)
+      blocks.splice(overLoc.blockIdx, 0, moved)
+    } else {
+      // Cross-column / cross-section move
+      const srcBlocks = sections[activeLoc.sectionIdx].columns[activeLoc.columnIdx].blocks
+      const [moved] = srcBlocks.splice(activeLoc.blockIdx, 1)
+      const dstBlocks = sections[overLoc.sectionIdx].columns[overLoc.columnIdx].blocks
+      dstBlocks.splice(overLoc.blockIdx, 0, moved)
+    }
+
+    updateDoc({ ...doc, sections })
+  }, [doc, updateDoc])
+
+  // ── Drop from palette ──
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const type = e.dataTransfer.getData('blockType')
+    if (type) addBlock(type)
+  }, [addBlock])
+
+  // ── Save ──
+  const handleSave = useCallback(async () => {
+    setSaving(true)
+    try {
+      const html = renderDocumentToHtml(doc)
+      const success = await onSave(doc as any, html)
+      if (success) showToast('Template salvo com sucesso!')
+    } catch (err: any) { showToast('Erro: ' + err.message, 'error') }
+    setSaving(false)
+  }, [doc, onSave, showToast])
+
+  // ── Preview ──
+  const handlePreview = useCallback(async () => {
+    // When inside a flow, use the flow preview mode with real data
+    if (flowContext) {
+      // Save first so the template HTML is up to date
+      const html = renderDocumentToHtml(doc)
+      await onSave(doc as Record<string, any>, html)
+      setShowFlowPreview(true)
+      return
+    }
+    // Resolve dynamic product blocks before rendering
+    let resolvedDoc = doc
+    const hasDynamicProducts = doc.sections?.some((s: any) =>
+      s.columns?.some((c: any) =>
+        c.blocks?.some((b: any) => b.type === 'product-grid' && (!b.props.staticProducts || b.props.staticProducts.length === 0))
+      )
+    )
+    if (hasDynamicProducts) {
+      try {
+        const { resolveProductBlocks } = await import('@/lib/email/render-html')
+        resolvedDoc = await resolveProductBlocks(doc, async () => {
+          const res = await fetch('/api/products')
+          if (!res.ok) return []
+          const data = await res.json()
+          return data.products || []
+        })
+      } catch (e) {
+        console.error('Failed to resolve products:', e)
+      }
+    }
+    let html = renderDocumentToHtml(resolvedDoc)
+    // Resolve countdown timer URLs
+    html = html.replace(/\{\{countdown_base_url\}\}/g, window.location.origin)
+    // Replace common merge tags with preview values
+    html = html.replace(/\{\{first_name\}\}/g, 'Cliente')
+    html = html.replace(/\{\{store_name\}\}/g, 'Minha Loja')
+    html = html.replace(/\{\{store_url\}\}/g, window.location.origin)
+    html = html.replace(/\{\{unsubscribe_url\}\}/g, '#')
+    html = html.replace(/\{\{view_in_browser_url\}\}/g, '#')
+    setPreviewHtml(html)
+    setShowPreview(true)
+  }, [doc])
+
+  // ── Keyboard shortcuts ──
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSave() }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
+      if (e.key === 'Delete' && selectedBlockId) removeBlock(selectedBlockId)
+      if (e.key === 'Escape') { clearSelection(); setShowPreview(false) }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [handleSave, undo, redo, selectedBlockId, removeBlock, clearSelection])
+
+  const canvasWidth = device === 'mobile' ? 375 : doc.settings.contentWidth
+  const isSaved = toast?.type === 'success' && toast.msg.includes('salvo')
+
+  // ── Render ──
+  return (
+    <div className="flex flex-col h-screen w-screen bg-gray-100 overflow-hidden">
+      {/* ── Toast ── */}
+      {toast && (
+        <div className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-sm font-medium transition-all ${toast.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* ── Toolbar (black theme, restored from 8442103) ── */}
+      <div className="flex items-center justify-between px-4 h-[52px] bg-zinc-900 flex-shrink-0 z-20">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/worder-favicon.svg" alt="Worder" className="w-7 h-7 flex-shrink-0" />
+          <div className="h-5 w-px bg-zinc-700" />
+          <span className="text-sm font-semibold text-white truncate max-w-[280px]">{templateName}</span>
+          <span className="text-[9px] px-1.5 py-0.5 bg-white/10 text-white rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <button onClick={undo} disabled={historyIdx <= 0} className="p-1.5 text-zinc-500 hover:text-white rounded disabled:opacity-30 transition-colors" title="Desfazer"><Undo2 size={15} /></button>
+          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-1.5 text-zinc-500 hover:text-white rounded disabled:opacity-30 transition-colors" title="Refazer"><Redo2 size={15} /></button>
+          <div className="w-px h-4 bg-zinc-700 mx-1" />
+          <button onClick={() => setDevice('desktop')} className={`p-1.5 rounded transition-colors ${device === 'desktop' ? 'text-white bg-zinc-700' : 'text-zinc-500 hover:text-white'}`}><Monitor size={15} /></button>
+          <button onClick={() => setDevice('mobile')} className={`p-1.5 rounded transition-colors ${device === 'mobile' ? 'text-white bg-zinc-700' : 'text-zinc-500 hover:text-white'}`}><Smartphone size={15} /></button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowMergeTags(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors" title="Merge Tags">
+            <Tag size={14} /> Tags
+          </button>
+          <button onClick={handlePreview} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors">
+            <Eye size={14} /> Preview
+          </button>
+          <button onClick={() => setShowSendTest(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors">
+            <Send size={14} /> Teste
+          </button>
+          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-zinc-900 text-xs font-semibold rounded-lg hover:bg-zinc-100 disabled:opacity-50 transition-colors">
+            {saving ? <Loader2 size={14} className="animate-spin" /> : isSaved ? <CheckCircle size={14} /> : <Save size={14} />}
+            {saving ? 'Salvando...' : isSaved ? 'Salvo!' : 'Salvar'}
+          </button>
+          <button onClick={() => { if (confirm('Sair sem salvar? Alterações não salvas serão perdidas.')) onBack() }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-400 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors" title="Sair">
+            Sair
+          </button>
+        </div>
+      </div>
+
+      {/* ── Main Layout (Klaviyo-style: Left = contextual panel, Right = canvas) ── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* ── Left Sidebar (contextual: palette OR block/section properties) ── */}
+        <div className="w-[360px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+          {selectedBlock ? (
+            <>
+              {/* Header with back button when editing a block */}
+              <div className="flex items-center gap-2 py-2.5 px-3 border-b border-gray-200 flex-shrink-0">
+                <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors" title="Voltar">
+                  <ArrowLeft size={14} />
+                </button>
+                <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider flex-1">
+                  {BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}
+                </p>
+                {selectedBlock._savedBlockId && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-violet-100 text-violet-700">
+                    <Star className="w-2.5 h-2.5 fill-violet-600" />
+                    UNIVERSAL
+                  </span>
+                )}
+              </div>
+
+              {/* Universal block banner — appears only when the selected block
+                  is linked to a saved_block. Explains propagation + unlink action. */}
+              {selectedBlock._savedBlockId && (
+                <div className="mx-3 mt-3 p-3 rounded-lg bg-violet-50 border border-violet-200">
+                  <div className="flex items-start gap-2">
+                    <Star className="w-4 h-4 text-violet-600 fill-violet-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-semibold text-violet-900 leading-tight">
+                        {selectedBlock._savedBlockName || 'Bloco Universal'}
+                      </p>
+                      <p className="text-[11px] text-violet-700/80 leading-snug mt-0.5">
+                        Edições se aplicam a todos os emails que usam este bloco.
+                      </p>
+                      <button
+                        onClick={() => unlinkUniversalBlock(selectedBlock.id)}
+                        className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:text-violet-900 underline underline-offset-2"
+                      >
+                        Desvincular — editar só neste email
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex-1 overflow-y-auto p-3">
+                <BlockProperties
+                  block={selectedBlock}
+                  onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
+                  onSaveAsReusable={() => {
+                    setSaveBlockName('')
+                    setShowSaveBlockModal(true)
+                  }}
+                />
+              </div>
+            </>
+          ) : selectedSection ? (
+            <>
+              {/* Header with back button when editing a section */}
+              <div className="flex items-center gap-2 py-2.5 px-3 border-b border-gray-200 flex-shrink-0">
+                <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors" title="Voltar">
+                  <ArrowLeft size={14} />
+                </button>
+                <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider flex-1">Seção</p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3">
+                <SectionProperties
+                  section={selectedSection}
+                  onStyleChange={(key, value) => updateSectionStyles(selectedSection.id, { [key]: value })}
+                  onColumnLayoutChange={(cols) => {
+                    setDoc(prev => ({
+                      ...prev,
+                      sections: prev.sections.map(s => {
+                        if (s.id !== selectedSection.id) return s
+                        const newCols = cols.map((w, i) => ({
+                          id: s.columns[i]?.id || ('c_' + Date.now().toString(36) + '_' + i),
+                          width: w,
+                          blocks: s.columns[i]?.blocks || [],
+                        }))
+                        if (s.columns.length > cols.length) {
+                          const overflow = s.columns.slice(cols.length).flatMap(c => c.blocks)
+                          newCols[newCols.length - 1].blocks.push(...overflow)
+                        }
+                        return { ...s, columns: newCols }
+                      })
+                    }))
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Default: palette / styles tabs */}
+              <div className="flex border-b border-gray-200 flex-shrink-0">
+                <button onClick={() => setLeftTab('content')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${leftTab === 'content' ? 'text-zinc-900 border-b-2 border-zinc-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Conteúdo</button>
+                <button onClick={() => setLeftTab('styles')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${leftTab === 'styles' ? 'text-zinc-900 border-b-2 border-zinc-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>Estilos</button>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                {leftTab === 'content' ? (
+                  <div className="flex flex-col h-full overflow-y-auto">
+                    {/* Layout section — Columns + Section like Klaviyo */}
+                    <div className="p-3 border-b border-gray-100">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Layout</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button onClick={() => setShowColumnModal(true)}
+                          className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
+                          <Columns className="w-5 h-5 text-gray-500" />
+                          <span className="text-[10px] font-medium text-gray-600">Colunas</span>
+                        </button>
+                        <button onClick={() => addSection([100])}
+                          className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
+                          <LayoutGrid className="w-5 h-5 text-gray-500" />
+                          <span className="text-[10px] font-medium text-gray-600">Seção</span>
+                        </button>
+                      </div>
+                    </div>
+                    {/* Block palette */}
+                    <BlockPalette onAddBlock={addBlock} onAddSavedBlock={addSavedBlock} />
+                  </div>
+                ) : (
+                  <StylesTab doc={doc} setDoc={setDoc} />
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ── Canvas ── */}
+        <div className="flex-1 overflow-y-auto" style={{ backgroundColor: doc.settings.backgroundColor }}
+          onDrop={handleDrop} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+          onClick={clearSelection}>
+          <div className="py-4">
+            {doc.sections.length === 0 ? (
+              <div className="mx-auto transition-all duration-300" style={{ maxWidth: canvasWidth }}>
+                <div style={{ backgroundColor: doc.settings.contentBackgroundColor, borderRadius: doc.settings.borderRadius, minHeight: 200, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}
+                  className="flex flex-col items-center justify-center py-24 text-gray-400">
+                  <Plus size={36} className="mb-3 text-gray-300" />
+                  <p className="text-sm font-medium text-gray-500">Arraste blocos aqui</p>
+                  <p className="text-xs mt-1 text-gray-400">ou adicione um layout na barra lateral</p>
+                </div>
+              </div>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                <SortableContext items={doc.sections.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                {doc.sections.map((section, sectionIndex) => {
+                  const isFirst = sectionIndex === 0
+                  const isLast = sectionIndex === doc.sections.length - 1
+                  const br = doc.settings.borderRadius || 0
+                  const sectionBorderRadius = br > 0 ? `${isFirst ? br : 0}px ${isFirst ? br : 0}px ${isLast ? br : 0}px ${isLast ? br : 0}px` : undefined
+                  return (
+                  <SortableSection key={section.id} sectionId={section.id} isSelected={selectedSectionId === section.id}>
+                  {/* Section = FULL WIDTH with section color */}
+                  <div
+                    className={`relative group/section ${selectedSectionId === section.id ? 'ring-2 ring-indigo-400 ring-inset' : 'hover:ring-1 hover:ring-indigo-200 hover:ring-inset'}`}
+                    style={{ backgroundColor: section.styles.backgroundColor || undefined }}
+                    onClick={e => { e.stopPropagation(); selectSection(section.id) }}
+                  >
+                      {/* Section toolbar INSIDE the section - always visible */}
+                      {selectedSectionId === section.id && (
+                        <div className="absolute left-1 top-1 z-20 flex items-center gap-1">
+                          <span className="px-2 py-0.5 bg-indigo-500 text-white text-[10px] font-semibold rounded">Seção</span>
+                          <div className="flex gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5">
+                            <button onClick={e => { e.stopPropagation(); cloneSection(section.id) }}
+                              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Duplicar">
+                              <Copy className="w-3 h-3" />
+                            </button>
+                            <button onClick={e => { e.stopPropagation(); showToast('Seção salva!') }}
+                              className="p-1 text-gray-400 hover:text-amber-500 hover:bg-amber-50 rounded" title="Salvar">
+                              <Star className="w-3 h-3" />
+                            </button>
+                            <button onClick={e => { e.stopPropagation(); removeSection(section.id) }}
+                              className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded" title="Excluir">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {/* Content area = centered, max-width, with content bg */}
+                      <div style={{
+                        maxWidth: canvasWidth,
+                        margin: '0 auto',
+                        backgroundColor: section.styles.contentBackgroundColor || doc.settings.contentBackgroundColor || undefined,
+                        borderRadius: sectionBorderRadius,
+                        overflow: sectionBorderRadius ? 'hidden' : undefined,
+                        fontFamily: doc.settings.fontFamily || undefined,
+                      }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 0,
+                          alignItems: section.styles.columnAlignment === 'middle' ? 'center' : section.styles.columnAlignment === 'bottom' ? 'flex-end' : 'flex-start',
+                          padding: `${section.styles.padding.top}px ${section.styles.padding.right}px ${section.styles.padding.bottom}px ${section.styles.padding.left}px`,
+                        }}
+                      >
+                        {section.columns.map((column) => {
+                          const colBlocks = column.blocks
+                          return (
+                            <div key={column.id} style={{ width: `${column.width}%`, minHeight: 40 }} className="relative"
+                              onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30') }}
+                              onDragLeave={e => { e.currentTarget.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30') }}
+                              onDrop={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30'); const type = e.dataTransfer.getData('blockType'); if (type) addBlock(type, section.id, column.id) }}
+                            >
+                              {colBlocks.length === 0 ? (
+                                <DroppableColumn columnId={column.id} sectionId={section.id}>
+                                  <div className="flex items-center justify-center h-full min-h-[60px] border border-dashed border-gray-300 bg-gray-50/50 text-gray-400 text-xs gap-2 rounded">
+                                    <span>Solte conteúdo aqui</span>
+                                  </div>
+                                </DroppableColumn>
+                              ) : (
+                                <SortableContext items={colBlocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
+                                  {colBlocks.map((block) => (
+                                    <SortableBlock
+                                      key={block.id}
+                                      blockId={block.id}
+                                      isSelected={selectedBlockId === block.id}
+                                      onSelect={() => selectBlock(block.id)}
+                                      onClone={() => cloneBlock(block.id)}
+                                      onDelete={() => removeBlock(block.id)}
+                                      isUniversal={!!block._savedBlockId}
+                                      savedBlockName={block._savedBlockName}
+                                      onSaveAsUniversal={() => saveBlockAsUniversal(block.id)}
+                                      onUnlink={() => unlinkUniversalBlock(block.id)}
+                                      visibility={(block.props as any)?.visibility}
+                                    >
+                                      <BlockPreview
+                                        block={block}
+                                        selected={selectedBlockId === block.id}
+                                        onSelect={() => selectBlock(block.id)}
+                                        onClone={() => cloneBlock(block.id)}
+                                        onDelete={() => removeBlock(block.id)}
+                                      />
+                                    </SortableBlock>
+                                  ))}
+                                </SortableContext>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                      </div>{/* close content area wrapper */}
+                    </div>
+                  </SortableSection>
+                  )
+                })}
+                </SortableContext>
+                </DndContext>
+              )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* ── Preview Modal ── */}
+      <PreviewModal
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+        html={previewHtml}
+        subject={templateName}
+        onSendTest={() => { setShowPreview(false); setShowSendTest(true) }}
+      />
+
+      {/* ── Flow Preview Mode (real data from automation) ── */}
+      {showFlowPreview && flowContext && (
+        <EmailPreviewMode
+          templateId={flowContext.templateId}
+          triggerType={flowContext.triggerType}
+          organizationId={flowContext.organizationId}
+          onClose={() => setShowFlowPreview(false)}
+        />
+      )}
+
+      {/* ── Send Test Modal ── */}
+      <SendTestModal
+        isOpen={showSendTest}
+        onClose={() => setShowSendTest(false)}
+        html={(() => {
+          let h = previewHtml || renderDocumentToHtml(doc)
+          h = h.replace(/\{\{countdown_base_url\}\}/g, typeof window !== 'undefined' ? window.location.origin : '')
+          h = h.replace(/\{\{first_name\}\}/g, 'Cliente')
+          h = h.replace(/\{\{store_name\}\}/g, 'Minha Loja')
+          h = h.replace(/\{\{store_url\}\}/g, typeof window !== 'undefined' ? window.location.origin : '')
+          h = h.replace(/\{\{unsubscribe_url\}\}/g, '#')
+          h = h.replace(/\{\{view_in_browser_url\}\}/g, '#')
+          return h
+        })()}
+        defaultSubject={templateName}
+      />
+
+      {/* ── Merge Tag Picker Modal ── */}
+      <MergeTagPicker
+        isOpen={showMergeTags}
+        onClose={() => setShowMergeTags(false)}
+        onSelect={(tag) => {
+          navigator.clipboard.writeText(tag).catch(() => {})
+          setShowMergeTags(false)
+        }}
+      />
+
+      {/* ── Save Block as Universal Modal ── */}
+      {showSaveBlockModal && selectedBlock && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowSaveBlockModal(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl w-[420px] p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-6 h-6 rounded-md bg-violet-100 flex items-center justify-center">
+                <Star className="w-3.5 h-3.5 text-violet-600 fill-violet-600" />
+              </div>
+              <h3 className="text-sm font-semibold text-gray-900">Salvar como Bloco Universal</h3>
+            </div>
+            <p className="text-[12px] text-gray-500 leading-relaxed mb-4 pl-8">
+              Blocos universais ficam disponíveis em todos os emails. Edições
+              no bloco se propagam automaticamente para cada email que o usa.
+            </p>
+            <input
+              type="text"
+              value={saveBlockName}
+              onChange={e => setSaveBlockName(e.target.value)}
+              placeholder="Nome do bloco universal..."
+              autoFocus
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 outline-none mb-3"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowSaveBlockModal(false)}
+                className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={!saveBlockName.trim()}
+                onClick={async () => {
+                  const name = saveBlockName.trim()
+                  try {
+                    // Strip any existing link fields before saving to library
+                    const cleanBlock: EmailBlock = { ...selectedBlock } as EmailBlock
+                    delete (cleanBlock as any)._savedBlockId
+                    delete (cleanBlock as any)._savedBlockName
+                    const res = await fetch('/api/email/saved-blocks', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ name, block_json: cleanBlock }),
+                    })
+                    if (!res.ok) throw new Error('save failed')
+                    const json = await res.json()
+                    const savedId: string | undefined = json?.block?.id
+                    // Link THIS block instance to the new saved_block so it
+                    // acts as a linked universal block from now on.
+                    if (savedId) {
+                      const loc = findBlockLocation(doc, selectedBlock.id)
+                      if (loc) {
+                        const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
+                        const b = sections[loc.sectionIdx].columns[loc.columnIdx].blocks[loc.blockIdx]
+                        b._savedBlockId = savedId
+                        b._savedBlockName = name
+                        updateDoc({ ...doc, sections })
+                      }
+                    }
+                    showToast('Bloco universal criado!')
+                    setShowSaveBlockModal(false)
+                  } catch {
+                    showToast('Erro ao salvar', 'error')
+                  }
+                }}
+                className="px-4 py-2 bg-violet-600 text-white text-sm font-semibold rounded-lg hover:bg-violet-700 disabled:opacity-50"
+              >
+                Salvar como Universal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Configure Column Layout Modal (Klaviyo-style) ── */}
+      {showColumnModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowColumnModal(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl w-[480px] p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-semibold text-gray-900">Configurar layout de colunas</h3>
+              <button onClick={() => setShowColumnModal(false)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* Number of columns */}
+            <p className="text-sm font-medium text-gray-700 mb-2">Número de colunas</p>
+            <div className="flex border border-gray-200 rounded-lg overflow-hidden mb-5">
+              {[1, 2, 3, 4].map(n => (
+                <button key={n} onClick={() => {
+                  setColumnModalCols(n)
+                  if (n === 1) setColumnModalLayout([100])
+                  else if (n === 2) setColumnModalLayout([50, 50])
+                  else if (n === 3) setColumnModalLayout([33, 34, 33])
+                  else setColumnModalLayout([25, 25, 25, 25])
+                }}
+                  className={`flex-1 py-2.5 text-sm font-medium transition-colors ${columnModalCols === n ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'}`}>
+                  {n}
+                </button>
+              ))}
+            </div>
+
+            {/* Column layout */}
+            {columnModalCols >= 2 && (
+              <>
+                <p className="text-sm font-medium text-gray-700 mb-2">Layout das colunas</p>
+                <div className="grid grid-cols-3 gap-2 mb-5">
+                  {(columnModalCols === 2 ? [
+                    { label: 'Igual', cols: [50, 50] },
+                    { label: '33% | 67%', cols: [33, 67] },
+                    { label: '67% | 33%', cols: [67, 33] },
+                    { label: '25% | 75%', cols: [25, 75] },
+                    { label: '75% | 25%', cols: [75, 25] },
+                  ] : columnModalCols === 3 ? [
+                    { label: 'Igual', cols: [33, 34, 33] },
+                    { label: '25% | 50% | 25%', cols: [25, 50, 25] },
+                    { label: '50% | 25% | 25%', cols: [50, 25, 25] },
+                  ] : [
+                    { label: 'Igual', cols: [25, 25, 25, 25] },
+                  ]).map(opt => {
+                    const isActive = JSON.stringify(columnModalLayout) === JSON.stringify(opt.cols)
+                    return (
+                      <button key={opt.label} onClick={() => setColumnModalLayout(opt.cols)}
+                        className={`p-3 border-2 rounded-lg text-center transition-all ${isActive ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                        <div className="flex gap-0.5 justify-center mb-1">
+                          {opt.cols.map((w, i) => (
+                            <div key={i} className={`h-5 rounded-sm ${isActive ? 'bg-brand-500' : 'bg-gray-300'}`} style={{ width: `${w * 0.6}px` }} />
+                          ))}
+                        </div>
+                        <span className="text-[10px] text-gray-600">{opt.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowColumnModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Cancelar</button>
+              <button onClick={() => { addSection(columnModalLayout); setShowColumnModal(false) }}
+                className="px-4 py-2 text-sm font-semibold text-white bg-gray-900 rounded-lg hover:bg-gray-800">
+                Adicionar colunas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

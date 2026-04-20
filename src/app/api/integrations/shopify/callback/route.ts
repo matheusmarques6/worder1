@@ -1,240 +1,376 @@
 // =============================================
-// API: Shopify OAuth Callback
+// Shopify OAuth Callback
 // src/app/api/integrations/shopify/callback/route.ts
-// Usa tabela 'shopify_stores' (padrão do projeto)
+//
+// Handles TWO scenarios:
+// A) Merchant came from Worder OAuth (state in oauth_states)
+// B) Merchant came from Partner Dashboard link (HMAC, no state in DB)
 // =============================================
 
-// Forçar rota dinâmica (não pode ser gerada estaticamente)
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
-import { 
-  exchangeCodeForToken, 
-  ShopifyClient,
-  SHOPIFY_WEBHOOK_TOPICS 
-} from '@/lib/integrations/shopify';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import crypto from 'crypto';
 
 const SHOPIFY_CLIENT_ID = process.env.SHOPIFY_CLIENT_ID || '';
 const SHOPIFY_CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET || '';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || '';
 
-// =============================================
-// GET - Callback do OAuth
-// =============================================
 export async function GET(request: NextRequest) {
+  const supabase = getSupabaseAdmin();
+
   try {
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
-    const state = searchParams.get('state');
     const shop = searchParams.get('shop');
+    const state = searchParams.get('state');
+    const hmac = searchParams.get('hmac');
     const errorParam = searchParams.get('error');
 
-    // Verificar erro
+    console.log('[Shopify Callback] Received:', { code: !!code, shop, state: state?.substring(0, 10), hmac: !!hmac });
+
     if (errorParam) {
-      console.error('Shopify OAuth error:', errorParam);
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/integrations/shopify?error=oauth_denied`
-      );
+      return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=oauth_denied`);
     }
 
-    // Validar parâmetros
-    if (!code || !state || !shop) {
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/integrations/shopify?error=missing_params`
-      );
+    if (!code || !shop) {
+      return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=missing_params`);
     }
 
-    // Verificar state
-    const { data: oauthState, error: stateError } = await supabase
-      .from('oauth_states')
-      .select('*')
-      .eq('state', state)
-      .eq('provider', 'shopify')
-      .single();
+    // =============================================
+    // VALIDATE HMAC (Shopify security)
+    // =============================================
+    if (hmac && SHOPIFY_CLIENT_SECRET) {
+      const params = new URLSearchParams(searchParams);
+      params.delete('hmac');
+      params.sort();
+      const message = params.toString();
+      const generatedHmac = crypto
+        .createHmac('sha256', SHOPIFY_CLIENT_SECRET)
+        .update(message)
+        .digest('hex');
 
-    if (stateError || !oauthState) {
-      console.error('Invalid state:', stateError);
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/integrations/shopify?error=invalid_state`
-      );
+      try {
+        if (!crypto.timingSafeEqual(Buffer.from(generatedHmac, 'hex'), Buffer.from(hmac, 'hex'))) {
+          console.error('[Shopify Callback] HMAC validation failed');
+          return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=hmac_invalid`);
+        }
+      } catch {
+        console.warn('[Shopify Callback] HMAC comparison error, continuing...');
+      }
     }
 
-    // Verificar expiração
-    if (new Date(oauthState.expires_at) < new Date()) {
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/integrations/shopify?error=state_expired`
-      );
+    // =============================================
+    // RESOLVE ORGANIZATION ID
+    // =============================================
+    let organizationId: string | null = null;
+
+    // Try 1: State saved in oauth_states (Worder OAuth flow)
+    if (state) {
+      const { data: oauthState } = await supabase
+        .from('oauth_states')
+        .select('data')
+        .eq('state_token', state)
+        .gte('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+      if (oauthState?.data?.organization_id) {
+        organizationId = oauthState.data.organization_id;
+        // Delete used state
+        await supabase.from('oauth_states').delete().eq('state_token', state);
+        console.log('[Shopify Callback] Resolved org via oauth_states:', organizationId);
+      }
     }
 
-    const organizationId = oauthState.organization_id;
+    // Try 2: Existing store in DB (reinstall scenario)
+    if (!organizationId) {
+      const { data: existingStore } = await supabase
+        .from('shopify_stores')
+        .select('organization_id')
+        .eq('shop_domain', shop)
+        .maybeSingle();
 
-    // Deletar state usado
-    await supabase.from('oauth_states').delete().eq('state', state);
-
-    // Verificar se tem credenciais OAuth configuradas
-    if (!SHOPIFY_CLIENT_ID || !SHOPIFY_CLIENT_SECRET) {
-      console.error('Missing Shopify OAuth credentials');
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/integrations/shopify?error=oauth_not_configured`
-      );
+      if (existingStore?.organization_id) {
+        organizationId = existingStore.organization_id;
+        console.log('[Shopify Callback] Resolved org via existing store:', organizationId);
+      }
     }
 
-    // Trocar código por access token
-    const tokenData = await exchangeCodeForToken({
-      shopDomain: shop,
-      clientId: SHOPIFY_CLIENT_ID,
-      clientSecret: SHOPIFY_CLIENT_SECRET,
-      code,
+    // Try 3: Fallback for Partner link install (single-org setup)
+    if (!organizationId) {
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+
+      if (org?.id) {
+        organizationId = org.id;
+        console.log('[Shopify Callback] Resolved org via fallback:', organizationId);
+      }
+    }
+
+    if (!organizationId) {
+      console.error('[Shopify Callback] Could not resolve organization');
+      return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=no_organization`);
+    }
+
+    // =============================================
+    // EXCHANGE CODE FOR ACCESS TOKEN
+    // =============================================
+    const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: SHOPIFY_CLIENT_ID,
+        client_secret: SHOPIFY_CLIENT_SECRET,
+        code,
+      }),
     });
 
-    // Criar cliente e obter info da loja
-    const client = new ShopifyClient({
-      shopDomain: shop,
-      accessToken: tokenData.access_token,
-    });
+    if (!tokenResponse.ok) {
+      const errText = await tokenResponse.text();
+      console.error('[Shopify Callback] Token exchange failed:', errText);
+      return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=token_failed`);
+    }
 
-    const shopInfo = await client.getShop();
-    const shopData = shopInfo.shop || {};
+    const tokenData = await tokenResponse.json();
+    const accessToken = tokenData.access_token;
+    const grantedScopes = tokenData.scope || '';
 
-    // Verificar se loja já existe
+    console.log('[Shopify Callback] Token obtained. Scopes:', grantedScopes);
+
+    // =============================================
+    // GET SHOP INFO VIA GRAPHQL
+    // =============================================
+    let shopName = shop;
+    let shopEmail = '';
+    let currency = 'BRL';
+    let planName = '';
+
+    try {
+      const shopInfoRes = await fetch(`https://${shop}/admin/api/2026-01/graphql.json`, {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: `{ shop { name email currencyCode plan { displayName } } }`,
+        }),
+      });
+
+      if (shopInfoRes.ok) {
+        const shopInfo = await shopInfoRes.json();
+        const s = shopInfo.data?.shop;
+        if (s) {
+          shopName = s.name || shop;
+          shopEmail = s.email || '';
+          currency = s.currencyCode || 'BRL';
+          planName = s.plan?.displayName || '';
+        }
+      }
+    } catch (err) {
+      console.warn('[Shopify Callback] Failed to get shop info:', err);
+    }
+
+    // =============================================
+    // UPSERT STORE IN DB
+    // =============================================
     const { data: existingStore } = await supabase
       .from('shopify_stores')
       .select('id')
       .eq('shop_domain', shop)
-      .single();
+      .maybeSingle();
+
+    const storeRecord = {
+      organization_id: organizationId,
+      shop_domain: shop,
+      shop_name: shopName,
+      shop_email: shopEmail,
+      access_token: accessToken,
+      api_secret: SHOPIFY_CLIENT_SECRET,
+      currency,
+      plan_name: planName,
+      api_version: '2026-01',
+      scopes: grantedScopes ? grantedScopes.split(',') : [],
+      is_active: true,
+      status: 'active',
+      installed_at: new Date().toISOString(),
+      last_sync_at: new Date().toISOString(),
+    };
+
+    let storeId: string;
 
     if (existingStore) {
-      // Atualizar existente
-      const { error: updateError } = await supabase
-        .from('shopify_stores')
-        .update({
-          organization_id: organizationId,
-          shop_name: shopData.name || shop,
-          shop_email: shopData.email,
-          access_token: tokenData.access_token,
-          api_secret: SHOPIFY_CLIENT_SECRET,
-          currency: shopData.currency,
-          timezone: shopData.timezone,
-          is_active: true,
-          last_sync_at: new Date().toISOString(),
-        })
-        .eq('id', existingStore.id);
-
-      if (updateError) {
-        console.error('Update error:', updateError);
-        return NextResponse.redirect(
-          `${process.env.NEXT_PUBLIC_APP_URL}/integrations/shopify?error=save_failed`
-        );
-      }
+      await supabase.from('shopify_stores').update(storeRecord).eq('id', existingStore.id);
+      storeId = existingStore.id;
     } else {
-      // Criar nova
-      const { error: insertError } = await supabase
+      const { data: newStore, error: insertError } = await supabase
         .from('shopify_stores')
-        .insert({
-          organization_id: organizationId,
-          shop_domain: shop,
-          shop_name: shopData.name || shop,
-          shop_email: shopData.email,
-          access_token: tokenData.access_token,
-          api_secret: SHOPIFY_CLIENT_SECRET,
-          currency: shopData.currency,
-          timezone: shopData.timezone,
-          is_active: true,
-          last_sync_at: new Date().toISOString(),
-        });
+        .insert(storeRecord)
+        .select('id')
+        .single();
 
-      if (insertError) {
-        console.error('Insert error:', insertError);
-        return NextResponse.redirect(
-          `${process.env.NEXT_PUBLIC_APP_URL}/integrations/shopify?error=save_failed`
-        );
+      if (insertError || !newStore) {
+        console.error('[Shopify Callback] Store insert error:', insertError);
+        return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=save_failed`);
       }
+      storeId = newStore.id;
     }
 
-    // Configurar webhooks - CRÍTICO: não ignorar erros
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${request.headers.get('host')}`;
-    const webhookUrl = `${appUrl}/api/webhooks/shopify`;
-    
-    console.log('========================================');
-    console.log('[SHOPIFY CALLBACK] Registrando webhooks...');
-    console.log('[SHOPIFY CALLBACK] URL base:', appUrl);
-    console.log('[SHOPIFY CALLBACK] Webhook URL:', webhookUrl);
-    console.log('[SHOPIFY CALLBACK] Shop:', shop);
-    console.log('========================================');
-    
+    // =============================================
+    // REGISTER WEBHOOKS VIA GRAPHQL
+    // =============================================
+    const webhookUrl = `${APP_URL}/api/webhooks/shopify`;
     const webhookTopics = [
-      'customers/create',
-      'customers/update', 
-      'orders/create',
-      'orders/paid',
-      'orders/fulfilled',
-      'orders/cancelled',
-      'checkouts/create',
-      'checkouts/update',
+      'ORDERS_CREATE', 'ORDERS_UPDATED', 'ORDERS_FULFILLED',
+      'ORDERS_CANCELLED', 'ORDERS_PAID',
+      'CHECKOUTS_CREATE', 'CHECKOUTS_UPDATE',
+      'CUSTOMERS_CREATE', 'CUSTOMERS_UPDATE', 'CUSTOMERS_DELETE',
+      'PRODUCTS_CREATE', 'PRODUCTS_UPDATE', 'PRODUCTS_DELETE',
+      'REFUNDS_CREATE',
+      'FULFILLMENTS_CREATE', 'FULFILLMENTS_UPDATE',
+      'APP_UNINSTALLED',
     ];
-    
-    const webhookResults: { topic: string; success: boolean; error?: string }[] = [];
-    
+
+    const webhookMutation = `
+      mutation webhookCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
+        webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
+          webhookSubscription { id topic }
+          userErrors { field message }
+        }
+      }
+    `;
+
+    let webhookSuccess = 0;
+    let webhookFail = 0;
+
     for (const topic of webhookTopics) {
       try {
-        console.log(`[SHOPIFY CALLBACK] Criando webhook: ${topic}`);
-        
-        const response = await fetch(
-          `https://${shop}/admin/api/2024-01/webhooks.json`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Shopify-Access-Token': tokenData.access_token,
+        const res = await fetch(`https://${shop}/admin/api/2026-01/graphql.json`, {
+          method: 'POST',
+          headers: {
+            'X-Shopify-Access-Token': accessToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: webhookMutation,
+            variables: {
+              topic,
+              webhookSubscription: { callbackUrl: webhookUrl, format: 'JSON' },
             },
-            body: JSON.stringify({
-              webhook: {
-                topic,
-                address: webhookUrl,
-                format: 'json',
-              },
-            }),
-          }
-        );
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-          console.log(`[SHOPIFY CALLBACK] ✅ Webhook criado: ${topic}`);
-          webhookResults.push({ topic, success: true });
+          }),
+        });
+
+        const data = await res.json();
+        const errors = data.data?.webhookSubscriptionCreate?.userErrors;
+        if (!errors || errors.length === 0) {
+          webhookSuccess++;
         } else {
-          // Se webhook já existe, tudo bem
-          const errorMsg = JSON.stringify(result.errors || result);
-          if (errorMsg.includes('already exists') || errorMsg.includes('for this topic has already been taken')) {
-            console.log(`[SHOPIFY CALLBACK] ⚠️ Webhook já existe: ${topic}`);
-            webhookResults.push({ topic, success: true, error: 'already_exists' });
+          const msg = errors[0]?.message || '';
+          if (msg.includes('already') || msg.includes('taken')) {
+            webhookSuccess++;
           } else {
-            console.error(`[SHOPIFY CALLBACK] ❌ Erro webhook ${topic}:`, errorMsg);
-            webhookResults.push({ topic, success: false, error: errorMsg });
+            console.warn(`[Shopify Callback] Webhook ${topic}: ${msg}`);
+            webhookFail++;
           }
         }
-      } catch (webhookError: any) {
-        console.error(`[SHOPIFY CALLBACK] ❌ Exceção webhook ${topic}:`, webhookError.message);
-        webhookResults.push({ topic, success: false, error: webhookError.message });
+      } catch {
+        webhookFail++;
       }
     }
-    
-    // Log resultado final
-    const successCount = webhookResults.filter(r => r.success).length;
-    const failCount = webhookResults.filter(r => !r.success).length;
-    console.log('========================================');
-    console.log(`[SHOPIFY CALLBACK] Webhooks: ${successCount} OK, ${failCount} falhas`);
-    console.log('[SHOPIFY CALLBACK] Resultados:', JSON.stringify(webhookResults));
-    console.log('========================================');
 
-    // Redirecionar para página de sucesso
+    console.log(`[Shopify Callback] Webhooks: ${webhookSuccess} OK, ${webhookFail} failed`);
+
+    // =============================================
+    // INSTALL WEB PIXEL
+    // =============================================
+    let pixelInstalled = false;
+    try {
+      const pixelRes = await fetch(`https://${shop}/admin/api/2026-01/graphql.json`, {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: `
+            mutation webPixelCreate($webPixel: WebPixelInput!) {
+              webPixelCreate(webPixel: $webPixel) {
+                webPixel { id }
+                userErrors { code field message }
+              }
+            }
+          `,
+          variables: {
+            webPixel: {
+              settings: JSON.stringify({
+                accountId: organizationId,
+                storeId,
+                trackingEndpoint: `${APP_URL}/api/track/event`,
+              }),
+            },
+          },
+        }),
+      });
+
+      const pixelData = await pixelRes.json();
+      const pixelErrors = pixelData.data?.webPixelCreate?.userErrors || [];
+      if (pixelErrors.length === 0) {
+        pixelInstalled = true;
+      } else {
+        const msg = pixelErrors[0]?.message || '';
+        if (msg.includes('already') || msg.includes('exists')) {
+          pixelInstalled = true;
+        }
+      }
+    } catch (err) {
+      console.warn('[Shopify Callback] Pixel install failed:', err);
+    }
+
+    // =============================================
+    // UPDATE STORE WITH FINAL STATUS
+    // =============================================
+    const themeEditorUrl = `https://${shop}/admin/themes/current/editor?context=apps`;
+
+    await supabase.from('shopify_stores').update({
+      pixel_installed: pixelInstalled,
+      webhook_secret: SHOPIFY_CLIENT_SECRET,
+      embed_installed: false,
+      settings: {
+        theme_editor_url: themeEditorUrl,
+        tracking_endpoint: `${APP_URL}/api/track`,
+      },
+    }).eq('id', storeId);
+
+    // =============================================
+    // TRIGGER INITIAL SYNC (fire-and-forget)
+    // =============================================
+    try {
+      fetch(`${APP_URL}/api/shopify/trigger-sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Request': 'true',
+        },
+        body: JSON.stringify({ storeId }),
+      }).catch(() => {});
+    } catch {}
+
+    // =============================================
+    // REDIRECT TO SUCCESS
+    // =============================================
+    console.log(`[Shopify Callback] Complete: store=${storeId}, webhooks=${webhookSuccess}, pixel=${pixelInstalled}`);
+
     return NextResponse.redirect(
-      `${appUrl}/integrations/shopify?success=true&webhooks=${successCount}`
+      `${APP_URL}/integrations/shopify?success=true&store=${storeId}&webhooks=${webhookSuccess}&pixel=${pixelInstalled}`
     );
   } catch (error: any) {
-    console.error('Shopify callback error:', error);
+    console.error('[Shopify Callback] Error:', error);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/integrations/shopify?error=${encodeURIComponent(error.message)}`
+      `${APP_URL}/integrations/shopify?error=${encodeURIComponent(error.message)}`
     );
   }
 }

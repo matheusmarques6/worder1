@@ -6,7 +6,13 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId') || 'org-placeholder'
+    // Aceita tanto organizationId quanto organization_id
+    const organizationId = searchParams.get('organizationId') || searchParams.get('organization_id')
+
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
+    }
+
     const status = searchParams.get('status')
     const type = searchParams.get('type')
     const search = searchParams.get('search')
@@ -58,8 +64,15 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    // Aceita tanto organizationId quanto organization_id
+    const organizationId = body.organizationId || body.organization_id
+
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
+    }
+
     const {
-      organizationId = 'org-placeholder', name, description, type = 'broadcast',
+      name, description, type = 'broadcast',
       template_id, template_name, template_variables, media_url, media_type,
       audience_type = 'all', audience_tags, audience_segment_id, audience_phonebook_id, audience_filters,
       imported_contacts, scheduled_at, timezone = 'America/Sao_Paulo',

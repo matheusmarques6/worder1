@@ -132,15 +132,24 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true, skipped: true, reason: 'duplicate' });
       }
 
-      // Registrar evento (para idempotência)
-      await supabase
+      // ✅ CORREÇÃO: Usar upsert para evitar race condition
+      const { error: insertError } = await supabase
         .from('shopify_webhook_events')
-        .insert({
+        .upsert({
           event_id: eventId,
           store_id: store.id,
           topic: topic,
           status: 'queued',
+        }, {
+          onConflict: 'event_id',
+          ignoreDuplicates: true
         });
+
+      // Se houve erro de constraint, é duplicata
+      if (insertError?.code === '23505') {
+        console.log(`Duplicate event (race condition): ${eventId}`);
+        return NextResponse.json({ received: true, skipped: true, reason: 'duplicate' });
+      }
     }
 
     // 8. Enfileirar para processamento assíncrono

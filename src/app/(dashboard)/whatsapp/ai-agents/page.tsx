@@ -18,8 +18,8 @@ export default function AIAgentsPage() {
   // Wait for mount and auth check
   if (!mounted || isLoading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-dark-900">
-        <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+      <div className="h-screen flex items-center justify-center bg-white">
+        <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
       </div>
     )
   }
@@ -33,7 +33,7 @@ export default function AIAgentsPage() {
   const organizationId = user.organization_id as string
 
   return (
-    <div className="h-full bg-dark-900">
+    <div className="h-full bg-white">
       <AIAgentList organizationId={organizationId} />
     </div>
   )

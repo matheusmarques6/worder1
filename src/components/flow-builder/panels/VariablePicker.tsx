@@ -168,31 +168,31 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="absolute z-50 w-80 max-h-96 overflow-hidden rounded-xl bg-[#1a1a1a] border border-white/10 shadow-2xl"
+      className="absolute z-50 w-80 max-h-96 overflow-hidden rounded-xl bg-white border border-gray-200 shadow-2xl"
       style={{
         top: anchorRef?.current?.offsetHeight ? anchorRef.current.offsetHeight + 4 : 'auto',
       }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-white/10">
+      <div className="flex items-center justify-between p-3 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <Variable className="w-4 h-4 text-blue-400" />
-          <span className="text-sm font-medium text-white">
+          <span className="text-sm font-medium text-gray-900">
             {showFilters ? 'Adicionar Filtro' : 'Inserir Variável'}
           </span>
         </div>
         <button
           onClick={onClose}
-          className="p-1 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+          className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
       {/* Search */}
-      <div className="p-2 border-b border-white/10">
+      <div className="p-2 border-b border-gray-200">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             value={search}
@@ -200,8 +200,8 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
             placeholder="Buscar variável..."
             className={cn(
               'w-full pl-9 pr-3 py-2 rounded-lg text-sm',
-              'bg-[#0a0a0a] border border-white/10 text-white',
-              'placeholder-white/30',
+              'bg-white border border-gray-200 text-gray-900',
+              'placeholder-gray-400',
               'focus:outline-none focus:border-blue-500/50'
             )}
             autoFocus
@@ -220,10 +220,10 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
                   handleDirectSelect(selectedVariable);
                 }
               }}
-              className="w-full flex items-center gap-2 p-2 rounded-lg text-left hover:bg-white/10 transition-colors"
+              className="w-full flex items-center gap-2 p-2 rounded-lg text-left hover:bg-gray-100 transition-colors"
             >
-              <span className="text-sm text-white/80">Sem filtro</span>
-              <span className="text-xs text-white/40 ml-auto">
+              <span className="text-sm text-gray-700/80">Sem filtro</span>
+              <span className="text-xs text-gray-600/40 ml-auto">
                 {`{{${selectedVariable}}}`}
               </span>
             </button>
@@ -231,11 +231,11 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
               <button
                 key={filter.name}
                 onClick={() => handleSelect(filter.name)}
-                className="w-full flex items-center justify-between p-2 rounded-lg text-left hover:bg-white/10 transition-colors"
+                className="w-full flex items-center justify-between p-2 rounded-lg text-left hover:bg-gray-100 transition-colors"
               >
                 <div>
-                  <span className="text-sm text-white/80">{filter.name}</span>
-                  <p className="text-xs text-white/40">{filter.description}</p>
+                  <span className="text-sm text-gray-700/80">{filter.name}</span>
+                  <p className="text-xs text-gray-600/40">{filter.description}</p>
                 </div>
               </button>
             ))}
@@ -244,7 +244,7 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
                 setShowFilters(false);
                 setSelectedVariable(null);
               }}
-              className="w-full p-2 text-sm text-white/60 hover:text-white transition-colors"
+              className="w-full p-2 text-sm text-gray-700/60 hover:text-gray-900 transition-colors"
             >
               ← Voltar
             </button>
@@ -257,16 +257,16 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
                 {/* Group Header */}
                 <button
                   onClick={() => setExpandedGroup(expandedGroup === group.id ? '' : group.id)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-white/10 transition-colors"
+                  className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <ChevronRight
                     className={cn(
-                      'w-4 h-4 text-white/40 transition-transform',
+                      'w-4 h-4 text-gray-400 transition-transform',
                       expandedGroup === group.id && 'rotate-90'
                     )}
                   />
-                  <span className="text-sm font-medium text-white/80">{group.label}</span>
-                  <span className="text-xs text-white/30 ml-auto">
+                  <span className="text-sm font-medium text-gray-900/80">{group.label}</span>
+                  <span className="text-xs text-gray-600/30 ml-auto">
                     {group.variables.length}
                   </span>
                 </button>
@@ -285,17 +285,17 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
                           <button
                             key={variable.path}
                             onClick={() => handleSelect(variable.path)}
-                            className="w-full flex items-center justify-between p-2 rounded-lg text-left hover:bg-white/10 transition-colors group"
+                            className="w-full flex items-center justify-between p-2 rounded-lg text-left hover:bg-gray-100 transition-colors group"
                           >
                             <div className="min-w-0">
-                              <span className="text-sm text-white/80">{variable.label}</span>
-                              <p className="text-xs text-white/40 truncate">
+                              <span className="text-sm text-gray-700/80">{variable.label}</span>
+                              <p className="text-xs text-gray-600/40 truncate">
                                 {variable.example || variable.description || variable.path}
                               </p>
                             </div>
                             <span className={cn(
                               'text-xs px-1.5 py-0.5 rounded',
-                              'bg-white/5 text-white/40',
+                              'bg-gray-50 text-gray-400',
                               variable.type === 'string' && 'text-green-400',
                               variable.type === 'number' && 'text-blue-400',
                               variable.type === 'date' && 'text-amber-400',
@@ -314,7 +314,7 @@ export function VariablePicker({ onSelect, onClose, anchorRef }: VariablePickerP
             ))}
 
             {filteredGroups.length === 0 && (
-              <p className="text-sm text-white/40 text-center py-4">
+              <p className="text-sm text-gray-700/40 text-center py-4">
                 Nenhuma variável encontrada
               </p>
             )}

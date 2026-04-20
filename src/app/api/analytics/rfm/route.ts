@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { getAuthClient, authError } from '@/lib/api-utils'
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -10,13 +11,12 @@ export const dynamic = 'force-dynamic';
 // GET - Buscar dados RFM
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const organization_id = searchParams.get('organization_id')
-    const view = searchParams.get('view') || 'summary'
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organization_id = auth.user.organization_id
 
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id required' }, { status: 400 })
-    }
+    const { searchParams } = new URL(request.url)
+    const view = searchParams.get('view') || 'summary'
 
     // Resumo por segmento
     if (view === 'summary') {
@@ -124,12 +124,12 @@ export async function GET(request: NextRequest) {
 // POST - Recalcular RFM scores
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { organization_id, period_days = 365 } = body
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organization_id = auth.user.organization_id
 
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id required' }, { status: 400 })
-    }
+    const body = await request.json()
+    const { period_days = 365 } = body
 
     // Tentar chamar função do banco
     const { error } = await supabase.rpc('calculate_rfm_scores', {
