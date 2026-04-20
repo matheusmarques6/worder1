@@ -219,7 +219,30 @@ async function processCustomerCreated(store: ShopifyStoreConfig, customer: any) 
     },
     source: 'shopify',
   });
-  
+
+  // Emitir evento público customer.created pros outbound webhooks
+  await EventBus.emit(EventType.CUSTOMER_CREATED, {
+    organization_id: store.organization_id,
+    contact_id: contact?.id,
+    email: customer.email,
+    phone: customer.phone,
+    data: {
+      _webhook_dispatch_meta: buildShopifyWebhookMeta(
+        store,
+        `customer:${customer.id}`
+      ),
+      customer_id: contact?.id,
+      shopify_customer_id: String(customer.id),
+      email: customer.email,
+      first_name: customer.first_name,
+      last_name: customer.last_name,
+      phone: customer.phone,
+      accepts_marketing: customer.accepts_marketing,
+      tags: customer.tags,
+    },
+    source: 'shopify',
+  });
+
   // Criar notificação
   const supabase = getSupabase();
   await supabase.from('notifications').insert({
@@ -263,6 +286,31 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   if (!contact) {
     console.error('[Shopify] Failed to create contact for order');
     return;
+  }
+
+  // Se contato foi criado agora (customer não existia antes do pedido),
+  // emitir customer.created pros outbound webhooks também. O handler
+  // customers/create do Shopify pode não ter vindo ainda, ou nem vir.
+  if (contact.isNew) {
+    await EventBus.emit(EventType.CUSTOMER_CREATED, {
+      organization_id: store.organization_id,
+      contact_id: contact.id,
+      email: order.email,
+      phone: order.phone,
+      data: {
+        _webhook_dispatch_meta: buildShopifyWebhookMeta(
+          store,
+          `customer:${order.customer?.id ?? contact.id}`
+        ),
+        customer_id: contact.id,
+        shopify_customer_id: order.customer?.id ? String(order.customer.id) : null,
+        email: order.email,
+        first_name: order.customer?.first_name,
+        last_name: order.customer?.last_name,
+        phone: order.phone,
+      },
+      source: 'shopify',
+    });
   }
 
   // Auto-link anonymous pixel events to this contact by email.
@@ -1479,6 +1527,28 @@ async function processFulfillmentEvent(store: ShopifyStoreConfig, fulfillment: a
     });
   } catch (cdpError) {
     console.error('[Shopify Webhook] CDP event creation failed (fulfillment):', cdpError);
+  }
+
+  // Outbound: shipment.tracking_created (só se tracking_number presente)
+  if (fulfillment.tracking_number) {
+    await EventBus.emit(EventType.SHIPMENT_TRACKING_CREATED, {
+      organization_id: store.organization_id,
+      contact_id: contactId ?? undefined,
+      order_id: String(fulfillment.order_id),
+      data: {
+        _webhook_dispatch_meta: buildShopifyWebhookMeta(
+          store,
+          `fulfillment:${fulfillment.id}`
+        ),
+        order_id: String(fulfillment.order_id),
+        fulfillment_id: String(fulfillment.id),
+        tracking_number: fulfillment.tracking_number,
+        tracking_url: fulfillment.tracking_url ?? null,
+        tracking_company: fulfillment.tracking_company ?? null,
+        status: fulfillment.status,
+      },
+      source: 'shopify',
+    });
   }
 }
 
