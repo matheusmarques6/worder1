@@ -63,6 +63,11 @@ export enum EventType {
   PAYMENT_PIX_ABANDONED = 'payment.pix.abandoned',
   PAYMENT_BOLETO_ABANDONED = 'payment.boleto.abandoned',
   BROWSE_ABANDONED = 'browse.abandoned',
+
+  // Outbound webhooks: aliases de catálogo público
+  // Mantemos CONTACT_CREATED/CART_ABANDONED p/ compat interna das automações
+  CUSTOMER_CREATED = 'customer.created',
+  CHECKOUT_ABANDONED = 'checkout.abandoned',
 }
 
 // Mapeamento de EventType para trigger_type do banco
@@ -100,6 +105,8 @@ const EVENT_TO_TRIGGER_MAP: Record<EventType, string> = {
   [EventType.PAYMENT_PIX_ABANDONED]: 'trigger_payment_pix_abandoned',
   [EventType.PAYMENT_BOLETO_ABANDONED]: 'trigger_payment_boleto_abandoned',
   [EventType.BROWSE_ABANDONED]: 'trigger_browse_abandoned',
+  [EventType.CUSTOMER_CREATED]: 'trigger_customer_created',
+  [EventType.CHECKOUT_ABANDONED]: 'trigger_checkout_abandoned',
 };
 
 // ============================================
