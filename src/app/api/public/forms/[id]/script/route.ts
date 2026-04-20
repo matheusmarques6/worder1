@@ -452,6 +452,19 @@ function show(){
               fetch("/cart/update.js",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
                 attributes:{"_worder_email":idData.email,"_worder_fn":idData.firstName||"","_worder_ln":idData.lastName||"","_worder_phone":idData.phone||""}
               })}).catch(function(){});
+              // Real-time bridge: publish a custom Shopify event so the Web Pixel
+              // (in its sandboxed iframe) can pick up identity immediately — no
+              // navigation required. This closes the gap for "same page popup+ATC".
+              try{
+                if(window.Shopify&&window.Shopify.analytics&&typeof window.Shopify.analytics.publish==="function"){
+                  window.Shopify.analytics.publish("worder_identified",{
+                    email:idData.email||"",
+                    phone:idData.phone||"",
+                    firstName:idData.firstName||"",
+                    lastName:idData.lastName||""
+                  });
+                }
+              }catch(e){}
             }
           }
         }catch(err){}

@@ -267,6 +267,22 @@ register(({ analytics, browser, settings, init }) => {
   // Event Subscriptions
   // =============================================
 
+  // --- Worder Identified (custom event) ---
+  // Published by the popup runtime when a visitor submits a form on the same
+  // page. Lets the Web Pixel pick up identity without waiting for a page
+  // reload, so a subsequent added_to_cart on the same page is attributed.
+  try {
+    analytics.subscribe('worder_identified', (event: any) => {
+      const d = event?.customData || event?.data || {};
+      if (d.email) cartIdentity.email = String(d.email);
+      if (d.phone) cartIdentity.phone = String(d.phone);
+      if (d.firstName) cartIdentity.firstName = String(d.firstName);
+      if (d.lastName) cartIdentity.lastName = String(d.lastName);
+    });
+  } catch {
+    /* custom events may be unsupported in older pixel runtimes */
+  }
+
   // --- Page Viewed ---
   analytics.subscribe('page_viewed', (event: any) => {
     sendEvent('page_viewed', {
