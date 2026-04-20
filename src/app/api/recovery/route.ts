@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       ]),
     ];
 
-    if (type !== 'cart' && type !== 'checkout') {
+    if (type !== 'cart' && type !== 'checkout' && type !== 'pix' && type !== 'boleto' && type !== 'card') {
       return NextResponse.json({
         items: [],
         total: 0,
@@ -74,6 +74,22 @@ export async function GET(request: NextRequest) {
         activeStoreIds,
         storeId,
         statusFilter,
+        limit,
+        offset,
+      });
+    }
+
+    // =====================================================================
+    // PIX / BOLETO / CARTÃO tabs: orders with financial_status='pending'
+    // filtered by payment gateway. These are real conversion opportunities —
+    // customer completed checkout but payment hasn't settled yet.
+    // =====================================================================
+    if (type === 'pix' || type === 'boleto' || type === 'card') {
+      return await handlePaymentPendingTab({
+        paymentType: type,
+        orgIds,
+        activeStoreIds,
+        storeId,
         limit,
         offset,
       });
@@ -766,6 +782,115 @@ async function handleCheckoutFallback(opts: {
       total: abandoned.length,
       pending: 0,
       abandoned: abandoned.length,
+      converted: 0,
+      recovered: 0,
+      revenue_recovered: 0,
+      recovery_rate: '0.0',
+    },
+  });
+}
+
+// =====================================================================
+// PIX / BOLETO / CARTÃO tab: pending-payment orders by gateway.
+// These are Shopify orders with financial_status='pending' where the
+// selected gateway matches. The customer committed to buy but payment
+// didn't settle — a high-intent recovery opportunity.
+// =====================================================================
+async function handlePaymentPendingTab(opts: {
+  paymentType: 'pix' | 'boleto' | 'card';
+  orgIds: string[];
+  activeStoreIds: string[];
+  storeId: string | null;
+  limit: number;
+  offset: number;
+}): Promise<NextResponse> {
+  const { paymentType, orgIds, activeStoreIds, storeId, limit, offset } = opts;
+
+  // Gateway keyword matching — different gateways name themselves
+  // differently (pagarme_pix, gerencianet_pix, mercadopago_pix, etc.)
+  const GATEWAY_KEYWORDS: Record<typeof paymentType, string[]> = {
+    pix: ['pix'],
+    boleto: ['boleto', 'bank_slip', 'bankslip'],
+    card: ['cartao', 'card', 'credit', 'stripe', 'adyen', 'cielo', 'getnet', 'rede', 'pagseguro', 'mercadopago_cc', 'pagarme_credit'],
+  };
+
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  let q = supabaseAdmin
+    .from('shopify_orders')
+    .select('id, store_id, shopify_order_id, shopify_order_number, email, phone, total_price, currency, line_items, financial_status, payment_gateway_names, contact_id, shopify_created_at, created_at, contacts(id, email, first_name, last_name, phone)', { count: 'exact' })
+    .in('organization_id', orgIds)
+    .in('store_id', activeStoreIds)
+    .eq('financial_status', 'pending')
+    .gte('shopify_created_at', since)
+    .order('shopify_created_at', { ascending: false })
+    .limit(500);
+
+  if (storeId) q = q.eq('store_id', storeId);
+
+  let rows: any[] = [];
+  try {
+    const { data, error } = await q;
+    if (error) {
+      // If column doesn't exist yet (migration not run), fail gracefully
+      if (error.code === '42703' || error.message?.includes('payment_gateway_names')) {
+        return NextResponse.json({ items: [], total: 0, stats: zeroStats() });
+      }
+      console.error('[Recovery] Payment tab query error:', error);
+      return NextResponse.json({ items: [], total: 0, stats: zeroStats() });
+    }
+    rows = data || [];
+  } catch {
+    return NextResponse.json({ items: [], total: 0, stats: zeroStats() });
+  }
+
+  // Filter rows by gateway keyword
+  const keywords = GATEWAY_KEYWORDS[paymentType];
+  const filtered = rows.filter(r => {
+    const gateways: string[] = Array.isArray(r.payment_gateway_names) ? r.payment_gateway_names : [];
+    const joined = gateways.join(' ').toLowerCase();
+    return keywords.some(kw => joined.includes(kw));
+  });
+
+  const paged = filtered.slice(offset, offset + limit);
+
+  const normalized = paged.map((o: any) => {
+    const ci = Array.isArray(o.contacts) ? o.contacts[0] : o.contacts;
+    const name = [ci?.first_name, ci?.last_name].filter(Boolean).join(' ').trim() || ci?.email || o.email || 'Desconhecido';
+    const items = Array.isArray(o.line_items) ? o.line_items : [];
+    return {
+      id: o.id,
+      type: paymentType,
+      status: 'abandoned' as const,
+      email: o.email || ci?.email || null,
+      phone: o.phone || ci?.phone || null,
+      contact_id: o.contact_id,
+      contact_name: name,
+      value: Number(o.total_price) || 0,
+      currency: o.currency || 'BRL',
+      items_count: items.length,
+      items_preview: items.slice(0, 3).map((i: any) => ({
+        title: i.title || i.name || '',
+        quantity: i.quantity || 1,
+        price: Number(i.price || 0),
+        image_url: i.image?.src || null,
+      })),
+      recovery_url: null,
+      abandoned_at: o.shopify_created_at,
+      converted_at: null,
+      recovered_at: null,
+      created_at: o.shopify_created_at || o.created_at,
+      store_id: o.store_id,
+    };
+  });
+
+  return NextResponse.json({
+    items: normalized,
+    total: filtered.length,
+    stats: {
+      total: filtered.length,
+      pending: filtered.length,
+      abandoned: filtered.length,
       converted: 0,
       recovered: 0,
       revenue_recovered: 0,

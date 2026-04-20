@@ -188,6 +188,7 @@ function transformOrder(order: any, storeId: string, organizationId: string) {
     customer_first_name: order.customer?.first_name || null,
     customer_last_name: order.customer?.last_name || null,
     source_name: order.source_name || 'web',
+    payment_gateway_names: order.payment_gateway_names || [],
     line_items: order.line_items || [],
     refunds: order.refunds || [],
     shipping_address: order.shipping_address || null,

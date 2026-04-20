@@ -194,6 +194,7 @@ export const ORDERS_QUERY = `
         financialStatus
         fulfillmentStatus
         confirmed
+        paymentGatewayNames
         totalPriceSet {
           shopMoney {
             amount

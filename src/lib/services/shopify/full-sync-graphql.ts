@@ -368,6 +368,7 @@ async function syncOrdersGraphQL(
           currency,
           financial_status: (order.financialStatus || 'pending').toLowerCase(),
           fulfillment_status: order.fulfillmentStatus ? order.fulfillmentStatus.toLowerCase() : null,
+          payment_gateway_names: order.paymentGatewayNames || [],
           customer_id: order.customer?.id ? extractShopifyId(order.customer.id) : null,
           line_items: lineItems,
           shipping_address: order.shippingAddress || null,

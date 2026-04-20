@@ -823,6 +823,7 @@ async function saveOrder(
       financial_status: order.financial_status,
       fulfillment_status: order.fulfillment_status,
       line_items: order.line_items,
+      payment_gateway_names: (order as any).payment_gateway_names || [],
       shopify_created_at: order.created_at,
       updated_at: new Date().toISOString(),
     }, {
