@@ -12,6 +12,7 @@ const tabs = [
   { title: 'Dados & LGPD', href: '/settings/lgpd' },
   { title: 'Uso de IA', href: '/settings/ai-usage' },
   { title: 'API', href: '/settings/api' },
+  { title: 'Webhooks', href: '/settings/webhooks' },
   { title: 'Segurança', href: '/settings/security' },
 ]
 
