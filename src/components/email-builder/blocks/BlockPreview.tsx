@@ -10,6 +10,8 @@ interface BlockPreviewProps {
   onSelect: () => void
   onClone: () => void
   onDelete: () => void
+  selectedSubElement?: string | null
+  onSelectSubElement?: (subEl: string | null) => void
 }
 
 const DYNAMIC_TYPES = new Set(['product-grid', 'abandoned-cart', 'coupon'])
@@ -47,6 +49,8 @@ export function BlockPreview({
   onSelect,
   onClone,
   onDelete,
+  selectedSubElement,
+  onSelectSubElement,
 }: BlockPreviewProps) {
   const p = block.props
   const pad = parsePadding(p.padding)
@@ -411,9 +415,12 @@ export function BlockPreview({
 
       // ── Product Grid ──
       case 'product-grid': {
-        const cols = p.columns || 2
+        const isListLayout = p.layout === 'list'
+        const cols = isListLayout ? 1 : (p.columns || 2)
         const rows = p.rows || 2
-        const total = cols * rows
+        const total = isListLayout ? rows : cols * rows
+        const imgRatio = p.imageRatio || 'square'
+        const imgHeight = imgRatio === 'portrait' ? (p.maxImageHeight || 300) * 1.3 : imgRatio === 'landscape' ? (p.maxImageHeight || 300) * 0.65 : (p.maxImageHeight || 300)
         // eslint-disable-next-line react-hooks/rules-of-hooks
         const gridId = `pgrid-${block.id.replace(/[^a-z0-9]/gi,'')}`
         return (
@@ -451,20 +458,24 @@ export function BlockPreview({
               {Array.from({ length: total }).map((_, i) => {
                 const staticProd = p.staticProducts?.[i]
                 return (
+                <div key={i}>
                 <div
-                  key={i}
                   style={{
                     border: `1px solid ${p.productBorderColor || '#E5E7EB'}`,
                     borderRadius: p.productBorderRadius ?? 8,
                     overflow: 'hidden',
                     background: '#fff',
-                    textAlign: 'center',
+                    textAlign: isListLayout ? 'left' : 'center',
+                    display: isListLayout ? 'flex' : 'block',
+                    gap: isListLayout ? 12 : undefined,
                   }}
                 >
                   <div
                     style={{
                       background: '#F3F4F6',
-                      height: p.maxImageHeight ?? 200,
+                      height: isListLayout ? 80 : imgHeight,
+                      width: isListLayout ? 80 : undefined,
+                      flexShrink: 0,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -538,6 +549,11 @@ export function BlockPreview({
                     )}
                   </div>
                 </div>
+                {/* Separator */}
+                {p.showSeparator && i < total - 1 && (
+                  <hr style={{ border: 'none', borderTop: `1px solid ${p.separatorColor || '#E5E7EB'}`, margin: `${(p.productPadding ?? 8) / 2}px 0` }} />
+                )}
+                </div>
                 )
               })}
             </div>
@@ -547,119 +563,104 @@ export function BlockPreview({
 
       // ── Abandoned Cart ──
       case 'abandoned-cart': {
-        const maxItems = p.maxItems || 3
+        const maxItems = p.maxItems || 2
+        const layout = p.layoutType || 'image-left'
+        const isVertical = layout === 'vertical'
+        const imgW = p.imageWidth || 200
+        const imgR = p.imageBorderRadius ?? 0
+        const sampleProducts = [
+          { name: 'Product name', desc: 'Product description', price: 'R$0.00', oldPrice: 'R$0.00' },
+          { name: 'Product name', desc: 'Product description', price: 'R$0.00', oldPrice: 'R$0.00' },
+          { name: 'Product name', desc: 'Product description', price: 'R$0.00', oldPrice: 'R$0.00' },
+        ]
+        const btnAlign = p.buttonAlign || 'left'
+        // Sub-element click handler (compound block)
+        const subClick = (el: string) => (e: React.MouseEvent) => {
+          e.stopPropagation()
+          onSelectSubElement?.(el)
+        }
+        const subRing = (el: string) => selectedSubElement === el ? 'outline outline-2 outline-zinc-900 outline-offset-1 rounded-sm' : 'hover:outline hover:outline-1 hover:outline-zinc-300 hover:outline-offset-1 rounded-sm cursor-pointer'
+        // Show only first product for compact preview, but render all
         return (
-          <div
-            style={{
-              ...pad,
-              backgroundColor: p.backgroundColor || '#FFFBEB',
-            }}
-          >
-            {p.title && (
-              <p
-                style={{
-                  margin: '0 0 4px',
-                  fontSize: p.titleFontSize || 18,
-                  fontWeight: 'bold',
-                  color: p.titleColor || '#111827',
-                  textAlign: 'center',
-                }}
-              >
-                {p.title}
-              </p>
-            )}
-            {p.subtitle && (
-              <p
-                style={{
-                  margin: '0 0 16px',
-                  fontSize: p.subtitleFontSize || 14,
-                  color: p.subtitleColor || '#6B7280',
-                  textAlign: 'center',
-                }}
-              >
-                {p.subtitle}
-              </p>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {Array.from({ length: maxItems }).map((_, i) => (
-                <div
-                  key={i}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    background: p.itemCardBg || '#fff',
-                    borderRadius: 8,
-                    padding: 10,
-                    border: `1px solid ${p.itemBorderColor || '#E5E7EB'}`,
-                  }}
-                >
-                  {p.showImage !== false && (
-                    <div
-                      style={{
-                        width: 64,
-                        height: 64,
-                        flexShrink: 0,
-                        background: '#F3F4F6',
-                        borderRadius: 6,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#9CA3AF',
-                        fontSize: 11,
-                      }}
-                    >
-                      Item {i + 1}
-                    </div>
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontWeight: 600,
-                        fontSize: p.itemNameFontSize || 14,
-                        color: p.itemNameColor || '#111827',
-                      }}
-                    >
-                      Nome do produto
-                    </p>
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 8,
-                        marginTop: 2,
-                        fontSize: 13,
-                        color: '#6B7280',
-                      }}
-                    >
-                      {p.showQuantity !== false && <span>Qtd: 1</span>}
-                      {p.showPrice !== false && (
-                        <span style={{ fontWeight: 600, color: p.itemPriceColor || '#111827' }}>
-                          R$ XX,XX
-                        </span>
+          <div style={{ ...pad, backgroundColor: p.backgroundColor || undefined }}>
+            <div>
+              {Array.from({ length: maxItems }).map((_, i) => {
+                const prod = sampleProducts[i % sampleProducts.length]
+                return (
+                  <div key={i}>
+                    <div style={{
+                      display: isVertical ? 'block' : 'flex',
+                      gap: isVertical ? 0 : 20,
+                      flexDirection: layout === 'image-right' ? 'row-reverse' : 'row',
+                      padding: '16px 0',
+                    }}>
+                      {/* Image — clickable */}
+                      {p.showImage !== false && (
+                        <div onClick={subClick('image')} className={subRing('image')} style={{
+                          width: isVertical ? '100%' : imgW,
+                          height: isVertical ? imgW * 0.8 : imgW,
+                          flexShrink: 0, background: '#F3F4F6', borderRadius: imgR,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: '#9CA3AF', fontSize: 12, transition: 'outline-color 0.15s',
+                        }}>
+                          Product image
+                        </div>
                       )}
+                      {/* Details column */}
+                      <div style={{ flex: 1, minWidth: 0, padding: isVertical ? '12px 0 0' : '0' }}>
+                        {/* Name — clickable */}
+                        {p.showName !== false && (
+                          <div onClick={subClick('name')} className={subRing('name')}>
+                            <p style={{ margin: 0, fontWeight: p.nameWeight || '600', fontSize: p.nameFontSize || 14, color: p.nameColor || '#111827', fontFamily: p.nameFontFamily || 'inherit', padding: '2px 0' }}>
+                              {prod.name}
+                            </p>
+                          </div>
+                        )}
+                        {/* Description — clickable */}
+                        {p.showDescription !== false && (
+                          <div onClick={subClick('description')} className={subRing('description')}>
+                            <p style={{ margin: '4px 0 0', fontSize: p.descFontSize || 13, color: p.descColor || '#6B7280', fontWeight: p.descWeight || '400', padding: '2px 0' }}>
+                              {prod.desc}
+                            </p>
+                          </div>
+                        )}
+                        {/* Price — clickable */}
+                        {(p.showPrice !== false || p.showOldPrice !== false) && (
+                          <div onClick={subClick('price')} className={subRing('price')} style={{ marginTop: 8, display: 'inline-flex', alignItems: 'baseline', gap: 6, padding: '2px 0' }}>
+                            {p.showPrice !== false && (
+                              <span style={{ fontWeight: p.priceWeight || '600', fontSize: p.priceFontSize || 14, color: p.priceColor || '#111827' }}>
+                                {prod.price}
+                              </span>
+                            )}
+                            {p.showOldPrice !== false && (
+                              <span style={{ fontSize: (p.priceFontSize || 14) - 1, color: p.oldPriceColor || '#9CA3AF', textDecoration: 'line-through' }}>
+                                {prod.oldPrice}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {/* Button — clickable */}
+                        {p.showButton !== false && (
+                          <div onClick={subClick('button')} className={subRing('button')} style={{ marginTop: 10, textAlign: btnAlign === 'full' ? undefined : btnAlign as any }}>
+                            <a href="#" onClick={e => e.preventDefault()} style={{
+                              display: btnAlign === 'full' ? 'block' : 'inline-block',
+                              padding: `${p.buttonPaddingV || 10}px ${p.buttonPaddingH || 24}px`,
+                              background: p.buttonColor || '#111827', color: p.buttonTextColor || '#FFFFFF',
+                              borderRadius: p.buttonRadius ?? 4, fontSize: p.buttonFontSize || 14,
+                              fontWeight: 600, textDecoration: 'none', textAlign: 'center',
+                            }}>
+                              {p.buttonText || 'Shop now'}
+                            </a>
+                          </div>
+                        )}
+                      </div>
                     </div>
+                    {p.separator !== false && i < maxItems - 1 && (
+                      <hr style={{ border: 'none', borderTop: `1px solid ${p.separatorColor || '#E5E7EB'}`, margin: 0 }} />
+                    )}
                   </div>
-                </div>
-              ))}
-            </div>
-            <div style={{ textAlign: 'center', marginTop: 16 }}>
-              <a
-                href="#"
-                onClick={preventDefault}
-                style={{
-                  display: 'inline-block',
-                  padding: '12px 32px',
-                  background: p.buttonColor || '#F97316',
-                  color: p.buttonTextColor || '#FFFFFF',
-                  borderRadius: p.buttonRadius ?? 8,
-                  fontSize: p.buttonFontSize || 15,
-                  fontWeight: 'bold',
-                  textDecoration: 'none',
-                }}
-              >
-                {p.buttonText || 'Finalizar Compra'}
-              </a>
+                )
+              })}
             </div>
           </div>
         )
@@ -1067,28 +1068,16 @@ export function BlockPreview({
     }
   }
 
-  const isDynamic = DYNAMIC_TYPES.has(block.type)
-
   return (
     <div
       onClick={onSelect}
       className={`relative group transition-all cursor-pointer ${
         selected
-          ? 'ring-2 ring-brand-500 ring-offset-1'
-          : 'hover:ring-1 hover:ring-gray-300'
+          ? 'ring-2 ring-zinc-900 ring-offset-1'
+          : 'hover:ring-1 hover:ring-zinc-400'
       }`}
     >
-      {renderBlock()}
-
-      {/* Dynamic badge */}
-      {isDynamic && (
-        <div
-          className="absolute top-1 left-1 flex items-center gap-1 bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 text-[10px] font-semibold pointer-events-none"
-        >
-          <Zap size={10} />
-          <span>Dinâmico</span>
-        </div>
-      )}
+      {(() => { try { return renderBlock() } catch (err) { return <div className="p-4 text-center text-red-400 text-xs">Erro ao renderizar bloco: {block.type}</div> } })()}
 
       {/* Floating toolbar — compact, no arrows (drag to reorder) */}
       {selected && (

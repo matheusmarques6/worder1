@@ -381,7 +381,24 @@ async function handleOrderPaid(
   
   const contactId = orderRecord?.contact_id as string | undefined;
   const orderValue = parseFloat(order.total_price || '0');
-  
+
+  // Email conversion attribution — if this contact recently opened or
+  // clicked an email from us, credit the revenue to that send/campaign.
+  // Runs before the rule engine so downstream automations see the data.
+  if (contactId && orderValue > 0) {
+    try {
+      const { attributeEmailConversion } = await import('@/lib/email/attribution');
+      await attributeEmailConversion({
+        contactId,
+        organizationId: store.organization_id,
+        orderId: String(order.id),
+        orderValue,
+      });
+    } catch (err) {
+      console.error('[Webhook] Attribution error:', err);
+    }
+  }
+
   // Processar regras de automação
   const eventData: EventData = {
     contact_id: contactId,
@@ -394,7 +411,7 @@ async function handleOrderPaid(
     product_ids: order.line_items?.map(li => String(li.product_id)) || [],
     source_id: String(order.id),
   };
-  
+
   await RuleEngine.processCreationRules(
     store.organization_id,
     'shopify',

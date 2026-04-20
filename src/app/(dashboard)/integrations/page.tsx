@@ -116,8 +116,12 @@ export default function IntegrationsPage() {
     setDisconnecting(null)
   }
 
+  // When the merchant already has a Shopify store connected, clicking
+  // "Adicionar loja" should open the connect form (not the "connected"
+  // view). We pass ?add=1 so ShopifyConnect shows the form explicitly.
   const handleConnect = () => {
-    router.push('/integrations/shopify')
+    const qs = connectedStores.length > 0 ? '?add=1' : ''
+    router.push(`/integrations/shopify${qs}`)
   }
 
   const formatDate = (d: string | null) => {

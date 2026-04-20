@@ -101,6 +101,15 @@ class EventProcessorClass {
         'customer_created': 'trigger_signup',
         'contact_created': 'trigger_signup',
         'custom_event': 'trigger_custom_event',
+        // WhatsApp
+        'whatsapp_received': 'trigger_whatsapp',
+        'whatsapp_keyword': 'trigger_whatsapp_keyword',
+        'whatsapp_first_message': 'trigger_whatsapp_first_message',
+        'ctwa_ad': 'trigger_ctwa_ad',
+        // E-commerce
+        'back_in_stock': 'trigger_back_in_stock',
+        // CRM
+        'rfm_segment_change': 'trigger_rfm_segment_change',
       };
 
       const triggerType = EVENT_TO_TRIGGER[event.event_type] || `trigger_${event.event_type}`;
@@ -144,10 +153,26 @@ class EventProcessorClass {
         }));
       }
 
-      console.log(`[EventProcessor] Found ${automations?.length || 0} automations for event ${event.event_type}`);
+      // 2b. Filtrar automações por trigger_config (keyword match, segment match etc.)
+      const filteredAutomations: typeof automations = [];
+      for (const a of (automations || [])) {
+        // Buscar trigger_config da automação
+        const { data: autoDetail } = await supabase
+          .from('automations')
+          .select('trigger_config')
+          .eq('id', a.automation_id)
+          .single();
+        const cfg = (autoDetail?.trigger_config || {}) as Record<string, any>;
+
+        if (matchesTriggerConfig(event.event_type, cfg, event.payload)) {
+          filteredAutomations.push(a);
+        }
+      }
+
+      console.log(`[EventProcessor] Found ${filteredAutomations.length} automations for event ${event.event_type} (after config filter)`);
 
       // 3. Criar runs para cada automação
-      for (const automation of (automations || [])) {
+      for (const automation of filteredAutomations) {
         try {
           const runId = await this.createAndQueueRun(
             automation.automation_id,
@@ -435,6 +460,64 @@ class EventProcessorClass {
       await this.triggerDirectExecution(runId);
     }
   }
+}
+
+// ============================================
+// HELPER: Match event payload against trigger_config
+// ============================================
+
+function matchesTriggerConfig(
+  eventType: string,
+  config: Record<string, any>,
+  payload: Record<string, any>
+): boolean {
+  if (!config || Object.keys(config).length === 0) return true;
+
+  // Keyword match (trigger_whatsapp_keyword): config.keywords = ['cupom', 'desconto'] or config.keyword = 'cupom'
+  if (eventType === 'whatsapp_keyword' || eventType === 'whatsapp_received') {
+    const configuredKeywords: string[] = Array.isArray(config.keywords)
+      ? config.keywords
+      : config.keyword
+      ? [config.keyword]
+      : [];
+    if (configuredKeywords.length > 0) {
+      const text = (payload.message_text || payload.text || '').toString().toLowerCase();
+      if (!text) return false;
+      const matchMode = config.match_mode || 'contains'; // 'contains' | 'exact' | 'starts_with'
+      const matched = configuredKeywords.some((kw) => {
+        const k = kw.toLowerCase().trim();
+        if (!k) return false;
+        if (matchMode === 'exact') return text === k;
+        if (matchMode === 'starts_with') return text.startsWith(k);
+        return text.includes(k);
+      });
+      if (!matched) return false;
+    }
+  }
+
+  // RFM segment change (trigger_rfm_segment_change): config.from_segment / config.to_segment
+  if (eventType === 'rfm_segment_change') {
+    if (config.to_segment && payload.to_segment !== config.to_segment) return false;
+    if (config.from_segment && payload.from_segment !== config.from_segment) return false;
+  }
+
+  // Back in stock (trigger_back_in_stock): config.product_id (specific product only)
+  if (eventType === 'back_in_stock') {
+    if (config.product_id && String(payload.product_id) !== String(config.product_id)) return false;
+  }
+
+  // CTWA ad (trigger_ctwa_ad): config.ad_id / config.source_id
+  if (eventType === 'ctwa_ad') {
+    if (config.ad_id && payload.ad_id !== config.ad_id) return false;
+    if (config.source_id && payload.source_id !== config.source_id) return false;
+  }
+
+  // Generic fallthrough: tag / stage / pipeline (matches EventBus logic)
+  if (config.tag_name && payload.tag_name && config.tag_name !== payload.tag_name) return false;
+  if (config.stage_id && payload.to_stage_id && config.stage_id !== payload.to_stage_id) return false;
+  if (config.pipeline_id && payload.pipeline_id && config.pipeline_id !== payload.pipeline_id) return false;
+
+  return true;
 }
 
 // ============================================

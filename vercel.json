@@ -27,6 +27,22 @@
     {
       "path": "/api/workers/abandoned-cart",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/shopify-token-refresh",
+      "schedule": "0 */23 * * *"
+    },
+    {
+      "path": "/api/cron/webhook-deliveries-sweeper",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/webhook-deliveries-prune",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/browse-abandoned",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

@@ -99,3 +99,64 @@ export async function getDomain(domainId: string) {
 
   return data;
 }
+
+// =============================================
+// Webhooks
+// =============================================
+
+export async function registerWebhook(endpointUrl: string) {
+  const resend = getResend();
+  const client: any = resend as any;
+  const { data, error } = await client.webhooks.create({
+    url: endpointUrl,
+    events: [
+      'email.sent',
+      'email.delivered',
+      'email.delivery_delayed',
+      'email.bounced',
+      'email.complained',
+      'email.opened',
+      'email.clicked',
+    ],
+  });
+  if (error) {
+    console.error('[Resend] Error registering webhook:', error);
+    throw new Error(`Resend webhook error: ${error.message}`);
+  }
+  return data;
+}
+
+export async function listWebhooks() {
+  const resend = getResend();
+  const client: any = resend as any;
+  const { data, error } = await client.webhooks.list();
+  if (error) {
+    console.error('[Resend] Error listing webhooks:', error);
+    throw new Error(`Resend webhook error: ${error.message}`);
+  }
+  return data;
+}
+
+// =============================================
+// Batch send
+// =============================================
+
+export interface BatchEmail {
+  from: string;
+  to: string[];
+  subject: string;
+  html: string;
+  replyTo?: string;
+  tags?: { name: string; value: string }[];
+  headers?: Record<string, string>;
+}
+
+export async function sendBatchEmails(emails: BatchEmail[]) {
+  const resend = getResend();
+  const { data, error } = await resend.batch.send(emails as any);
+  if (error) {
+    console.error('[Resend] Error sending batch:', error);
+    throw new Error(`Resend batch error: ${error.message}`);
+  }
+  return data;
+}

@@ -24,6 +24,7 @@ interface EmailTemplate {
   updated_at: string
   created_at: string
   thumbnail_url?: string
+  html?: string
 }
 
 const categoryColors: Record<string, string> = {
@@ -105,6 +106,47 @@ export default function EmailTemplatesPage() {
         </Link>
       </div>
 
+      {/* Pre-built Templates */}
+      {templates.length === 0 && !loading && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="text-base font-semibold text-gray-900 mb-1">Começar com um template</h2>
+          <p className="text-sm text-gray-500 mb-4">Escolha um template pré-configurado ou comece do zero</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { name: 'Boas-vindas', desc: 'Email de boas-vindas para novos inscritos', cat: 'marketing', color: 'bg-blue-50 border-blue-200' },
+              { name: 'Carrinho Abandonado', desc: 'Recupere carrinhos abandonados', cat: 'marketing', color: 'bg-amber-50 border-amber-200' },
+              { name: 'Promoção', desc: 'Template para ofertas e promoções', cat: 'marketing', color: 'bg-rose-50 border-rose-200' },
+              { name: 'Newsletter', desc: 'Novidades e conteúdo periódico', cat: 'marketing', color: 'bg-emerald-50 border-emerald-200' },
+              { name: 'Confirmação Pedido', desc: 'Confirmação de compra', cat: 'transactional', color: 'bg-indigo-50 border-indigo-200' },
+              { name: 'Envio Rastreio', desc: 'Informações de entrega', cat: 'transactional', color: 'bg-cyan-50 border-cyan-200' },
+              { name: 'Aniversário', desc: 'Email de aniversário com cupom', cat: 'marketing', color: 'bg-pink-50 border-pink-200' },
+              { name: 'Em Branco', desc: 'Comece do zero', cat: 'custom', color: 'bg-gray-50 border-gray-200' },
+            ].map(t => (
+              <button key={t.name} onClick={async () => {
+                try {
+                  const res = await fetch('/api/email/templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: t.name, category: t.cat, store_id: currentStore?.id || undefined }),
+                  })
+                  if (res.ok) {
+                    const data = await res.json()
+                    window.location.href = `/email/templates/${data.template?.id || data.id}/edit`
+                  }
+                } catch {}
+              }}
+                className={`p-4 rounded-xl border ${t.color} hover:shadow-md transition-all group text-left cursor-pointer`}>
+                <div className="w-8 h-8 rounded-lg bg-white/60 flex items-center justify-center mb-2">
+                  <Mail className="w-4 h-4 text-gray-500" />
+                </div>
+                <p className="text-sm font-semibold text-gray-900 group-hover:text-brand-600">{t.name}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{t.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -152,32 +194,55 @@ export default function EmailTemplatesPage() {
 
       {/* Grid */}
       {!loading && filtered.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {filtered.map((template, i) => (
             <motion.div
               key={template.id}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="group bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow relative"
+              transition={{ delay: i * 0.03 }}
+              className="group bg-white border border-zinc-200 rounded-xl hover:shadow-lg hover:border-zinc-300 transition-all duration-200 relative"
             >
-              {/* Thumbnail */}
-              <div className="h-40 bg-gray-100 flex items-center justify-center relative">
-                {template.thumbnail_url ? (
-                  <img
-                    src={template.thumbnail_url}
-                    alt={template.name}
-                    className="w-full h-full object-cover"
-                  />
+              {/* Thumbnail / HTML Preview */}
+              <div className="aspect-[4/3] bg-zinc-50 relative overflow-hidden border-b border-zinc-100 rounded-t-xl">
+                {template.html ? (
+                  <div className="absolute inset-0 flex items-start justify-center">
+                    <iframe
+                      srcDoc={template.html
+                        .replace(/\{\{countdown_base_url\}\}/g, window.location.origin)
+                        .replace(/\{\{first_name\}\}/g, 'Cliente')
+                        .replace(/\{\{store_name\}\}/g, 'Loja')
+                        .replace(/\{\{store_url\}\}/g, '#')
+                        .replace(/\{\{checkout_url\}\}/g, '#')
+                        .replace(/\{\{[^}]+\}\}/g, '')
+                      }
+                      title={template.name}
+                      className="border-0 pointer-events-none select-none"
+                      style={{ width: 600, height: 900, transform: 'scale(var(--preview-scale))', transformOrigin: 'top center' }}
+                      sandbox=""
+                      loading="lazy"
+                      ref={(el) => {
+                        if (el) {
+                          const w = el.parentElement?.offsetWidth || 280
+                          el.style.setProperty('--preview-scale', String(w / 600))
+                        }
+                      }}
+                    />
+                  </div>
+                ) : template.thumbnail_url ? (
+                  <img src={template.thumbnail_url} alt={template.name} className="w-full h-full object-cover" />
                 ) : (
-                  <Mail className="w-10 h-10 text-gray-300" />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <Mail className="w-8 h-8 text-zinc-300" />
+                    <span className="text-[11px] text-zinc-400 mt-1.5">Sem preview</span>
+                  </div>
                 )}
 
                 {/* Hover overlay */}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
                   <Link
                     href={`/email/templates/${template.id}/edit`}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-white text-gray-900 text-sm font-medium rounded-lg shadow-sm hover:bg-gray-50 transition-colors"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-zinc-900 text-[13px] font-semibold rounded-lg shadow-lg hover:bg-zinc-50 transition-colors"
                   >
                     <Edit3 className="w-4 h-4" />
                     Editar
@@ -186,26 +251,25 @@ export default function EmailTemplatesPage() {
               </div>
 
               {/* Info */}
-              <div className="p-4">
-                <div className="flex items-start justify-between">
+              <div className="px-4 py-3">
+                <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-medium text-gray-900 truncate">
+                    <h3 className="text-[13px] font-semibold text-zinc-900 truncate">
                       {template.name}
                     </h3>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-1.5">
                       <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full ${
                           categoryColors[template.category] || categoryColors.custom
                         }`}
                       >
-                        <Tag className="w-3 h-3" />
+                        <Tag className="w-2.5 h-2.5" />
                         {categoryLabels[template.category] || template.category}
                       </span>
+                      <span className="text-[10px] text-zinc-400">
+                        {new Date(template.updated_at).toLocaleDateString('pt-BR')}
+                      </span>
                     </div>
-                    <p className="text-xs text-gray-400 mt-2">
-                      Atualizado em{' '}
-                      {new Date(template.updated_at).toLocaleDateString('pt-BR')}
-                    </p>
                   </div>
 
                   {/* Actions menu */}
@@ -219,22 +283,30 @@ export default function EmailTemplatesPage() {
                       <MoreVertical className="w-4 h-4" />
                     </button>
                     {activeMenu === template.id && (
-                      <div className="absolute right-0 top-8 z-10 w-40 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-                        <Link
-                          href={`/email/templates/${template.id}/edit`}
-                          className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                          Editar
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(template.id)}
-                          className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Excluir
-                        </button>
-                      </div>
+                      <>
+                        {/* backdrop — fecha menu ao clicar fora */}
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setActiveMenu(null)}
+                        />
+                        <div className="absolute right-0 top-8 z-50 w-44 bg-white border border-gray-200 rounded-lg shadow-xl py-1">
+                          <Link
+                            href={`/email/templates/${template.id}/edit`}
+                            onClick={() => setActiveMenu(null)}
+                            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                            Editar
+                          </Link>
+                          <button
+                            onClick={() => { setActiveMenu(null); handleDelete(template.id); }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Excluir
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>

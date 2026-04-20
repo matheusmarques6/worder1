@@ -1,575 +1,819 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { createBrowserClient } from '@/lib/supabase'
 import { useAuthStore } from '@/stores'
 import {
   BarChart,
   Bar,
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import {
-  DollarSign,
-  ShoppingCart,
-  Users,
-  Mail,
-  MessageCircle,
-  TrendingUp,
-  TrendingDown,
-  Zap,
-  FileText,
-  BarChart3,
-  ArrowRight,
-  Plus,
-} from 'lucide-react'
+import { RefreshCw, ChevronDown, TrendingUp, TrendingDown, Info, ExternalLink, Download } from 'lucide-react'
 
-type Period = '7d' | '30d' | '90d'
-type RevenueTab = 'email' | 'whatsapp' | 'automacoes' | 'total'
+// ──────────────────────────────────────────────────────────────
+// Types
+// ──────────────────────────────────────────────────────────────
 
-interface KPIs {
+type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | '90d' | 'month'
+type Granularity = 'daily' | 'weekly' | 'monthly'
+type ChartTab = 'revenue' | 'orders'
+
+interface RecentCampaign {
+  id: string
+  name: string
+  status: string
+  sends: number
+  openRate: number
+  clickRate: number
   revenue: number
-  orders: number
-  activeContacts: number
-  emailsSent: number
-  prevRevenue: number
-  prevOrders: number
-  prevContacts: number
-  prevEmails: number
 }
 
-interface SalesChartPoint {
-  date: string
-  label: string
-  campanhas: number
-  automacoes: number
-}
-
-interface GrowthChartPoint {
-  date: string
-  label: string
-  subscribers: number
-}
-
-interface Automation {
+interface TopAutomation {
   id: string
   name: string
   status: string
-  created_at: string
+  sends: number
+  conversionRate: number
+  revenue: number
 }
 
-interface Campaign {
-  id: string
-  name: string
-  status: string
-  created_at: string
+interface Overview {
+  worderRevenue: number
+  worderOrders: number
+  worderShare: number
+  worderDelta: number
+  campaignsRevenue: number
+  campaignsOrders: number
+  automationsRevenue: number
+  automationsOrders: number
+  storeRevenue: number
+  storeOrders: number
+  series: Array<{ label: string; campanhas: number; automacoes: number; fora: number }>
+  sparklines: { campanhas: number[]; automacoes: number[] }
+  channels: { email: number; whatsapp: number; sms: number }
+  recentCampaigns: RecentCampaign[]
+  topAutomations: TopAutomation[]
+  hasShopify: boolean
 }
 
-function getGreeting(): string {
-  const hour = new Date().getHours()
-  if (hour < 12) return 'Bom dia'
-  if (hour < 18) return 'Boa tarde'
+const EMPTY_OVERVIEW: Overview = {
+  worderRevenue: 0, worderOrders: 0, worderShare: 0, worderDelta: 0,
+  campaignsRevenue: 0, campaignsOrders: 0,
+  automationsRevenue: 0, automationsOrders: 0,
+  storeRevenue: 0, storeOrders: 0,
+  series: [],
+  sparklines: { campanhas: [], automacoes: [] },
+  channels: { email: 0, whatsapp: 0, sms: 0 },
+  recentCampaigns: [], topAutomations: [],
+  hasShopify: false,
+}
+
+const RANGE_OPTIONS: Array<{ value: RangeKey; label: string }> = [
+  { value: 'today', label: 'Hoje' },
+  { value: 'yesterday', label: 'Ontem' },
+  { value: '7d', label: 'Últimos 7 dias' },
+  { value: '30d', label: 'Últimos 30 dias' },
+  { value: '90d', label: 'Últimos 90 dias' },
+  { value: 'month', label: 'Este mês' },
+]
+
+const GRANULARITY_OPTIONS: Array<{ value: Granularity; label: string }> = [
+  { value: 'daily', label: 'Diário' },
+  { value: 'weekly', label: 'Semanal' },
+  { value: 'monthly', label: 'Mensal' },
+]
+
+// ──────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────
+
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Bom dia'
+  if (h < 18) return 'Boa tarde'
   return 'Boa noite'
 }
 
-function getPeriodDays(period: Period): number {
-  return period === '7d' ? 7 : period === '30d' ? 30 : 90
+function formatBRL(v: number): string {
+  const rounded = Math.round(v)
+  if (rounded === 0) return 'R$ 0'
+  return 'R$ ' + rounded.toLocaleString('pt-BR')
 }
 
-function getPeriodDate(period: Period): string {
-  const now = new Date()
-  now.setDate(now.getDate() - getPeriodDays(period))
-  return now.toISOString()
+function formatBRLCompact(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+  if (v >= 1000) return `${Math.round(v / 1000)}k`
+  return `${Math.round(v)}`
 }
 
-function getPrevPeriodDate(period: Period): string {
-  const now = new Date()
-  now.setDate(now.getDate() - getPeriodDays(period) * 2)
-  return now.toISOString()
+function formatPct(v: number, digits = 1): string {
+  return `${v.toFixed(digits)}%`
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value)
+function timeAgoShort(date: Date): string {
+  const mins = Math.floor((Date.now() - date.getTime()) / 60000)
+  if (mins < 1) return 'agora mesmo'
+  if (mins < 60) return `há ${mins} min`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `há ${hours} h`
+  return `há ${Math.floor(hours / 24)} d`
 }
 
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat('pt-BR').format(value)
+// Count-up (ease-out cubic), used only on the hero number.
+function useCountUp(target: number, duration = 1800): number {
+  const [val, setVal] = useState(target * 0.6)
+  const raf = useRef<number | null>(null)
+  useEffect(() => {
+    const start = performance.now()
+    const from = target * 0.6
+    const tick = (now: number) => {
+      const p = Math.min((now - start) / duration, 1)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setVal(from + (target - from) * eased)
+      if (p < 1) raf.current = requestAnimationFrame(tick)
+    }
+    raf.current = requestAnimationFrame(tick)
+    return () => { if (raf.current) cancelAnimationFrame(raf.current) }
+  }, [target, duration])
+  return val
 }
 
-function calcChange(current: number, previous: number): number {
-  if (previous === 0) return current > 0 ? 100 : 0
-  return Math.round(((current - previous) / previous) * 100)
-}
+// ──────────────────────────────────────────────────────────────
+// Dashboard
+// ──────────────────────────────────────────────────────────────
 
-function ChangeIndicator({ value }: { value: number }) {
-  if (value === 0) return <span className="text-xs text-gray-400">--</span>
-  const positive = value > 0
+export default function DashboardPage() {
+  const { user } = useAuthStore()
+  const firstName = (user?.name?.split(' ')[0]) || user?.email?.split('@')[0] || 'por aí'
+
+  // Persist filter choices across sessions so users land where they
+  // left off. Defaults to 30d / weekly / revenue on first visit.
+  const [range, setRange] = useState<RangeKey>('30d')
+  const [granularity, setGranularity] = useState<Granularity>('weekly')
+  const [tab, setTab] = useState<ChartTab>('revenue')
+
+  useEffect(() => {
+    try {
+      const r = localStorage.getItem('wd:range') as RangeKey | null
+      const g = localStorage.getItem('wd:granularity') as Granularity | null
+      const t = localStorage.getItem('wd:chartTab') as ChartTab | null
+      if (r && RANGE_OPTIONS.some((o) => o.value === r)) setRange(r)
+      if (g && GRANULARITY_OPTIONS.some((o) => o.value === g)) setGranularity(g)
+      if (t === 'revenue' || t === 'orders') setTab(t)
+    } catch {}
+  }, [])
+
+  useEffect(() => { try { localStorage.setItem('wd:range', range) } catch {} }, [range])
+  useEffect(() => { try { localStorage.setItem('wd:granularity', granularity) } catch {} }, [granularity])
+  useEffect(() => { try { localStorage.setItem('wd:chartTab', tab) } catch {} }, [tab])
+  const [data, setData] = useState<Overview>(EMPTY_OVERVIEW)
+  const [loading, setLoading] = useState(true)
+  const [lastFetch, setLastFetch] = useState<Date>(new Date())
+  const [, setNow] = useState<Date>(new Date())
+  const [toast, setToast] = useState<string | null>(null)
+
+  // "Atualizado há N min" tick
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30000)
+    return () => clearInterval(t)
+  }, [])
+
+  // Transient toast for shortcut / export feedback.
+  const showToast = (msg: string) => {
+    setToast(msg)
+    window.setTimeout(() => setToast(null), 1800)
+  }
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/dashboard/overview?range=${range}&granularity=${granularity}`, { cache: 'no-store' })
+      if (res.ok) {
+        const json = (await res.json()) as Overview
+        setData({ ...EMPTY_OVERVIEW, ...json })
+      }
+    } catch {
+      setData(EMPTY_OVERVIEW)
+    } finally {
+      setLoading(false)
+      setLastFetch(new Date())
+      setNow(new Date())
+    }
+  }
+
+  useEffect(() => { fetchData() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [range, granularity])
+
+  // Keyboard shortcut: "R" refreshes (ignored while typing in inputs).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault()
+        fetchData()
+        showToast('Atualizado')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, granularity])
+
+  // CSV export — exports the current period's time-series plus channel
+  // totals and KPIs. Opens a download without leaving the page.
+  const exportCSV = () => {
+    const rows: string[][] = []
+    rows.push(['Dashboard Worder — export', new Date().toISOString()])
+    rows.push([])
+    rows.push(['Período', range, 'Granularidade', granularity])
+    rows.push([])
+    rows.push(['KPIs'])
+    rows.push(['Receita via Worder', String(data.worderRevenue)])
+    rows.push(['% do faturamento', data.worderShare.toFixed(2) + '%'])
+    rows.push(['Pedidos via Worder', String(data.worderOrders)])
+    rows.push(['Campanhas (receita)', String(data.campaignsRevenue)])
+    rows.push(['Campanhas (pedidos)', String(data.campaignsOrders)])
+    rows.push(['Automações (receita)', String(data.automationsRevenue)])
+    rows.push(['Automações (pedidos)', String(data.automationsOrders)])
+    rows.push(['Receita total da loja', String(data.storeRevenue)])
+    rows.push(['Pedidos totais', String(data.storeOrders)])
+    rows.push([])
+    rows.push(['Canal', 'Receita'])
+    rows.push(['Email', String(data.channels.email)])
+    rows.push(['WhatsApp', String(data.channels.whatsapp)])
+    rows.push(['SMS', String(data.channels.sms)])
+    rows.push([])
+    rows.push(['Período', 'Campanhas', 'Automações', 'Fora da Worder'])
+    for (const s of data.series) {
+      rows.push([s.label, String(s.campanhas), String(s.automacoes), String(s.fora)])
+    }
+
+    const esc = (v: string) => {
+      if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+        return '"' + v.replace(/"/g, '""') + '"'
+      }
+      return v
+    }
+    const csv = rows.map((r) => r.map(esc).join(',')).join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `worder-dashboard-${range}-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    showToast('CSV baixado')
+  }
+
+  const heroAnim = useCountUp(data.worderRevenue)
+
+  // Chart data — use revenue or order counts per bucket
+  const chartRows = data.series.map((p) => {
+    if (tab === 'revenue') return p
+    const totalOrdersStore = data.storeOrders || 0
+    const aov = totalOrdersStore > 0 && data.storeRevenue > 0 ? data.storeRevenue / totalOrdersStore : 1
+    return {
+      label: p.label,
+      campanhas: Math.round(p.campanhas / (aov || 1)),
+      automacoes: Math.round(p.automacoes / (aov || 1)),
+      fora: Math.round(p.fora / (aov || 1)),
+    }
+  })
+
+  const channelTotal = data.channels.email + data.channels.whatsapp + data.channels.sms || 1
+  const channelPct = {
+    email: (data.channels.email / channelTotal) * 100,
+    whatsapp: (data.channels.whatsapp / channelTotal) * 100,
+    sms: (data.channels.sms / channelTotal) * 100,
+  }
+
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${positive ? 'text-emerald-600' : 'text-red-500'}`}>
-      {positive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-      {positive ? '+' : ''}{value}%
+    <div className="min-h-screen bg-[#FAFAFA]" style={{ fontFamily: '"DM Sans", system-ui, -apple-system, sans-serif' }}>
+      <div className="w-full px-8 py-10 lg:px-12 lg:py-12 pb-16">
+        {/* ── Greeting ── */}
+        <header className="mb-11">
+          <h1 className="text-[26px] font-bold text-[#18181B] leading-tight" style={{ letterSpacing: '-0.03em' }}>
+            {getGreeting()}, {firstName}
+          </h1>
+          <p className="text-[14px] text-[#A1A1AA] mt-1">Aqui está o resumo da sua operação.</p>
+        </header>
+
+        {/* ── Onboarding banner: shown until a Shopify store is connected ── */}
+        {!loading && !data.hasShopify && (
+          <div
+            className="mb-11 rounded-[14px] bg-white px-6 py-5 flex items-center justify-between gap-4 flex-wrap"
+            style={{ border: '1px solid #E4E4E7' }}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="text-[14px] font-bold text-[#18181B]" style={{ letterSpacing: '-0.01em' }}>
+                Conecte sua loja para liberar a dashboard
+              </div>
+              <p className="text-[13px] text-[#71717A] mt-1 leading-relaxed">
+                Vincule sua Shopify para ver receita, pedidos e atribuição das suas campanhas e automações em tempo real.
+              </p>
+            </div>
+            <Link
+              href="/integrations"
+              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-[#18181B] hover:bg-[#27272A] transition-colors px-4 py-2 rounded-[8px] shrink-0"
+            >
+              Conectar Shopify <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
+
+        {/* ── Section header ── */}
+        <div className="flex items-start justify-between gap-6 mb-6 flex-wrap">
+          <div>
+            <h2 className="text-[20px] font-bold text-[#18181B] leading-tight" style={{ letterSpacing: '-0.02em' }}>
+              Desempenho de vendas
+            </h2>
+            <button
+              className="inline-flex items-center gap-1 text-[13px] text-[#71717A] hover:text-[#3F3F46] mt-1 transition-colors"
+              title="Receita atribuída: pedidos realizados dentro da janela de atribuição após clique em email, WhatsApp ou SMS enviados pela Worder."
+            >
+              <Info className="w-3.5 h-3.5" />
+              Como calculamos as vendas
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={fetchData}
+              className="inline-flex items-center gap-1.5 text-[12.5px] text-[#A1A1AA] hover:text-[#52525B] transition-colors"
+              title="Atualizar"
+            >
+              <RefreshCw className={`w-[13px] h-[13px] ${loading ? 'animate-spin' : ''}`} />
+              Atualizado {timeAgoShort(lastFetch)}
+            </button>
+            <RangeSelect value={range} onChange={setRange} />
+            <GranularitySelect value={granularity} onChange={setGranularity} />
+            <button
+              onClick={exportCSV}
+              className="inline-flex items-center gap-1.5 text-[13.5px] font-medium text-[#52525B] hover:text-[#18181B] bg-white px-3 py-2 rounded-[8px] hover:border-[#D4D4D8] transition-colors"
+              style={{ border: '1px solid #E4E4E7' }}
+              title="Exportar CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Exportar</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ── KPI Stack + Bar Chart ── */}
+        <div className="flex gap-5 mb-14 flex-wrap lg:flex-nowrap">
+          {/* KPI stack (340px) */}
+          <div className="flex flex-col gap-3.5 w-full lg:w-[340px] lg:flex-shrink-0">
+            {/* Hero card */}
+            <div
+              className="relative overflow-hidden rounded-[14px] text-white px-[26px] py-6"
+              style={{ background: 'linear-gradient(135deg, #F97316 0%, #EA580C 60%, #C2410C 100%)' }}
+            >
+              <div
+                aria-hidden
+                className="absolute pointer-events-none"
+                style={{ top: -30, right: -30, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }}
+              />
+              <div className="flex items-center justify-between relative">
+                <span className="text-[13px] font-semibold">Receita via Worder</span>
+                {data.worderDelta !== 0 && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[12px] font-bold px-[10px] py-[3px] rounded-full"
+                    style={{ background: 'rgba(255,255,255,0.18)' }}
+                    title={`${data.worderDelta > 0 ? 'Crescimento' : 'Queda'} em relação ao período anterior`}
+                  >
+                    {data.worderDelta > 0
+                      ? <TrendingUp className="w-3 h-3" />
+                      : <TrendingDown className="w-3 h-3" />}
+                    {data.worderDelta > 0 ? '+' : ''}{data.worderDelta}%
+                  </span>
+                )}
+              </div>
+              <div
+                className="text-[34px] font-bold mt-2"
+                style={{ letterSpacing: '-0.04em', fontVariantNumeric: 'tabular-nums', minHeight: 41 }}
+              >
+                {loading && data.worderRevenue === 0 ? (
+                  <span className="inline-block w-36 h-7 rounded bg-white/15 animate-pulse" />
+                ) : (
+                  formatBRL(heroAnim)
+                )}
+              </div>
+              <div className="flex items-center justify-between mt-3 relative">
+                <span className="text-[13px] font-semibold opacity-[0.85]">
+                  {formatPct(data.worderShare)} do faturamento
+                </span>
+                <span className="text-[12px] opacity-50">
+                  {data.worderOrders.toLocaleString('pt-BR')} pedidos
+                </span>
+              </div>
+            </div>
+
+            {/* Campanhas + Automações */}
+            <div className="flex gap-3.5">
+              <MiniKPI
+                label="Campanhas"
+                value={data.campaignsRevenue}
+                sub={`${data.campaignsOrders.toLocaleString('pt-BR')} pedidos`}
+                spark={data.sparklines?.campanhas}
+              />
+              <MiniKPI
+                label="Automações"
+                value={data.automationsRevenue}
+                sub={`${data.automationsOrders.toLocaleString('pt-BR')} pedidos`}
+                spark={data.sparklines?.automacoes}
+              />
+            </div>
+
+            {/* Receita total da loja */}
+            <div className="rounded-[12px] bg-white px-5 py-[18px] transition-colors hover:bg-[#FAFAFA]" style={{ border: '1px solid #E4E4E7' }}>
+              <div className="text-[12px] font-semibold text-[#71717A] mb-2">Receita total da loja</div>
+              <div
+                className="text-[24px] font-bold text-[#18181B]"
+                style={{ letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}
+              >
+                {formatBRL(data.storeRevenue)}
+              </div>
+              <div className="text-[12px] text-[#A1A1AA] mt-[6px]">
+                {data.storeOrders.toLocaleString('pt-BR')} pedidos
+              </div>
+            </div>
+          </div>
+
+          {/* Chart (flex 1) */}
+          <div className="flex-1 min-w-0 rounded-[14px] bg-white px-7 py-6" style={{ border: '1px solid #E4E4E7' }}>
+            {/* Tabs + Legend */}
+            <div className="flex items-center justify-between mb-5" style={{ borderBottom: '2px solid #E4E4E7' }}>
+              <div className="flex">
+                {(['revenue', 'orders'] as ChartTab[]).map((t) => {
+                  const active = tab === t
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setTab(t)}
+                      className="text-[14px] px-6 py-2 -mb-[2px] transition-colors"
+                      style={{
+                        fontWeight: active ? 700 : 400,
+                        color: active ? '#18181B' : '#A1A1AA',
+                        borderBottom: active ? '2px solid #18181B' : '2px solid transparent',
+                      }}
+                    >
+                      {t === 'revenue' ? 'Receita' : 'Pedidos'}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="flex items-center gap-4 pb-2">
+                <LegendDot color="#18181B" label="Campanhas" />
+                <LegendDot color="#71717A" label="Automações" />
+                <LegendDot color="#E4E4E7" label="Fora da Worder" border="#D4D4D8" />
+              </div>
+            </div>
+
+            <div className="h-[280px]">
+              {loading && chartRows.length === 0 ? (
+                <div className="h-full w-full flex items-center justify-center text-[13px] text-[#A1A1AA]">
+                  Carregando…
+                </div>
+              ) : chartRows.every((p) => p.campanhas + p.automacoes + p.fora === 0) ? (
+                <div className="h-full w-full flex flex-col items-center justify-center text-[13px] text-[#A1A1AA] gap-2">
+                  <span>Nenhuma venda registrada no período.</span>
+                  <Link href="/campaigns/new" className="text-[#52525B] hover:text-[#18181B] underline underline-offset-2">
+                    Criar primeira campanha
+                  </Link>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartRows} margin={{ top: 12, right: 8, left: -10, bottom: 0 }}>
+                    <CartesianGrid vertical={false} stroke="#F4F4F5" strokeWidth={0.5} />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={{ stroke: '#E4E4E7' }}
+                      tick={{ fontSize: 11.5, fill: '#A1A1AA' }}
+                      dy={8}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 11, fill: '#A1A1AA' } as any}
+                      tickFormatter={(v) => (tab === 'revenue' ? formatBRLCompact(v) : String(v))}
+                      width={56}
+                    />
+                    <Tooltip
+                      cursor={{ fill: '#F4F4F5' }}
+                      content={<RichTooltip isRevenue={tab === 'revenue'} />}
+                      wrapperStyle={{ outline: 'none' }}
+                    />
+                    <Bar dataKey="campanhas" stackId="a" fill="#18181B" barSize={34} />
+                    <Bar dataKey="automacoes" stackId="a" fill="#71717A" barSize={34} />
+                    <Bar dataKey="fora" stackId="a" fill="#E4E4E7" radius={[3, 3, 0, 0]} barSize={34} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Receita por canal ── */}
+        <section className="rounded-[14px] bg-white px-7 py-6 mb-14" style={{ border: '1px solid #E4E4E7' }}>
+          <h3 className="text-[16px] font-bold text-[#18181B] mb-[22px]">Receita por canal</h3>
+          <div
+            className="relative w-full h-[5px] rounded-[5px] overflow-hidden flex"
+            style={{ background: '#F4F4F5' }}
+          >
+            <div style={{ width: `${channelPct.email}%`, background: '#18181B' }} />
+            <div style={{ width: `${channelPct.whatsapp}%`, background: '#71717A' }} />
+            <div style={{ width: `${channelPct.sms}%`, background: '#D4D4D8' }} />
+          </div>
+          <div className="grid grid-cols-3 gap-5 mt-6">
+            <ChannelItem label="Email" value={data.channels.email} pct={channelPct.email} color="#18181B" />
+            <ChannelItem label="WhatsApp" value={data.channels.whatsapp} pct={channelPct.whatsapp} color="#71717A" />
+            <ChannelItem label="SMS" value={data.channels.sms} pct={channelPct.sms} color="#D4D4D8" />
+          </div>
+        </section>
+
+        {/* ── Rankings ── */}
+        <section className="flex gap-5 flex-wrap lg:flex-nowrap">
+          <RankingCard
+            title="Campanhas recentes"
+            seeAllHref="/campaigns"
+            items={data.recentCampaigns}
+            itemHref={(c: RecentCampaign) => `/campaigns/${c.id}`}
+            renderDetails={(c: RecentCampaign) =>
+              `${c.sends.toLocaleString('pt-BR')} envios · Abertura ${formatPct(c.openRate)} · Clique ${formatPct(c.clickRate)}`
+            }
+            emptyLabel="Ainda sem campanhas enviadas."
+            emptyHref="/campaigns/new"
+            emptyAction="Criar campanha"
+          />
+          <RankingCard
+            title="Top automações"
+            seeAllHref="/automations"
+            items={data.topAutomations}
+            itemHref={(a: TopAutomation) => `/automations/${a.id}`}
+            renderDetails={(a: TopAutomation) =>
+              `${a.sends.toLocaleString('pt-BR')} envios · Conversão ${formatPct(a.conversionRate)}`
+            }
+            emptyLabel="Ainda sem automações ativas."
+            emptyHref="/automations"
+            emptyAction="Criar automação"
+          />
+        </section>
+      </div>
+
+      {/* Floating toast for keyboard shortcut + export feedback */}
+      {toast && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-[10px] text-[13px] font-medium text-white shadow-lg"
+          style={{ background: '#18181B' }}
+          role="status"
+          aria-live="polite"
+        >
+          {toast}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────
+// Sub-components
+// ──────────────────────────────────────────────────────────────
+
+function MiniKPI({ label, value, sub, spark }: { label: string; value: number; sub: string; spark?: number[] }) {
+  return (
+    <div className="flex-1 rounded-[12px] bg-white px-5 py-[18px] transition-colors hover:bg-[#FAFAFA] relative overflow-hidden" style={{ border: '1px solid #E4E4E7' }}>
+      <div className="text-[12px] font-semibold text-[#71717A] mb-2">{label}</div>
+      <div className="text-[19px] font-bold text-[#18181B]" style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+        {formatBRL(value)}
+      </div>
+      <div className="text-[12px] text-[#A1A1AA] mt-[6px]">{sub}</div>
+      {spark && spark.length > 1 && spark.some((v) => v > 0) && (
+        <div className="mt-2 -mx-1 -mb-1 h-[22px] opacity-60">
+          <Sparkline values={spark} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Lightweight inline SVG sparkline — no deps, no tooltip, purely visual.
+function Sparkline({ values }: { values: number[] }) {
+  const w = 100
+  const h = 22
+  const max = Math.max(...values, 1)
+  const min = Math.min(...values, 0)
+  const span = Math.max(max - min, 1)
+  const step = values.length > 1 ? w / (values.length - 1) : 0
+  const points = values
+    .map((v, i) => `${(i * step).toFixed(2)},${(h - ((v - min) / span) * h).toFixed(2)}`)
+    .join(' ')
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-full block">
+      <polyline points={points} fill="none" stroke="#A1A1AA" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// Rich tooltip used by the stacked bar chart — shows a breakdown by
+// category with color dots, tabular-nums values, and a separator above
+// the total so it reads like the Klaviyo / Linear tooltip style.
+function RichTooltip({ active, payload, label, isRevenue }: any) {
+  if (!active || !payload || !payload.length) return null
+  const rows: Array<{ name: string; value: number; color: string }> = []
+  const keyMap: Record<string, { name: string; color: string }> = {
+    campanhas: { name: 'Campanhas', color: '#18181B' },
+    automacoes: { name: 'Automações', color: '#71717A' },
+    fora: { name: 'Fora da Worder', color: '#D4D4D8' },
+  }
+  for (const p of payload) {
+    const k = p?.dataKey as string
+    const meta = keyMap[k]
+    if (!meta) continue
+    rows.push({ name: meta.name, value: Number(p?.value) || 0, color: meta.color })
+  }
+  const total = rows.reduce((s, r) => s + r.value, 0)
+  const fmt = (v: number) => (isRevenue ? formatBRL(v) : v.toLocaleString('pt-BR'))
+
+  return (
+    <div
+      className="min-w-[200px]"
+      style={{
+        background: 'white',
+        border: '1px solid #E4E4E7',
+        borderRadius: 10,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+        padding: '10px 12px',
+      }}
+    >
+      <div className="text-[11.5px] font-semibold text-[#71717A] mb-2">{label}</div>
+      <div className="space-y-1.5">
+        {rows.map((r) => (
+          <div key={r.name} className="flex items-center justify-between gap-6 text-[12.5px]">
+            <span className="flex items-center gap-2 text-[#52525B]">
+              <span className="inline-block w-2 h-2 rounded-[2px]" style={{ background: r.color }} />
+              {r.name}
+            </span>
+            <span className="font-semibold text-[#18181B]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {fmt(r.value)}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 pt-2 flex items-center justify-between text-[12.5px]" style={{ borderTop: '1px solid #F4F4F5' }}>
+        <span className="text-[#71717A] font-semibold">Total</span>
+        <span className="font-bold text-[#18181B]" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(total)}</span>
+      </div>
+    </div>
+  )
+}
+
+function LegendDot({ color, label, border }: { color: string; label: string; border?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[12px] text-[#71717A]">
+      <span
+        className="inline-block w-[10px] h-[10px] rounded-[2px]"
+        style={{ background: color, ...(border ? { border: `1px solid ${border}` } : {}) }}
+      />
+      {label}
     </span>
   )
 }
 
-function SkeletonBlock({ className }: { className: string }) {
-  return <div className={`bg-gray-100 rounded animate-pulse ${className}`} />
+function ChannelItem({ label, value, pct, color }: { label: string; value: number; pct: number; color: string }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-[13px] font-semibold text-[#71717A]">
+        <span className="inline-block w-2 h-2 rounded-full" style={{ background: color }} />
+        {label}
+      </div>
+      <div className="text-[22px] font-bold text-[#18181B] mt-2" style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+        {formatBRL(value)}
+      </div>
+      <div className="text-[12px] text-[#A1A1AA] mt-1">{formatPct(pct)}</div>
+    </div>
+  )
 }
 
-export default function DashboardPage() {
-  const { user } = useAuthStore()
-  const [period, setPeriod] = useState<Period>('30d')
-  const [kpis, setKpis] = useState<KPIs>({
-    revenue: 0, orders: 0, activeContacts: 0, emailsSent: 0,
-    prevRevenue: 0, prevOrders: 0, prevContacts: 0, prevEmails: 0,
-  })
-  const [salesData, setSalesData] = useState<SalesChartPoint[]>([])
-  const [growthData, setGrowthData] = useState<GrowthChartPoint[]>([])
-  const [revenueTab, setRevenueTab] = useState<RevenueTab>('total')
-  const [revenueByChannel, setRevenueByChannel] = useState({ email: 0, whatsapp: 0, automacoes: 0, total: 0 })
-  const [automations, setAutomations] = useState<Automation[]>([])
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [emailSubs, setEmailSubs] = useState(0)
-  const [whatsappSubs, setWhatsappSubs] = useState(0)
-  const [loading, setLoading] = useState(true)
-
-  const firstName = user?.name?.split(' ')[0] || 'Usuário'
-
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true)
-      const supabase = createBrowserClient()
-      const since = getPeriodDate(period)
-      const prevSince = getPrevPeriodDate(period)
-
-      // --- KPIs ---
-      let revenue = 0, prevRevenue = 0, orders = 0, prevOrders = 0
-      let activeContacts = 0, prevContacts = 0, emailsSent = 0, prevEmails = 0
-
-      try {
-        const { data } = await supabase.from('orders').select('total_price').gte('created_at', since)
-        revenue = data?.reduce((s: number, o: any) => s + (Number(o.total_price) || 0), 0) ?? 0
-        orders = data?.length ?? 0
-      } catch {}
-      try {
-        const { data } = await supabase.from('orders').select('total_price').gte('created_at', prevSince).lt('created_at', since)
-        prevRevenue = data?.reduce((s: number, o: any) => s + (Number(o.total_price) || 0), 0) ?? 0
-        prevOrders = data?.length ?? 0
-      } catch {}
-
-      try {
-        const { count } = await supabase.from('contacts').select('*', { count: 'exact', head: true }).neq('status', 'unsubscribed')
-        activeContacts = count ?? 0
-      } catch {}
-      try {
-        const { count } = await supabase.from('contacts').select('*', { count: 'exact', head: true }).neq('status', 'unsubscribed').lt('created_at', since)
-        prevContacts = count ?? 0
-      } catch {}
-
-      try {
-        const { count } = await supabase.from('email_sends').select('*', { count: 'exact', head: true }).gte('created_at', since)
-        emailsSent = count ?? 0
-      } catch {}
-      try {
-        const { count } = await supabase.from('email_sends').select('*', { count: 'exact', head: true }).gte('created_at', prevSince).lt('created_at', since)
-        prevEmails = count ?? 0
-      } catch {}
-
-      setKpis({ revenue, orders, activeContacts, emailsSent, prevRevenue, prevOrders, prevContacts, prevEmails })
-
-      // --- Revenue by channel (simplified) ---
-      setRevenueByChannel({ email: Math.round(revenue * 0.45), whatsapp: Math.round(revenue * 0.15), automacoes: Math.round(revenue * 0.4), total: revenue })
-
-      // --- Sales chart (30 days) ---
-      try {
-        const thirtyAgo = getPeriodDate('30d')
-        const { data } = await supabase.from('email_sends').select('created_at, campaign_id').gte('created_at', thirtyAgo).order('created_at', { ascending: true })
-
-        const grouped: Record<string, { campanhas: number; automacoes: number }> = {}
-        const now = new Date()
-        for (let i = 29; i >= 0; i--) {
-          const d = new Date(now); d.setDate(d.getDate() - i)
-          grouped[d.toISOString().split('T')[0]] = { campanhas: 0, automacoes: 0 }
-        }
-        data?.forEach((row: any) => {
-          const key = new Date(row.created_at).toISOString().split('T')[0]
-          if (grouped[key]) {
-            if (row.campaign_id) grouped[key].campanhas++
-            else grouped[key].automacoes++
-          }
-        })
-        setSalesData(Object.entries(grouped).map(([date, vals]) => ({
-          date, label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-          ...vals,
-        })))
-      } catch {
-        const points: SalesChartPoint[] = []
-        const now = new Date()
-        for (let i = 29; i >= 0; i--) {
-          const d = new Date(now); d.setDate(d.getDate() - i)
-          const key = d.toISOString().split('T')[0]
-          points.push({ date: key, label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), campanhas: 0, automacoes: 0 })
-        }
-        setSalesData(points)
-      }
-
-      // --- Audience growth chart ---
-      try {
-        const thirtyAgo = getPeriodDate('30d')
-        const { data } = await supabase.from('contacts').select('created_at').gte('created_at', thirtyAgo).neq('status', 'unsubscribed').order('created_at', { ascending: true })
-
-        const grouped: Record<string, number> = {}
-        const now = new Date()
-        for (let i = 29; i >= 0; i--) {
-          const d = new Date(now); d.setDate(d.getDate() - i)
-          grouped[d.toISOString().split('T')[0]] = 0
-        }
-        data?.forEach((row: any) => {
-          const key = new Date(row.created_at).toISOString().split('T')[0]
-          if (grouped[key] !== undefined) grouped[key]++
-        })
-        let cumulative = 0
-        setGrowthData(Object.entries(grouped).map(([date, count]) => {
-          cumulative += count
-          return { date, label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), subscribers: cumulative }
-        }))
-      } catch {
-        const points: GrowthChartPoint[] = []
-        const now = new Date()
-        for (let i = 29; i >= 0; i--) {
-          const d = new Date(now); d.setDate(d.getDate() - i)
-          points.push({ date: d.toISOString().split('T')[0], label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), subscribers: 0 })
-        }
-        setGrowthData(points)
-      }
-
-      // --- Subscriber counts ---
-      try {
-        const { count } = await supabase.from('contacts').select('*', { count: 'exact', head: true }).neq('status', 'unsubscribed').not('email', 'is', null)
-        setEmailSubs(count ?? 0)
-      } catch {}
-      try {
-        const { count } = await supabase.from('contacts').select('*', { count: 'exact', head: true }).neq('status', 'unsubscribed').not('whatsapp', 'is', null)
-        setWhatsappSubs(count ?? 0)
-      } catch {}
-
-      // --- Top automations ---
-      try {
-        const { data } = await supabase.from('automations').select('id, name, status, created_at').eq('status', 'active').order('created_at', { ascending: false }).limit(5)
-        setAutomations(data ?? [])
-      } catch { setAutomations([]) }
-
-      // --- Recent campaigns ---
-      try {
-        const { data } = await supabase.from('email_campaigns').select('id, name, status, created_at').order('created_at', { ascending: false }).limit(5)
-        setCampaigns(data ?? [])
-      } catch { setCampaigns([]) }
-
-      setLoading(false)
-    }
-    fetchData()
-  }, [period])
-
-  const kpiCards = [
-    { label: 'Receita', value: formatCurrency(kpis.revenue), change: calcChange(kpis.revenue, kpis.prevRevenue), icon: DollarSign, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
-    { label: 'Pedidos', value: formatNumber(kpis.orders), change: calcChange(kpis.orders, kpis.prevOrders), icon: ShoppingCart, iconBg: 'bg-blue-50', iconColor: 'text-blue-600' },
-    { label: 'Contatos Ativos', value: formatNumber(kpis.activeContacts), change: calcChange(kpis.activeContacts, kpis.prevContacts), icon: Users, iconBg: 'bg-violet-50', iconColor: 'text-violet-600' },
-    { label: 'Emails Enviados', value: formatNumber(kpis.emailsSent), change: calcChange(kpis.emailsSent, kpis.prevEmails), icon: Mail, iconBg: 'bg-orange-50', iconColor: 'text-orange-600' },
-  ]
-
-  const periodButtons: { key: Period; label: string }[] = [
-    { key: '7d', label: '7d' },
-    { key: '30d', label: '30d' },
-    { key: '90d', label: '90d' },
-  ]
-
-  const revenueTabs: { key: RevenueTab; label: string }[] = [
-    { key: 'email', label: 'Email' },
-    { key: 'whatsapp', label: 'WhatsApp' },
-    { key: 'automacoes', label: 'Automações' },
-    { key: 'total', label: 'Total' },
-  ]
-
-  function statusBadge(status: string) {
-    const map: Record<string, { bg: string; text: string; label: string }> = {
-      draft: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Rascunho' },
-      sending: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Enviando' },
-      sent: { bg: 'bg-green-100', text: 'text-green-700', label: 'Enviada' },
-      active: { bg: 'bg-green-100', text: 'text-green-700', label: 'Ativa' },
-      paused: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Pausada' },
-      scheduled: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Agendada' },
-    }
-    const s = map[status] ?? { bg: 'bg-gray-100', text: 'text-gray-700', label: status }
-    return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.text}`}>{s.label}</span>
-  }
-
-  const totalSalesChartSends = salesData.reduce((s, p) => s + p.campanhas + p.automacoes, 0)
-
+function RangeSelect({ value, onChange }: { value: RangeKey; onChange: (v: RangeKey) => void }) {
   return (
-    <div className="min-h-screen bg-gray-50 p-6 lg:p-8 space-y-6">
-      {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {getGreeting()}, {firstName}
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">Aqui está o resumo da sua operação.</p>
-        </div>
-        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
-          {periodButtons.map((b) => (
-            <button
-              key={b.key}
-              onClick={() => setPeriod(b.key)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                period === b.key ? 'bg-gray-900 text-white' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {b.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── KPI Cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiCards.map((card) => (
-          <div key={card.label} className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs text-gray-500 uppercase tracking-wide font-medium">{card.label}</span>
-              <div className={`${card.iconBg} ${card.iconColor} p-2 rounded-lg`}>
-                <card.icon className="w-4 h-4" />
-              </div>
-            </div>
-            {loading ? (
-              <SkeletonBlock className="h-8 w-28" />
-            ) : (
-              <>
-                <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-                <div className="mt-1"><ChangeIndicator value={card.change} /></div>
-              </>
-            )}
-          </div>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as RangeKey)}
+        className="appearance-none bg-white text-[13.5px] font-medium text-[#18181B] px-4 py-2 pr-8 rounded-[8px] cursor-pointer hover:border-[#D4D4D8] transition-colors focus:outline-none focus:border-[#A1A1AA]"
+        style={{ border: '1px solid #E4E4E7' }}
+      >
+        {RANGE_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
         ))}
+      </select>
+      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A1A1AA] pointer-events-none" />
+    </div>
+  )
+}
+
+function GranularitySelect({ value, onChange }: { value: Granularity; onChange: (v: Granularity) => void }) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as Granularity)}
+        className="appearance-none bg-white text-[13.5px] font-medium text-[#18181B] px-4 py-2 pr-8 rounded-[8px] cursor-pointer hover:border-[#D4D4D8] transition-colors focus:outline-none focus:border-[#A1A1AA]"
+        style={{ border: '1px solid #E4E4E7' }}
+      >
+        {GRANULARITY_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A1A1AA] pointer-events-none" />
+    </div>
+  )
+}
+
+function RankingCard<T extends { id: string; name: string; status: string; revenue: number }>({
+  title,
+  seeAllHref,
+  items,
+  itemHref,
+  renderDetails,
+  emptyLabel,
+  emptyHref,
+  emptyAction,
+}: {
+  title: string
+  seeAllHref: string
+  items: T[]
+  itemHref?: (item: T) => string
+  renderDetails: (item: T) => string
+  emptyLabel: string
+  emptyHref: string
+  emptyAction: string
+}) {
+  return (
+    <div className="flex-1 min-w-0 rounded-[14px] bg-white px-7 py-6" style={{ border: '1px solid #E4E4E7' }}>
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-[16px] font-bold text-[#18181B]">{title}</h3>
+        <Link href={seeAllHref} className="text-[13px] font-semibold text-[#52525B] hover:text-[#18181B] transition-colors">
+          Ver todas
+        </Link>
       </div>
 
-      {/* ── Desempenho de Vendas ── */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Desempenho de Vendas</h2>
-            <p className="text-sm text-gray-500 mt-0.5">Últimos 30 dias</p>
-          </div>
-          <div className="flex items-center gap-6 text-sm">
-            <div>
-              <span className="text-gray-500">Receita Worder</span>
-              <p className="text-base font-semibold text-gray-900">{loading ? '...' : formatCurrency(kpis.revenue)}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Campanhas</span>
-              <p className="text-base font-semibold text-gray-900">{loading ? '...' : formatNumber(salesData.reduce((s, p) => s + p.campanhas, 0))}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Automações</span>
-              <p className="text-base font-semibold text-gray-900">{loading ? '...' : formatNumber(salesData.reduce((s, p) => s + p.automacoes, 0))}</p>
-            </div>
-          </div>
-        </div>
-        <div className="h-[300px]">
-          {loading ? (
-            <SkeletonBlock className="h-full w-full" />
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6B7280' }} tickLine={false} axisLine={{ stroke: '#E5E7EB' }} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', borderRadius: '8px', fontSize: '13px', color: '#111827' }}
-                  labelStyle={{ color: '#6B7280', marginBottom: 4 }}
-                  formatter={(value: number, name: string) => [formatNumber(value), name === 'campanhas' ? 'Campanhas' : 'Automações']}
-                />
-                <Bar dataKey="campanhas" fill="#6366f1" radius={[3, 3, 0, 0]} barSize={8} />
-                <Bar dataKey="automacoes" fill="#10b981" radius={[3, 3, 0, 0]} barSize={8} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-        <div className="flex items-center gap-5 mt-4 text-xs text-gray-500">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-indigo-500" /> Campanhas</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> Automações</span>
-        </div>
-      </div>
-
-      {/* ── Receita Atribuída + Crescimento de Público ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Receita Atribuída */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Receita Atribuída</h2>
-          <div className="flex gap-1 mb-5 bg-gray-100 rounded-lg p-1">
-            {revenueTabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setRevenueTab(tab.key)}
-                className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  revenueTab === tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          {loading ? (
-            <SkeletonBlock className="h-20 w-full" />
-          ) : (
-            <div className="text-center py-6">
-              <p className="text-3xl font-bold text-gray-900">{formatCurrency(revenueByChannel[revenueTab])}</p>
-              <p className="text-sm text-gray-500 mt-1">no período selecionado</p>
-            </div>
-          )}
-        </div>
-
-        {/* Crescimento de Público */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Crescimento de Público</h2>
-          </div>
-          <div className="flex items-center gap-6 mb-4 text-sm">
-            <div>
-              <span className="text-gray-500">Assinantes Email</span>
-              <p className="text-base font-semibold text-gray-900">{loading ? '...' : formatNumber(emailSubs)}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">WhatsApp</span>
-              <p className="text-base font-semibold text-gray-900">{loading ? '...' : formatNumber(whatsappSubs)}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Total</span>
-              <p className="text-base font-semibold text-gray-900">{loading ? '...' : formatNumber(emailSubs + whatsappSubs)}</p>
-            </div>
-          </div>
-          <div className="h-[180px]">
-            {loading ? (
-              <SkeletonBlock className="h-full w-full" />
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={growthData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6B7280' }} tickLine={false} axisLine={{ stroke: '#E5E7EB' }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickLine={false} axisLine={false} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', borderRadius: '8px', fontSize: '13px', color: '#111827' }}
-                    formatter={(value: number) => [formatNumber(value), 'Novos assinantes']}
-                  />
-                  <Line type="monotone" dataKey="subscribers" stroke="#6366f1" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Fluxos + Campanhas recentes ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Fluxos com melhor desempenho */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-semibold text-gray-900">Fluxos com melhor desempenho</h2>
-            <Link href="/automations" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">Ver todos</Link>
-          </div>
-          {loading ? (
-            <div className="space-y-3">{[...Array(3)].map((_, i) => <SkeletonBlock key={i} className="h-12 w-full" />)}</div>
-          ) : automations.length === 0 ? (
-            <div className="text-center py-8">
-              <Zap className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 mb-2">Nenhuma automação ativa ainda.</p>
-              <Link href="/automations" className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700">
-                Criar automação <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {automations.map((a, idx) => (
-                <Link key={a.id} href={`/automations/${a.id}`} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 text-xs font-semibold flex items-center justify-center">{idx + 1}</span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{a.name}</p>
-                      <p className="text-xs text-gray-500">{new Date(a.created_at).toLocaleDateString('pt-BR')}</p>
-                    </div>
-                  </div>
-                  {statusBadge(a.status)}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Campanhas recentes */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-semibold text-gray-900">Campanhas recentes</h2>
-            <Link href="/campaigns" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">Ver todas</Link>
-          </div>
-          {loading ? (
-            <div className="space-y-3">{[...Array(3)].map((_, i) => <SkeletonBlock key={i} className="h-12 w-full" />)}</div>
-          ) : campaigns.length === 0 ? (
-            <div className="text-center py-8">
-              <Mail className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 mb-2">Nenhuma campanha criada ainda.</p>
-              <Link href="/campaigns/create" className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700">
-                Criar campanha <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {campaigns.map((c) => (
-                <Link key={c.id} href={`/campaigns/${c.id}`} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Mail className="w-4 h-4 text-orange-600" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
-                      <p className="text-xs text-gray-500">{new Date(c.created_at).toLocaleDateString('pt-BR')}</p>
-                    </div>
-                  </div>
-                  {statusBadge(c.status)}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Ações Rápidas ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { label: 'Criar Campanha', description: 'Envie um email para sua base', href: '/campaigns/create', icon: Plus, iconBg: 'bg-orange-50', iconColor: 'text-orange-600' },
-          { label: 'Criar Formulário', description: 'Capture leads no seu site', href: '/forms', icon: FileText, iconBg: 'bg-violet-50', iconColor: 'text-violet-600' },
-          { label: 'Ver Relatórios', description: 'Analise seus resultados', href: '/analytics', icon: BarChart3, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
-        ].map((action) => (
-          <Link key={action.label} href={action.href} className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-sm transition-all group">
-            <div className="flex items-start gap-4">
-              <div className={`${action.iconBg} ${action.iconColor} p-2.5 rounded-lg`}>
-                <action.icon className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">{action.label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{action.description}</p>
-              </div>
-            </div>
+      {items.length === 0 ? (
+        <div className="py-10 text-center">
+          <p className="text-[13px] text-[#A1A1AA]">{emptyLabel}</p>
+          <Link href={emptyHref} className="inline-block mt-2 text-[13px] font-semibold text-[#52525B] hover:text-[#18181B] underline underline-offset-2">
+            {emptyAction}
           </Link>
-        ))}
-      </div>
+        </div>
+      ) : (
+        items.map((item) => {
+          const row = (
+            <>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-semibold text-[#18181B] truncate">{item.name}</div>
+                  <div className="text-[12.5px] text-[#A1A1AA] mt-[5px]">{renderDetails(item)}</div>
+                </div>
+                <span
+                  className="text-[11.5px] font-semibold text-[#52525B] px-[10px] py-[2px] rounded-full shrink-0"
+                  style={{ background: '#F4F4F5' }}
+                >
+                  {item.status}
+                </span>
+              </div>
+              <div className="text-[16px] font-bold text-[#18181B] mt-[5px]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {formatBRL(item.revenue)}
+              </div>
+            </>
+          )
+          const commonClass = 'block py-4 -mx-2 px-2 rounded-[6px] transition-colors'
+          if (itemHref) {
+            return (
+              <Link
+                key={item.id}
+                href={itemHref(item)}
+                className={`${commonClass} hover:bg-[#FAFAFA]`}
+                style={{ borderTop: '1px solid #F4F4F5' }}
+              >
+                {row}
+              </Link>
+            )
+          }
+          return (
+            <div key={item.id} className={commonClass} style={{ borderTop: '1px solid #F4F4F5' }}>
+              {row}
+            </div>
+          )
+        })
+      )}
     </div>
   )
 }

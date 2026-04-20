@@ -1,5 +1,7 @@
 'use client'
 
+import { ColorPicker } from '../../ui/ColorPicker'
+
 // ═══════════════════════════════════════════
 // Reusable Field Components for Email Builder
 // ═══════════════════════════════════════════
@@ -67,17 +69,7 @@ export function PaddingField({ value, onChange }: {
 export function ColorField({ label, value, onChange }: {
   label?: string; value: string; onChange: (v: string) => void
 }) {
-  return (
-    <div>
-      {label && <label className="block text-[11px] font-medium text-gray-500 mb-1">{label}</label>}
-      <div className="flex items-center gap-2">
-        <input type="color" value={value || '#000000'} onChange={e => onChange(e.target.value)}
-          className="w-7 h-7 rounded border border-gray-200 cursor-pointer p-0.5 flex-shrink-0" />
-        <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} placeholder="#000000"
-          className="flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
-      </div>
-    </div>
-  )
+  return <ColorPicker label={label} value={value || '#000000'} onChange={onChange} />
 }
 
 // ── Number Field ──

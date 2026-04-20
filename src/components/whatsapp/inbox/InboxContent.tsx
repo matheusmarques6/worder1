@@ -394,7 +394,14 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
             onBack={handleBack}
             onToggleContactPanel={handleToggleContactPanel}
             showContactPanel={showContactPanel}
-            onRetryMessage={handleRetryMessage} // NOVO: Passar função de retry
+            onRetryMessage={handleRetryMessage}
+            organizationId={organizationId}
+            currentAgentId={user?.id}
+            currentAgentName={user?.email || user?.id}
+            onResolved={() => {
+              selectConversation(null)
+              refreshConversations()
+            }}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-400">
@@ -441,6 +448,14 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
             onDeleteInvoice={deleteInvoice}
             onAddComment={addComment}
             onRefreshContact={handleRefreshContact}
+            organizationId={organizationId}
+            lastInboundMessage={messages.filter((m: any) => m.direction === 'inbound' && m.content).slice(-1)[0]?.content}
+            onInsertCopilotSuggestion={(text: string) => {
+              // Copy to clipboard as fallback; ChatPanel will pick it up via paste
+              if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                navigator.clipboard.writeText(text).catch(() => {})
+              }
+            }}
           />
         </div>
       )}

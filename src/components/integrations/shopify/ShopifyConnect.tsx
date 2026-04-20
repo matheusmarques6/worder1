@@ -41,7 +41,31 @@ export default function ShopifyConnect() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
+  // Dual-mode connection: the merchant can either OAuth (official) or
+  // paste credentials from a Custom App (manual). Defaults to manual
+  // while the public app is still pending Shopify Partner approval.
+  const [mode, setMode] = useState<'official' | 'manual'>('manual');
+  const [manualDomain, setManualDomain] = useState('');
+  const [manualClientId, setManualClientId] = useState('');
+  const [manualClientSecret, setManualClientSecret] = useState('');
+  const [manualConnecting, setManualConnecting] = useState(false);
+  const [manualResult, setManualResult] = useState<any>(null);
+  const [pixelCode, setPixelCode] = useState<string | null>(null);
+  const [copiedPixel, setCopiedPixel] = useState(false);
+
+  // When the page was opened via "Adicionar loja" from the integrations
+  // list, the URL carries ?add=1. In that case we skip the "connected"
+  // view even if there's already a store — the user explicitly wants
+  // to connect a new one (e.g. a second Shopify store on the same org).
+  const forceAdd = searchParams.get('add') === '1' || searchParams.get('add') === 'true';
+
   useEffect(() => {
+    if (forceAdd) {
+      // Skip status fetch — go straight to the connect form.
+      setLoading(false);
+      setConnected(false);
+      return;
+    }
     fetchStatus();
 
     const success = searchParams.get('success');
@@ -54,6 +78,7 @@ export default function ShopifyConnect() {
     if (urlError) {
       setError(getErrorMessage(urlError));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   async function fetchStatus() {
@@ -126,6 +151,52 @@ export default function ShopifyConnect() {
     } catch {
       setError('Erro ao conectar. Tente novamente.');
       setConnecting(false);
+    }
+  }
+
+  async function handleManualConnect() {
+    const domain = manualDomain.trim();
+    if (!domain || !manualClientId.trim() || !manualClientSecret.trim()) {
+      setError('Preencha domínio, Client ID e Client Secret.');
+      return;
+    }
+    setManualConnecting(true);
+    setError('');
+    setManualResult(null);
+    setPixelCode(null);
+
+    try {
+      const res = await fetch('/api/integrations/shopify/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain,
+          clientId: manualClientId.trim(),
+          clientSecret: manualClientSecret.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || 'Erro ao conectar loja.');
+        return;
+      }
+      setManualResult(data);
+      // Fetch the ready-to-paste Custom Pixel JS for this shop.
+      try {
+        const pRes = await fetch(
+          `/api/integrations/shopify/pixel-code?shop=${encodeURIComponent(data.store?.domain || domain)}`
+        );
+        const pJson = await pRes.json();
+        if (pRes.ok && pJson.code) setPixelCode(pJson.code);
+      } catch { /* non-blocking */ }
+      // IMPORTANT: do NOT call fetchStatus() here. Doing so would flip
+      // the component into its "connected" view and hide the Custom
+      // Pixel code block (the very next step the merchant needs). The
+      // user exits via the "Voltar para Integrações" button at the top.
+    } catch {
+      setError('Erro ao conectar. Tente novamente.');
+    } finally {
+      setManualConnecting(false);
     }
   }
 
@@ -306,36 +377,177 @@ export default function ShopifyConnect() {
         <p className="text-sm text-gray-500">Sincronize pedidos, clientes e ative tracking completo</p>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Domínio da loja</label>
-        <div className="flex">
-          <input
-            type="text"
-            value={shopDomain}
-            onChange={(e) => setShopDomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-            placeholder="minhaloja"
-            className="flex-1 px-4 py-2.5 border border-gray-300 rounded-l-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#95BF47] focus:border-[#95BF47] outline-none"
-            onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
-            autoFocus
-          />
-          <span className="px-4 py-2.5 bg-gray-50 border border-l-0 border-gray-300 rounded-r-lg text-gray-500 text-sm flex items-center">
-            .myshopify.com
-          </span>
-        </div>
-        <p className="text-xs text-gray-400 mt-1">Shopify Admin &rarr; Configurações &rarr; Domínios</p>
+      {/* Connection mode tabs */}
+      <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
+        <button
+          onClick={() => setMode('official')}
+          className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'official' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Integração Oficial
+        </button>
+        <button
+          onClick={() => setMode('manual')}
+          className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'manual' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Integração Manual
+        </button>
       </div>
 
-      <button
-        onClick={handleConnect}
-        disabled={connecting || !shopDomain.trim()}
-        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#95BF47] text-white rounded-lg hover:bg-[#7da03a] disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
-      >
-        {connecting ? (
-          <><Loader2 className="w-5 h-5 animate-spin" /> Redirecionando para Shopify...</>
-        ) : (
-          <><ShoppingBag className="w-5 h-5" /> Conectar Loja Shopify</>
-        )}
-      </button>
+      {mode === 'official' ? (
+        <>
+          <p className="text-xs text-gray-500 -mt-2">
+            Conexão automática via OAuth. Requer que o app Worder esteja aprovado na Shopify.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Domínio da loja</label>
+            <div className="flex">
+              <input
+                type="text"
+                value={shopDomain}
+                onChange={(e) => setShopDomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                placeholder="minhaloja"
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-l-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#95BF47] focus:border-[#95BF47] outline-none"
+                onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+              />
+              <span className="px-4 py-2.5 bg-gray-50 border border-l-0 border-gray-300 rounded-r-lg text-gray-500 text-sm flex items-center">
+                .myshopify.com
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Shopify Admin &rarr; Configurações &rarr; Domínios</p>
+          </div>
+
+          <button
+            onClick={handleConnect}
+            disabled={connecting || !shopDomain.trim()}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#95BF47] text-white rounded-lg hover:bg-[#7da03a] disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+          >
+            {connecting ? (
+              <><Loader2 className="w-5 h-5 animate-spin" /> Redirecionando para Shopify...</>
+            ) : (
+              <><ShoppingBag className="w-5 h-5" /> Conectar Loja Shopify</>
+            )}
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="text-xs text-gray-500 -mt-2">
+            Crie um app no <a href="https://dev.shopify.com" target="_blank" rel="noreferrer" className="text-[#95BF47] hover:underline">Shopify Dev Dashboard</a>,
+            configure os escopos, instale na loja e cole aqui o Client ID + Client Secret.
+            A Worder gera o access token automaticamente via <code className="text-[11px] px-1 py-0.5 bg-gray-100 rounded">client_credentials</code>.
+          </p>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Domínio da loja</label>
+            <input
+              type="text"
+              value={manualDomain}
+              onChange={(e) => setManualDomain(e.target.value.trim().toLowerCase())}
+              placeholder="minhaloja.myshopify.com"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#95BF47] focus:border-[#95BF47] outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Client ID</label>
+            <input
+              type="text"
+              value={manualClientId}
+              onChange={(e) => setManualClientId(e.target.value)}
+              placeholder="copiado do Dev Dashboard"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-[#95BF47] focus:border-[#95BF47] outline-none"
+              autoComplete="off"
+            />
+            <p className="text-xs text-gray-400 mt-1">Dev Dashboard → seu app → Configurações → ID do cliente</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Client Secret</label>
+            <input
+              type="password"
+              value={manualClientSecret}
+              onChange={(e) => setManualClientSecret(e.target.value)}
+              placeholder="copiada do Dev Dashboard"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-[#95BF47] focus:border-[#95BF47] outline-none"
+              autoComplete="off"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              A Worder gera o access token a partir do Client Secret e renova automaticamente a cada 24h.
+            </p>
+          </div>
+
+          <button
+            onClick={handleManualConnect}
+            disabled={manualConnecting || !manualDomain.trim() || !manualClientId.trim() || !manualClientSecret.trim()}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#95BF47] text-white rounded-lg hover:bg-[#7da03a] disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+          >
+            {manualConnecting ? (
+              <><Loader2 className="w-5 h-5 animate-spin" /> Conectando...</>
+            ) : (
+              <>Conectar Loja</>
+            )}
+          </button>
+
+          {manualResult && (
+            <div className="space-y-3 pt-3 border-t border-gray-100">
+              <StatusLine label="Loja conectada" ok detail={manualResult.store?.name || '—'} />
+              <StatusLine
+                label="Token de acesso"
+                ok={!!manualResult.token?.obtained}
+                detail={manualResult.token?.obtained ? 'Gerado (renovação automática a cada 24h)' : '—'}
+              />
+              <StatusLine
+                label="Webhooks configurados"
+                ok={manualResult.webhooks?.created + manualResult.webhooks?.existing > 0}
+                detail={`${manualResult.webhooks?.created + manualResult.webhooks?.existing} / ${manualResult.webhooks?.total}`}
+              />
+              <StatusLine label="Sync inicial" ok={!!manualResult.sync?.triggered} detail={manualResult.sync?.triggered ? 'Disparado' : '—'} />
+            </div>
+          )}
+
+          {pixelCode && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg mt-4">
+              <div className="flex items-start gap-2 mb-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium text-amber-800 text-sm">
+                    Instale o Custom Pixel da Worder
+                  </p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Captura visualizações de produto, carrinho e checkout (inclusive e-mail no checkout).
+                  </p>
+                </div>
+              </div>
+
+              <div className="relative">
+                <pre className="bg-white p-3 rounded border border-amber-200 text-[11px] font-mono overflow-x-auto text-gray-800 max-h-48">
+                  {pixelCode}
+                </pre>
+                <button
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(pixelCode);
+                      setCopiedPixel(true);
+                      setTimeout(() => setCopiedPixel(false), 1800);
+                    } catch { /* noop */ }
+                  }}
+                  className="absolute top-2 right-2 px-2 py-1 bg-amber-100 rounded hover:bg-amber-200 transition-colors text-xs font-medium text-amber-700"
+                >
+                  {copiedPixel ? 'Copiado!' : 'Copiar'}
+                </button>
+              </div>
+
+              <div className="mt-3 text-xs text-amber-700 space-y-1">
+                <p className="font-medium">Como instalar:</p>
+                <p>1. Admin Shopify → <strong>Configurações → Customer Events</strong></p>
+                <p>2. Clique em <strong>Adicionar pixel personalizado</strong></p>
+                <p>3. Nome: <strong>Worder</strong></p>
+                <p>4. Cole o código acima no editor</p>
+                <p>5. <strong>Salvar</strong> → <strong>Conectar</strong></p>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       <div className="text-xs text-gray-400 space-y-0.5 pt-1">
         <p className="font-medium text-gray-500 mb-1">O que será sincronizado:</p>

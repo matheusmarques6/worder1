@@ -57,6 +57,17 @@ export enum EventType {
   
   // Webhooks customizados
   WEBHOOK_RECEIVED = 'webhook.received',
+
+  // E-commerce — pagamentos e logística (outbound webhooks v1)
+  SHIPMENT_TRACKING_CREATED = 'shipment.tracking_created',
+  PAYMENT_PIX_ABANDONED = 'payment.pix.abandoned',
+  PAYMENT_BOLETO_ABANDONED = 'payment.boleto.abandoned',
+  BROWSE_ABANDONED = 'browse.abandoned',
+
+  // Outbound webhooks: aliases de catálogo público
+  // Mantemos CONTACT_CREATED/CART_ABANDONED p/ compat interna das automações
+  CUSTOMER_CREATED = 'customer.created',
+  CHECKOUT_ABANDONED = 'checkout.abandoned',
 }
 
 // Mapeamento de EventType para trigger_type do banco
@@ -90,6 +101,12 @@ const EVENT_TO_TRIGGER_MAP: Record<EventType, string> = {
   [EventType.SEGMENT_ENTERED]: 'trigger_segment',
   [EventType.SEGMENT_LEFT]: 'trigger_segment_left',
   [EventType.WEBHOOK_RECEIVED]: 'trigger_webhook',
+  [EventType.SHIPMENT_TRACKING_CREATED]: 'trigger_shipment_tracking',
+  [EventType.PAYMENT_PIX_ABANDONED]: 'trigger_payment_pix_abandoned',
+  [EventType.PAYMENT_BOLETO_ABANDONED]: 'trigger_payment_boleto_abandoned',
+  [EventType.BROWSE_ABANDONED]: 'trigger_browse_abandoned',
+  [EventType.CUSTOMER_CREATED]: 'trigger_customer_created',
+  [EventType.CHECKOUT_ABANDONED]: 'trigger_checkout_abandoned',
 };
 
 // ============================================
@@ -152,6 +169,32 @@ class EventBusClass {
 
       // 1. Registrar o evento no log
       await this.logEvent(eventType, payload);
+
+      // 1.5. Outbound webhooks dispatch (fallback silencioso — não pode
+      // quebrar o fluxo de automação). Só dispatcha eventos do catálogo v1
+      // e quando o handler origem setou _webhook_dispatch_meta no payload.
+      try {
+        const OUTBOUND_V1_CATALOG = new Set([
+          'order.created', 'order.paid', 'order.fulfilled', 'order.cancelled',
+          'checkout.abandoned', 'customer.created', 'shipment.tracking_created',
+          'payment.pix.abandoned', 'payment.boleto.abandoned', 'browse.abandoned',
+        ]);
+        if (OUTBOUND_V1_CATALOG.has(eventType) && payload.data?._webhook_dispatch_meta) {
+          const meta = payload.data._webhook_dispatch_meta;
+          const { dispatchToOutbound } = await import('./webhooks/outbound-dispatcher');
+          await dispatchToOutbound({
+            eventType: eventType as any,
+            organizationId: payload.organization_id,
+            storeId: meta.store_id,
+            sourceEventId: meta.source_event_id,
+            source: meta.source,
+            store: meta.store,
+            data: payload.data,
+          });
+        }
+      } catch (err) {
+        console.error('[EventBus] outbound dispatch failed:', err);
+      }
 
       // 2. Buscar automações ativas que correspondem ao trigger
       const triggerType = EVENT_TO_TRIGGER_MAP[eventType];

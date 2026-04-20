@@ -353,72 +353,91 @@ const actionExecutors: Record<string, NodeExecutor> = {
         // 3. Build sender info
         const senderName = config.senderName || (context as any).store?.name || 'Worder';
         const senderEmail = config.senderEmail || credentials?.defaultFrom || 'noreply@example.com';
-        const from = `${senderName} <${senderEmail}>`;
 
-        // 4. Send via Resend (default provider)
-        const provider = credentials?.type || 'resend';
-        const apiKey = credentials?.apiKey || process.env.RESEND_API_KEY;
+        // 4. Send via the full campaign pipeline so automation emails
+        //    get the same tracking as campaigns (open pixel, click
+        //    tracking, unsubscribe link, resend tags with flow_id).
+        //    This replaces the previous raw fetch to the Resend REST
+        //    endpoint which skipped all tracking.
 
-        if (!apiKey) {
-          return { status: 'error', output: null, error: 'API key de email não configurada (Resend/SendGrid)' };
+        if (!process.env.RESEND_API_KEY && !credentials?.apiKey) {
+          return { status: 'error', output: null, error: 'RESEND_API_KEY não configurada' };
         }
 
-        if (provider === 'emailSendgrid' || provider === 'sendgrid') {
-          const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              personalizations: [{ to: [{ email }] }],
-              from: { email: senderEmail, name: senderName },
-              subject,
-              content: [{ type: 'text/html', value: html }],
-            }),
-          });
-
-          if (!response.ok) {
-            const error = await response.text();
-            return { status: 'error', output: { error }, error: 'Falha no envio SendGrid' };
-          }
-
-          return { status: 'success', output: { sent: true, provider: 'sendgrid', to: email } };
-        } else {
-          const response = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              from,
-              to: email,
-              subject,
-              html,
-            }),
-          });
-
-          const result = await response.json();
-
-          if (!response.ok) {
-            return { status: 'error', output: result, error: result.message || 'Falha no envio Resend' };
-          }
-
-          // 5. Record the send in email_sends table (skip for tests)
-          if (organizationId && !isTest) {
-            await supabase.from('email_sends').insert({
-              organization_id: organizationId,
-              contact_id: context.contact?.id,
-              email_template_id: config.templateId || null,
-              subject,
-              status: 'sent',
-              resend_id: result?.id,
-            }).catch(() => {}); // non-blocking
-          }
-
-          return { status: 'success', output: { ...result, provider: 'resend', to: email } };
+        if (isTest) {
+          // In test mode, skip the DB insert (no email_sends row) and
+          // return success without actually sending. The test panel
+          // uses a separate /api/email/test endpoint for real sends.
+          return {
+            status: 'success',
+            output: { sent: false, test: true, to: email, subject, preview: html.slice(0, 200) },
+          };
         }
+
+        const { sendCampaignEmail } = await import('@/lib/email/send-campaign-email');
+
+        // Build merge data from the same context we already resolved
+        // (contact + event + store). Using empty mergeData works too
+        // because the HTML/subject were pre-rendered by the variable
+        // engine above — prepareEmailHtml still adds tracking + footer.
+        const mergeData: Record<string, string> = {
+          first_name: (context.contact as any)?.first_name || '',
+          last_name: (context.contact as any)?.last_name || '',
+          email: email || '',
+          phone: (context.contact as any)?.phone || '',
+        };
+        if ((context.contact as any)?.custom_fields && typeof (context.contact as any).custom_fields === 'object') {
+          for (const [k, v] of Object.entries((context.contact as any).custom_fields)) {
+            mergeData[`custom.${k}`] = String(v ?? '');
+            mergeData[`custom_${k}`] = String(v ?? '');
+          }
+        }
+
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app';
+
+        // Use flowId as campaignId surrogate so email_sends rows carry
+        // a stable key we can aggregate by when the Automations ranking
+        // queries attribution revenue.
+        const campaignIdSurrogate = (context as any).flowId || (context as any).flow_id || `flow-${Date.now()}`;
+
+        const result = await sendCampaignEmail({
+          campaignId: campaignIdSurrogate,
+          contactId: (context.contact as any)?.id || '',
+          contactEmail: email,
+          mergeData,
+          templateHtml: html,
+          subject,
+          fromEmail: senderEmail,
+          senderName,
+          replyTo: undefined,
+          baseUrl,
+          organizationId: organizationId || '',
+        });
+
+        if (!result.success) {
+          return { status: 'error', output: { error: result.error }, error: result.error || 'Falha no envio' };
+        }
+
+        // Tag the email_sends row with flow/automation ids (so we can
+        // tell apart campaign sends from automation sends downstream).
+        if (result.emailSendId) {
+          try {
+            const updates: Record<string, any> = {};
+            const flowId = (context as any).flowId || (context as any).flow_id;
+            const runId = (context as any).automation_run_id || (context as any).runId;
+            if (flowId) updates.flow_id = flowId;
+            if (runId) updates.automation_run_id = runId;
+            if (config.templateId) updates.email_template_id = config.templateId;
+            if (Object.keys(updates).length > 0) {
+              await supabase.from('email_sends').update(updates).eq('id', result.emailSendId);
+            }
+          } catch { /* non-blocking */ }
+        }
+
+        return {
+          status: 'success',
+          output: { sent: true, provider: 'resend', to: email, emailSendId: result.emailSendId },
+        };
       } catch (error: any) {
         return { status: 'error', output: null, error: error.message };
       }
@@ -928,6 +947,222 @@ const actionExecutors: Record<string, NodeExecutor> = {
     },
   },
 
+  // ========== NEW WHATSAPP NODES (Module B) ==========
+
+  // Aguardar resposta com timeout — marca conversa aguardando
+  action_whatsapp_wait_reply: {
+    async execute({ config, context, isTest }) {
+      if (isTest) {
+        return { status: 'success', output: { waiting: true, timeout_seconds: config.timeoutSeconds || 3600 } };
+      }
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabase-admin');
+        const conversationId = context.conversation_id || context.conversationId;
+        if (!conversationId) {
+          return { status: 'error', output: null, error: 'conversationId missing from context' };
+        }
+        const timeoutMs = (config.timeoutSeconds || 3600) * 1000;
+        await supabaseAdmin
+          .from('whatsapp_conversations')
+          .update({
+            metadata: {
+              wait_for_reply: {
+                expires_at: new Date(Date.now() + timeoutMs).toISOString(),
+                execution_id: context.executionId,
+              },
+            },
+          })
+          .eq('id', conversationId);
+        return { status: 'success', output: { waiting: true, timeout: timeoutMs } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // Transferir conversa para fila ou agente
+  action_whatsapp_transfer: {
+    async execute({ config, context, isTest }) {
+      if (isTest) {
+        return { status: 'success', output: { transferred: true, target: config.queueId || config.agentId } };
+      }
+      try {
+        const { transferConversation } = await import('@/lib/services/whatsapp/conversation-service');
+        const conversationId = context.conversation_id || context.conversationId;
+        const organizationId = context.organization_id || context.organizationId;
+        if (!conversationId || !organizationId) {
+          return { status: 'error', output: null, error: 'conversationId/organizationId missing' };
+        }
+        const result = await transferConversation({
+          conversationId,
+          organizationId,
+          toAgentId: config.agentId,
+          toQueueId: config.queueId,
+          reason: config.reason || 'Transferido por automacao',
+        });
+        if (result.error) {
+          return { status: 'error', output: null, error: result.error };
+        }
+        return { status: 'success', output: result.data };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // Ativar agente IA na conversa
+  action_whatsapp_ai: {
+    async execute({ config, context, isTest }) {
+      if (isTest) {
+        return { status: 'success', output: { ai_activated: true, agent_id: config.aiAgentId } };
+      }
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabase-admin');
+        const conversationId = context.conversation_id || context.conversationId;
+        if (!conversationId || !config.aiAgentId) {
+          return { status: 'error', output: null, error: 'conversationId or aiAgentId missing' };
+        }
+        await supabaseAdmin
+          .from('whatsapp_conversations')
+          .update({ bot_active: true, ai_agent_id: config.aiAgentId })
+          .eq('id', conversationId);
+        return { status: 'success', output: { ai_activated: true } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // Enviar catalogo Meta
+  action_whatsapp_catalog: {
+    async execute({ config, context, credentials, isTest }) {
+      if (isTest) {
+        return { status: 'success', output: { catalog_sent: true, product_count: config.productIds?.length || 0 } };
+      }
+      const phone = context.contact?.phone;
+      if (!phone) return { status: 'error', output: null, error: 'Contato sem telefone' };
+      try {
+        const response = await fetch(
+          `https://graph.facebook.com/v21.0/${credentials?.phoneNumberId}/messages`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${credentials?.accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              to: phone.replace(/\D/g, ''),
+              type: 'interactive',
+              interactive: {
+                type: 'product_list',
+                header: { type: 'text', text: config.headerText || 'Nossos produtos' },
+                body: { text: config.bodyText || 'Confira:' },
+                action: {
+                  catalog_id: config.catalogId || credentials?.catalogId,
+                  sections: config.sections || [
+                    { title: 'Destaques', product_items: (config.productIds || []).map((id: string) => ({ product_retailer_id: id })) },
+                  ],
+                },
+              },
+            }),
+          }
+        );
+        const result = await response.json();
+        if (!response.ok) return { status: 'error', output: result, error: result.error?.message };
+        return { status: 'success', output: result };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // Enviar link de pagamento
+  action_whatsapp_payment: {
+    async execute({ config, context, isTest }) {
+      if (isTest) {
+        return { status: 'success', output: { payment_link_sent: true, amount: config.amount } };
+      }
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabase-admin');
+        const conversationId = context.conversation_id || context.conversationId;
+        const organizationId = context.organization_id || context.organizationId;
+
+        const { data: link } = await supabaseAdmin
+          .from('whatsapp_payment_links')
+          .insert({
+            organization_id: organizationId,
+            conversation_id: conversationId,
+            contact_id: context.contact?.id,
+            amount: config.amount,
+            currency: config.currency || 'BRL',
+            description: config.description,
+            payment_url: config.paymentUrl || `https://pay.example.com/checkout/${Date.now()}`,
+            status: 'pending',
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          })
+          .select()
+          .single();
+
+        if (!link) return { status: 'error', output: null, error: 'Failed to create payment link' };
+
+        return { status: 'success', output: { url: link.payment_url, id: link.id } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // Gerar cupom Shopify
+  action_shopify_coupon: {
+    async execute({ config, context, credentials, isTest }) {
+      if (isTest) {
+        const code = (config.prefix || 'GIFT') + '-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+        return { status: 'success', output: { code, test: true } };
+      }
+      try {
+        const { generateShopifyCoupon } = await import('@/lib/services/whatsapp/shopify-coupon-service');
+        const result = await generateShopifyCoupon({
+          shopDomain: credentials?.shopDomain,
+          accessToken: credentials?.accessToken,
+          discountType: config.discountType || 'percentage',
+          value: config.value || 10,
+          validityDays: config.validityDays || 7,
+          prefix: config.prefix || 'GIFT',
+          contactEmail: context.contact?.email,
+        });
+        if (result.error) return { status: 'error', output: null, error: result.error };
+        return { status: 'success', output: { code: result.data?.code } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
+  // Registrar interesse em produto (back-in-stock)
+  action_back_in_stock_notify: {
+    async execute({ config, context, isTest }) {
+      if (isTest) {
+        return { status: 'success', output: { registered: true, product_id: config.productId } };
+      }
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabase-admin');
+        await supabaseAdmin.from('whatsapp_product_interests').insert({
+          organization_id: context.organization_id || context.organizationId,
+          contact_id: context.contact?.id,
+          phone: context.contact?.phone,
+          product_id: config.productId,
+          product_title: config.productTitle,
+          variant_id: config.variantId,
+          notified: false,
+        });
+        return { status: 'success', output: { registered: true } };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
   // ========== REMOVE FROM LIST ==========
   action_remove_from_list: {
     async execute({ config, context, supabase, isTest, organizationId }) {
@@ -1067,6 +1302,31 @@ const conditionExecutors: Record<string, NodeExecutor> = {
         status: 'success',
         output: { conditions: results, logicOperator, result: finalResult },
         branch: finalResult ? 'true' : 'false',
+      };
+    },
+  },
+
+  // WhatsApp keyword matcher (Module B)
+  condition_whatsapp_keyword: {
+    async execute({ config, context }) {
+      const message = (context.message?.text || context.lastMessage || '').toLowerCase();
+      const keywords: string[] = config.keywords || [];
+      const mode = config.mode || 'contains'; // contains|equals|regex
+
+      let matched = false;
+      for (const kw of keywords) {
+        const lower = kw.toLowerCase();
+        if (mode === 'equals') matched = message.trim() === lower;
+        else if (mode === 'regex') {
+          try { matched = new RegExp(kw, 'i').test(message); } catch { matched = false; }
+        } else matched = message.includes(lower);
+        if (matched) break;
+      }
+
+      return {
+        status: 'success',
+        output: { matched, message },
+        branch: matched ? 'true' : 'false',
       };
     },
   },

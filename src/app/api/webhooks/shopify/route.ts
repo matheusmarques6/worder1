@@ -29,8 +29,30 @@ export const dynamic = 'force-dynamic';
 // ============================================
 
 function getSupabase() {
-  
+
   return getSupabaseAdmin();
+}
+
+// ============================================
+// HELPER: meta pro outbound webhook dispatcher
+// ============================================
+// O dispatcher em src/lib/webhooks/outbound-dispatcher.ts só dispara
+// quando payload.data._webhook_dispatch_meta está presente. Este helper
+// monta o meta consistente pra todos os emits de Shopify.
+function buildShopifyWebhookMeta(
+  store: ShopifyStoreConfig,
+  sourceEventId: string
+) {
+  return {
+    store_id: store.id,
+    source: 'shopify',
+    source_event_id: sourceEventId,
+    store: {
+      id: store.id,
+      shop_domain: store.shop_domain,
+      name: store.shop_name ?? store.shop_domain,
+    },
+  };
 }
 
 // ============================================
@@ -197,7 +219,30 @@ async function processCustomerCreated(store: ShopifyStoreConfig, customer: any) 
     },
     source: 'shopify',
   });
-  
+
+  // Emitir evento público customer.created pros outbound webhooks
+  await EventBus.emit(EventType.CUSTOMER_CREATED, {
+    organization_id: store.organization_id,
+    contact_id: contact?.id,
+    email: customer.email,
+    phone: customer.phone,
+    data: {
+      _webhook_dispatch_meta: buildShopifyWebhookMeta(
+        store,
+        `customer:${customer.id}`
+      ),
+      customer_id: contact?.id,
+      shopify_customer_id: String(customer.id),
+      email: customer.email,
+      first_name: customer.first_name,
+      last_name: customer.last_name,
+      phone: customer.phone,
+      accepts_marketing: customer.accepts_marketing,
+      tags: customer.tags,
+    },
+    source: 'shopify',
+  });
+
   // Criar notificação
   const supabase = getSupabase();
   await supabase.from('notifications').insert({
@@ -237,12 +282,37 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   
   // Criar/atualizar contato
   const contact = await syncContactFromShopify(customerData, store, 'order');
-  
+
   if (!contact) {
     console.error('[Shopify] Failed to create contact for order');
     return;
   }
-  
+
+  // Se contato foi criado agora (customer não existia antes do pedido),
+  // emitir customer.created pros outbound webhooks também. O handler
+  // customers/create do Shopify pode não ter vindo ainda, ou nem vir.
+  if (contact.isNew) {
+    await EventBus.emit(EventType.CUSTOMER_CREATED, {
+      organization_id: store.organization_id,
+      contact_id: contact.id,
+      email: order.email,
+      phone: order.phone,
+      data: {
+        _webhook_dispatch_meta: buildShopifyWebhookMeta(
+          store,
+          `customer:${order.customer?.id ?? contact.id}`
+        ),
+        customer_id: contact.id,
+        shopify_customer_id: order.customer?.id ? String(order.customer.id) : null,
+        email: order.email,
+        first_name: order.customer?.first_name,
+        last_name: order.customer?.last_name,
+        phone: order.phone,
+      },
+      source: 'shopify',
+    });
+  }
+
   // Atualizar estatísticas do contato
   const orderValue = parseFloat(order.total_price || '0');
   await updateContactOrderStats(contact.id, orderValue);
@@ -539,6 +609,8 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
     email: order.email,
     phone: order.phone,
     data: {
+      _webhook_dispatch_meta: buildShopifyWebhookMeta(store, String(order.id)),
+      order_id: String(order.id),
       order_number: order.order_number,
       total_price: orderValue,
       currency: order.currency,
@@ -666,8 +738,11 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
     order_id: order.id?.toString(),
     email: order.email,
     data: {
+      _webhook_dispatch_meta: buildShopifyWebhookMeta(store, String(order.id)),
+      order_id: String(order.id),
       order_number: order.order_number,
       total_price: parseFloat(order.total_price || '0'),
+      currency: order.currency,
     },
     source: 'shopify',
   });
@@ -799,9 +874,12 @@ async function processOrderFulfilled(store: ShopifyStoreConfig, order: any) {
     order_id: order.id?.toString(),
     email: order.email,
     data: {
+      _webhook_dispatch_meta: buildShopifyWebhookMeta(store, String(order.id)),
+      order_id: String(order.id),
       order_number: order.order_number,
       tracking_number: order.fulfillments?.[0]?.tracking_number,
       tracking_url: order.fulfillments?.[0]?.tracking_url,
+      tracking_company: order.fulfillments?.[0]?.tracking_company,
     },
     source: 'shopify',
   });
@@ -900,8 +978,12 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
     order_id: order.id?.toString(),
     email: order.email,
     data: {
+      _webhook_dispatch_meta: buildShopifyWebhookMeta(store, String(order.id)),
+      order_id: String(order.id),
       order_number: order.order_number,
       cancel_reason: order.cancel_reason,
+      total_price: parseFloat(order.total_price || '0'),
+      currency: order.currency,
     },
     source: 'shopify',
   });
@@ -1118,6 +1200,28 @@ async function processFulfillmentEvent(store: ShopifyStoreConfig, fulfillment: a
     });
   } catch (cdpError) {
     console.error('[Shopify Webhook] CDP event creation failed (fulfillment):', cdpError);
+  }
+
+  // Outbound: shipment.tracking_created (só se tracking_number presente)
+  if (fulfillment.tracking_number) {
+    await EventBus.emit(EventType.SHIPMENT_TRACKING_CREATED, {
+      organization_id: store.organization_id,
+      contact_id: contactId ?? undefined,
+      order_id: String(fulfillment.order_id),
+      data: {
+        _webhook_dispatch_meta: buildShopifyWebhookMeta(
+          store,
+          `fulfillment:${fulfillment.id}`
+        ),
+        order_id: String(fulfillment.order_id),
+        fulfillment_id: String(fulfillment.id),
+        tracking_number: fulfillment.tracking_number,
+        tracking_url: fulfillment.tracking_url ?? null,
+        tracking_company: fulfillment.tracking_company ?? null,
+        status: fulfillment.status,
+      },
+      source: 'shopify',
+    });
   }
 }
 

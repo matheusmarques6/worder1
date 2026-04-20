@@ -18,8 +18,75 @@ import { ABANDONED_CHECKOUTS_QUERY } from '@/lib/shopify/graphql-queries';
 import { extractShopifyId } from '@/lib/shopify/graphql-client';
 import { createEvent } from '@/lib/shopify/event-service';
 import { WORDER_SHOPIFY_EVENTS, EVENT_SOURCES } from '@/lib/shopify/event-types';
+import { EventBus, EventType } from '@/lib/events';
 
 const ABANDONMENT_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Emite os eventos de outbound webhook pra um checkout abandonado.
+ * Sempre emite checkout.abandoned; se o payment gateway for detectável
+ * (ex: payload salvo do webhook REST), também emite o específico de
+ * BR (PIX/boleto). Quando a detecção não tem dado de gateway (path
+ * GraphQL atual), só checkout.abandoned é emitido — os específicos
+ * podem ser ligados em iteração futura sem mudar esta assinatura.
+ */
+async function emitCheckoutAbandonedEvents(opts: {
+  store: ShopifyStoreConfig;
+  contactId: string | null;
+  checkoutId: string;
+  email?: string | null;
+  phone?: string | null;
+  totalPrice: number;
+  currency: string;
+  items: any[];
+  paymentMethod?: string | null;
+}) {
+  const baseMeta = {
+    store_id: opts.store.id,
+    source: 'shopify',
+    source_event_id: `checkout_abandoned:${opts.checkoutId}`,
+    store: {
+      id: opts.store.id,
+      shop_domain: opts.store.shop_domain,
+      name: opts.store.shop_name ?? opts.store.shop_domain,
+    },
+  };
+
+  const baseData = {
+    checkout_id: opts.checkoutId,
+    email: opts.email ?? null,
+    phone: opts.phone ?? null,
+    total_price: opts.totalPrice,
+    currency: opts.currency,
+    items: opts.items,
+    payment_method: opts.paymentMethod ?? null,
+  };
+
+  await EventBus.emit(EventType.CHECKOUT_ABANDONED, {
+    organization_id: opts.store.organization_id,
+    contact_id: opts.contactId ?? undefined,
+    data: { _webhook_dispatch_meta: baseMeta, ...baseData },
+    source: 'shopify',
+  });
+
+  const method = (opts.paymentMethod ?? '').toLowerCase();
+  if (method.includes('pix')) {
+    await EventBus.emit(EventType.PAYMENT_PIX_ABANDONED, {
+      organization_id: opts.store.organization_id,
+      contact_id: opts.contactId ?? undefined,
+      data: { _webhook_dispatch_meta: baseMeta, ...baseData },
+      source: 'shopify',
+    });
+  }
+  if (method.includes('boleto')) {
+    await EventBus.emit(EventType.PAYMENT_BOLETO_ABANDONED, {
+      organization_id: opts.store.organization_id,
+      contact_id: opts.contactId ?? undefined,
+      data: { _webhook_dispatch_meta: baseMeta, ...baseData },
+      source: 'shopify',
+    });
+  }
+}
 
 interface AbandonedCartResult {
   storesProcessed: number;
@@ -142,6 +209,22 @@ async function detectAbandonedCartsFromDB(
 
       // Create CDP event
       await createAbandonedCheckoutEvent(storeConfig, checkout);
+
+      // Outbound: checkout.abandoned + payment.{pix,boleto}.abandoned
+      // (payment_method vem do payload salvo, pode ser null em alguns casos)
+      await emitCheckoutAbandonedEvents({
+        store: storeConfig,
+        contactId: checkout.contact_id ?? null,
+        checkoutId: String(checkout.shopify_checkout_id || checkout.id),
+        email: checkout.email,
+        phone: checkout.phone,
+        totalPrice: parseFloat(checkout.total_price || '0'),
+        currency: checkout.currency || 'BRL',
+        items: checkout.line_items || [],
+        paymentMethod: checkout.payment_method
+          ?? checkout.payment_gateway_names?.[0]
+          ?? null,
+      });
 
       // Tag contact and create deal
       if (checkout.contact_id) {
@@ -296,6 +379,21 @@ async function pollAbandonedCheckoutsGraphQL(
         shopify_resource_type: 'checkout',
         occurred_at: checkout.createdAt,
         idempotency_key: `checkout_abandoned:${checkoutId}`,
+      });
+
+      // Outbound: checkout.abandoned (GraphQL path não retorna payment
+      // gateway, então pix/boleto não é emitido aqui; futura extensão
+      // do query pode alimentar esse campo).
+      await emitCheckoutAbandonedEvents({
+        store: buildStoreConfig(store),
+        contactId,
+        checkoutId,
+        email,
+        phone,
+        totalPrice,
+        currency,
+        items: lineItems,
+        paymentMethod: null,
       });
 
       abandoned++;

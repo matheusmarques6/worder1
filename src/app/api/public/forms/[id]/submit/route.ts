@@ -7,48 +7,86 @@ import { getSupabaseClient } from '@/lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
-// Helper: Extract contact data from answers based on field mappings
-function extractContactData(answers: Record<string, any>, fields: any[]) {
-  const contactData: Record<string, any> = {}
+// Known contact columns (directly writable)
+const KNOWN_CONTACT_COLUMNS = new Set([
+  'first_name', 'last_name', 'full_name', 'email', 'phone', 'whatsapp',
+  'birthday', 'gender', 'company', 'position',
+  'city', 'state', 'country', 'zip', 'address',
+])
 
+// Helper: Extract contact data from answers based on field mappings
+// Supports 2 modes: legacy (crm_form_fields table) + new (design_json blocks with mapTo)
+function extractContactData(answers: Record<string, any>, fields: any[], designBlocks: any[] = []) {
+  const contactData: Record<string, any> = {}
+  const customFields: Record<string, any> = {}
+
+  // ── 1. NEW: Design JSON blocks with mapTo property ──
+  for (const block of designBlocks) {
+    const p = block?.props || {}
+    if (!['email', 'phone', 'name-input', 'text-input', 'date-input'].includes(block.type)) continue
+
+    // Resolve input name (matches the public script)
+    const mapTo = p.mapTo === 'custom'
+      ? `custom:${p.mapToCustom || p.label || 'field'}`
+      : (p.mapTo || (block.type === 'email' ? 'email' : block.type === 'phone' ? 'phone' : block.type === 'name-input' ? 'first_name' : 'field'))
+
+    const value = answers[mapTo]
+    if (value === undefined || value === null || value === '') continue
+
+    // Custom field → put in custom_fields
+    if (String(mapTo).startsWith('custom:')) {
+      customFields[mapTo.slice(7)] = value
+      continue
+    }
+
+    // full_name → split into first_name + last_name
+    if (mapTo === 'full_name') {
+      const parts = String(value).trim().split(/\s+/)
+      contactData.first_name = parts[0]
+      if (parts.length > 1) contactData.last_name = parts.slice(1).join(' ')
+      continue
+    }
+
+    // Known contact columns
+    if (KNOWN_CONTACT_COLUMNS.has(mapTo)) {
+      contactData[mapTo] = value
+      continue
+    }
+
+    // Unknown key → custom_fields
+    customFields[mapTo] = value
+  }
+
+  // ── 2. LEGACY: crm_form_fields table (still supported) ──
   for (const field of fields) {
     const value = answers[field.id]
     if (value === undefined || value === '') continue
 
-    // 1. Use explicit mapping if defined
     if (field.map_to_contact_field) {
-      // Map 'name' to 'first_name' for compatibility
       const mappedField = field.map_to_contact_field === 'name' ? 'first_name' : field.map_to_contact_field
-      contactData[mappedField] = value
+      if (KNOWN_CONTACT_COLUMNS.has(mappedField) && !contactData[mappedField]) {
+        contactData[mappedField] = value
+      }
       continue
     }
 
-    // 2. Auto-detect by field type
-    if (field.field_type === 'email' && !contactData.email) {
-      contactData.email = value
-    } else if (field.field_type === 'phone' && !contactData.phone) {
-      contactData.phone = value
-    }
+    if (field.field_type === 'email' && !contactData.email) contactData.email = value
+    else if (field.field_type === 'phone' && !contactData.phone) contactData.phone = value
 
-    // 3. Auto-detect by label (common patterns)
     const label = (field.label || '').toLowerCase()
     if (!contactData.first_name && (label.includes('nome') || label.includes('name'))) {
-      // If it's a full name, try to split
       const parts = String(value).trim().split(' ')
       contactData.first_name = parts[0] || value
-      if (parts.length > 1) {
-        contactData.last_name = parts.slice(1).join(' ')
-      }
+      if (parts.length > 1) contactData.last_name = parts.slice(1).join(' ')
     }
-    if (!contactData.email && (label.includes('email') || label.includes('e-mail'))) {
-      contactData.email = value
-    }
-    if (!contactData.phone && (label.includes('telefone') || label.includes('phone') || label.includes('whatsapp') || label.includes('celular'))) {
-      contactData.phone = value
-    }
-    if (!contactData.company && (label.includes('empresa') || label.includes('company'))) {
-      contactData.company = value
-    }
+    if (!contactData.email && (label.includes('email') || label.includes('e-mail'))) contactData.email = value
+    if (!contactData.phone && (label.includes('telefone') || label.includes('phone') || label.includes('whatsapp') || label.includes('celular'))) contactData.phone = value
+    if (!contactData.company && (label.includes('empresa') || label.includes('company'))) contactData.company = value
+  }
+
+  // Attach custom fields (if any)
+  if (Object.keys(customFields).length > 0) {
+    contactData.custom_fields = customFields
   }
 
   return contactData
@@ -193,7 +231,31 @@ export async function POST(
     }
 
     // 3. Extrair dados de contato
-    const contactData = extractContactData(answers, form.fields || [])
+    // Collect all blocks from design_json (steps[].blocks[]) to read mapTo
+    const designBlocks: any[] = []
+    const designJson = form.design_json || {}
+    if (Array.isArray(designJson.steps)) {
+      for (const step of designJson.steps) {
+        if (Array.isArray(step?.blocks)) designBlocks.push(...step.blocks)
+      }
+    }
+    const contactData = extractContactData(answers, form.fields || [], designBlocks)
+
+    // UTM data for contact profile (if behavior.utm.storeOnConsent is true)
+    const popupBehavior = (form.behavior as any) || (designJson.behavior as any) || {}
+    const storeUtmOnConsent = popupBehavior?.utm?.storeOnConsent === true
+    const utmPayload: Record<string, any> = {}
+    if (storeUtmOnConsent) {
+      if (utm_source) utmPayload.utm_source = utm_source
+      if (utm_medium) utmPayload.utm_medium = utm_medium
+      if (utm_campaign) utmPayload.utm_campaign = utm_campaign
+      if (utm_term) utmPayload.utm_term = utm_term
+      if (utm_content) utmPayload.utm_content = utm_content
+      if (Object.keys(utmPayload).length > 0) {
+        utmPayload.captured_at = new Date().toISOString()
+        utmPayload.form_id = formId
+      }
+    }
 
     // 4. Criar ou encontrar contato (sempre criar se tiver algum dado)
     let contactId: string | null = null
@@ -215,34 +277,49 @@ export async function POST(
         if (existingContact) {
           contactId = existingContact.id
           // Atualizar contato com novos dados
-          await supabase
-            .from('contacts')
-            .update({
-              first_name: contactData.first_name || undefined,
-              last_name: contactData.last_name || undefined,
-              phone: contactData.phone || undefined,
-              company: contactData.company || undefined,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', contactId)
+          const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() }
+          const fields = ['first_name','last_name','phone','whatsapp','birthday','gender','company','position','city','state','country','zip','address']
+          for (const f of fields) {
+            if (contactData[f] !== undefined) updatePayload[f] = contactData[f]
+          }
+          if (contactData.custom_fields) {
+            updatePayload.custom_fields = contactData.custom_fields
+          }
+          if (storeUtmOnConsent && Object.keys(utmPayload).length > 0) {
+            updatePayload.utm_data = utmPayload
+          }
+          await supabase.from('contacts').update(updatePayload).eq('id', contactId)
           console.log('[Form Submit] Updated existing contact:', contactId)
         }
       }
 
       // Se não encontrou, criar novo
       if (!contactId) {
+        const insertPayload: Record<string, any> = {
+          organization_id: form.organization_id,
+          store_id: form.store_id || null,
+          first_name: contactData.first_name || contactData.email || contactData.phone || 'Lead',
+          last_name: contactData.last_name || null,
+          email: contactData.email || null,
+          phone: contactData.phone || null,
+          whatsapp: contactData.whatsapp || null,
+          company: contactData.company || null,
+          position: contactData.position || null,
+          source: 'form',
+        }
+        // Optional new contact columns
+        const optional = ['birthday', 'gender', 'city', 'state', 'country', 'zip', 'address']
+        for (const f of optional) {
+          if (contactData[f] !== undefined) insertPayload[f] = contactData[f]
+        }
+        if (contactData.custom_fields) insertPayload.custom_fields = contactData.custom_fields
+        if (storeUtmOnConsent && Object.keys(utmPayload).length > 0) {
+          insertPayload.utm_data = utmPayload
+        }
+
         const { data: newContact, error: contactError } = await supabase
           .from('contacts')
-          .insert({
-            organization_id: form.organization_id,
-            store_id: form.store_id || null,
-            first_name: contactData.first_name || contactData.email || contactData.phone || 'Lead',
-            last_name: contactData.last_name || null,
-            email: contactData.email || null,
-            phone: contactData.phone || null,
-            company: contactData.company || null,
-            source: 'form',
-          })
+          .insert(insertPayload)
           .select('id')
           .single()
 
