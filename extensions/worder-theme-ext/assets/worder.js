@@ -223,7 +223,7 @@
       timestamp: new Date().toISOString(),
     };
 
-    // Include logged-in customer data if available
+    // Include customer/contact identity if available
     if (window.__worder && window.__worder.customer) {
       var c = window.__worder.customer;
       payload.customer = {
@@ -233,6 +233,13 @@
         lastName: c.lastName || null,
         shopifyCustomerId: c.shopifyCustomerId ? String(c.shopifyCustomerId) : null,
       };
+    } else {
+      // Fallback: use popup-identified email from cookie so server resolves
+      // contact directly without needing the visitorId→contact lookup query.
+      var idEmail = getCookie(COOKIE_EMAIL);
+      if (idEmail) {
+        payload.customer = { email: idEmail };
+      }
     }
 
     var body = JSON.stringify(payload);
@@ -438,6 +445,11 @@
       if (!data) return;
       if (data.email) {
         setCookie(COOKIE_EMAIL, data.email, COOKIE_DAYS);
+        // Set in-memory so same-page events include identity immediately
+        if (!window.__worder) window.__worder = {};
+        if (!window.__worder.customer) {
+          window.__worder.customer = { email: data.email, phone: data.phone, firstName: data.firstName, lastName: data.lastName };
+        }
       }
       sendIdentify({
         email: data.email,

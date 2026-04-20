@@ -105,12 +105,13 @@ export async function POST(request: NextRequest) {
       eventType,
       eventId,
       properties,
-      // Contact fields
-      email,
-      phone,
-      firstName,
-      lastName,
-      shopifyCustomerId,
+      // Contact fields (root-level OR nested under customer object)
+      email: emailRoot,
+      phone: phoneRoot,
+      firstName: firstNameRoot,
+      lastName: lastNameRoot,
+      shopifyCustomerId: shopifyCustomerIdRoot,
+      customer,
       // Attribution
       utmParams,
       clickIds,
@@ -125,6 +126,13 @@ export async function POST(request: NextRequest) {
       clientId,
       anonymousId,
     } = body;
+
+    // Merge root-level and customer-nested fields (root takes precedence)
+    const email = emailRoot || customer?.email || null;
+    const phone = phoneRoot || customer?.phone || null;
+    const firstName = firstNameRoot || customer?.firstName || null;
+    const lastName = lastNameRoot || customer?.lastName || null;
+    const shopifyCustomerId = shopifyCustomerIdRoot || customer?.shopifyCustomerId || null;
 
     // Validate: need at least an event type and a way to resolve the store
     if (!eventType) {
