@@ -73,7 +73,6 @@ export async function GET(request: NextRequest) {
         orgIds,
         activeStoreIds,
         storeId,
-        statusFilter,
         limit,
         offset,
       });
@@ -320,7 +319,6 @@ async function handleCartTab(opts: {
   orgIds: string[];
   activeStoreIds: string[];
   storeId: string | null;
-  statusFilter: string | null;
   limit: number;
   offset: number;
 }): Promise<NextResponse> {

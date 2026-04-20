@@ -79,7 +79,11 @@ export async function GET(request: NextRequest) {
       })
 
     const countMap: Record<string, number> = {}
-    if (!rpcError && counts) {
+    if (rpcError) {
+      // Log so the RPC-missing case is diagnosable instead of showing
+      // silent zeros across every metric.
+      console.error('[Metrics] count_events_by_type RPC failed:', rpcError.message || rpcError)
+    } else if (counts) {
       for (const row of counts as any[]) {
         countMap[row.event_type] = Number(row.cnt) || 0
       }
