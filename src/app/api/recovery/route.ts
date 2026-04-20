@@ -81,41 +81,54 @@ export async function GET(request: NextRequest) {
 
     // =====================================================================
     // CHECKOUT tab: query shopify_checkouts table (webhook-backed)
+    // Falls back to contact_events if shopify_checkouts is empty (e.g.
+    // sync_checkouts not enabled, or table doesn't exist).
     // =====================================================================
-    let query = supabaseAdmin
-      .from('shopify_checkouts')
-      .select('id, store_id, shopify_checkout_id, shopify_checkout_token, email, phone, total_price, currency, line_items, abandoned_checkout_url, recovery_url, status, abandoned_at, converted_at, recovered_at, contact_id, shopify_created_at, created_at, updated_at, contacts(id, email, first_name, last_name, phone)', { count: 'exact' })
-      .in('organization_id', orgIds)
-      .in('store_id', activeStoreIds)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    let items: any[] | null = null;
+    let count: number | null = null;
+    let checkoutError: any = null;
 
-    if (storeId) query = query.eq('store_id', storeId);
-    if (statusFilter) {
-      query = query.eq('status', statusFilter);
-    } else {
-      // Default abandoned-checkouts view must EXCLUDE 'converted' rows —
-      // those are customers that already paid and shouldn't appear in the
-      // recovery funnel. 'recovered' means we brought them back through
-      // a recovery email (we keep those for recovery-rate stats).
-      query = query.in('status', ['pending', 'abandoned', 'recovered']);
+    try {
+      let query = supabaseAdmin
+        .from('shopify_checkouts')
+        .select('id, store_id, shopify_checkout_id, shopify_checkout_token, email, phone, total_price, currency, line_items, abandoned_checkout_url, recovery_url, status, abandoned_at, converted_at, recovered_at, contact_id, shopify_created_at, created_at, updated_at, contacts(id, email, first_name, last_name, phone)', { count: 'exact' })
+        .in('organization_id', orgIds)
+        .in('store_id', activeStoreIds)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (storeId) query = query.eq('store_id', storeId);
+      if (statusFilter) {
+        query = query.eq('status', statusFilter);
+      } else {
+        query = query.in('status', ['pending', 'abandoned', 'recovered']);
+      }
+
+      query = query.not('email', 'is', null).neq('email', '');
+
+      const result = await query;
+      items = result.data;
+      count = result.count;
+      checkoutError = result.error;
+    } catch {
+      checkoutError = { code: '42P01' };
     }
 
-    // Only checkouts that reached the email step
-    query = query.not('email', 'is', null).neq('email', '');
+    // Fallback: if shopify_checkouts is empty or missing, derive abandoned
+    // checkouts from contact_events (checkout_started without checkout_completed).
+    if ((!items || items.length === 0) && (!checkoutError || checkoutError.code === '42P01' || checkoutError.code === '42703' || checkoutError.message?.includes('relation'))) {
+      return await handleCheckoutFallback({
+        orgIds,
+        activeStoreIds,
+        storeId,
+        limit,
+        offset,
+      });
+    }
 
-    const { data: items, count, error } = await query;
-
-    if (error) {
-      if (error.code === '42P01' || error.code === '42703' || error.message?.includes('relation')) {
-        return NextResponse.json({
-          items: [],
-          total: 0,
-          stats: { total: 0, pending: 0, abandoned: 0, converted: 0, recovered: 0, revenue_recovered: 0, recovery_rate: '0.0' },
-        });
-      }
-      console.error('[Recovery] Error fetching checkouts:', error);
-      return NextResponse.json({ error: error.message || 'Failed to fetch' }, { status: 500 });
+    if (checkoutError) {
+      console.error('[Recovery] Error fetching checkouts:', checkoutError);
+      return NextResponse.json({ error: checkoutError.message || 'Failed to fetch' }, { status: 500 });
     }
 
     // ── Live conversion check: catch checkouts whose customer already placed ──
@@ -596,4 +609,167 @@ async function handleCartTab(opts: {
 
 function zeroStats() {
   return { total: 0, pending: 0, abandoned: 0, converted: 0, recovered: 0, revenue_recovered: 0, recovery_rate: '0.0' };
+}
+
+// =====================================================================
+// CHECKOUT tab fallback: derive abandoned checkouts from contact_events
+// when shopify_checkouts table is empty (sync_checkouts not enabled).
+// Finds checkout_started events that were never followed by
+// checkout_completed / placed_order / order_paid.
+// =====================================================================
+async function handleCheckoutFallback(opts: {
+  orgIds: string[];
+  activeStoreIds: string[];
+  storeId: string | null;
+  limit: number;
+  offset: number;
+}): Promise<NextResponse> {
+  const { orgIds, activeStoreIds, storeId, limit, offset } = opts;
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  let q = supabaseAdmin
+    .from('contact_events')
+    .select('id, contact_id, store_id, organization_id, properties, session_id, anonymous_id, monetary_value, currency, occurred_at, event_type')
+    .in('organization_id', orgIds)
+    .eq('event_type', 'checkout_started')
+    .gte('occurred_at', since)
+    .order('occurred_at', { ascending: false })
+    .limit(2000);
+
+  if (storeId) {
+    q = q.eq('store_id', storeId);
+  } else if (activeStoreIds.length > 0) {
+    q = q.or(`store_id.in.(${activeStoreIds.join(',')}),store_id.is.null`);
+  }
+
+  const { data: startedEvents, error } = await q;
+  if (error || !startedEvents || startedEvents.length === 0) {
+    return NextResponse.json({ items: [], total: 0, stats: zeroStats() });
+  }
+
+  // Group by contact_id or session_id
+  const buckets = new Map<string, { key: string; contact_id: string | null; session_id: string | null; events: any[]; last_at: string; first_at: string; store_id: string }>();
+  for (const e of startedEvents) {
+    const key = e.contact_id ? `c:${e.contact_id}` : e.session_id ? `s:${e.session_id}` : `e:${e.id}`;
+    const existing = buckets.get(key);
+    if (existing) {
+      existing.events.push(e);
+      if (e.occurred_at > existing.last_at) existing.last_at = e.occurred_at;
+      if (e.occurred_at < existing.first_at) existing.first_at = e.occurred_at;
+      if (!existing.contact_id && e.contact_id) existing.contact_id = e.contact_id;
+    } else {
+      buckets.set(key, { key, contact_id: e.contact_id, session_id: e.session_id, events: [e], last_at: e.occurred_at, first_at: e.occurred_at, store_id: e.store_id });
+    }
+  }
+
+  // Check which of these have a matching checkout_completed / placed_order
+  const contactIds = [...new Set([...buckets.values()].map(b => b.contact_id).filter(Boolean))] as string[];
+  const sessionIds = [...new Set([...buckets.values()].map(b => b.session_id).filter(Boolean))] as string[];
+
+  const completedSessions = new Set<string>();
+  const completedContacts = new Set<string>();
+
+  if (sessionIds.length > 0) {
+    try {
+      const { data } = await supabaseAdmin
+        .from('contact_events')
+        .select('session_id')
+        .in('organization_id', orgIds)
+        .in('event_type', ['checkout_completed', 'placed_order', 'order_paid'])
+        .in('session_id', sessionIds)
+        .gte('occurred_at', since);
+      for (const r of (data || []) as any[]) {
+        if (r.session_id) completedSessions.add(r.session_id);
+      }
+    } catch {}
+  }
+
+  if (contactIds.length > 0) {
+    try {
+      const { data } = await supabaseAdmin
+        .from('contact_events')
+        .select('contact_id')
+        .in('organization_id', orgIds)
+        .in('event_type', ['checkout_completed', 'placed_order', 'order_paid'])
+        .in('contact_id', contactIds)
+        .gte('occurred_at', since);
+      for (const r of (data || []) as any[]) {
+        if (r.contact_id) completedContacts.add(r.contact_id);
+      }
+    } catch {}
+  }
+
+  const cutoff15min = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+  const abandoned = [...buckets.values()].filter(b => {
+    if (b.last_at > cutoff15min) return false;
+    if (b.session_id && completedSessions.has(b.session_id)) return false;
+    if (b.contact_id && completedContacts.has(b.contact_id)) return false;
+    return true;
+  });
+
+  // Resolve contacts
+  const uniqueContactIds = [...new Set(abandoned.map(b => b.contact_id).filter(Boolean))] as string[];
+  const contactMap = new Map<string, any>();
+  if (uniqueContactIds.length > 0) {
+    const { data } = await supabaseAdmin.from('contacts').select('id, email, first_name, last_name, phone').in('id', uniqueContactIds);
+    for (const c of (data || [])) contactMap.set(c.id, c);
+  }
+
+  abandoned.sort((a, b) => (a.last_at < b.last_at ? 1 : -1));
+  const paged = abandoned.slice(offset, offset + limit);
+
+  const normalized = paged.map(b => {
+    const contact = b.contact_id ? contactMap.get(b.contact_id) : null;
+    let propEmail: string | null = null;
+    let propPhone: string | null = null;
+    let value = 0;
+    const lineItems: any[] = [];
+    for (const ev of b.events) {
+      const p = ev.properties || {};
+      if (!propEmail) propEmail = (p.email || p.Email || p.customer?.email || '').toLowerCase() || null;
+      if (!propPhone) propPhone = p.phone || p.Phone || p.customer?.phone || null;
+      if (p.totalPrice != null) value = Math.max(value, Number(p.totalPrice) || 0);
+      if (ev.monetary_value) value = Math.max(value, Number(ev.monetary_value));
+      const lis = p.lineItems || p.line_items || [];
+      for (const li of (Array.isArray(lis) ? lis : [])) {
+        lineItems.push({ title: li.title || li.name || 'Produto', quantity: li.quantity || 1, price: Number(li.price || li.lineTotal || 0), image_url: li.imageUrl || li.image?.src || null });
+      }
+    }
+    const name = [contact?.first_name, contact?.last_name].filter(Boolean).join(' ').trim() || contact?.email || propEmail || 'Desconhecido';
+
+    return {
+      id: `ckf-${b.key}`,
+      type: 'checkout' as const,
+      status: 'abandoned' as const,
+      email: contact?.email || propEmail || null,
+      phone: contact?.phone || propPhone || null,
+      contact_id: b.contact_id,
+      contact_name: name,
+      value,
+      currency: 'BRL',
+      items_count: lineItems.length || b.events.length,
+      items_preview: lineItems.slice(0, 3),
+      recovery_url: null,
+      abandoned_at: b.last_at,
+      converted_at: null,
+      recovered_at: null,
+      created_at: b.first_at,
+      store_id: b.store_id,
+    };
+  });
+
+  return NextResponse.json({
+    items: normalized,
+    total: abandoned.length,
+    stats: {
+      total: abandoned.length,
+      pending: 0,
+      abandoned: abandoned.length,
+      converted: 0,
+      recovered: 0,
+      revenue_recovered: 0,
+      recovery_rate: '0.0',
+    },
+  });
 }

@@ -39,17 +39,21 @@ export async function GET(request: NextRequest) {
     const since = new Date()
     since.setDate(since.getDate() - days)
 
-    // Count events by type
-    const { data: counts } = await supabaseAdmin
-      .from('contact_events')
-      .select('event_type')
-      .eq('organization_id', orgId)
-      .gte('occurred_at', since.toISOString())
+    // Count events by type using RPC (GROUP BY in SQL).
+    // The old approach fetched every row and counted in JS, but PostgREST's
+    // default 1000-row limit silently truncated results.
+    const { data: counts, error: rpcError } = await supabaseAdmin
+      .rpc('count_events_by_type', {
+        p_org_id: orgId,
+        p_since: since.toISOString(),
+      })
 
     const countMap: Record<string, number> = {}
-    ;(counts || []).forEach((row: any) => {
-      countMap[row.event_type] = (countMap[row.event_type] || 0) + 1
-    })
+    if (!rpcError && counts) {
+      for (const row of counts as any[]) {
+        countMap[row.event_type] = Number(row.cnt) || 0
+      }
+    }
 
     let metrics = []
     if (integration === 'all' || integration === 'shopify') {
