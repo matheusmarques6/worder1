@@ -38,15 +38,22 @@ CREATE INDEX IF NOT EXISTS idx_webhook_subs_lookup
 CREATE INDEX IF NOT EXISTS idx_webhook_subs_org
   ON webhook_subscriptions(organization_id);
 
--- RLS
+-- RLS — padrão do repo: organization_id vem de profiles (o JWT do
+-- Supabase auth não carrega organization_id em claims por padrão).
 ALTER TABLE webhook_subscriptions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "org_members_read_subs" ON webhook_subscriptions
-  FOR SELECT USING (auth.jwt() ->> 'organization_id' = organization_id::text);
+  FOR SELECT USING (
+    organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
+  );
 
 CREATE POLICY "org_members_write_subs" ON webhook_subscriptions
-  FOR ALL USING (auth.jwt() ->> 'organization_id' = organization_id::text)
-  WITH CHECK (auth.jwt() ->> 'organization_id' = organization_id::text);
+  FOR ALL USING (
+    organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
+  )
+  WITH CHECK (
+    organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
+  );
 
 -- Trigger pra updated_at
 CREATE OR REPLACE FUNCTION update_webhook_subscriptions_updated_at()

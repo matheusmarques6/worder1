@@ -47,10 +47,12 @@ CREATE INDEX IF NOT EXISTS idx_webhook_deliv_stuck
   ON webhook_deliveries(last_attempt_at NULLS FIRST)
   WHERE status IN ('pending', 'retrying', 'in_flight');
 
--- RLS
+-- RLS — padrão do repo: organization_id vem de profiles.
 ALTER TABLE webhook_deliveries ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "org_members_read_deliveries" ON webhook_deliveries
-  FOR SELECT USING (auth.jwt() ->> 'organization_id' = organization_id::text);
+  FOR SELECT USING (
+    organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
+  );
 
 -- INSERT/UPDATE só via service role; sem policy de write

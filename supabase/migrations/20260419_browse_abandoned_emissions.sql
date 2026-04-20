@@ -20,4 +20,6 @@ CREATE INDEX IF NOT EXISTS idx_browse_aband_org_emitted
 
 ALTER TABLE browse_abandoned_emissions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "org_members_read_browse_emissions" ON browse_abandoned_emissions
-  FOR SELECT USING (auth.jwt() ->> 'organization_id' = organization_id::text);
+  FOR SELECT USING (
+    organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid())
+  );
