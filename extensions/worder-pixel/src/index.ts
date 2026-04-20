@@ -23,6 +23,29 @@ register(({ analytics, browser, settings, init }) => {
   if (!ENDPOINT || !ACCOUNT_ID) return;
 
   // =============================================
+  // Cart-attribute identity bridge
+  // When a popup form captures an email, it writes it to Shopify cart
+  // attributes via /cart/update.js. The Web Pixel sandbox can't read
+  // cookies from the main page, but it CAN read init.data.cart which
+  // Shopify populates on each page load with persisted cart data.
+  // =============================================
+  let cartIdentity: { email?: string; phone?: string; firstName?: string; lastName?: string } = {};
+
+  function extractCartIdentity(cart: any): void {
+    if (!cart) return;
+    const attrs: any[] = Array.isArray(cart.attributes) ? cart.attributes : [];
+    for (const attr of attrs) {
+      if (attr.key === '_worder_email' && attr.value) cartIdentity.email = attr.value;
+      if (attr.key === '_worder_phone' && attr.value) cartIdentity.phone = attr.value;
+      if (attr.key === '_worder_fn' && attr.value) cartIdentity.firstName = attr.value;
+      if (attr.key === '_worder_ln' && attr.value) cartIdentity.lastName = attr.value;
+    }
+  }
+
+  // Read cart identity on pixel init (available if user was identified on a prior page)
+  try { extractCartIdentity(init.data?.cart); } catch { /* sandbox may restrict */ }
+
+  // =============================================
   // UUID generation (RFC4122-ish v4)
   // =============================================
   function generateUUID(): string {
@@ -126,7 +149,7 @@ register(({ analytics, browser, settings, init }) => {
       url: init.context?.document?.location?.href || null,
     };
 
-    // Attach customer info from init data or checkout
+    // Attach customer info: explicit > Shopify customer > cart-attribute bridge
     if (customerData) {
       payload.customer = customerData;
     } else if (init.data?.customer) {
@@ -136,6 +159,13 @@ register(({ analytics, browser, settings, init }) => {
         firstName: init.data.customer.firstName || null,
         lastName: init.data.customer.lastName || null,
         shopifyCustomerId: init.data.customer.id || null,
+      };
+    } else if (cartIdentity.email || cartIdentity.phone) {
+      payload.customer = {
+        email: cartIdentity.email || null,
+        phone: cartIdentity.phone || null,
+        firstName: cartIdentity.firstName || null,
+        lastName: cartIdentity.lastName || null,
       };
     }
 
@@ -290,6 +320,8 @@ register(({ analytics, browser, settings, init }) => {
   // --- Cart Viewed ---
   analytics.subscribe('cart_viewed', (event: any) => {
     const cart = event.data?.cart;
+    // Refresh cart identity — user may have been identified since pixel init
+    extractCartIdentity(cart);
     sendEvent('cart_viewed', {
       totalPrice: parseFloat(cart?.cost?.totalAmount?.amount || '0'),
       currency: cart?.cost?.totalAmount?.currencyCode || null,

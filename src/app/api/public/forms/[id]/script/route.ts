@@ -446,6 +446,12 @@ function show(){
             if(idData.email){
               var ed=new Date();ed.setTime(ed.getTime()+730*24*60*60*1000);
               document.cookie="__worder_id_email="+encodeURIComponent(idData.email)+";expires="+ed.toUTCString()+";path=/;SameSite=Lax";
+              // Bridge identity into Shopify cart attributes so the sandboxed Web Pixel
+              // (which can't read our cookies) picks up the email from cart data and
+              // attaches it to added_to_cart / checkout events.
+              fetch("/cart/update.js",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+                attributes:{"_worder_email":idData.email,"_worder_fn":idData.firstName||"","_worder_ln":idData.lastName||"","_worder_phone":idData.phone||""}
+              })}).catch(function(){});
             }
           }
         }catch(err){}
