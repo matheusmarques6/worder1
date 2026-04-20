@@ -29,8 +29,30 @@ export const dynamic = 'force-dynamic';
 // ============================================
 
 function getSupabase() {
-  
+
   return getSupabaseAdmin();
+}
+
+// ============================================
+// HELPER: meta pro outbound webhook dispatcher
+// ============================================
+// O dispatcher em src/lib/webhooks/outbound-dispatcher.ts só dispara
+// quando payload.data._webhook_dispatch_meta está presente. Este helper
+// monta o meta consistente pra todos os emits de Shopify.
+function buildShopifyWebhookMeta(
+  store: ShopifyStoreConfig,
+  sourceEventId: string
+) {
+  return {
+    store_id: store.id,
+    source: 'shopify',
+    source_event_id: sourceEventId,
+    store: {
+      id: store.id,
+      shop_domain: store.shop_domain,
+      name: store.shop_name ?? store.shop_domain,
+    },
+  };
 }
 
 // ============================================
@@ -686,6 +708,8 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
     email: order.email,
     phone: order.phone,
     data: {
+      _webhook_dispatch_meta: buildShopifyWebhookMeta(store, String(order.id)),
+      order_id: String(order.id),
       order_number: order.order_number,
       total_price: orderValue,
       currency: order.currency,
@@ -813,8 +837,11 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
     order_id: order.id?.toString(),
     email: order.email,
     data: {
+      _webhook_dispatch_meta: buildShopifyWebhookMeta(store, String(order.id)),
+      order_id: String(order.id),
       order_number: order.order_number,
       total_price: parseFloat(order.total_price || '0'),
+      currency: order.currency,
     },
     source: 'shopify',
   });
@@ -946,9 +973,12 @@ async function processOrderFulfilled(store: ShopifyStoreConfig, order: any) {
     order_id: order.id?.toString(),
     email: order.email,
     data: {
+      _webhook_dispatch_meta: buildShopifyWebhookMeta(store, String(order.id)),
+      order_id: String(order.id),
       order_number: order.order_number,
       tracking_number: order.fulfillments?.[0]?.tracking_number,
       tracking_url: order.fulfillments?.[0]?.tracking_url,
+      tracking_company: order.fulfillments?.[0]?.tracking_company,
     },
     source: 'shopify',
   });
@@ -1066,8 +1096,12 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
     order_id: order.id?.toString(),
     email: order.email,
     data: {
+      _webhook_dispatch_meta: buildShopifyWebhookMeta(store, String(order.id)),
+      order_id: String(order.id),
       order_number: order.order_number,
       cancel_reason: order.cancel_reason,
+      total_price: parseFloat(order.total_price || '0'),
+      currency: order.currency,
     },
     source: 'shopify',
   });
