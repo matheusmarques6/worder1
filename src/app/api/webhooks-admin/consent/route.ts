@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
       organization_id: user.organization_id,
       user_id: user.id,
       action: CONSENT_ACTION,
+      entity_type: 'webhook_consent',
       metadata: { spec_version: '1', user_agent: ua },
     },
     {
@@ -55,18 +56,12 @@ export async function POST(req: NextRequest) {
       user_id: user.id,
       action: CONSENT_ACTION,
       entity_type: 'webhook_consent',
-      details: { spec_version: '1', user_agent: ua },
-    },
-    {
-      organization_id: user.organization_id,
-      user_id: user.id,
-      action: CONSENT_ACTION,
-      resource_type: 'webhook_consent',
       details: JSON.stringify({ spec_version: '1', user_agent: ua }),
     },
     {
       organization_id: user.organization_id,
       action: CONSENT_ACTION,
+      entity_type: 'webhook_consent',
     },
   ];
 
