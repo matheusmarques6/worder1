@@ -70,21 +70,36 @@ export async function POST(req: NextRequest) {
     },
   ];
 
-  let lastErr: any = null;
-  for (const payload of variants) {
+  const attempts: any[] = [];
+  for (let i = 0; i < variants.length; i++) {
+    const payload = variants[i];
     const { error } = await admin.from('audit_logs').insert(payload);
-    if (!error) return NextResponse.json({ ok: true });
-    lastErr = error;
-    // Only try next variant if the error is column/schema related
+    if (!error) {
+      console.log(`[Consent] audit_logs insert OK on variant ${i}`);
+      return NextResponse.json({ ok: true });
+    }
+    console.error(`[Consent] audit_logs variant ${i} failed:`, {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      payload_keys: Object.keys(payload),
+    });
+    attempts.push({ variant: i, code: error.code, message: error.message, details: error.details });
+    // Only try next variant if error looks schema-related
     if (error.code !== '42703' && error.code !== 'PGRST204' && error.code !== '23502') {
       break;
     }
   }
 
-  // If audit_logs is entirely unusable, table might not exist — consent is
-  // effectively "not recordable". Return a soft failure the UI can handle.
+  const lastErr = attempts[attempts.length - 1];
   if (lastErr?.code === '42P01') {
     return NextResponse.json({ error: 'Audit log table missing. Run the migrations.' }, { status: 503 });
   }
-  return NextResponse.json({ error: lastErr?.message || 'Failed to record consent' }, { status: 500 });
+  return NextResponse.json({
+    error: lastErr?.message || 'Failed to record consent',
+    details: lastErr?.details,
+    code: lastErr?.code,
+    attempts,
+  }, { status: 500 });
 }
