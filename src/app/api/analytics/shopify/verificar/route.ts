@@ -4,7 +4,7 @@ import { getSupabaseClient } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 // VERSÃO DO CÓDIGO - Atualizar a cada deploy
-const CODE_VERSION = 'v8-senior-2026-01-14';
+const CODE_VERSION = 'v8-senior-2024-10-14';
 
 const SHOPIFY_API_VERSION = '2024-10';
 

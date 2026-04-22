@@ -2,7 +2,7 @@
 // Shopify GraphQL Mutations
 // src/lib/shopify/graphql-mutations.ts
 //
-// All write mutations for the Shopify Admin GraphQL API v2026-01
+// All write mutations for the Shopify Admin GraphQL API v2024-10
 // =============================================
 
 // =============================================

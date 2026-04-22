@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 
 // ===== VERSÃO DO CÓDIGO - ATUALIZAR A CADA DEPLOY =====
-const API_VERSION = 'v8-senior-fix-2026-01-14';
+const API_VERSION = 'v8-senior-fix-2024-10-14';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;

@@ -150,7 +150,7 @@ export async function GET(request: NextRequest) {
     let planName = '';
 
     try {
-      const shopInfoRes = await fetch(`https://${shop}/admin/api/2026-01/graphql.json`, {
+      const shopInfoRes = await fetch(`https://${shop}/admin/api/2024-10/graphql.json`, {
         method: 'POST',
         headers: {
           'X-Shopify-Access-Token': accessToken,
@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
       api_secret: SHOPIFY_CLIENT_SECRET,
       currency,
       plan_name: planName,
-      api_version: '2026-01',
+      api_version: '2024-10',
       scopes: grantedScopes ? grantedScopes.split(/[\s,]+/).filter(Boolean) : [],
       is_active: true,
       status: 'active',
@@ -255,7 +255,7 @@ export async function GET(request: NextRequest) {
 
     for (const topic of webhookTopics) {
       try {
-        const res = await fetch(`https://${shop}/admin/api/2026-01/graphql.json`, {
+        const res = await fetch(`https://${shop}/admin/api/2024-10/graphql.json`, {
           method: 'POST',
           headers: {
             'X-Shopify-Access-Token': accessToken,
@@ -295,7 +295,7 @@ export async function GET(request: NextRequest) {
     // =============================================
     let pixelInstalled = false;
     try {
-      const pixelRes = await fetch(`https://${shop}/admin/api/2026-01/graphql.json`, {
+      const pixelRes = await fetch(`https://${shop}/admin/api/2024-10/graphql.json`, {
         method: 'POST',
         headers: {
           'X-Shopify-Access-Token': accessToken,

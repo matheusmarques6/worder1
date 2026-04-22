@@ -2,7 +2,7 @@
 // Shopify GraphQL Queries
 // src/lib/shopify/graphql-queries.ts
 //
-// All read queries for the Shopify Admin GraphQL API v2026-01
+// All read queries for the Shopify Admin GraphQL API v2024-10
 // =============================================
 
 // =============================================
