@@ -573,8 +573,20 @@ export default function ShopifyConnect() {
           </button>
 
           {manualResult && (
-            <div className="space-y-3 pt-3 border-t border-gray-100">
-              <StatusLine label="Loja conectada" ok detail={manualResult.store?.name || '—'} />
+            <div className="space-y-4 pt-4">
+              {/* Success banner */}
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-3">
+                <CheckCircle className="w-6 h-6 text-emerald-600 shrink-0" />
+                <div>
+                  <p className="font-semibold text-emerald-800">Loja conectada com sucesso!</p>
+                  <p className="text-sm text-emerald-700 mt-0.5">
+                    {manualResult.store?.name || 'Sua loja'} está pronta. {pixelCode ? 'Instale o Custom Pixel abaixo para tracking completo.' : 'Todos os eventos serão sincronizados em tempo real.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 border-t border-gray-100 pt-3">
+                <StatusLine label="Loja conectada" ok detail={manualResult.store?.name || '—'} />
               <StatusLine
                 label="Token de acesso"
                 ok={!!manualResult.token?.obtained}
@@ -590,6 +602,7 @@ export default function ShopifyConnect() {
                 }
               />
               <StatusLine label="Sync inicial" ok={!!manualResult.sync?.triggered} detail={manualResult.sync?.triggered ? 'Disparado' : '—'} />
+              </div>
 
               {/* Webhook manual setup instructions */}
               {manualResult.webhooks?.failed > 0 && (
@@ -679,6 +692,24 @@ export default function ShopifyConnect() {
             </div>
           )}
         </>
+      )}
+
+      {/* Done button — appears after successful connection */}
+      {manualResult && (
+        <div className="flex gap-3 pt-2">
+          <button
+            onClick={() => window.location.href = '/'}
+            className="flex-1 py-3 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
+          >
+            Ir para o Dashboard
+          </button>
+          <button
+            onClick={() => window.location.href = '/integrations'}
+            className="px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Integrações
+          </button>
+        </div>
       )}
 
       <div className="text-xs text-gray-400 space-y-0.5 pt-1">
