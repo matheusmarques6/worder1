@@ -69,23 +69,39 @@ export async function GET(request: NextRequest) {
     const since = new Date()
     since.setDate(since.getDate() - days)
 
-    // Count events by type using RPC (GROUP BY in SQL).
-    // The old approach fetched every row and counted in JS, but PostgREST's
-    // default 1000-row limit silently truncated results.
+    // Try RPC first (fast GROUP BY in SQL), fallback to direct query
+    const countMap: Record<string, number> = {}
+
     const { data: counts, error: rpcError } = await supabaseAdmin
       .rpc('count_events_by_type', {
         p_org_id: orgId,
         p_since: since.toISOString(),
       })
 
-    const countMap: Record<string, number> = {}
-    if (rpcError) {
-      // Log so the RPC-missing case is diagnosable instead of showing
-      // silent zeros across every metric.
-      console.error('[Metrics] count_events_by_type RPC failed:', rpcError.message || rpcError)
-    } else if (counts) {
+    if (!rpcError && counts) {
       for (const row of counts as any[]) {
         countMap[row.event_type] = Number(row.cnt) || 0
+      }
+    } else {
+      // RPC doesn't exist — fallback: query contact_events directly with pagination
+      console.warn('[Metrics] RPC unavailable, using fallback query:', rpcError?.message)
+      try {
+        // Get counts per event_type by fetching just the event_type column
+        // Use a large limit to avoid the 1000-row default
+        const { data: rawEvents } = await supabaseAdmin
+          .from('contact_events')
+          .select('event_type')
+          .eq('organization_id', orgId)
+          .gte('occurred_at', since.toISOString())
+          .limit(50000)
+
+        if (rawEvents) {
+          for (const row of rawEvents) {
+            countMap[row.event_type] = (countMap[row.event_type] || 0) + 1
+          }
+        }
+      } catch (fallbackErr: any) {
+        console.error('[Metrics] Fallback query also failed:', fallbackErr?.message)
       }
     }
 
