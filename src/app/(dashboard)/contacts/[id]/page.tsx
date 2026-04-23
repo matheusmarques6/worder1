@@ -31,10 +31,12 @@ import {
   ArrowsClockwise,
   Megaphone,
   CursorClick,
+  Package,
+  Handbag,
 } from '@phosphor-icons/react'
 import Link from 'next/link'
 import { useInboxContact } from '@/hooks/useInboxContact'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { InboxContact, InboxActivity, InboxNote, InboxTask, InboxOrder, InboxDeal } from '@/types/inbox'
 
@@ -170,6 +172,121 @@ function getCity(c: InboxContact): string | null {
   return parts.length > 0 ? parts.join(', ') : null
 }
 
+function formatCurrency(value: number | null | undefined, currency?: string | null): string {
+  if (value == null) return ''
+  const prefix = currency === 'BRL' ? 'R$ ' : currency ? `${currency} ` : 'R$ '
+  return `${prefix}${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+}
+
+function getDateGroupLabel(dateStr: string): string {
+  const date = new Date(dateStr)
+  if (isToday(date)) return 'HOJE'
+  if (isYesterday(date)) return 'ONTEM'
+  return format(date, "d 'de' MMMM, yyyy", { locale: ptBR }).toUpperCase()
+}
+
+function renderActivityDescription(activity: any): React.ReactNode {
+  const props = activity.properties || (activity as any).props || {}
+  const type = activity.activity_type
+  const currency = activity.currency || props.currency || 'BRL'
+
+  const productName = props.title || props.product_title || props.ProductName || props.productName
+  const productUrl = props.url || props.productUrl || props.product_url
+  const price = props.price || props.Price
+  const totalPrice = props.total_price || props.totalPrice || props.TotalPrice || activity.monetaryValue
+  const orderNumber = props.order_number || props.order_id || props.OrderNumber || props.orderId
+  const itemCount = props.item_count || props.ItemCount || (Array.isArray(props.lineItems) ? props.lineItems.length : props.lineItems) || (Array.isArray(props.Items) ? props.Items.length : props.Items)
+  const pageTitle = props.title || props.page_title || props.pageTitle
+  const pageUrl = props.url || props.page_url || props.pageUrl
+  const trackingNumber = props.tracking_number || props.trackingNumber || props.TrackingNumber
+
+  switch (type) {
+    case 'viewed_product':
+      return (
+        <span>
+          Viewed product.{productName && <> Product title: {productUrl ? <a href={productUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-teal-600 hover:underline">{productName}</a> : <span className="font-semibold text-teal-600">{productName}</span>}</>}
+        </span>
+      )
+    case 'added_to_cart':
+      return (
+        <span>
+          Added to cart.{productName && <> Product title: {productUrl ? <a href={productUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-teal-600 hover:underline">{productName}</a> : <span className="font-semibold text-teal-600">{productName}</span>}</>}{price != null && <> — {formatCurrency(Number(price), currency)}</>}
+        </span>
+      )
+    case 'placed_order':
+      return (
+        <span>
+          Placed order.{totalPrice != null && <> Amount: <span className="font-semibold text-gray-800">{formatCurrency(Number(totalPrice), currency)}</span></>}{orderNumber && <>; Order number: <span className="font-medium text-gray-700">#{orderNumber}</span></>}{itemCount != null && <> — {itemCount} item(s)</>}
+        </span>
+      )
+    case 'checkout_started':
+      return (
+        <span>
+          Started checkout.{totalPrice != null && <> Amount: <span className="font-semibold text-gray-800">{formatCurrency(Number(totalPrice), currency)}</span></>}{itemCount != null && <> — {itemCount} item(s)</>}
+        </span>
+      )
+    case 'page_viewed':
+      return (
+        <span>
+          Viewed page.{pageTitle && <> Page title: {pageUrl ? <a href={pageUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-teal-600 hover:underline">{pageTitle}</a> : <span className="font-semibold text-teal-600">{pageTitle}</span>}</>}
+        </span>
+      )
+    case 'email_captured':
+    case 'checkout_contact_submitted':
+      return <span>Email captured at checkout</span>
+    case 'profile_created':
+      return <span>Profile created</span>
+    case 'fulfilled_order':
+      return (
+        <span>
+          Order fulfilled.{orderNumber && <> Order: <span className="font-medium text-gray-700">#{orderNumber}</span></>}{trackingNumber && <> Tracking: <span className="font-medium text-gray-700">{trackingNumber}</span></>}
+        </span>
+      )
+    case 'ordered_product':
+      return (
+        <span>
+          Ordered product.{productName && <> <span className="font-semibold text-teal-600">{productName}</span></>}{price != null && <> — {formatCurrency(Number(price), currency)}</>}
+        </span>
+      )
+    case 'checkout_completed':
+      return (
+        <span>
+          Checkout completed.{totalPrice != null && <> Amount: <span className="font-semibold text-gray-800">{formatCurrency(Number(totalPrice), currency)}</span></>}
+        </span>
+      )
+    case 'cancelled_order':
+      return (
+        <span>
+          Order cancelled.{orderNumber && <> Order: <span className="font-medium text-gray-700">#{orderNumber}</span></>}
+        </span>
+      )
+    case 'refunded_order':
+      return (
+        <span>
+          Order refunded.{totalPrice != null && <> Amount: <span className="font-semibold text-gray-800">{formatCurrency(Number(totalPrice), currency)}</span></>}
+        </span>
+      )
+    case 'removed_from_cart':
+      return (
+        <span>
+          Removed from cart.{productName && <> <span className="font-semibold text-teal-600">{productName}</span></>}
+        </span>
+      )
+    case 'viewed_collection':
+      return (
+        <span>
+          Viewed collection.{(props.collection_title || props.title) && <> <span className="font-semibold text-teal-600">{props.collection_title || props.title}</span></>}
+        </span>
+      )
+    case 'subscribed_email':
+      return <span>Subscribed to email marketing</span>
+    case 'subscribed_sms':
+      return <span>Subscribed to SMS marketing</span>
+    default:
+      return null
+  }
+}
+
 export default function ContactDetailPage() {
   const router = useRouter()
   const params = useParams()
@@ -222,6 +339,9 @@ export default function ContactDetailPage() {
         : evt.properties?.ProductName || evt.properties?.product_title || null,
       created_at: evt.occurredAt,
       source: 'shopify',
+      properties: evt.properties,
+      monetaryValue: evt.monetaryValue,
+      currency: evt.currency,
     } as any)
   })
   mergedActivities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -505,31 +625,60 @@ export default function ContactDetailPage() {
                       <p className="text-sm text-gray-500">Nenhuma atividade registrada</p>
                     </div>
                   ) : (
-                    mergedActivities.map((activity, i) => {
-                      const iconCfg = activityIconMap[activity.activity_type] || defaultActivityIcon
-                      const Icon = iconCfg.icon
-                      return (
-                        <div key={activity.id} className="flex gap-4">
-                          <div className="flex flex-col items-center">
-                            <div className={`w-8 h-8 rounded-full ${iconCfg.bgColor} flex items-center justify-center flex-shrink-0 relative`}>
-                              <Icon size={16} className={iconCfg.color} weight="fill" />
-                              {(activity as any).source === 'shopify' && (
-                                <img src="/integrations/icone shopify .png" alt="" className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-white p-[1px]" />
-                              )}
-                            </div>
-                            {i < mergedActivities.length - 1 && <div className="w-px h-full bg-gray-50 min-h-[24px]" />}
+                    (() => {
+                      const grouped: { label: string; items: typeof mergedActivities }[] = []
+                      mergedActivities.forEach((activity) => {
+                        const label = getDateGroupLabel(activity.created_at)
+                        const last = grouped[grouped.length - 1]
+                        if (last && last.label === label) {
+                          last.items.push(activity)
+                        } else {
+                          grouped.push({ label, items: [activity] })
+                        }
+                      })
+                      return grouped.map((group) => (
+                        <div key={group.label}>
+                          <div className="flex items-center gap-3 py-3">
+                            <div className="h-px flex-1 bg-gray-100" />
+                            <span className="text-[10px] font-semibold text-gray-400 tracking-wider">{group.label}</span>
+                            <div className="h-px flex-1 bg-gray-100" />
                           </div>
-                          <div className="pb-5">
-                            <p className="text-sm text-gray-700">{activity.title}</p>
-                            {activity.description && <p className="text-xs text-gray-500 mt-0.5">{activity.description}</p>}
-                            <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                              <Clock size={10} />
-                              {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true, locale: ptBR })}
-                            </p>
-                          </div>
+                          {group.items.map((activity, i) => {
+                            const iconCfg = activityIconMap[activity.activity_type] || defaultActivityIcon
+                            const Icon = iconCfg.icon
+                            const isShopify = (activity as any).source === 'shopify'
+                            const richDesc = isShopify ? renderActivityDescription(activity) : null
+                            return (
+                              <div key={activity.id} className="flex gap-4">
+                                <div className="flex flex-col items-center">
+                                  <div className={`w-8 h-8 rounded-full ${iconCfg.bgColor} flex items-center justify-center flex-shrink-0 relative`}>
+                                    <Icon size={16} className={iconCfg.color} weight="fill" />
+                                    {isShopify && (
+                                      <img src="/integrations/icone shopify .png" alt="" className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-white p-[1px]" />
+                                    )}
+                                  </div>
+                                  {i < group.items.length - 1 && <div className="w-px h-full bg-gray-50 min-h-[24px]" />}
+                                </div>
+                                <div className="pb-5 min-w-0 flex-1">
+                                  {richDesc ? (
+                                    <p className="text-sm text-gray-700 leading-relaxed">{richDesc}</p>
+                                  ) : (
+                                    <>
+                                      <p className="text-sm text-gray-700">{activity.title}</p>
+                                      {activity.description && <p className="text-xs text-gray-500 mt-0.5">{activity.description}</p>}
+                                    </>
+                                  )}
+                                  <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                                    <Clock size={10} />
+                                    {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true, locale: ptBR })}
+                                  </p>
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
-                      )
-                    })
+                      ))
+                    })()
                   )}
                 </div>
               )}
@@ -650,6 +799,134 @@ export default function ContactDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Produtos no Carrinho (abandoned cart items) */}
+          {(() => {
+            const completedCheckoutTimes = new Set(
+              shopifyEvents
+                .filter(e => e.eventType === 'checkout_completed' || e.eventType === 'placed_order')
+                .map(e => new Date(e.occurredAt).getTime())
+            )
+            const cartItems = shopifyEvents
+              .filter(e => e.eventType === 'added_to_cart')
+              .filter(evt => {
+                const evtTime = new Date(evt.occurredAt).getTime()
+                // Consider it abandoned if no checkout_completed happened after this add_to_cart
+                return ![...completedCheckoutTimes].some(ct => ct > evtTime)
+              })
+            // Deduplicate by product title, keep most recent
+            const seen = new Map<string, ShopifyEvent>()
+            cartItems.forEach(evt => {
+              const title = evt.properties?.title || evt.properties?.product_title || evt.properties?.ProductName || 'Produto'
+              if (!seen.has(title)) seen.set(title, evt)
+            })
+            const uniqueCartItems = Array.from(seen.values()).slice(0, 5)
+            if (uniqueCartItems.length === 0) return null
+            const now = Date.now()
+            return (
+              <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                  <Handbag size={14} className="text-yellow-500" />
+                  Produtos no Carrinho
+                </h3>
+                <div className="space-y-2">
+                  {uniqueCartItems.map((evt) => {
+                    const title = evt.properties?.title || evt.properties?.product_title || evt.properties?.ProductName || 'Produto'
+                    const price = evt.properties?.price || evt.properties?.Price || evt.monetaryValue
+                    const qty = evt.properties?.quantity || evt.properties?.Quantity || 1
+                    const hoursAgo = (now - new Date(evt.occurredAt).getTime()) / (1000 * 60 * 60)
+                    const isAbandoned = hoursAgo > 24
+                    return (
+                      <div key={evt.id} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
+                        {evt.properties?.imageUrl || evt.properties?.image_url ? (
+                          <img
+                            src={evt.properties.imageUrl || evt.properties.image_url}
+                            alt={title}
+                            className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-gray-100"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
+                            <ShoppingCart size={16} className="text-gray-300" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-700 font-medium truncate">{title}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs text-gray-500">{qty}x</span>
+                            {price != null && (
+                              <span className="text-xs text-gray-500">· R$ {Number(price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            )}
+                            {isAbandoned && (
+                              <span className="text-[10px] font-medium text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded-full">Abandonado</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Produtos Visualizados Recentes */}
+          {(() => {
+            const viewedProducts = shopifyEvents.filter(e => e.eventType === 'viewed_product')
+            // Deduplicate by product title, keep most recent
+            const seen = new Map<string, ShopifyEvent>()
+            viewedProducts.forEach(evt => {
+              const title = evt.properties?.title || evt.properties?.product_title || evt.properties?.ProductName
+              if (title && !seen.has(title)) seen.set(title, evt)
+            })
+            const uniqueViewed = Array.from(seen.values()).slice(0, 5)
+            if (uniqueViewed.length === 0) return null
+            return (
+              <div className="bg-white/50 border border-gray-200 rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                  <Eye size={14} className="text-gray-500" />
+                  Produtos Visualizados Recentes
+                </h3>
+                <div className="space-y-2">
+                  {uniqueViewed.map((evt) => {
+                    const title = evt.properties?.title || evt.properties?.product_title || evt.properties?.ProductName || 'Produto'
+                    const price = evt.properties?.price || evt.properties?.Price
+                    const imageUrl = evt.properties?.imageUrl || evt.properties?.image_url || evt.properties?.featuredImage
+                    const productUrl = evt.properties?.url || evt.properties?.productUrl || evt.properties?.product_url
+                    return (
+                      <div key={evt.id} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
+                        {imageUrl ? (
+                          <img
+                            src={imageUrl}
+                            alt={title}
+                            className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-gray-100"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
+                            <Package size={16} className="text-gray-300" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          {productUrl ? (
+                            <a href={productUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-teal-600 font-medium truncate block hover:underline">{title}</a>
+                          ) : (
+                            <p className="text-sm text-gray-700 font-medium truncate">{title}</p>
+                          )}
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {price != null && (
+                              <span className="text-xs text-gray-500">R$ {Number(price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            )}
+                            <span className="text-xs text-gray-400">
+                              {formatDistanceToNow(new Date(evt.occurredAt), { addSuffix: true, locale: ptBR })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Deals */}
           {deals.length > 0 && (
