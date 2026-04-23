@@ -105,6 +105,21 @@ export async function GET(request: NextRequest) {
     } catch {}
   }
 
+  // Auto-detect pixel: if we have recent pixel events, pixel IS installed
+  let pixelDetected = store.pixel_installed || false;
+  if (!pixelDetected) {
+    try {
+      const recentPixelCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { count: pixelEvents } = await supabase
+        .from('contact_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('store_id', store.id)
+        .eq('event_source', 'worder_pixel')
+        .gte('occurred_at', recentPixelCutoff);
+      if (pixelEvents && pixelEvents > 0) pixelDetected = true;
+    } catch {}
+  }
+
   return NextResponse.json({
     connected: true,
     store: {
@@ -118,7 +133,7 @@ export async function GET(request: NextRequest) {
       isActive: store.is_active,
       status: store.status,
       initialSyncCompleted: store.initial_sync_completed,
-      pixelInstalled: store.pixel_installed,
+      pixelInstalled: pixelDetected,
       embedInstalled: store.embed_installed,
       installedAt: store.installed_at,
       lastSyncAt: store.last_sync_at,

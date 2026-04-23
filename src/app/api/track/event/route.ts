@@ -205,6 +205,28 @@ export async function POST(request: NextRequest) {
         .ilike('email', email)
         .maybeSingle();
       contactId = contact?.id || null;
+
+      // When we identify a contact by email (e.g. from checkout), retroactively
+      // link ALL prior anonymous events from this visitor to the contact.
+      // This bridges the gap between Web Pixel (sandbox) and Theme Extension
+      // (main page) which have different visitorIds.
+      if (contactId) {
+        const visitorAnonId = anonymousId || visitorId;
+        if (visitorAnonId) {
+          supabase.from('contact_events')
+            .update({ contact_id: contactId })
+            .is('contact_id', null)
+            .eq('anonymous_id', visitorAnonId)
+            .then(() => {}, () => {});
+        }
+        if (sessionId && sessionId !== visitorAnonId) {
+          supabase.from('contact_events')
+            .update({ contact_id: contactId })
+            .is('contact_id', null)
+            .eq('session_id', sessionId)
+            .then(() => {}, () => {});
+        }
+      }
     }
 
     if (!contactId && resolvedCustomerId) {

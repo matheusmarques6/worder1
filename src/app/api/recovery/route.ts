@@ -55,13 +55,7 @@ export async function GET(request: NextRequest) {
 
     const activeStoreIds = (activeStores || []).map((s: any) => s.id);
 
-    if (activeStoreIds.length === 0) {
-      return NextResponse.json({
-        items: [],
-        total: 0,
-        stats: { total: 0, pending: 0, abandoned: 0, converted: 0, recovered: 0, revenue_recovered: 0, recovery_rate: '0.0' },
-      });
-    }
+    // Don't bail early — cart tab works with org_id alone even without store IDs
 
     // =====================================================================
     // CART tab: aggregate added_to_cart pixel events from contact_events that
@@ -340,12 +334,9 @@ async function handleCartTab(opts: {
     .order('occurred_at', { ascending: false })
     .limit(2000);
 
-  // Store filter: if we know the store, use it; otherwise filter by active stores.
+  // Store filter
   if (storeId) {
     q = q.eq('store_id', storeId);
-  } else if (activeStoreIds.length > 0) {
-    // Include events with NULL store_id too (older events stored without it)
-    q = q.or(`store_id.in.(${activeStoreIds.join(',')}),store_id.is.null`);
   }
 
   const { data: rawEvents, error: evErr } = await q;
