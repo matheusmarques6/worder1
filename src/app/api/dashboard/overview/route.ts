@@ -163,9 +163,9 @@ export async function GET(request: NextRequest) {
       orders,
       stores,
     ] = await Promise.all([
-      safeQuery(() => supabaseAdmin.from('campaigns').select('*').eq('organization_id', orgId).gte('created_at', since).order('created_at', { ascending: false })),
-      safeQuery(() => supabaseAdmin.from('campaigns').select('*').eq('organization_id', orgId).gte('created_at', prevSince).lt('created_at', since)),
-      safeQuery(() => supabaseAdmin.from('flows').select('*').eq('organization_id', orgId)),
+      safeQuery(() => supabaseAdmin.from('email_campaigns').select('*').eq('organization_id', orgId).gte('created_at', since).order('created_at', { ascending: false })),
+      safeQuery(() => supabaseAdmin.from('email_campaigns').select('*').eq('organization_id', orgId).gte('created_at', prevSince).lt('created_at', since)),
+      safeQuery(() => supabaseAdmin.from('automations').select('*').eq('organization_id', orgId)),
       safeQuery(() => supabaseAdmin.from('whatsapp_campaigns').select('*').eq('organization_id', orgId).gte('created_at', since)),
       safeQuery(() => supabaseAdmin.from('sms_campaigns').select('*').eq('organization_id', orgId).gte('created_at', since)),
       safeQuery(() => supabaseAdmin.from('email_sends').select('created_at, campaign_id').eq('organization_id', orgId).gte('created_at', since)),
