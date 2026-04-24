@@ -270,6 +270,19 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
             </div>
           </div>
 
+          {/* Ocultar seção do email */}
+          <div>
+            <label className="flex items-center justify-between p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
+              <span className="text-xs text-gray-700">Ocultar seção do email</span>
+              <div className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${(s as any).hidden ? 'bg-zinc-900' : 'bg-gray-200'}`}
+                onClick={() => onStyleChange('hidden', !(s as any).hidden)}>
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${(s as any).hidden ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </div>
+            </label>
+            {(s as any).hidden && (
+              <p className="text-[10px] text-zinc-400 mt-1 px-1">Esta seção nao aparecera no email enviado.</p>
+            )}
+          </div>
 
         </div>
       )}

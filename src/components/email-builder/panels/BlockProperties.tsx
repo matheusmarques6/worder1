@@ -405,9 +405,10 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                 <p className="text-xs font-semibold text-gray-700 mb-2">Visibilidade</p>
                 <div className="space-y-1">
                   {[
-                    { v: 'all', label: 'Todos dispositivos', icon: '🖥📱' },
-                    { v: 'desktop', label: 'Apenas desktop', icon: '🖥' },
-                    { v: 'mobile', label: 'Apenas mobile', icon: '📱' },
+                    { v: 'all', label: 'Todos dispositivos' },
+                    { v: 'desktop', label: 'Apenas desktop' },
+                    { v: 'mobile', label: 'Apenas mobile' },
+                    { v: 'hidden', label: 'Ocultar do email' },
                   ].map(opt => (
                     <label key={opt.v} className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${(p.visibility || 'all') === opt.v ? 'border-zinc-900 bg-zinc-50' : 'border-gray-200 hover:border-gray-300'}`}>
                       <input type="radio" name={`vis-${block.id}`} checked={(p.visibility || 'all') === opt.v}
@@ -796,11 +797,12 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
             </summary>
             <div className="px-3 pb-3">
               <p className="text-[11px] text-zinc-400 mb-2">Selecione em quais dispositivos exibir.</p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {[
                   { value: 'all', label: 'Todos' },
-                  { value: 'mobile', label: 'Mobile' },
-                  { value: 'desktop', label: 'Desktop' },
+                  { value: 'mobile', label: 'Apenas Mobile' },
+                  { value: 'desktop', label: 'Apenas Desktop' },
+                  { value: 'hidden', label: 'Ocultar' },
                 ].map(opt => (
                   <button key={opt.value} onClick={() => onChange('visibility', opt.value)}
                     className={`flex flex-col items-center gap-1 p-2.5 border-2 rounded-lg transition-all ${(p.visibility || 'all') === opt.value ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-200 hover:border-zinc-300'}`}>

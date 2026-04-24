@@ -55,6 +55,13 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
   const linkColor = ts?.link?.color || '#F97316'
   const linkUnderline = ts?.link?.underline !== false
 
+  // Block visibility values:
+  //   undefined/''/'all'  → show everywhere (default)
+  //   'desktop'           → show on desktop only (hidden on mobile via @media)
+  //   'mobile'            → show on mobile only (hidden on desktop via @media)
+  //   'hidden'            → omit from output entirely (hidden in both preview and sent email)
+  if (p.visibility === 'hidden') return ''
+
   // Device visibility: wrap any block in a visibility class
   const visClass = p.visibility === 'desktop' ? 'worder-desktop-only' : p.visibility === 'mobile' ? 'worder-mobile-only' : ''
 
@@ -350,6 +357,8 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
 
 function renderSection(section: EmailSection, font: string, contentWidth: number, contentBg: string, settings?: EmailDocument['settings'], isFirst = false, isLast = false): string {
   const s = section.styles
+  // Hidden from builder: skip section entirely
+  if ((s as any).hidden === true) return ''
   // Device visibility: if both hidden, skip section entirely
   const showDesktop = (s as any).showOnDesktop !== false
   const showMobile = (s as any).showOnMobile !== false

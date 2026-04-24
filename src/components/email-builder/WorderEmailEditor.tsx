@@ -48,8 +48,8 @@ function SortableBlock({
   savedBlockName?: string;
   onSaveAsUniversal: () => void;
   onUnlink: () => void;
-  /** 'desktop' | 'mobile' when the block is hidden on the currently previewed device */
-  hiddenOnDevice?: 'desktop' | 'mobile' | null;
+  /** 'desktop' | 'mobile' | 'all' when the block is hidden */
+  hiddenOnDevice?: 'desktop' | 'mobile' | 'all' | null;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: blockId,
@@ -84,7 +84,7 @@ function SortableBlock({
             style={{ backgroundImage: 'repeating-linear-gradient(-45deg, rgba(0,0,0,0.04) 0 6px, transparent 6px 12px)' }}
           />
           <div className="pointer-events-none absolute left-1/2 top-1 -translate-x-1/2 z-20 flex items-center gap-1 px-1.5 py-0.5 bg-gray-900/85 text-white text-[10px] font-semibold rounded shadow">
-            {hiddenOnDevice === 'desktop' ? 'Oculto no Desktop' : 'Oculto no Mobile'}
+            {hiddenOnDevice === 'all' ? 'Oculto' : hiddenOnDevice === 'desktop' ? 'Oculto no Desktop' : 'Oculto no Mobile'}
           </div>
         </>
       )}
@@ -143,8 +143,8 @@ function SortableSection({ sectionId, children, isSelected, hiddenOnDevice, isUn
   sectionId: string;
   children: React.ReactNode;
   isSelected: boolean;
-  /** 'desktop' | 'mobile' when the section is hidden on the currently previewed device */
-  hiddenOnDevice?: 'desktop' | 'mobile' | null;
+  /** 'desktop' | 'mobile' | 'all' when the section is hidden */
+  hiddenOnDevice?: 'desktop' | 'mobile' | 'all' | null;
   /** True when the section is linked to a saved_section in the library */
   isUniversal?: boolean;
   savedSectionName?: string;
@@ -176,7 +176,7 @@ function SortableSection({ sectionId, children, isSelected, hiddenOnDevice, isUn
             style={{ backgroundImage: 'repeating-linear-gradient(-45deg, rgba(0,0,0,0.05) 0 8px, transparent 8px 16px)' }}
           />
           <div className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 z-20 flex items-center gap-1 px-2 py-0.5 bg-indigo-700/90 text-white text-[10px] font-semibold rounded shadow">
-            {hiddenOnDevice === 'desktop' ? 'Seção oculta no Desktop' : 'Seção oculta no Mobile'}
+            {hiddenOnDevice === 'all' ? 'Seção oculta' : hiddenOnDevice === 'desktop' ? 'Seção oculta no Desktop' : 'Seção oculta no Mobile'}
           </div>
         </>
       )}
@@ -1634,8 +1634,9 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                   const ss = section.styles as any
                   const sectionShowDesktop = ss.showOnDesktop !== false
                   const sectionShowMobile = ss.showOnMobile !== false
-                  const sectionHiddenOnDevice: 'desktop' | 'mobile' | null =
-                    device === 'desktop' && !sectionShowDesktop ? 'desktop'
+                  const sectionHiddenOnDevice: 'desktop' | 'mobile' | 'all' | null =
+                    ss.hidden === true ? 'all'
+                    : device === 'desktop' && !sectionShowDesktop ? 'desktop'
                     : device === 'mobile' && !sectionShowMobile ? 'mobile'
                     : null
                   return (
@@ -1774,8 +1775,9 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                 <SortableContext items={colBlocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
                                   {colBlocks.map((block) => {
                                     const bv = (block.props as any)?.visibility as string | undefined
-                                    const blockHiddenOnDevice: 'desktop' | 'mobile' | null =
-                                      device === 'desktop' && bv === 'mobile' ? 'desktop'
+                                    const blockHiddenOnDevice: 'desktop' | 'mobile' | 'all' | null =
+                                      bv === 'hidden' ? 'all'
+                                      : device === 'desktop' && bv === 'mobile' ? 'desktop'
                                       : device === 'mobile' && bv === 'desktop' ? 'mobile'
                                       : null
                                     return (
