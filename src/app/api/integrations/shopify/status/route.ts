@@ -25,14 +25,12 @@ export async function GET(request: NextRequest) {
     orgIds = [...new Set([...orgIds, ...memberships.map((m: any) => m.organization_id)])];
   }
 
-  // Build store query
+  // Build store query — don't filter is_active when a specific store is requested
   let query = supabase
     .from('shopify_stores')
     .select('*')
-    .in('organization_id', orgIds)
-    .eq('is_active', true);
+    .in('organization_id', orgIds);
 
-  // If specific store requested, filter by it
   if (requestedStoreId) {
     query = query.eq('id', requestedStoreId);
   }

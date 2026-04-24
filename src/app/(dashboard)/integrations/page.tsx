@@ -65,7 +65,7 @@ export default function IntegrationsPage() {
       setLoading(false)
     }
     loadStores()
-  }, [])
+  }, [currentStore?.id])
 
   const handleSync = async (storeId: string) => {
     setSyncing(storeId)
@@ -76,7 +76,8 @@ export default function IntegrationsPage() {
         body: JSON.stringify({ store_id: storeId }),
       })
       // Reload after sync with proper mapping
-      const res = await fetch('/api/integrations/shopify/status')
+      const storeParam = storeId ? `?store_id=${storeId}` : ''
+      const res = await fetch(`/api/integrations/shopify/status${storeParam}`)
       if (res.ok) {
         const data = await res.json()
         if (data.connected && data.store) {
