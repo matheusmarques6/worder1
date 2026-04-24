@@ -36,7 +36,7 @@ interface WorderEmailEditorProps {
 function SortableBlock({
   blockId, children, isSelected, onSelect, onClone, onDelete,
   isUniversal, savedBlockName, onSaveAsUniversal, onUnlink,
-  hiddenOnDevice,
+  hiddenOnDevice, dragDisabled,
 }: {
   blockId: string;
   children: React.ReactNode;
@@ -50,10 +50,12 @@ function SortableBlock({
   onUnlink: () => void;
   /** 'desktop' | 'mobile' | 'all' when the block is hidden */
   hiddenOnDevice?: 'desktop' | 'mobile' | 'all' | null;
+  dragDisabled?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: blockId,
     data: { type: 'block', blockId },
+    disabled: dragDisabled,
   })
   return (
     <div
@@ -439,6 +441,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     return JSON.parse(JSON.stringify(DEFAULT_DOCUMENT))
   })
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
+  const [inlineEditingBlockId, setInlineEditingBlockId] = useState<string | null>(null)
   const [selectedSubElement, setSelectedSubElement] = useState<string | null>(null)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
@@ -555,6 +558,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
 
   const clearSelection = useCallback(() => {
     setSelectedBlockId(null)
+    setInlineEditingBlockId(null)
     setSelectedSectionId(null)
     setSelectedSubElement(null)
   }, [])
@@ -1017,6 +1021,33 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     })
   }, [scheduleUniversalSync, scheduleUniversalSectionSync])
 
+  const updateBlockMultiProps = useCallback((id: string, patch: Record<string, any>) => {
+    setDoc(prev => {
+      let parentSection: EmailSection | null = null
+      const next = {
+        ...prev,
+        sections: prev.sections.map(s => {
+          if (!s.columns.some(c => c.blocks.some(b => b.id === id))) return s
+          const updated: EmailSection = {
+            ...s,
+            columns: s.columns.map(c => ({
+              ...c,
+              blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, ...patch } } : b),
+            })),
+          }
+          parentSection = updated
+          return updated
+        }),
+      }
+      const edited = allBlocks(next).find(b => b.id === id)
+      if (edited?._savedBlockId) scheduleUniversalSync(edited._savedBlockId, edited)
+      if (parentSection && (parentSection as EmailSection)._savedSectionId) {
+        scheduleUniversalSectionSync((parentSection as EmailSection)._savedSectionId!, parentSection)
+      }
+      return next
+    })
+  }, [scheduleUniversalSync, scheduleUniversalSectionSync])
+
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
 
   // ── DnD: supports reorder within column, cross-column, cross-section, and section reordering ──
@@ -1244,13 +1275,38 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSave() }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
-      if (e.key === 'Delete' && selectedBlockId) removeBlock(selectedBlockId)
-      if (e.key === 'Escape') { clearSelection(); setShowPreview(false) }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        if (inlineEditingBlockId) return // let TipTap handle undo/redo
+        e.preventDefault(); e.shiftKey ? redo() : undo()
+      }
+      if (e.key === 'Delete' && selectedBlockId && !inlineEditingBlockId) removeBlock(selectedBlockId)
+      if (e.key === 'Escape') {
+        if (inlineEditingBlockId) {
+          setInlineEditingBlockId(null)
+        } else {
+          clearSelection(); setShowPreview(false)
+        }
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleSave, undo, redo, selectedBlockId, removeBlock, clearSelection])
+  }, [handleSave, undo, redo, selectedBlockId, inlineEditingBlockId, removeBlock, clearSelection])
+
+  // ── Click-outside handler for inline editing ──
+  useEffect(() => {
+    if (!inlineEditingBlockId) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      // Check if the click is inside the editing block's DOM subtree
+      const editingEl = document.querySelector(`[data-block-id="${inlineEditingBlockId}"]`)
+      if (editingEl && !editingEl.contains(target)) {
+        setInlineEditingBlockId(null)
+      }
+    }
+    // Use mousedown so we capture before blur events
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [inlineEditingBlockId])
 
   // ── Universal-sync safeguards ──
   // If the user closes the tab or SPA-unmounts the editor mid-debounce, we
@@ -1848,7 +1904,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                       : device === 'mobile' && bv === 'desktop' ? 'mobile'
                                       : null
                                     return (
-                                    <div key={block.id} data-palette-drop-block>
+                                    <div key={block.id} data-palette-drop-block data-block-id={block.id}>
                                       {colDropIndex === blockIndex && (
                                         <div className="h-[3px] bg-[#F97316] rounded-full mx-2 transition-opacity" />
                                       )}
@@ -1863,6 +1919,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                         onSaveAsUniversal={() => saveBlockAsUniversal(block.id)}
                                         onUnlink={() => unlinkUniversalBlock(block.id)}
                                         hiddenOnDevice={blockHiddenOnDevice}
+                                        dragDisabled={inlineEditingBlockId === block.id}
                                       >
                                         <BlockPreview
                                           block={block}
@@ -1872,6 +1929,13 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                           onDelete={() => removeBlock(block.id)}
                                           selectedSubElement={selectedBlockId === block.id ? selectedSubElement : null}
                                           onSelectSubElement={setSelectedSubElement}
+                                          isInlineEditing={inlineEditingBlockId === block.id}
+                                          onEnterInlineEdit={() => {
+                                            selectBlock(block.id)
+                                            setInlineEditingBlockId(block.id)
+                                          }}
+                                          onExitInlineEdit={() => setInlineEditingBlockId(null)}
+                                          onUpdateProps={(patch) => updateBlockMultiProps(block.id, patch)}
                                         />
                                       </SortableBlock>
                                       {colDropIndex === blockIndex + 1 && blockIndex === colBlocks.length - 1 && (

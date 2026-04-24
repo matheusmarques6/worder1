@@ -1,8 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { Instagram, Facebook, Music, Youtube, Link2, Zap, Copy, X } from 'lucide-react'
 import type { EmailBlock } from '../config/types'
+
+const RichTextEditor = dynamic(
+  () => import('./RichTextEditor').then(m => m.RichTextEditor),
+  { ssr: false }
+)
 
 interface BlockPreviewProps {
   block: EmailBlock
@@ -12,6 +18,10 @@ interface BlockPreviewProps {
   onDelete: () => void
   selectedSubElement?: string | null
   onSelectSubElement?: (subEl: string | null) => void
+  isInlineEditing?: boolean
+  onEnterInlineEdit?: () => void
+  onExitInlineEdit?: () => void
+  onUpdateProps?: (patch: Record<string, any>) => void
 }
 
 const DYNAMIC_TYPES = new Set(['product-grid', 'abandoned-cart', 'order-products', 'coupon'])
@@ -51,6 +61,10 @@ export function BlockPreview({
   onDelete,
   selectedSubElement,
   onSelectSubElement,
+  isInlineEditing,
+  onEnterInlineEdit,
+  onExitInlineEdit,
+  onUpdateProps,
 }: BlockPreviewProps) {
   const p = block.props
   const pad = parsePadding(p.padding)
@@ -69,10 +83,27 @@ export function BlockPreview({
               textAlign: (p.align as React.CSSProperties['textAlign']) || 'left',
               backgroundColor: p.backgroundColor || undefined,
             }}
+            onDoubleClick={(e) => {
+              if (!isInlineEditing) {
+                e.stopPropagation()
+                onEnterInlineEdit?.()
+              }
+            }}
           >
-            {/* Wrap in a div that forces text-align on all children */}
-            <style dangerouslySetInnerHTML={{ __html: `.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} p,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h1,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h2,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h3,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h4{text-align:${p.align || 'left'}}` }} />
-            <div className={`worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')}`} dangerouslySetInnerHTML={{ __html: p.contentHtml || (typeof p.content === 'string' ? p.content : '') || '<p>Escreva seu texto aqui.</p>' }} />
+            {isInlineEditing ? (
+              <RichTextEditor
+                content={p.contentHtml || (typeof p.content === 'string' ? p.content : '') || '<p>Escreva seu texto aqui.</p>'}
+                onChange={(html: string) => {
+                  onUpdateProps?.({ contentHtml: html })
+                }}
+              />
+            ) : (
+              <>
+                {/* Wrap in a div that forces text-align on all children */}
+                <style dangerouslySetInnerHTML={{ __html: `.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} p,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h1,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h2,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h3,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h4{text-align:${p.align || 'left'}}` }} />
+                <div className={`worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')}`} dangerouslySetInnerHTML={{ __html: p.contentHtml || (typeof p.content === 'string' ? p.content : '') || '<p>Escreva seu texto aqui.</p>' }} />
+              </>
+            )}
           </div>
         )
 
@@ -155,7 +186,45 @@ export function BlockPreview({
                 boxSizing: 'border-box',
               }}
             >
-              {p.text}
+              {isInlineEditing ? (
+                <span
+                  contentEditable
+                  suppressContentEditableWarning
+                  onBlur={(e) => {
+                    const newText = (e.target as HTMLSpanElement).textContent || ''
+                    if (newText !== p.text) {
+                      onUpdateProps?.({ text: newText })
+                    }
+                    onExitInlineEdit?.()
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      ;(e.target as HTMLSpanElement).blur()
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault()
+                      ;(e.target as HTMLSpanElement).textContent = p.text || ''
+                      onExitInlineEdit?.()
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  style={{ outline: 'none', cursor: 'text', minWidth: 20, display: 'inline-block' }}
+                >
+                  {p.text}
+                </span>
+              ) : (
+                <span
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    onEnterInlineEdit?.()
+                  }}
+                >
+                  {p.text}
+                </span>
+              )}
             </a>
           </div>
         )
