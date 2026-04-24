@@ -5,7 +5,7 @@ import { getSupabaseClient } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const SHOPIFY_API_VERSION = '2024-10';
+const SHOPIFY_API_VERSION = '2025-01';
 const TZ_OFFSET = '-03:00';
 
 const toNum = (v: any): number => {
