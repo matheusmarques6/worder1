@@ -29,13 +29,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'shop parameter required' }, { status: 400 });
   }
 
-  const apiUrl = process.env.NEXT_PUBLIC_APP_URL || '';
-  const trackEndpoint = `${apiUrl}/api/shopify/track`;
+  const apiUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.worder.com.br';
 
-  const code = generatePixelCode(trackEndpoint, shopDomain);
+  // Generate simple 3-line loader (like WeTracked) instead of 300+ line inline code
+  const loaderCode = `// Worder Tracking Pixel
+// Instale como Custom Pixel no Shopify Admin → Settings → Customer Events
+!function(t,w,d){var s=d.createElement("script");s.async=!0;s.src="${apiUrl}/api/pixel/worder-pixel.js?shop="+t.init.data.shop.myshopifyDomain;d.head.append(s);w.__worder_ctx=t}(this,window,document);`;
+
+  // Also generate the full inline version as fallback
+  const trackEndpoint = `${apiUrl}/api/shopify/track`;
+  const inlineCode = generatePixelCode(trackEndpoint, shopDomain);
 
   return NextResponse.json({
-    code,
+    code: loaderCode,
+    inlineCode,
     instructions: {
       step1: 'No admin da Shopify, vá em Configurações → Customer Events',
       step2: 'Clique em "Adicionar pixel personalizado"',
