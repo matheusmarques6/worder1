@@ -69,7 +69,9 @@ export default function FormsPage() {
   const fetchForms = useCallback(async () => {
     try {
       setIsLoading(true)
-      const res = await fetch('/api/forms')
+      const params = new URLSearchParams();
+      if (currentStore?.id) params.set('storeId', currentStore.id);
+      const res = await fetch(`/api/forms?${params}`)
       if (res.ok) {
         const data = await res.json()
         setForms(data.forms || [])

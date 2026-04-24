@@ -124,7 +124,9 @@ export default function AutomationsPage() {
     async function fetchStats() {
       setStatsLoading(true);
       try {
-        const res = await fetch('/api/automations/dashboard-stats');
+        const statsParams = new URLSearchParams();
+        if (currentStore?.id) statsParams.set('storeId', currentStore.id);
+        const res = await fetch(`/api/automations/dashboard-stats?${statsParams}`);
         if (res.ok) {
           const data = await res.json();
           setDashboardStats(data);
@@ -148,7 +150,9 @@ export default function AutomationsPage() {
 
       setLoading(true);
       try {
-        const res = await fetch(`/api/automations?organizationId=${organizationId}`);
+        const params = new URLSearchParams({ organizationId });
+        if (currentStore?.id) params.set('storeId', currentStore.id);
+        const res = await fetch(`/api/automations?${params}`);
         if (res.ok) {
           const data = await res.json();
           setAutomations(data.automations || []);
