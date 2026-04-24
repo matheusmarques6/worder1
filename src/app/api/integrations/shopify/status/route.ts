@@ -75,7 +75,14 @@ export async function GET(request: NextRequest) {
     if (count && count > customersCount) customersCount = count;
   } catch {}
 
-  // Count orders from contact_events for THIS store
+  // Count orders — try shopify_orders first, fallback to contact_events
+  try {
+    const { count } = await supabase
+      .from('shopify_orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('store_id', store.id);
+    if (count && count > ordersCount) ordersCount = count;
+  } catch {}
   try {
     const { count } = await supabase
       .from('contact_events')
@@ -85,7 +92,7 @@ export async function GET(request: NextRequest) {
     if (count && count > ordersCount) ordersCount = count;
   } catch {}
 
-  // Count products for THIS store
+  // Count products — try shopify_products first, fallback to products
   try {
     const { count } = await supabase
       .from('shopify_products')
@@ -102,6 +109,20 @@ export async function GET(request: NextRequest) {
       if (count) productsCount = count;
     } catch {}
   }
+
+  // Calculate revenue from shopify_orders
+  let totalRevenue = store.total_revenue || 0;
+  try {
+    const { data: orderRevenue } = await supabase
+      .from('shopify_orders')
+      .select('total_price')
+      .eq('store_id', store.id)
+      .in('financial_status', ['paid', 'partially_paid']);
+    if (orderRevenue) {
+      const rev = orderRevenue.reduce((sum: number, o: any) => sum + (parseFloat(o.total_price) || 0), 0);
+      if (rev > totalRevenue) totalRevenue = rev;
+    }
+  } catch {}
 
   // Auto-detect pixel: if we have recent pixel events, pixel IS installed
   let pixelDetected = store.pixel_installed || false;
@@ -136,7 +157,7 @@ export async function GET(request: NextRequest) {
       installedAt: store.installed_at,
       lastSyncAt: store.last_sync_at,
       totalOrders: ordersCount,
-      totalRevenue: store.total_revenue || 0,
+      totalRevenue: totalRevenue,
       totalCustomers: customersCount,
       totalProducts: productsCount,
       settings: store.settings,
