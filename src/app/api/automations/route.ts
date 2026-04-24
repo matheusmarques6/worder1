@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
     
     // ✅ NOVO: Filtrar por loja se fornecido
     if (storeId) {
-      query = query.eq('store_id', storeId);
+      query = query.or(`store_id.eq.${storeId},store_id.is.null`);
     }
 
     const { data, error } = await query;
