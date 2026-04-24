@@ -269,7 +269,7 @@ export default function IntegrationsPage() {
   // Fetch data
   useEffect(() => {
     fetchData()
-  }, [user?.organization_id])
+  }, [user?.organization_id, currentStore?.id])
 
   const fetchData = async () => {
     if (!user?.organization_id) return

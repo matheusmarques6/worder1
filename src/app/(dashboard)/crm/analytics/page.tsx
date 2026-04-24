@@ -842,11 +842,11 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false)
     }
-  }, [organizationId, storeId, period, selectedPipelineIds]) // ✅ MODIFICADO
+  }, [organizationId, storeId, period, selectedPipelineIds, currentStore?.id]) // ✅ MODIFICADO
 
   useEffect(() => {
     fetchData()
-  }, [fetchData])
+  }, [fetchData, currentStore?.id])
 
   // ✅ NOVO: Verificar loja selecionada
   if (!organizationId || !storeId) {

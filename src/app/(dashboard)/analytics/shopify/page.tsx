@@ -230,7 +230,7 @@ export default function ShopifyAnalyticsPage() {
   // ✅ MODIFICADO: Recarregar quando loja mudar
   useEffect(() => {
     fetchData()
-  }, [selectedPeriod, storeId])
+  }, [selectedPeriod, storeId, currentStore?.id])
 
   const handleRefresh = () => {
     setIsRefreshing(true)

@@ -65,7 +65,7 @@ export default function InboxPage() {
     }
     console.log('📥 [Inbox] New conversation:', conv.id)
     refreshConversations()
-  }, [refreshConversations, storeId])
+  }, [refreshConversations, storeId, currentStore?.id])
 
   const handleConversationUpdate = useCallback((conv: any) => {
     // ✅ CRÍTICO: Verificar se conversa pertence à loja atual
@@ -74,7 +74,7 @@ export default function InboxPage() {
     }
     console.log('📝 [Inbox] Conversation update:', conv.id)
     updateConversation(conv.id, conv)
-  }, [updateConversation, storeId])
+  }, [updateConversation, storeId, currentStore?.id])
 
   const handleNewMessage = useCallback((msg: any) => {
     console.log('📨 [Inbox] New message:', msg.id)
@@ -82,14 +82,14 @@ export default function InboxPage() {
       addMessage(msg)
     }
     refreshConversations()
-  }, [selectedConversation?.id, addMessage, refreshConversations])
+  }, [selectedConversation?.id, addMessage, refreshConversations, currentStore?.id])
 
   const handleStatusUpdate = useCallback((msg: any) => {
     console.log('✓ [Inbox] Status update:', msg.id, '->', msg.status)
     if (msg.id && msg.status) {
       updateMessageStatus(msg.id, msg.status)
     }
-  }, [updateMessageStatus])
+  }, [updateMessageStatus, currentStore?.id])
 
   // =============================================
   // REALTIME SUBSCRIPTIONS
@@ -110,14 +110,14 @@ export default function InboxPage() {
       fetchConversations()
       fetchInstances()
     }
-  }, [storeId])
+  }, [storeId, currentStore?.id])
 
   // Fetch conversations on mount
   useEffect(() => { 
     if (organizationId && storeId) {
       fetchConversations() 
     }
-  }, [organizationId, storeId])
+  }, [organizationId, storeId, currentStore?.id])
 
   // Fetch messages when conversation selected
   useEffect(() => {
@@ -133,7 +133,7 @@ export default function InboxPage() {
       clearMessages()
       clearContact()
     }
-  }, [selectedConversation?.id])
+  }, [selectedConversation?.id, currentStore?.id])
 
   // Polling fallback
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
@@ -155,7 +155,7 @@ export default function InboxPage() {
         clearInterval(pollingRef.current)
       }
     }
-  }, [selectedConversation?.id, refetchLatest, refreshConversations])
+  }, [selectedConversation?.id, refetchLatest, refreshConversations, currentStore?.id])
 
   // =============================================
   // HANDLERS

@@ -164,7 +164,7 @@ export default function AgentsTab() {
       fetchModels()
       fetchApiKeys()
     }
-  }, [organizationId, storeId])
+  }, [organizationId, storeId, currentStore?.id])
 
   // Toggle agent status
   const handleToggleStatus = async (agent: Agent) => {

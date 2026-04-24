@@ -60,7 +60,7 @@ export default function WhatsAppSettingsPage() {
   useEffect(() => {
     loadMetaConfig()
     loadInstances()
-  }, [])
+  }, [currentStore?.id])
 
   // =============================================
   // META API

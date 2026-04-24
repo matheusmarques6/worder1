@@ -63,7 +63,7 @@ export default function AdvancedAnalyticsPage() {
     // Simular carregamento inicial
     const timer = setTimeout(() => setIsLoading(false), 500)
     return () => clearTimeout(timer)
-  }, [])
+  }, [currentStore?.id])
 
   if (isLoading) {
     return (
