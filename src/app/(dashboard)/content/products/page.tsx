@@ -16,6 +16,7 @@ import {
   CheckCircle,
   XCircle,
 } from '@phosphor-icons/react'
+import { useStoreStore } from '@/stores'
 
 interface Product {
   id: string
@@ -43,6 +44,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 }
 
 export default function ProductsPage() {
+  const { currentStore } = useStoreStore()
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -56,7 +58,9 @@ export default function ProductsPage() {
     try {
       setLoading(true)
       setError(null)
-      const res = await fetch('/api/products/shopify')
+      const params = new URLSearchParams()
+      if (currentStore?.id) params.set('storeId', currentStore.id)
+      const res = await fetch(`/api/products/shopify?${params}`)
       if (!res.ok) throw new Error('Falha ao carregar produtos')
       const data = await res.json()
       setProducts(data.products || [])
@@ -67,7 +71,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [currentStore?.id])
 
   useEffect(() => {
     fetchProducts()
@@ -78,10 +82,12 @@ export default function ProductsPage() {
     try {
       setSyncing(true)
       setError(null)
+      const syncBody: Record<string, string> = { syncType: 'products' }
+      if (currentStore?.id) syncBody.storeId = currentStore.id
       const res = await fetch('/api/shopify/sync-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ syncType: 'products' }),
+        body: JSON.stringify(syncBody),
       })
       const data = await res.json()
       if (!res.ok) {

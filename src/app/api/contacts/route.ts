@@ -57,9 +57,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Listagem — busca em TODAS as orgs do usuário
+    // NOTE: Removed deals(id) join — FK may not exist and causes 500 errors
     let query = supabase
       .from('contacts')
-      .select('*, deals(id)', { count: 'exact' })
+      .select('*', { count: 'exact' })
       .in('organization_id', orgIds)
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
@@ -82,14 +83,8 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    const contactsWithDealsCount = data?.map(contact => ({
-      ...contact,
-      deals_count: contact.deals?.length || 0,
-      deals: undefined,
-    })) || [];
-
     return NextResponse.json({
-      contacts: contactsWithDealsCount,
+      contacts: data || [],
       pagination: {
         page,
         limit,

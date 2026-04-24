@@ -26,7 +26,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useStoreStore } from '@/stores';
 import { FlowBuilder, getFlowDataForSave } from '@/components/flow-builder';
 import { FLOW_TEMPLATES } from '@/lib/automation/flow-templates';
 import type { FlowTemplate } from '@/lib/automation/flow-templates';
@@ -99,6 +99,7 @@ function getTemplateIcon(templateId: string) {
 
 export default function AutomationsPage() {
   const { user } = useAuthStore();
+  const { currentStore } = useStoreStore();
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'draft'>('all');
@@ -121,6 +122,7 @@ export default function AutomationsPage() {
   // Fetch dashboard stats
   useEffect(() => {
     async function fetchStats() {
+      setStatsLoading(true);
       try {
         const res = await fetch('/api/automations/dashboard-stats');
         if (res.ok) {
@@ -134,7 +136,7 @@ export default function AutomationsPage() {
       }
     }
     fetchStats();
-  }, []);
+  }, [currentStore?.id]);
 
   // Fetch automations
   useEffect(() => {
@@ -159,7 +161,7 @@ export default function AutomationsPage() {
     }
 
     fetchAutomations();
-  }, [organizationId]);
+  }, [organizationId, currentStore?.id]);
 
   // Filter automations
   const filteredAutomations = automations.filter((automation) => {

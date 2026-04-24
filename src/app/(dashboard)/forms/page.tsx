@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
+import { useStoreStore } from '@/stores'
 import {
   Plus, FileText, Eye, Users, BarChart3, Settings,
   Loader2, Search, Trash2, Copy, ExternalLink,
@@ -50,6 +51,7 @@ function getFormType(form: Form): string {
 }
 
 export default function FormsPage() {
+  const { currentStore } = useStoreStore()
   const [forms, setForms] = useState<Form[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -81,7 +83,7 @@ export default function FormsPage() {
 
   useEffect(() => {
     fetchForms()
-  }, [fetchForms])
+  }, [fetchForms, currentStore?.id])
 
   const POPUP_TEMPLATES: Record<string, { name: string; desc: string; design: any }> = {
     discount: { name: 'Popup de Desconto', desc: 'Captura email com cupom de desconto', design: {

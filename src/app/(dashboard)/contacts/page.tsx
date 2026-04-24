@@ -75,10 +75,12 @@ export default function ContactsPage() {
     setSyncing(true)
     setSyncMessage('')
     try {
+      const syncBody: Record<string, string> = { syncType: 'customers' }
+      if (currentStore?.id) syncBody.storeId = currentStore.id
       const res = await fetch('/api/shopify/sync-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ syncType: 'customers' }),
+        body: JSON.stringify(syncBody),
       })
       const data = await res.json()
       if (data.data) {
