@@ -34,6 +34,7 @@ export function RichTextEditor({ content, onChange, onInsertMergeTag, placeholde
       Placeholder.configure({ placeholder: placeholder || 'Escreva seu texto...' }),
     ],
     content: content || '<p></p>',
+    autofocus: 'end',
     onUpdate: ({ editor: e }) => {
       onChange(e.getHTML())
     },

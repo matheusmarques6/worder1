@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import type { WorderEmailEditorHandle } from '@/components/email-builder/WorderEmailEditor';
 
 const WorderEditor = dynamic(() => import('@/components/email-builder/WorderEmailEditor'), { ssr: false });
 
@@ -21,15 +22,6 @@ interface EmailEditorOverlayProps {
   onNavigate?: (templateId: string) => void;
 }
 
-/**
- * Opens the email editor FULLSCREEN inside the flow builder.
- * When user clicks Exit/Back, returns to the flow at the same node.
- * Passes flowContext so Preview uses real event data.
- *
- * When `siblings` is provided with more than one entry, a navigation
- * toolbar is rendered so the user can switch between email nodes
- * without leaving the editor overlay.
- */
 export function EmailEditorOverlay({
   templateId,
   triggerType,
@@ -41,6 +33,7 @@ export function EmailEditorOverlay({
   const [template, setTemplate] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const editorRef = useRef<WorderEmailEditorHandle>(null);
 
   const showNav = siblings && siblings.length > 1;
   const currentIdx = siblings?.findIndex(s => s.templateId === templateId) ?? -1;
@@ -48,11 +41,8 @@ export function EmailEditorOverlay({
   const hasNext = currentIdx >= 0 && currentIdx < (siblings?.length ?? 0) - 1;
 
   const goTo = useCallback(
-    (newTemplateId: string) => {
-      // TODO: save current template before navigating. The WorderEmailEditor
-      // does not expose an imperative save handle, so we cannot trigger a save
-      // from outside. The user's unsaved edits in the current template may be
-      // lost when navigating away.
+    async (newTemplateId: string) => {
+      try { await editorRef.current?.save(); } catch {}
       onNavigate?.(newTemplateId);
     },
     [onNavigate],
@@ -70,7 +60,6 @@ export function EmailEditorOverlay({
     }
   }, [hasNext, siblings, currentIdx, goTo]);
 
-  // Keyboard shortcuts: Alt+ArrowLeft / Alt+ArrowRight
   useEffect(() => {
     if (!showNav) return;
     const handler = (e: KeyboardEvent) => {
@@ -135,11 +124,15 @@ export function EmailEditorOverlay({
     }
   };
 
-  // -- Navigation toolbar --------------------------------------------------
+  const handleClose = useCallback(async () => {
+    try { await editorRef.current?.save(); } catch {}
+    onClose();
+  }, [onClose]);
+
   const navToolbar = showNav ? (
     <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
       <button
-        onClick={onClose}
+        onClick={handleClose}
         className="text-sm text-gray-600 hover:text-gray-900 font-medium"
       >
         Voltar ao flow
@@ -150,7 +143,7 @@ export function EmailEditorOverlay({
           onClick={goPrev}
           disabled={!hasPrev}
           className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30"
-          title="Email anterior (Alt + Left)"
+          title="Email anterior (Alt + ←)"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -171,13 +164,12 @@ export function EmailEditorOverlay({
           onClick={goNext}
           disabled={!hasNext}
           className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30"
-          title="Proximo email (Alt + Right)"
+          title="Próximo email (Alt + →)"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Spacer to keep the select centered */}
       <div className="w-[100px]" />
     </div>
   ) : null;
@@ -208,12 +200,13 @@ export function EmailEditorOverlay({
       {navToolbar}
       <div className="flex-1 min-h-0">
         <WorderEditor
+          ref={editorRef}
           key={templateId}
           templateName={template.name || 'Template'}
           design={template.design_json || template.design}
           onSave={handleSave}
           onRename={handleRename}
-          onBack={onClose}
+          onBack={handleClose}
           flowContext={triggerType && organizationId ? {
             templateId,
             triggerType,

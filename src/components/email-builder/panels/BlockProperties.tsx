@@ -424,13 +424,14 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                 <p className="text-xs font-semibold text-gray-700 mb-1">Lógica mostrar/ocultar</p>
                 <p className="text-[10px] text-gray-400 mb-3">Personalize o email mostrando ou ocultando conteúdo baseado nas propriedades ou eventos do contato.</p>
                 <div className="flex gap-2">
-                  <button className="px-3 py-1.5 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <button disabled className="px-3 py-1.5 text-[11px] font-medium text-gray-400 bg-gray-50 border border-gray-200 rounded-lg cursor-not-allowed" title="Em breve">
                     Usar construtor
                   </button>
-                  <button className="px-3 py-1.5 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <button disabled className="px-3 py-1.5 text-[11px] font-medium text-gray-400 bg-gray-50 border border-gray-200 rounded-lg cursor-not-allowed" title="Em breve">
                     Usar código
                   </button>
                 </div>
+                <p className="text-[10px] text-gray-400 mt-1 italic">Em breve</p>
               </div>
 
               {/* Content repeat */}

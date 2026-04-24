@@ -298,6 +298,19 @@ export async function resolveProductBlocks(
       // No products available
     }
 
+    if (products.length === 0 && feedType.startsWith('trigger_')) {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        const fallbackRes = await fetch(`${baseUrl}/api/email/product-feeds/resolve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feed_type: 'bestsellers', organization_id: orgId, max_products: maxProducts }),
+        })
+        const fallbackData = await fallbackRes.json()
+        products = fallbackData.products || []
+      } catch {}
+    }
+
     if (products.length === 0) {
       result = result.replace(fullMatch, '')
       continue

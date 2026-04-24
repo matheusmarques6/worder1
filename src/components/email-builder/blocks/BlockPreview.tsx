@@ -188,6 +188,7 @@ export function BlockPreview({
             >
               {isInlineEditing ? (
                 <span
+                  ref={(el) => { if (el) { el.focus(); const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const s = window.getSelection(); s?.removeAllRanges(); s?.addRange(r); } }}
                   contentEditable
                   suppressContentEditableWarning
                   onBlur={(e) => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star, RotateCcw } from 'lucide-react'
 import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, useDroppable, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
@@ -432,7 +432,11 @@ function allBlocks(doc: EmailDocument): EmailBlock[] {
 
 const LAYOUT_ICONS: Record<string, typeof Square> = { Square, Columns, PanelLeft, PanelRight, LayoutGrid }
 
-export default function WorderEmailEditor({ templateName, design, onSave, onBack, onRename, flowContext }: WorderEmailEditorProps) {
+export interface WorderEmailEditorHandle {
+  save: () => Promise<void>;
+}
+
+const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorProps>(function WorderEmailEditor({ templateName, design, onSave, onBack, onRename, flowContext }, ref) {
   const [editableName, setEditableName] = useState(templateName)
   const [editingName, setEditingName] = useState(false)
   // ── State ──
@@ -1225,6 +1229,8 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
     setSaving(false)
   }, [doc, onSave, showToast, flushUniversalSync])
 
+  useImperativeHandle(ref, () => ({ save: handleSave }), [handleSave])
+
   // ── Preview ──
   const handlePreview = useCallback(async () => {
     // When inside a flow, use the flow preview mode with real data
@@ -1906,7 +1912,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                     return (
                                     <div key={block.id} data-palette-drop-block data-block-id={block.id}>
                                       {colDropIndex === blockIndex && (
-                                        <div className="h-[3px] bg-[#F97316] rounded-full mx-2 transition-opacity" />
+                                        <div className="h-[3px] bg-[#3B82F6] rounded-full mx-2 transition-opacity" />
                                       )}
                                       <SortableBlock
                                         blockId={block.id}
@@ -1939,7 +1945,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                         />
                                       </SortableBlock>
                                       {colDropIndex === blockIndex + 1 && blockIndex === colBlocks.length - 1 && (
-                                        <div className="h-[3px] bg-[#F97316] rounded-full mx-2 transition-opacity" />
+                                        <div className="h-[3px] bg-[#3B82F6] rounded-full mx-2 transition-opacity" />
                                       )}
                                     </div>
                                     )
@@ -2253,7 +2259,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       )}
     </div>
   )
-}
+})
 
 function SavedBlockVersionsModal({ savedBlockId, onClose, onRestored }: {
   savedBlockId: string; onClose: () => void; onRestored: () => void
@@ -2321,3 +2327,5 @@ function SavedBlockVersionsModal({ savedBlockId, onClose, onRestored }: {
     </div>
   )
 }
+
+export default WorderEmailEditor

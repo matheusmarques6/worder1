@@ -252,7 +252,7 @@ export function SectionProperties({ section, onStyleChange, onColumnLayoutChange
           {/* Visibilidade por dispositivo */}
           <div>
             <p className="text-[12px] font-medium text-gray-700 mb-2">Visibilidade por dispositivo</p>
-            <div className="space-y-2">
+            <div className={`space-y-2 ${(s as any).hidden ? 'opacity-40 pointer-events-none' : ''}`}>
               <label className="flex items-center justify-between p-2.5 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
                 <span className="text-xs text-gray-700">Mostrar no Desktop</span>
                 <div className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${(s as any).showOnDesktop !== false ? 'bg-zinc-900' : 'bg-gray-200'}`}

@@ -437,6 +437,7 @@ export async function POST(request: NextRequest) {
       added_to_cart: 'trigger_added_to_cart',
       checkout_started: 'trigger_checkout_abandoned',
       checkout_completed: 'trigger_order',
+      active_on_site: 'trigger_active_on_site',
     };
     const triggerType = triggerMap[mappedEventType];
     if (triggerType && contactId) {
