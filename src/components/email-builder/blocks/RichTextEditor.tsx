@@ -7,7 +7,8 @@ import LinkExtension from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Link, Type, Tag } from 'lucide-react'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { MergeTagQuickPicker } from '../modals/MergeTagQuickPicker'
 
 interface RichTextEditorProps {
   content: string
@@ -17,6 +18,11 @@ interface RichTextEditorProps {
 }
 
 export function RichTextEditor({ content, onChange, onInsertMergeTag, placeholder }: RichTextEditorProps) {
+  const [showQuickPicker, setShowQuickPicker] = useState(false)
+  const [quickPickerRect, setQuickPickerRect] = useState<{ top: number; left: number; bottom: number } | undefined>()
+  const tagButtonRef = useRef<HTMLButtonElement>(null)
+  const toolbarRef = useRef<HTMLDivElement>(null)
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -45,10 +51,41 @@ export function RichTextEditor({ content, onChange, onInsertMergeTag, placeholde
     }
   }, [content, editor])
 
+  const handleToggleQuickPicker = useCallback(() => {
+    if (showQuickPicker) {
+      setShowQuickPicker(false)
+      return
+    }
+    if (tagButtonRef.current && toolbarRef.current) {
+      const btnRect = tagButtonRef.current.getBoundingClientRect()
+      const toolbarRect = toolbarRef.current.getBoundingClientRect()
+      setQuickPickerRect({
+        top: btnRect.top - toolbarRect.top,
+        left: btnRect.left - toolbarRect.left,
+        bottom: btnRect.bottom - toolbarRect.top,
+      })
+    }
+    setShowQuickPicker(true)
+  }, [showQuickPicker])
+
+  const handleQuickPickerSelect = useCallback((tag: string) => {
+    editor?.chain().focus().insertContent(tag).run()
+    setShowQuickPicker(false)
+  }, [editor])
+
+  const handleCloseQuickPicker = useCallback(() => {
+    setShowQuickPicker(false)
+  }, [])
+
+  const handleOpenFullPicker = useCallback(() => {
+    setShowQuickPicker(false)
+    onInsertMergeTag?.()
+  }, [onInsertMergeTag])
+
   if (!editor) return null
 
-  const ToolbarButton = ({ active, onClick, children, title }: { active?: boolean; onClick: () => void; children: React.ReactNode; title: string }) => (
-    <button type="button" onClick={onClick} title={title}
+  const ToolbarButton = ({ active, onClick, children, title, buttonRef }: { active?: boolean; onClick: () => void; children: React.ReactNode; title: string; buttonRef?: React.Ref<HTMLButtonElement> }) => (
+    <button type="button" ref={buttonRef} onClick={onClick} title={title}
       className={`p-1 rounded transition-colors ${active ? 'bg-brand-100 text-brand-700' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}>
       {children}
     </button>
@@ -57,7 +94,7 @@ export function RichTextEditor({ content, onChange, onInsertMergeTag, placeholde
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
       {/* Toolbar */}
-      <div className="flex items-center gap-0.5 px-1.5 py-1 border-b border-gray-100 bg-gray-50 flex-wrap">
+      <div ref={toolbarRef} className="relative flex items-center gap-0.5 px-1.5 py-1 border-b border-gray-100 bg-gray-50 flex-wrap">
         <select
           value={editor.isActive('heading', { level: 1 }) ? 'h1' : editor.isActive('heading', { level: 2 }) ? 'h2' : editor.isActive('heading', { level: 3 }) ? 'h3' : 'p'}
           onChange={e => {
@@ -99,10 +136,17 @@ export function RichTextEditor({ content, onChange, onInsertMergeTag, placeholde
           <Link className="w-3.5 h-3.5" />
         </ToolbarButton>
 
-        {onInsertMergeTag && (
-          <ToolbarButton onClick={onInsertMergeTag} title="Inserir Merge Tag">
-            <Tag className="w-3.5 h-3.5" />
-          </ToolbarButton>
+        <ToolbarButton active={showQuickPicker} onClick={handleToggleQuickPicker} title="Inserir Merge Tag" buttonRef={tagButtonRef}>
+          <Tag className="w-3.5 h-3.5" />
+        </ToolbarButton>
+
+        {showQuickPicker && (
+          <MergeTagQuickPicker
+            onSelect={handleQuickPickerSelect}
+            onOpenFull={onInsertMergeTag ? handleOpenFullPicker : undefined}
+            onClose={handleCloseQuickPicker}
+            anchorRect={quickPickerRect}
+          />
         )}
       </div>
 
