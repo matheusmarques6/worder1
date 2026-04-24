@@ -140,6 +140,7 @@ export async function GET(request: NextRequest) {
     const auth = await getAuthClient();
     if (!auth) return authError();
     const orgId = auth.user.organization_id;
+    const storeId = request.nextUrl.searchParams.get('storeId');
 
     const days = daysForRange(range);
     const sinceDate = new Date();
@@ -171,6 +172,9 @@ export async function GET(request: NextRequest) {
       safeQuery(() => supabaseAdmin.from('email_sends').select('created_at, campaign_id').eq('organization_id', orgId).gte('created_at', since)),
       // Orders sit in shopify_orders (joined via store). Fall back to `orders` if present.
       safeQuery(async () => {
+        if (storeId) {
+          return supabaseAdmin.from('shopify_orders').select('total_price, created_at, financial_status, cancelled_at').eq('store_id', storeId).gte('created_at', since);
+        }
         const storesRes = await supabaseAdmin.from('shopify_stores').select('id').eq('organization_id', orgId);
         const storeIds = (storesRes.data || []).map((s: any) => s.id);
         if (!storeIds.length) return { data: [], error: null };

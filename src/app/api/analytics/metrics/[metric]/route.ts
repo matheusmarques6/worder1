@@ -16,19 +16,26 @@ export async function GET(request: NextRequest, { params }: { params: { metric: 
     const tab = searchParams.get('tab') || 'chart'
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
+    const storeId = searchParams.get('storeId')
 
     const since = new Date()
     since.setDate(since.getDate() - days)
 
+    // Build base filter: storeId takes priority over orgId
+    function applyScope(query: any) {
+      if (storeId) return query.eq('store_id', storeId)
+      return query.eq('organization_id', orgId)
+    }
+
     if (tab === 'chart') {
-      // Get daily counts for chart
-      const { data: events } = await supabaseAdmin
+      let chartQuery = supabaseAdmin
         .from('contact_events')
         .select('occurred_at')
-        .eq('organization_id', orgId)
         .eq('event_type', metricType)
         .gte('occurred_at', since.toISOString())
         .order('occurred_at', { ascending: true })
+
+      const { data: events } = await applyScope(chartQuery)
 
       // Group by day
       const dailyCounts: Record<string, number> = {}
@@ -51,13 +58,14 @@ export async function GET(request: NextRequest, { params }: { params: { metric: 
     if (tab === 'feed') {
       // Activity feed with contact info
       const offset = (page - 1) * limit
-      const { data: events, count } = await supabaseAdmin
+      let feedQuery = supabaseAdmin
         .from('contact_events')
         .select('*, contacts(id, first_name, last_name, email)', { count: 'exact' })
-        .eq('organization_id', orgId)
         .eq('event_type', metricType)
         .order('occurred_at', { ascending: false })
         .range(offset, offset + limit - 1)
+
+      const { data: events, count } = await applyScope(feedQuery)
 
       return NextResponse.json({
         events: (events || []).map((e: any) => ({

@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const type = searchParams.get('type')
     const search = searchParams.get('search')
+    const storeId = searchParams.get('storeId')
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = (page - 1) * limit
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
+    if (storeId) query = query.or(`store_id.eq.${storeId},store_id.is.null`)
     if (status) query = query.eq('status', status)
     if (type) query = query.eq('type', type)
     if (search) query = query.ilike('name', `%${search}%`)
