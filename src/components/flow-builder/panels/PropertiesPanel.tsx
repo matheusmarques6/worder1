@@ -2114,7 +2114,21 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
   const [showSettings, setShowSettings] = useState(false)
   const [showPreviewMode, setShowPreviewMode] = useState(false)
   const [showEmailEditor, setShowEmailEditor] = useState(false)
+  const [editorTemplateId, setEditorTemplateId] = useState<string | null>(null)
   const storeId = useFlowStore.getState().automationConfig?.storeId;
+  const nodes = useFlowStore((state) => state.nodes);
+
+  // Compute sibling email nodes for in-editor navigation
+  const emailSiblings = useMemo(() => {
+    return nodes
+      .filter(n => n.data?.nodeType === 'action_email' && n.data?.config?.templateId && n.data.config.templateId !== '__new__')
+      .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0))
+      .map(n => ({
+        templateId: n.data.config.templateId as string,
+        nodeName: n.data.label || 'Email',
+        nodeId: n.id,
+      }));
+  }, [nodes]);
 
   const fetchTemplates = useCallback(async () => {
     setLoadingTemplates(true);
@@ -2274,7 +2288,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
         {config.templateId && config.templateId !== '__new__' && (
           <EmailTemplatePreview
             templateId={config.templateId}
-            onEdit={() => setShowEmailEditor(true)}
+            onEdit={() => { setEditorTemplateId(null); setShowEmailEditor(true); }}
           />
         )}
 
@@ -2407,13 +2421,18 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
       )}
 
       {/* Email Editor fullscreen (opens INSIDE the flow, not new tab) */}
-      {showEmailEditor && config.templateId && config.templateId !== '__new__' && (
+      {showEmailEditor && (editorTemplateId || config.templateId) && (editorTemplateId || config.templateId) !== '__new__' && (
         <EmailEditorOverlay
-          templateId={config.templateId}
+          templateId={editorTemplateId || config.templateId}
           triggerType={triggerType}
           organizationId={organizationId}
+          siblings={emailSiblings}
+          onNavigate={(newTemplateId) => {
+            setEditorTemplateId(newTemplateId);
+          }}
           onClose={async () => {
             await fetchTemplates();
+            setEditorTemplateId(null);
             setShowEmailEditor(false);
           }}
         />
