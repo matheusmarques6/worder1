@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useStoreStore } from '@/stores'
 import {
   Plus, Search, RefreshCw, MoreVertical, Play, Pause, Copy, Trash2,
   Calendar, Users, Send, CheckCircle, Eye, MessageSquare, Clock,
@@ -45,6 +45,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: any }> 
 export default function CampaignsPage() {
   const router = useRouter()
   const { user } = useAuthStore()
+  const { currentStore } = useStoreStore()
   const organizationId = user?.organization_id || ''
   
   // Verificar conexão do WhatsApp
@@ -75,7 +76,7 @@ export default function CampaignsPage() {
     }
   }
 
-  useEffect(() => { if (organizationId) fetchCampaigns() }, [statusFilter, organizationId])
+  useEffect(() => { if (organizationId) fetchCampaigns() }, [statusFilter, organizationId, currentStore?.id])
 
   const handleAction = async (action: string, campaignId: string) => {
     setOpenDropdown(null)

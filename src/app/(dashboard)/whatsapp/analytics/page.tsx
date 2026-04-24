@@ -26,7 +26,7 @@ import {
   Shield,
 } from 'lucide-react'
 import { QualityDashboard } from '@/components/whatsapp/quality'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useStoreStore } from '@/stores'
 import {
   XAxis,
   YAxis,
@@ -312,6 +312,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export default function WhatsAppAnalyticsPage() {
   const { user } = useAuthStore()
+  const { currentStore } = useStoreStore()
   const organizationId = user?.organization_id || ''
   const [activeTab, setActiveTab] = useState<'campaigns' | 'ai' | 'quality'>('campaigns')
   const [dateRange, setDateRange] = useState('7d')
@@ -473,7 +474,7 @@ export default function WhatsAppAnalyticsPage() {
     }
 
     fetchData()
-  }, [organizationId, dateRange])
+  }, [organizationId, dateRange, currentStore?.id])
 
   const handleRefresh = async () => {
     setLoading(true)

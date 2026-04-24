@@ -213,6 +213,7 @@ export default function OrdersPage() {
   const { currentStore, stores } = useStoreStore()
 
   const fetchOrders = useCallback(async () => {
+    if (!currentStore?.id) return
     try {
       setIsLoading(true)
       const params = new URLSearchParams()

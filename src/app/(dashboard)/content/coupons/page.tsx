@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { Ticket, Plus, RefreshCw, Trash2, Pencil, X } from 'lucide-react';
+import { useStoreStore } from '@/stores';
 
 interface Coupon {
   id: string;
@@ -48,6 +49,7 @@ function formatValue(coupon: Coupon): string {
 }
 
 export default function CouponsPage() {
+  const { currentStore } = useStoreStore();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -58,9 +60,10 @@ export default function CouponsPage() {
   const [error, setError] = useState('');
 
   const fetchCoupons = useCallback(async () => {
+    if (!currentStore?.id) return;
     try {
       setLoading(true);
-      const res = await fetch('/api/content/coupons');
+      const res = await fetch(`/api/content/coupons?storeId=${currentStore.id}`);
       if (res.ok) {
         const data = await res.json();
         setCoupons(data.coupons || []);
@@ -70,7 +73,7 @@ export default function CouponsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentStore?.id]);
 
   useEffect(() => {
     fetchCoupons();

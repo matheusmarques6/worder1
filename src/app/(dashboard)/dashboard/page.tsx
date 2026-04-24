@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useStoreStore } from '@/stores'
 import {
   BarChart,
   Bar,
@@ -148,6 +148,7 @@ function useCountUp(target: number, duration = 1800): number {
 
 export default function DashboardPage() {
   const { user } = useAuthStore()
+  const { currentStore } = useStoreStore()
   const firstName = (user?.name?.split(' ')[0]) || user?.email?.split('@')[0] || 'por aí'
 
   // Persist filter choices across sessions so users land where they
@@ -189,9 +190,10 @@ export default function DashboardPage() {
   }
 
   const fetchData = async () => {
+    if (!currentStore?.id) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/dashboard/overview?range=${range}&granularity=${granularity}`, { cache: 'no-store' })
+      const res = await fetch(`/api/dashboard/overview?range=${range}&granularity=${granularity}&storeId=${currentStore.id}`, { cache: 'no-store' })
       if (res.ok) {
         const json = (await res.json()) as Overview
         setData({ ...EMPTY_OVERVIEW, ...json })
@@ -205,7 +207,7 @@ export default function DashboardPage() {
     }
   }
 
-  useEffect(() => { fetchData() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [range, granularity])
+  useEffect(() => { fetchData() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [range, granularity, currentStore?.id])
 
   // Keyboard shortcut: "R" refreshes (ignored while typing in inputs).
   useEffect(() => {

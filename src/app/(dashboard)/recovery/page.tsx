@@ -85,6 +85,7 @@ export default function RecoveryPage() {
   const { currentStore } = useStoreStore()
 
   const fetchRecovery = useCallback(async () => {
+    if (!currentStore?.id) return
     setLoading(true)
     try {
       const params = new URLSearchParams({ type: activeTab })

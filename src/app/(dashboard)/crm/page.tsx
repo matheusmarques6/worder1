@@ -41,7 +41,7 @@ import {
   User,
 } from 'lucide-react'
 import { useDeals, usePipelines } from '@/hooks'
-import { useCRMStore, useAuthStore } from '@/stores'
+import { useCRMStore, useAuthStore, useStoreStore } from '@/stores'
 import { CreateDealModal, DealDrawer, PipelineModal, EditStageModal } from '@/components/crm'
 import type { Deal, Pipeline, PipelineStage, CreateDealData } from '@/types'
 
@@ -367,7 +367,8 @@ function EmptyState({ onCreatePipeline }: { onCreatePipeline: () => void }) {
 
 export default function CRMPage() {
   const { user } = useAuthStore()
-  const { 
+  const { currentStore } = useStoreStore()
+  const {
     deals, 
     pipelines, 
     loading, 
@@ -400,6 +401,14 @@ export default function CRMPage() {
     hasContact: 'all' as 'all' | 'yes' | 'no',
     status: 'open' as 'all' | 'open' | 'won' | 'lost', // Default: só deals abertos
   })
+
+  // Refetch when store changes
+  useEffect(() => {
+    if (currentStore?.id) {
+      refetch()
+      refetchPipelines()
+    }
+  }, [currentStore?.id])
 
   // Set active pipeline when pipelines load
   useEffect(() => {

@@ -23,6 +23,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
+import { useStoreStore } from '@/stores'
 
 interface DeliverabilityData {
   kpis: {
@@ -51,19 +52,21 @@ interface DeliverabilityData {
 }
 
 export default function DeliverabilityPage() {
+  const { currentStore } = useStoreStore()
   const [period, setPeriod] = useState('30d')
   const [data, setData] = useState<DeliverabilityData | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!currentStore?.id) return
     const days = period === '7d' ? 7 : period === '90d' ? 90 : 30
     setLoading(true)
-    fetch(`/api/analytics/deliverability?days=${days}`)
+    fetch(`/api/analytics/deliverability?days=${days}&storeId=${currentStore.id}`)
       .then(r => r.json())
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [period])
+  }, [period, currentStore?.id])
 
   const kpis = data ? [
     {

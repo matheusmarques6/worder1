@@ -272,7 +272,7 @@ export default function IntegrationsPage() {
   }, [user?.organization_id, currentStore?.id])
 
   const fetchData = async () => {
-    if (!user?.organization_id) return
+    if (!user?.organization_id || !currentStore?.id) return
 
     setLoading(true)
     try {

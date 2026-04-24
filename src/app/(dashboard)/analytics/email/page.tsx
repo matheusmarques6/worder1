@@ -22,6 +22,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts'
+import { useStoreStore } from '@/stores'
 
 // Types
 interface EmailMetrics {
@@ -136,6 +137,7 @@ function DeliverabilityScore({ metrics }: { metrics: EmailMetrics }) {
 
 // Main Page
 export default function EmailAnalyticsPage() {
+  const { currentStore } = useStoreStore()
   const [data, setData] = useState<AnalyticsData>({
     metrics: null,
     timeline: [],
@@ -145,9 +147,10 @@ export default function EmailAnalyticsPage() {
   const [days, setDays] = useState(30)
 
   const fetchData = async (d: number = days) => {
+    if (!currentStore?.id) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/analytics/email-dashboard?days=${d}`)
+      const res = await fetch(`/api/analytics/email-dashboard?days=${d}&storeId=${currentStore.id}`)
       if (!res.ok) throw new Error('Failed to fetch')
       const json = await res.json()
       setData(json)
@@ -160,7 +163,7 @@ export default function EmailAnalyticsPage() {
 
   useEffect(() => {
     fetchData()
-  }, [days])
+  }, [days, currentStore?.id])
 
   const metrics = data.metrics || {
     emailsSent: 0,

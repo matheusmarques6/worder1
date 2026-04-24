@@ -11,6 +11,7 @@ import {
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
+import { useStoreStore } from '@/stores'
 
 const ICON_MAP: Record<string, any> = {
   ShoppingCart, CreditCard, CheckCircle, Package, Box, Truck, XCircle, RotateCcw, Eye, Activity,
@@ -185,6 +186,7 @@ function FeedEventRow({ event }: { event: FeedEvent }) {
 }
 
 export default function MetricDetailPage() {
+  const { currentStore } = useStoreStore()
   const params = useParams()
   const metricKey = params.metric as string
   const info = METRIC_INFO[metricKey] || { label: metricKey, icon: 'Activity', integration: 'shopify' }
@@ -206,9 +208,10 @@ export default function MetricDetailPage() {
   const limit = 20
 
   const fetchChart = useCallback(async () => {
+    if (!currentStore?.id) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/analytics/metrics/${metricKey}?tab=chart&days=${days}`)
+      const res = await fetch(`/api/analytics/metrics/${metricKey}?tab=chart&days=${days}&storeId=${currentStore.id}`)
       const data = await res.json()
       setChartData(data.chartData || [])
       setTotal(data.total || 0)
@@ -218,12 +221,13 @@ export default function MetricDetailPage() {
     } finally {
       setLoading(false)
     }
-  }, [metricKey, days])
+  }, [metricKey, days, currentStore?.id])
 
   const fetchFeed = useCallback(async (p: number) => {
+    if (!currentStore?.id) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/analytics/metrics/${metricKey}?tab=feed&page=${p}&limit=${limit}`)
+      const res = await fetch(`/api/analytics/metrics/${metricKey}?tab=feed&page=${p}&limit=${limit}&storeId=${currentStore.id}`)
       const data = await res.json()
       setEvents(data.events || [])
       setFeedTotal(data.total || 0)
@@ -233,7 +237,7 @@ export default function MetricDetailPage() {
     } finally {
       setLoading(false)
     }
-  }, [metricKey])
+  }, [metricKey, currentStore?.id])
 
   useEffect(() => {
     if (tab === 'chart') {

@@ -75,7 +75,7 @@ export default function SegmentsPage() {
   useEffect(() => { setFavs(loadFavs()) }, [])
 
   const fetchSegments = useCallback(async (seed = true) => {
-    if (!user?.organization_id) return
+    if (!user?.organization_id || !currentStore?.id) return
     try {
       const params = new URLSearchParams({
         organization_id: user.organization_id,

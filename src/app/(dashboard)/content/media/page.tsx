@@ -53,6 +53,7 @@ export default function MediaPage() {
   const { currentStore } = useStoreStore();
 
   const fetchFiles = useCallback(async () => {
+    if (!currentStore?.id) return;
     try {
       setLoading(true);
       const params = new URLSearchParams();
