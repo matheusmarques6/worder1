@@ -53,22 +53,28 @@ export async function GET(request: NextRequest) {
       ...(memberships?.map(m => m.organization_id) || []),
     ])];
 
-    // Fetch active stores ONLY from the user's organizations
+    // Fetch ALL stores from the user's organizations (don't filter is_active
+    // — a temporarily disconnected store should still appear in the sidebar
+    // so the user can reconnect or view historical data)
     const { data: stores, error } = await supabase
       .from('shopify_stores')
       .select('*')
       .in('organization_id', orgIds)
-      .eq('is_active', true)
       .order('installed_at', { ascending: false });
 
     if (error) {
       return NextResponse.json({ success: false, stores: [], error: error.message });
     }
 
+    // Filter out internal placeholder stores (manual-.worder.local)
+    const realStores = (stores || []).filter((s: any) =>
+      !s.shop_domain?.endsWith('.worder.local')
+    );
+
     return NextResponse.json({
       success: true,
-      stores: stores || [],
-      hasStores: (stores?.length || 0) > 0
+      stores: realStores,
+      hasStores: realStores.length > 0
     });
   } catch (error: any) {
     console.error('[/api/stores] Error:', error.message);

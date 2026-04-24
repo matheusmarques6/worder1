@@ -60,11 +60,12 @@ export async function GET(request: NextRequest) {
       const errorText = await response.text();
       console.error('[Shopify Check] API error:', response.status, errorText);
       
-      // Atualizar status da loja - RLS filtra automaticamente
+      // Log the error but DON'T deactivate the store — a temporary API
+      // glitch shouldn't hide the store from the sidebar. The store stays
+      // active; the user can manually disconnect if needed.
       await supabase
         .from('shopify_stores')
-        .update({ 
-          is_active: false,
+        .update({
           last_error: `API error: ${response.status}`,
           updated_at: new Date().toISOString(),
         })
