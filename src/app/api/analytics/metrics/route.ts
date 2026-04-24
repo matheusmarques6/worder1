@@ -65,35 +65,47 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const integration = searchParams.get('integration') || 'all'
     const days = parseInt(searchParams.get('days') || '30')
+    const storeId = searchParams.get('storeId')
 
     const since = new Date()
     since.setDate(since.getDate() - days)
 
-    // Try RPC first (fast GROUP BY in SQL), fallback to direct query
+    // Try RPC first, fallback to direct query
     const countMap: Record<string, number> = {}
 
-    const { data: counts, error: rpcError } = await supabaseAdmin
-      .rpc('count_events_by_type', {
-        p_org_id: orgId,
-        p_since: since.toISOString(),
-      })
+    // If storeId provided, skip RPC (it filters by org, not store) and go direct
+    if (!storeId) {
+      const { data: counts, error: rpcError } = await supabaseAdmin
+        .rpc('count_events_by_type', {
+          p_org_id: orgId,
+          p_since: since.toISOString(),
+        })
 
-    if (!rpcError && counts) {
-      for (const row of counts as any[]) {
-        countMap[row.event_type] = Number(row.cnt) || 0
+      if (!rpcError && counts) {
+        for (const row of counts as any[]) {
+          countMap[row.event_type] = Number(row.cnt) || 0
+        }
       }
-    } else {
-      // RPC doesn't exist — fallback: query contact_events directly with pagination
-      console.warn('[Metrics] RPC unavailable, using fallback query:', rpcError?.message)
+    }
+
+    if (Object.keys(countMap).length === 0) {
+      console.warn('[Metrics] Using fallback query')
       try {
         // Get counts per event_type by fetching just the event_type column
         // Use a large limit to avoid the 1000-row default
-        const { data: rawEvents } = await supabaseAdmin
+        let evQuery = supabaseAdmin
           .from('contact_events')
           .select('event_type')
-          .eq('organization_id', orgId)
           .gte('occurred_at', since.toISOString())
           .limit(50000)
+
+        if (storeId) {
+          evQuery = evQuery.eq('store_id', storeId)
+        } else {
+          evQuery = evQuery.eq('organization_id', orgId)
+        }
+
+        const { data: rawEvents } = await evQuery
 
         if (rawEvents) {
           for (const row of rawEvents) {

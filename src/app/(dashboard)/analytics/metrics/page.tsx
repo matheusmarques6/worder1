@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useStoreStore } from '@/stores'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Search, Loader2, ShoppingCart, CreditCard, CheckCircle, Package, Box, Truck, XCircle, RotateCcw, Eye, Activity, Mail, MailOpen, MousePointerClick, MailX, UserMinus, MoreVertical, ChevronDown } from 'lucide-react'
@@ -20,15 +21,18 @@ export default function MetricsPage() {
   const [search, setSearch] = useState('')
   const [integration, setIntegration] = useState('all')
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const { currentStore } = useStoreStore()
 
   useEffect(() => {
     setLoading(true)
-    fetch(`/api/analytics/metrics?integration=${integration}`)
+    const params = new URLSearchParams({ integration })
+    if (currentStore?.id) params.set('storeId', currentStore.id)
+    fetch(`/api/analytics/metrics?${params}`)
       .then(r => r.json())
       .then(data => setMetrics(data.metrics || []))
       .catch(() => setMetrics([]))
       .finally(() => setLoading(false))
-  }, [integration])
+  }, [integration, currentStore?.id])
 
   const filtered = metrics.filter(m =>
     !search || m.label.toLowerCase().includes(search.toLowerCase())
