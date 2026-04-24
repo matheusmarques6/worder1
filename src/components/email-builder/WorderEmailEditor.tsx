@@ -466,6 +466,14 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   // can SEE that edits are landing in the library (Klaviyo shows the same).
   const [universalSyncStatus, setUniversalSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('idle')
 
+  // ── Drop indicator for HTML5 palette drag ──
+  const [dropIndicator, setDropIndicator] = useState<{
+    sectionId: string;
+    columnId: string;
+    index: number;
+  } | null>(null)
+  const dragLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   // Undo/Redo — single snapshot frame array + idx as ref to avoid
@@ -476,6 +484,16 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   const [historyIdx, setHistoryIdx] = useState(0)
   const historyIdxRef = useRef(0)
   useEffect(() => { historyIdxRef.current = historyIdx }, [historyIdx])
+
+  // Clear drop indicator when HTML5 drag ends (drop outside, Escape, etc.)
+  useEffect(() => {
+    const handleGlobalDragEnd = () => {
+      setDropIndicator(null)
+      if (dragLeaveTimerRef.current) { clearTimeout(dragLeaveTimerRef.current); dragLeaveTimerRef.current = null }
+    }
+    document.addEventListener('dragend', handleGlobalDragEnd)
+    return () => document.removeEventListener('dragend', handleGlobalDragEnd)
+  }, [])
 
   const selectedBlock = selectedBlockId ? allBlocks(doc).find(b => b.id === selectedBlockId) || null : null
   const selectedSection = selectedSectionId ? doc.sections.find(s => s.id === selectedSectionId) || null : null
@@ -654,7 +672,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   }, [])
 
   // ── Block Operations ──
-  const addBlock = useCallback((type: string, targetSectionId?: string, targetColumnId?: string) => {
+  const addBlock = useCallback((type: string, targetSectionId?: string, targetColumnId?: string, insertIndex?: number) => {
     const block = createBlock(type as any)
     const sections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
 
@@ -664,7 +682,11 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
       if (section) {
         const column = section.columns.find(c => c.id === targetColumnId)
         if (column) {
-          column.blocks.push(block)
+          if (insertIndex !== undefined && insertIndex >= 0 && insertIndex <= column.blocks.length) {
+            column.blocks.splice(insertIndex, 0, block)
+          } else {
+            column.blocks.push(block)
+          }
           updateDoc({ ...doc, sections })
           selectBlock(block.id)
           return
@@ -1068,6 +1090,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
   // the link alive on the dropped instance.
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
+    setDropIndicator(null)
     // 1. Saved section (entire section-level universal content)
     const savedSectionJson = e.dataTransfer.getData('savedSectionJson')
     const savedSectionId = e.dataTransfer.getData('savedSectionId')
@@ -1707,13 +1730,57 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                       >
                         {section.columns.map((column) => {
                           const colBlocks = column.blocks
+                          const colDropIndex = dropIndicator && dropIndicator.sectionId === section.id && dropIndicator.columnId === column.id ? dropIndicator.index : null
                           return (
                             <div key={column.id} style={{ width: `${column.width}%`, minHeight: 40 }} className="relative"
-                              onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30') }}
-                              onDragLeave={e => { e.currentTarget.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30') }}
+                              onDragOver={e => {
+                                e.preventDefault(); e.stopPropagation();
+                                e.dataTransfer.dropEffect = 'copy'
+                                e.currentTarget.classList.add('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30')
+                                // Cancel any pending drag-leave clear
+                                if (dragLeaveTimerRef.current) { clearTimeout(dragLeaveTimerRef.current); dragLeaveTimerRef.current = null }
+                                // Auto-scroll when near viewport edges
+                                const scrollContainer = e.currentTarget.closest('.overflow-y-auto') as HTMLElement | null
+                                if (scrollContainer) {
+                                  if (e.clientY < 80) scrollContainer.scrollTop -= 8
+                                  else if (e.clientY > window.innerHeight - 80) scrollContainer.scrollTop += 8
+                                }
+                                // Calculate drop index from cursor position relative to blocks
+                                if (colBlocks.length === 0) {
+                                  setDropIndicator({ sectionId: section.id, columnId: column.id, index: 0 })
+                                  return
+                                }
+                                const blockEls = Array.from(e.currentTarget.querySelectorAll<HTMLElement>(':scope > [data-palette-drop-block]'))
+                                let idx = colBlocks.length
+                                for (let i = 0; i < blockEls.length; i++) {
+                                  const rect = blockEls[i].getBoundingClientRect()
+                                  const midY = rect.top + rect.height / 2
+                                  if (e.clientY < midY) { idx = i; break }
+                                }
+                                setDropIndicator(prev => {
+                                  if (prev && prev.sectionId === section.id && prev.columnId === column.id && prev.index === idx) return prev
+                                  return { sectionId: section.id, columnId: column.id, index: idx }
+                                })
+                              }}
+                              onDragLeave={e => {
+                                // Debounce to avoid flicker when moving between child blocks
+                                const target = e.currentTarget
+                                dragLeaveTimerRef.current = setTimeout(() => {
+                                  target.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30')
+                                  setDropIndicator(prev => {
+                                    if (prev && prev.sectionId === section.id && prev.columnId === column.id) return null
+                                    return prev
+                                  })
+                                }, 50)
+                              }}
                               onDrop={e => {
                                 e.preventDefault(); e.stopPropagation();
                                 e.currentTarget.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30')
+                                if (dragLeaveTimerRef.current) { clearTimeout(dragLeaveTimerRef.current); dragLeaveTimerRef.current = null }
+                                const insertIdx = dropIndicator && dropIndicator.sectionId === section.id && dropIndicator.columnId === column.id
+                                  ? dropIndicator.index
+                                  : colBlocks.length
+                                setDropIndicator(null)
                                 // Saved SECTION can't live inside a column — insert it as a
                                 // new section AFTER the current one (Klaviyo does the same).
                                 const ssJson = e.dataTransfer.getData('savedSectionJson')
@@ -1740,7 +1807,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                     return
                                   } catch { /* fall through */ }
                                 }
-                                // Saved block dropped directly into a column → add here, not at doc level
+                                // Saved block dropped directly into a column → insert at indicator position
                                 const sbJson = e.dataTransfer.getData('savedBlockJson')
                                 if (sbJson) {
                                   try {
@@ -1755,14 +1822,14 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                     const nextSections = JSON.parse(JSON.stringify(doc.sections)) as EmailSection[]
                                     const sec = nextSections.find(s => s.id === section.id)
                                     const col = sec?.columns.find(c => c.id === column.id)
-                                    if (col) col.blocks.push(restored)
+                                    if (col) col.blocks.splice(insertIdx, 0, restored)
                                     updateDoc({ ...doc, sections: nextSections })
                                     selectBlock(restored.id)
                                     return
                                   } catch { /* fall through */ }
                                 }
                                 const type = e.dataTransfer.getData('blockType')
-                                if (type) addBlock(type, section.id, column.id)
+                                if (type) addBlock(type, section.id, column.id, insertIdx)
                               }}
                             >
                               {colBlocks.length === 0 ? (
@@ -1773,7 +1840,7 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                 </DroppableColumn>
                               ) : (
                                 <SortableContext items={colBlocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
-                                  {colBlocks.map((block) => {
+                                  {colBlocks.map((block, blockIndex) => {
                                     const bv = (block.props as any)?.visibility as string | undefined
                                     const blockHiddenOnDevice: 'desktop' | 'mobile' | 'all' | null =
                                       bv === 'hidden' ? 'all'
@@ -1781,29 +1848,36 @@ export default function WorderEmailEditor({ templateName, design, onSave, onBack
                                       : device === 'mobile' && bv === 'desktop' ? 'mobile'
                                       : null
                                     return (
-                                    <SortableBlock
-                                      key={block.id}
-                                      blockId={block.id}
-                                      isSelected={selectedBlockId === block.id}
-                                      onSelect={() => selectBlock(block.id)}
-                                      onClone={() => cloneBlock(block.id)}
-                                      onDelete={() => removeBlock(block.id)}
-                                      isUniversal={!!block._savedBlockId}
-                                      savedBlockName={block._savedBlockName}
-                                      onSaveAsUniversal={() => saveBlockAsUniversal(block.id)}
-                                      onUnlink={() => unlinkUniversalBlock(block.id)}
-                                      hiddenOnDevice={blockHiddenOnDevice}
-                                    >
-                                      <BlockPreview
-                                        block={block}
-                                        selected={selectedBlockId === block.id}
+                                    <div key={block.id} data-palette-drop-block>
+                                      {colDropIndex === blockIndex && (
+                                        <div className="h-[3px] bg-[#F97316] rounded-full mx-2 transition-opacity" />
+                                      )}
+                                      <SortableBlock
+                                        blockId={block.id}
+                                        isSelected={selectedBlockId === block.id}
                                         onSelect={() => selectBlock(block.id)}
                                         onClone={() => cloneBlock(block.id)}
                                         onDelete={() => removeBlock(block.id)}
-                                        selectedSubElement={selectedBlockId === block.id ? selectedSubElement : null}
-                                        onSelectSubElement={setSelectedSubElement}
-                                      />
-                                    </SortableBlock>
+                                        isUniversal={!!block._savedBlockId}
+                                        savedBlockName={block._savedBlockName}
+                                        onSaveAsUniversal={() => saveBlockAsUniversal(block.id)}
+                                        onUnlink={() => unlinkUniversalBlock(block.id)}
+                                        hiddenOnDevice={blockHiddenOnDevice}
+                                      >
+                                        <BlockPreview
+                                          block={block}
+                                          selected={selectedBlockId === block.id}
+                                          onSelect={() => selectBlock(block.id)}
+                                          onClone={() => cloneBlock(block.id)}
+                                          onDelete={() => removeBlock(block.id)}
+                                          selectedSubElement={selectedBlockId === block.id ? selectedSubElement : null}
+                                          onSelectSubElement={setSelectedSubElement}
+                                        />
+                                      </SortableBlock>
+                                      {colDropIndex === blockIndex + 1 && blockIndex === colBlocks.length - 1 && (
+                                        <div className="h-[3px] bg-[#F97316] rounded-full mx-2 transition-opacity" />
+                                      )}
+                                    </div>
                                     )
                                   })}
                                 </SortableContext>
