@@ -35,6 +35,7 @@ export default function ContactsPage() {
   const [syncMessage, setSyncMessage] = useState('')
 
   const fetchContacts = useCallback(async () => {
+    if (!currentStore?.id) return
     setLoading(true)
     try {
       const params = new URLSearchParams({

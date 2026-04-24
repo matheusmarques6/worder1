@@ -49,10 +49,11 @@ export default function EmailTemplatesPage() {
   const { currentStore } = useStoreStore()
 
   const fetchTemplates = useCallback(async () => {
+    if (!currentStore?.id) return // Wait for store to be selected
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      if (currentStore) params.set('store_id', currentStore?.id || '')
+      params.set('store_id', currentStore.id)
       if (search) params.set('search', search)
       const res = await fetch(`/api/email/templates?${params}`)
       if (res.ok) {

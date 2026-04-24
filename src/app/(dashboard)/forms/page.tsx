@@ -67,6 +67,7 @@ export default function FormsPage() {
   const [togglingStatus, setTogglingStatus] = useState<string | null>(null)
 
   const fetchForms = useCallback(async () => {
+    if (!currentStore?.id) return
     try {
       setIsLoading(true)
       const params = new URLSearchParams();

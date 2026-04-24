@@ -122,6 +122,7 @@ export default function AutomationsPage() {
   // Fetch dashboard stats
   useEffect(() => {
     async function fetchStats() {
+      if (!currentStore?.id) return
       setStatsLoading(true);
       try {
         const statsParams = new URLSearchParams();

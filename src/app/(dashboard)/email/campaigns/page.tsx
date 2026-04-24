@@ -59,6 +59,7 @@ export default function CampaignsPage() {
   const { currentStore } = useStoreStore()
 
   const fetchCampaigns = useCallback(async () => {
+    if (!currentStore?.id) return
     setLoading(true)
     try {
       const params = new URLSearchParams()

@@ -55,6 +55,7 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null)
 
   const fetchProducts = useCallback(async () => {
+    if (!currentStore?.id) return
     try {
       setLoading(true)
       setError(null)

@@ -24,6 +24,7 @@ export default function MetricsPage() {
   const { currentStore } = useStoreStore()
 
   useEffect(() => {
+    if (!currentStore?.id) return
     setLoading(true)
     const params = new URLSearchParams({ integration })
     if (currentStore?.id) params.set('storeId', currentStore.id)
