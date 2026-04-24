@@ -139,6 +139,7 @@ export default function FormsPage() {
           name: newFormName,
           description: newFormDescription,
           form_type: newFormType,
+          store_id: currentStore?.id || null,
           design_json: template?.design || {},
           theme: {
             formType: newFormType,
@@ -188,6 +189,7 @@ export default function FormsPage() {
           name: `${form.name} (copia)`,
           description: form.description,
           theme: form.theme,
+          store_id: currentStore?.id || null,
         }),
       })
       if (res.ok) {
