@@ -495,6 +495,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   {selectedNode.data.nodeType === 'trigger_cancelled_order' && 'Dispara quando um pedido e cancelado.'}
                   {selectedNode.data.nodeType === 'trigger_form_submitted' && 'Dispara quando um formulario e enviado.'}
                   {selectedNode.data.nodeType === 'trigger_custom_event' && 'Dispara quando um evento personalizado e recebido via API.'}
+                  {selectedNode.data.nodeType === 'trigger_active_on_site' && 'Dispara quando um contato identificado fica ativo no site (1x por sessao de 30 min).'}
                 </p>
               </div>
             )}
@@ -2521,6 +2522,10 @@ const TRIGGER_FILTER_FIELDS: Record<string, Array<{ value: string; label: string
   trigger_signup: [
     { value: 'source', label: 'Origem' },
     { value: 'tags', label: 'Tags' },
+  ],
+  trigger_active_on_site: [
+    { value: 'url', label: 'URL da Pagina' },
+    { value: 'referrer', label: 'Referrer' },
   ],
 };
 

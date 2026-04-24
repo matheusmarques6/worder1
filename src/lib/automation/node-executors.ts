@@ -420,6 +420,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           replyTo: undefined,
           baseUrl,
           organizationId: organizationId || '',
+          eventData: context.trigger?.data,
         });
 
         if (!result.success) {

@@ -8,7 +8,7 @@ import {
   ArrowRight, Trophy, XCircle, Calendar, Users, Webhook, MessageSquare,
   Clock, Mail, Phone, Bell, Edit, GitBranch, Zap, Send, UserMinus,
   Eye, PlusCircle, Package, Truck, Smartphone, UserCog, List,
-  Shuffle, MessageCircle, FileText, MoreVertical,
+  Shuffle, MessageCircle, FileText, MoreVertical, Activity,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -50,7 +50,7 @@ const iconMap: Record<string, LucideIcon> = {
   ArrowRight, Trophy, XCircle, Calendar, Users, Webhook, MessageSquare,
   Mail, Phone, Bell, Edit, Send, UserMinus, GitBranch, Clock, Zap,
   Eye, PlusCircle, Package, Truck, Smartphone, UserCog, List,
-  Shuffle, MessageCircle, FileText,
+  Shuffle, MessageCircle, FileText, Activity,
 };
 
 // ============================================
@@ -172,6 +172,7 @@ const nodeTypeIconFallback: Record<string, LucideIcon> = {
   trigger_deal_created: Briefcase, trigger_deal_stage: ArrowRight,
   trigger_deal_won: Trophy, trigger_deal_lost: XCircle,
   trigger_whatsapp: MessageSquare,
+  trigger_active_on_site: Activity,
   action_email: Mail, action_whatsapp: MessageCircle, action_sms: Smartphone,
   action_webhook: Send, action_notify: Bell,
   action_tag: Tag, action_remove_tag: UserMinus, action_update: UserCog,

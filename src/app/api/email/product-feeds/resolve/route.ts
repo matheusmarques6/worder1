@@ -12,13 +12,13 @@ export async function POST(request: NextRequest) {
       const body = await request.json()
       orgId = body.organization_id
       if (!orgId) return NextResponse.json({ products: [] })
-      var { feed_id, feed_type, contact_id, max_products = 4 } = body
+      var { feed_id, feed_type, contact_id, max_products = 4, event_data } = body
     } else {
       const auth = await getAuthClient()
       if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       const body = await request.json()
       orgId = auth.user.organization_id
-      var { feed_id, feed_type, contact_id, max_products = 4 } = body
+      var { feed_id, feed_type, contact_id, max_products = 4, event_data } = body
     }
     const type = feed_type || 'bestsellers'
     const limit = max_products
@@ -100,6 +100,42 @@ export async function POST(request: NextRequest) {
             }
           } catch {}
         }
+        break
+      }
+
+      case 'trigger_cart': {
+        const items = event_data?.Items || event_data?.line_items || event_data?.extra?.line_items || []
+        products = items.slice(0, limit).map((it: any) => ({
+          title: it.ProductName || it.title || it.name || 'Product',
+          price: parseFloat(it.ItemPrice || it.price || '0'),
+          compare_at_price: it.CompareAtPrice ? parseFloat(it.CompareAtPrice) : null,
+          image_url: it.ImageURL || it.image_url || it.image?.src || null,
+          url: it.ProductURL || it.url || '#',
+        }))
+        break
+      }
+
+      case 'trigger_viewed_product': {
+        if (event_data) {
+          products = [{
+            title: event_data?.ProductName || event_data?.product_title || event_data?.title || 'Product',
+            price: parseFloat(event_data?.Price || event_data?.price || '0'),
+            image_url: event_data?.ImageURL || event_data?.image_url || null,
+            url: event_data?.ProductURL || event_data?.product_url || '#',
+          }]
+        }
+        break
+      }
+
+      case 'trigger_order': {
+        const items = event_data?.Items || event_data?.line_items || []
+        products = items.slice(0, limit).map((it: any) => ({
+          title: it.ProductName || it.title || it.name || 'Product',
+          price: parseFloat(it.ItemPrice || it.price || '0'),
+          image_url: it.ImageURL || it.image_url || it.image?.src || null,
+          url: it.ProductURL || it.url || '#',
+          quantity: it.Quantity || it.quantity || 1,
+        }))
         break
       }
 

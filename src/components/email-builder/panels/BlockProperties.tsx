@@ -1692,6 +1692,9 @@ function ProductBlockProperties({ p, onChange, commonTail, selectedSubElement, o
                       {p.feedType === 'cart_items' && 'Exibir produtos do carrinho do cliente.'}
                       {p.feedType === 'recommendations' && 'Exibir produtos recomendados baseado no historico.'}
                       {p.feedType === 'most_viewed' && 'Exibir produtos mais vistos.'}
+                      {p.feedType === 'trigger_cart' && 'Produtos do Carrinho Abandonado'}
+                      {p.feedType === 'trigger_viewed_product' && 'Produto Visualizado (evento)'}
+                      {p.feedType === 'trigger_order' && 'Produtos do Pedido'}
                       {!p.feedType && 'Feed configurado.'}
                     </p>
                   </div>

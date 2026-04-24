@@ -26,6 +26,9 @@ const FEED_TYPES = [
   { value: 'most_viewed', label: 'Produtos mais vistos' },
   { value: 'cart_items', label: 'Produtos no carrinho' },
   { value: 'recommendations', label: 'Produtos recomendados' },
+  { value: 'trigger_cart', label: 'Produtos do Carrinho Abandonado' },
+  { value: 'trigger_viewed_product', label: 'Produto Visualizado (evento)' },
+  { value: 'trigger_order', label: 'Produtos do Pedido' },
 ]
 
 const FALLBACK_TYPES = [
@@ -122,6 +125,9 @@ export function ViewFeedsModal({ isOpen, onClose, onSelect, currentFeedId }: Pro
                           {feed.feed_type === 'recently_viewed' && ' Show products a customer has recently viewed.'}
                           {feed.feed_type === 'bestsellers' && ' Show best-selling products.'}
                           {feed.feed_type === 'newest' && ' Show newest products.'}
+                          {feed.feed_type === 'trigger_cart' && ' Produtos do carrinho abandonado (evento).'}
+                          {feed.feed_type === 'trigger_viewed_product' && ' Produto visualizado (evento).'}
+                          {feed.feed_type === 'trigger_order' && ' Produtos do pedido (evento).'}
                         </p>
                       </div>
                     </div>

@@ -267,7 +267,8 @@ export function addUnsubscribeLink(
 export async function resolveProductBlocks(
   html: string,
   orgId: string,
-  contactId?: string
+  contactId?: string,
+  eventData?: Record<string, any>
 ): Promise<string> {
   const regex = /<!-- WORDER_PRODUCT_BLOCK:(\w+):(\d+):(\d+):(true|false):(true|false):(true|false):([^-]*?) -->/g
   let result = html
@@ -289,7 +290,7 @@ export async function resolveProductBlocks(
       const res = await fetch(`${baseUrl}/api/email/product-feeds/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feed_type: feedType, contact_id: contactId, organization_id: orgId, max_products: maxProducts }),
+        body: JSON.stringify({ feed_type: feedType, contact_id: contactId, organization_id: orgId, max_products: maxProducts, event_data: eventData }),
       })
       const data = await res.json()
       products = data.products || []

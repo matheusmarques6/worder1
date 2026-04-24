@@ -44,6 +44,7 @@ import {
   Smartphone,
   List,
   MessageCircle,
+  Activity,
   LucideIcon,
 } from 'lucide-react';
 
@@ -304,6 +305,14 @@ export const triggerTypes: NodeTypeDefinition[] = [
     icon: Target,
     category: 'trigger',
     color: '#10b981',
+  },
+  {
+    type: 'trigger_active_on_site',
+    category: 'trigger',
+    label: 'Ativo no Site',
+    description: 'Dispara quando um contato identificado visita qualquer pagina da loja (1x por sessao).',
+    icon: Activity,
+    color: '#F97316',
   },
 ];
 
@@ -669,6 +678,7 @@ export const nodeTypes: Record<string, any> = {
   trigger_rfm_segment_change: TriggerNode,
   trigger_back_in_stock: TriggerNode,
   trigger_ctwa_ad: TriggerNode,
+  trigger_active_on_site: TriggerNode,
 
   // WhatsApp actions
   action_whatsapp_wait_reply: ActionNode,
@@ -775,6 +785,16 @@ export function getNodeColor(color?: string): { solid: string; bg: string; text:
       solid: 'bg-pink-500',
       bg: 'bg-pink-500/10',
       text: 'text-pink-400',
+    },
+    '#f97316': {
+      solid: 'bg-orange-500',
+      bg: 'bg-orange-500/10',
+      text: 'text-orange-400',
+    },
+    '#F97316': {
+      solid: 'bg-orange-500',
+      bg: 'bg-orange-500/10',
+      text: 'text-orange-400',
     },
     // Named colors fallback
     'emerald': {

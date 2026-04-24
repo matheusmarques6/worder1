@@ -22,6 +22,7 @@ export interface SendCampaignEmailParams {
   replyTo?: string;
   baseUrl: string;
   organizationId: string;
+  eventData?: Record<string, any>;
 }
 
 export async function sendCampaignEmail({
@@ -36,6 +37,7 @@ export async function sendCampaignEmail({
   replyTo,
   baseUrl,
   organizationId,
+  eventData,
 }: SendCampaignEmailParams): Promise<{ success: boolean; emailSendId?: string; error?: string }> {
   let emailSendId = '' as string;
 
@@ -79,7 +81,7 @@ export async function sendCampaignEmail({
     }
 
     // 3. Resolve dynamic product blocks + cart blocks
-    let htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, contactId);
+    let htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, contactId, eventData);
     htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, contactId);
 
     // 3. Prepare HTML with merge tags, tracking, unsubscribe

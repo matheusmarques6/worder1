@@ -104,6 +104,26 @@ analytics.subscribe('page_viewed', function(e) {
   send('page_view', { url: e.context.document.location.href, title: e.context.document.title, referrer: e.context.document.referrer }, e.context);
 });
 
+// Active on Site — fires once per session for identified visitors
+analytics.subscribe('page_viewed', function(e) {
+  if (!knownEmail) return;
+  try {
+    var key = '_worder_active_session';
+    browser.localStorage.getItem(key).then(function(last) {
+      if (last) {
+        var lastTs = parseInt(last, 10);
+        if (Date.now() - lastTs < 30 * 60 * 1000) return;
+      }
+      browser.localStorage.setItem(key, String(Date.now()));
+      send('active_on_site', {
+        url: e.context.document.location.href,
+        referrer: e.context.document.referrer,
+        session_start: new Date().toISOString(),
+      }, e.context);
+    });
+  } catch(ex) {}
+});
+
 analytics.subscribe('product_viewed', function(e) {
   var v = e.data.productVariant;
   send('viewed_product', { product_id: v.product.id, product_title: v.product.title || v.title, product_url: v.product.url, product_type: v.product.type, product_vendor: v.product.vendor, price: v.price.amount, currency: v.price.currencyCode, variant_id: v.id, variant_title: v.title, image_url: v.image ? v.image.src : null, sku: v.sku }, e.context);
