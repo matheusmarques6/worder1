@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -107,6 +107,9 @@ export default function AutomationsPage() {
   const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null);
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -245,7 +248,7 @@ export default function AutomationsPage() {
           setEditingAutomation(data.automation);
           return data.automation.id;
         } else {
-          alert('Erro ao salvar: ' + (data.error || 'Erro desconhecido'));
+          setToast({ msg: 'Erro ao salvar: ' + (data.error || 'Erro desconhecido'), type: 'error' });
           return undefined;
         }
       } else {
@@ -264,13 +267,13 @@ export default function AutomationsPage() {
           setEditingAutomation(data.automation);
           return data.automation.id;
         } else {
-          alert('Erro ao salvar: ' + (data.error || 'Erro desconhecido'));
+          setToast({ msg: 'Erro ao salvar: ' + (data.error || 'Erro desconhecido'), type: 'error' });
           return undefined;
         }
       }
     } catch (e) {
       console.error('Error saving automation:', e);
-      alert('Erro de conexão ao salvar automação.');
+      setToast({ msg: 'Erro de conexão ao salvar automação.', type: 'error' });
       return undefined;
     }
   };
@@ -297,7 +300,8 @@ export default function AutomationsPage() {
 
   // Handle delete
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta automação?')) return;
+    if (confirmDelete !== id) { setConfirmDelete(id); return; }
+    setConfirmDelete(null);
 
     try {
       const res = await fetch(`/api/automations?id=${id}&organizationId=${organizationId}`, {
@@ -319,11 +323,11 @@ export default function AutomationsPage() {
     // Validate before activating
     if (newStatus === 'active') {
       if (!automation.trigger_type || automation.trigger_type === 'manual') {
-        alert('Configure um gatilho antes de ativar a automação.');
+        setToast({ msg: 'Configure um gatilho antes de ativar a automação.', type: 'error' });
         return;
       }
       if (!automation.nodes || automation.nodes.length < 2) {
-        alert('Adicione pelo menos uma ação ao fluxo antes de ativar.');
+        setToast({ msg: 'Adicione pelo menos uma ação ao fluxo antes de ativar.', type: 'error' });
         return;
       }
 
@@ -368,7 +372,7 @@ export default function AutomationsPage() {
       }
 
       if (errors.length > 0) {
-        alert('Corrija antes de ativar:\n\n' + errors.join('\n'));
+        setToast({ msg: 'Corrija antes de ativar: ' + errors.join(', '), type: 'error' });
         return;
       }
     }
@@ -435,6 +439,17 @@ export default function AutomationsPage() {
 
   return (
     <div className="space-y-6 p-6">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${toast.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+          <div className="flex items-center gap-2">
+            <span>{toast.msg}</span>
+            <button onClick={() => setToast(null)} className="text-current opacity-50 hover:opacity-100">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
       {/* Fullscreen Editor Portal */}
       {renderFullscreenEditor()}
       {/* Header */}
@@ -744,13 +759,24 @@ export default function AutomationsPage() {
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </button>
-                  <button
-                    onClick={() => handleDelete(automation.id)}
-                    className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500"
-                    title="Excluir"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {confirmDelete === automation.id ? (
+                    <button
+                      onClick={() => handleDelete(automation.id)}
+                      onBlur={() => setConfirmDelete(null)}
+                      className="px-2 py-1 rounded-md bg-red-500 text-white text-[10px] font-medium"
+                      autoFocus
+                    >
+                      Confirmar
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDelete(automation.id)}
+                      className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500"
+                      title="Excluir"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             );

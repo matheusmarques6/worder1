@@ -294,6 +294,8 @@ export default function ContactDetailPage() {
   const [activeTab, setActiveTab] = useState<'timeline' | 'notes'>('timeline')
   const [noteText, setNoteText] = useState('')
   const [shopifyEvents, setShopifyEvents] = useState<ShopifyEvent[]>([])
+  const [showTagInput, setShowTagInput] = useState(false)
+  const [newTagText, setNewTagText] = useState('')
 
   const {
     contact,
@@ -305,6 +307,7 @@ export default function ContactDetailPage() {
     isLoading,
     error,
     fetchContact,
+    updateContact,
     addNote,
     deleteNote,
     addTag,
@@ -353,6 +356,27 @@ export default function ContactDetailPage() {
       setNoteText('')
     } catch (err) {
       console.error('Error adding note:', err)
+    }
+  }
+
+  const handleAddTag = async () => {
+    const tag = newTagText.trim()
+    if (!tag || !contactId) return
+    try {
+      await addTag(contactId, tag)
+      setNewTagText('')
+      setShowTagInput(false)
+    } catch (err) {
+      console.error('Error adding tag:', err)
+    }
+  }
+
+  const handleToggleSubscription = async (field: 'is_subscribed_email' | 'is_subscribed_whatsapp' | 'is_subscribed_sms') => {
+    if (!contact || !contactId) return
+    try {
+      await updateContact(contactId, { [field]: !contact[field] })
+    } catch (err) {
+      console.error('Error toggling subscription:', err)
     }
   }
 
@@ -439,7 +463,10 @@ export default function ContactDetailPage() {
             <Trash size={14} />
             Excluir
           </button>
-          <button className="flex items-center gap-2 px-3 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-xs font-medium transition-colors">
+          <button
+            onClick={() => router.push(`/email/campaigns/new?contactId=${contactId}`)}
+            className="flex items-center gap-2 px-3 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-xs font-medium transition-colors"
+          >
             <PaperPlaneTilt size={14} />
             Enviar E-mail
           </button>
@@ -517,10 +544,30 @@ export default function ContactDetailPage() {
                 <Tag size={14} className="text-brand-600" />
                 Tags
               </h3>
-              <button className="p-1 rounded hover:bg-gray-50 transition-colors">
+              <button
+                onClick={() => setShowTagInput((v) => !v)}
+                className="p-1 rounded hover:bg-gray-50 transition-colors"
+              >
                 <Plus size={14} className="text-gray-500" />
               </button>
             </div>
+            {showTagInput && (
+              <div className="mb-2">
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Nome da tag..."
+                  value={newTagText}
+                  onChange={(e) => setNewTagText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddTag()
+                    if (e.key === 'Escape') { setShowTagInput(false); setNewTagText('') }
+                  }}
+                  onBlur={() => { if (!newTagText.trim()) { setShowTagInput(false); setNewTagText('') } }}
+                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-500"
+                />
+              </div>
+            )}
             {contact.tags && contact.tags.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {contact.tags.map((tag, i) => (
@@ -564,30 +611,39 @@ export default function ContactDetailPage() {
               Canais
             </h3>
             <div className="space-y-2">
-              <div className="flex items-center justify-between py-1.5">
+              <button
+                onClick={() => handleToggleSubscription('is_subscribed_email')}
+                className="w-full flex items-center justify-between py-1.5 hover:bg-gray-50 rounded px-1 -mx-1 transition-colors"
+              >
                 <span className="text-sm text-gray-700 flex items-center gap-2">
                   <EnvelopeSimple size={14} className="text-gray-500" /> E-mail
                 </span>
                 <span className={`text-xs ${contact.is_subscribed_email !== false ? 'text-emerald-400' : 'text-gray-400'}`}>
                   {contact.is_subscribed_email !== false ? 'Inscrito' : 'Não inscrito'}
                 </span>
-              </div>
-              <div className="flex items-center justify-between py-1.5">
+              </button>
+              <button
+                onClick={() => handleToggleSubscription('is_subscribed_whatsapp')}
+                className="w-full flex items-center justify-between py-1.5 hover:bg-gray-50 rounded px-1 -mx-1 transition-colors"
+              >
                 <span className="text-sm text-gray-700 flex items-center gap-2">
                   <WhatsappLogo size={14} className="text-[#25D366]" /> WhatsApp
                 </span>
                 <span className={`text-xs ${contact.is_subscribed_whatsapp !== false ? 'text-emerald-400' : 'text-gray-400'}`}>
                   {contact.is_subscribed_whatsapp !== false ? 'Inscrito' : 'Não inscrito'}
                 </span>
-              </div>
-              <div className="flex items-center justify-between py-1.5">
+              </button>
+              <button
+                onClick={() => handleToggleSubscription('is_subscribed_sms')}
+                className="w-full flex items-center justify-between py-1.5 hover:bg-gray-50 rounded px-1 -mx-1 transition-colors"
+              >
                 <span className="text-sm text-gray-700 flex items-center gap-2">
                   <Phone size={14} className="text-gray-500" /> SMS
                 </span>
                 <span className={`text-xs ${contact.is_subscribed_sms ? 'text-emerald-400' : 'text-gray-400'}`}>
                   {contact.is_subscribed_sms ? 'Inscrito' : 'Não inscrito'}
                 </span>
-              </div>
+              </button>
             </div>
           </div>
         </div>

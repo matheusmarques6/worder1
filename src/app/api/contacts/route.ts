@@ -32,6 +32,9 @@ export async function GET(request: NextRequest) {
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '50');
   const storeId = searchParams.get('storeId');
+  const sort = searchParams.get('sort');
+  const source = searchParams.get('source');
+  const subscribed = searchParams.get('subscribed');
 
   try {
     // Se buscar por ID específico
@@ -62,8 +65,18 @@ export async function GET(request: NextRequest) {
       .from('contacts')
       .select('*', { count: 'exact' })
       .in('organization_id', orgIds)
-      .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
+
+    // Sort
+    if (sort === 'name_asc') {
+      query = query.order('first_name', { ascending: true });
+    } else if (sort === 'most_orders') {
+      query = query.order('total_orders', { ascending: false, nullsFirst: false });
+    } else if (sort === 'highest_spent') {
+      query = query.order('total_spent', { ascending: false, nullsFirst: false });
+    } else {
+      query = query.order('created_at', { ascending: false });
+    }
 
     // Se storeId fornecido, filtrar por store
     if (storeId) {
@@ -77,6 +90,16 @@ export async function GET(request: NextRequest) {
     if (tags) {
       const tagList = tags.split(',');
       query = query.contains('tags', tagList);
+    }
+
+    if (source) {
+      query = query.eq('source', source);
+    }
+
+    if (subscribed === 'true') {
+      query = query.eq('is_subscribed_email', true);
+    } else if (subscribed === 'false') {
+      query = query.eq('is_subscribed_email', false);
     }
 
     const { data, error, count } = await query;

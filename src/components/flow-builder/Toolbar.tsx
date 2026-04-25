@@ -56,6 +56,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isEditing, setIsEditing] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const [toolbarToast, setToolbarToast] = useState<string | null>(null);
 
   const isActive = automationStatus === 'active';
 
@@ -111,7 +112,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
 
   const handleToggleStatus = async () => {
     if (!valid) {
-      alert('Corrija os erros antes de ativar:\n\n' + errors.join('\n'));
+      setToolbarToast('Corrija os erros antes de ativar: ' + errors.join(', ')); setTimeout(() => setToolbarToast(null), 5000);
       return;
     }
 
@@ -137,13 +138,19 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
 
   const handleTest = () => {
     if (!valid) {
-      alert(errors.join('\n'));
+      setToolbarToast(errors.join(', ')); setTimeout(() => setToolbarToast(null), 5000);
       return;
     }
     onTest();
   };
 
   return (
+    <>
+    {toolbarToast && (
+      <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm shadow-lg max-w-lg">
+        {toolbarToast}
+      </div>
+    )}
     <div className="h-[60px] bg-zinc-950 border-b border-zinc-800 flex items-center px-3 sm:px-5 gap-3 sm:gap-4 shrink-0 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
       {/* Left Section - Logo + Name */}
       <div className="flex items-center gap-3 min-w-0 flex-shrink-0">
@@ -333,6 +340,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
         </button>
       </div>
     </div>
+    </>
   );
 }
 

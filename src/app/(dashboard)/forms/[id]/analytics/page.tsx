@@ -50,9 +50,10 @@ export default function FormAnalyticsPage() {
         const key = new Date(s.created_at).toISOString().slice(0, 10)
         if (daily[key]) daily[key].submissions++
       })
+      const avgImpressions = (form?.impressions_count || 0) > 0 ? Math.round(form.impressions_count / days) : 0
       setChartData(Object.entries(daily).map(([date, v]) => ({
         date: new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
-        impressions: (form?.impressions_count || 0) > 0 ? Math.round((form.impressions_count / days) * (1 + Math.random() * 0.3)) : v.impressions,
+        impressions: avgImpressions || v.impressions,
         submissions: v.submissions,
       })))
       setLoading(false)
@@ -63,8 +64,10 @@ export default function FormAnalyticsPage() {
   const totalImpressions = form?.impressions_count || form?.views_count || 0
   const totalSubmissions = form?.submissions_count || submissions.length || 0
   const conversionRate = totalImpressions > 0 ? ((totalSubmissions / totalImpressions) * 100).toFixed(1) : '0'
-  const desktopPct = 65
-  const mobilePct = 35
+  const mobileCount = submissions.filter(s => /mobile|android|iphone|ipad/i.test(s.user_agent || '')).length
+  const desktopCount = submissions.length - mobileCount
+  const desktopPct = submissions.length > 0 ? Math.round((desktopCount / submissions.length) * 100) : 0
+  const mobilePct = submissions.length > 0 ? 100 - desktopPct : 0
 
   if (loading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
@@ -87,8 +90,8 @@ export default function FormAnalyticsPage() {
         {[
           { label: 'Impressões', value: totalImpressions.toLocaleString('pt-BR'), icon: Eye, color: 'text-blue-500', bg: 'bg-blue-50' },
           { label: 'Submissões', value: totalSubmissions.toLocaleString('pt-BR'), icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-          { label: 'Taxa Conversão', value: `${conversionRate}%`, icon: TrendingUp, color: 'text-brand-500', bg: 'bg-brand-50' },
-          { label: 'Dispositivos', value: `${desktopPct}% / ${mobilePct}%`, icon: Monitor, color: 'text-gray-500', bg: 'bg-gray-50' },
+          { label: 'Taxa Conversão', value: `${conversionRate}%`, icon: TrendingUp, color: 'text-zinc-700', bg: 'bg-zinc-50' },
+          { label: 'Dispositivos', value: submissions.length > 0 ? `${desktopPct}% / ${mobilePct}%` : '—', icon: Monitor, color: 'text-gray-500', bg: 'bg-gray-50' },
         ].map(kpi => (
           <div key={kpi.label} className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-center gap-3">
@@ -123,7 +126,8 @@ export default function FormAnalyticsPage() {
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip />
               <Legend />
-              <Line type="monotone" dataKey="submissions" name="Submissões" stroke="#F97316" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="impressions" name="Impressões" stroke="#94A3B8" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="submissions" name="Submissões" stroke="#18181B" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -149,11 +153,11 @@ export default function FormAnalyticsPage() {
           <div className="space-y-3">
             <div>
               <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Step 1</span><span>100%</span></div>
-              <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-brand-500 rounded-full" style={{ width: '100%' }} /></div>
+              <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-zinc-500 rounded-full" style={{ width: '100%' }} /></div>
             </div>
             <div>
               <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Submetido</span><span>{conversionRate}%</span></div>
-              <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-brand-500 rounded-full" style={{ width: `${conversionRate}%` }} /></div>
+              <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-zinc-500 rounded-full" style={{ width: `${conversionRate}%` }} /></div>
             </div>
           </div>
         </div>

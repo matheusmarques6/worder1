@@ -135,8 +135,14 @@ export class ExecutionEngine {
     }
 
     try {
-      // Build execution order
-      const executionOrder = this.buildExecutionOrder(workflow);
+      // Build execution order, optionally starting from a specific node (resume)
+      let executionOrder = this.buildExecutionOrder(workflow);
+      if (options.startFromNodeId) {
+        const startIdx = executionOrder.findIndex(n => n.id === options.startFromNodeId);
+        if (startIdx > 0) {
+          executionOrder = executionOrder.slice(startIdx);
+        }
+      }
       
       // Get exit conditions from the trigger node config or workflow settings
       const triggerNode = workflow.nodes.find(n => n.data.category === 'trigger');
@@ -583,10 +589,20 @@ export async function resumeExecution(
     isTest: false,
   });
 
-  // Resume from where we left off
+  const resumeData = (execution as any).resume_data;
+  const waitingNodeId = resumeData?.waitingAt?.nodeId;
+
+  // Find the next node after the waiting node
+  let startFromNodeId: string | undefined;
+  if (waitingNodeId) {
+    const edge = (workflow.edges || []).find((e: any) => e.source === waitingNodeId);
+    startFromNodeId = edge?.target;
+  }
+
   return engine.execute(workflow, {
-    context: (execution as any).resume_data?.context,
+    context: resumeData?.context,
     executionId,
+    startFromNodeId,
   });
 }
 
