@@ -20,7 +20,7 @@ import {
   MagnifyingGlass,
   SpinnerGap,
 } from '@phosphor-icons/react'
-import { createBrowserClient } from '@/lib/supabase'
+import { useStoreStore } from '@/stores/storeStore'
 
 interface Campaign {
   id: string
@@ -67,29 +67,24 @@ export default function CampaignsPage() {
   const [search, setSearch] = useState('')
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
+  const { currentStore } = useStoreStore()
 
   const fetchCampaigns = useCallback(async () => {
+    if (!currentStore?.id) return
     try {
       setLoading(true)
-      const supabase = createBrowserClient()
-      const { data, error } = await supabase
-        .from('email_campaigns')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('Error fetching campaigns:', error.message)
-        setCampaigns([])
-        return
-      }
-      setCampaigns(data || [])
+      const url = `/api/email/campaigns?storeId=${currentStore.id}`
+      const res = await fetch(url)
+      if (!res.ok) { setCampaigns([]); return }
+      const data = await res.json()
+      setCampaigns(data.campaigns || [])
     } catch (err) {
       console.error('Failed to fetch campaigns:', err)
       setCampaigns([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [currentStore?.id])
 
   useEffect(() => {
     fetchCampaigns()

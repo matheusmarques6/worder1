@@ -105,7 +105,7 @@ export function MergeTagQuickPicker({ onSelect, onOpenFull, onClose, anchorRect 
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar tag..."
-            className="w-full pl-7 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#F97316]"
+            className="w-full pl-7 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#18181B]"
             autoFocus
           />
           {search && (
@@ -135,7 +135,7 @@ export function MergeTagQuickPicker({ onSelect, onOpenFull, onClose, anchorRect 
               >
                 <span className="text-xs text-gray-800">{item.label}</span>
                 <code className={`text-[11px] font-mono transition-colors ${
-                  idx === activeIdx ? 'text-[#F97316]' : 'text-gray-400 group-hover:text-[#F97316]'
+                  idx === activeIdx ? 'text-[#18181B]' : 'text-gray-400 group-hover:text-[#18181B]'
                 }`}>
                   {item.tag}
                 </code>
@@ -149,7 +149,7 @@ export function MergeTagQuickPicker({ onSelect, onOpenFull, onClose, anchorRect 
         <div className="px-2.5 py-2 border-t border-gray-200">
           <button
             onClick={onOpenFull}
-            className="w-full text-center text-xs font-medium text-[#F97316] hover:text-[#ea6c10] transition-colors py-1"
+            className="w-full text-center text-xs font-medium text-[#18181B] hover:text-[#27272A] transition-colors py-1"
           >
             Ver todas
           </button>

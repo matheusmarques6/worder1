@@ -82,7 +82,7 @@ export default function FormsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [currentStore?.id])
 
   useEffect(() => {
     fetchForms()

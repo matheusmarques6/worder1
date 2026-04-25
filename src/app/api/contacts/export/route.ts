@@ -20,11 +20,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { data: contacts, error } = await supabase
+    const storeId = searchParams.get('storeId');
+    let query = supabase
       .from('contacts')
       .select('*')
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false });
+
+    if (storeId) {
+      query = query.eq('store_id', storeId);
+    }
+
+    const { data: contacts, error } = await query;
 
     if (error) throw error;
 

@@ -87,7 +87,7 @@ export function RichTextEditor({ content, onChange, onInsertMergeTag, placeholde
 
   const ToolbarButton = ({ active, onClick, children, title, buttonRef }: { active?: boolean; onClick: () => void; children: React.ReactNode; title: string; buttonRef?: React.Ref<HTMLButtonElement> }) => (
     <button type="button" ref={buttonRef} onClick={onClick} title={title}
-      className={`p-1 rounded transition-colors ${active ? 'bg-brand-100 text-brand-700' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}>
+      className={`p-1 rounded transition-colors ${active ? 'bg-zinc-200 text-zinc-900' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}>
       {children}
     </button>
   )

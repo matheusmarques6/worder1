@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,14 +11,10 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const timeframe = searchParams.get('timeframe') || '30d';
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: 'Not configured' }, { status: 500 });
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
+  const organizationId = user.organization_id;
 
   // Calculate date filter
   let dateFilter: string | null = null;
@@ -33,6 +29,17 @@ export async function GET(
 
   try {
     // Get automation runs for this automation
+    const { data: automation } = await supabase
+      .from('automations')
+      .select('id')
+      .eq('id', automationId)
+      .eq('organization_id', organizationId)
+      .single();
+
+    if (!automation) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
     let runsQuery = supabase
       .from('automation_runs')
       .select('id')
@@ -48,7 +55,7 @@ export async function GET(
       return NextResponse.json({ nodeStats: {}, totalRuns: 0, error: runsError.message });
     }
 
-    const runIds = (runs || []).map(r => r.id);
+    const runIds = (runs || []).map((r: any) => r.id);
 
     if (runIds.length === 0) {
       return NextResponse.json({ nodeStats: {}, totalRuns: 0 });

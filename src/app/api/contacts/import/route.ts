@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
       contacts,
       columnMapping,
       options = {},
+      storeId,
     } = body;
     
     if (!contacts?.length) {
@@ -159,6 +160,7 @@ export async function POST(request: NextRequest) {
       
       return {
         organization_id: user.organization_id,
+        store_id: storeId || null,
         email: contact.email?.toLowerCase() || null,
         phone: contact.phone || null,
         first_name: contact.first_name || null,

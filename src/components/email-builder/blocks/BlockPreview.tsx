@@ -602,7 +602,7 @@ export function BlockPreview({
                           style={{
                             fontWeight: p.priceWeight || '700',
                             fontSize: p.priceFontSize || 16,
-                            color: p.priceColor || '#F97316',
+                            color: p.priceColor || '#18181B',
                           }}
                         >
                           {staticProd?.price ? `R$ ${staticProd.price.toFixed(2)}` : 'R$ XX,XX'}
@@ -617,7 +617,7 @@ export function BlockPreview({
                           style={{
                             display: p.buttonFullWidth ? 'block' : 'inline-block',
                             padding: `${p.buttonPaddingV ?? 6}px ${p.buttonPaddingH ?? 16}px`,
-                            background: p.buttonColor || '#F97316',
+                            background: p.buttonColor || '#18181B',
                             color: p.buttonTextColor || '#FFFFFF',
                             borderRadius: p.buttonRadius ?? 6,
                             fontSize: p.buttonFontSize || 12,
@@ -960,7 +960,7 @@ export function BlockPreview({
                   display: 'inline-block',
                   marginTop: 12,
                   padding: '10px 20px',
-                  backgroundColor: p.buttonColor || '#F97316',
+                  backgroundColor: p.buttonColor || '#18181B',
                   color: p.buttonTextColor || '#FFFFFF',
                   borderRadius: 6,
                   fontSize: 14,
@@ -1211,7 +1211,7 @@ export function BlockPreview({
           const presets: Record<string, { numColor: string; lblColor: string; bxColor: string; bg: string; sepColor: string; ttlColor: string }> = {
             dark: { numColor: '#FFFFFF', lblColor: '#9CA3AF', bxColor: '#1F2937', bg: '#111827', sepColor: '#6B7280', ttlColor: '#F9FAFB' },
             light: { numColor: '#111827', lblColor: '#6B7280', bxColor: '#F3F4F6', bg: '#FFFFFF', sepColor: '#D1D5DB', ttlColor: '#111827' },
-            brand: { numColor: '#FFFFFF', lblColor: 'rgba(255,255,255,0.75)', bxColor: '#EA580C', bg: '#F97316', sepColor: 'rgba(255,255,255,0.5)', ttlColor: '#FFFFFF' },
+            brand: { numColor: '#FFFFFF', lblColor: 'rgba(255,255,255,0.75)', bxColor: '#27272A', bg: '#18181B', sepColor: 'rgba(255,255,255,0.5)', ttlColor: '#FFFFFF' },
             minimal: { numColor: '#111827', lblColor: '#9CA3AF', bxColor: 'transparent', bg: 'transparent', sepColor: '#D1D5DB', ttlColor: '#374151' },
             urgent: { numColor: '#FFFFFF', lblColor: 'rgba(255,255,255,0.8)', bxColor: '#991B1B', bg: '#DC2626', sepColor: 'rgba(255,255,255,0.4)', ttlColor: '#FFFFFF' },
           }

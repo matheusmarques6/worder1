@@ -52,7 +52,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
   const blockPad = pad(p.padding)
   const ts = settings?.textStyles
   const bs = settings?.buttonStyles
-  const linkColor = ts?.link?.color || '#F97316'
+  const linkColor = ts?.link?.color || '#18181B'
   const linkUnderline = ts?.link?.underline !== false
 
   // Block visibility values:
@@ -99,7 +99,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     }
 
     case 'button':
-      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:${p.align === 'left' ? '0' : p.align === 'right' ? '0 0 0 auto' : '0 auto'};${p.fullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.bgColor || '#F97316'};border-radius:${p.borderRadius || 8}px;padding:${p.paddingV || 14}px ${p.paddingH || 32}px;text-align:center;"><a href="${p.href || '#'}" style="color:${p.textColor || '#fff'};font-size:${p.fontSize || 16}px;font-weight:${p.fontWeight || 'bold'};text-decoration:none;display:block;font-family:${font};">${p.text || ''}</a></td></tr></table></td></tr>`
+      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:${p.align === 'left' ? '0' : p.align === 'right' ? '0 0 0 auto' : '0 auto'};${p.fullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.bgColor || '#18181B'};border-radius:${p.borderRadius || 8}px;padding:${p.paddingV || 14}px ${p.paddingH || 32}px;text-align:center;"><a href="${p.href || '#'}" style="color:${p.textColor || '#fff'};font-size:${p.fontSize || 16}px;font-weight:${p.fontWeight || 'bold'};text-decoration:none;display:block;font-family:${font};">${p.text || ''}</a></td></tr></table></td></tr>`
 
     case 'divider': {
       const dw = p.width ?? 100
@@ -167,8 +167,8 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
           const cells = rowProds.map((prod: any) => {
             const imgHtml = prod.image_url ? `<img src="${prod.image_url}" alt="${prod.title || ''}" width="100%" style="display:block;width:100%;height:auto;max-height:${p.maxImageHeight || 300}px;object-fit:cover;border-radius:${p.productBorderRadius ?? 0}px ${p.productBorderRadius ?? 0}px 0 0;" />` : `<div style="height:${p.maxImageHeight || 300}px;background:#f3f4f6;"></div>`
             const nameHtml = p.showName !== false ? `<p style="margin:0;font-weight:${p.nameWeight || '600'};font-size:${p.nameFontSize || 14}px;color:${p.nameColor || '#111827'};font-family:${font};">${prod.title || ''}</p>` : ''
-            const priceHtml = p.showPrice !== false ? `<p style="margin:4px 0 0;">${p.showComparePrice && prod.compare_at_price ? `<span style="font-size:${(p.priceFontSize || 16) - 3}px;color:${p.comparePriceColor || '#9CA3AF'};text-decoration:line-through;margin-right:6px;">R$ ${Number(prod.compare_at_price).toFixed(2)}</span>` : ''}<span style="font-weight:${p.priceWeight || '700'};font-size:${p.priceFontSize || 16}px;color:${p.priceColor || '#F97316'};">R$ ${Number(prod.price || 0).toFixed(2)}</span></p>` : ''
-            const btnHtml = p.showButton !== false ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:8px ${p.buttonFullWidth ? '0' : 'auto'} 0;${p.buttonFullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.buttonColor || '#F97316'};border-radius:${p.buttonRadius ?? 6}px;padding:${p.buttonPaddingV ?? 6}px ${p.buttonPaddingH ?? 16}px;text-align:center;"><a href="${prod.url || '#'}" style="color:${p.buttonTextColor || '#FFFFFF'};font-size:${p.buttonFontSize || 12}px;font-weight:600;text-decoration:none;display:block;font-family:${font};">${p.buttonText || 'Comprar'}</a></td></tr></table>` : ''
+            const priceHtml = p.showPrice !== false ? `<p style="margin:4px 0 0;">${p.showComparePrice && prod.compare_at_price ? `<span style="font-size:${(p.priceFontSize || 16) - 3}px;color:${p.comparePriceColor || '#9CA3AF'};text-decoration:line-through;margin-right:6px;">R$ ${Number(prod.compare_at_price).toFixed(2)}</span>` : ''}<span style="font-weight:${p.priceWeight || '700'};font-size:${p.priceFontSize || 16}px;color:${p.priceColor || '#18181B'};">R$ ${Number(prod.price || 0).toFixed(2)}</span></p>` : ''
+            const btnHtml = p.showButton !== false ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:8px ${p.buttonFullWidth ? '0' : 'auto'} 0;${p.buttonFullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.buttonColor || '#18181B'};border-radius:${p.buttonRadius ?? 6}px;padding:${p.buttonPaddingV ?? 6}px ${p.buttonPaddingH ?? 16}px;text-align:center;"><a href="${prod.url || '#'}" style="color:${p.buttonTextColor || '#FFFFFF'};font-size:${p.buttonFontSize || 12}px;font-weight:600;text-decoration:none;display:block;font-family:${font};">${p.buttonText || 'Comprar'}</a></td></tr></table>` : ''
             return `<td width="${cellWidth}%" valign="top" style="vertical-align:top;padding:${p.productPadding ?? 4}px;"><div style="border:1px solid ${p.productBorderColor || '#E5E7EB'};border-radius:${p.productBorderRadius ?? 8}px;overflow:hidden;background:#fff;text-align:center;">${imgHtml}<div style="padding:${p.productPadding ?? 8}px;">${nameHtml}${priceHtml}${btnHtml}</div></div></td>`
           }).join('')
           // Pad with empty cells if row not full
@@ -266,7 +266,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     case 'coupon': {
       const cpv = p.codePaddingV ?? 10
       const cph = p.codePaddingH ?? 28
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#FFF7ED'};text-align:${p.headerAlign || 'center'};font-family:${font};">${p.headerText ? `<p style="margin:0 0 10px;font-size:${p.headerFontSize || 14}px;color:${p.headerColor || '#9A3412'};font-weight:${p.headerFontWeight || '500'};text-align:${p.headerAlign || 'center'};">${p.headerText}</p>` : ''}<p style="margin:0;font-size:${p.codeFontSize || 32}px;font-weight:${p.codeFontWeight || 'bold'};color:${p.codeColor || '#EA580C'};letter-spacing:${p.codeLetterSpacing ?? 4}px;${p.borderStyle !== 'none' ? `border:${p.borderWidth ?? 2}px ${p.borderStyle || 'dashed'} ${p.borderColor || '#EA580C'};` : ''}border-radius:${p.borderRadius || 12}px;display:inline-block;padding:${cpv}px ${cph}px;max-width:100%;box-sizing:border-box;word-break:break-all;${p.codeBgColor ? `background-color:${p.codeBgColor};` : ''}" class="worder-coupon-code">${p.code || ''}</p>${p.footerText ? `<p style="margin:10px 0 0;font-size:${p.footerFontSize || 12}px;color:${p.footerColor || '#9CA3AF'};font-weight:${p.footerFontWeight || 'normal'};">${p.footerText}</p>` : ''}</td></tr>`
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#FFF7ED'};text-align:${p.headerAlign || 'center'};font-family:${font};">${p.headerText ? `<p style="margin:0 0 10px;font-size:${p.headerFontSize || 14}px;color:${p.headerColor || '#9A3412'};font-weight:${p.headerFontWeight || '500'};text-align:${p.headerAlign || 'center'};">${p.headerText}</p>` : ''}<p style="margin:0;font-size:${p.codeFontSize || 32}px;font-weight:${p.codeFontWeight || 'bold'};color:${p.codeColor || '#18181B'};letter-spacing:${p.codeLetterSpacing ?? 4}px;${p.borderStyle !== 'none' ? `border:${p.borderWidth ?? 2}px ${p.borderStyle || 'dashed'} ${p.borderColor || '#18181B'};` : ''}border-radius:${p.borderRadius || 12}px;display:inline-block;padding:${cpv}px ${cph}px;max-width:100%;box-sizing:border-box;word-break:break-all;${p.codeBgColor ? `background-color:${p.codeBgColor};` : ''}" class="worder-coupon-code">${p.code || ''}</p>${p.footerText ? `<p style="margin:10px 0 0;font-size:${p.footerFontSize || 12}px;color:${p.footerColor || '#9CA3AF'};font-weight:${p.footerFontWeight || 'normal'};">${p.footerText}</p>` : ''}</td></tr>`
     }
 
     case 'columns':
@@ -280,7 +280,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       const isImgLeft = p.layout !== 'image-right'
       const ratios = (p.splitRatio || '50-50').split('-').map(Number)
       const imgCell = `<td width="${ratios[isImgLeft ? 0 : 1]}%" valign="top" style="vertical-align:top;line-height:0;font-size:0;"><img src="${p.imageSrc || ''}" alt="${p.imageAlt || ''}" width="${p.imageWidth || 300}" style="max-width:100%;height:auto;display:block;vertical-align:bottom;" /></td>`
-      const textCell = `<td width="${ratios[isImgLeft ? 1 : 0]}%" valign="middle" style="vertical-align:middle;padding:16px 20px;font-family:${font};">${p.textHtml || ''}${p.showButton !== false ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:16px;"><tr><td style="background-color:${p.buttonColor || '#F97316'};border-radius:8px;padding:12px 24px;"><a href="${p.buttonHref || '#'}" style="color:${p.buttonTextColor || '#fff'};font-size:15px;font-weight:bold;text-decoration:none;display:block;font-family:${font};">${p.buttonText || 'Saiba Mais'}</a></td></tr></table>` : ''}</td>`
+      const textCell = `<td width="${ratios[isImgLeft ? 1 : 0]}%" valign="middle" style="vertical-align:middle;padding:16px 20px;font-family:${font};">${p.textHtml || ''}${p.showButton !== false ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:16px;"><tr><td style="background-color:${p.buttonColor || '#18181B'};border-radius:8px;padding:12px 24px;"><a href="${p.buttonHref || '#'}" style="color:${p.buttonTextColor || '#fff'};font-size:15px;font-weight:bold;text-decoration:none;display:block;font-family:${font};">${p.buttonText || 'Saiba Mais'}</a></td></tr></table>` : ''}</td>`
       return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="worder-section-stack"><tr>${isImgLeft ? imgCell + textCell : textCell + imgCell}</tr></table></td></tr>`
     }
 
@@ -430,7 +430,7 @@ body,table,td,a{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}
 table,td{mso-table-lspace:0pt;mso-table-rspace:0pt}
 img{-ms-interpolation-mode:bicubic;border:0;height:auto;line-height:100%;outline:none;text-decoration:none;display:block}
 body{margin:0;padding:0;width:100%!important}
-a{color:${s.textStyles?.link?.color || '#F97316'};${s.textStyles?.link?.underline !== false ? 'text-decoration:underline;' : 'text-decoration:none;'}}
+a{color:${s.textStyles?.link?.color || '#18181B'};${s.textStyles?.link?.underline !== false ? 'text-decoration:underline;' : 'text-decoration:none;'}}
 .worder-mobile-only{display:none!important;max-height:0;overflow:hidden}
 .worder-mobile-hide{} /* visible on desktop by default */
 .worder-desktop-hide{display:none!important;mso-hide:all;max-height:0;overflow:hidden}

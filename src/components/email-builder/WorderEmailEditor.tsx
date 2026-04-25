@@ -64,7 +64,7 @@ function SortableBlock({
       {...listeners}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1, zIndex: isDragging ? 50 : 'auto' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
-      className={`relative group cursor-grab active:cursor-grabbing ${isSelected ? 'ring-2 ring-brand-500 ring-offset-1' : isUniversal ? 'hover:ring-1 hover:ring-violet-300' : 'hover:ring-1 hover:ring-brand-300'}`}
+      className={`relative group cursor-grab active:cursor-grabbing ${isSelected ? 'ring-2 ring-zinc-900 ring-offset-1' : isUniversal ? 'hover:ring-1 hover:ring-violet-300' : 'hover:ring-1 hover:ring-zinc-400'}`}
     >
       {/* Universal badge — always visible when linked to saved block */}
       {isUniversal && (
@@ -99,7 +99,7 @@ function SortableBlock({
       >
         <button
           onClick={e => { e.stopPropagation(); onClone() }}
-          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+          className="p-1.5 text-gray-400 hover:text-zinc-700 hover:bg-zinc-100 rounded"
           title="Duplicar"
         >
           <Copy className="w-3.5 h-3.5" />
@@ -165,7 +165,7 @@ function SortableSection({ sectionId, children, isSelected, hiddenOnDevice, isUn
       <div
         {...attributes}
         {...listeners}
-        className={`absolute right-2 top-2 cursor-grab active:cursor-grabbing p-1.5 rounded-md z-30 transition-all ${isSelected ? 'opacity-100 bg-indigo-100 text-indigo-600' : 'opacity-0 group-hover/sectiondrag:opacity-100 bg-white/90 text-gray-400 hover:text-indigo-500 border border-gray-200 shadow-sm'}`}
+        className={`absolute right-2 top-2 cursor-grab active:cursor-grabbing p-1.5 rounded-md z-30 transition-all ${isSelected ? 'opacity-100 bg-zinc-100 text-zinc-700' : 'opacity-0 group-hover/sectiondrag:opacity-100 bg-white/90 text-gray-400 hover:text-zinc-600 border border-gray-200 shadow-sm'}`}
         title="Arrastar seção"
       >
         <GripVertical className="w-3.5 h-3.5" />
@@ -177,7 +177,7 @@ function SortableSection({ sectionId, children, isSelected, hiddenOnDevice, isUn
             className="pointer-events-none absolute inset-0 z-10 bg-gray-100/60"
             style={{ backgroundImage: 'repeating-linear-gradient(-45deg, rgba(0,0,0,0.05) 0 8px, transparent 8px 16px)' }}
           />
-          <div className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 z-20 flex items-center gap-1 px-2 py-0.5 bg-indigo-700/90 text-white text-[10px] font-semibold rounded shadow">
+          <div className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 z-20 flex items-center gap-1 px-2 py-0.5 bg-zinc-800/90 text-white text-[10px] font-semibold rounded shadow">
             {hiddenOnDevice === 'all' ? 'Seção oculta' : hiddenOnDevice === 'desktop' ? 'Seção oculta no Desktop' : 'Seção oculta no Mobile'}
           </div>
         </>
@@ -208,7 +208,7 @@ function DroppableColumn({ columnId, sectionId, children }: { columnId: string; 
     data: { type: 'column', columnId, sectionId },
   })
   return (
-    <div ref={setNodeRef} className={`${isOver ? 'ring-2 ring-brand-400 ring-inset bg-brand-50/30' : ''}`}>
+    <div ref={setNodeRef} className={`${isOver ? 'ring-2 ring-zinc-400 ring-inset bg-zinc-50/30' : ''}`}>
       {children}
     </div>
   )
@@ -229,7 +229,7 @@ function InlineColorPicker({ value, onChange, label }: { value: string; onChange
       <div className="flex items-center gap-1.5">
         <button onClick={() => setOpen(!open)} className="w-8 h-8 rounded-lg border-2 border-gray-200 cursor-pointer flex-shrink-0 hover:border-gray-400 transition-colors" style={{ backgroundColor: value || '#ffffff' }} />
         <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} placeholder="#000000"
-          className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
+          className="flex-1 px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-mono text-gray-900 focus:border-zinc-900 focus:outline-none" />
       </div>
       {open && (
         <div className="absolute top-full left-0 mt-1 z-50 bg-white rounded-xl shadow-xl border border-gray-200 p-3" onMouseDown={e => e.stopPropagation()}>
@@ -270,12 +270,12 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
             <div>
               <label className="block text-[11px] font-medium text-gray-500 mb-1">Largura (px)</label>
               <input type="number" value={s.contentWidth} onChange={e => update('contentWidth', Number(e.target.value))} min={400} max={800}
-                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all" />
+                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900/10 focus:outline-none transition-all" />
             </div>
             <div>
               <label className="block text-[11px] font-medium text-gray-500 mb-1">Bordas</label>
               <input type="number" value={s.borderRadius} onChange={e => update('borderRadius', Number(e.target.value))} min={0} max={24}
-                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all" />
+                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900/10 focus:outline-none transition-all" />
             </div>
           </div>
         </div>
@@ -287,7 +287,7 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
         <div>
           <label className="block text-[11px] font-medium text-gray-500 mb-1.5">Fonte Global</label>
           <select value={s.fontFamily} onChange={e => update('fontFamily', e.target.value)}
-            className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 focus:outline-none transition-all"
+            className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900/10 focus:outline-none transition-all"
             style={{ fontFamily: s.fontFamily }}>
             {FONTS.map(f => <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>)}
           </select>
@@ -321,12 +321,12 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
                     <div>
                       <label className="text-[10px] text-gray-400">Tamanho</label>
                       <input type="number" value={ts.fontSize} onChange={e => updateTS('fontSize', Number(e.target.value))} min={8} max={72}
-                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                     </div>
                     <div>
                       <label className="text-[10px] text-gray-400">Altura</label>
                       <input type="number" value={ts.lineHeight} onChange={e => updateTS('lineHeight', Number(e.target.value))} min={0.8} max={3} step={0.1}
-                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                     </div>
                     <div>
                       <label className="text-[10px] text-gray-400">Cor</label>
@@ -338,7 +338,7 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
                           input.click()
                         }} className="w-8 h-[30px] rounded-lg border border-gray-200 cursor-pointer flex-shrink-0" style={{ backgroundColor: ts.color }} />
                         <input type="text" value={ts.color} onChange={e => updateTS('color', e.target.value)}
-                          className="flex-1 min-w-0 px-1.5 py-1.5 border border-gray-200 rounded-lg text-[10px] font-mono text-gray-900 focus:border-brand-500 focus:outline-none" />
+                          className="flex-1 min-w-0 px-1.5 py-1.5 border border-gray-200 rounded-lg text-[10px] font-mono text-gray-900 focus:border-zinc-900 focus:outline-none" />
                       </div>
                     </div>
                   </div>
@@ -352,13 +352,13 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
       {/* ── Links ── */}
       <div className="p-4 space-y-3 border-b border-gray-100">
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Links</p>
-        <InlineColorPicker label="Cor do Link" value={s.textStyles?.link?.color || '#F97316'} onChange={v => {
+        <InlineColorPicker label="Cor do Link" value={s.textStyles?.link?.color || '#18181B'} onChange={v => {
           const textStyles = { ...(s.textStyles || {}) }
           textStyles.link = { ...(textStyles.link || {}), color: v }
           update('textStyles', textStyles)
         }} />
         <label className="flex items-center gap-2.5 cursor-pointer">
-          <div className={`relative w-9 h-5 rounded-full transition-colors ${s.textStyles?.link?.underline !== false ? 'bg-brand-500' : 'bg-gray-200'}`}>
+          <div className={`relative w-9 h-5 rounded-full transition-colors ${s.textStyles?.link?.underline !== false ? 'bg-zinc-900' : 'bg-gray-200'}`}>
             <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${s.textStyles?.link?.underline !== false ? 'translate-x-4' : 'translate-x-0.5'}`} />
           </div>
           <span className="text-[12px] text-gray-700">Sublinhado</span>
@@ -369,7 +369,7 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
       <div className="p-4 space-y-3">
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Botões Padrão</p>
         {(['primary', 'secondary'] as const).map(variant => {
-          const bs = s.buttonStyles?.[variant] || { bgColor: variant === 'primary' ? '#F97316' : '#FFFFFF', textColor: variant === 'primary' ? '#FFFFFF' : '#F97316', borderRadius: 8, fontWeight: 'bold' }
+          const bs = s.buttonStyles?.[variant] || { bgColor: variant === 'primary' ? '#18181B' : '#FFFFFF', textColor: variant === 'primary' ? '#FFFFFF' : '#18181B', borderRadius: 8, fontWeight: 'bold' }
           const updateBS = (field: string, val: any) => {
             const buttonStyles: Record<string, any> = { ...(s.buttonStyles || {}) }
             buttonStyles[variant] = { ...bs, [field]: val }
@@ -394,12 +394,12 @@ function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch
                   <div>
                     <label className="text-[10px] text-gray-400">Raio</label>
                     <input type="number" value={bs.borderRadius} onChange={e => updateBS('borderRadius', Number(e.target.value))} min={0} max={50}
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 focus:border-zinc-900 focus:outline-none" />
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-400">Peso</label>
                     <select value={bs.fontWeight} onChange={e => updateBS('fontWeight', e.target.value)}
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 bg-white focus:border-brand-500 focus:outline-none">
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 bg-white focus:border-zinc-900 focus:outline-none">
                       <option value="normal">Normal</option>
                       <option value="600">Semibold</option>
                       <option value="bold">Bold</option>
@@ -584,7 +584,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
           { id: bid(), type: 'image', props: { src: '', alt: 'Hero', width: 600, fillColumn: true, padding: { top: 0, right: 0, bottom: 0, left: 0 }, backgroundColor: '' } },
           { id: bid(), type: 'text', props: { contentHtml: '<h1 style="text-align:center;font-size:32px;font-weight:bold;color:#111827;">Título Principal</h1>', fontSize: 32, color: '#111827', lineHeight: 1.3, align: 'center', padding: { top: 24, right: 24, bottom: 8, left: 24 } } },
           { id: bid(), type: 'text', props: { contentHtml: '<p style="text-align:center;color:#6B7280;">Subtítulo com descrição do conteúdo principal do email.</p>', fontSize: 16, color: '#6B7280', lineHeight: 1.6, align: 'center', padding: { top: 0, right: 24, bottom: 16, left: 24 } } },
-          { id: bid(), type: 'button', props: { text: 'SAIBA MAIS', href: '#', bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, fontWeight: 'bold', borderRadius: 8, paddingH: 32, paddingV: 14, fullWidth: false, align: 'center', padding: { top: 0, right: 24, bottom: 24, left: 24 } } },
+          { id: bid(), type: 'button', props: { text: 'SAIBA MAIS', href: '#', bgColor: '#18181B', textColor: '#FFFFFF', fontSize: 15, fontWeight: 'bold', borderRadius: 8, paddingH: 32, paddingV: 14, fullWidth: false, align: 'center', padding: { top: 0, right: 24, bottom: 24, left: 24 } } },
         )
         break
       case 'cta':
@@ -598,7 +598,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
       case 'products':
         blocks.push(
           { id: bid(), type: 'text', props: { contentHtml: '<h2 style="text-align:center;font-weight:bold;color:#111827;">Recomendados para você</h2>', fontSize: 22, color: '#111827', align: 'center', padding: { top: 24, right: 24, bottom: 16, left: 24 } } },
-          { id: bid(), type: 'product-grid', props: { mode: 'static', columns: 2, rows: 1, showName: true, showPrice: true, showComparePrice: true, showButton: true, buttonText: 'Comprar', buttonColor: '#F97316', buttonTextColor: '#FFFFFF', stackOnMobile: true, padding: { top: 0, right: 24, bottom: 24, left: 24 } } },
+          { id: bid(), type: 'product-grid', props: { mode: 'static', columns: 2, rows: 1, showName: true, showPrice: true, showComparePrice: true, showButton: true, buttonText: 'Comprar', buttonColor: '#18181B', buttonTextColor: '#FFFFFF', stackOnMobile: true, padding: { top: 0, right: 24, bottom: 24, left: 24 } } },
         )
         break
       case 'footer':
@@ -1415,7 +1415,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
                 if (e.key === 'Escape') { setEditableName(templateName); setEditingName(false) }
               }}
-              className="text-sm font-semibold text-white bg-zinc-700 border border-zinc-600 rounded px-2 py-0.5 max-w-[280px] outline-none focus:border-brand-500"
+              className="text-sm font-semibold text-white bg-zinc-700 border border-zinc-600 rounded px-2 py-0.5 max-w-[280px] outline-none focus:border-zinc-900"
             />
           ) : (
             <button
@@ -1664,12 +1664,12 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Layout</p>
                       <div className="grid grid-cols-2 gap-1.5">
                         <button onClick={() => setShowColumnModal(true)}
-                          className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
+                          className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-zinc-400 hover:shadow-sm transition-all cursor-pointer">
                           <Columns className="w-5 h-5 text-gray-500" />
                           <span className="text-[10px] font-medium text-gray-600">Colunas</span>
                         </button>
                         <button onClick={() => addSection([100])}
-                          className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:shadow-sm transition-all cursor-pointer">
+                          className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white border border-gray-200 rounded-lg hover:border-zinc-400 hover:shadow-sm transition-all cursor-pointer">
                           <LayoutGrid className="w-5 h-5 text-gray-500" />
                           <span className="text-[10px] font-medium text-gray-600">Seção</span>
                         </button>
@@ -1735,19 +1735,19 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                   >
                   {/* Section = FULL WIDTH with section color */}
                   <div
-                    className={`relative group/section ${selectedSectionId === section.id ? 'ring-2 ring-indigo-400 ring-inset' : 'hover:ring-1 hover:ring-indigo-200 hover:ring-inset'}`}
+                    className={`relative group/section ${selectedSectionId === section.id ? 'ring-2 ring-zinc-900 ring-inset' : 'hover:ring-1 hover:ring-zinc-300 hover:ring-inset'}`}
                     style={{ backgroundColor: section.styles.backgroundColor || undefined }}
                     onClick={e => { e.stopPropagation(); selectSection(section.id) }}
                   >
                       {/* Section toolbar INSIDE the section - always visible */}
                       {selectedSectionId === section.id && (
                         <div className="absolute left-1 top-1 z-20 flex items-center gap-1">
-                          <span className={`px-2 py-0.5 text-white text-[10px] font-semibold rounded ${section._savedSectionId ? 'bg-violet-500' : 'bg-indigo-500'}`}>
+                          <span className={`px-2 py-0.5 text-white text-[10px] font-semibold rounded ${section._savedSectionId ? 'bg-violet-500' : 'bg-zinc-700'}`}>
                             {section._savedSectionId ? 'Seção Universal' : 'Seção'}
                           </span>
                           <div className="flex gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5">
                             <button onClick={e => { e.stopPropagation(); cloneSection(section.id) }}
-                              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Duplicar">
+                              className="p-1 text-gray-400 hover:text-zinc-700 hover:bg-zinc-100 rounded" title="Duplicar">
                               <Copy className="w-3 h-3" />
                             </button>
                             {section._savedSectionId ? (
@@ -1798,7 +1798,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                               onDragOver={e => {
                                 e.preventDefault(); e.stopPropagation();
                                 e.dataTransfer.dropEffect = 'copy'
-                                e.currentTarget.classList.add('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30')
+                                e.currentTarget.classList.add('ring-2', 'ring-zinc-400', 'ring-inset', 'bg-zinc-50/30')
                                 // Cancel any pending drag-leave clear
                                 if (dragLeaveTimerRef.current) { clearTimeout(dragLeaveTimerRef.current); dragLeaveTimerRef.current = null }
                                 // Auto-scroll when near viewport edges
@@ -1828,7 +1828,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                                 // Debounce to avoid flicker when moving between child blocks
                                 const target = e.currentTarget
                                 dragLeaveTimerRef.current = setTimeout(() => {
-                                  target.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30')
+                                  target.classList.remove('ring-2', 'ring-zinc-400', 'ring-inset', 'bg-zinc-50/30')
                                   setDropIndicator(prev => {
                                     if (prev && prev.sectionId === section.id && prev.columnId === column.id) return null
                                     return prev
@@ -1837,7 +1837,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                               }}
                               onDrop={e => {
                                 e.preventDefault(); e.stopPropagation();
-                                e.currentTarget.classList.remove('ring-2', 'ring-brand-400', 'ring-inset', 'bg-brand-50/30')
+                                e.currentTarget.classList.remove('ring-2', 'ring-zinc-400', 'ring-inset', 'bg-zinc-50/30')
                                 if (dragLeaveTimerRef.current) { clearTimeout(dragLeaveTimerRef.current); dragLeaveTimerRef.current = null }
                                 const insertIdx = dropIndicator && dropIndicator.sectionId === section.id && dropIndicator.columnId === column.id
                                   ? dropIndicator.index
@@ -1912,7 +1912,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                                     return (
                                     <div key={block.id} data-palette-drop-block data-block-id={block.id}>
                                       {colDropIndex === blockIndex && (
-                                        <div className="h-[3px] bg-[#3B82F6] rounded-full mx-2 transition-opacity" />
+                                        <div className="h-[3px] bg-zinc-900 rounded-full mx-2 transition-opacity" />
                                       )}
                                       <SortableBlock
                                         blockId={block.id}
@@ -1945,7 +1945,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                                         />
                                       </SortableBlock>
                                       {colDropIndex === blockIndex + 1 && blockIndex === colBlocks.length - 1 && (
-                                        <div className="h-[3px] bg-[#3B82F6] rounded-full mx-2 transition-opacity" />
+                                        <div className="h-[3px] bg-zinc-900 rounded-full mx-2 transition-opacity" />
                                       )}
                                     </div>
                                     )
@@ -2221,10 +2221,10 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                     const isActive = JSON.stringify(columnModalLayout) === JSON.stringify(opt.cols)
                     return (
                       <button key={opt.label} onClick={() => setColumnModalLayout(opt.cols)}
-                        className={`p-3 border-2 rounded-lg text-center transition-all ${isActive ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                        className={`p-3 border-2 rounded-lg text-center transition-all ${isActive ? 'border-zinc-900 bg-zinc-50' : 'border-gray-200 hover:border-gray-300'}`}>
                         <div className="flex gap-0.5 justify-center mb-1">
                           {opt.cols.map((w, i) => (
-                            <div key={i} className={`h-5 rounded-sm ${isActive ? 'bg-brand-500' : 'bg-gray-300'}`} style={{ width: `${w * 0.6}px` }} />
+                            <div key={i} className={`h-5 rounded-sm ${isActive ? 'bg-zinc-900' : 'bg-gray-300'}`} style={{ width: `${w * 0.6}px` }} />
                           ))}
                         </div>
                         <span className="text-[10px] text-gray-600">{opt.label}</span>

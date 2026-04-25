@@ -269,7 +269,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                   <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center bg-gray-50 hover:border-gray-400 transition-colors"
                     onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-zinc-400', 'bg-zinc-50') }}
                     onDragLeave={e => { e.currentTarget.classList.remove('border-zinc-400', 'bg-zinc-50') }}
-                    onDrop={async e => { e.preventDefault(); e.currentTarget.classList.remove('border-zinc-400', 'bg-zinc-50'); const f = e.dataTransfer.files[0]; if (!f) return; const form = new FormData(); form.append('file', f); try { const res = await fetch('/api/content/media', { method: 'POST', body: form }); const data = await res.json(); if (data.url) onChange('src', data.url) } catch { alert('Erro') } }}
+                    onDrop={async e => { e.preventDefault(); e.currentTarget.classList.remove('border-zinc-400', 'bg-zinc-50'); const f = e.dataTransfer.files[0]; if (!f) return; const form = new FormData(); form.append('file', f); try { const res = await fetch('/api/content/media', { method: 'POST', body: form }); const data = await res.json(); if (data.url) onChange('src', data.url) } catch { console.error('Upload falhou') } }}
                   >
                     <p className="text-sm font-medium text-gray-600 mb-1">Arraste e solte ou selecione</p>
                     <p className="text-[10px] text-gray-400 mb-3">Aceita .png, .jpg, .jpeg, .gif, .webp<br/>Tamanho maximo: 10 MB</p>
@@ -282,7 +282,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                         <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                           const file = e.target.files?.[0]; if (!file) return
                           const form = new FormData(); form.append('file', file)
-                          try { const res = await fetch('/api/content/media', { method: 'POST', body: form }); const data = await res.json(); if (data.url) onChange('src', data.url) } catch { alert('Erro') }
+                          try { const res = await fetch('/api/content/media', { method: 'POST', body: form }); const data = await res.json(); if (data.url) onChange('src', data.url) } catch { console.error('Upload falhou') }
                         }} />
                       </label>
                     </div>
@@ -573,7 +573,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                   const res = await fetch('/api/images/upload', { method: 'POST', body: form })
                   const data = await res.json()
                   if (data.url) onChange('thumbnailUrl', data.url)
-                } catch { alert('Erro no upload') }
+                } catch { console.error('Upload falhou') }
               }} />
             </label>
           )}
@@ -963,7 +963,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
             <span className="text-[10px] font-semibold text-gray-500 uppercase">Estilo do Código</span>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Tamanho"><NumberInput value={p.codeFontSize || 32} onChange={v => onChange('codeFontSize', v)} min={16} max={64} /></Field>
-              <Field label="Cor"><ColorInput value={p.codeColor || '#EA580C'} onChange={v => onChange('codeColor', v)} /></Field>
+              <Field label="Cor"><ColorInput value={p.codeColor || '#18181B'} onChange={v => onChange('codeColor', v)} /></Field>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Borda">
@@ -971,7 +971,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                   { value: 'dashed', label: 'Tracejado' }, { value: 'solid', label: 'Sólido' }, { value: 'dotted', label: 'Pontilhado' }, { value: 'none', label: 'Nenhuma' },
                 ]} />
               </Field>
-              <Field label="Cor Borda"><ColorInput value={p.borderColor || '#EA580C'} onChange={v => onChange('borderColor', v)} /></Field>
+              <Field label="Cor Borda"><ColorInput value={p.borderColor || '#18181B'} onChange={v => onChange('borderColor', v)} /></Field>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Arredondamento"><NumberInput value={p.borderRadius ?? 12} onChange={v => onChange('borderRadius', v)} min={0} max={32} /></Field>
@@ -1089,7 +1089,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                       const res = await fetch('/api/images/upload', { method: 'POST', body: form })
                       const data = await res.json()
                       if (data.url) onChange('imageSrc', data.url)
-                    } catch { alert('Erro no upload') }
+                    } catch { console.error('Upload falhou') }
                   }} />
                 </label>
                 <button onClick={() => onChange('imageSrc', '')} className="flex-1 py-1 text-[10px] font-medium text-red-600 bg-red-50 rounded hover:bg-red-100">Remover</button>
@@ -1105,7 +1105,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                   const res = await fetch('/api/images/upload', { method: 'POST', body: form })
                   const data = await res.json()
                   if (data.url) onChange('imageSrc', data.url)
-                } catch { alert('Erro no upload') }
+                } catch { console.error('Upload falhou') }
               }} />
             </label>
           )}
@@ -1342,7 +1342,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
               {[
                 { v: 'dark', label: 'Escuro', bg: '#111827', fg: '#fff' },
                 { v: 'light', label: 'Claro', bg: '#F3F4F6', fg: '#111827' },
-                { v: 'brand', label: 'Marca', bg: '#F97316', fg: '#fff' },
+                { v: 'brand', label: 'Marca', bg: '#18181B', fg: '#fff' },
                 { v: 'minimal', label: 'Mín.', bg: '#fff', fg: '#111827' },
                 { v: 'urgent', label: 'Urg.', bg: '#DC2626', fg: '#fff' },
               ].map(opt => (
@@ -1545,7 +1545,7 @@ function ProductBlockProperties({ p, onChange, commonTail, selectedSubElement, o
                   </Field>
                 </div>
                 <Field label="Cor do preco">
-                  <ColorInput value={p.priceColor || '#F97316'} onChange={v => onChange('priceColor', v)} />
+                  <ColorInput value={p.priceColor || '#18181B'} onChange={v => onChange('priceColor', v)} />
                 </Field>
               </>
             )}
@@ -1568,7 +1568,7 @@ function ProductBlockProperties({ p, onChange, commonTail, selectedSubElement, o
                   <TextInput value={p.buttonText || 'Comprar'} onChange={v => onChange('buttonText', v)} placeholder="Texto do botao" />
                 </Field>
                 <Field label="Cor de fundo">
-                  <ColorInput value={p.buttonColor || '#F97316'} onChange={v => onChange('buttonColor', v)} />
+                  <ColorInput value={p.buttonColor || '#18181B'} onChange={v => onChange('buttonColor', v)} />
                 </Field>
                 <Field label="Cor do texto">
                   <ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} />

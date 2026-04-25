@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,29 +8,22 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   const automationId = params.id;
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: 'Not configured' }, { status: 500 });
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const { supabase, user } = auth;
 
   try {
-    // Fetch original automation
     const { data: original, error: fetchError } = await supabase
       .from('automations')
       .select('*')
       .eq('id', automationId)
+      .eq('organization_id', user.organization_id)
       .single();
 
     if (fetchError || !original) {
       return NextResponse.json({ error: 'Automation not found' }, { status: 404 });
     }
 
-    // Create duplicate with "Cópia de" prefix and draft status
     const { data: duplicate, error: insertError } = await supabase
       .from('automations')
       .insert({
@@ -46,7 +39,7 @@ export async function POST(
         frequency_config: original.frequency_config || { type: 'once' },
         nodes: original.nodes || [],
         edges: original.edges || [],
-        status: 'draft', // Always create as draft
+        status: 'draft',
       })
       .select()
       .single();
