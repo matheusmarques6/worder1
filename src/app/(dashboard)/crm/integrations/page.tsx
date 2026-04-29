@@ -1,6 +1,6 @@
-import { toast } from '@/components/ui/Toast'
 'use client'
 
+import { toast } from '@/components/ui/Toast'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'

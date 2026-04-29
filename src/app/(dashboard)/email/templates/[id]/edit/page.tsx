@@ -1,6 +1,6 @@
-import { toast } from '@/components/ui/Toast'
 'use client'
 
+import { toast } from '@/components/ui/Toast'
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'

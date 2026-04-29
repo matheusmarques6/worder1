@@ -1,6 +1,6 @@
-import { toast } from '@/components/ui/Toast'
 'use client'
 
+import { toast } from '@/components/ui/Toast'
 // ─────────────────────────────────────────────────────────────────────────
 // Dedicated editor for a single universal (saved) block or section.
 //
