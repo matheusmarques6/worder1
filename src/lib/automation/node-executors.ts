@@ -388,14 +388,66 @@ const actionExecutors: Record<string, NodeExecutor> = {
         // (contact + event + store). Using empty mergeData works too
         // because the HTML/subject were pre-rendered by the variable
         // engine above — prepareEmailHtml still adds tracking + footer.
+        const contact = context.contact as any;
+        const triggerData = context.trigger?.data || {};
+        const triggerProps = triggerData.properties || triggerData;
         const mergeData: Record<string, string> = {
-          first_name: (context.contact as any)?.first_name || '',
-          last_name: (context.contact as any)?.last_name || '',
+          first_name: contact?.first_name || '',
+          last_name: contact?.last_name || '',
+          full_name: [contact?.first_name, contact?.last_name].filter(Boolean).join(' '),
           email: email || '',
-          phone: (context.contact as any)?.phone || '',
+          phone: contact?.phone || '',
+          total_orders: String(contact?.total_orders || 0),
+          total_spent: String(contact?.total_spent || 0),
+          store_name: (context as any)?.store?.name || '',
+          store_url: (context as any)?.store?.domain ? `https://${(context as any).store.domain}` : '',
         };
-        if ((context.contact as any)?.custom_fields && typeof (context.contact as any).custom_fields === 'object') {
-          for (const [k, v] of Object.entries((context.contact as any).custom_fields)) {
+        // Flatten event/trigger data into merge tags as event.*
+        if (triggerProps && typeof triggerProps === 'object') {
+          for (const [k, v] of Object.entries(triggerProps)) {
+            if (v == null || typeof v === 'object') continue;
+            mergeData[`event.${k}`] = String(v);
+          }
+          if (triggerProps.Items && Array.isArray(triggerProps.Items) && triggerProps.Items.length > 0) {
+            const first = triggerProps.Items[0];
+            mergeData['event.ProductName'] = first.ProductName || first.title || '';
+            mergeData['event.Price'] = String(first.ItemPrice || first.price || '');
+            mergeData['event.ImageURL'] = first.ImageURL || first.image_url || '';
+            mergeData['event.ProductURL'] = first.ProductURL || first.url || '';
+            mergeData['event.SKU'] = first.SKU || first.sku || '';
+            mergeData['event.VariantName'] = first.VariantName || first.variant_title || '';
+            mergeData['event.Brand'] = first.Brand || first.vendor || '';
+          }
+          mergeData['event.Value'] = String(triggerProps.$value || triggerProps.Value || triggerProps.monetary_value || '');
+          mergeData['event.Currency'] = triggerProps.Currency || triggerProps.currency || 'BRL';
+          mergeData['event.OrderId'] = triggerProps.OrderId || triggerProps.order_id || '';
+          mergeData['event.OrderNumber'] = triggerProps.OrderNumber || '';
+          mergeData['event.CheckoutURL'] = triggerProps.CheckoutURL || triggerProps.checkout_url || '';
+          mergeData['event.ItemCount'] = String(triggerProps.ItemCount || triggerProps.item_count || '');
+          mergeData['event.DiscountCode'] = (triggerProps.DiscountCodes || triggerProps.discount_codes || [])[0]?.code || '';
+          mergeData['event.customer_name'] = triggerProps.CustomerName || [contact?.first_name, contact?.last_name].filter(Boolean).join(' ');
+          mergeData['event.email'] = triggerProps.CustomerEmail || email || '';
+          // Also flatten top-level trigger data keys
+          for (const [k, v] of Object.entries(triggerData)) {
+            if (v == null || typeof v === 'object') continue;
+            if (!mergeData[`event.${k}`]) mergeData[`event.${k}`] = String(v);
+          }
+        }
+        // Checkout URL for cart recovery emails
+        mergeData['checkout_url'] = triggerProps.CheckoutURL || triggerProps.checkout_url || '';
+        mergeData['cart_total'] = String(triggerProps.$value || triggerProps.Value || '');
+        mergeData['cart_item_count'] = String(triggerProps.ItemCount || '');
+        if (triggerProps.Items?.[0]) {
+          mergeData['cart_first_item'] = triggerProps.Items[0].ProductName || '';
+          mergeData['cart_first_item_price'] = String(triggerProps.Items[0].ItemPrice || '');
+        }
+        // Order tags
+        mergeData['order_number'] = triggerProps.OrderNumber || '';
+        mergeData['order_total'] = String(triggerProps.$value || triggerProps.Value || triggerProps.TotalPrice || '');
+        mergeData['order_status'] = triggerProps.FinancialStatus || triggerProps.FulfillmentStatus || '';
+        // Custom fields
+        if (contact?.custom_fields && typeof contact.custom_fields === 'object') {
+          for (const [k, v] of Object.entries(contact.custom_fields)) {
             mergeData[`custom.${k}`] = String(v ?? '');
             mergeData[`custom_${k}`] = String(v ?? '');
           }

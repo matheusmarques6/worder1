@@ -702,6 +702,52 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
       idempotency_key: `placed_order:${order.id}`,
     });
 
+    // Dispatch automation trigger with full event data
+    try {
+      const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
+      await dispatchTrigger({
+        organizationId: store.organization_id,
+        triggerType: 'trigger_order',
+        contactId: contact.id,
+        triggerData: {
+          event_type: 'placed_order',
+          OrderId: String(order.id),
+          OrderNumber: String(order.order_number),
+          Value: orderValue,
+          Currency: order.currency,
+          ItemCount: order.line_items?.length || 0,
+          Items: (order.line_items || []).map((item: any) => ({
+            ProductID: item.product_id ? String(item.product_id) : undefined,
+            ProductName: item.title || item.name,
+            Quantity: item.quantity || 1,
+            ItemPrice: parseFloat(item.price || '0'),
+            ImageURL: item.product?.images?.[0]?.src || '',
+            ProductURL: item.product?.handle ? `https://${store.shop_domain}/products/${item.product.handle}` : '',
+            SKU: item.sku,
+            VariantName: item.variant_title,
+            Brand: item.vendor,
+          })),
+          ItemNames: (order.line_items || []).map((item: any) => item.title || item.name),
+          SubtotalPrice: parseFloat(order.subtotal_price || '0'),
+          TotalDiscounts: parseFloat(order.total_discounts || '0'),
+          DiscountCodes: order.discount_codes || [],
+          ShippingAddress: order.shipping_address ? {
+            FirstName: order.shipping_address.first_name,
+            LastName: order.shipping_address.last_name,
+            City: order.shipping_address.city,
+            Country: order.shipping_address.country,
+          } : undefined,
+          CustomerEmail: order.email || order.customer?.email,
+          CustomerPhone: order.phone || order.customer?.phone,
+          CustomerName: [order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(' '),
+          order_status_url: order.order_status_url || '',
+        },
+        idempotencyKey: `trigger:placed_order:${order.id}`,
+      });
+    } catch (dispatchErr) {
+      console.warn('[Shopify] dispatchTrigger for placed_order failed (non-critical):', dispatchErr);
+    }
+
     // Evento ordered_product per line item
     for (const item of (order.line_items || [])) {
       await createEvent({
@@ -1364,6 +1410,45 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       occurred_at: checkout.created_at || new Date().toISOString(),
       idempotency_key: `checkout_started:${checkout.id || checkout.token}`,
     });
+
+    // Dispatch automation trigger with full checkout data
+    if (contactId) {
+      try {
+        const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
+        await dispatchTrigger({
+          organizationId: store.organization_id,
+          triggerType: 'trigger_checkout_abandoned',
+          contactId,
+          triggerData: {
+            event_type: 'checkout_started',
+            CheckoutId: String(checkout.id || checkout.token),
+            CheckoutURL: checkout.abandoned_checkout_url || '',
+            Value: checkoutValue,
+            Currency: checkout.currency,
+            ItemCount: checkout.line_items?.length || 0,
+            Items: (checkout.line_items || []).map((item: any) => ({
+              ProductID: item.product_id ? String(item.product_id) : undefined,
+              ProductName: item.title || item.name,
+              Quantity: item.quantity || 1,
+              ItemPrice: parseFloat(item.price || '0'),
+              ImageURL: item.product?.images?.[0]?.src || item.product?.image?.src || '',
+              ProductURL: item.product?.handle ? `https://${store.shop_domain}/products/${item.product.handle}` : '',
+              SKU: item.sku,
+              VariantName: item.variant_title,
+              Brand: item.vendor,
+            })),
+            ItemNames: (checkout.line_items || []).map((item: any) => item.title || item.name),
+            SubtotalPrice: parseFloat(checkout.subtotal_price || '0'),
+            TotalDiscounts: parseFloat(checkout.total_discounts || '0'),
+            CustomerEmail: checkout.email,
+            CustomerPhone: checkout.phone,
+          },
+          idempotencyKey: `trigger:checkout_started:${checkout.id || checkout.token}`,
+        });
+      } catch (dispatchErr) {
+        console.warn('[Shopify] dispatchTrigger for checkout_started failed:', dispatchErr);
+      }
+    }
   } catch (cdpError) {
     console.error('[Shopify Webhook] CDP event creation failed (checkout):', cdpError);
   }

@@ -62,7 +62,29 @@ export async function sendCampaignEmail({
 
     emailSendId = emailSend.id;
 
-    // 2. Resolve checkout_url merge tag from contact's latest abandoned cart (if not provided)
+    // 2a. Flatten eventData into mergeData for {{event.*}} tags
+    if (eventData && typeof eventData === 'object') {
+      const props = eventData.properties || eventData;
+      for (const [k, v] of Object.entries(props)) {
+        if (v == null || typeof v === 'object') continue;
+        if (!mergeData[`event.${k}`]) mergeData[`event.${k}`] = String(v);
+      }
+      if (props.Items && Array.isArray(props.Items) && props.Items.length > 0) {
+        const first = props.Items[0];
+        mergeData['event.ProductName'] = mergeData['event.ProductName'] || first.ProductName || first.title || '';
+        mergeData['event.Price'] = mergeData['event.Price'] || String(first.ItemPrice || first.price || '');
+        mergeData['event.ImageURL'] = mergeData['event.ImageURL'] || first.ImageURL || '';
+        mergeData['event.ProductURL'] = mergeData['event.ProductURL'] || first.ProductURL || '';
+      }
+      mergeData['event.Value'] = mergeData['event.Value'] || String(props.$value || props.Value || '');
+      mergeData['event.Currency'] = mergeData['event.Currency'] || props.Currency || props.currency || '';
+      mergeData['event.CheckoutURL'] = mergeData['event.CheckoutURL'] || props.CheckoutURL || '';
+      mergeData['event.OrderId'] = mergeData['event.OrderId'] || props.OrderId || '';
+      mergeData['event.ItemCount'] = mergeData['event.ItemCount'] || String(props.ItemCount || '');
+      if (props.CheckoutURL && !mergeData.checkout_url) mergeData.checkout_url = props.CheckoutURL;
+    }
+
+    // 2b. Resolve checkout_url merge tag from contact's latest abandoned cart (if not provided)
     if (!mergeData.checkout_url || mergeData.checkout_url === '{{checkout_url}}') {
       try {
         const { data: cart } = await supabaseAdmin
