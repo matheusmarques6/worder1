@@ -376,11 +376,17 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
         const { sendCampaignEmail } = await import('@/lib/email/send-campaign-email');
 
-        // Resolve order-products blocks using event data before sending
-        if (html.includes('WORDER_ORDER_BLOCK')) {
-          const { resolveOrderBlocks, enrichOrderItemImages } = await import('@/lib/email/render');
-          const eventData = context.trigger?.data || {};
+        // Enrich trigger data with product images from shopify_products table
+        // (webhooks don't always include images inline)
+        const eventData = context.trigger?.data || {};
+        try {
+          const { enrichOrderItemImages } = await import('@/lib/email/render');
           await enrichOrderItemImages(eventData, supabase, undefined, organizationId);
+        } catch {}
+
+        // Resolve order-products blocks using enriched event data
+        if (html.includes('WORDER_ORDER_BLOCK')) {
+          const { resolveOrderBlocks } = await import('@/lib/email/render');
           html = resolveOrderBlocks(html, eventData);
         }
 
