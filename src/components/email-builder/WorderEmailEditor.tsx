@@ -456,14 +456,13 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
   const [selectedSubElement, setSelectedSubElement] = useState<string | null>(null)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
-  const [saving, setSaving] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const nameAnchorRef = useRef<HTMLDivElement>(null)
-  const initialDocRef = useRef(doc)
-  // Track any doc change (from any source) as dirty
+  const mountedRef = useRef(false)
   useEffect(() => {
-    if (doc !== initialDocRef.current) setIsDirty(true)
+    if (!mountedRef.current) { mountedRef.current = true; return }
+    setIsDirty(true)
   }, [doc])
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [leftTab, setLeftTab] = useState<'content' | 'styles'>('content')
@@ -1230,23 +1229,6 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     ))
   }, [doc])
 
-  const handleSave = useCallback(async () => {
-    setSaving(true)
-    try {
-      // 1. Flush any pending universal-sync debounces so nothing is lost.
-      await flushUniversalSync()
-      // 2. Render + persist the email itself.
-      const html = renderDocumentToHtml(doc)
-      const success = await onSave(doc as any, html)
-      if (success) showToast('Template salvo com sucesso!')
-      // 3. Bump the palette counter so neighbouring UI re-fetches the
-      //    updated library immediately (useful when saving then dragging
-      //    the same universal into another section without leaving).
-      setSavedLibraryVersion(v => v + 1)
-    } catch (err: any) { showToast('Erro: ' + err.message, 'error') }
-    setSaving(false)
-  }, [doc, onSave, showToast, flushUniversalSync])
-
   const { saveStatus, lastSavedAt: autosaveLastSaved, saveError, flush: flushAutosave } = useEmailAutosave({
     onSave: async () => {
       try {
@@ -1329,7 +1311,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [flushAutosave, handleSave, undo, redo, selectedBlockId, inlineEditingBlockId, removeBlock, clearSelection])
+  }, [flushAutosave, undo, redo, selectedBlockId, inlineEditingBlockId, removeBlock, clearSelection])
 
   // ── Click-outside handler for inline editing ──
   useEffect(() => {
@@ -1489,7 +1471,8 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
               anchorRef={nameAnchorRef}
               onSelect={async (id) => {
                 setSwitcherOpen(false)
-                await flushAutosave()
+                const ok = await flushAutosave()
+                if (!ok) { showToast('Erro ao salvar. Tente novamente.', 'error'); return }
                 onNavigateEmail(id)
               }}
             />

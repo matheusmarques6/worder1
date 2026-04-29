@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Save,
   PlayCircle,
   History,
   Loader2,
@@ -58,7 +57,6 @@ export function Toolbar({ onSave, onTest, onBack, organizationId, automations, c
 
   const { valid, errors } = useIsValidFlow();
 
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isEditing, setIsEditing] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
   const [toolbarToast, setToolbarToast] = useState<string | null>(null);
@@ -82,56 +80,6 @@ export function Toolbar({ onSave, onTest, onBack, organizationId, automations, c
   }, [lastSavedAt]);
 
   const isActive = automationStatus === 'active';
-
-  const handleSave = async () => {
-    if (isSaving) return;
-
-    setSaving(true);
-    setSaveStatus('saving');
-
-    try {
-      const result = await onSave();
-      if (result) {
-        setSaveStatus('saved');
-        setDirty(false);
-        setTimeout(() => setSaveStatus('idle'), 2000);
-      } else {
-        setSaveStatus('error');
-        setTimeout(() => setSaveStatus('idle'), 3000);
-      }
-    } catch (e) {
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 3000);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSaveAndClose = async () => {
-    if (isSaving) return;
-
-    setSaving(true);
-    setSaveStatus('saving');
-
-    try {
-      const result = await onSave();
-      if (result) {
-        setSaveStatus('saved');
-        setDirty(false);
-        setTimeout(() => {
-          onBack();
-        }, 500);
-      } else {
-        setSaveStatus('error');
-        setTimeout(() => setSaveStatus('idle'), 3000);
-      }
-    } catch (e) {
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 3000);
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleToggleStatus = async () => {
     if (!valid) {
@@ -258,8 +206,8 @@ export function Toolbar({ onSave, onTest, onBack, organizationId, automations, c
               anchorRef={nameAnchorRef}
               onSelect={async (id) => {
                 setSwitcherOpen(false);
-                if (isDirty) await handleSave();
-                onSwitchAutomation(id);
+                if (isDirty) { setSaving(true); try { await onSave(); setDirty(false); } finally { setSaving(false); } }
+                onSwitchAutomation?.(id);
               }}
             />
           )}
