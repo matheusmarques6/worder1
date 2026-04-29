@@ -716,31 +716,69 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
           Value: orderValue,
           Currency: order.currency,
           ItemCount: order.line_items?.length || 0,
-          Items: (order.line_items || []).map((item: any) => ({
-            ProductID: item.product_id ? String(item.product_id) : undefined,
-            ProductName: item.title || item.name,
-            Quantity: item.quantity || 1,
-            ItemPrice: parseFloat(item.price || '0'),
-            ImageURL: item.product?.images?.[0]?.src || '',
-            ProductURL: item.product?.handle ? `https://${store.shop_domain}/products/${item.product.handle}` : '',
-            SKU: item.sku,
-            VariantName: item.variant_title,
-            Brand: item.vendor,
-          })),
+          Items: (order.line_items || []).map((item: any) => {
+            const pid = item.product_id ? String(item.product_id) : ''
+            const prodData = productImageMap.get(pid)
+            const vid = item.variant_id ? String(item.variant_id) : ''
+            let imageUrl = item.product?.images?.[0]?.src || ''
+            if (prodData) {
+              const imgSrc = (img: any) => img?.src || img?.url || ''
+              const variant = prodData.variants?.find((v: any) => String(v.id) === vid)
+              const variantImgId = variant?.image_id
+              const variantImg = variantImgId ? prodData.images?.find((img: any) => String(img.id) === String(variantImgId)) : null
+              imageUrl = imgSrc(variantImg) || imgSrc(prodData.images?.[0]) || imageUrl
+            }
+            const compareAt = item.compare_at_price || item.product?.variants?.[0]?.compare_at_price
+            return {
+              ProductID: pid || undefined,
+              ProductName: item.title || item.name,
+              Quantity: item.quantity || 1,
+              ItemPrice: parseFloat(item.price || '0'),
+              RowTotal: parseFloat(item.price || '0') * (item.quantity || 1),
+              CompareAtPrice: compareAt ? parseFloat(compareAt) : null,
+              ImageURL: imageUrl,
+              ProductURL: item.product?.handle ? `https://${store.shop_domain}/products/${item.product.handle}` : '',
+              SKU: item.sku,
+              VariantName: item.variant_title,
+              VariantID: vid || undefined,
+              Brand: item.vendor,
+              Categories: item.product?.product_type ? [item.product.product_type] : [],
+            }
+          }),
           ItemNames: (order.line_items || []).map((item: any) => item.title || item.name),
           SubtotalPrice: parseFloat(order.subtotal_price || '0'),
           TotalDiscounts: parseFloat(order.total_discounts || '0'),
           DiscountCodes: order.discount_codes || [],
+          FinancialStatus: order.financial_status || '',
+          FulfillmentStatus: order.fulfillment_status || '',
+          PaymentGateway: order.payment_gateway_names?.[0] || '',
+          ShippingRate: order.shipping_lines?.[0]?.title || '',
+          TotalTax: parseFloat(order.total_tax || '0'),
+          TotalShipping: (order.shipping_lines || []).reduce((sum: number, sl: any) => sum + parseFloat(sl.price || '0'), 0),
           ShippingAddress: order.shipping_address ? {
             FirstName: order.shipping_address.first_name,
             LastName: order.shipping_address.last_name,
+            Address1: order.shipping_address.address1,
             City: order.shipping_address.city,
+            Province: order.shipping_address.province,
             Country: order.shipping_address.country,
+            Zip: order.shipping_address.zip,
+            Phone: order.shipping_address.phone,
+          } : undefined,
+          BillingAddress: order.billing_address ? {
+            FirstName: order.billing_address.first_name,
+            LastName: order.billing_address.last_name,
+            City: order.billing_address.city,
+            Country: order.billing_address.country,
           } : undefined,
           CustomerEmail: order.email || order.customer?.email,
           CustomerPhone: order.phone || order.customer?.phone,
           CustomerName: [order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(' '),
           order_status_url: order.order_status_url || '',
+          SourceName: order.source_name || 'web',
+          ReferringSite: order.referring_site || '',
+          LandingSite: order.landing_site || '',
+          BrowserIP: order.browser_ip || order.client_details?.browser_ip || '',
         },
         idempotencyKey: `trigger:placed_order:${order.id}`,
       });
@@ -1056,6 +1094,40 @@ async function processOrderFulfilled(store: ShopifyStoreConfig, order: any) {
       occurred_at: new Date().toISOString(),
       idempotency_key: `fulfilled_order:${order.id}`,
     });
+    // Dispatch fulfillment automation trigger
+    if (contact?.id) {
+      try {
+        const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
+        await dispatchTrigger({
+          organizationId: store.organization_id,
+          triggerType: 'trigger_fulfilled_order',
+          contactId: contact.id,
+          triggerData: {
+            event_type: 'fulfilled_order',
+            OrderId: String(order.id),
+            OrderNumber: String(order.order_number),
+            Value: parseFloat(order.total_price || '0'),
+            Currency: order.currency,
+            TrackingNumber: order.fulfillments?.[0]?.tracking_number || '',
+            TrackingUrl: order.fulfillments?.[0]?.tracking_url || '',
+            TrackingCompany: order.fulfillments?.[0]?.tracking_company || '',
+            FulfillmentStatus: order.fulfillment_status || 'fulfilled',
+            ItemCount: order.line_items?.length || 0,
+            Items: (order.line_items || []).map((item: any) => ({
+              ProductID: item.product_id ? String(item.product_id) : undefined,
+              ProductName: item.title || item.name,
+              Quantity: item.quantity || 1,
+              ItemPrice: parseFloat(item.price || '0'),
+              ImageURL: item.product?.images?.[0]?.src || '',
+              SKU: item.sku,
+            })),
+            CustomerEmail: order.email || order.customer?.email,
+            CustomerName: [order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(' '),
+          },
+          idempotencyKey: `trigger:fulfilled_order:${order.id}`,
+        });
+      } catch {}
+    }
   } catch (cdpError) {
     console.error('[Shopify Webhook] CDP event creation failed (fulfilled):', cdpError);
   }
@@ -1431,17 +1503,23 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
               ProductName: item.title || item.name,
               Quantity: item.quantity || 1,
               ItemPrice: parseFloat(item.price || '0'),
+              RowTotal: parseFloat(item.price || '0') * (item.quantity || 1),
+              CompareAtPrice: item.compare_at_price ? parseFloat(item.compare_at_price) : null,
               ImageURL: item.product?.images?.[0]?.src || item.product?.image?.src || '',
               ProductURL: item.product?.handle ? `https://${store.shop_domain}/products/${item.product.handle}` : '',
               SKU: item.sku,
               VariantName: item.variant_title,
+              VariantID: item.variant_id ? String(item.variant_id) : undefined,
               Brand: item.vendor,
             })),
             ItemNames: (checkout.line_items || []).map((item: any) => item.title || item.name),
             SubtotalPrice: parseFloat(checkout.subtotal_price || '0'),
             TotalDiscounts: parseFloat(checkout.total_discounts || '0'),
+            DiscountCodes: checkout.discount_codes || [],
             CustomerEmail: checkout.email,
             CustomerPhone: checkout.phone,
+            ReferringSite: checkout.referring_site || '',
+            LandingSite: checkout.landing_site || '',
           },
           idempotencyKey: `trigger:checkout_started:${checkout.id || checkout.token}`,
         });

@@ -25,6 +25,18 @@ export async function POST(request: NextRequest) {
 
     let products: any[] = []
 
+    const mapTriggerItem = (it: any) => ({
+      title: it.ProductName || it.title || it.name || 'Product',
+      price: parseFloat(it.ItemPrice || it.price || '0'),
+      compare_at_price: it.CompareAtPrice ? parseFloat(it.CompareAtPrice) : (it.compare_at_price ? parseFloat(it.compare_at_price) : null),
+      image_url: it.ImageURL || it.image_url || it.image?.src || null,
+      url: it.ProductURL || it.url || '#',
+      quantity: it.Quantity || it.quantity || 1,
+      sku: it.SKU || it.sku || null,
+      variant_title: it.VariantName || it.variant_title || null,
+      brand: it.Brand || it.vendor || null,
+    })
+
     switch (type) {
       case 'bestsellers':
       case 'most_viewed': {
@@ -105,23 +117,22 @@ export async function POST(request: NextRequest) {
 
       case 'trigger_cart': {
         const items = event_data?.Items || event_data?.line_items || event_data?.extra?.line_items || []
-        products = items.slice(0, limit).map((it: any) => ({
-          title: it.ProductName || it.title || it.name || 'Product',
-          price: parseFloat(it.ItemPrice || it.price || '0'),
-          compare_at_price: it.CompareAtPrice ? parseFloat(it.CompareAtPrice) : null,
-          image_url: it.ImageURL || it.image_url || it.image?.src || null,
-          url: it.ProductURL || it.url || '#',
-        }))
+        products = items.slice(0, limit).map((it: any) => mapTriggerItem(it))
         break
       }
 
       case 'trigger_viewed_product': {
         if (event_data) {
+          const props = event_data.properties || event_data
           products = [{
-            title: event_data?.ProductName || event_data?.product_title || event_data?.title || 'Product',
-            price: parseFloat(event_data?.Price || event_data?.price || '0'),
-            image_url: event_data?.ImageURL || event_data?.image_url || null,
-            url: event_data?.ProductURL || event_data?.product_url || '#',
+            title: props.ProductName || props.product_title || props.title || 'Product',
+            price: parseFloat(props.Price || props.price || props.ItemPrice || '0'),
+            compare_at_price: props.CompareAtPrice ? parseFloat(props.CompareAtPrice) : (props.compare_at_price ? parseFloat(props.compare_at_price) : null),
+            image_url: props.ImageURL || props.image_url || null,
+            url: props.ProductURL || props.product_url || '#',
+            sku: props.SKU || props.sku || null,
+            variant_title: props.VariantName || props.variant_title || null,
+            brand: props.Brand || props.vendor || null,
           }]
         }
         break
@@ -129,13 +140,7 @@ export async function POST(request: NextRequest) {
 
       case 'trigger_order': {
         const items = event_data?.Items || event_data?.line_items || []
-        products = items.slice(0, limit).map((it: any) => ({
-          title: it.ProductName || it.title || it.name || 'Product',
-          price: parseFloat(it.ItemPrice || it.price || '0'),
-          image_url: it.ImageURL || it.image_url || it.image?.src || null,
-          url: it.ProductURL || it.url || '#',
-          quantity: it.Quantity || it.quantity || 1,
-        }))
+        products = items.slice(0, limit).map((it: any) => mapTriggerItem(it))
         break
       }
 
