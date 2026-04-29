@@ -13,6 +13,7 @@ import { ExecutionPanel } from './panels/ExecutionPanel';
 import { HistoryPanel } from './panels/HistoryPanel';
 import { useFlowStore, FlowNode, FlowNodeData } from '@/stores/flowStore';
 import { getNodeDefinition } from './nodes/nodeTypes';
+import { useAutosave } from './hooks/useAutosave';
 
 // Re-exports
 export { Canvas } from './Canvas';
@@ -38,6 +39,8 @@ interface FlowBuilderProps {
   onBack: () => void;
   onTest?: () => void;
   organizationId?: string;
+  automations?: Array<{ id: string; name: string; status: 'active' | 'paused' | 'draft' }>;
+  onSwitchAutomation?: (id: string) => void;
 }
 
 export function FlowBuilder({
@@ -50,6 +53,8 @@ export function FlowBuilder({
   onBack,
   onTest,
   organizationId,
+  automations,
+  onSwitchAutomation,
 }: FlowBuilderProps) {
   // Store
   const loadAutomation = useFlowStore((state) => state.loadAutomation);
@@ -207,6 +212,30 @@ export function FlowBuilder({
     return result;
   }, [onSave]);
 
+  const { flush: flushAutosave } = useAutosave({ onSave: handleSave, debounceMs: 1500 });
+
+  // Ctrl+S → immediate flush
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        flushAutosave();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [flushAutosave]);
+
+  const handleBackWithFlush = useCallback(async () => {
+    await flushAutosave();
+    onBack();
+  }, [flushAutosave, onBack]);
+
+  const handleSwitchAutomation = useCallback(async (id: string) => {
+    await flushAutosave();
+    onSwitchAutomation?.(id);
+  }, [flushAutosave, onSwitchAutomation]);
+
   // Handle test - open modal
   const handleTest = useCallback(() => {
     if (onTest) {
@@ -233,8 +262,11 @@ export function FlowBuilder({
         <Toolbar
           onSave={handleSave}
           onTest={handleTest}
-          onBack={onBack}
+          onBack={handleBackWithFlush}
           organizationId={organizationId}
+          automations={automations}
+          currentAutomationId={savedAutomationId || automationId}
+          onSwitchAutomation={handleSwitchAutomation}
         />
 
         {/* Main Content */}

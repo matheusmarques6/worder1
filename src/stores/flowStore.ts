@@ -176,6 +176,9 @@ interface FlowStore {
   // ============================================
   setSaving: (saving: boolean) => void;
   setDirty: (dirty: boolean) => void;
+  setLastSavedAt: (date: Date | null) => void;
+  saveError: string | null;
+  setSaveError: (msg: string | null) => void;
   markSaved: () => void;
   togglePropertiesPanel: () => void;
   toggleHistoryPanel: () => void;
@@ -236,6 +239,7 @@ const initialState = {
   future: [] as HistoryEntry[],
   isSaving: false,
   isDirty: false,
+  saveError: null as string | null,
   lastSavedAt: null as Date | null,
   showPropertiesPanel: false,
   showHistoryPanel: false,
@@ -523,6 +527,8 @@ export const useFlowStore = create<FlowStore>()(
       
       setSaving: (saving) => set({ isSaving: saving }),
       setDirty: (dirty) => set({ isDirty: dirty }),
+      setLastSavedAt: (date) => set({ lastSavedAt: date }),
+      setSaveError: (msg) => set({ saveError: msg }),
       markSaved: () => set({ isDirty: false, lastSavedAt: new Date() }),
       togglePropertiesPanel: () => set((state) => ({ showPropertiesPanel: !state.showPropertiesPanel })),
       toggleHistoryPanel: () => set((state) => ({ showHistoryPanel: !state.showHistoryPanel })),
@@ -609,6 +615,8 @@ export const useFlowStore = create<FlowStore>()(
         nodes: data.nodes,
         edges: data.edges,
         isDirty: false,
+        lastSavedAt: null,
+        saveError: null,
         past: [],
         future: [],
         selectedNodeId: null,

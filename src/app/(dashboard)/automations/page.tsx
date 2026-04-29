@@ -417,6 +417,7 @@ export default function AutomationsPage() {
             style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
           >
             <FlowBuilder
+              key={editingAutomation.id}
               automationId={editingAutomation.id}
               automationName={editingAutomation.name}
               automationStatus={editingAutomation.status}
@@ -425,6 +426,14 @@ export default function AutomationsPage() {
               onSave={handleSave}
               onBack={handleBack}
               organizationId={organizationId}
+              automations={automations
+                .filter(a => a.id !== 'new')
+                .map(a => ({ id: a.id, name: a.name, status: a.status as 'active' | 'paused' | 'draft' }))
+              }
+              onSwitchAutomation={(id) => {
+                const target = automations.find(a => a.id === id);
+                if (target) setEditingAutomation(target);
+              }}
             />
           </motion.div>
         )}

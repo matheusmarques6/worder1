@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Save,
@@ -14,9 +14,11 @@ import {
   Undo2,
   Redo2,
   BarChart3,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useIsValidFlow } from '@/stores/flowStore';
+import { AutomationSwitcher } from './AutomationSwitcher';
 
 // ============================================
 // TOOLBAR COMPONENT
@@ -27,9 +29,12 @@ interface ToolbarProps {
   onTest: () => void;
   onBack: () => void;
   organizationId?: string;
+  automations?: Array<{ id: string; name: string; status: 'active' | 'paused' | 'draft' }>;
+  currentAutomationId?: string;
+  onSwitchAutomation?: (id: string) => void;
 }
 
-export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps) {
+export function Toolbar({ onSave, onTest, onBack, organizationId, automations, currentAutomationId, onSwitchAutomation }: ToolbarProps) {
   const automationName = useFlowStore((state) => state.automationName);
   const setAutomationName = useFlowStore((state) => state.setAutomationName);
   const automationStatus = useFlowStore((state) => state.automationStatus);
@@ -57,6 +62,24 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
   const [isEditing, setIsEditing] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
   const [toolbarToast, setToolbarToast] = useState<string | null>(null);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const nameAnchorRef = useRef<HTMLDivElement>(null);
+  const lastSavedAt = useFlowStore(s => s.lastSavedAt);
+  const [savedAgo, setSavedAgo] = useState('');
+
+  useEffect(() => {
+    if (!lastSavedAt) { setSavedAgo(''); return; }
+    const update = () => {
+      const seconds = Math.floor((Date.now() - lastSavedAt.getTime()) / 1000);
+      if (seconds < 5) setSavedAgo('Salvo agora');
+      else if (seconds < 60) setSavedAgo(`Salvo há ${seconds}s`);
+      else if (seconds < 3600) setSavedAgo(`Salvo há ${Math.floor(seconds / 60)}min`);
+      else setSavedAgo(`Salvo há ${Math.floor(seconds / 3600)}h`);
+    };
+    update();
+    const t = setInterval(update, 10000);
+    return () => clearInterval(t);
+  }, [lastSavedAt]);
 
   const isActive = automationStatus === 'active';
 
@@ -163,8 +186,8 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
         />
         <div className="h-5 w-px bg-zinc-700" />
 
-        {/* Name - inline editable */}
-        <div className="flex items-center gap-2 min-w-0">
+        {/* Name + Switcher */}
+        <div ref={nameAnchorRef} className="relative flex items-center gap-1 min-w-0">
           {isEditing ? (
             <input
               type="text"
@@ -182,21 +205,63 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
               )}
             />
           ) : (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-white hover:text-white/90 transition-colors group truncate max-w-[180px] sm:max-w-[280px]"
-              title={`Renomear: ${automationName}`}
-            >
-              <span className="truncate">{automationName}</span>
-              <Pencil className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white transition-colors flex-shrink-0" strokeWidth={2} />
-            </button>
+            <>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-white hover:text-white/90 transition-colors group truncate max-w-[180px] sm:max-w-[280px]"
+                title={`Renomear: ${automationName}`}
+              >
+                <span className="truncate">{automationName}</span>
+                <Pencil className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white transition-colors flex-shrink-0" strokeWidth={2} />
+              </button>
+
+              {automations && automations.length > 1 && (
+                <button
+                  onClick={() => setSwitcherOpen(o => !o)}
+                  className={cn(
+                    'p-1 rounded-md transition-colors flex-shrink-0',
+                    switcherOpen ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  )}
+                  title="Trocar de automação"
+                  aria-expanded={switcherOpen}
+                >
+                  <ChevronDown className={cn('w-4 h-4 transition-transform', switcherOpen && 'rotate-180')} strokeWidth={2} />
+                </button>
+              )}
+            </>
           )}
 
-          {/* Dirty indicator */}
-          {isDirty && (
-            <span className="text-[10px] sm:text-[11px] font-medium text-amber-200 bg-amber-500/10 px-1.5 sm:px-2 py-0.5 rounded-full border border-amber-400/30 flex-shrink-0 whitespace-nowrap">
-              Não salvo
+          {/* Save status */}
+          {isSaving ? (
+            <span className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-300 px-2 py-0.5 flex-shrink-0 ml-1">
+              <Loader2 className="w-3 h-3 animate-spin" strokeWidth={2.5} />
+              Salvando...
             </span>
+          ) : isDirty ? (
+            <span className="flex items-center gap-1.5 text-[11px] font-medium text-amber-200 px-2 py-0.5 flex-shrink-0 ml-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              Alterações pendentes
+            </span>
+          ) : lastSavedAt ? (
+            <span className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-400 px-2 py-0.5 flex-shrink-0 ml-1">
+              <Check className="w-3 h-3" strokeWidth={2.5} />
+              {savedAgo}
+            </span>
+          ) : null}
+
+          {automations && currentAutomationId && onSwitchAutomation && (
+            <AutomationSwitcher
+              open={switcherOpen}
+              onClose={() => setSwitcherOpen(false)}
+              currentId={currentAutomationId}
+              automations={automations}
+              anchorRef={nameAnchorRef}
+              onSelect={async (id) => {
+                setSwitcherOpen(false);
+                if (isDirty) await handleSave();
+                onSwitchAutomation(id);
+              }}
+            />
           )}
         </div>
       </div>
@@ -310,33 +375,18 @@ export function Toolbar({ onSave, onTest, onBack, organizationId }: ToolbarProps
           onToggle={handleToggleStatus}
         />
 
-        {/* Save status indicator */}
-        {saveStatus === 'saving' && (
-          <div className="flex items-center gap-1.5 text-[11px] text-zinc-300 pl-1">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            <span className="hidden sm:inline">Salvando...</span>
-          </div>
-        )}
-        {saveStatus === 'saved' && (
-          <div className="flex items-center gap-1.5 text-[11px] text-emerald-300 pl-1">
-            <Check className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Salvo</span>
-          </div>
-        )}
-
-        {/* Salvar e Fechar */}
+        {/* Fechar */}
         <button
-          onClick={handleSaveAndClose}
-          disabled={isSaving}
+          onClick={onBack}
           className={cn(
             'flex items-center gap-1.5 px-3.5 py-1.5 rounded-md ml-1',
-            'bg-white hover:bg-zinc-100',
-            'text-zinc-900 text-[13px] font-semibold tracking-tight',
-            'shadow-sm transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
+            'bg-zinc-800 hover:bg-zinc-700 border border-zinc-700',
+            'text-white text-[13px] font-medium',
+            'transition-colors'
           )}
+          title="Fechar editor"
         >
-          Salvar e Fechar
+          Fechar
         </button>
       </div>
     </div>
