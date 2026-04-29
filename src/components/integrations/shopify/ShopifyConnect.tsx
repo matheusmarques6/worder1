@@ -111,7 +111,7 @@ export default function ShopifyConnect() {
           shopEmail: s.email || s.shop_email || '',
           currency: s.currency || 'BRL',
           planName: s.plan_name || '',
-          apiVersion: s.api_version || '2025-01',
+          apiVersion: s.api_version || '2026-04',
           status: s.status || s.connectionStatus || 'active',
           connectionType: s.connection_type || s.connectionType || 'oauth',
           tokenExpiresAt: s.token_expires_at || s.tokenExpiresAt,
@@ -326,7 +326,7 @@ export default function ShopifyConnect() {
             <StatusLine label="App Embed" ok={!!store.embedInstalled} detail={store.embedInstalled ? 'Ativo' : 'Ativar no tema'} />
           )}
           <StatusLine label="Última sync" ok={true} detail={store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleString('pt-BR') : 'Nunca'} />
-          <StatusLine label="API" ok={true} detail={store.apiVersion || '2025-01'} />
+          <StatusLine label="API" ok={true} detail={store.apiVersion || '2026-04'} />
           {store.connectionType === 'manual' && store.tokenExpiresAt && (
             <StatusLine label="Token expira" ok={new Date(store.tokenExpiresAt) > new Date()} detail={new Date(store.tokenExpiresAt).toLocaleString('pt-BR')} />
           )}

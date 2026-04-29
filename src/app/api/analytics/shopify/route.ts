@@ -7,7 +7,7 @@ const API_VERSION = 'v8-senior-fix-2024-10-14';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const SHOPIFY_API_VERSION = '2025-01';
+const SHOPIFY_API_VERSION = '2026-04';
 const TZ_OFFSET = '-03:00'; // Fuso horário Brasil
 
 // ===== Utils =====

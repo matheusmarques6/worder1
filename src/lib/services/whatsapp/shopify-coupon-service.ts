@@ -54,7 +54,7 @@ export async function generateShopifyCoupon(
   }
 
   const normalizedDomain = shopDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')
-  const apiVersion = '2024-10'
+  const apiVersion = '2026-04'
 
   // Generate unique code
   const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase()

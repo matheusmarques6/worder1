@@ -4,7 +4,7 @@ import { getSupabaseClient } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
-const SHOPIFY_API_VERSION = '2025-01';
+const SHOPIFY_API_VERSION = '2026-04';
 
 const toNum = (v: any): number => {
   const n = parseFloat(v);

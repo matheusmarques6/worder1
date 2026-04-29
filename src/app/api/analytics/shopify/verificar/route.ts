@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 // VERSÃO DO CÓDIGO - Atualizar a cada deploy
 const CODE_VERSION = 'v8-senior-2024-10-14';
 
-const SHOPIFY_API_VERSION = '2025-01';
+const SHOPIFY_API_VERSION = '2026-04';
 
 async function shopifyFetch(shopDomain: string, accessToken: string, endpoint: string) {
   const url = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}${endpoint}`;

@@ -110,7 +110,7 @@ const credentialTesters: Record<string, TestFunction> = {
   shopifyOAuth2: async (data) => {
     try {
       const domain = data.shopDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      const response = await fetch(`https://${domain}/admin/api/2024-01/shop.json`, {
+      const response = await fetch(`https://${domain}/admin/api/2026-04/shop.json`, {
         headers: {
           'X-Shopify-Access-Token': data.accessToken,
         },

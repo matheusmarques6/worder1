@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     const { access_token, scope } = await tokenResponse.json();
 
     // Get shop info
-    const shopResponse = await fetch(`https://${shop}/admin/api/2024-01/shop.json`, {
+    const shopResponse = await fetch(`https://${shop}/admin/api/2026-04/shop.json`, {
       headers: { 'X-Shopify-Access-Token': access_token },
     });
     const { shop: shopData } = await shopResponse.json();
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     ];
 
     for (const topic of webhooksToCreate) {
-      await fetch(`https://${shop}/admin/api/2024-01/webhooks.json`, {
+      await fetch(`https://${shop}/admin/api/2026-04/webhooks.json`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

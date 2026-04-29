@@ -10,7 +10,7 @@ import { getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-const SHOPIFY_API_VERSION = '2025-01';
+const SHOPIFY_API_VERSION = '2026-04';
 
 const CONFIG = {
   SHOPIFY_DELAY_MS: 150,

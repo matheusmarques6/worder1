@@ -19,7 +19,7 @@ export const maxDuration = 55; // 55 segundos (margem de segurança)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-const SHOPIFY_API_VERSION = '2025-01';
+const SHOPIFY_API_VERSION = '2026-04';
 const CUSTOMERS_PER_PAGE = 250;
 const MAX_PAGES_PER_RUN = 6; // ~1500 clientes por execução
 const MAX_EXECUTION_TIME_MS = 50000; // 50 segundos máximo

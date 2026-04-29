@@ -349,7 +349,7 @@ export async function checkWebhookHealth(): Promise<{
     try {
       console.log(`   Buscando webhooks existentes...`);
       const listResponse = await fetch(
-        `https://${store.shop_domain}/admin/api/2024-01/webhooks.json`,
+        `https://${store.shop_domain}/admin/api/2026-04/webhooks.json`,
         {
           headers: {
             'X-Shopify-Access-Token': store.access_token,
@@ -385,7 +385,7 @@ export async function checkWebhookHealth(): Promise<{
         console.log(`   🗑️ Deletando webhook com URL errada: ${webhook.topic} -> ${webhook.address}`);
         try {
           const deleteResponse = await fetch(
-            `https://${store.shop_domain}/admin/api/2024-01/webhooks/${webhook.id}.json`,
+            `https://${store.shop_domain}/admin/api/2026-04/webhooks/${webhook.id}.json`,
             {
               method: 'DELETE',
               headers: {
@@ -422,7 +422,7 @@ export async function checkWebhookHealth(): Promise<{
       console.log(`   ➕ Criando webhook: ${topic}`);
       try {
         const createResponse = await fetch(
-          `https://${store.shop_domain}/admin/api/2024-01/webhooks.json`,
+          `https://${store.shop_domain}/admin/api/2026-04/webhooks.json`,
           {
             method: 'POST',
             headers: {

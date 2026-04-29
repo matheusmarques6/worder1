@@ -9,7 +9,7 @@ import { getAuthClient, authError, validateStoreAccess, getSupabaseClient } from
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const SHOPIFY_API_VERSION = '2025-01';
+const SHOPIFY_API_VERSION = '2026-04';
 
 // =============================================
 // FETCH HELPERS

@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-        const testUrl = `https://${store.shop_domain}/admin/api/2024-10/shop.json`;
+        const testUrl = `https://${store.shop_domain}/admin/api/2026-04/shop.json`;
         const response = await fetch(testUrl, {
           headers: {
             'X-Shopify-Access-Token': store.access_token,

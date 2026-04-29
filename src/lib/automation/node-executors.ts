@@ -980,7 +980,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
       try {
         const domain = credentials?.shopDomain?.replace(/^https?:\/\//, '').replace(/\/$/, '');
         const response = await fetch(
-          `https://${domain}/admin/api/2024-01/customers/${customerId}.json`,
+          `https://${domain}/admin/api/2026-04/customers/${customerId}.json`,
           {
             method: 'PUT',
             headers: {

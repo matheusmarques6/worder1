@@ -53,7 +53,7 @@ export class ShopifyAPIService {
     this.accessToken = accessToken;
     // Garantir que o domínio está correto
     const cleanDomain = shopDomain.replace('.myshopify.com', '').replace(/^https?:\/\//, '');
-    this.baseUrl = `https://${cleanDomain}.myshopify.com/admin/api/2024-01`;
+    this.baseUrl = `https://${cleanDomain}.myshopify.com/admin/api/2026-04`;
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {

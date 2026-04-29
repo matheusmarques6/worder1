@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     // 1. Listar webhooks existentes
     const listResponse = await fetch(
-      `https://${store.shop_domain}/admin/api/2024-01/webhooks.json`,
+      `https://${store.shop_domain}/admin/api/2026-04/webhooks.json`,
       {
         headers: {
           'X-Shopify-Access-Token': store.access_token,
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
         console.log(`[Shopify] Deleting webhook with wrong URL: ${webhook.address}`)
         try {
           await fetch(
-            `https://${store.shop_domain}/admin/api/2024-01/webhooks/${webhook.id}.json`,
+            `https://${store.shop_domain}/admin/api/2026-04/webhooks/${webhook.id}.json`,
             {
               method: 'DELETE',
               headers: {
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
       // Criar novo webhook
       try {
         const createResponse = await fetch(
-          `https://${store.shop_domain}/admin/api/2024-01/webhooks.json`,
+          `https://${store.shop_domain}/admin/api/2026-04/webhooks.json`,
           {
             method: 'POST',
             headers: {
@@ -229,7 +229,7 @@ export async function GET(request: NextRequest) {
     }
 
     const response = await fetch(
-      `https://${store.shop_domain}/admin/api/2024-01/webhooks.json`,
+      `https://${store.shop_domain}/admin/api/2026-04/webhooks.json`,
       {
         headers: {
           'X-Shopify-Access-Token': store.access_token,

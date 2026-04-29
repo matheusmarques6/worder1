@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     // Buscar contagem total de clientes
     const countResponse = await fetch(
-      `https://${store.shop_domain}/admin/api/2024-10/customers/count.json`,
+      `https://${store.shop_domain}/admin/api/2026-04/customers/count.json`,
       {
         headers: {
           'X-Shopify-Access-Token': store.access_token,

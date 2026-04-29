@@ -429,7 +429,7 @@ async function testCredential(
 
       case 'shopifyOAuth2': {
         const response = await fetch(
-          `https://${data.shopDomain}/admin/api/2024-01/shop.json`,
+          `https://${data.shopDomain}/admin/api/2026-04/shop.json`,
           {
             headers: { 'X-Shopify-Access-Token': data.accessToken },
           }

@@ -121,7 +121,7 @@ export async function exchangeCodeForToken(params: {
 export class ShopifyClient {
   private shopDomain: string;
   private accessToken: string;
-  private apiVersion: string = '2024-10';
+  private apiVersion: string = '2026-04';
 
   constructor(config: ShopifyConfig) {
     this.shopDomain = config.shopDomain;

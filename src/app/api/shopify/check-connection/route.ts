@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. Fazer uma chamada simples à API do Shopify para testar
-    const shopifyUrl = `https://${store.shop_domain}/admin/api/2024-01/shop.json`;
+    const shopifyUrl = `https://${store.shop_domain}/admin/api/2026-04/shop.json`;
     
     const response = await fetch(shopifyUrl, {
       method: 'GET',

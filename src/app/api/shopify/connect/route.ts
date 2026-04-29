@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     // Verify access token
     const shopResponse = await fetch(
-      `https://${shopDomain}/admin/api/2024-01/shop.json`,
+      `https://${shopDomain}/admin/api/2026-04/shop.json`,
       {
         method: 'GET',
         headers: {

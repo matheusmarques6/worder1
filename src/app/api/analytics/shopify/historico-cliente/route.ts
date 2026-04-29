@@ -4,7 +4,7 @@ import { getSupabaseClient } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const SHOPIFY_API_VERSION = '2025-01';
+const SHOPIFY_API_VERSION = '2026-04';
 
 async function shopifyFetch(shopDomain: string, accessToken: string, endpoint: string) {
   const url = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}${endpoint}`;

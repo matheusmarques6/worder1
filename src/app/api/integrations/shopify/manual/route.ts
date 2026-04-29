@@ -26,7 +26,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || '';
-const SHOPIFY_API_VERSION = '2025-01';
+const SHOPIFY_API_VERSION = '2026-04';
 
 // Required scopes for basic functionality
 const REQUIRED_SCOPES = ['read_orders', 'read_customers', 'read_products'];

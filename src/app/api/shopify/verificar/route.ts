@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     if (store.access_token) {
       try {
         const webhooksRes = await fetch(
-          `https://${store.shop_domain}/admin/api/2024-01/webhooks.json`,
+          `https://${store.shop_domain}/admin/api/2026-04/webhooks.json`,
           { headers: { 'X-Shopify-Access-Token': store.access_token } }
         );
         
