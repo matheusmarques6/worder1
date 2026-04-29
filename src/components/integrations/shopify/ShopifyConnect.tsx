@@ -18,6 +18,8 @@ interface StoreData {
   planName: string;
   apiVersion: string;
   status: string;
+  connectionType?: 'oauth' | 'manual';
+  tokenExpiresAt?: string;
   initialSyncCompleted: boolean;
   pixelInstalled: boolean;
   embedInstalled: boolean;
@@ -109,8 +111,10 @@ export default function ShopifyConnect() {
           shopEmail: s.email || s.shop_email || '',
           currency: s.currency || 'BRL',
           planName: s.plan_name || '',
-          apiVersion: s.api_version || '2026-01',
+          apiVersion: s.api_version || '2025-01',
           status: s.status || s.connectionStatus || 'active',
+          connectionType: s.connection_type || s.connectionType || 'oauth',
+          tokenExpiresAt: s.token_expires_at || s.tokenExpiresAt,
           initialSyncCompleted: s.initial_sync_completed || false,
           pixelInstalled: s.pixel_installed || false,
           embedInstalled: s.embed_installed || false,
@@ -314,12 +318,18 @@ export default function ShopifyConnect() {
 
         <div className="bg-gray-50 rounded-lg p-4 space-y-2">
           <h4 className="text-sm font-medium text-gray-700 mb-1">Status</h4>
+          <StatusLine label="Tipo de conexão" ok={true} detail={store.connectionType === 'manual' ? 'Manual (Custom App)' : 'OAuth (App Oficial)'} />
           <StatusLine label="Webhooks" ok={true} detail="17 registrados" />
           <StatusLine label="Sync inicial" ok={!!store.initialSyncCompleted} detail={store.initialSyncCompleted ? 'Completo' : 'Pendente'} />
           <StatusLine label="Pixel" ok={!!store.pixelInstalled} detail={store.pixelInstalled ? 'Instalado' : 'Pendente'} />
-          <StatusLine label="App Embed" ok={!!store.embedInstalled} detail={store.embedInstalled ? 'Ativo' : 'Ativar no tema'} />
+          {store.connectionType !== 'manual' && (
+            <StatusLine label="App Embed" ok={!!store.embedInstalled} detail={store.embedInstalled ? 'Ativo' : 'Ativar no tema'} />
+          )}
           <StatusLine label="Última sync" ok={true} detail={store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleString('pt-BR') : 'Nunca'} />
-          <StatusLine label="API" ok={true} detail={store.apiVersion || '2026-01'} />
+          <StatusLine label="API" ok={true} detail={store.apiVersion || '2025-01'} />
+          {store.connectionType === 'manual' && store.tokenExpiresAt && (
+            <StatusLine label="Token expira" ok={new Date(store.tokenExpiresAt) > new Date()} detail={new Date(store.tokenExpiresAt).toLocaleString('pt-BR')} />
+          )}
         </div>
 
         {!store.pixelInstalled && !showPixelCode && (

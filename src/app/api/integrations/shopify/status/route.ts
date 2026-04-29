@@ -162,6 +162,8 @@ export async function GET(request: NextRequest) {
       apiVersion: store.api_version,
       isActive: store.is_active,
       status: store.status,
+      connectionType: store.connection_type || 'oauth',
+      tokenExpiresAt: store.token_expires_at,
       initialSyncCompleted: store.initial_sync_completed,
       pixelInstalled: pixelDetected,
       embedInstalled: embedDetected,

@@ -28,7 +28,10 @@ export const maxDuration = 60;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || '';
 const SHOPIFY_API_VERSION = '2025-01';
 
+// Required scopes for basic functionality
 const REQUIRED_SCOPES = ['read_orders', 'read_customers', 'read_products'];
+// Recommended scopes for full feature support (warned if missing, not blocked)
+const RECOMMENDED_SCOPES = ['write_pixels', 'read_customer_events', 'read_fulfillments', 'read_discounts'];
 
 // 17 webhook topics — must match the OAuth callback exactly so both
 // connection modes produce identical event coverage.
@@ -108,6 +111,7 @@ export async function POST(request: NextRequest) {
       return false
     }
     const missingScopes = REQUIRED_SCOPES.filter((s) => !hasScope(s));
+    const missingRecommended = RECOMMENDED_SCOPES.filter((s) => !hasScope(s));
     if (missingScopes.length > 0) {
       return NextResponse.json(
         {
@@ -291,6 +295,67 @@ export async function POST(request: NextRequest) {
     }
 
     // ──────────────────────────────────────────
+    // 5b. Try to install Web Pixel automatically if scope allows
+    //     If the merchant's custom app has write_pixels scope, we can install
+    //     the Shopify Web Pixel programmatically (best UX). If not, the merchant
+    //     will use the Custom Pixel code shown in the integration page.
+    // ──────────────────────────────────────────
+    let pixelInstalled = false;
+    if (scopesList.includes('write_pixels')) {
+      try {
+        const pixelRes = await fetch(
+          `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+          {
+            method: 'POST',
+            headers: {
+              'X-Shopify-Access-Token': accessToken,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              query: `
+                mutation webPixelCreate($webPixel: WebPixelInput!) {
+                  webPixelCreate(webPixel: $webPixel) {
+                    webPixel { id }
+                    userErrors { code field message }
+                  }
+                }
+              `,
+              variables: {
+                webPixel: {
+                  settings: JSON.stringify({
+                    accountId: organizationId,
+                    storeId,
+                    trackingEndpoint: `${APP_URL}/api/track/event`,
+                  }),
+                },
+              },
+            }),
+          }
+        );
+        if (pixelRes.ok) {
+          const pixelData = await pixelRes.json();
+          const errors = pixelData.data?.webPixelCreate?.userErrors || [];
+          if (errors.length === 0 && pixelData.data?.webPixelCreate?.webPixel?.id) {
+            pixelInstalled = true;
+            await supabase
+              .from('shopify_stores')
+              .update({ pixel_installed: true })
+              .eq('id', storeId);
+            console.log('[Shopify Manual] Web Pixel installed automatically');
+          } else if (errors.some((e: any) => e.message?.includes('already exists'))) {
+            pixelInstalled = true;
+            await supabase
+              .from('shopify_stores')
+              .update({ pixel_installed: true })
+              .eq('id', storeId);
+          }
+        }
+      } catch (pixelErr) {
+        console.warn('[Shopify Manual] Auto pixel install failed (merchant must use Custom Pixel code):', pixelErr);
+      }
+    }
+
+    // ──────────────────────────────────────────
     // 6. Trigger initial sync (fire-and-forget)
     // ──────────────────────────────────────────
     let syncTriggered = false;
@@ -330,6 +395,8 @@ export async function POST(request: NextRequest) {
         manualSetupRequired: failed > 0 && created === 0 && existingCount === 0,
       },
       sync: { triggered: syncTriggered },
+      pixel: { autoInstalled: pixelInstalled },
+      missingRecommendedScopes: missingRecommended.length > 0 ? missingRecommended : undefined,
     });
   } catch (err: any) {
     console.error('[Shopify Manual] Error:', err);

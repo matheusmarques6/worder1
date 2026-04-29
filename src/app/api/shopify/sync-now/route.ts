@@ -65,7 +65,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token de acesso não encontrado' }, { status: 400 });
     }
 
-    console.log(`[Sync] Store: ${store.shop_name} (${store.shop_domain}), syncType=${syncType}`);
+    // For manual integrations, refresh token if expired or expiring within 5 min
+    if (store.connection_type === 'manual' && store.client_id && store.api_secret) {
+      const expiresAt = store.token_expires_at ? new Date(store.token_expires_at).getTime() : 0;
+      const fiveMinFromNow = Date.now() + 5 * 60 * 1000;
+      if (expiresAt < fiveMinFromNow) {
+        try {
+          const { refreshStoreToken } = await import('@/lib/shopify/client-credentials');
+          console.log(`[Sync] Token expired/expiring for ${store.shop_domain}, refreshing...`);
+          const newToken = await refreshStoreToken(store.shop_domain, store.client_id, store.api_secret);
+          const newExpiresAt = new Date(Date.now() + 86399 * 1000).toISOString();
+          await supabase
+            .from('shopify_stores')
+            .update({ access_token: newToken, token_expires_at: newExpiresAt })
+            .eq('id', store.id);
+          store.access_token = newToken;
+          console.log(`[Sync] Token refreshed for ${store.shop_domain}`);
+        } catch (refreshErr: any) {
+          console.error(`[Sync] Token refresh failed:`, refreshErr.message);
+          return NextResponse.json({
+            error: 'Token expirou e não foi possível renovar. Reconecte a loja.',
+            details: refreshErr.message,
+          }, { status: 401 });
+        }
+      }
+    }
+
+    console.log(`[Sync] Store: ${store.shop_name} (${store.shop_domain}), syncType=${syncType}, type=${store.connection_type || 'oauth'}`);
 
     const storeConfig = {
       id: store.id,
