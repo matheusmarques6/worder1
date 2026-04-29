@@ -124,18 +124,29 @@ export async function GET(request: NextRequest) {
     }
   } catch {}
 
-  // Auto-detect pixel: if we have recent pixel events, pixel IS installed
+  // Auto-detect pixel: if we have ANY pixel events, pixel IS installed
   let pixelDetected = store.pixel_installed || false;
   if (!pixelDetected) {
     try {
-      const recentPixelCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const { count: pixelEvents } = await supabase
         .from('contact_events')
         .select('id', { count: 'exact', head: true })
         .eq('store_id', store.id)
-        .eq('event_source', 'worder_pixel')
-        .gte('occurred_at', recentPixelCutoff);
+        .in('event_source', ['worder_pixel', 'shopify_pixel', 'pixel']);
       if (pixelEvents && pixelEvents > 0) pixelDetected = true;
+    } catch {}
+  }
+
+  // Auto-detect theme extension (app embed): if we have any theme_ext events
+  let embedDetected = store.embed_installed || false;
+  if (!embedDetected) {
+    try {
+      const { count: themeEvents } = await supabase
+        .from('contact_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('store_id', store.id)
+        .eq('event_source', 'theme_ext');
+      if (themeEvents && themeEvents > 0) embedDetected = true;
     } catch {}
   }
 
@@ -153,7 +164,7 @@ export async function GET(request: NextRequest) {
       status: store.status,
       initialSyncCompleted: store.initial_sync_completed,
       pixelInstalled: pixelDetected,
-      embedInstalled: store.embed_installed,
+      embedInstalled: embedDetected,
       installedAt: store.installed_at,
       lastSyncAt: store.last_sync_at,
       totalOrders: ordersCount,

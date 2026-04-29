@@ -559,7 +559,7 @@ export async function POST(request: NextRequest) {
       contact_id: contactId || null,
       store_id: store.id,
       event_type,
-      event_source: 'pixel',
+      event_source: 'worder_pixel',
       properties: {
         page_url,
         page_title,

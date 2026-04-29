@@ -285,11 +285,12 @@ export async function POST(request: NextRequest) {
     if (syncType === 'all' || syncType === 'orders') {
       try {
         const sinceDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-        const sinceDateStr = sinceDate.toISOString().split('T')[0]; // YYYY-MM-DD only — Shopify search syntax
+        const sinceDateStr = sinceDate.toISOString().split('T')[0]; // YYYY-MM-DD
+        // Shopify search syntax: created_at:>=YYYY-MM-DD (no quotes)
         console.log(`[Sync] Fetching orders since ${sinceDateStr}...`);
         const { nodes } = await shopifyGraphQLPaginate(
           storeConfig, ORDERS_QUERY,
-          { query: `created_at:>='${sinceDateStr}'`, sortKey: 'CREATED_AT' },
+          { query: `created_at:>=${sinceDateStr}`, sortKey: 'CREATED_AT' },
           'orders',
           { first: 250, maxPages: 100 }
         );
