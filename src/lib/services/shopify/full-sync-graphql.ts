@@ -316,12 +316,14 @@ async function syncOrdersGraphQL(
   let totalRevenue = 0;
 
   try {
-    const sinceDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
+    // Shopify search syntax: created_at:>=YYYY-MM-DD (no quotes, date-only)
+    const sinceDateStr = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000)
+      .toISOString().split('T')[0];
 
     const { nodes } = await shopifyGraphQLPaginate(
       storeConfig,
       ORDERS_QUERY,
-      { query: `created_at:>'${sinceDate}'`, sortKey: 'CREATED_AT' },
+      { query: `created_at:>=${sinceDateStr}`, sortKey: 'CREATED_AT' },
       'orders',
       {
         first: 50,
