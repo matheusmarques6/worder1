@@ -456,6 +456,13 @@ const actionExecutors: Record<string, NodeExecutor> = {
         mergeData['order_number'] = triggerProps.OrderNumber || '';
         mergeData['order_total'] = String(triggerProps.$value || triggerProps.Value || triggerProps.TotalPrice || '');
         mergeData['order_status'] = triggerProps.FinancialStatus || triggerProps.FulfillmentStatus || '';
+        // UTM params from webhook note_attributes
+        const utmData = triggerProps.UTM || triggerProps._utm || {};
+        if (utmData && typeof utmData === 'object') {
+          for (const [k, v] of Object.entries(utmData)) {
+            if (v) mergeData[`event.${k}`] = String(v);
+          }
+        }
         // Custom fields
         if (contact?.custom_fields && typeof contact.custom_fields === 'object') {
           for (const [k, v] of Object.entries(contact.custom_fields)) {

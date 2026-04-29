@@ -25,6 +25,28 @@ import { enrichContactAfterOrder } from '@/lib/shopify/profile-enricher';
 export const dynamic = 'force-dynamic';
 
 // ============================================
+// HELPERS
+// ============================================
+
+function extractNoteAttributes(noteAttributes: any[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!Array.isArray(noteAttributes)) return result;
+  for (const attr of noteAttributes) {
+    if (attr?.name && attr?.value) result[attr.name] = String(attr.value);
+  }
+  return result;
+}
+
+function extractUtmFromNoteAttributes(attrs: Record<string, string>): Record<string, string> {
+  const utm: Record<string, string> = {};
+  const utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+  const clickKeys = ['gclid', 'fbclid', 'ttclid', 'msclkid', 'fbc', 'fbp', 'ttp', 'vid'];
+  for (const k of utmKeys) { if (attrs[k]) utm[k] = attrs[k]; }
+  for (const k of clickKeys) { if (attrs[k]) utm[k] = attrs[k]; }
+  return utm;
+}
+
+// ============================================
 // CONFIGURAÇÃO
 // ============================================
 
@@ -680,6 +702,11 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
         Tags: order.tags ? (typeof order.tags === 'string' ? order.tags.split(',').map((t: string) => t.trim()) : order.tags) : [],
         SourceName: order.source_name || 'web',
         Note: order.note,
+        ...((() => {
+          const attrs = extractNoteAttributes(order.note_attributes);
+          const utm = extractUtmFromNoteAttributes(attrs);
+          return Object.keys(utm).length > 0 ? { UTM: utm } : {};
+        })()),
         extra: {
           full_landing_site: order.landing_site || order.full_landing_site || '',
           referring_site: order.referring_site || '',
@@ -691,6 +718,7 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
           user_agent: order.client_details?.user_agent || '',
           cart_token: order.cart_token || '',
           confirmation_number: order.confirmation_number || '',
+          note_attributes: order.note_attributes || [],
           line_items: order.line_items || [],
         },
       },
@@ -779,6 +807,7 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
           ReferringSite: order.referring_site || '',
           LandingSite: order.landing_site || '',
           BrowserIP: order.browser_ip || order.client_details?.browser_ip || '',
+          UTM: extractUtmFromNoteAttributes(extractNoteAttributes(order.note_attributes)),
         },
         idempotencyKey: `trigger:placed_order:${order.id}`,
       });
@@ -1520,6 +1549,7 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
             CustomerPhone: checkout.phone,
             ReferringSite: checkout.referring_site || '',
             LandingSite: checkout.landing_site || '',
+            UTM: extractUtmFromNoteAttributes(extractNoteAttributes(checkout.note_attributes)),
           },
           idempotencyKey: `trigger:checkout_started:${checkout.id || checkout.token}`,
         });
