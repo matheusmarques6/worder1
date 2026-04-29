@@ -2,23 +2,21 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import type { WorderEmailEditorHandle } from '@/components/email-builder/WorderEmailEditor';
+import type { EmailSiblingItem } from '@/components/email-builder/modals/EmailSwitcher';
 
 const WorderEditor = dynamic(() => import('@/components/email-builder/WorderEmailEditor'), { ssr: false });
 
-export interface EmailSibling {
-  templateId: string;
-  nodeName: string;
-  nodeId: string;
-}
+export { type EmailSiblingItem as EmailSibling };
 
 interface EmailEditorOverlayProps {
   templateId: string;
   triggerType?: string;
   organizationId?: string;
   onClose: () => void;
-  siblings?: EmailSibling[];
+  flowName?: string;
+  emailSiblings?: EmailSiblingItem[];
   onNavigate?: (templateId: string) => void;
 }
 
@@ -27,54 +25,14 @@ export function EmailEditorOverlay({
   triggerType,
   organizationId,
   onClose,
-  siblings,
+  flowName,
+  emailSiblings,
   onNavigate,
 }: EmailEditorOverlayProps) {
   const [template, setTemplate] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const editorRef = useRef<WorderEmailEditorHandle>(null);
-
-  const showNav = siblings && siblings.length > 1;
-  const currentIdx = siblings?.findIndex(s => s.templateId === templateId) ?? -1;
-  const hasPrev = currentIdx > 0;
-  const hasNext = currentIdx >= 0 && currentIdx < (siblings?.length ?? 0) - 1;
-
-  const goTo = useCallback(
-    async (newTemplateId: string) => {
-      try { await editorRef.current?.save(); } catch {}
-      onNavigate?.(newTemplateId);
-    },
-    [onNavigate],
-  );
-
-  const goPrev = useCallback(() => {
-    if (hasPrev && siblings) {
-      goTo(siblings[currentIdx - 1].templateId);
-    }
-  }, [hasPrev, siblings, currentIdx, goTo]);
-
-  const goNext = useCallback(() => {
-    if (hasNext && siblings) {
-      goTo(siblings[currentIdx + 1].templateId);
-    }
-  }, [hasNext, siblings, currentIdx, goTo]);
-
-  useEffect(() => {
-    if (!showNav) return;
-    const handler = (e: KeyboardEvent) => {
-      if (!e.altKey) return;
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        goPrev();
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        goNext();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [showNav, goPrev, goNext]);
 
   const fetchTemplate = useCallback(async () => {
     setLoading(true);
@@ -112,14 +70,9 @@ export function EmailEditorOverlay({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ design, design_json: design, html }),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        alert('Erro ao salvar: ' + (err.error || 'Tente novamente'));
-        return false;
-      }
+      if (!res.ok) return false;
       return true;
-    } catch (err: any) {
-      alert('Erro ao salvar: ' + err.message);
+    } catch {
       return false;
     }
   };
@@ -129,55 +82,10 @@ export function EmailEditorOverlay({
     onClose();
   }, [onClose]);
 
-  const navToolbar = showNav ? (
-    <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
-      <button
-        onClick={handleClose}
-        className="text-sm text-gray-600 hover:text-gray-900 font-medium"
-      >
-        Voltar ao flow
-      </button>
-
-      <div className="flex items-center gap-2">
-        <button
-          onClick={goPrev}
-          disabled={!hasPrev}
-          className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30"
-          title="Email anterior (Alt + ←)"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-
-        <select
-          value={templateId}
-          onChange={(e) => goTo(e.target.value)}
-          className="text-sm border border-gray-200 rounded px-2 py-1"
-        >
-          {siblings!.map((s, i) => (
-            <option key={s.templateId} value={s.templateId}>
-              Email {i + 1}/{siblings!.length}: {s.nodeName}
-            </option>
-          ))}
-        </select>
-
-        <button
-          onClick={goNext}
-          disabled={!hasNext}
-          className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30"
-          title="Próximo email (Alt + →)"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
-
-      <div className="w-[100px]" />
-    </div>
-  ) : null;
-
   if (loading) {
     return (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white">
-        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+        <Loader2 className="w-8 h-8 text-zinc-400 animate-spin" />
       </div>
     );
   }
@@ -187,7 +95,7 @@ export function EmailEditorOverlay({
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white">
         <div className="text-center">
           <p className="text-base font-medium text-gray-500 mb-3">{error || 'Template não encontrado'}</p>
-          <button onClick={onClose} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+          <button onClick={onClose} className="text-sm text-zinc-700 hover:text-zinc-900 font-medium">
             Voltar ao flow
           </button>
         </div>
@@ -196,24 +104,25 @@ export function EmailEditorOverlay({
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-white flex flex-col">
-      {navToolbar}
-      <div className="flex-1 min-h-0">
-        <WorderEditor
-          ref={editorRef}
-          key={templateId}
-          templateName={template.name || 'Template'}
-          design={template.design_json || template.design}
-          onSave={handleSave}
-          onRename={handleRename}
-          onBack={handleClose}
-          flowContext={triggerType && organizationId ? {
-            templateId,
-            triggerType,
-            organizationId,
-          } : undefined}
-        />
-      </div>
+    <div className="fixed inset-0 z-[9999] bg-white">
+      <WorderEditor
+        ref={editorRef}
+        key={templateId}
+        templateName={template.name || 'Template'}
+        design={template.design_json || template.design}
+        onSave={handleSave}
+        onRename={handleRename}
+        onBack={handleClose}
+        flowContext={triggerType && organizationId ? {
+          templateId,
+          triggerType,
+          organizationId,
+        } : undefined}
+        flowName={flowName}
+        emailSiblings={emailSiblings}
+        currentTemplateId={templateId}
+        onNavigateEmail={onNavigate}
+      />
     </div>
   );
 }

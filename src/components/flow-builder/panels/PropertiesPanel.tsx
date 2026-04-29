@@ -2117,6 +2117,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
   const [editorTemplateId, setEditorTemplateId] = useState<string | null>(null)
   const storeId = useFlowStore.getState().automationConfig?.storeId;
   const nodes = useFlowStore((state) => state.nodes);
+  const automationName = useFlowStore((state) => state.automationName);
 
   // Compute sibling email nodes for in-editor navigation
   const emailSiblings = useMemo(() => {
@@ -2426,9 +2427,12 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
           templateId={editorTemplateId || config.templateId}
           triggerType={triggerType}
           organizationId={organizationId}
-          siblings={emailSiblings}
+          flowName={automationName}
+          emailSiblings={emailSiblings}
           onNavigate={(newTemplateId) => {
             setEditorTemplateId(newTemplateId);
+            const node = nodes.find((n: any) => n.data?.config?.templateId === newTemplateId);
+            if (node) useFlowStore.getState().selectNode(node.id);
           }}
           onClose={async () => {
             await fetchTemplates();

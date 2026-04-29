@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
-import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star, RotateCcw, ChevronDown, AlertCircle } from 'lucide-react'
 import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, useDroppable, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -18,6 +18,9 @@ import {
   type EmailBlock, type EmailDocument, type EmailSection,
 } from './config/types'
 import { renderDocumentToHtml } from '@/lib/email/render-html'
+import { cn } from '@/lib/utils'
+import { EmailSwitcher, type EmailSiblingItem } from './modals/EmailSwitcher'
+import { useEmailAutosave, type SaveStatus } from './hooks/useEmailAutosave'
 
 interface WorderEmailEditorProps {
   templateName: string
@@ -30,6 +33,10 @@ interface WorderEmailEditorProps {
     triggerType: string
     organizationId: string
   }
+  flowName?: string
+  emailSiblings?: EmailSiblingItem[]
+  currentTemplateId?: string
+  onNavigateEmail?: (templateId: string) => void
 }
 
 // ── Sortable Block Wrapper (drag from anywhere on the block) ──
@@ -242,9 +249,9 @@ function InlineColorPicker({ value, onChange, label }: { value: string; onChange
 }
 
 // ── Styles Tab ──
-function StylesTab({ doc, setDoc }: { doc: EmailDocument; setDoc: React.Dispatch<React.SetStateAction<EmailDocument>> }) {
+function StylesTab({ doc, setDoc, onDirty }: { doc: EmailDocument; setDoc: React.Dispatch<React.SetStateAction<EmailDocument>>; onDirty?: () => void }) {
   const s = doc.settings
-  const update = (key: string, value: any) => setDoc(prev => ({ ...prev, settings: { ...prev.settings, [key]: value } }))
+  const update = (key: string, value: any) => { setDoc(prev => ({ ...prev, settings: { ...prev.settings, [key]: value } })); onDirty?.() }
 
   const FONTS = [
     { value: "'DM Sans', Arial, sans-serif", label: 'DM Sans' },
@@ -436,7 +443,7 @@ export interface WorderEmailEditorHandle {
   save: () => Promise<void>;
 }
 
-const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorProps>(function WorderEmailEditor({ templateName, design, onSave, onBack, onRename, flowContext }, ref) {
+const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorProps>(function WorderEmailEditor({ templateName, design, onSave, onBack, onRename, flowContext, flowName, emailSiblings, currentTemplateId, onNavigateEmail }, ref) {
   const [editableName, setEditableName] = useState(templateName)
   const [editingName, setEditingName] = useState(false)
   // ── State ──
@@ -450,6 +457,14 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [saving, setSaving] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+  const nameAnchorRef = useRef<HTMLDivElement>(null)
+  const initialDocRef = useRef(doc)
+  // Track any doc change (from any source) as dirty
+  useEffect(() => {
+    if (doc !== initialDocRef.current) setIsDirty(true)
+  }, [doc])
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [leftTab, setLeftTab] = useState<'content' | 'styles'>('content')
   const [previewHtml, setPreviewHtml] = useState('')
@@ -526,6 +541,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
   const updateDoc = useCallback((newDoc: EmailDocument) => {
     setDoc(newDoc)
     pushHistory(newDoc)
+    setIsDirty(true)
   }, [pushHistory])
 
   const undo = useCallback(() => {
@@ -534,6 +550,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
       const next = prev - 1
       historyIdxRef.current = next
       setDoc(JSON.parse(history[next]))
+      setIsDirty(true)
       return next
     })
   }, [history])
@@ -544,6 +561,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
       const next = prev + 1
       historyIdxRef.current = next
       setDoc(JSON.parse(history[next]))
+      setIsDirty(true)
       return next
     })
   }, [history])
@@ -1229,7 +1247,22 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     setSaving(false)
   }, [doc, onSave, showToast, flushUniversalSync])
 
-  useImperativeHandle(ref, () => ({ save: handleSave }), [handleSave])
+  const { saveStatus, lastSavedAt: autosaveLastSaved, saveError, flush: flushAutosave } = useEmailAutosave({
+    onSave: async () => {
+      try {
+        await flushUniversalSync()
+        const html = renderDocumentToHtml(doc)
+        const success = await onSave(doc as any, html)
+        if (success) setSavedLibraryVersion(v => v + 1)
+        return !!success
+      } catch { return false }
+    },
+    isDirty,
+    onSaved: () => setIsDirty(false),
+    debounceMs: 1500,
+  })
+
+  useImperativeHandle(ref, () => ({ save: async () => { await flushAutosave() } }), [flushAutosave])
 
   // ── Preview ──
   const handlePreview = useCallback(async () => {
@@ -1280,7 +1313,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
   // ── Keyboard shortcuts ──
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSave() }
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); flushAutosave() }
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
         if (inlineEditingBlockId) return // let TipTap handle undo/redo
         e.preventDefault(); e.shiftKey ? redo() : undo()
@@ -1296,7 +1329,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleSave, undo, redo, selectedBlockId, inlineEditingBlockId, removeBlock, clearSelection])
+  }, [flushAutosave, handleSave, undo, redo, selectedBlockId, inlineEditingBlockId, removeBlock, clearSelection])
 
   // ── Click-outside handler for inline editing ──
   useEffect(() => {
@@ -1382,7 +1415,6 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
   }, [])
 
   const canvasWidth = device === 'mobile' ? 375 : doc.settings.contentWidth
-  const isSaved = toast?.type === 'success' && toast.msg.includes('salvo')
 
   // ── Render ──
   return (
@@ -1394,9 +1426,9 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
         </div>
       )}
 
-      {/* ── Toolbar (black theme, restored from 8442103) ── */}
+      {/* ── Toolbar (black theme) ── */}
       <div className="flex items-center justify-between px-4 h-[52px] bg-zinc-900 flex-shrink-0 z-20">
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div ref={nameAnchorRef} className="relative flex items-center gap-2.5 min-w-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="Worder" className="h-7 flex-shrink-0" />
           <div className="h-5 w-px bg-zinc-700" />
@@ -1418,16 +1450,50 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
               className="text-sm font-semibold text-white bg-zinc-700 border border-zinc-600 rounded px-2 py-0.5 max-w-[280px] outline-none focus:border-zinc-900"
             />
           ) : (
-            <button
-              type="button"
-              onClick={() => { setEditingName(true); setEditableName(editableName || templateName) }}
-              className="text-sm font-semibold text-white truncate max-w-[280px] hover:bg-zinc-700 px-2 py-0.5 rounded transition-colors cursor-text"
-              title="Clique para renomear"
-            >
-              {editableName || templateName}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => { setEditingName(true); setEditableName(editableName || templateName) }}
+                className="text-sm font-semibold text-white truncate max-w-[240px] hover:bg-zinc-700 px-2 py-0.5 rounded transition-colors cursor-text"
+                title="Clique para renomear"
+              >
+                {editableName || templateName}
+              </button>
+              {emailSiblings && emailSiblings.length > 1 && currentTemplateId && (
+                <button
+                  onClick={() => setSwitcherOpen(o => !o)}
+                  className={cn(
+                    'p-1 rounded transition-colors flex-shrink-0',
+                    switcherOpen ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
+                  )}
+                  title="Trocar de email no fluxo"
+                  aria-expanded={switcherOpen}
+                >
+                  <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', switcherOpen && 'rotate-180')} strokeWidth={2.5} />
+                </button>
+              )}
+            </>
           )}
           <span className="text-[9px] px-1.5 py-0.5 bg-white/10 text-white rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
+
+          {/* Save status indicator */}
+          <SaveStatusIndicator status={saveStatus} lastSavedAt={autosaveLastSaved} error={saveError} />
+
+          {emailSiblings && currentTemplateId && onNavigateEmail && flowName && (
+            <EmailSwitcher
+              open={switcherOpen}
+              onClose={() => setSwitcherOpen(false)}
+              currentTemplateId={currentTemplateId}
+              flowName={flowName}
+              siblings={emailSiblings}
+              anchorRef={nameAnchorRef}
+              onSelect={async (id) => {
+                setSwitcherOpen(false)
+                await flushAutosave()
+                onNavigateEmail(id)
+              }}
+            />
+          )}
         </div>
 
         <div className="flex items-center gap-1">
@@ -1448,16 +1514,8 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
           <button onClick={() => setShowSendTest(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-300 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors">
             <Send size={14} /> Teste
           </button>
-          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-zinc-900 text-xs font-semibold rounded-lg hover:bg-zinc-100 disabled:opacity-50 transition-colors">
-            {saving ? <Loader2 size={14} className="animate-spin" /> : isSaved ? <CheckCircle size={14} /> : <Save size={14} />}
-            {saving ? 'Salvando...' : isSaved ? 'Salvo!' : 'Salvar'}
-          </button>
           <button onClick={async () => {
-            if (!confirm('Sair sem salvar? Alterações não salvas serão perdidas.')) return
-            // Even when the user leaves without saving the EMAIL, any pending
-            // universal-sync PATCHes for blocks/sections they did edit should
-            // still land — the library is a separate resource. Flush first,
-            // then leave.
+            await flushAutosave()
             await flushUniversalSync()
             onBack()
           }}
@@ -1685,7 +1743,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                     />
                   </div>
                 ) : (
-                  <StylesTab doc={doc} setDoc={setDoc} />
+                  <StylesTab doc={doc} setDoc={setDoc} onDirty={() => setIsDirty(true)} />
                 )}
               </div>
             </>
@@ -2326,6 +2384,29 @@ function SavedBlockVersionsModal({ savedBlockId, onClose, onRestored }: {
       </div>
     </div>
   )
+}
+
+function SaveStatusIndicator({ status, lastSavedAt, error }: { status: SaveStatus; lastSavedAt: Date | null; error: string | null }) {
+  const [savedAgo, setSavedAgo] = useState('')
+  useEffect(() => {
+    if (!lastSavedAt) { setSavedAgo(''); return }
+    const update = () => {
+      const seconds = Math.floor((Date.now() - lastSavedAt.getTime()) / 1000)
+      if (seconds < 5) setSavedAgo('Salvo agora')
+      else if (seconds < 60) setSavedAgo(`Salvo há ${seconds}s`)
+      else if (seconds < 3600) setSavedAgo(`Salvo há ${Math.floor(seconds / 60)}min`)
+      else setSavedAgo(`Salvo há ${Math.floor(seconds / 3600)}h`)
+    }
+    update()
+    const t = setInterval(update, 10000)
+    return () => clearInterval(t)
+  }, [lastSavedAt])
+
+  if (status === 'saving') return <span className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-300 px-2 py-0.5"><Loader2 className="w-3 h-3 animate-spin" strokeWidth={2.5} />Salvando...</span>
+  if (status === 'pending') return <span className="flex items-center gap-1.5 text-[11px] font-medium text-amber-200 px-2 py-0.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Alterações pendentes</span>
+  if (status === 'error') return <span className="flex items-center gap-1.5 text-[11px] font-medium text-red-300 px-2 py-0.5" title={error || ''}><AlertCircle className="w-3 h-3" strokeWidth={2.5} />Erro ao salvar</span>
+  if (savedAgo) return <span className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-400 px-2 py-0.5"><CheckCircle className="w-3 h-3" strokeWidth={2.5} />{savedAgo}</span>
+  return null
 }
 
 export default WorderEmailEditor
