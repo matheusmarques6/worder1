@@ -1,4 +1,5 @@
 'use client'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
@@ -42,6 +43,7 @@ const categoryLabels: Record<string, string> = {
 }
 
 export default function EmailTemplatesPage() {
+  const { confirm } = useConfirm()
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -72,7 +74,7 @@ export default function EmailTemplatesPage() {
   }, [fetchTemplates])
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este template?')) return
+    const ok = await confirm({ title: 'Excluir template?', destructive: true, confirmLabel: 'Excluir' }); if (!ok) return
     try {
       const res = await fetch(`/api/email/templates/${id}`, { method: 'DELETE' })
       if (res.ok) {

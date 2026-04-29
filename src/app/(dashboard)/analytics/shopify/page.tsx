@@ -1,3 +1,4 @@
+import { toast } from '@/components/ui/Toast'
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -337,11 +338,11 @@ export default function ShopifyAnalyticsPage() {
                 } else {
                   const errorText = await response.text()
                   console.error('[PDF] Erro da API:', errorText)
-                  alert(`Erro ao gerar PDF: ${response.status}`)
+                  toast({ type: 'error', title: `Erro ao gerar PDF: ${response.status}` })
                 }
               } catch (error) {
                 console.error('[PDF] Erro ao exportar:', error)
-                alert('Erro ao exportar PDF. Veja o console.')
+                toast({ type: 'error', title: 'Erro ao exportar PDF. Veja o console.' })
               } finally {
                 const btn = document.getElementById('export-pdf-btn')
                 if (btn) btn.textContent = 'Exportar PDF'

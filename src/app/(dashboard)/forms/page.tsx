@@ -1,4 +1,5 @@
 'use client'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -51,6 +52,7 @@ function getFormType(form: Form): string {
 }
 
 export default function FormsPage() {
+  const { confirm } = useConfirm()
   const { currentStore } = useStoreStore()
   const [forms, setForms] = useState<Form[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -169,7 +171,7 @@ export default function FormsPage() {
   }
 
   const deleteForm = async (formId: string) => {
-    if (!confirm('Tem certeza que deseja deletar este formulario?')) return
+    const ok = await confirm({ title: 'Excluir formulário?', destructive: true, confirmLabel: 'Excluir' }); if (!ok) return
     try {
       const res = await fetch(`/api/forms/${formId}`, { method: 'DELETE' })
       if (res.ok) {

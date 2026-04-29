@@ -1,4 +1,5 @@
 'use client'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -23,6 +24,7 @@ interface ConnectedStore {
 }
 
 export default function IntegrationsPage() {
+  const { confirm } = useConfirm()
   const router = useRouter()
   const { user } = useAuthStore()
   const { stores, currentStore } = useStoreStore()
@@ -106,7 +108,7 @@ export default function IntegrationsPage() {
   }
 
   const handleDisconnect = async (storeId: string) => {
-    if (!confirm('Desconectar esta loja? Os dados sincronizados serão mantidos.')) return
+    const ok = await confirm({ title: 'Desconectar loja?', description: 'Os dados sincronizados serão mantidos.', confirmLabel: 'Desconectar' }); if (!ok) return
     setDisconnecting(storeId)
     try {
       await fetch(`/api/integrations/shopify/${storeId}/disconnect`, { method: 'POST' })

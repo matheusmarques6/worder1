@@ -30,6 +30,13 @@ var analytics = ctx.analytics;
 var browser = ctx.browser;
 var init = ctx.init;
 
+// If the Shopify Web Pixel extension is active, skip the remote pixel to avoid double-tracking.
+(async function() {
+try { var extFlag = await browser.localStorage.getItem('__worder_pixel_ext'); if (extFlag) { return; } } catch(e) {}
+__worderRemotePixelInit();
+})();
+function __worderRemotePixelInit() {
+
 var ENDPOINT = '${trackEndpoint}';
 var SHOP = '${shop}' || (init.data && init.data.shop && init.data.shop.myshopifyDomain) || '';
 
@@ -170,6 +177,8 @@ try {
     if (d.email) persistContact(d.email, d.phone);
   });
 } catch(e) {}
+
+} // end __worderRemotePixelInit
 
 })();`;
 

@@ -1,3 +1,4 @@
+import { toast } from '@/components/ui/Toast'
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -485,11 +486,11 @@ function AddAccountModal({
         onSuccess()
       } else {
         const data = await res.json()
-        alert(data.error || 'Erro ao conectar conta')
+        toast({ type: 'error', title: data.error || 'Erro ao conectar conta' })
       }
     } catch (error) {
       console.error('Error adding account:', error)
-      alert('Erro ao conectar conta')
+      toast({ type: 'error', title: 'Erro ao conectar conta' })
     } finally {
       setLoading(false)
     }

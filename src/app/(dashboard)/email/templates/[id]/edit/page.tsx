@@ -1,3 +1,4 @@
+import { toast } from '@/components/ui/Toast'
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -40,12 +41,12 @@ export default function EditTemplatePage() {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        alert('Erro ao salvar: ' + (err.error || 'Tente novamente'))
+        toast({ type: 'error', title: 'Erro ao salvar: ' + (err.error || 'Tente novamente') })
         return false
       }
       return true
     } catch (err: any) {
-      alert('Erro ao salvar: ' + err.message)
+      toast({ type: 'error', title: 'Erro ao salvar: ' + err.message })
       return false
     }
   }

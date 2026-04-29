@@ -1,3 +1,4 @@
+import { toast } from '@/components/ui/Toast'
 'use client'
 
 import { useState } from 'react'
@@ -120,7 +121,7 @@ export default function CRMDiagnosticsPage() {
 
   const runAllTests = async () => {
     if (!organizationId) {
-      alert('Organization ID não encontrado. Faça login novamente.')
+      toast({ type: 'error', title: 'Organization ID não encontrado. Faça login novamente.' })
       return
     }
 

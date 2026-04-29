@@ -230,6 +230,49 @@ export async function POST(request: NextRequest) {
           await supabase.from('contacts').update(data).eq('id', id);
         }
 
+        // Retroactively link anonymous pixel events to newly created/updated contacts.
+        // Same pattern as /api/track/event — matches on email or anonymous_id where contact_id IS NULL.
+        const allContactEmails = [...toInsert.map(c => c.email), ...toUpdate.map(c => c.email)].filter(Boolean);
+        if (allContactEmails.length > 0) {
+          // Fetch IDs for all synced contacts in batches
+          const contactIdMap = new Map<string, string>();
+          for (let i = 0; i < allContactEmails.length; i += 500) {
+            const emailBatch = allContactEmails.slice(i, i + 500);
+            const { data: contacts } = await supabase
+              .from('contacts')
+              .select('id, email')
+              .in('email', emailBatch);
+            (contacts || []).forEach((c: any) => {
+              if (c.email) contactIdMap.set(c.email.toLowerCase(), c.id);
+            });
+          }
+
+          // Link orphan contact_events by email (fire-and-forget, same pattern as /api/track/event)
+          let linkedEmails = 0;
+          for (const [email, contactId] of contactIdMap) {
+            supabase
+              .from('contact_events')
+              .update({ contact_id: contactId })
+              .is('contact_id', null)
+              .eq('store_id', store.id)
+              .ilike('properties->>_email', email)
+              .then(() => {}, () => {});
+
+            supabase
+              .from('contact_events')
+              .update({ contact_id: contactId })
+              .is('contact_id', null)
+              .eq('store_id', store.id)
+              .ilike('properties->>email', email)
+              .then(() => {}, () => {});
+
+            linkedEmails++;
+          }
+          if (linkedEmails > 0) {
+            console.log(`[Sync] Retroactively linking anonymous events for ${linkedEmails} contacts`);
+          }
+        }
+
         results.customers = toInsert.length + toUpdate.length;
         console.log(`[Sync] Contacts: ${toInsert.length} inserted, ${toUpdate.length} updated`);
       } catch (err: any) {
@@ -300,7 +343,10 @@ export async function POST(request: NextRequest) {
               .limit(1)
               .maybeSingle();
 
+            let resolvedContactId: string | null = null;
+
             if (existingContact) {
+              resolvedContactId = existingContact.id;
               await supabase.from('contacts').update({
                 store_id: store.id,
                 phone: order.phone || order.customer?.phone || null,
@@ -308,7 +354,7 @@ export async function POST(request: NextRequest) {
                 updated_at: new Date().toISOString(),
               }).eq('id', existingContact.id);
             } else {
-              await supabase.from('contacts').insert({
+              const { data: newContact } = await supabase.from('contacts').insert({
                 organization_id: store.organization_id,
                 store_id: store.id,
                 email: order.email.toLowerCase(),
@@ -319,7 +365,25 @@ export async function POST(request: NextRequest) {
                 shopify_customer_id: order.customer?.id ? extractShopifyId(order.customer.id) : null,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
-              }); // Skip duplicates
+              }).select('id').maybeSingle();
+              resolvedContactId = newContact?.id || null;
+            }
+
+            // Retroactively link anonymous pixel events to this contact (same pattern as /api/track/event)
+            if (resolvedContactId) {
+              const emailLower = order.email.toLowerCase();
+              supabase.from('contact_events')
+                .update({ contact_id: resolvedContactId })
+                .is('contact_id', null)
+                .eq('store_id', store.id)
+                .ilike('properties->>email', emailLower)
+                .then(() => {}, () => {});
+              supabase.from('contact_events')
+                .update({ contact_id: resolvedContactId })
+                .is('contact_id', null)
+                .eq('store_id', store.id)
+                .ilike('properties->>_email', emailLower)
+                .then(() => {}, () => {});
             }
           }
 

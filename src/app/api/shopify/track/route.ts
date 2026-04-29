@@ -503,7 +503,30 @@ export async function POST(request: NextRequest) {
       } catch {}
     }
     
-    // 3. Registrar atividade
+    // 3. Deduplication: check if the new extension pixel already recorded
+    //    this event (same event_type + session_id + timestamp within ±2s).
+    if (session_id && event_type) {
+      const ts = timestamp ? new Date(timestamp) : new Date();
+      const tsLow = new Date(ts.getTime() - 2000).toISOString();
+      const tsHigh = new Date(ts.getTime() + 2000).toISOString();
+
+      const { data: duplicate } = await supabase
+        .from('contact_events')
+        .select('id')
+        .eq('organization_id', store.organization_id)
+        .eq('session_id', session_id)
+        .eq('event_type', mapEventTypeToActivityType(event_type))
+        .gte('occurred_at', tsLow)
+        .lte('occurred_at', tsHigh)
+        .limit(1)
+        .maybeSingle();
+
+      if (duplicate) {
+        return NextResponse.json({ ok: true, deduplicated: true }, { headers: CORS_HEADERS });
+      }
+    }
+
+    // 3a. Registrar atividade
     const activityData: any = {
       organization_id: store.organization_id,
       type: mapEventTypeToActivityType(event_type),

@@ -78,6 +78,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [addToast]
   );
 
+  useEffect(() => {
+    setGlobalToast(addToast);
+    return () => { setGlobalToast(() => {}); };
+  }, [addToast]);
+
   return (
     <ToastContext.Provider value={{ toasts, addToast, removeToast, success, error, warning, info }}>
       {children}

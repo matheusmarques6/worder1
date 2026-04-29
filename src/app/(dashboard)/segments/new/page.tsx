@@ -1,3 +1,4 @@
+import { toast } from '@/components/ui/Toast'
 'use client'
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
@@ -322,7 +323,7 @@ export default function CreateSegmentPage() {
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar')
       router.push('/segments')
     } catch (err: any) {
-      alert(err?.message || 'Erro ao salvar segmento.')
+      toast({ type: 'error', title: err?.message || 'Erro ao salvar segmento.' })
     } finally {
       setSaving(false)
     }

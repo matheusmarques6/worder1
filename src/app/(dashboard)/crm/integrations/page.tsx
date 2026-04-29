@@ -1,3 +1,4 @@
+import { toast } from '@/components/ui/Toast'
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -653,11 +654,11 @@ function IntegrationInstallModal({
         onSuccess()
       } else {
         const error = await response.json()
-        alert(`Erro ao instalar: ${error.error}`)
+        toast({ type: 'error', title: `Erro ao instalar: ${error.error}` })
       }
     } catch (error) {
       console.error('Error installing:', error)
-      alert('Erro ao instalar integração')
+      toast({ type: 'error', title: 'Erro ao instalar integração' })
     } finally {
       setLoading(false)
     }

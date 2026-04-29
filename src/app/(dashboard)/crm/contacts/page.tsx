@@ -1,3 +1,4 @@
+import { toast } from '@/components/ui/Toast'
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -646,7 +647,7 @@ export default function ContactsPage() {
       URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Error exporting:', error)
-      alert('Erro ao exportar contatos')
+      toast({ type: 'error', title: 'Erro ao exportar contatos' })
     } finally {
       setExporting(false)
     }

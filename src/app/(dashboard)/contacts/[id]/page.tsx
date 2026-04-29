@@ -1,6 +1,7 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -288,6 +289,7 @@ function renderActivityDescription(activity: any): React.ReactNode {
 }
 
 export default function ContactDetailPage() {
+  const { confirm } = useConfirm()
   const router = useRouter()
   const params = useParams()
   const contactId = params.id as string
@@ -386,7 +388,7 @@ export default function ContactDetailPage() {
   ]
 
   const handleDelete = async () => {
-    if (!confirm('Tem certeza que deseja excluir este contato? Esta ação é irreversível.')) return
+    const confirmed = await confirm({ title: 'Excluir contato?', description: 'Esta ação é irreversível.', destructive: true, confirmLabel: 'Excluir' }); if (!confirmed) return
     try {
       const res = await fetch(`/api/contacts?id=${contactId}`, { method: 'DELETE' })
       if (res.ok) {
@@ -724,6 +726,17 @@ export default function ContactDetailPage() {
                                       {activity.description && <p className="text-xs text-gray-500 mt-0.5">{activity.description}</p>}
                                     </>
                                   )}
+                                  {(() => {
+                                    const utm = (activity as any).properties?._utm
+                                    if (!utm) return null
+                                    const parts = [utm.utm_source, utm.utm_medium, utm.utm_campaign].filter(Boolean)
+                                    if (parts.length === 0) return null
+                                    return (
+                                      <p className="text-[11px] text-gray-400 mt-0.5 italic">
+                                        via {parts.join(' / ')}
+                                      </p>
+                                    )
+                                  })()}
                                   <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
                                     <Clock size={10} />
                                     {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true, locale: ptBR })}

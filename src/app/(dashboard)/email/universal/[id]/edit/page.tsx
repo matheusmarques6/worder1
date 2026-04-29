@@ -1,3 +1,4 @@
+import { toast } from '@/components/ui/Toast'
 'use client'
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -145,7 +146,7 @@ export default function EditUniversalPage() {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        alert('Erro ao salvar: ' + (err.error || 'Tente novamente'))
+        toast({ type: 'error', title: 'Erro ao salvar: ' + (err.error || 'Tente novamente') })
         return false
       }
       // Broadcast to sibling tabs so any other open email editor can re-
@@ -155,7 +156,7 @@ export default function EditUniversalPage() {
       } catch { /* private-mode / full storage — non-fatal */ }
       return true
     } catch (err: any) {
-      alert('Erro ao salvar: ' + err.message)
+      toast({ type: 'error', title: 'Erro ao salvar: ' + err.message })
       return false
     }
   }, [id, isSection, saved])

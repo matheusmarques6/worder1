@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { ToastProvider } from '@/components/ui/Toast'
+import { ConfirmProvider } from '@/components/ui/ConfirmDialog'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -579,6 +580,7 @@ export default function DashboardLayout({
   // ============================================
   return (
     <ToastProvider>
+    <ConfirmProvider>
     <div className="min-h-screen bg-gray-50">
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
@@ -796,6 +798,7 @@ export default function DashboardLayout({
 
       <AddStoreModal isOpen={addStoreModalOpen} onClose={() => setAddStoreModalOpen(false)} onSuccess={handleAddStore} />
     </div>
+    </ConfirmProvider>
     </ToastProvider>
   )
 }

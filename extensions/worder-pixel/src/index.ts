@@ -119,6 +119,14 @@ register(({ analytics, browser, settings, init }) => {
 
   initIds();
 
+  // Signal that the extension pixel is active so the legacy remote pixel
+  // (worder-pixel.js) can skip itself and avoid double-tracking.
+  try {
+    browser.localStorage.setItem('__worder_pixel_ext', '1');
+  } catch {
+    /* sandbox may restrict */
+  }
+
   // Touch session timestamp on every event
   function touchSession(): void {
     if (storageAvailable) {

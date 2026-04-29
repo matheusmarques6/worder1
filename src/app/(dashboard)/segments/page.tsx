@@ -1,4 +1,5 @@
 'use client'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
@@ -59,6 +60,7 @@ function saveFavs(favs: Set<string>) {
 }
 
 export default function SegmentsPage() {
+  const { confirm } = useConfirm()
   const router = useRouter()
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore()
@@ -113,7 +115,7 @@ export default function SegmentsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Excluir este segmento permanentemente?')) return
+    const ok = await confirm({ title: 'Excluir segmento?', description: 'Esta ação é permanente.', destructive: true, confirmLabel: 'Excluir' }); if (!ok) return
     setDeleting(id)
     try {
       await fetch(`/api/segments?id=${id}`, { method: 'DELETE' })
