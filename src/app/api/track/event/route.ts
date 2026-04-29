@@ -441,6 +441,23 @@ export async function POST(request: NextRequest) {
     };
     const triggerType = triggerMap[mappedEventType];
     if (triggerType && contactId) {
+      // Normalize pixel lineItems to Items format for consistency with webhook triggers
+      const pixelLineItems = enrichedProperties.lineItems || enrichedProperties.line_items || [];
+      const normalizedItems = Array.isArray(pixelLineItems) ? pixelLineItems.map((it: any) => ({
+        ProductID: it.productId || it.product_id ? String(it.productId || it.product_id) : undefined,
+        ProductName: it.title || it.name || '',
+        Quantity: it.quantity || 1,
+        ItemPrice: it.price || parseFloat(it.lineTotal || '0') / (it.quantity || 1),
+        RowTotal: it.lineTotal || (it.price * (it.quantity || 1)),
+        CompareAtPrice: it.compareAtPrice || it.compare_at_price || null,
+        ImageURL: it.imageUrl || it.image_url || '',
+        ProductURL: it.productUrl || it.product_url || '',
+        SKU: it.sku || '',
+        VariantName: it.variantTitle || it.variant_title || '',
+        VariantID: it.variantId || it.variant_id ? String(it.variantId || it.variant_id) : undefined,
+        Brand: it.vendor || it.brand || '',
+      })) : [];
+
       import('@/lib/automation/trigger-dispatcher').then(({ dispatchTrigger }) =>
         dispatchTrigger({
           organizationId,
@@ -448,9 +465,19 @@ export async function POST(request: NextRequest) {
           contactId,
           triggerData: {
             event_type: mappedEventType,
-            product_id: enrichedProperties.product_id,
-            product_name: enrichedProperties.product_name,
+            product_id: enrichedProperties.product_id || enrichedProperties.productId,
+            product_name: enrichedProperties.product_name || enrichedProperties.title,
             monetary_value: monetaryValue,
+            Value: monetaryValue || enrichedProperties.totalPrice || enrichedProperties.$value,
+            Currency: enrichedProperties.currency || enrichedProperties.lineCurrency || '',
+            ItemCount: normalizedItems.length || enrichedProperties.itemCount || 0,
+            Items: normalizedItems.length > 0 ? normalizedItems : undefined,
+            ItemNames: normalizedItems.map((it: any) => it.ProductName).filter(Boolean),
+            CheckoutURL: enrichedProperties.checkoutUrl || enrichedProperties.checkout_url || '',
+            SubtotalPrice: enrichedProperties.subtotalPrice || 0,
+            TotalDiscounts: enrichedProperties.totalDiscounts || 0,
+            DiscountCodes: enrichedProperties.discountCodes || [],
+            CustomerEmail: enrichedProperties._first_name ? undefined : undefined,
             properties: enrichedProperties,
           },
           idempotencyKey: idempotencyKey

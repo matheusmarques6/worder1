@@ -203,6 +203,36 @@
   }
 
   // ============================================
+  // UTM & Click ID extraction
+  // ============================================
+  function extractUtmParams() {
+    var params = {};
+    var utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+    var clickKeys = ['gclid', 'fbclid', 'ttclid', 'msclkid', 'dclid', 'li_fat_id', 'twclid', 'scclid'];
+    for (var i = 0; i < utmKeys.length; i++) {
+      var v = getUrlParam(utmKeys[i]);
+      if (v) params[utmKeys[i]] = v;
+    }
+    for (var j = 0; j < clickKeys.length; j++) {
+      var cv = getUrlParam(clickKeys[j]);
+      if (cv) params[clickKeys[j]] = cv;
+    }
+    return Object.keys(params).length > 0 ? params : null;
+  }
+
+  var cachedUtmParams = extractUtmParams();
+
+  // Persist UTM/click IDs in sessionStorage so they survive internal navigation
+  try {
+    if (cachedUtmParams) {
+      sessionStorage.setItem('__worder_utm', JSON.stringify(cachedUtmParams));
+    } else {
+      var stored = sessionStorage.getItem('__worder_utm');
+      if (stored) cachedUtmParams = JSON.parse(stored);
+    }
+  } catch(e) {}
+
+  // ============================================
   // SEND EVENT
   // ============================================
   function sendEvent(eventType, properties) {
@@ -222,6 +252,11 @@
       title: document.title,
       timestamp: new Date().toISOString(),
     };
+
+    // Include UTM/click ID params
+    if (cachedUtmParams) {
+      payload.utm = cachedUtmParams;
+    }
 
     // Include customer/contact identity if available
     if (window.__worder && window.__worder.customer) {
