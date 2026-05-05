@@ -405,19 +405,37 @@ function SenderConfig({ verifiedDomains }: { verifiedDomains: Domain[] }) {
   const [saving, setSaving] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [toast, setToast] = useState('')
+  // Originals to detect changes after save
+  const [originalSenderName, setOriginalSenderName] = useState('')
+  const [originalSenderEmail, setOriginalSenderEmail] = useState('')
+  const [originalReplyTo, setOriginalReplyTo] = useState('')
+  // "Apply to all" modal state
+  const [pendingSync, setPendingSync] = useState<{
+    senderName?: string
+    senderEmail?: string
+    replyTo?: string
+    previousEmail?: string
+  } | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<any>(null)
 
   useEffect(() => {
     fetch('/api/settings/organization')
       .then(r => r.json())
       .then(d => {
         const s = d?.organization?.email_settings || {}
-        setSenderName(s.default_sender_name || '')
-        setReplyTo(s.default_reply_to || '')
+        const name = s.default_sender_name || ''
+        const reply = s.default_reply_to || ''
         const email = s.default_sender_email || ''
+        setSenderName(name)
+        setReplyTo(reply)
         if (email.includes('@')) {
           setSenderLocal(email.split('@')[0])
           setSelectedDomain(email.split('@')[1])
         }
+        setOriginalSenderName(name)
+        setOriginalSenderEmail(email)
+        setOriginalReplyTo(reply)
         setLoaded(true)
       })
       .catch(() => setLoaded(true))
@@ -449,13 +467,126 @@ function SenderConfig({ verifiedDomains }: { verifiedDomains: Domain[] }) {
       if (res.ok) {
         setToast('Salvo com sucesso')
         setTimeout(() => setToast(''), 2000)
+
+        // Detect what changed and prompt to apply to all emails
+        const finalReplyTo = replyTo || fullEmail
+        const nameChanged = senderName && senderName !== originalSenderName
+        const emailChanged = fullEmail && fullEmail !== originalSenderEmail
+        const replyChanged = finalReplyTo && finalReplyTo !== originalReplyTo
+        if (nameChanged || emailChanged || replyChanged) {
+          setPendingSync({
+            senderName: nameChanged ? senderName : undefined,
+            senderEmail: emailChanged ? fullEmail : undefined,
+            replyTo: replyChanged ? finalReplyTo : undefined,
+            previousEmail: emailChanged ? originalSenderEmail : undefined,
+          })
+        }
+
+        // Update originals so subsequent saves don't re-prompt
+        setOriginalSenderName(senderName)
+        setOriginalSenderEmail(fullEmail)
+        setOriginalReplyTo(finalReplyTo)
       }
     } finally { setSaving(false) }
+  }
+
+  const applySync = async (scope: 'all' | 'empty') => {
+    if (!pendingSync) return
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/email/sync-defaults', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...pendingSync,
+          onlyEmpty: scope === 'empty',
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setSyncResult(data)
+      }
+    } finally {
+      setSyncing(false)
+    }
   }
 
   if (!loaded) return null
 
   return (
+    <>
+    {pendingSync && (
+      <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/50" onClick={syncing ? undefined : () => { setPendingSync(null); setSyncResult(null); }} />
+        <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+          {syncResult ? (
+            <div className="p-6 text-center">
+              <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              </div>
+              <h3 className="text-base font-semibold text-zinc-900 mb-1">Atualizado</h3>
+              <p className="text-sm text-zinc-500 mb-4">
+                {syncResult.nodesUpdated} email{syncResult.nodesUpdated !== 1 ? 's' : ''} em {syncResult.automationsUpdated} automaç{syncResult.automationsUpdated !== 1 ? 'ões' : 'ão'}
+                {syncResult.templatesUpdated > 0 && ` · ${syncResult.templatesUpdated} template${syncResult.templatesUpdated !== 1 ? 's' : ''}`}
+              </p>
+              <button onClick={() => { setPendingSync(null); setSyncResult(null); }} className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium rounded-md">
+                Fechar
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="px-5 py-4 border-b border-zinc-100">
+                <h3 className="text-base font-semibold text-zinc-900">Aplicar a emails existentes?</h3>
+                <p className="text-xs text-zinc-500 mt-1">Você alterou as configurações de remetente. Aplicar nas automações e templates já criados?</p>
+              </div>
+              <div className="p-5 space-y-2 text-sm">
+                {pendingSync.senderName && (
+                  <div className="flex justify-between gap-3 text-zinc-700">
+                    <span className="text-zinc-500">Nome:</span>
+                    <span className="font-medium truncate">{pendingSync.senderName}</span>
+                  </div>
+                )}
+                {pendingSync.senderEmail && (
+                  <div className="flex justify-between gap-3 text-zinc-700">
+                    <span className="text-zinc-500">Email:</span>
+                    <span className="font-medium truncate">{pendingSync.senderEmail}</span>
+                  </div>
+                )}
+                {pendingSync.replyTo && (
+                  <div className="flex justify-between gap-3 text-zinc-700">
+                    <span className="text-zinc-500">Reply-to:</span>
+                    <span className="font-medium truncate">{pendingSync.replyTo}</span>
+                  </div>
+                )}
+              </div>
+              <div className="px-5 py-3 bg-zinc-50 border-t border-zinc-100 flex flex-col gap-2">
+                <button
+                  onClick={() => applySync('all')}
+                  disabled={syncing}
+                  className="w-full px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+                >
+                  {syncing ? 'Atualizando...' : 'Atualizar em todos os emails'}
+                </button>
+                <button
+                  onClick={() => applySync('empty')}
+                  disabled={syncing}
+                  className="w-full px-3 py-2 bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-700 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
+                >
+                  Aplicar apenas onde está vazio
+                </button>
+                <button
+                  onClick={() => setPendingSync(null)}
+                  disabled={syncing}
+                  className="w-full px-3 py-2 text-zinc-500 hover:text-zinc-700 text-sm rounded-md transition-colors disabled:opacity-50"
+                >
+                  Não atualizar emails existentes
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )}
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
       <div className="px-6 py-5 border-b border-gray-100">
         <div className="flex items-center gap-2">
@@ -533,6 +664,7 @@ function SenderConfig({ verifiedDomains }: { verifiedDomains: Domain[] }) {
         </div>
       </div>
     </div>
+    </>
   )
 }
 
