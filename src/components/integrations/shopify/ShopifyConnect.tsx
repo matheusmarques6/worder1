@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { useStoreStore } from '@/stores';
 import {
   ShoppingBag, CheckCircle, AlertCircle, Loader2, Trash2,
-  Store, ExternalLink, Wifi, RefreshCw,
+  Store, ExternalLink, Wifi, RefreshCw, KeyRound,
 } from 'lucide-react';
 
 interface StoreData {
@@ -53,6 +53,12 @@ export default function ShopifyConnect() {
   const [copiedPixel, setCopiedPixel] = useState(false);
   const [showPixelCode, setShowPixelCode] = useState(false);
   const [loadingPixelCode, setLoadingPixelCode] = useState(false);
+
+  // Edit credentials (manual integration only)
+  const [showEditCreds, setShowEditCreds] = useState(false);
+  const [editClientId, setEditClientId] = useState('');
+  const [editClientSecret, setEditClientSecret] = useState('');
+  const [savingCreds, setSavingCreds] = useState(false);
 
   // When the page was opened via "Adicionar loja" from the integrations
   // list, the URL carries ?add=1. In that case we skip the "connected"
@@ -276,6 +282,40 @@ export default function ShopifyConnect() {
     }
   }
 
+  async function handleUpdateCredentials() {
+    if (!store?.id) return;
+    const cid = editClientId.trim();
+    const cs = editClientSecret.trim();
+    if (!cid || !cs) {
+      setError('Preencha Client ID e Client Secret.');
+      return;
+    }
+    setSavingCreds(true);
+    setError('');
+    setSuccessMessage('');
+    try {
+      const res = await fetch('/api/integrations/shopify/manual/update-credentials', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: store.id, clientId: cid, clientSecret: cs }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || 'Erro ao atualizar credenciais.');
+        return;
+      }
+      setSuccessMessage('Credenciais atualizadas. Novo token gerado.');
+      setShowEditCreds(false);
+      setEditClientId('');
+      setEditClientSecret('');
+      fetchStatus();
+    } catch {
+      setError('Erro ao atualizar credenciais. Tente novamente.');
+    } finally {
+      setSavingCreds(false);
+    }
+  }
+
   async function handleDisconnect() {
     if (!confirm('Tem certeza? Os dados já importados serão mantidos.')) return;
     setDisconnecting(true);
@@ -322,6 +362,12 @@ export default function ShopifyConnect() {
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg flex items-center gap-2 text-sm">
             <CheckCircle className="w-4 h-4 flex-shrink-0" />
             {successMessage}
+          </div>
+        )}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2 text-sm">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            {error}
           </div>
         )}
 
@@ -441,7 +487,59 @@ export default function ShopifyConnect() {
           </div>
         )}
 
-        <div className="flex gap-3 pt-2">
+        {store.connectionType === 'manual' && showEditCreds && (
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-gray-900 text-sm">Atualizar credenciais</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Cole o novo Client ID e Client Secret do seu Custom App. O domínio <code className="font-mono">{store.shopDomain}</code> não muda.
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowEditCreds(false); setEditClientId(''); setEditClientSecret(''); setError(''); }}
+                className="text-xs text-gray-400 hover:text-gray-600"
+              >
+                Cancelar
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Client ID</label>
+              <input
+                type="text"
+                value={editClientId}
+                onChange={(e) => setEditClientId(e.target.value)}
+                placeholder="Dev Dashboard → seu app → Client ID"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-[#95BF47] focus:border-[#95BF47] outline-none"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Client Secret</label>
+              <input
+                type="password"
+                value={editClientSecret}
+                onChange={(e) => setEditClientSecret(e.target.value)}
+                placeholder="Dev Dashboard → seu app → Client Secret"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-[#95BF47] focus:border-[#95BF47] outline-none"
+                autoComplete="off"
+              />
+            </div>
+            <button
+              onClick={handleUpdateCredentials}
+              disabled={savingCreds || !editClientId.trim() || !editClientSecret.trim()}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#95BF47] text-white rounded-lg hover:bg-[#7da03a] disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            >
+              {savingCreds ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Validando e salvando...</>
+              ) : (
+                <>Salvar e gerar novo token</>
+              )}
+            </button>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-3 pt-2">
           <button
             onClick={handleSyncAll}
             disabled={syncingAll}
@@ -464,6 +562,15 @@ export default function ShopifyConnect() {
           >
             <RefreshCw className="w-4 h-4" /> Atualizar
           </button>
+          {store.connectionType === 'manual' && (
+            <button
+              onClick={() => setShowEditCreds((v) => !v)}
+              className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
+            >
+              <KeyRound className="w-4 h-4" />
+              {showEditCreds ? 'Fechar editor' : 'Editar credenciais'}
+            </button>
+          )}
           <button
             onClick={handleDisconnect}
             disabled={disconnecting}
