@@ -1094,38 +1094,55 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     switch (block.type) {
 
       case 'text':
-        return <div className="space-y-5">
-          {/* Content section */}
-          <div className="space-y-3">
-            <SectionHeader title="Conteúdo" icon={<Type className="w-3 h-3" />} />
-            <LabeledField label="Estilo do texto">
-              <Segmented value={p.tag || 'p'} onChange={v => up('tag', v)} options={[
-                { value: 'h1', label: 'H1', title: 'Título grande' },
-                { value: 'h2', label: 'H2', title: 'Título médio' },
-                { value: 'h3', label: 'H3', title: 'Título pequeno' },
-                { value: 'p', label: 'P', title: 'Parágrafo' },
-              ]} />
-            </LabeledField>
-            <LabeledField label="Texto" hint="Também editável clicando diretamente no texto no canvas.">
-              <textarea className={inp} rows={3} value={p.content || ''} onChange={e => up('content', e.target.value)} />
-            </LabeledField>
-          </div>
+        return <div className="space-y-4">
+          {/* Style preset — first thing the merchant changes (Heading vs body) */}
+          <LabeledField label="Estilo do texto">
+            <Segmented value={p.tag || 'p'} onChange={v => up('tag', v)} options={[
+              { value: 'h1', label: 'H1', title: 'Título grande' },
+              { value: 'h2', label: 'H2', title: 'Título médio' },
+              { value: 'h3', label: 'H3', title: 'Título pequeno' },
+              { value: 'p', label: 'Texto', title: 'Parágrafo' },
+            ]} />
+          </LabeledField>
 
-          {/* Typography section */}
-          <div className="pt-4 border-t border-gray-100 space-y-3">
-            <SectionHeader title="Tipografia" icon={<Type className="w-3 h-3" />} />
+          <p className="text-[11px] text-gray-400 leading-snug">
+            Para editar o texto, clique direto no popup ao lado.
+          </p>
+
+          {/* Font + Size on same row, Omnisend-style */}
+          <div className="grid grid-cols-[1fr_72px] gap-2">
             <LabeledField label="Fonte">
               <FontSelect value={p.fontFamily || 'inherit'} onChange={v => up('fontFamily', v)} />
             </LabeledField>
-            <div className="grid grid-cols-2 gap-2">
-              <LabeledField label="Tamanho">
-                <UnitInput value={p.fontSize || 16} onChange={v => up('fontSize', v)} min={8} max={120} />
-              </LabeledField>
-              <LabeledField label="Altura da linha">
-                <UnitInput value={Number(p.lineHeight || 1.4)} onChange={v => up('lineHeight', v)} min={0.8} max={3} step={0.1} unit="×" />
-              </LabeledField>
-            </div>
-            <LabeledField label="Peso">
+            <LabeledField label="Tamanho">
+              <UnitInput value={p.fontSize || 16} onChange={v => up('fontSize', v)} min={8} max={120} />
+            </LabeledField>
+          </div>
+
+          {/* Format + Alignment in one row */}
+          <div className="grid grid-cols-2 gap-2">
+            <LabeledField label="Formatação"><TextFormat p={p} up={up} /></LabeledField>
+            <LabeledField label="Alinhamento">
+              <AlignButtons value={p.align || 'left'} onChange={v => up('align', v)} showFull={false} />
+            </LabeledField>
+          </div>
+
+          {/* Colors — most edited after content */}
+          <div className="pt-3 border-t border-gray-100 space-y-2.5">
+            <ColorRow label="Cor do texto" value={p.color || '#111827'} onChange={v => up('color', v)} />
+            <ColorRow label="Cor dos links" value={p.linkColor || '#F97316'} onChange={v => up('linkColor', v)} />
+          </div>
+
+          {/* Padding — direct, visible */}
+          <div className="pt-3 border-t border-gray-100">
+            <LabeledField label="Preenchimento (padding)">
+              <PaddingControl p={p} up={up} prefix="blockPad" defaults={{ t: 0, r: 0, b: 0, l: 0 }} />
+            </LabeledField>
+          </div>
+
+          {/* Less-used controls hidden behind a collapsible group */}
+          <Group title="Avançado" defaultOpen={false} icon={<Settings className="w-3 h-3" />}>
+            <LabeledField label="Peso da fonte">
               <Segmented value={String(p.fontWeight || 'normal')} onChange={v => up('fontWeight', v)} options={[
                 { value: 'normal', label: '400' },
                 { value: '500', label: '500' },
@@ -1134,31 +1151,14 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 { value: '800', label: '800' },
               ]} />
             </LabeledField>
-            <div className="flex items-center gap-3">
-              <LabeledField label="Formatação"><TextFormat p={p} up={up} /></LabeledField>
-              <div className="flex-1">
-                <LabeledField label="Alinhamento">
-                  <AlignButtons value={p.align || 'left'} onChange={v => up('align', v)} showFull={false} />
-                </LabeledField>
-              </div>
-            </div>
+            <LabeledField label="Altura da linha">
+              <UnitInput value={Number(p.lineHeight || 1.4)} onChange={v => up('lineHeight', v)} min={0.8} max={3} step={0.1} unit="×" />
+            </LabeledField>
             <LabeledField label="Espaçamento entre letras">
               <UnitInput value={p.letterSpacing ?? 0} onChange={v => up('letterSpacing', v)} min={-2} max={20} step={0.5} />
             </LabeledField>
-          </div>
-
-          {/* Colors */}
-          <div className="pt-4 border-t border-gray-100 space-y-3">
-            <SectionHeader title="Cores" />
-            <ColorRow label="Cor do texto" value={p.color || '#111827'} onChange={v => up('color', v)} />
-            <ColorRow label="Cor dos links" value={p.linkColor || '#F97316'} onChange={v => up('linkColor', v)} />
-            <ColorRow label="Cor de fundo do bloco" hint="Aplicado a todo o bloco de texto." value={p.blockBg || ''} onChange={v => up('blockBg', v)} />
-          </div>
-
-          {/* Spacing */}
-          <div className="pt-4 border-t border-gray-100 space-y-3">
-            <SectionHeader title="Espaçamento" />
-            <LabeledField label="Margem externa" hint="Espaço acima e abaixo do bloco de texto.">
+            <ColorRow label="Cor de fundo do bloco" value={p.blockBg || ''} onChange={v => up('blockBg', v)} />
+            <LabeledField label="Margem externa">
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <span className="text-[10px] text-gray-400 block mb-1">Topo</span>
@@ -1170,51 +1170,74 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 </div>
               </div>
             </LabeledField>
-            <LabeledField label="Preenchimento interno" hint="Espaço entre a borda e o texto (padding).">
-              <PaddingControl p={p} up={up} prefix="blockPad" defaults={{ t: 0, r: 0, b: 0, l: 0 }} />
+            <LabeledField label="Conteúdo (texto)" hint="Também editável diretamente no popup ao lado.">
+              <textarea className={inp} rows={3} value={p.content || ''} onChange={e => up('content', e.target.value)} />
             </LabeledField>
-          </div>
+          </Group>
         </div>
 
       case 'button':
-        return <div className="space-y-5">
-          {/* Content & action */}
-          <div className="space-y-3">
-            <SectionHeader title="Conteúdo" icon={<MousePointerClick className="w-3 h-3" />} />
-            <LabeledField label="Texto" hint="Também editável diretamente no botão no canvas.">
-              <input className={inp} value={p.text || ''} onChange={e => up('text', e.target.value)} />
+        return <div className="space-y-4">
+          {/* Action — first thing to set up; controls everything else */}
+          <LabeledField label="Ação ao clicar">
+            <Segmented value={p.action || 'submit'} onChange={v => up('action', v)} options={[
+              { value: 'submit', label: 'Enviar' },
+              { value: 'next-step', label: 'Próxima' },
+              { value: 'url', label: 'URL' },
+              { value: 'close', label: 'Fechar' },
+            ]} />
+          </LabeledField>
+          {p.action === 'url' && (
+            <LabeledField label="URL de destino" hint="Abre em nova aba.">
+              <div className="flex items-center border border-gray-200 rounded-lg focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500/20">
+                <Link2 className="w-3.5 h-3.5 text-gray-400 ml-3" />
+                <input className="flex-1 px-2 py-2 text-[13px] text-gray-800 outline-none bg-transparent" value={p.url || ''} onChange={e => up('url', e.target.value)} placeholder="https://..." />
+              </div>
             </LabeledField>
-            <LabeledField label="Ação ao clicar">
-              <Segmented value={p.action || 'submit'} onChange={v => up('action', v)} options={[
-                { value: 'submit', label: 'Enviar', title: 'Submeter formulário' },
-                { value: 'next-step', label: 'Próxima', title: 'Ir para a próxima etapa' },
-                { value: 'url', label: 'URL', title: 'Abrir link' },
-                { value: 'close', label: 'Fechar', title: 'Fechar popup' },
+          )}
+
+          <p className="text-[11px] text-gray-400 leading-snug">
+            Para editar o texto do botão, clique direto no popup ao lado.
+          </p>
+
+          {/* Colors — most edited */}
+          <div className="pt-3 border-t border-gray-100 space-y-2.5">
+            <ColorRow label="Cor de fundo" value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
+            <ColorRow label="Cor do texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
+          </div>
+
+          {/* Size & shape */}
+          <div className="pt-3 border-t border-gray-100 space-y-2.5">
+            <LabeledField label="Largura">
+              <Segmented value={p.fullWidth ? 'full' : 'auto'} onChange={v => up('fullWidth', v === 'full')} options={[
+                { value: 'auto', label: 'Auto' },
+                { value: 'full', label: 'Preencher' },
               ]} />
             </LabeledField>
-            {p.action === 'url' && (
-              <LabeledField label="URL de destino" hint="Abre em nova aba quando clicado.">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center border border-gray-200 rounded-lg focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500/20">
-                    <Link2 className="w-3.5 h-3.5 text-gray-400 ml-3" />
-                    <input className="flex-1 px-2 py-2 text-[13px] text-gray-800 outline-none bg-transparent" value={p.url || ''} onChange={e => up('url', e.target.value)} placeholder="https://..." />
-                  </div>
-                </div>
+            <LabeledField label="Raio da borda">
+              <Slider value={p.borderRadius ?? 8} onChange={v => up('borderRadius', v)} min={0} max={50} unit="px" />
+            </LabeledField>
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledField label="Padding vertical">
+                <UnitInput value={p.paddingV ?? 14} onChange={v => up('paddingV', v)} min={4} max={40} />
+              </LabeledField>
+              <LabeledField label="Padding horizontal">
+                <UnitInput value={p.paddingH ?? 28} onChange={v => up('paddingH', v)} min={4} max={80} />
+              </LabeledField>
+            </div>
+          </div>
+
+          {/* Less-used controls behind a collapsible group */}
+          <Group title="Avançado" defaultOpen={false} icon={<Settings className="w-3 h-3" />}>
+            <LabeledField label="Texto do botão" hint="Também editável diretamente no popup ao lado.">
+              <input className={inp} value={p.text || ''} onChange={e => up('text', e.target.value)} />
+            </LabeledField>
+            <ColorRow label="Cor no hover" hint="Cor de fundo ao passar o mouse." value={p.hoverColor || ''} onChange={v => up('hoverColor', v)} />
+            {!p.fullWidth && (
+              <LabeledField label="Alinhamento">
+                <AlignButtons value={p.align || 'center'} onChange={v => up('align', v)} showFull={false} />
               </LabeledField>
             )}
-          </div>
-
-          {/* Colors */}
-          <div className="pt-4 border-t border-gray-100 space-y-3">
-            <SectionHeader title="Cores" icon={<Palette className="w-3 h-3" />} />
-            <ColorRow label="Fundo" value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
-            <ColorRow label="Texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
-            <ColorRow label="Hover (opcional)" hint="Cor de fundo ao passar o mouse." value={p.hoverColor || ''} onChange={v => up('hoverColor', v)} />
-          </div>
-
-          {/* Typography */}
-          <div className="pt-4 border-t border-gray-100 space-y-3">
-            <SectionHeader title="Tipografia" icon={<Type className="w-3 h-3" />} />
             <LabeledField label="Fonte">
               <FontSelect value={p.fontFamily || 'inherit'} onChange={v => up('fontFamily', v)} />
             </LabeledField>
@@ -1235,50 +1258,18 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
             <LabeledField label="Espaçamento entre letras">
               <Slider value={p.btnLetterSpacing ?? 0} onChange={v => up('btnLetterSpacing', v)} min={-1} max={8} step={0.5} unit="px" />
             </LabeledField>
-          </div>
-
-          {/* Shape & border */}
-          <div className="pt-4 border-t border-gray-100 space-y-3">
-            <SectionHeader title="Forma & borda" icon={<Square className="w-3 h-3" />} />
-            <LabeledField label="Raio da borda">
-              <Slider value={p.borderRadius ?? 8} onChange={v => up('borderRadius', v)} min={0} max={50} unit="px" />
-            </LabeledField>
             <div className="grid grid-cols-2 gap-2">
               <LabeledField label="Largura da borda">
                 <UnitInput value={p.btnBorderWidth ?? 0} onChange={v => up('btnBorderWidth', v)} min={0} max={8} />
               </LabeledField>
-              <LabeledField label="Estilo">
+              <LabeledField label="Estilo da borda">
                 <BorderStyleControl p={p} up={up} />
               </LabeledField>
             </div>
             {(p.btnBorderWidth || 0) > 0 && (
               <ColorRow label="Cor da borda" value={p.btnBorderColor || '#E5E7EB'} onChange={v => up('btnBorderColor', v)} />
             )}
-          </div>
-
-          {/* Size & spacing */}
-          <div className="pt-4 border-t border-gray-100 space-y-3">
-            <SectionHeader title="Tamanho & espaçamento" icon={<MoveHorizontal className="w-3 h-3" />} />
-            <LabeledField label="Largura">
-              <Segmented value={p.fullWidth ? 'full' : 'auto'} onChange={v => up('fullWidth', v === 'full')} options={[
-                { value: 'auto', label: 'Auto', title: 'Largura automática' },
-                { value: 'full', label: 'Preencher', title: 'Preencher container' },
-              ]} />
-            </LabeledField>
-            {!p.fullWidth && (
-              <LabeledField label="Alinhamento">
-                <AlignButtons value={p.align || 'center'} onChange={v => up('align', v)} showFull={false} />
-              </LabeledField>
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              <LabeledField label="Padding vertical">
-                <UnitInput value={p.paddingV ?? 14} onChange={v => up('paddingV', v)} min={4} max={40} />
-              </LabeledField>
-              <LabeledField label="Padding horizontal">
-                <UnitInput value={p.paddingH ?? 28} onChange={v => up('paddingH', v)} min={4} max={80} />
-              </LabeledField>
-            </div>
-          </div>
+          </Group>
         </div>
 
       case 'image':
@@ -2364,7 +2355,11 @@ export default function PopupEditorPage() {
   const [showSuccess, setShowSuccess] = useState(false)
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   // Left sidebar view: 'hub' (overview with Styles/Targeting/Blocks cards) | 'styles' | 'targeting' | 'blocks'
-  const [leftView, setLeftView] = useState<'hub' | 'styles' | 'targeting' | 'blocks'>('hub')
+  // Persistent top-level tab in the left sidebar (Omnisend-style). No more
+  // drill-down + back button — the merchant always knows which section they're
+  // in and switching is one click. Default to "blocks" because that's the most
+  // common action when starting from a blank popup.
+  const [leftTab, setLeftTab] = useState<'blocks' | 'styles' | 'targeting'>('blocks')
   const [showPreview, setShowPreview] = useState(false)
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
@@ -2678,93 +2673,56 @@ export default function PopupEditorPage() {
                 <BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} />
               </div>
             </>
-          ) : leftView === 'hub' ? (
-            <>
-              {/* Hub view — Klaviyo-style minimal nav rows */}
-              <div className="flex-1 overflow-y-auto">
-                <div className="py-2">
-                  <button onClick={() => setLeftView('styles')}
-                    className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left group">
-                    <Palette className="w-[18px] h-[18px] text-gray-400 group-hover:text-gray-600 flex-shrink-0 transition-colors" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13.5px] font-medium text-gray-900">Estilos</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                  </button>
-                  <button onClick={() => setLeftView('targeting')}
-                    className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left group">
-                    <Target className="w-[18px] h-[18px] text-gray-400 group-hover:text-gray-600 flex-shrink-0 transition-colors" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13.5px] font-medium text-gray-900">Segmentação e comportamento</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                  </button>
-                  <button onClick={() => setLeftView('blocks')}
-                    className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left group">
-                    <LayoutGrid className="w-[18px] h-[18px] text-gray-400 group-hover:text-gray-600 flex-shrink-0 transition-colors" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13.5px] font-medium text-gray-900">Adicionar blocos</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : leftView === 'styles' ? (
-            <>
-              <div className="flex items-center gap-2.5 px-4 h-[44px] border-b border-gray-100 shrink-0">
-                <button onClick={() => setLeftView('hub')}
-                  className="p-1 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100 transition-colors">
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
-                <h2 className="text-[13px] font-semibold text-gray-900 flex-1">Estilos</h2>
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                <ThemePanel design={design} onChange={setDesign} onOpenMedia={openMediaLibrary} />
-              </div>
-            </>
-          ) : leftView === 'targeting' ? (
-            <>
-              <div className="flex items-center gap-2.5 px-4 h-[44px] border-b border-gray-100 shrink-0">
-                <button onClick={() => setLeftView('hub')}
-                  className="p-1 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100 transition-colors">
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
-                <h2 className="text-[13px] font-semibold text-gray-900 flex-1">Segmentação e comportamento</h2>
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                <BehaviorPanel
-                  beh={design.behavior}
-                  onChange={b => setDesign(d => ({ ...d, behavior: b }))}
-                  formId={formId}
-                  postSubmit={design.postSubmit || defaultDesign.postSubmit!}
-                  onPostSubmitChange={ps => setDesign(d => ({ ...d, postSubmit: ps }))}
-                  successMessage={design.successMessage || ''}
-                  onSuccessMessageChange={v => setDesign(d => ({ ...d, successMessage: v }))}
-                />
-              </div>
-            </>
           ) : (
             <>
-              <div className="flex items-center gap-2.5 px-4 h-[44px] border-b border-gray-100 shrink-0">
-                <button onClick={() => setLeftView('hub')}
-                  className="p-1 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100 transition-colors">
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
-                <h2 className="text-[13px] font-semibold text-gray-900 flex-1">Adicionar blocos</h2>
+              {/* Persistent tab bar — always visible, one-click switching.
+                  Replaces the old drill-down hub + back-button pattern. */}
+              <div className="flex border-b border-gray-100 shrink-0 bg-white">
+                {([
+                  { k: 'blocks', label: 'Blocos', Icon: LayoutGrid },
+                  { k: 'styles', label: 'Estilos', Icon: Palette },
+                  { k: 'targeting', label: 'Comportamento', Icon: Target },
+                ] as const).map(({ k, label, Icon }) => (
+                  <button
+                    key={k}
+                    onClick={() => setLeftTab(k)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 h-[44px] text-[12px] font-semibold transition-colors ${leftTab === k ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-700'}`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {label}
+                  </button>
+                ))}
               </div>
-              <div className="flex-1 overflow-y-auto px-4 py-4">
-                <div className="grid grid-cols-2 gap-1.5">
-                  {BLOCK_TYPES.map(bt => (
-                    <button key={bt.type} onClick={() => addBlock(bt.type)}
-                      title={`Adicionar ${bt.label}`}
-                      className="group flex flex-col items-center gap-1.5 py-3.5 px-2 rounded-lg border border-gray-100 bg-white hover:border-gray-300 hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900">
-                      <bt.icon className="w-5 h-5" />
-                      <span className="text-[11px] font-medium leading-tight text-center">{bt.label}</span>
-                    </button>
-                  ))}
+              {leftTab === 'blocks' ? (
+                <div className="flex-1 overflow-y-auto px-4 py-4">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {BLOCK_TYPES.map(bt => (
+                      <button key={bt.type} onClick={() => addBlock(bt.type)}
+                        title={`Adicionar ${bt.label}`}
+                        className="group flex flex-col items-center gap-1.5 py-3.5 px-2 rounded-lg border border-gray-100 bg-white hover:border-gray-300 hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900">
+                        <bt.icon className="w-5 h-5" />
+                        <span className="text-[11px] font-medium leading-tight text-center">{bt.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : leftTab === 'styles' ? (
+                <div className="flex-1 overflow-y-auto">
+                  <ThemePanel design={design} onChange={setDesign} onOpenMedia={openMediaLibrary} />
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto">
+                  <BehaviorPanel
+                    beh={design.behavior}
+                    onChange={b => setDesign(d => ({ ...d, behavior: b }))}
+                    formId={formId}
+                    postSubmit={design.postSubmit || defaultDesign.postSubmit!}
+                    onPostSubmitChange={ps => setDesign(d => ({ ...d, postSubmit: ps }))}
+                    successMessage={design.successMessage || ''}
+                    onSuccessMessageChange={v => setDesign(d => ({ ...d, successMessage: v }))}
+                  />
+                </div>
+              )}
             </>
           )}
         </aside>
