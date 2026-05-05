@@ -383,6 +383,7 @@ function InputBlockPreview({ block, children }: { block: Block; children?: React
 function InlineEditable({
   value,
   onCommit,
+  onFocus,
   tag = 'div',
   style,
   className,
@@ -393,6 +394,7 @@ function InlineEditable({
 }: {
   value: string
   onCommit: (v: string) => void
+  onFocus?: () => void
   tag?: string
   style?: React.CSSProperties
   className?: string
@@ -446,11 +448,19 @@ function InlineEditable({
         if (e.key === 'Escape') { (e.currentTarget as HTMLElement).blur(); return }
         if (singleLine && e.key === 'Enter') { e.preventDefault(); (e.currentTarget as HTMLElement).blur() }
       }}
+      onFocus={() => { if (editable) onFocus?.() }}
       onBlur={(e: React.FocusEvent<HTMLElement>) => {
         const txt = e.currentTarget.innerText.replace(/\u00A0/g, ' ')
         if (txt !== (value ?? '')) onCommit(txt)
       }}
       onClick={(e: React.MouseEvent) => { if (editable) e.stopPropagation() }}
+      onMouseDown={(e: React.MouseEvent) => {
+        // Stop propagation BEFORE the focus event, so the outer block's
+        // click-to-select doesn't override the contentEditable's native
+        // cursor-positioning. This makes a click on the text put the caret
+        // exactly where the user clicked, like in Omnisend.
+        if (editable) e.stopPropagation()
+      }}
       className={`worder-inline-editable ${className || ''}`}
       style={{
         outline: 'none',
@@ -470,15 +480,19 @@ function InlineEditableStyles() {
         color: rgba(0,0,0,0.3);
         pointer-events: none;
       }
+      .worder-inline-editable[contenteditable="true"] { cursor: text; }
+      .worder-inline-editable[contenteditable="true"]:hover {
+        box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.25) inset;
+      }
       .worder-inline-editable[contenteditable="true"]:focus {
-        box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.15) inset;
+        box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.5) inset;
       }
     ` }} />
   )
 }
 
 // ── Block Renderer (canvas) ────────────────────────────────────────────────────
-function BlockPreview({ block, selected, onContentChange }: { block: Block; selected?: boolean; onContentChange?: (key: string, value: string) => void }) {
+function BlockPreview({ block, selected, onContentChange, onSelect }: { block: Block; selected?: boolean; onContentChange?: (key: string, value: string) => void; onSelect?: () => void }) {
   const p = block.props
   const blockStyle: React.CSSProperties = {
     marginTop: p.marginTop || 0, marginBottom: p.marginBottom ?? 8,
@@ -514,14 +528,18 @@ function BlockPreview({ block, selected, onContentChange }: { block: Block; sele
         marginBottom: blockStyle.marginBottom ?? 8,
       }
       if (onContentChange) {
+        // Always editable so a single click on the text positions the
+        // caret where the user clicked (Omnisend-style). Focusing the
+        // text auto-selects the block.
         return (
           <InlineEditable
             tag={Tag}
             value={p.content || ''}
-            editable={!!selected}
-            autoFocus={!!selected}
+            editable={true}
+            autoFocus={false}
             placeholder="Digite seu texto..."
             onCommit={(v) => onContentChange('content', v)}
+            onFocus={onSelect}
             style={textStyle}
           />
         )
@@ -559,11 +577,12 @@ function BlockPreview({ block, selected, onContentChange }: { block: Block; sele
           <InlineEditable
             tag="button"
             value={p.text || ''}
-            editable={!!selected}
-            autoFocus={!!selected}
+            editable={true}
+            autoFocus={false}
             singleLine
             placeholder="Clique para editar..."
             onCommit={(v) => onContentChange('text', v)}
+            onFocus={onSelect}
             style={btnStyle}
           />
         ) : (
@@ -2167,72 +2186,42 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
 }
 
 // ── Sortable Block Wrapper ────────────────────────────────────────────────────
-function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate, onContentChange, onPropChange }: {
+function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate, onContentChange }: {
   block: Block; isSelected: boolean; onSelect: () => void; onDelete: () => void; onDuplicate: () => void
   onContentChange: (key: string, value: string) => void
-  onPropChange: (key: string, value: any) => void
+  onPropChange?: (key: string, value: any) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id })
-  const p = block.props
-  const isText = block.type === 'text'
-  const isButton = block.type === 'button'
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
-      className={`group relative rounded transition ${isSelected ? 'ring-2 ring-gray-400/60 ring-offset-2 ring-offset-white' : 'hover:ring-1 hover:ring-gray-300 cursor-pointer'}`}>
-      {/* Visible drag handle pill — sits at top-center of the block, inside bounds */}
-      <div {...attributes} {...listeners}
-        className={`absolute left-1/2 -translate-x-1/2 top-0.5 z-10 flex items-center gap-1 px-2 h-5 bg-white border border-gray-200 rounded shadow-sm text-[10px] font-medium text-gray-500 cursor-grab active:cursor-grabbing transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-        title="Arraste para reordenar"
-        onClick={e => e.stopPropagation()}>
-        <GripHorizontal className="w-3 h-3" />
-        <span>Arrastar</span>
-      </div>
-      {/* Floating inline format toolbar (text only, when selected) */}
-      {isSelected && isText && (
-        <div
-          onMouseDown={e => e.preventDefault()}
-          className="absolute left-1/2 -translate-x-1/2 -top-11 z-20 flex items-center gap-0.5 bg-gray-900 text-white rounded-lg shadow-lg px-1 py-1">
-          <button onClick={(e) => { e.stopPropagation(); onPropChange('fontWeight', p.fontWeight === 'bold' ? 'normal' : 'bold') }}
-            className={`px-2 py-1 text-xs font-bold rounded hover:bg-white/10 ${p.fontWeight === 'bold' ? 'bg-white/20' : ''}`} title="Negrito">B</button>
-          <button onClick={(e) => { e.stopPropagation(); onPropChange('fontStyle', p.fontStyle === 'italic' ? 'normal' : 'italic') }}
-            className={`px-2 py-1 text-xs italic rounded hover:bg-white/10 ${p.fontStyle === 'italic' ? 'bg-white/20' : ''}`} title="Itálico">I</button>
-          <button onClick={(e) => { e.stopPropagation(); onPropChange('textDecoration', p.textDecoration === 'underline' ? 'none' : 'underline') }}
-            className={`px-2 py-1 text-xs underline rounded hover:bg-white/10 ${p.textDecoration === 'underline' ? 'bg-white/20' : ''}`} title="Sublinhado">U</button>
-          <div className="w-px h-4 bg-white/20 mx-0.5" />
-          {['left','center','right'].map(a => (
-            <button key={a} onClick={(e) => { e.stopPropagation(); onPropChange('align', a) }}
-              className={`px-2 py-1 text-[10px] rounded hover:bg-white/10 ${p.align === a ? 'bg-white/20' : ''}`} title={`Alinhar ${a}`}>
-              {a === 'left' ? '⇤' : a === 'center' ? '≡' : '⇥'}
-            </button>
-          ))}
-          <div className="w-px h-4 bg-white/20 mx-0.5" />
-          <select value={p.tag || 'p'} onChange={(e) => { e.stopPropagation(); onPropChange('tag', e.target.value) }}
-            onClick={e => e.stopPropagation()}
-            className="bg-transparent text-[11px] px-1 py-0.5 rounded focus:outline-none cursor-pointer hover:bg-white/10" title="Estilo">
-            <option value="h1" className="text-gray-900">H1</option>
-            <option value="h2" className="text-gray-900">H2</option>
-            <option value="h3" className="text-gray-900">H3</option>
-            <option value="p" className="text-gray-900">P</option>
-          </select>
-        </div>
-      )}
-      {/* Floating toolbar for button blocks */}
-      {isSelected && isButton && (
-        <div
-          onMouseDown={e => e.preventDefault()}
-          className="absolute left-1/2 -translate-x-1/2 -top-11 z-20 flex items-center gap-1 bg-gray-900 text-white rounded-lg shadow-lg px-2 py-1.5 text-[11px]">
-          <span className="text-white/60">Editando botão — clique fora p/ concluir</span>
-        </div>
-      )}
-      <BlockPreview block={block} selected={isSelected} onContentChange={onContentChange} />
-      {/* Action buttons — visible while selected, top-right corner */}
+      className={`group relative rounded transition ${isSelected ? 'outline outline-2 outline-offset-1 outline-brand-500/70' : 'hover:outline hover:outline-1 hover:outline-gray-300 cursor-pointer'}`}>
+      {/* Omnisend-style side toolbar — small, icon-only, sits to the LEFT of the
+          selected block. Drag, duplicate, delete. No scary buttons-on-top. */}
       {isSelected && (
-        <div className="absolute top-0.5 right-0.5 flex items-center gap-0.5 bg-white border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5 z-10">
-          <button onClick={e => { e.stopPropagation(); onDuplicate() }} className="p-1 text-gray-400 hover:text-gray-700 rounded" title="Duplicar"><Copy className="w-3 h-3" /></button>
-          <button onClick={e => { e.stopPropagation(); onDelete() }} className="p-1 text-gray-400 hover:text-red-500 rounded" title="Remover"><Trash2 className="w-3 h-3" /></button>
+        <div
+          onMouseDown={e => e.preventDefault()}
+          onClick={e => e.stopPropagation()}
+          className="absolute -left-10 top-0 z-20 flex flex-col items-center gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5"
+        >
+          <button {...attributes} {...listeners}
+            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded cursor-grab active:cursor-grabbing"
+            title="Arraste para reordenar">
+            <GripHorizontal className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => onDuplicate()}
+            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded"
+            title="Duplicar">
+            <Copy className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => onDelete()}
+            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
+            title="Remover">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
+      <BlockPreview block={block} selected={isSelected} onContentChange={onContentChange} onSelect={onSelect} />
     </div>
   )
 }
