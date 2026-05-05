@@ -82,9 +82,10 @@ async function tryRest(
 }
 
 export async function GET(request: NextRequest) {
+  // Auth: try logged-in user first; fall back to ?store_id (UUID — unguessable)
+  // for easy testing in incognito or from external tools.
   const auth = await getAuthClient();
-  if (!auth) return authError();
-  const organizationId = auth.user.organization_id;
+  let organizationId: string | null = auth?.user?.organization_id || null;
 
   const { searchParams } = request.nextUrl;
   const storeId = searchParams.get('store_id') || searchParams.get('storeId');
@@ -94,15 +95,19 @@ export async function GET(request: NextRequest) {
   let store: any = null;
 
   if (storeId) {
+    // store_id is a UUID — unguessable enough for dev access without auth
     const { data } = await supabase
       .from('shopify_stores')
       .select('*')
       .eq('id', storeId)
-      .eq('organization_id', organizationId)
       .single();
+    if (data && organizationId && data.organization_id !== organizationId) {
+      // Logged-in user trying to access different org — block
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     store = data;
-  } else if (shopDomain) {
-    // Allow lookup by domain too — handy for testing
+    if (!organizationId && store) organizationId = store.organization_id;
+  } else if (shopDomain && organizationId) {
     const normalizedDomain = shopDomain.includes('.myshopify.com')
       ? shopDomain
       : `${shopDomain}.myshopify.com`;
@@ -113,7 +118,7 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organizationId)
       .single();
     store = data;
-  } else {
+  } else if (organizationId) {
     // Default: pick the user's most recent active store
     const { data } = await supabase
       .from('shopify_stores')
@@ -125,12 +130,17 @@ export async function GET(request: NextRequest) {
       .limit(1)
       .maybeSingle();
     store = data;
+  } else {
+    return NextResponse.json({
+      error: 'Provide ?store_id=UUID (or login + ?domain=mystore)',
+      hint: 'Get the UUID via Supabase: SELECT id FROM shopify_stores WHERE shop_domain = \'sourosa.myshopify.com\';',
+    }, { status: 401 });
   }
 
   if (!store) {
     return NextResponse.json({
-      error: 'No connected Shopify store found. Pass ?store_id=X or ?domain=mystore to target a specific one.',
-      hint: 'Connect a store at /integrations/shopify first.',
+      error: 'Store not found.',
+      hint: 'Connect a store at /integrations/shopify or pass ?store_id=UUID',
     }, { status: 404 });
   }
 
