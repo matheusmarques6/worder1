@@ -20,6 +20,7 @@ import {
   CheckCircle,
   Copy,
   Share2,
+  ArrowRight as ArrowRightIcon,
   ShoppingCart,
   UserPlus,
   Package,
@@ -30,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { useAuthStore, useStoreStore } from '@/stores';
 import { FlowBuilder, getFlowDataForSave } from '@/components/flow-builder';
 import { CloneToStoreModal } from '@/components/ui/CloneToStoreModal';
+import { MoveToStoreModal } from '@/components/ui/MoveToStoreModal';
 import { FLOW_TEMPLATES } from '@/lib/automation/flow-templates';
 import type { FlowTemplate } from '@/lib/automation/flow-templates';
 
@@ -112,6 +114,7 @@ export default function AutomationsPage() {
   const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [cloneToStoreTarget, setCloneToStoreTarget] = useState<{ id: string; name: string } | null>(null);
+  const [moveToStoreTarget, setMoveToStoreTarget] = useState<{ id: string; name: string } | null>(null);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -778,6 +781,13 @@ export default function AutomationsPage() {
                   >
                     <Share2 className="w-3.5 h-3.5" />
                   </button>
+                  <button
+                    onClick={() => setMoveToStoreTarget({ id: automation.id, name: automation.name })}
+                    className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                    title="Mover para outra loja"
+                  >
+                    <ArrowRightIcon className="w-3.5 h-3.5" />
+                  </button>
                   {confirmDelete === automation.id ? (
                     <button
                       onClick={() => handleDelete(automation.id)}
@@ -827,6 +837,22 @@ export default function AutomationsPage() {
           subresourceLabel="template"
           onCloned={() => {
             setToast({ msg: `Automação clonada com sucesso!`, type: 'success' });
+          }}
+        />
+      )}
+
+      {/* Move to Store modal */}
+      {moveToStoreTarget && (
+        <MoveToStoreModal
+          open={!!moveToStoreTarget}
+          onClose={() => setMoveToStoreTarget(null)}
+          endpoint={`/api/automations/${moveToStoreTarget.id}/move-to-store`}
+          resourceName={moveToStoreTarget.name}
+          resourceLabel="Automação"
+          currentStoreId={currentStore?.id}
+          onMoved={() => {
+            // Reload list since the moved automation no longer belongs to current store
+            window.location.reload();
           }}
         />
       )}

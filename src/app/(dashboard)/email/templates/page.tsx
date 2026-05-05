@@ -14,10 +14,12 @@ import {
   FileText,
   Tag,
   Share2,
+  ArrowRight,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useStoreStore } from '@/stores'
 import { CloneToStoreModal } from '@/components/ui/CloneToStoreModal'
+import { MoveToStoreModal } from '@/components/ui/MoveToStoreModal'
 
 interface EmailTemplate {
   id: string
@@ -51,6 +53,7 @@ export default function EmailTemplatesPage() {
   const [search, setSearch] = useState('')
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [cloneTarget, setCloneTarget] = useState<{ id: string; name: string } | null>(null)
+  const [moveTarget, setMoveTarget] = useState<{ id: string; name: string } | null>(null)
   const { currentStore } = useStoreStore()
 
   const fetchTemplates = useCallback(async () => {
@@ -315,6 +318,16 @@ export default function EmailTemplatesPage() {
                             Clonar para outra loja
                           </button>
                           <button
+                            onClick={() => {
+                              setActiveMenu(null);
+                              setMoveTarget({ id: template.id, name: template.name });
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                          >
+                            <ArrowRight className="w-4 h-4" />
+                            Mover para outra loja
+                          </button>
+                          <button
                             onClick={() => { setActiveMenu(null); handleDelete(template.id); }}
                             className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
                           >
@@ -341,6 +354,18 @@ export default function EmailTemplatesPage() {
           resourceLabel="Template"
           currentStoreId={currentStore?.id}
           onCloned={() => fetchTemplates()}
+        />
+      )}
+
+      {moveTarget && (
+        <MoveToStoreModal
+          open={!!moveTarget}
+          onClose={() => setMoveTarget(null)}
+          endpoint={`/api/email/templates/${moveTarget.id}/move-to-store`}
+          resourceName={moveTarget.name}
+          resourceLabel="Template"
+          currentStoreId={currentStore?.id}
+          onMoved={() => fetchTemplates()}
         />
       )}
     </div>
