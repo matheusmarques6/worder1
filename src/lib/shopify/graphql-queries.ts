@@ -231,8 +231,6 @@ export const ORDERS_QUERY = `
             currencyCode
           }
         }
-        displayFinancialStatus
-        displayFulfillmentStatus
         customer {
           id
           firstName
