@@ -88,21 +88,50 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const storeId = searchParams.get('store_id') || searchParams.get('storeId');
-
-  if (!storeId) {
-    return NextResponse.json({ error: 'store_id required' }, { status: 400 });
-  }
+  const shopDomain = searchParams.get('domain') || searchParams.get('shop');
 
   const supabase = getSupabaseAdmin();
-  const { data: store, error: storeErr } = await supabase
-    .from('shopify_stores')
-    .select('*')
-    .eq('id', storeId)
-    .eq('organization_id', organizationId)
-    .single();
+  let store: any = null;
 
-  if (storeErr || !store) {
-    return NextResponse.json({ error: 'Store not found or no access' }, { status: 404 });
+  if (storeId) {
+    const { data } = await supabase
+      .from('shopify_stores')
+      .select('*')
+      .eq('id', storeId)
+      .eq('organization_id', organizationId)
+      .single();
+    store = data;
+  } else if (shopDomain) {
+    // Allow lookup by domain too — handy for testing
+    const normalizedDomain = shopDomain.includes('.myshopify.com')
+      ? shopDomain
+      : `${shopDomain}.myshopify.com`;
+    const { data } = await supabase
+      .from('shopify_stores')
+      .select('*')
+      .eq('shop_domain', normalizedDomain)
+      .eq('organization_id', organizationId)
+      .single();
+    store = data;
+  } else {
+    // Default: pick the user's most recent active store
+    const { data } = await supabase
+      .from('shopify_stores')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+      .not('access_token', 'is', null)
+      .order('installed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    store = data;
+  }
+
+  if (!store) {
+    return NextResponse.json({
+      error: 'No connected Shopify store found. Pass ?store_id=X or ?domain=mystore to target a specific one.',
+      hint: 'Connect a store at /integrations/shopify first.',
+    }, { status: 404 });
   }
 
   if (!store.access_token) {
