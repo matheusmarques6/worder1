@@ -313,16 +313,14 @@ export const ORDERS_QUERY = `
           }
         }
         transactions(first: 10) {
-          nodes {
-            id
-            gateway
-            kind
-            status
-            amountSet {
-              shopMoney {
-                amount
-                currencyCode
-              }
+          id
+          gateway
+          kind
+          status
+          amountSet {
+            shopMoney {
+              amount
+              currencyCode
             }
           }
         }
