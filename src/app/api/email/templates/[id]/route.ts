@@ -51,9 +51,11 @@ export async function PUT(
     if (!auth) return authError();
 
     const { searchParams } = request.nextUrl;
-    const storeId = searchParams.get('store_id');
+    const storeIdParam = searchParams.get('store_id') || searchParams.get('storeId');
 
     const body = await request.json();
+    const storeIdFromBody = body.store_id || body.storeId;
+    const targetStoreId = storeIdParam || storeIdFromBody;
 
     const updateData: Record<string, any> = {
       updated_at: new Date().toISOString(),
@@ -73,15 +75,27 @@ export async function PUT(
       updateData.design_json = designValue;
     }
 
-    let updateQuery = supabaseAdmin
+    // Auto-assign store_id to orphan templates (NULL store_id) when caller
+    // provides one. This way: editing a legacy template inside an automation
+    // automatically attaches it to the current store, fixing the orphan
+    // problem retroactively without manual SQL.
+    if (targetStoreId) {
+      const { data: existing } = await supabaseAdmin
+        .from('email_templates')
+        .select('store_id')
+        .eq('id', params.id)
+        .eq('organization_id', auth.user.organization_id)
+        .single();
+      if (existing && !existing.store_id) {
+        updateData.store_id = targetStoreId;
+      }
+    }
+
+    const updateQuery = supabaseAdmin
       .from('email_templates')
       .update(updateData)
       .eq('id', params.id)
       .eq('organization_id', auth.user.organization_id);
-
-    if (storeId) {
-      updateQuery = updateQuery.eq('store_id', storeId);
-    }
 
     const { data: template, error } = await updateQuery
       .select()

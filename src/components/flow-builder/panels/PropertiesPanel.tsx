@@ -2146,10 +2146,16 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
   }, [nodes]);
 
   const fetchTemplates = useCallback(async () => {
+    if (!storeId) {
+      // Without a store context, we don't know which templates to show.
+      // Don't fall back to fetching ALL — that leaks templates across stores.
+      setTemplates([]);
+      setLoadingTemplates(false);
+      return;
+    }
     setLoadingTemplates(true);
     try {
-      const url = storeId ? `/api/email/templates?storeId=${storeId}` : '/api/email/templates';
-      const res = await fetch(url);
+      const res = await fetch(`/api/email/templates?storeId=${storeId}`);
       if (res.ok) {
         const data = await res.json();
         setTemplates(data.templates || data || []);
@@ -2465,6 +2471,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
           templateId={editorTemplateId || config.templateId}
           triggerType={triggerType}
           organizationId={organizationId}
+          storeId={storeId}
           flowName={automationName}
           emailSiblings={emailSiblings}
           onNavigate={(newTemplateId) => {

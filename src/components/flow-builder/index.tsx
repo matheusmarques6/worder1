@@ -33,6 +33,7 @@ interface FlowBuilderProps {
   automationId?: string;
   automationName?: string;
   automationStatus?: 'draft' | 'active' | 'paused' | 'error';
+  automationStoreId?: string;
   initialNodes?: any[];
   initialEdges?: any[];
   onSave: () => Promise<string | undefined>;
@@ -47,6 +48,7 @@ export function FlowBuilder({
   automationId,
   automationName = 'Nova Automação',
   automationStatus = 'draft',
+  automationStoreId,
   initialNodes = [],
   initialEdges = [],
   onSave,
@@ -148,6 +150,7 @@ export function FlowBuilder({
       status: automationStatus,
       nodes: convertedNodes,
       edges: convertedEdges,
+      config: automationStoreId ? { storeId: automationStoreId } : undefined,
     });
 
     // Keyboard shortcuts

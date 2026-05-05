@@ -14,6 +14,7 @@ interface EmailEditorOverlayProps {
   templateId: string;
   triggerType?: string;
   organizationId?: string;
+  storeId?: string;
   onClose: () => void;
   flowName?: string;
   emailSiblings?: EmailSiblingItem[];
@@ -24,6 +25,7 @@ export function EmailEditorOverlay({
   templateId,
   triggerType,
   organizationId,
+  storeId,
   onClose,
   flowName,
   emailSiblings,
@@ -65,10 +67,14 @@ export function EmailEditorOverlay({
 
   const handleSave = async (design: Record<string, any>, html: string) => {
     try {
-      const res = await fetch(`/api/email/templates/${templateId}`, {
+      // Include storeId so the API auto-attaches orphan templates to current store
+      const url = storeId
+        ? `/api/email/templates/${templateId}?storeId=${storeId}`
+        : `/api/email/templates/${templateId}`;
+      const res = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ design, design_json: design, html }),
+        body: JSON.stringify({ design, design_json: design, html, store_id: storeId }),
       });
       if (!res.ok) return false;
       return true;

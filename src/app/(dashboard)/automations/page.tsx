@@ -427,6 +427,7 @@ export default function AutomationsPage() {
               automationId={editingAutomation.id}
               automationName={editingAutomation.name}
               automationStatus={editingAutomation.status}
+              automationStoreId={(editingAutomation as any).store_id || currentStore?.id}
               initialNodes={editingAutomation.nodes || []}
               initialEdges={editingAutomation.edges || []}
               onSave={handleSave}
