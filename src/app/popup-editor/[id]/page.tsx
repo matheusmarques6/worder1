@@ -625,6 +625,216 @@ function BlockPreview({ block, selected, onContentChange }: { block: Block; sele
   }
 }
 
+// ── Block Props Editor primitives ────────────────────────────────────────────
+// IMPORTANT: these MUST live at module scope. Defining them inside BlockEditor
+// makes them new function references on every render, which makes React treat
+// every <UnitInput/> etc. as a different component type and unmount/remount
+// the underlying <input>. That destroys focus on every keystroke — typing "10"
+// in a px field would commit "1", lose focus, and require another click to
+// type the second digit. Keep these out of BlockEditor.
+
+const AlignButtons = ({ value, onChange: oc, showFull = true }: { value: string; onChange: (v: string) => void; showFull?: boolean }) => {
+  const opts: Array<{ v: string; I: React.ComponentType<any>; label: string }> = [
+    { v: 'left', I: AlignLeft, label: 'Esquerda' },
+    { v: 'center', I: AlignCenter, label: 'Centro' },
+    { v: 'right', I: AlignRight, label: 'Direita' },
+  ]
+  if (showFull) opts.push({ v: 'full', I: AlignJustify, label: 'Preencher' })
+  return (
+    <div className="inline-flex border border-gray-200 rounded-lg overflow-hidden bg-white w-full">
+      {opts.map(({ v, I, label }) => (
+        <button key={v} onClick={() => oc(v)} title={label}
+          className={`flex-1 py-2 flex items-center justify-center transition-colors ${value === v ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+          <I className="w-3.5 h-3.5" />
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const Toggle = ({ label, checked, onChange: oc, hint }: { label: string; checked: boolean; onChange: (v: boolean) => void; hint?: string }) => (
+  <div className="flex items-start gap-3 py-1 min-w-0">
+    <div className="flex-1 min-w-0">
+      <p className="text-[13px] text-gray-800 leading-tight">{label}</p>
+      {hint && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{hint}</p>}
+    </div>
+    <button type="button" onClick={() => oc(!checked)}
+      className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-brand-500' : 'bg-gray-200'}`}>
+      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+    </button>
+  </div>
+)
+
+const LabeledField = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
+  <div>
+    <label className="block text-[12px] font-medium text-gray-800">{label}</label>
+    {hint && <p className="text-[11px] text-gray-400 mt-0.5 mb-1.5 leading-snug">{hint}</p>}
+    <div className={hint ? '' : 'mt-1'}>{children}</div>
+  </div>
+)
+
+const Group = ({ title, children, defaultOpen = true, icon }: { title: string; children: React.ReactNode; defaultOpen?: boolean; icon?: React.ReactNode }) => {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="border-t border-gray-100 first:border-t-0">
+      <button onClick={() => setOpen(!open)} className="flex items-center justify-between w-full py-3 text-[13px] font-semibold text-gray-800 hover:text-gray-900">
+        <span className="flex items-center gap-2">
+          {icon && <span className="text-gray-400">{icon}</span>}
+          {title}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? '' : '-rotate-90'}`} />
+      </button>
+      {open && <div className="pb-4 space-y-3">{children}</div>}
+    </div>
+  )
+}
+
+const ColorRow = ({ label, value, onChange: oc, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) => (
+  <LabeledField label={label} hint={hint}>
+    <ColorPicker value={value || ''} onChange={oc} />
+  </LabeledField>
+)
+const CleanColor = ColorRow
+const ColorField = ColorRow
+
+const UnitInput = ({ value, onChange: oc, unit = 'px', min = 0, max = 999, step = 1, className = '' }: { value: number; onChange: (v: number) => void; unit?: string; min?: number; max?: number; step?: number; className?: string }) => (
+  <div className={`relative ${className}`}>
+    <input type="number" min={min} max={max} step={step}
+      className="w-full border border-gray-200 rounded-lg px-3 py-2 pr-8 text-[13px] text-gray-800 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-colors"
+      value={value} onChange={e => oc(+e.target.value)} />
+    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-gray-400">{unit}</span>
+  </div>
+)
+
+const Stepper = ({ value, onChange: oc, min = 0, max = 999, step = 1, unit }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; unit?: string }) => (
+  <div className="inline-flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+    <button type="button" onClick={() => oc(Math.max(min, value - step))}
+      className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors">
+      <Minus className="w-3 h-3" />
+    </button>
+    <input type="number" min={min} max={max} step={step}
+      value={value}
+      onChange={e => oc(+e.target.value)}
+      className="w-12 h-8 text-center text-[12px] text-gray-800 bg-transparent outline-none border-x border-gray-200" />
+    <button type="button" onClick={() => oc(Math.min(max, value + step))}
+      className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors">
+      <Plus className="w-3 h-3" />
+    </button>
+    {unit && <span className="px-2 text-[10px] text-gray-400 border-l border-gray-200 h-8 flex items-center">{unit}</span>}
+  </div>
+)
+
+const Slider = ({ value, onChange: oc, min = 0, max = 100, step = 1, unit = 'px' }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; unit?: string }) => (
+  <div className="flex items-center gap-3">
+    <input type="range" min={min} max={max} step={step} value={value} onChange={e => oc(+e.target.value)}
+      className="flex-1 accent-brand-500 h-1" />
+    <div className="flex items-center gap-1 w-[64px] justify-end">
+      <input type="number" min={min} max={max} step={step} value={value} onChange={e => oc(+e.target.value)}
+        className="w-10 px-1.5 py-1 text-[11px] text-gray-800 border border-gray-200 rounded text-center outline-none focus:border-brand-500" />
+      <span className="text-[10px] text-gray-400">{unit}</span>
+    </div>
+  </div>
+)
+
+const Segmented = <T extends string,>({ value, onChange: oc, options }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label?: string; icon?: React.ReactNode; title?: string }> }) => (
+  <div className="flex border border-gray-200 rounded-lg overflow-hidden bg-white">
+    {options.map(opt => (
+      <button key={opt.value} type="button" onClick={() => oc(opt.value)} title={opt.title}
+        className={`flex-1 py-2 px-2 flex items-center justify-center gap-1.5 text-[12px] font-medium transition-colors ${value === opt.value ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+        {opt.icon}
+        {opt.label && <span className="truncate">{opt.label}</span>}
+      </button>
+    ))}
+  </div>
+)
+
+const FontSelect = ({ value, onChange: oc }: { value: string; onChange: (v: string) => void }) => {
+  const fonts = [
+    { v: 'inherit', l: 'Padrão' },
+    { v: "'Inter', sans-serif", l: 'Inter' },
+    { v: "'Montserrat', sans-serif", l: 'Montserrat' },
+    { v: "'Poppins', sans-serif", l: 'Poppins' },
+    { v: "'Roboto', sans-serif", l: 'Roboto' },
+    { v: "'Open Sans', sans-serif", l: 'Open Sans' },
+    { v: 'Georgia, serif', l: 'Georgia' },
+    { v: "'Times New Roman', serif", l: 'Times New Roman' },
+    { v: 'Arial, sans-serif', l: 'Arial' },
+    { v: "'Helvetica Neue', sans-serif", l: 'Helvetica' },
+  ]
+  return (
+    <select className={sel} value={value || 'inherit'} onChange={e => oc(e.target.value)}
+      style={{ fontFamily: value || 'inherit' }}>
+      {fonts.map(f => <option key={f.v} value={f.v} style={{ fontFamily: f.v }}>{f.l}</option>)}
+    </select>
+  )
+}
+
+const SectionHeader = ({ title }: { title: string; icon?: React.ReactNode }) => (
+  <div className="pt-1 pb-1">
+    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">{title}</p>
+  </div>
+)
+
+// Single padding-side number input. Used by PaddingControl below — kept at
+// module scope (not nested) so its <input> doesn't remount per keystroke.
+const PaddingNum = ({ value, onChange: oc }: { value: number; onChange: (v: number) => void }) => (
+  <div className="relative">
+    <input type="number" min={0} max={120}
+      className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-gray-800 text-center outline-none focus:border-brand-500"
+      value={value} onChange={e => oc(+e.target.value)} />
+    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span>
+  </div>
+)
+
+const PaddingControl = ({ p, up, prefix, defaults }: { p: any; up: (k: string, v: any) => void; prefix: 'padding' | 'inputPad' | 'blockPad'; defaults?: { t?: number; r?: number; b?: number; l?: number } }) => {
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+  const keyT = prefix === 'padding' ? 'paddingTop' : `${prefix}${cap('top')}`
+  const keyR = prefix === 'padding' ? 'paddingRight' : `${prefix}${cap('right')}`
+  const keyB = prefix === 'padding' ? 'paddingBottom' : `${prefix}${cap('bottom')}`
+  const keyL = prefix === 'padding' ? 'paddingLeft' : `${prefix}${cap('left')}`
+  const d = defaults || {}
+  return (
+    <div className="grid grid-cols-3 gap-1.5 max-w-[220px] mx-auto">
+      <div />
+      <PaddingNum value={p[keyT] ?? (d.t ?? 0)} onChange={v => up(keyT, v)} />
+      <div />
+      <PaddingNum value={p[keyL] ?? (d.l ?? 0)} onChange={v => up(keyL, v)} />
+      <div className="flex items-center justify-center">
+        <div className="w-7 h-7 rounded-sm bg-gradient-to-br from-gray-100 to-gray-50 border border-gray-200" />
+      </div>
+      <PaddingNum value={p[keyR] ?? (d.r ?? 0)} onChange={v => up(keyR, v)} />
+      <div />
+      <PaddingNum value={p[keyB] ?? (d.b ?? 0)} onChange={v => up(keyB, v)} />
+      <div />
+    </div>
+  )
+}
+
+const TextFormat = ({ p, up, keyWeight = 'fontWeight', keyStyle = 'fontStyle', keyDeco = 'textDecoration' }: { p: any; up: (k: string, v: any) => void; keyWeight?: string; keyStyle?: string; keyDeco?: string }) => (
+  <div className="inline-flex items-center gap-0.5 border border-gray-200 rounded-lg p-0.5 bg-white">
+    <button onClick={() => up(keyWeight, p[keyWeight] === 'bold' ? 'normal' : 'bold')}
+      className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${p[keyWeight] === 'bold' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`} title="Negrito">
+      <Bold className="w-3.5 h-3.5" />
+    </button>
+    <button onClick={() => up(keyStyle, p[keyStyle] === 'italic' ? 'normal' : 'italic')}
+      className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${p[keyStyle] === 'italic' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`} title="Itálico">
+      <Italic className="w-3.5 h-3.5" />
+    </button>
+    <button onClick={() => up(keyDeco, p[keyDeco] === 'underline' ? 'none' : 'underline')}
+      className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${p[keyDeco] === 'underline' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`} title="Sublinhado">
+      <Underline className="w-3.5 h-3.5" />
+    </button>
+  </div>
+)
+
+const BorderStyleControl = ({ p, up }: { p: any; up: (k: string, v: any) => void }) => (
+  <Segmented value={p.borderStyle || 'solid'} onChange={v => up('borderStyle', v)} options={[
+    { value: 'solid', label: '───', title: 'Sólida' },
+    { value: 'dashed', label: '╌╌╌', title: 'Tracejada' },
+    { value: 'dotted', label: '· · ·', title: 'Pontilhada' },
+  ]} />
+)
+
 // ── Block Props Editor (Klaviyo-style per-block panels) ──────────────────────
 function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void }) {
   const up = (key: string, val: any) => onChange({ ...block, props: { ...block.props, [key]: val } })
@@ -638,221 +848,6 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     'legal-consent': 'Consentimento', text: 'Conteúdo', button: 'Botão', image: 'Imagem',
     spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem',
   }
-
-  // ── Polished primitives (Klaviyo-level) ──────────────────────────────────
-  const AlignButtons = ({ value, onChange: oc, showFull = true }: { value: string; onChange: (v: string) => void; showFull?: boolean }) => {
-    const opts: Array<{ v: string; I: React.ComponentType<any>; label: string }> = [
-      { v: 'left', I: AlignLeft, label: 'Esquerda' },
-      { v: 'center', I: AlignCenter, label: 'Centro' },
-      { v: 'right', I: AlignRight, label: 'Direita' },
-    ]
-    if (showFull) opts.push({ v: 'full', I: AlignJustify, label: 'Preencher' })
-    return (
-      <div className="inline-flex border border-gray-200 rounded-lg overflow-hidden bg-white w-full">
-        {opts.map(({ v, I, label }) => (
-          <button key={v} onClick={() => oc(v)} title={label}
-            className={`flex-1 py-2 flex items-center justify-center transition-colors ${value === v ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
-            <I className="w-3.5 h-3.5" />
-          </button>
-        ))}
-      </div>
-    )
-  }
-
-  // Inline toggle row — label on left, switch on right
-  const Toggle = ({ label, checked, onChange: oc, hint }: { label: string; checked: boolean; onChange: (v: boolean) => void; hint?: string }) => (
-    <div className="flex items-start gap-3 py-1 min-w-0">
-      <div className="flex-1 min-w-0">
-        <p className="text-[13px] text-gray-800 leading-tight">{label}</p>
-        {hint && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{hint}</p>}
-      </div>
-      <button type="button" onClick={() => oc(!checked)}
-        className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-brand-500' : 'bg-gray-200'}`}>
-        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-      </button>
-    </div>
-  )
-
-  // Labeled field with helper text
-  const LabeledField = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
-    <div>
-      <label className="block text-[12px] font-medium text-gray-800">{label}</label>
-      {hint && <p className="text-[11px] text-gray-400 mt-0.5 mb-1.5 leading-snug">{hint}</p>}
-      <div className={hint ? '' : 'mt-1'}>{children}</div>
-    </div>
-  )
-
-  // Collapsible section
-  const Group = ({ title, children, defaultOpen = true, icon }: { title: string; children: React.ReactNode; defaultOpen?: boolean; icon?: React.ReactNode }) => {
-    const [open, setOpen] = useState(defaultOpen)
-    return (
-      <div className="border-t border-gray-100 first:border-t-0">
-        <button onClick={() => setOpen(!open)} className="flex items-center justify-between w-full py-3 text-[13px] font-semibold text-gray-800 hover:text-gray-900">
-          <span className="flex items-center gap-2">
-            {icon && <span className="text-gray-400">{icon}</span>}
-            {title}
-          </span>
-          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? '' : '-rotate-90'}`} />
-        </button>
-        {open && <div className="pb-4 space-y-3">{children}</div>}
-      </div>
-    )
-  }
-
-  // Color row — uses shared ColorPicker
-  const ColorRow = ({ label, value, onChange: oc, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) => (
-    <LabeledField label={label} hint={hint}>
-      <ColorPicker value={value || ''} onChange={oc} />
-    </LabeledField>
-  )
-  // Legacy alias used by older renderers (maps to new polished ColorRow).
-  const CleanColor = ColorRow
-  // Legacy simple color field (kept as alias to ColorRow for consistency).
-  const ColorField = ColorRow
-
-  // Number input with unit badge
-  const UnitInput = ({ value, onChange: oc, unit = 'px', min = 0, max = 999, step = 1, className = '' }: { value: number; onChange: (v: number) => void; unit?: string; min?: number; max?: number; step?: number; className?: string }) => (
-    <div className={`relative ${className}`}>
-      <input type="number" min={min} max={max} step={step}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 pr-8 text-[13px] text-gray-800 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-colors"
-        value={value} onChange={e => oc(+e.target.value)} />
-      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-gray-400">{unit}</span>
-    </div>
-  )
-
-  // Stepper — number with +/- buttons. Good for small integer values.
-  const Stepper = ({ value, onChange: oc, min = 0, max = 999, step = 1, unit }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; unit?: string }) => (
-    <div className="inline-flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
-      <button type="button" onClick={() => oc(Math.max(min, value - step))}
-        className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors">
-        <Minus className="w-3 h-3" />
-      </button>
-      <input type="number" min={min} max={max} step={step}
-        value={value}
-        onChange={e => oc(+e.target.value)}
-        className="w-12 h-8 text-center text-[12px] text-gray-800 bg-transparent outline-none border-x border-gray-200" />
-      <button type="button" onClick={() => oc(Math.min(max, value + step))}
-        className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors">
-        <Plus className="w-3 h-3" />
-      </button>
-      {unit && <span className="px-2 text-[10px] text-gray-400 border-l border-gray-200 h-8 flex items-center">{unit}</span>}
-    </div>
-  )
-
-  // Slider with live value badge
-  const Slider = ({ value, onChange: oc, min = 0, max = 100, step = 1, unit = 'px' }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; unit?: string }) => (
-    <div className="flex items-center gap-3">
-      <input type="range" min={min} max={max} step={step} value={value} onChange={e => oc(+e.target.value)}
-        className="flex-1 accent-brand-500 h-1" />
-      <div className="flex items-center gap-1 w-[64px] justify-end">
-        <input type="number" min={min} max={max} step={step} value={value} onChange={e => oc(+e.target.value)}
-          className="w-10 px-1.5 py-1 text-[11px] text-gray-800 border border-gray-200 rounded text-center outline-none focus:border-brand-500" />
-        <span className="text-[10px] text-gray-400">{unit}</span>
-      </div>
-    </div>
-  )
-
-  // Segmented control with labels (or icons if provided)
-  const Segmented = <T extends string,>({ value, onChange: oc, options }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label?: string; icon?: React.ReactNode; title?: string }> }) => (
-    <div className="flex border border-gray-200 rounded-lg overflow-hidden bg-white">
-      {options.map(opt => (
-        <button key={opt.value} type="button" onClick={() => oc(opt.value)} title={opt.title}
-          className={`flex-1 py-2 px-2 flex items-center justify-center gap-1.5 text-[12px] font-medium transition-colors ${value === opt.value ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
-          {opt.icon}
-          {opt.label && <span className="truncate">{opt.label}</span>}
-        </button>
-      ))}
-    </div>
-  )
-
-  // Text-format controls: Bold / Italic / Underline
-  const TextFormat = ({ keyWeight = 'fontWeight', keyStyle = 'fontStyle', keyDeco = 'textDecoration' }: { keyWeight?: string; keyStyle?: string; keyDeco?: string }) => (
-    <div className="inline-flex items-center gap-0.5 border border-gray-200 rounded-lg p-0.5 bg-white">
-      <button onClick={() => up(keyWeight, p[keyWeight] === 'bold' ? 'normal' : 'bold')}
-        className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${p[keyWeight] === 'bold' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`} title="Negrito">
-        <Bold className="w-3.5 h-3.5" />
-      </button>
-      <button onClick={() => up(keyStyle, p[keyStyle] === 'italic' ? 'normal' : 'italic')}
-        className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${p[keyStyle] === 'italic' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`} title="Itálico">
-        <Italic className="w-3.5 h-3.5" />
-      </button>
-      <button onClick={() => up(keyDeco, p[keyDeco] === 'underline' ? 'none' : 'underline')}
-        className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${p[keyDeco] === 'underline' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`} title="Sublinhado">
-        <Underline className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  )
-
-  // Font family select with preview
-  const FontSelect = ({ value, onChange: oc }: { value: string; onChange: (v: string) => void }) => {
-    const fonts = [
-      { v: 'inherit', l: 'Padrão' },
-      { v: "'Inter', sans-serif", l: 'Inter' },
-      { v: "'Montserrat', sans-serif", l: 'Montserrat' },
-      { v: "'Poppins', sans-serif", l: 'Poppins' },
-      { v: "'Roboto', sans-serif", l: 'Roboto' },
-      { v: "'Open Sans', sans-serif", l: 'Open Sans' },
-      { v: 'Georgia, serif', l: 'Georgia' },
-      { v: "'Times New Roman', serif", l: 'Times New Roman' },
-      { v: 'Arial, sans-serif', l: 'Arial' },
-      { v: "'Helvetica Neue', sans-serif", l: 'Helvetica' },
-    ]
-    return (
-      <select className={sel} value={value || 'inherit'} onChange={e => oc(e.target.value)}
-        style={{ fontFamily: value || 'inherit' }}>
-        {fonts.map(f => <option key={f.v} value={f.v} style={{ fontFamily: f.v }}>{f.l}</option>)}
-      </select>
-    )
-  }
-
-  // 4-side padding control with visual box
-  const PaddingControl = ({ prefix, defaults }: { prefix: 'padding' | 'inputPad' | 'blockPad'; defaults?: { t?: number; r?: number; b?: number; l?: number } }) => {
-    const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
-    const keyT = prefix === 'padding' ? 'paddingTop' : `${prefix}${cap('top')}`
-    const keyR = prefix === 'padding' ? 'paddingRight' : `${prefix}${cap('right')}`
-    const keyB = prefix === 'padding' ? 'paddingBottom' : `${prefix}${cap('bottom')}`
-    const keyL = prefix === 'padding' ? 'paddingLeft' : `${prefix}${cap('left')}`
-    const d = defaults || {}
-    const Num = ({ k, def }: { k: string; def: number }) => (
-      <div className="relative">
-        <input type="number" min={0} max={120}
-          className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-gray-800 text-center outline-none focus:border-brand-500"
-          value={p[k] ?? def} onChange={e => up(k, +e.target.value)} />
-        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span>
-      </div>
-    )
-    return (
-      <div className="grid grid-cols-3 gap-1.5 max-w-[220px] mx-auto">
-        <div />
-        <Num k={keyT} def={d.t ?? 0} />
-        <div />
-        <Num k={keyL} def={d.l ?? 0} />
-        <div className="flex items-center justify-center">
-          <div className="w-7 h-7 rounded-sm bg-gradient-to-br from-gray-100 to-gray-50 border border-gray-200" />
-        </div>
-        <Num k={keyR} def={d.r ?? 0} />
-        <div />
-        <Num k={keyB} def={d.b ?? 0} />
-        <div />
-      </div>
-    )
-  }
-
-  // Section header (uppercase, minimal — no icons)
-  const SectionHeader = ({ title }: { title: string; icon?: React.ReactNode }) => (
-    <div className="pt-1 pb-1">
-      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">{title}</p>
-    </div>
-  )
-
-  // Border-style control with visual previews
-  const BorderStyleControl = () => (
-    <Segmented value={p.borderStyle || 'solid'} onChange={v => up('borderStyle', v)} options={[
-      { value: 'solid', label: '───', title: 'Sólida' },
-      { value: 'dashed', label: '╌╌╌', title: 'Tracejada' },
-      { value: 'dotted', label: '· · ·', title: 'Pontilhada' },
-    ]} />
-  )
 
   // Unified input "Input" tab renderer (Omnisend-style clean sections)
   const renderInputConfig = () => {
@@ -935,7 +930,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           </LabeledField>
 
           <LabeledField label="Espaçamento externo" hint="Margem ao redor do campo (fora da borda).">
-            <PaddingControl prefix="padding" defaults={{ b: 8 }} />
+            <PaddingControl p={p} up={up} prefix="padding" defaults={{ b: 8 }} />
           </LabeledField>
         </div>
 
@@ -1013,7 +1008,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 <UnitInput value={p.borderWidth ?? 1} onChange={v => up('borderWidth', v)} min={0} max={8} />
               </LabeledField>
               <LabeledField label="Estilo">
-                <BorderStyleControl />
+                <BorderStyleControl p={p} up={up} />
               </LabeledField>
             </div>
             {(p.borderWidth ?? 1) > 0 && (
@@ -1066,7 +1061,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
         {/* Inner padding */}
         <div className="pt-4 border-t border-gray-100 space-y-3">
           <SectionHeader title="Espaçamento interno" icon={<MoveHorizontal className="w-3 h-3" />} />
-          <PaddingControl prefix="inputPad" defaults={{ t: 12, r: 16, b: 12, l: 16 }} />
+          <PaddingControl p={p} up={up} prefix="inputPad" defaults={{ t: 12, r: 16, b: 12, l: 16 }} />
         </div>
       </div>
     )
@@ -1121,7 +1116,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
               ]} />
             </LabeledField>
             <div className="flex items-center gap-3">
-              <LabeledField label="Formatação"><TextFormat /></LabeledField>
+              <LabeledField label="Formatação"><TextFormat p={p} up={up} /></LabeledField>
               <div className="flex-1">
                 <LabeledField label="Alinhamento">
                   <AlignButtons value={p.align || 'left'} onChange={v => up('align', v)} showFull={false} />
@@ -1157,7 +1152,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
               </div>
             </LabeledField>
             <LabeledField label="Preenchimento interno" hint="Espaço entre a borda e o texto (padding).">
-              <PaddingControl prefix="blockPad" defaults={{ t: 0, r: 0, b: 0, l: 0 }} />
+              <PaddingControl p={p} up={up} prefix="blockPad" defaults={{ t: 0, r: 0, b: 0, l: 0 }} />
             </LabeledField>
           </div>
         </div>
@@ -1234,7 +1229,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 <UnitInput value={p.btnBorderWidth ?? 0} onChange={v => up('btnBorderWidth', v)} min={0} max={8} />
               </LabeledField>
               <LabeledField label="Estilo">
-                <BorderStyleControl />
+                <BorderStyleControl p={p} up={up} />
               </LabeledField>
             </div>
             {(p.btnBorderWidth || 0) > 0 && (
@@ -1479,7 +1474,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
               <Slider value={p.borderRadius ?? 8} onChange={v => up('borderRadius', v)} min={0} max={30} unit="px" />
             </LabeledField>
             <LabeledField label="Estilo da borda">
-              <BorderStyleControl />
+              <BorderStyleControl p={p} up={up} />
             </LabeledField>
           </div>
         </div>
