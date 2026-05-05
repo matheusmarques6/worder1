@@ -19,6 +19,7 @@ import {
   Edit,
   CheckCircle,
   Copy,
+  Share2,
   ShoppingCart,
   UserPlus,
   Package,
@@ -28,6 +29,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuthStore, useStoreStore } from '@/stores';
 import { FlowBuilder, getFlowDataForSave } from '@/components/flow-builder';
+import { CloneToStoreModal } from '@/components/flow-builder/CloneToStoreModal';
 import { FLOW_TEMPLATES } from '@/lib/automation/flow-templates';
 import type { FlowTemplate } from '@/lib/automation/flow-templates';
 
@@ -109,6 +111,7 @@ export default function AutomationsPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [cloneToStoreTarget, setCloneToStoreTarget] = useState<{ id: string; name: string } | null>(null);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -768,6 +771,13 @@ export default function AutomationsPage() {
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </button>
+                  <button
+                    onClick={() => setCloneToStoreTarget({ id: automation.id, name: automation.name })}
+                    className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                    title="Clonar para outra loja"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                  </button>
                   {confirmDelete === automation.id ? (
                     <button
                       onClick={() => handleDelete(automation.id)}
@@ -803,6 +813,20 @@ export default function AutomationsPage() {
           />
         )}
       </AnimatePresence>
+
+      {/* Clone to Store modal */}
+      {cloneToStoreTarget && (
+        <CloneToStoreModal
+          open={!!cloneToStoreTarget}
+          onClose={() => setCloneToStoreTarget(null)}
+          automationId={cloneToStoreTarget.id}
+          automationName={cloneToStoreTarget.name}
+          currentStoreId={currentStore?.id}
+          onCloned={() => {
+            setToast({ msg: `Automação clonada com sucesso!`, type: 'success' });
+          }}
+        />
+      )}
     </div>
   );
 }
