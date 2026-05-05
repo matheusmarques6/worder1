@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       .order('usage_count', { ascending: false })
 
     if (storeId) {
-      query = query.or(`store_id.eq.${storeId},store_id.is.null`)
+      query = query.eq('store_id', storeId)
     }
 
     if (category && category !== 'all') {

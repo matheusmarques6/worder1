@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 
       // store_id OPCIONAL - se fornecido, filtra; se não, busca todos
       if (storeId) {
-        query = query.or(`store_id.eq.${storeId},store_id.is.null`);
+        query = query.eq('store_id', storeId);
       }
 
       const { data: pipelines, error: pipelineError } = await query;
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
           .eq('organization_id', organizationId);
         
         if (storeId) {
-          dealsQuery = dealsQuery.or(`store_id.eq.${storeId},store_id.is.null`);
+          dealsQuery = dealsQuery.eq('store_id', storeId);
         }
         
         const { data: dealCounts } = await dealsQuery;
@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
     
     // Filtros OPCIONAIS
     if (storeId) {
-      dealsQuery = dealsQuery.or(`store_id.eq.${storeId},store_id.is.null`);
+      dealsQuery = dealsQuery.eq('store_id', storeId);
     }
     if (pipelineId) {
       dealsQuery = dealsQuery.eq('pipeline_id', pipelineId);

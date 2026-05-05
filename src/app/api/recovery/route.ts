@@ -644,7 +644,7 @@ async function handleCheckoutFallback(opts: {
   if (storeId) {
     q = q.eq('store_id', storeId);
   } else if (activeStoreIds.length > 0) {
-    q = q.or(`store_id.in.(${activeStoreIds.join(',')}),store_id.is.null`);
+    q = q.in('store_id', activeStoreIds);
   }
 
   const { data: startedEvents, error } = await q;

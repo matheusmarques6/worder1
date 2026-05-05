@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
         .in('organization_id', orgIds)
 
       if (storeId) {
-        singleQuery = singleQuery.or(`store_id.eq.${storeId},store_id.is.null`)
+        singleQuery = singleQuery.eq('store_id', storeId)
       }
 
       const { data, error } = await singleQuery.single()
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
 
     if (storeId) {
-      listQuery = listQuery.or(`store_id.eq.${storeId},store_id.is.null`)
+      listQuery = listQuery.eq('store_id', storeId)
     }
 
     const { data: rawSegments, error } = await listQuery

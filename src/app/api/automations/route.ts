@@ -86,9 +86,10 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false });
     
-    // ✅ NOVO: Filtrar por loja se fornecido
+    // Filtrar estritamente por loja — automações sem store_id (legacy) ficam ocultas
+    // até que sejam atribuídas a uma loja específica via PATCH.
     if (storeId) {
-      query = query.or(`store_id.eq.${storeId},store_id.is.null`);
+      query = query.eq('store_id', storeId);
     }
 
     const { data, error } = await query;

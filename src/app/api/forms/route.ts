@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     // Filtrar por loja se fornecido
     if (storeId) {
-      query = query.or(`store_id.eq.${storeId},store_id.is.null`)
+      query = query.eq('store_id', storeId)
     }
 
     if (status) {

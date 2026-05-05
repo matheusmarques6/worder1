@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
-    if (storeId) query = query.or(`store_id.eq.${storeId},store_id.is.null`)
+    if (storeId) query = query.eq('store_id', storeId)
     if (status) query = query.eq('status', status)
     if (type) query = query.eq('type', type)
     if (search) query = query.ilike('name', `%${search}%`)

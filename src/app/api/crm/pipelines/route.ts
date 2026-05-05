@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     // Se não, buscar todos da organização (incluindo sem loja e de todas as lojas que o usuário tem acesso)
     if (storeId) {
       // Buscar pipelines da loja específica OU pipelines globais (sem store_id)
-      query = query.or(`store_id.eq.${storeId},store_id.is.null`)
+      query = query.eq('store_id', storeId)
     }
 
     const { data: pipelines, error } = await query
