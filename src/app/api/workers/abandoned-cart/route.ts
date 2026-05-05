@@ -53,6 +53,25 @@ export async function GET(request: NextRequest) {
 
     for (const checkout of checkouts || []) {
       try {
+        // Skip anonymous checkouts — without a contact_id we can't tell if
+        // the same visitor later placed an order, so we can't classify it
+        // as abandoned. Just mark processed so we don't keep evaluating it.
+        // (Passing a null contact_id to .eq() makes Supabase serialize it as
+        // the string "null", which Postgres then rejects as invalid uuid.)
+        if (!checkout.contact_id) {
+          await supabase
+            .from('contact_events')
+            .update({
+              properties: {
+                ...(checkout.properties || {}),
+                abandoned_cart_processed: true,
+                abandoned_cart_skipped_reason: 'anonymous',
+              },
+            })
+            .eq('id', checkout.id);
+          continue;
+        }
+
         // Check if there's a placed_order event from the same contact after the checkout
         const { data: orders, error: orderError } = await supabase
           .from('contact_events')

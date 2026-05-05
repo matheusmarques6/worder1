@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { ensureFreshToken } from '@/lib/shopify/ensure-fresh-token';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -68,6 +69,12 @@ export async function POST(request: NextRequest) {
   if (!store.access_token) {
     return NextResponse.json({ error: 'Token de acesso ausente' }, { status: 400 });
   }
+
+  const refreshed = await ensureFreshToken(store);
+  if (!refreshed.ok) {
+    return NextResponse.json({ error: refreshed.error }, { status: 401 });
+  }
+  store = refreshed.store;
 
   const shopDomain = store.shop_domain;
   const accessToken = store.access_token;

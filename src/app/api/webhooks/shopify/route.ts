@@ -1874,9 +1874,15 @@ export async function POST(request: NextRequest) {
     // 3. Buscar configuração da loja
     const store = await getStoreConfig(shopDomain);
     if (!store) {
-      console.warn(`[Shopify Webhook] No store found for: ${shopDomain}`);
-      // Retorna 200 para o Shopify não retentar
-      return NextResponse.json({ success: true, message: 'Shop not registered' });
+      // Orphan webhook subscription — typically from a store that was
+      // disconnected/deleted on our side without uninstalling our app on
+      // Shopify, so Shopify keeps delivering events for it forever.
+      // Returning 410 Gone makes Shopify auto-remove the subscription
+      // after a handful of failed deliveries (~48h), permanently
+      // stopping the noise without us needing valid credentials. We log
+      // at info level so this doesn't flood error monitoring.
+      console.log(`[Shopify Webhook] Orphan subscription, replying 410: ${shopDomain}`);
+      return NextResponse.json({ error: 'Shop not registered' }, { status: 410 });
     }
 
     // 4. Verificar assinatura HMAC

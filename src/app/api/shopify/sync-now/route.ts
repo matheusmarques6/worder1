@@ -5,6 +5,7 @@ import { getAuthClient, authError } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { shopifyGraphQL, shopifyGraphQLPaginate, extractShopifyId } from '@/lib/shopify/graphql-client';
 import { PRODUCTS_QUERY, CUSTOMERS_QUERY, ORDERS_QUERY } from '@/lib/shopify/graphql-queries';
+import { ensureFreshToken } from '@/lib/shopify/ensure-fresh-token';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -65,31 +66,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token de acesso não encontrado' }, { status: 400 });
     }
 
-    // For manual integrations, refresh token if expired or expiring within 5 min
-    if (store.connection_type === 'manual' && store.client_id && store.api_secret) {
-      const expiresAt = store.token_expires_at ? new Date(store.token_expires_at).getTime() : 0;
-      const fiveMinFromNow = Date.now() + 5 * 60 * 1000;
-      if (expiresAt < fiveMinFromNow) {
-        try {
-          const { refreshStoreToken } = await import('@/lib/shopify/client-credentials');
-          console.log(`[Sync] Token expired/expiring for ${store.shop_domain}, refreshing...`);
-          const newToken = await refreshStoreToken(store.shop_domain, store.client_id, store.api_secret);
-          const newExpiresAt = new Date(Date.now() + 86399 * 1000).toISOString();
-          await supabase
-            .from('shopify_stores')
-            .update({ access_token: newToken, token_expires_at: newExpiresAt })
-            .eq('id', store.id);
-          store.access_token = newToken;
-          console.log(`[Sync] Token refreshed for ${store.shop_domain}`);
-        } catch (refreshErr: any) {
-          console.error(`[Sync] Token refresh failed:`, refreshErr.message);
-          return NextResponse.json({
-            error: 'Token expirou e não foi possível renovar. Reconecte a loja.',
-            details: refreshErr.message,
-          }, { status: 401 });
-        }
-      }
+    // Always refresh the token at the start of a user-triggered sync for
+    // manual stores — see ensureFreshToken docs for why (reinstall on
+    // Shopify revokes the saved token immediately).
+    const refreshed = await ensureFreshToken(store);
+    if (!refreshed.ok) {
+      console.error(`[Sync] Token refresh failed:`, refreshed.error);
+      return NextResponse.json({
+        error: 'Não foi possível gerar token de acesso. Verifique se o app está instalado na loja e se as credenciais estão corretas.',
+        details: refreshed.error,
+      }, { status: 401 });
     }
+    store = refreshed.store;
 
     console.log(`[Sync] Store: ${store.shop_name} (${store.shop_domain}), syncType=${syncType}, type=${store.connection_type || 'oauth'}`);
 
