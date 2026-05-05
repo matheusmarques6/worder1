@@ -72,11 +72,24 @@ export default function IntegrationsPage() {
   const handleSync = async (storeId: string) => {
     setSyncing(storeId)
     try {
+      // Step 1: Sync products + customers + orders
       await fetch('/api/shopify/sync-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ store_id: storeId }),
       })
+      // Step 2: Pull lifetime financial metrics into contacts (revenue, AOV, last_order_at)
+      try {
+        await fetch(`/api/shopify/sync-financials?store_id=${storeId}`, { method: 'POST' })
+      } catch { /* non-blocking */ }
+      // Step 3: Wire webhooks + Web Pixel + mark initial sync complete
+      try {
+        await fetch('/api/shopify/install-extras', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storeId }),
+        })
+      } catch { /* non-blocking */ }
       // Reload after sync with proper mapping
       const storeParam = storeId ? `?store_id=${storeId}` : ''
       const res = await fetch(`/api/integrations/shopify/status${storeParam}`)
@@ -173,9 +186,10 @@ export default function IntegrationsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => handleSync(store.id)} disabled={syncing === store.id}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                      title="Sincroniza pedidos, clientes, produtos, métricas, webhooks e Custom Pixel"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-white bg-emerald-600 border border-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
                       {syncing === store.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                      Sincronizar
+                      {syncing === store.id ? 'Sincronizando...' : 'Sincronizar Tudo'}
                     </button>
                     <button onClick={() => router.push('/integrations/shopify')}
                       className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">

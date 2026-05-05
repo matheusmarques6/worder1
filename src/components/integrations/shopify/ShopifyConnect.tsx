@@ -39,7 +39,6 @@ export default function ShopifyConnect() {
   const [shopDomain, setShopDomain] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [syncingAll, setSyncingAll] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -229,56 +228,6 @@ export default function ShopifyConnect() {
       setError('Erro ao buscar código do pixel.');
     } finally {
       setLoadingPixelCode(false);
-    }
-  }
-
-  async function handleSyncAll() {
-    setSyncingAll(true);
-    setError('');
-    try {
-      // Step 1: Sync products + customers + orders into shopify_* tables
-      const res = await fetch('/api/shopify/sync-now', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ syncType: 'all' }),
-      });
-      const data = await res.json();
-      if (!data.success && !data.data) {
-        setError(data.error || 'Erro no sync');
-        setSyncingAll(false);
-        return;
-      }
-
-      // Step 2: Pull customer financial metrics (revenue, AOV, last_order_at)
-      // and write them into the contacts table → populates dashboard.
-      let financialStats: any = null;
-      if (store?.id) {
-        try {
-          const finRes = await fetch(`/api/shopify/sync-financials?store_id=${store.id}`, {
-            method: 'POST',
-          });
-          const finData = await finRes.json();
-          if (finRes.ok && finData.stats) financialStats = finData.stats;
-        } catch { /* non-blocking */ }
-      }
-
-      const parts: string[] = [];
-      if (data.data) {
-        parts.push(`${data.data.customers || 0} clientes`);
-        parts.push(`${data.data.products || 0} produtos`);
-        parts.push(`${data.data.orders || 0} pedidos`);
-      }
-      if (financialStats) {
-        const currency = financialStats.currency || 'BRL';
-        const revenue = (financialStats.totalRevenue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-        parts.push(`${currency} ${revenue} em receita`);
-      }
-      setSuccessMessage(`Sync concluído: ${parts.join(', ')}`);
-      fetchStatus();
-    } catch {
-      setError('Erro ao sincronizar');
-    } finally {
-      setSyncingAll(false);
     }
   }
 
@@ -540,14 +489,6 @@ export default function ShopifyConnect() {
         )}
 
         <div className="flex flex-wrap gap-3 pt-2">
-          <button
-            onClick={handleSyncAll}
-            disabled={syncingAll}
-            className="flex items-center gap-2 px-4 py-2 text-sm border border-emerald-300 rounded-lg hover:bg-emerald-50 text-emerald-700 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${syncingAll ? 'animate-spin' : ''}`} />
-            {syncingAll ? 'Sincronizando...' : 'Sync Clientes & Produtos'}
-          </button>
           <a
             href={`https://${store.shopDomain}/admin`}
             target="_blank"
