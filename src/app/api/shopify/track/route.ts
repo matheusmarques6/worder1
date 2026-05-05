@@ -429,23 +429,39 @@ export async function POST(request: NextRequest) {
 
       contactId = contact?.id;
 
-      // If email_captured/checkout but no contact exists yet, create one
+      // If email_captured/checkout but no contact exists yet, create one.
+      // Use upsert on (organization_id, email) so two concurrent pixel events
+      // with the same email don't create duplicate contacts under race.
       if (!contactId && (event_type === 'email_captured' || event_type === 'checkout_completed' || event_type === 'checkout_started')) {
-        const { data: newContact } = await supabase
+        const { data: newContact, error: upsertErr } = await supabase
           .from('contacts')
-          .insert({
-            organization_id: store.organization_id,
-            store_id: store.id,
-            email: eventEmail,
-            first_name: data?.first_name || null,
-            last_name: data?.last_name || null,
-            phone: data?.phone || null,
-            source: 'pixel',
-            is_subscribed_email: true,
-          })
+          .upsert(
+            {
+              organization_id: store.organization_id,
+              store_id: store.id,
+              email: eventEmail,
+              first_name: data?.first_name || null,
+              last_name: data?.last_name || null,
+              phone: data?.phone || null,
+              source: 'pixel',
+              is_subscribed_email: true,
+            },
+            { onConflict: 'organization_id,email', ignoreDuplicates: false }
+          )
           .select('id')
           .single();
-        if (newContact) contactId = newContact.id;
+        if (newContact) {
+          contactId = newContact.id;
+        } else if (upsertErr) {
+          // Fallback if no unique constraint exists: re-query for an existing row.
+          const { data: existing } = await supabase
+            .from('contacts')
+            .select('id')
+            .eq('organization_id', store.organization_id)
+            .ilike('email', eventEmail)
+            .maybeSingle();
+          contactId = existing?.id;
+        }
       }
 
       // Auto-link all previous anonymous events from this session

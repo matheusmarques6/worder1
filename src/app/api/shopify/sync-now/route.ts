@@ -423,12 +423,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update store stats
-    await supabase.from('shopify_stores').update({
+    // Update store stats. Mark the initial sync done and pin the api_version
+    // so old stores (e.g. created on 2024-10) automatically migrate to 2026-04
+    // the first time they run a successful sync. install-extras also does this
+    // — both endpoints converge on the same final state.
+    const syncOk = results.errors.length === 0;
+    const storeUpdate: Record<string, any> = {
       last_sync_at: new Date().toISOString(),
       total_orders: results.orders,
       total_customers: results.customers,
-    }).eq('id', store.id);
+    };
+    if (syncOk) {
+      storeUpdate.initial_sync_completed = true;
+      storeUpdate.api_version = '2026-04';
+    }
+    await supabase.from('shopify_stores').update(storeUpdate).eq('id', store.id);
 
     console.log(`[Sync] DONE: ${results.products} products, ${results.customers} customers, ${results.orders} orders, ${results.errors.length} errors`);
 

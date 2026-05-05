@@ -425,7 +425,10 @@ export default function ShopifyConnect() {
           </div>
         )}
 
-        {!store.embedInstalled && (
+        {/* Theme App Embed only applies to OAuth (official) integrations.
+            Manual/Custom App connections get full tracking via the Custom Pixel
+            + Web Pixel auto-installed by install-extras, so this panel is hidden. */}
+        {store.connectionType !== 'manual' && !store.embedInstalled && (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
             <p className="font-medium mb-1">Ativar Tracking no Tema</p>
             <ol className="list-decimal list-inside space-y-0.5 text-amber-700 text-xs">
