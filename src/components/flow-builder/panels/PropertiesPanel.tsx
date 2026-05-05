@@ -2119,6 +2119,20 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
   const nodes = useFlowStore((state) => state.nodes);
   const automationName = useFlowStore((state) => state.automationName);
 
+  // Fetch org defaults once and auto-populate sender if empty (Klaviyo-style)
+  useEffect(() => {
+    if (config.senderName && config.senderEmail) return; // already filled
+    fetch('/api/settings/organization')
+      .then(r => r.json())
+      .then(d => {
+        const s = d?.organization?.email_settings || {};
+        if (!config.senderName && s.default_sender_name) onUpdate('senderName', s.default_sender_name);
+        if (!config.senderEmail && s.default_sender_email) onUpdate('senderEmail', s.default_sender_email);
+      })
+      .catch(() => { /* non-blocking */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Compute sibling email nodes for in-editor navigation
   const emailSiblings = useMemo(() => {
     return nodes
@@ -2225,29 +2239,53 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
         {showSubjectEdit ? (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Assunto</label>
+              <label className="text-sm font-medium text-gray-700">Assunto <span className="text-red-500">*</span></label>
               <div className="relative">
                 <input type="text" value={config.subject || ''} onChange={(e) => onUpdate('subject', e.target.value)}
-                  placeholder="Voce esqueceu algo no carrinho" className={inputCls} />
+                  placeholder="Voce esqueceu algo no carrinho"
+                  className={cn(inputCls, !config.subject && 'border-red-300 focus:border-red-500 focus:ring-red-200')} />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2">
                   <VariableButton triggerType={triggerType} onSelect={(v) => onUpdate('subject', (config.subject || '') + v)} className="scale-75" />
                 </div>
               </div>
+              {!config.subject && (
+                <p className="text-[11px] text-red-600">Obrigatório — sem assunto, o email não pode ser enviado.</p>
+              )}
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Texto de preview</label>
+              <label className="text-sm font-medium text-gray-700">Texto de preview <span className="text-red-500">*</span></label>
               <input type="text" value={config.preheader || ''} onChange={(e) => onUpdate('preheader', e.target.value)}
-                placeholder="Aproveite! Seu desconto espera por voce!" className={inputCls} />
+                placeholder="Aproveite! Seu desconto espera por voce!"
+                className={cn(inputCls, !config.preheader && 'border-red-300 focus:border-red-500 focus:ring-red-200')} />
+              {!config.preheader && (
+                <p className="text-[11px] text-red-600">Obrigatório — exibido após o assunto na caixa de entrada.</p>
+              )}
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Nome do remetente</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">Nome do remetente</label>
+                {config.senderName && (
+                  <span className="text-[10px] text-zinc-400">Carregado das configurações</span>
+                )}
+              </div>
               <input type="text" value={config.senderName || ''} onChange={(e) => onUpdate('senderName', e.target.value)}
-                placeholder="Minha Loja" className={inputCls} />
+                placeholder="Configure em Settings → Email" className={inputCls} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Email do remetente</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">Email do remetente <span className="text-red-500">*</span></label>
+                {config.senderEmail && (
+                  <span className="text-[10px] text-zinc-400">Carregado das configurações</span>
+                )}
+              </div>
               <input type="email" value={config.senderEmail || ''} onChange={(e) => onUpdate('senderEmail', e.target.value)}
-                placeholder="contato@minhaloja.com.br" className={inputCls} />
+                placeholder="Configure em Settings → Email"
+                className={cn(inputCls, !config.senderEmail && 'border-red-300 focus:border-red-500 focus:ring-red-200')} />
+              {!config.senderEmail && (
+                <p className="text-[11px] text-red-600">
+                  Obrigatório. <a href="/settings/email" target="_blank" className="underline">Definir nas configurações</a> para auto-preencher.
+                </p>
+              )}
             </div>
           </div>
         ) : (

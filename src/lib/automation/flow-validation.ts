@@ -105,7 +105,46 @@ export function validateFlow(
     }
   }
 
-  // 4. Edges referenciando node inexistente
+  // 4. Email actions: subject + preheader obrigatórios (Klaviyo-style)
+  for (const n of nodes) {
+    if (n.type !== 'action_email') continue
+    const cfg = n.data?.config || {}
+    const label = n.data?.label || 'Email'
+    if (!cfg.subject || String(cfg.subject).trim() === '') {
+      issues.push({
+        severity: 'error',
+        code: 'EMAIL_SUBJECT_REQUIRED',
+        nodeId: n.id,
+        message: `O email "${label}" precisa ter um assunto definido.`,
+      })
+    }
+    if (!cfg.preheader || String(cfg.preheader).trim() === '') {
+      issues.push({
+        severity: 'error',
+        code: 'EMAIL_PREHEADER_REQUIRED',
+        nodeId: n.id,
+        message: `O email "${label}" precisa ter um texto de pré-cabeçalho.`,
+      })
+    }
+    if (!cfg.senderEmail || String(cfg.senderEmail).trim() === '') {
+      issues.push({
+        severity: 'error',
+        code: 'EMAIL_SENDER_REQUIRED',
+        nodeId: n.id,
+        message: `O email "${label}" precisa ter um remetente definido. Configure em Settings → Email.`,
+      })
+    }
+    if (!cfg.templateId || cfg.templateId === '__new__') {
+      issues.push({
+        severity: 'error',
+        code: 'EMAIL_TEMPLATE_REQUIRED',
+        nodeId: n.id,
+        message: `O email "${label}" precisa ter um template selecionado.`,
+      })
+    }
+  }
+
+  // 5. Edges referenciando node inexistente
   const nodeIds = new Set(nodes.map((n) => n.id))
   for (const e of edges) {
     if (!nodeIds.has(e.source)) {
