@@ -29,7 +29,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuthStore, useStoreStore } from '@/stores';
 import { FlowBuilder, getFlowDataForSave } from '@/components/flow-builder';
-import { CloneToStoreModal } from '@/components/flow-builder/CloneToStoreModal';
+import { CloneToStoreModal } from '@/components/ui/CloneToStoreModal';
 import { FLOW_TEMPLATES } from '@/lib/automation/flow-templates';
 import type { FlowTemplate } from '@/lib/automation/flow-templates';
 
@@ -819,9 +819,12 @@ export default function AutomationsPage() {
         <CloneToStoreModal
           open={!!cloneToStoreTarget}
           onClose={() => setCloneToStoreTarget(null)}
-          automationId={cloneToStoreTarget.id}
-          automationName={cloneToStoreTarget.name}
+          endpoint={`/api/automations/${cloneToStoreTarget.id}/clone-to-store`}
+          resourceName={cloneToStoreTarget.name}
+          resourceLabel="Automação"
           currentStoreId={currentStore?.id}
+          showSubresourceCount
+          subresourceLabel="template"
           onCloned={() => {
             setToast({ msg: `Automação clonada com sucesso!`, type: 'success' });
           }}

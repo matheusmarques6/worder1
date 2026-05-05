@@ -11,21 +11,32 @@ interface Store {
   is_active: boolean;
 }
 
-interface CloneToStoreModalProps {
+export interface CloneToStoreModalProps {
   open: boolean;
   onClose: () => void;
-  automationId: string;
-  automationName: string;
+  /** API endpoint that accepts POST { targetStoreIds: string[] } */
+  endpoint: string;
+  /** Display name of the resource being cloned (shown in header). */
+  resourceName: string;
+  /** Label shown when clone succeeds (e.g. "Automação", "Template"). */
+  resourceLabel?: string;
+  /** Current store id — excluded from the list. */
   currentStoreId?: string;
+  /** Whether the API also clones related sub-resources (e.g. emails for an automation). */
+  showSubresourceCount?: boolean;
+  subresourceLabel?: string;
   onCloned?: (clonedCount: number) => void;
 }
 
 export function CloneToStoreModal({
   open,
   onClose,
-  automationId,
-  automationName,
+  endpoint,
+  resourceName,
+  resourceLabel = 'Recurso',
   currentStoreId,
+  showSubresourceCount,
+  subresourceLabel,
   onCloned,
 }: CloneToStoreModalProps) {
   const [stores, setStores] = useState<Store[]>([]);
@@ -35,7 +46,6 @@ export function CloneToStoreModal({
   const [error, setError] = useState('');
   const [result, setResult] = useState<any>(null);
 
-  // Fetch available stores when modal opens
   useEffect(() => {
     if (!open) return;
     setError('');
@@ -70,7 +80,7 @@ export function CloneToStoreModal({
     setCloning(true);
     setError('');
     try {
-      const res = await fetch(`/api/automations/${automationId}/clone-to-store`, {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetStoreIds: Array.from(selectedIds) }),
@@ -91,6 +101,10 @@ export function CloneToStoreModal({
 
   if (!open) return null;
 
+  const subresourceCount = showSubresourceCount && result?.templatesCloned !== undefined
+    ? result.templatesCloned
+    : null;
+
   return (
     <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={cloning ? undefined : onClose} />
@@ -98,7 +112,7 @@ export function CloneToStoreModal({
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 flex-shrink-0">
           <div>
             <h2 className="text-base font-semibold text-zinc-900">Clonar para outra loja</h2>
-            <p className="text-xs text-zinc-500 mt-0.5 truncate max-w-[300px]">{automationName}</p>
+            <p className="text-xs text-zinc-500 mt-0.5 truncate max-w-[300px]">{resourceName}</p>
           </div>
           <button
             onClick={onClose}
@@ -115,10 +129,11 @@ export function CloneToStoreModal({
               <Check className="w-6 h-6 text-emerald-600" strokeWidth={2.5} />
             </div>
             <h3 className="text-base font-semibold text-zinc-900 mb-1">
-              Automação clonada
+              {resourceLabel} clonado{resourceLabel.endsWith('a') ? '' : ''}
             </h3>
             <p className="text-sm text-zinc-500 mb-4">
-              {result.cloned} loja{result.cloned !== 1 ? 's' : ''} · {result.templatesCloned} template{result.templatesCloned !== 1 ? 's' : ''} duplicado{result.templatesCloned !== 1 ? 's' : ''}
+              {result.cloned} loja{result.cloned !== 1 ? 's' : ''}
+              {subresourceCount !== null && ` · ${subresourceCount} ${subresourceLabel || 'sub-recurso'}${subresourceCount !== 1 ? 's' : ''} duplicado${subresourceCount !== 1 ? 's' : ''}`}
             </p>
             {result.failed > 0 && (
               <div className="w-full bg-amber-50 border border-amber-200 rounded-md p-3 mb-4 text-left">

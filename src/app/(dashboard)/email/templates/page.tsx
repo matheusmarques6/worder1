@@ -13,9 +13,11 @@ import {
   MoreVertical,
   FileText,
   Tag,
+  Share2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useStoreStore } from '@/stores'
+import { CloneToStoreModal } from '@/components/ui/CloneToStoreModal'
 
 interface EmailTemplate {
   id: string
@@ -48,6 +50,7 @@ export default function EmailTemplatesPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
+  const [cloneTarget, setCloneTarget] = useState<{ id: string; name: string } | null>(null)
   const { currentStore } = useStoreStore()
 
   const fetchTemplates = useCallback(async () => {
@@ -302,6 +305,16 @@ export default function EmailTemplatesPage() {
                             Editar
                           </Link>
                           <button
+                            onClick={() => {
+                              setActiveMenu(null);
+                              setCloneTarget({ id: template.id, name: template.name });
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                          >
+                            <Share2 className="w-4 h-4" />
+                            Clonar para outra loja
+                          </button>
+                          <button
                             onClick={() => { setActiveMenu(null); handleDelete(template.id); }}
                             className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
                           >
@@ -317,6 +330,18 @@ export default function EmailTemplatesPage() {
             </motion.div>
           ))}
         </div>
+      )}
+
+      {cloneTarget && (
+        <CloneToStoreModal
+          open={!!cloneTarget}
+          onClose={() => setCloneTarget(null)}
+          endpoint={`/api/email/templates/${cloneTarget.id}/clone-to-store`}
+          resourceName={cloneTarget.name}
+          resourceLabel="Template"
+          currentStoreId={currentStore?.id}
+          onCloned={() => fetchTemplates()}
+        />
       )}
     </div>
   )
