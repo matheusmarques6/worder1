@@ -23,7 +23,12 @@ export async function POST(request: NextRequest) {
     ...(memberships?.map((m: any) => m.organization_id) || []),
   ])];
 
-  const { error } = await supabase
+  // Optional: disconnect a specific store only (multi-store support)
+  let body: any = {};
+  try { body = await request.json(); } catch {}
+  const storeId = body?.storeId;
+
+  let query = supabase
     .from('shopify_stores')
     .update({
       is_active: false,
@@ -33,6 +38,12 @@ export async function POST(request: NextRequest) {
     })
     .in('organization_id', orgIds)
     .eq('is_active', true);
+
+  if (storeId) {
+    query = query.eq('id', storeId);
+  }
+
+  const { error } = await query;
 
   if (error) {
     return NextResponse.json({ error: 'Failed to disconnect' }, { status: 500 });

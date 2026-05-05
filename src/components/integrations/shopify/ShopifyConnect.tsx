@@ -180,7 +180,11 @@ export default function ShopifyConnect() {
       });
       const data = await res.json();
       if (!res.ok || data.error) {
-        setError(data.error || 'Erro ao conectar loja.');
+        let errorMsg = data.error || 'Erro ao conectar loja.';
+        if (data.missingScopes && Array.isArray(data.missingScopes) && data.missingScopes.length > 0) {
+          errorMsg = `Permissões obrigatórias ausentes: ${data.missingScopes.join(', ')}. Configure os escopos no Shopify Dev Dashboard e reinstale o app.`;
+        }
+        setError(errorMsg);
         return;
       }
       setManualResult(data);
@@ -612,7 +616,41 @@ export default function ShopifyConnect() {
                 }
               />
               <StatusLine label="Sync inicial" ok={!!manualResult.sync?.triggered} detail={manualResult.sync?.triggered ? 'Disparado' : '—'} />
+              <StatusLine
+                label="Custom Pixel"
+                ok={!!manualResult.pixel?.autoInstalled}
+                detail={manualResult.pixel?.autoInstalled ? 'Instalado automaticamente' : 'Use o código abaixo'}
+              />
               </div>
+
+              {/* Missing recommended scopes warning */}
+              {manualResult.missingRecommendedScopes && manualResult.missingRecommendedScopes.length > 0 && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="font-medium text-amber-800 text-sm mb-2">
+                    Permissões recomendadas ausentes
+                  </p>
+                  <p className="text-xs text-amber-700 mb-2">
+                    Sua loja vai funcionar, mas algumas funcionalidades estarão limitadas. Adicione estas permissões ao seu Custom App no Shopify Dev Dashboard para suporte completo:
+                  </p>
+                  <div className="space-y-1">
+                    {manualResult.missingRecommendedScopes.map((scope: string) => {
+                      const labels: Record<string, string> = {
+                        'read_all_orders': 'Pedidos antigos (>60 dias) — sem isto, só puxa últimos 60 dias',
+                        'write_pixels': 'Auto-instalar pixel — sem isto, precisa colar código manualmente',
+                        'read_customer_events': 'Eventos do cliente para attribution',
+                        'read_fulfillments': 'Status de entrega/rastreamento',
+                        'read_discounts': 'Cupons e descontos para automações',
+                      };
+                      return (
+                        <div key={scope} className="flex items-start gap-2 text-xs">
+                          <code className="font-mono bg-white border border-amber-200 rounded px-1.5 py-0.5 text-amber-900 flex-shrink-0">{scope}</code>
+                          <span className="text-amber-700">{labels[scope] || ''}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Webhook manual setup instructions */}
               {manualResult.webhooks?.failed > 0 && (
