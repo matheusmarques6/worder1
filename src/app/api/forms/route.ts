@@ -33,9 +33,12 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', user.organization_id)
       .order('created_at', { ascending: false })
 
-    // Filtrar por loja se fornecido
+    // Filter by store. Also include orphan forms (store_id IS NULL) so a
+    // popup created before currentStore was hydrated (race during page load)
+    // doesn't disappear from the dashboard. The popup-editor's save will
+    // auto-attach it to the current store on the next save.
     if (storeId) {
-      query = query.eq('store_id', storeId)
+      query = query.or(`store_id.eq.${storeId},store_id.is.null`)
     }
 
     if (status) {

@@ -609,11 +609,12 @@ export default function FormsPage() {
                 </div>
                 <button
                   onClick={createForm}
-                  disabled={!newFormName.trim() || creating}
+                  disabled={!newFormName.trim() || creating || !currentStore?.id}
+                  title={!currentStore?.id ? 'Aguardando loja carregar...' : ''}
                   className="w-full flex items-center justify-center gap-2 py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl font-medium transition-colors"
                 >
                   {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  {creating ? 'Criando...' : 'Criar Formulario'}
+                  {creating ? 'Criando...' : !currentStore?.id ? 'Aguardando loja...' : 'Criar Formulario'}
                 </button>
               </div>
             </motion.div>

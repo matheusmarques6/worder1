@@ -425,9 +425,7 @@ export default function ShopifyConnect() {
           </div>
         )}
 
-        {/* Theme App Embed only applies to OAuth (official) integrations.
-            Manual/Custom App connections get full tracking via the Custom Pixel
-            + Web Pixel auto-installed by install-extras, so this panel is hidden. */}
+        {/* OAuth: ask the merchant to enable our App Embed in Theme Editor */}
         {store.connectionType !== 'manual' && !store.embedInstalled && (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
             <p className="font-medium mb-1">Ativar Tracking no Tema</p>
@@ -436,6 +434,43 @@ export default function ShopifyConnect() {
               <li>App Embeds (icone quebra-cabeça) &rarr; Ativar &quot;Worder Tracking&quot;</li>
               <li>Salvar</li>
             </ol>
+          </div>
+        )}
+
+        {/* Manual: the App Embed extension isn't available for the merchant's
+            own Custom App, so popups need a regular <script> in theme.liquid.
+            Tracking already works via the Custom Pixel — this is only for
+            displaying popups/forms on the storefront. */}
+        {store.connectionType === 'manual' && (
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="font-medium text-blue-900 text-sm mb-2">Ativar popups na sua loja</p>
+            <p className="text-xs text-blue-800 mb-2.5 leading-relaxed">
+              Cole este script no seu <code className="px-1 py-0.5 bg-white rounded font-mono text-[11px]">theme.liquid</code> antes de <code className="px-1 py-0.5 bg-white rounded font-mono text-[11px]">&lt;/body&gt;</code>. Ele carrega automaticamente todos os popups publicados.
+              <br/>
+              <span className="text-blue-700">(Só precisa fazer uma vez. Tracking já funciona via o Custom Pixel — isto é só para exibir popups/formulários.)</span>
+            </p>
+            <div className="relative">
+              <pre className="bg-white p-3 rounded border border-blue-200 text-[11px] font-mono overflow-x-auto text-gray-800">{`<script src="${typeof window !== 'undefined' ? window.location.origin : 'https://app.worder.com.br'}/api/storefront/loader.js" async></script>`}</pre>
+              <button
+                onClick={async () => {
+                  try {
+                    const snippet = `<script src="${window.location.origin}/api/storefront/loader.js" async></script>`;
+                    await navigator.clipboard.writeText(snippet);
+                    setSuccessMessage('Script copiado.');
+                    setTimeout(() => setSuccessMessage(''), 2000);
+                  } catch {}
+                }}
+                className="absolute top-2 right-2 px-2.5 py-1 bg-blue-600 text-white rounded text-[11px] font-medium hover:bg-blue-700 transition-colors"
+              >
+                Copiar
+              </button>
+            </div>
+            <div className="mt-2.5 text-[11px] text-blue-700 space-y-0.5">
+              <p>Como editar o <code className="font-mono">theme.liquid</code>:</p>
+              <p>1. Loja Online &rarr; Temas &rarr; <strong>Editar código</strong> (no tema ativo)</p>
+              <p>2. Pasta Layout &rarr; <strong>theme.liquid</strong></p>
+              <p>3. Cole o script acima logo antes de <code className="font-mono">&lt;/body&gt;</code> e <strong>Salve</strong></p>
+            </div>
           </div>
         )}
 

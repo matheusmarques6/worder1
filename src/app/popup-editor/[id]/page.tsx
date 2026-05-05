@@ -2240,6 +2240,7 @@ function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate
 // ── Media Library Modal (uses shared component) ─────────────────────────────
 import { MediaLibraryModal } from '@/components/shared/MediaLibraryModal'
 import { ColorPicker } from '@/components/email-builder/ui/ColorPicker'
+import { useStoreStore } from '@/stores'
 
 // ── Step Bar (Omnisend-style, centered, editable step names) ──────────────────
 function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess, onRenameStep, onCloneStep, onDeleteStep, onAddStep }: {
@@ -2361,6 +2362,7 @@ export default function PopupEditorPage() {
   const params = useParams()
   const router = useRouter()
   const formId = params.id as string
+  const { currentStore } = useStoreStore()
 
   const [design, setDesign] = useState<PopupDesign>(defaultDesign)
   const [loading, setLoading] = useState(true)
@@ -2472,10 +2474,15 @@ export default function PopupEditorPage() {
           audience: design.behavior.audience || null,
           tags: design.behavior.audience?.tags || [],
           list_id: design.behavior.audience?.listId || null,
+          // Auto-attach to the current store on every save. Covers the case where
+          // the form was created with store_id=NULL because currentStore was still
+          // hydrating when the merchant clicked Create — without this, the popup
+          // is invisible in the per-store list and stuck as orphan forever.
+          ...(currentStore?.id ? { store_id: currentStore.id } : {}),
         }),
       })
     } finally { setSaving(false) }
-  }, [formId, design, formStatus, formName])
+  }, [formId, design, formStatus, formName, currentStore?.id])
 
   const handlePublish = useCallback(async () => {
     const newStatus = formStatus === 'published' ? 'draft' : 'published'
@@ -2483,9 +2490,15 @@ export default function PopupEditorPage() {
     await fetch(`/api/forms/${formId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus, design_json: design, form_type: design.formType, behavior: design.behavior }),
+      body: JSON.stringify({
+        status: newStatus,
+        design_json: design,
+        form_type: design.formType,
+        behavior: design.behavior,
+        ...(currentStore?.id ? { store_id: currentStore.id } : {}),
+      }),
     })
-  }, [formId, design, formStatus])
+  }, [formId, design, formStatus, currentStore?.id])
 
   const updateBlocks = (blocks: Block[]) => {
     const updater = (d: PopupDesign) => {
