@@ -230,18 +230,45 @@ export default function ShopifyConnect() {
     setSyncingAll(true);
     setError('');
     try {
+      // Step 1: Sync products + customers + orders into shopify_* tables
       const res = await fetch('/api/shopify/sync-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ syncType: 'all' }),
       });
       const data = await res.json();
-      if (data.success || data.data) {
-        setSuccessMessage(`Sync concluído: ${data.data?.customers || 0} clientes, ${data.data?.products || 0} produtos, ${data.data?.orders || 0} pedidos`);
-        fetchStatus();
-      } else {
+      if (!data.success && !data.data) {
         setError(data.error || 'Erro no sync');
+        setSyncingAll(false);
+        return;
       }
+
+      // Step 2: Pull customer financial metrics (revenue, AOV, last_order_at)
+      // and write them into the contacts table → populates dashboard.
+      let financialStats: any = null;
+      if (store?.id) {
+        try {
+          const finRes = await fetch(`/api/shopify/sync-financials?store_id=${store.id}`, {
+            method: 'POST',
+          });
+          const finData = await finRes.json();
+          if (finRes.ok && finData.stats) financialStats = finData.stats;
+        } catch { /* non-blocking */ }
+      }
+
+      const parts: string[] = [];
+      if (data.data) {
+        parts.push(`${data.data.customers || 0} clientes`);
+        parts.push(`${data.data.products || 0} produtos`);
+        parts.push(`${data.data.orders || 0} pedidos`);
+      }
+      if (financialStats) {
+        const currency = financialStats.currency || 'BRL';
+        const revenue = (financialStats.totalRevenue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+        parts.push(`${currency} ${revenue} em receita`);
+      }
+      setSuccessMessage(`Sync concluído: ${parts.join(', ')}`);
+      fetchStatus();
     } catch {
       setError('Erro ao sincronizar');
     } finally {
