@@ -161,8 +161,8 @@ export const CUSTOMER_BY_ID_QUERY = `
               currencyCode
             }
           }
-          financialStatus
-          fulfillmentStatus
+          displayFinancialStatus
+          displayFulfillmentStatus
         }
       }
     }
@@ -191,8 +191,8 @@ export const ORDERS_QUERY = `
         closedAt
         cancelledAt
         cancelReason
-        financialStatus
-        fulfillmentStatus
+        displayFinancialStatus
+        displayFulfillmentStatus
         confirmed
         paymentGatewayNames
         totalPriceSet {
@@ -231,6 +231,8 @@ export const ORDERS_QUERY = `
             currencyCode
           }
         }
+        displayFinancialStatus
+        displayFulfillmentStatus
         customer {
           id
           firstName
@@ -313,13 +315,16 @@ export const ORDERS_QUERY = `
           }
         }
         transactions(first: 10) {
-          gateway
-          kind
-          status
-          amountSet {
-            shopMoney {
-              amount
-              currencyCode
+          nodes {
+            id
+            gateway
+            kind
+            status
+            amountSet {
+              shopMoney {
+                amount
+                currencyCode
+              }
             }
           }
         }
@@ -337,8 +342,8 @@ export const ORDER_BY_ID_QUERY = `
       phone
       createdAt
       updatedAt
-      financialStatus
-      fulfillmentStatus
+      displayFinancialStatus
+      displayFulfillmentStatus
       totalPriceSet {
         shopMoney {
           amount

@@ -349,8 +349,8 @@ export async function POST(request: NextRequest) {
             phone: order.phone,
             total_price: orderValue,
             currency,
-            financial_status: (order.financialStatus || 'pending').toLowerCase(),
-            fulfillment_status: order.fulfillmentStatus?.toLowerCase() || null,
+            financial_status: (order.displayFinancialStatus || 'pending').toLowerCase(),
+            fulfillment_status: order.displayFulfillmentStatus?.toLowerCase() || null,
             line_items: lineItems,
             updated_at: new Date().toISOString(),
           };
