@@ -198,6 +198,7 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
   const removeNode = useFlowStore((s) => s.removeNode);
   const duplicateNode = useFlowStore((s) => s.duplicateNode);
   const [showMenu, setShowMenu] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -264,11 +265,12 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
             )}
           </div>
           {/* 3-dot menu — Portal to escape card overflow-hidden */}
-          <div className="shrink-0">
+          <div className="shrink-0 nodrag">
             <button
               ref={menuTriggerRef}
               onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
-              className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-gray-100 transition-opacity"
+              onMouseDown={(e) => e.stopPropagation()}
+              className="nodrag opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-gray-100 transition-opacity"
               aria-label="Mais opções"
             >
               <MoreVertical className="w-4 h-4 text-gray-400" />
@@ -347,13 +349,14 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
         <>
           <div
             className="fixed inset-0 z-[100]"
-            onClick={(e) => { e.stopPropagation(); setShowMenu(false); }}
+            onClick={(e) => { e.stopPropagation(); setShowMenu(false); setConfirmingDelete(false); }}
           />
           <div
             role="menu"
             style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
-            className="z-[101] w-36 bg-white rounded-lg border border-gray-200 shadow-xl py-1"
+            className="nodrag z-[101] w-36 bg-white rounded-lg border border-gray-200 shadow-xl py-1"
             onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
           >
             <button
               onClick={(e) => {
@@ -365,16 +368,29 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
             >
               Duplicar
             </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (confirm('Excluir este bloco?')) { removeNode(id); }
-                setShowMenu(false);
-              }}
-              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-            >
-              Excluir
-            </button>
+            {confirmingDelete ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeNode(id);
+                  setShowMenu(false);
+                  setConfirmingDelete(false);
+                }}
+                className="w-full px-3 py-2 text-left text-sm font-medium bg-red-500 text-white hover:bg-red-600"
+              >
+                Confirmar exclusão
+              </button>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmingDelete(true);
+                }}
+                className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+              >
+                Excluir
+              </button>
+            )}
           </div>
         </>,
         document.body
