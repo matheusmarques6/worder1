@@ -34,6 +34,15 @@ interface DiagResponse {
     byType: Record<string, number>
     bySource: Record<string, number>
   }
+  identity?: {
+    totalIdentities: number
+    identifiedCount: number
+    anonymousCount: number
+    stitchedByFingerprint: number
+  }
+  recommendations?: {
+    totalRecsRows: number
+  }
   recentEvents: Array<{
     id: string
     event_type: string
@@ -258,6 +267,36 @@ export default function TrackingDebugPage() {
         <StatusCard label="Webhooks" ok={(i.webhooksRegistered ?? 0) >= 10} hint={i.webhooksRegistered != null ? `${i.webhooksRegistered} registrados` : 'Não foi possível verificar'} />
         <StatusCard label="Eventos última hora" ok={c.last1h > 0} value={c.last1h} hint={c.last1h > 0 ? 'Tracking ativo' : 'Nenhum evento — verifique o pixel'} />
       </div>
+
+      {/* Identity graph + Recommendations status */}
+      {(data.identity || data.recommendations) && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatusCard
+            label="Visitantes únicos"
+            ok={(data.identity?.totalIdentities || 0) > 0}
+            value={data.identity?.totalIdentities || 0}
+            hint="Linhas na tabela visitor_identities"
+          />
+          <StatusCard
+            label="Identificados"
+            ok={(data.identity?.identifiedCount || 0) > 0}
+            value={data.identity?.identifiedCount || 0}
+            hint={`${data.identity?.anonymousCount || 0} ainda anônimos`}
+          />
+          <StatusCard
+            label="Re-stitch por fingerprint"
+            ok={(data.identity?.stitchedByFingerprint || 0) > 0}
+            value={data.identity?.stitchedByFingerprint || 0}
+            hint="Identidades recuperadas após ITP wipe"
+          />
+          <StatusCard
+            label="Recomendações"
+            ok={(data.recommendations?.totalRecsRows || 0) > 0}
+            value={data.recommendations?.totalRecsRows || 0}
+            hint={(data.recommendations?.totalRecsRows || 0) > 0 ? 'Cron materializou recs' : 'Cron ainda não rodou (4am UTC)'}
+          />
+        </div>
+      )}
 
       {/* Test event row */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-end gap-3">

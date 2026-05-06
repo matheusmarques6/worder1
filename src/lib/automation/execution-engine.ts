@@ -129,6 +129,25 @@ export class ExecutionEngine {
       (context as any).organizationId = options.organizationId;
     }
 
+    // Populate product recommendations from the trigger anchor product.
+    // Email/WhatsApp templates can reference {{ recommendations.fbt[0].title }}
+    // — this is what surfaces them with real data at render time. Fire and
+    // forget: an empty recs object is fine if the cron hasn't materialized
+    // anything yet for this product.
+    if (options.organizationId && !(context as any).recommendations) {
+      try {
+        const { populateRecommendations, extractAnchorProductId } = await import('./recommendations-populator');
+        const anchorId = extractAnchorProductId(context.trigger?.data || {});
+        const recs = await populateRecommendations({
+          organizationId: options.organizationId,
+          productId: anchorId,
+        });
+        (context as any).recommendations = recs;
+      } catch (recErr: any) {
+        console.warn('[Execution Engine] recommendations populate failed:', recErr?.message);
+      }
+    }
+
     // Ensure nodes object exists in context
     if (!context.nodes) {
       context.nodes = {};

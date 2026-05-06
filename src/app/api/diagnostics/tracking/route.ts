@@ -55,6 +55,34 @@ export async function GET(request: NextRequest) {
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const since1h = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
+  // Identity graph stats — surface how many visitors we're tracking and
+  // how many were re-stitched by fingerprint/email after losing localStorage.
+  const { count: totalIdentities } = await admin
+    .from('visitor_identities')
+    .select('*', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+    .is('merged_into_id', null);
+  const { count: identifiedCount } = await admin
+    .from('visitor_identities')
+    .select('*', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+    .is('merged_into_id', null)
+    .not('contact_id', 'is', null);
+  const { count: stitchedByFingerprint } = await admin
+    .from('visitor_identities')
+    .select('*', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+    .is('merged_into_id', null)
+    .gt('match_count', 1)
+    .not('fingerprint_hash', 'is', null);
+
+  // Recommendation cron output — count rows per type so the merchant
+  // sees if collaborative filtering has materialized anything yet.
+  const { count: recsCount } = await admin
+    .from('product_recommendations')
+    .select('*', { count: 'exact', head: true })
+    .eq('organization_id', orgId);
+
   // Recent events — last 50 for live feed
   const { data: recentEvents } = await admin
     .from('contact_events')
@@ -184,6 +212,15 @@ export async function GET(request: NextRequest) {
       anonymous: anonymousCount,
       byType: eventsByType,
       bySource: eventsBySource,
+    },
+    identity: {
+      totalIdentities: totalIdentities || 0,
+      identifiedCount: identifiedCount || 0,
+      anonymousCount: (totalIdentities || 0) - (identifiedCount || 0),
+      stitchedByFingerprint: stitchedByFingerprint || 0,
+    },
+    recommendations: {
+      totalRecsRows: recsCount || 0,
     },
     recentEvents: (recentEvents || []).map(e => ({
       id: e.id,
