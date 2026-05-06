@@ -94,6 +94,28 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(10);
 
+  // Recent webhook deliveries from Shopify (last 30) — helps diagnose
+  // when Shopify IS sending events (e.g. orders/create, checkouts/create)
+  // but our handler is silently dropping them. If this list is empty
+  // and the storefront has clearly had activity, the problem is at the
+  // delivery layer (HMAC mismatch, wrong endpoint URL, etc).
+  const { data: recentWebhooks } = await admin
+    .from('shopify_webhook_log')
+    .select('id, topic, status, shopify_resource_id, received_at, processed_at, error_message, attempts')
+    .eq('store_id', store.id)
+    .order('received_at', { ascending: false })
+    .limit(30);
+
+  // Recent abandoned checkouts saved by the webhook (so the merchant can
+  // confirm checkouts/create reached the DB even if no contact_event was
+  // produced — that's a different layer of failure).
+  const { data: recentCheckouts } = await admin
+    .from('shopify_checkouts')
+    .select('id, shopify_checkout_id, email, total_price, currency, status, contact_id, created_at, shopify_created_at')
+    .eq('store_id', store.id)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
   // Webhooks registered on Shopify
   let webhookCount: number | null = null;
   let webhookList: any[] = [];
@@ -162,6 +184,27 @@ export async function GET(request: NextRequest) {
       total_spent: c.total_spent,
       last_event_at: c.last_event_at,
       created_at: c.created_at,
+    })),
+    recentWebhooks: (recentWebhooks || []).map(w => ({
+      id: w.id,
+      topic: w.topic,
+      status: w.status,
+      shopify_resource_id: w.shopify_resource_id,
+      received_at: w.received_at,
+      processed_at: w.processed_at,
+      error_message: w.error_message,
+      attempts: w.attempts,
+    })),
+    recentCheckouts: (recentCheckouts || []).map(c => ({
+      id: c.id,
+      shopify_checkout_id: c.shopify_checkout_id,
+      email: c.email,
+      total_price: c.total_price,
+      currency: c.currency,
+      status: c.status,
+      has_contact: !!c.contact_id,
+      saved_at: c.created_at,
+      shopify_created_at: c.shopify_created_at,
     })),
   });
 }

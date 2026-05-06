@@ -52,6 +52,27 @@ interface DiagResponse {
     last_event_at: string | null
     created_at: string
   }>
+  recentWebhooks?: Array<{
+    id: string
+    topic: string
+    status: string
+    shopify_resource_id: string | null
+    received_at: string
+    processed_at: string | null
+    error_message: string | null
+    attempts: number
+  }>
+  recentCheckouts?: Array<{
+    id: string
+    shopify_checkout_id: string
+    email: string | null
+    total_price: number | null
+    currency: string | null
+    status: string
+    has_contact: boolean
+    saved_at: string
+    shopify_created_at: string
+  }>
 }
 
 const EVENT_ICONS: Record<string, any> = {
@@ -113,6 +134,31 @@ export default function TrackingDebugPage() {
       await fetchDiag()
     } finally {
       setTesting(false)
+    }
+  }
+
+  const [reprocessing, setReprocessing] = useState(false)
+  const [reprocessResult, setReprocessResult] = useState<string | null>(null)
+  async function reprocessCheckouts() {
+    if (!currentStore?.id) return
+    setReprocessing(true)
+    setReprocessResult(null)
+    try {
+      const res = await fetch('/api/diagnostics/reprocess-checkouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: currentStore.id }),
+      })
+      const j = await res.json()
+      if (j.success) {
+        setReprocessResult(`${j.processed} eventos criados, ${j.skipped} já existiam${j.errors ? `, ${j.errors} erros` : ''}.`)
+      } else {
+        setReprocessResult(j.error || 'Falhou.')
+      }
+      await fetchDiag()
+    } finally {
+      setReprocessing(false)
+      setTimeout(() => setReprocessResult(null), 6000)
     }
   }
 
@@ -203,6 +249,91 @@ export default function TrackingDebugPage() {
           Disparar
         </button>
       </div>
+
+      {/* Webhook deliveries (Shopify -> us) — shows whether Shopify is
+          actually reaching our endpoint, and whether we processed each
+          delivery. If checkouts/orders aren't producing contact_events,
+          this panel tells you whether the failure is at Shopify->us or
+          us->contact_events. */}
+      {data.recentWebhooks && data.recentWebhooks.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <p className="text-[13px] font-semibold text-gray-900">Webhooks recebidos do Shopify</p>
+              <p className="text-[11px] text-gray-400">Últimas 30 entregas — confirma se o Shopify está mandando os eventos</p>
+            </div>
+            {data.recentCheckouts && data.recentCheckouts.length > 0 && (
+              <button
+                onClick={reprocessCheckouts}
+                disabled={reprocessing}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-zinc-900 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-lg transition-colors disabled:opacity-50"
+                title="Reprocessa checkouts existentes para criar eventos checkout_started que talvez tenham sido perdidos."
+              >
+                {reprocessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Reprocessar checkouts
+              </button>
+            )}
+          </div>
+          {reprocessResult && (
+            <div className="px-4 py-2 bg-emerald-50 text-[12px] text-emerald-700 border-b border-emerald-100">
+              {reprocessResult}
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-3 max-h-[280px] overflow-y-auto">
+            {data.recentWebhooks.map(w => {
+              const ageMs = Date.now() - new Date(w.received_at).getTime()
+              const ageStr = ageMs < 60000 ? `${Math.floor(ageMs / 1000)}s` : ageMs < 3600000 ? `${Math.floor(ageMs / 60000)}m` : ageMs < 86400000 ? `${Math.floor(ageMs / 3600000)}h` : `${Math.floor(ageMs / 86400000)}d`
+              const ok = w.status === 'processed' || w.status === 'success' || w.status === 'completed'
+              const failed = w.status === 'failed' || !!w.error_message
+              return (
+                <div key={w.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-md border border-gray-100 hover:bg-gray-50">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${ok ? 'bg-emerald-500' : failed ? 'bg-red-500' : 'bg-amber-500'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-mono font-semibold text-gray-900 truncate">{w.topic}</p>
+                    <p className="text-[10px] text-gray-500 truncate">
+                      {w.shopify_resource_id ? `#${w.shopify_resource_id} · ` : ''}{w.status}{w.error_message ? ` — ${w.error_message.slice(0, 60)}` : ''}
+                    </p>
+                  </div>
+                  <span className="text-[10px] text-gray-400 flex-shrink-0">{ageStr}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Abandoned checkouts saved in our DB — shows whether the row
+          made it to shopify_checkouts. If it did but no checkout_started
+          event exists, click "Reprocessar checkouts" above. */}
+      {data.recentCheckouts && data.recentCheckouts.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <p className="text-[13px] font-semibold text-gray-900">Checkouts no banco</p>
+            <p className="text-[11px] text-gray-400">Últimos 10 — se há checkout aqui mas falta evento, use Reprocessar</p>
+          </div>
+          <div className="divide-y divide-gray-100 max-h-[280px] overflow-y-auto">
+            {data.recentCheckouts.map(c => {
+              const ageMs = Date.now() - new Date(c.shopify_created_at).getTime()
+              const ageStr = ageMs < 60000 ? `${Math.floor(ageMs / 1000)}s` : ageMs < 3600000 ? `${Math.floor(ageMs / 60000)}m` : ageMs < 86400000 ? `${Math.floor(ageMs / 3600000)}h` : `${Math.floor(ageMs / 86400000)}d`
+              return (
+                <div key={c.id} className="px-4 py-2.5 flex items-center gap-3">
+                  <CreditCard className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12.5px] font-medium text-gray-900 truncate">
+                      {c.email || <span className="italic text-gray-500">sem email</span>}
+                      {c.has_contact && <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-semibold">contato vinculado</span>}
+                    </p>
+                    <p className="text-[10.5px] text-gray-500">
+                      #{c.shopify_checkout_id} · {c.status} · {c.currency} {Number(c.total_price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <span className="text-[10px] text-gray-400 flex-shrink-0">{ageStr} atrás</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Live event feed */}
