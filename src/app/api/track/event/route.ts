@@ -39,14 +39,25 @@ const EVENT_TYPE_MAP: Record<string, WorderShopifyEventType> = {
   payment_submitted: 'payment_submitted',
 };
 
-// CORS headers for cross-origin requests from Shopify stores
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+// CORS headers for cross-origin requests from Shopify stores.
+// Echoes the request Origin so the browser sends cookies (we use a
+// first-party __worder_id cookie set by /api/identity/resolve to
+// re-identify visitors across sessions). With a wildcard origin the
+// browser silently drops the cookie.
+const CORS_HEADERS_BASE = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, X-Requested-With',
   'Access-Control-Max-Age': '86400',
+  'Vary': 'Origin',
 };
-
+function corsForRequest(request: NextRequest) {
+  const origin = request.headers.get('origin');
+  return {
+    ...CORS_HEADERS_BASE,
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Credentials': origin ? 'true' : 'false',
+  };
+}
 // Simple UA parser for device/browser/os
 function parseUserAgent(ua: string | undefined | null) {
   if (!ua) return { device_type: null, browser: null, os: null };
@@ -72,11 +83,12 @@ function parseUserAgent(ua: string | undefined | null) {
   return { device_type, browser, os };
 }
 
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 200, headers: CORS_HEADERS });
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 200, headers: corsForRequest(request) });
 }
 
 export async function POST(request: NextRequest) {
+  const CORS = corsForRequest(request);
   try {
     // ---- Rate limit anti-DoS (pixel público) ----
     const ip = getClientIp(request);
@@ -87,7 +99,7 @@ export async function POST(request: NextRequest) {
     if (!rl.allowed) {
       return NextResponse.json(
         { error: 'Rate limited', retryAfterSec: Math.ceil((rl.resetAt - Date.now()) / 1000) },
-        { status: 429, headers: { ...CORS_HEADERS, 'Retry-After': '60' } }
+        { status: 429, headers: { ...CORS, 'Retry-After': '60' } }
       );
     }
 
@@ -101,6 +113,7 @@ export async function POST(request: NextRequest) {
       visitorId,
       sessionId,
       fingerprint,
+      fingerprintHash,
       // Event
       eventType,
       eventId,
@@ -138,14 +151,14 @@ export async function POST(request: NextRequest) {
     if (!eventType) {
       return NextResponse.json(
         { error: 'Missing eventType' },
-        { status: 400, headers: CORS_HEADERS }
+        { status: 400, headers: CORS }
       );
     }
 
     if (!accountId && !storeId && !storeDomain) {
       return NextResponse.json(
         { error: 'Missing store identifier (accountId, storeId, or storeDomain)' },
-        { status: 400, headers: CORS_HEADERS }
+        { status: 400, headers: CORS }
       );
     }
 
@@ -187,17 +200,45 @@ export async function POST(request: NextRequest) {
     if (!store) {
       return NextResponse.json(
         { error: 'Store not found' },
-        { status: 404, headers: CORS_HEADERS }
+        { status: 404, headers: CORS }
       );
     }
 
     const organizationId = store.organization_id;
-
-    // ---- Resolve contact ----
-    let contactId: string | null = null;
     const resolvedCustomerId = shopifyCustomerId || clientId;
 
-    if (email) {
+    // ---- Resolve stable identity via the identity graph (NEW) ----
+    // Maps any combination of (clientVisitorId, fingerprintHash, UA, IP,
+    // email, phone, shopifyCustomerId) to a single worder_visitor_id row
+    // in visitor_identities. Survives Safari ITP localStorage wipes by
+    // re-matching on fingerprint+UA hash. Falls back gracefully when no
+    // fingerprint is present (legacy clients).
+    let identityResult: Awaited<ReturnType<typeof import('@/lib/identity/resolver').resolveIdentity>> | null = null;
+    try {
+      const { resolveIdentity } = await import('@/lib/identity/resolver');
+      const { getClientIp: getIp } = await import('@/lib/rate-limit');
+      identityResult = await resolveIdentity({
+        organizationId,
+        storeId: store.id,
+        clientVisitorId: visitorId || anonymousId || null,
+        fingerprintHash: fingerprintHash || (typeof fingerprint === 'string' ? fingerprint : null),
+        userAgent: userAgent || null,
+        ip: getIp(request) || null,
+        email: email || null,
+        phone: phone || null,
+        shopifyCustomerId: resolvedCustomerId ? String(resolvedCustomerId) : null,
+        source: source === 'shopify_pixel' ? 'pixel' : 'embed',
+      });
+    } catch (idErr) {
+      // Identity resolver failures must NEVER drop events. Log and fall
+      // back to the legacy resolution paths below.
+      console.error('[Track Event] Identity resolver failed:', idErr);
+    }
+
+    // ---- Resolve contact ----
+    let contactId: string | null = identityResult?.contactId || null;
+
+    if (email && !contactId) {
       const { data: contact } = await supabase
         .from('contacts')
         .select('id')
@@ -345,7 +386,7 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (existing) {
-        return NextResponse.json({ ok: true, deduplicated: true }, { status: 200, headers: CORS_HEADERS });
+        return NextResponse.json({ ok: true, deduplicated: true }, { status: 200, headers: CORS });
       }
     }
 
@@ -354,6 +395,13 @@ export async function POST(request: NextRequest) {
 
     // ---- Insert event ----
     const now = new Date().toISOString();
+    // Prefer the canonical worder_visitor_id from the identity graph when
+    // available — this is the stable ID across Safari ITP wipes / device
+    // changes. Fall back to whatever the client sent for legacy paths.
+    const canonicalAnonId = identityResult?.worderVisitorId
+      || visitorId
+      || anonymousId
+      || sessionId;
     const eventData: Record<string, any> = {
       organization_id: organizationId,
       contact_id: contactId,
@@ -364,11 +412,16 @@ export async function POST(request: NextRequest) {
       monetary_value: monetaryValue,
       currency,
       session_id: sessionId || null,
-      anonymous_id: !contactId ? (visitorId || anonymousId || sessionId) : null,
+      anonymous_id: !contactId ? canonicalAnonId : null,
       occurred_at: timestamp || now,
       received_at: now,
       idempotency_key: idempotencyKey,
     };
+    if (identityResult?.identityId) {
+      enrichedProperties._identity_id = identityResult.identityId;
+      enrichedProperties._identity_match_source = identityResult.matchSource;
+      if (identityResult.stitched) enrichedProperties._identity_stitched = true;
+    }
 
     // Add optional shopify resource fields if present
     if (properties?.shopify_resource_id) {
@@ -379,6 +432,19 @@ export async function POST(request: NextRequest) {
     }
 
     await supabase.from('contact_events').insert(eventData);
+
+    // ---- Link contact to identity row when newly resolved (NEW) ----
+    // If we just resolved a contact_id for an identity that didn't have
+    // one before, persist the link AND backfill historic anonymous events
+    // under any of this identity's aliases.
+    if (contactId && identityResult && !identityResult.contactId) {
+      try {
+        const { linkContactToIdentity } = await import('@/lib/identity/resolver');
+        await linkContactToIdentity(identityResult.identityId, contactId, organizationId);
+      } catch (linkErr) {
+        console.error('[Track Event] Identity link failed:', linkErr);
+      }
+    }
 
     // ---- Attribution touchpoints (first/last touch) ----
     const hasUtm = utmParams && (utmParams.utm_source || utmParams.utm_medium || utmParams.utm_campaign);
@@ -518,10 +584,10 @@ export async function POST(request: NextRequest) {
         });
     }
 
-    return NextResponse.json({ ok: true }, { status: 200, headers: CORS_HEADERS });
+    return NextResponse.json({ ok: true }, { status: 200, headers: CORS });
   } catch (error: any) {
     console.error('[Track Event] Error:', error?.message || error);
     // Always return 200 to not break pixel/embed
-    return NextResponse.json({ ok: true }, { status: 200, headers: CORS_HEADERS });
+    return NextResponse.json({ ok: true }, { status: 200, headers: CORS });
   }
 }

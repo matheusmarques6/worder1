@@ -169,6 +169,13 @@ export async function GET(request: NextRequest) {
       apiSecretConfigured: !!store.api_secret,
       syncCheckoutsEnabled: store.sync_checkouts !== false,
       scopes: Array.isArray(store.scopes) ? store.scopes : [],
+      // Manual install fallback — when auto webPixelCreate fails (the
+      // store is on a Custom App without our extension installed), the
+      // merchant has to paste this snippet into Shopify Admin → Settings
+      // → Customer Events → Add custom pixel. The diagnostic dashboard
+      // surfaces it inline when pixelInstalled=false so the merchant
+      // doesn't have to dig through the integrations page.
+      manualPixelLoaderCode: `!function(t,w,d){var s=d.createElement("script");s.async=!0;s.src="${process.env.NEXT_PUBLIC_APP_URL || ''}/api/pixel/worder-pixel.js?shop="+t.init.data.shop.myshopifyDomain;d.head.append(s);w.__worder_ctx=t}(this,window,document);`,
     },
     counts: {
       last1h: last1hCount,

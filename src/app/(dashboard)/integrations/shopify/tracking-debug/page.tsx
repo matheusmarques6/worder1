@@ -24,6 +24,7 @@ interface DiagResponse {
     apiSecretConfigured?: boolean
     syncCheckoutsEnabled?: boolean
     scopes: string[]
+    manualPixelLoaderCode?: string
   }
   counts: {
     last1h: number
@@ -147,6 +148,7 @@ export default function TrackingDebugPage() {
   const [reprocessResult, setReprocessResult] = useState<string | null>(null)
   const [reinstalling, setReinstalling] = useState(false)
   const [reinstallResult, setReinstallResult] = useState<string | null>(null)
+  const [copiedSnippet, setCopiedSnippet] = useState(false)
   async function reinstallEverything() {
     if (!currentStore?.id) return
     setReinstalling(true)
@@ -387,6 +389,49 @@ export default function TrackingDebugPage() {
       {reinstallResult && (
         <div className="px-4 py-2.5 bg-emerald-50 text-[12px] text-emerald-800 border border-emerald-200 rounded-lg">
           {reinstallResult}
+        </div>
+      )}
+
+      {/* Manual Custom Pixel install fallback — the auto-install via
+          webPixelCreate only works when the merchant has our published
+          Web Pixel Extension. For Custom App / manual integrations, the
+          mutation succeeds without actually installing anything visible
+          on the storefront. We surface the loader snippet so the
+          merchant can paste it into Customer Events directly. */}
+      {!data.install.pixelInstalled && data.install.manualPixelLoaderCode && (
+        <div className="bg-white border border-amber-200 rounded-xl">
+          <div className="px-4 py-3 border-b border-amber-100 bg-amber-50">
+            <p className="text-[13px] font-semibold text-amber-900">
+              Pixel não instalado — instalação manual necessária
+            </p>
+            <p className="text-[11.5px] text-amber-800 mt-0.5">
+              O auto-install via API falhou (provável: integração manual sem nossa Web Pixel Extension publicada).
+              Cole o código abaixo em <strong>Shopify Admin → Configurações → Customer Events → Adicionar pixel personalizado</strong> e marque "Não obrigatório" em privacidade.
+            </p>
+          </div>
+          <div className="p-4 space-y-2">
+            <div className="relative">
+              <pre className="text-[11px] font-mono bg-gray-900 text-emerald-400 p-3 rounded-lg overflow-x-auto whitespace-pre">{data.install.manualPixelLoaderCode}</pre>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(data.install.manualPixelLoaderCode || '')
+                  setCopiedSnippet(true)
+                  setTimeout(() => setCopiedSnippet(false), 2000)
+                }}
+                className="absolute top-2 right-2 px-2.5 py-1 text-[11px] font-medium bg-white text-gray-700 hover:bg-gray-50 rounded border border-gray-300 shadow-sm"
+              >
+                {copiedSnippet ? 'Copiado!' : 'Copiar'}
+              </button>
+            </div>
+            <ol className="text-[11.5px] text-gray-600 space-y-0.5 pl-4 list-decimal">
+              <li>No admin da Shopify, abra <strong>Configurações → Customer Events</strong>.</li>
+              <li>Clique em <strong>Adicionar pixel personalizado</strong> e nomeie como "Worder".</li>
+              <li>Cole o código acima no editor.</li>
+              <li>Em "Privacidade do cliente", mantenha <strong>Não obrigatório</strong> (ou ajuste conforme sua política LGPD).</li>
+              <li>Clique em <strong>Salvar</strong> e depois em <strong>Conectar</strong>.</li>
+              <li>Volte aqui e clique em "Atualizar" — pixelInstalled deve virar verde após o primeiro evento.</li>
+            </ol>
+          </div>
         </div>
       )}
 
