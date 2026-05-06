@@ -564,6 +564,13 @@ export default function ShopifyConnect() {
           >
             <RefreshCw className="w-4 h-4" /> Atualizar
           </button>
+          <a
+            href="/integrations/shopify/tracking-debug"
+            className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
+            title="Ver eventos de tracking em tempo real"
+          >
+            <Wifi className="w-4 h-4" /> Diagnóstico
+          </a>
           {store.connectionType === 'manual' && (
             <button
               onClick={() => setShowEditCreds((v) => !v)}
