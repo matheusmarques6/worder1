@@ -18,49 +18,56 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const storeId = searchParams.get('storeId') || searchParams.get('store_id')
 
-    // Use the admin client and enforce isolation explicitly via the
-    // organization_id filter. Going through the user's RLS-aware client was
-    // causing forms with store_id IS NULL to be hidden because the policy on
-    // crm_forms appears to require a non-null store_id match. The explicit
-    // organization_id filter below preserves multi-tenant isolation without
-    // depending on RLS.
     const admin = getSupabaseAdmin()
-    let query = admin
-      .from('crm_forms')
-      .select(`
-        id, name, slug, description, status,
-        submissions_count, views_count,
-        pipeline_id, stage_id, store_id,
-        facebook_pixel_id, google_ads_id,
-        theme, logo_url,
-        created_at, updated_at,
-        pipeline:pipelines(id, name, color),
-        fields:crm_form_fields(count),
-        events:crm_form_events(count)
-      `)
-      .eq('organization_id', user.organization_id)
-      .order('created_at', { ascending: false })
+    const baseSelect = `
+      id, name, slug, description, status,
+      submissions_count, views_count,
+      pipeline_id, stage_id, store_id,
+      facebook_pixel_id, google_ads_id,
+      theme, logo_url,
+      created_at, updated_at,
+      pipeline:pipelines(id, name, color),
+      fields:crm_form_fields(count),
+      events:crm_form_events(count)
+    `
 
-    // Filter by store. Also include orphan forms (store_id IS NULL) so a
-    // popup created before currentStore was hydrated (race during page load)
-    // doesn't disappear from the dashboard. The popup-editor's save will
-    // auto-attach it to the current store on the next save.
+    let forms: any[] = []
+    let error: any = null
+
     if (storeId) {
-      query = query.or(`store_id.eq.${storeId},store_id.is.null`)
+      // Two explicit queries (store_id = X) UNION (store_id IS NULL).
+      // .or() chained after .eq() with foreign-key joins was silently
+      // returning empty results in production for some rows even when the
+      // data was clearly there. Splitting avoids relying on the OR-with-
+      // joins quirk and the result is identical, just deduped + sorted in
+      // memory below.
+      let q1 = admin.from('crm_forms').select(baseSelect).eq('organization_id', user.organization_id).eq('store_id', storeId)
+      let q2 = admin.from('crm_forms').select(baseSelect).eq('organization_id', user.organization_id).is('store_id', null)
+      if (status) { q1 = q1.eq('status', status); q2 = q2.eq('status', status) }
+      const [r1, r2] = await Promise.all([q1, q2])
+      error = r1.error || r2.error
+      const merged = [...(r1.data || []), ...(r2.data || [])]
+      const seen = new Set<string>()
+      forms = merged.filter(f => seen.has(f.id) ? false : (seen.add(f.id), true))
+      forms.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+    } else {
+      let query = admin
+        .from('crm_forms')
+        .select(baseSelect)
+        .eq('organization_id', user.organization_id)
+        .order('created_at', { ascending: false })
+      if (status) query = query.eq('status', status)
+      const r = await query
+      error = r.error
+      forms = r.data || []
     }
-
-    if (status) {
-      query = query.eq('status', status)
-    }
-
-    const { data: forms, error } = await query
 
     if (error) {
       console.error('[Forms] Error fetching:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ forms: forms || [] })
+    return NextResponse.json({ forms })
   } catch (error: any) {
     console.error('[Forms] GET error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
