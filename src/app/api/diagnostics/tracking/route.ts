@@ -120,6 +120,8 @@ export async function GET(request: NextRequest) {
   let webhookCount: number | null = null;
   let webhookList: any[] = [];
   let webhookCheckoutTopicsRegistered = false;
+  let webhookUrlMismatchCount = 0;
+  const expectedWebhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || ''}/api/webhooks/shopify`;
   try {
     const apiVersion = store.api_version || '2026-04';
     const wRes = await fetch(
@@ -128,14 +130,21 @@ export async function GET(request: NextRequest) {
     );
     if (wRes.ok) {
       const json = await wRes.json();
-      const ours = (json.webhooks || []).filter((w: any) =>
-        (w.address || '').includes(process.env.NEXT_PUBLIC_APP_URL || '')
+      // Show ALL webhooks (not just ones matching our domain) so the merchant
+      // can see if subscriptions point at a stale URL (e.g. ngrok tunnel,
+      // old Vercel preview deployment, wrong app domain).
+      const all = json.webhooks || [];
+      webhookCount = all.length;
+      webhookList = all.map((w: any) => ({
+        topic: w.topic,
+        address: w.address,
+        matches_expected: w.address === expectedWebhookUrl,
+      }));
+      webhookCheckoutTopicsRegistered = all.some((w: any) =>
+        (w.topic === 'checkouts/create' || w.topic === 'checkouts/update') &&
+        w.address === expectedWebhookUrl
       );
-      webhookCount = ours.length;
-      webhookList = ours.map((w: any) => ({ topic: w.topic, address: w.address }));
-      webhookCheckoutTopicsRegistered = ours.some((w: any) =>
-        w.topic === 'checkouts/create' || w.topic === 'checkouts/update'
-      );
+      webhookUrlMismatchCount = all.filter((w: any) => w.address !== expectedWebhookUrl).length;
     }
   } catch { /* best-effort */ }
 
@@ -155,6 +164,8 @@ export async function GET(request: NextRequest) {
       webhooksRegistered: webhookCount,
       webhooks: webhookList,
       checkoutTopicsRegistered: webhookCheckoutTopicsRegistered,
+      webhookUrlMismatchCount,
+      expectedWebhookUrl,
       apiSecretConfigured: !!store.api_secret,
       syncCheckoutsEnabled: store.sync_checkouts !== false,
       scopes: Array.isArray(store.scopes) ? store.scopes : [],

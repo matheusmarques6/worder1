@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStoreStore } from '@/stores'
+import { cn } from '@/lib/utils'
 import {
   ArrowLeft, RefreshCw, CheckCircle, AlertCircle, Loader2, Activity,
   Eye, ShoppingCart, CreditCard, Package, Mail, User, Clock, Zap,
@@ -16,8 +17,10 @@ interface DiagResponse {
     loaderInstalled: boolean
     scriptTagId: string | null
     webhooksRegistered: number | null
-    webhooks: Array<{ topic: string; address: string }>
+    webhooks: Array<{ topic: string; address: string; matches_expected?: boolean }>
     checkoutTopicsRegistered?: boolean
+    webhookUrlMismatchCount?: number
+    expectedWebhookUrl?: string
     apiSecretConfigured?: boolean
     syncCheckoutsEnabled?: boolean
     scopes: string[]
@@ -142,6 +145,39 @@ export default function TrackingDebugPage() {
 
   const [reprocessing, setReprocessing] = useState(false)
   const [reprocessResult, setReprocessResult] = useState<string | null>(null)
+  const [reinstalling, setReinstalling] = useState(false)
+  const [reinstallResult, setReinstallResult] = useState<string | null>(null)
+  async function reinstallEverything() {
+    if (!currentStore?.id) return
+    setReinstalling(true)
+    setReinstallResult(null)
+    try {
+      const res = await fetch('/api/shopify/install-extras', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: currentStore.id }),
+      })
+      const j = await res.json()
+      if (j.success) {
+        const w = j.webhooks || {}
+        const parts: string[] = []
+        if ((w.staleDeleted || 0) > 0) parts.push(`${w.staleDeleted} URL${w.staleDeleted > 1 ? 's' : ''} antiga${w.staleDeleted > 1 ? 's' : ''} removida${w.staleDeleted > 1 ? 's' : ''}`)
+        parts.push(`webhooks: ${w.created || 0} criados, ${w.existing || 0} já existiam` + (w.failed ? `, ${w.failed} falharam` : ''))
+        if (j.pixel?.installed) parts.push('pixel ✓')
+        if (j.loader?.installed) parts.push('loader ✓')
+        else if (j.loader?.missingScope) parts.push('loader: faltam scopes')
+        setReinstallResult(parts.join(' · '))
+      } else {
+        setReinstallResult(j.error || 'Falhou.')
+      }
+      await fetchDiag()
+    } catch (e: any) {
+      setReinstallResult(e?.message || 'Erro de rede')
+    } finally {
+      setReinstalling(false)
+      setTimeout(() => setReinstallResult(null), 12000)
+    }
+  }
   async function reprocessCheckouts() {
     if (!currentStore?.id) return
     setReprocessing(true)
@@ -325,36 +361,95 @@ export default function TrackingDebugPage() {
         )}
       </div>
 
-      {/* Topics registrados na Shopify — mostra QUAIS topics estão de fato
-          registrados (não só o count). Permite confirmar se checkouts/create
-          está entre eles. Se estiver mas não chegar nada no painel acima,
-          o problema é no caminho Shopify -> nossa API (HMAC, URL errada). */}
+      {/* Reinstall everything — one-click recovery: registers webhooks,
+          installs Custom Pixel (if write_pixels scope), installs the
+          storefront loader ScriptTag. Idempotent. Most useful when the
+          merchant sees "pixel não instalado" or webhook URL mismatches. */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-end gap-3">
+        <div className="flex-1">
+          <p className="text-[13px] font-semibold text-gray-900 mb-0.5 flex items-center gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5 text-blue-500" /> Reinstalar pixel + webhooks + loader
+          </p>
+          <p className="text-[11px] text-gray-500">
+            Re-executa <code className="font-mono">install-extras</code> — registra os 17 webhooks no endpoint correto, instala o Web Pixel
+            (se tiver scope <code className="font-mono">write_pixels</code>) e o ScriptTag do loader. Idempotente, pode rodar quantas vezes quiser.
+          </p>
+        </div>
+        <button
+          onClick={reinstallEverything}
+          disabled={reinstalling}
+          className="px-4 py-2 text-[13px] font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+        >
+          {reinstalling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Reinstalar tudo
+        </button>
+      </div>
+      {reinstallResult && (
+        <div className="px-4 py-2.5 bg-emerald-50 text-[12px] text-emerald-800 border border-emerald-200 rounded-lg">
+          {reinstallResult}
+        </div>
+      )}
+
+      {/* Webhook subscriptions on Shopify — shows the FULL address of
+          each subscription (not just the topic) so the merchant can spot
+          stale URLs (ngrok tunnels, wrong domains, old preview deploys).
+          A subscription's address must equal expectedWebhookUrl exactly
+          for our handler to receive deliveries. */}
       {data.install.webhooks && data.install.webhooks.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <p className="text-[13px] font-semibold text-gray-900">Topics registrados na Shopify</p>
-              <p className="text-[11px] text-gray-400">{data.install.webhooks.length} subscriptions ativas para esta loja</p>
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-gray-900">Webhook subscriptions na Shopify</p>
+              <p className="text-[11px] text-gray-400 truncate">
+                Endpoint esperado: <code className="font-mono text-gray-600">{data.install.expectedWebhookUrl || '—'}</code>
+              </p>
             </div>
-            {data.install.checkoutTopicsRegistered === false && (
-              <span className="text-[10.5px] px-2 py-1 bg-red-50 text-red-700 rounded font-semibold border border-red-200">
-                FALTA: checkouts/*
-              </span>
-            )}
-            {data.install.apiSecretConfigured === false && (
-              <span className="text-[10.5px] px-2 py-1 bg-amber-50 text-amber-700 rounded font-semibold border border-amber-200">
-                api_secret ausente
-              </span>
-            )}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {data.install.checkoutTopicsRegistered === false && (
+                <span className="text-[10.5px] px-2 py-1 bg-red-50 text-red-700 rounded font-semibold border border-red-200">
+                  FALTA: checkouts/*
+                </span>
+              )}
+              {(data.install.webhookUrlMismatchCount || 0) > 0 && (
+                <span className="text-[10.5px] px-2 py-1 bg-red-50 text-red-700 rounded font-semibold border border-red-200">
+                  {data.install.webhookUrlMismatchCount} URL{(data.install.webhookUrlMismatchCount || 0) > 1 ? 's' : ''} fora do esperado
+                </span>
+              )}
+              {data.install.apiSecretConfigured === false && (
+                <span className="text-[10.5px] px-2 py-1 bg-amber-50 text-amber-700 rounded font-semibold border border-amber-200">
+                  api_secret ausente
+                </span>
+              )}
+            </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 p-3 max-h-[200px] overflow-y-auto">
+          <div className="divide-y divide-gray-100 max-h-[320px] overflow-y-auto">
             {data.install.webhooks.map((w, i) => (
-              <div key={i} className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-mono text-gray-700 bg-gray-50 rounded border border-gray-100">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                <span className="truncate">{w.topic}</span>
+              <div key={i} className="px-4 py-2 flex items-center gap-2.5">
+                <span className={cn(
+                  'w-2 h-2 rounded-full flex-shrink-0',
+                  w.matches_expected ? 'bg-emerald-500' : 'bg-red-500'
+                )} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-mono font-semibold text-gray-900 truncate">{w.topic}</p>
+                  <p className={cn(
+                    'text-[10.5px] truncate font-mono',
+                    w.matches_expected ? 'text-gray-500' : 'text-red-600'
+                  )}>{w.address}</p>
+                </div>
+                {!w.matches_expected && (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-red-50 text-red-700 rounded font-semibold flex-shrink-0">
+                    URL ERRADA
+                  </span>
+                )}
               </div>
             ))}
           </div>
+          {(data.install.webhookUrlMismatchCount || 0) > 0 && (
+            <div className="px-4 py-2.5 bg-red-50 border-t border-red-200 text-[11.5px] text-red-800">
+              ⚠️ <strong>{data.install.webhookUrlMismatchCount} subscription{(data.install.webhookUrlMismatchCount || 0) > 1 ? 's' : ''} apontando pra URL errada.</strong>{' '}
+              Shopify está mandando os eventos pra um endpoint que não é o nosso. Use <strong>"Reinstalar tudo"</strong> acima — ele apaga as antigas e cria no endpoint certo.
+            </div>
+          )}
           {data.install.syncCheckoutsEnabled === false && (
             <div className="px-4 py-2.5 bg-amber-50 border-t border-amber-100 text-[11.5px] text-amber-800">
               ⚠️ <strong>sync_checkouts está desativado</strong> nesta loja — webhooks de checkout chegam mas são ignorados antes de virar evento.

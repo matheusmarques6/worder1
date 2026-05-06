@@ -1879,9 +1879,24 @@ export async function POST(request: NextRequest) {
       // Shopify, so Shopify keeps delivering events for it forever.
       // Returning 410 Gone makes Shopify auto-remove the subscription
       // after a handful of failed deliveries (~48h), permanently
-      // stopping the noise without us needing valid credentials. We log
-      // at info level so this doesn't flood error monitoring.
+      // stopping the noise without us needing valid credentials.
+      //
+      // Also persist the attempt to shopify_webhook_audit so the
+      // diagnostic dashboard can show "Shopify is sending us X
+      // deliveries from shop_domain Y but no matching store row exists
+      // — was it deleted/inactivated?". The audit table doesn't require
+      // a store_id (which we don't have here).
       console.log(`[Shopify Webhook] Orphan subscription, replying 410: ${shopDomain}`);
+      try {
+        await getSupabase().from('shopify_webhook_audit').insert({
+          shop_domain: shopDomain,
+          topic,
+          webhook_id: webhookId,
+          status: 'orphan_store',
+          error_message: 'No active shopify_stores row matched this shop_domain. Reconnect the store or contact support.',
+          received_at: new Date().toISOString(),
+        });
+      } catch { /* table may not exist yet — best-effort */ }
       return NextResponse.json({ error: 'Shop not registered' }, { status: 410 });
     }
 

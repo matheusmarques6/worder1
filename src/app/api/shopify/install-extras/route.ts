@@ -81,9 +81,18 @@ export async function POST(request: NextRequest) {
   const webhookUrl = `${APP_URL}/api/webhooks/shopify`;
 
   // ──────────────────────────────────────────
-  // 1. Webhooks — skip ones already registered for our URL
+  // 1. Webhooks — clean up stale URLs first, then create missing ones.
+  //
+  // We delete any subscription whose path is `/api/webhooks/shopify`
+  // (so it's clearly ours) but whose address ≠ the current expected URL
+  // — typical when NEXT_PUBLIC_APP_URL changed (preview deploy promoted
+  // to prod, custom domain swap, ngrok tunnel that died). Without this,
+  // Shopify keeps delivering to the dead URL forever and the merchant
+  // sees zero events even though "17 subscriptions are registered".
   // ──────────────────────────────────────────
   let existingTopics: string[] = [];
+  let staleDeleted = 0;
+  let staleFailed = 0;
   try {
     const listRes = await fetch(
       `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`,
@@ -91,9 +100,25 @@ export async function POST(request: NextRequest) {
     );
     if (listRes.ok) {
       const json = await listRes.json();
-      existingTopics = (json.webhooks || [])
+      const all = json.webhooks || [];
+      existingTopics = all
         .filter((w: any) => w.address === webhookUrl)
         .map((w: any) => w.topic);
+
+      const stale = all.filter((w: any) =>
+        typeof w.address === 'string' &&
+        w.address.includes('/api/webhooks/shopify') &&
+        w.address !== webhookUrl
+      );
+      for (const sw of stale) {
+        try {
+          const delRes = await fetch(
+            `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/webhooks/${sw.id}.json`,
+            { method: 'DELETE', headers: { 'X-Shopify-Access-Token': accessToken } }
+          );
+          if (delRes.ok) staleDeleted++; else staleFailed++;
+        } catch { staleFailed++; }
+      }
     }
   } catch { /* best-effort */ }
 
@@ -274,6 +299,8 @@ export async function POST(request: NextRequest) {
       created: webhookCreated,
       existing: webhookExisting,
       failed: webhookFailed,
+      staleDeleted,
+      staleFailed,
       failedTopics: webhookFailed > 0 ? failedTopics : undefined,
     },
     pixel: { installed: pixelInstalled },
