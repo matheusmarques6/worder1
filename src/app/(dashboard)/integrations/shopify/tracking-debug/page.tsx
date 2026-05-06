@@ -17,6 +17,9 @@ interface DiagResponse {
     scriptTagId: string | null
     webhooksRegistered: number | null
     webhooks: Array<{ topic: string; address: string }>
+    checkoutTopicsRegistered?: boolean
+    apiSecretConfigured?: boolean
+    syncCheckoutsEnabled?: boolean
     scopes: string[]
   }
   counts: {
@@ -254,37 +257,57 @@ export default function TrackingDebugPage() {
           actually reaching our endpoint, and whether we processed each
           delivery. If checkouts/orders aren't producing contact_events,
           this panel tells you whether the failure is at Shopify->us or
-          us->contact_events. */}
-      {data.recentWebhooks && data.recentWebhooks.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <p className="text-[13px] font-semibold text-gray-900">Webhooks recebidos do Shopify</p>
-              <p className="text-[11px] text-gray-400">Últimas 30 entregas — confirma se o Shopify está mandando os eventos</p>
-            </div>
-            {data.recentCheckouts && data.recentCheckouts.length > 0 && (
-              <button
-                onClick={reprocessCheckouts}
-                disabled={reprocessing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-zinc-900 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-lg transition-colors disabled:opacity-50"
-                title="Reprocessa checkouts existentes para criar eventos checkout_started que talvez tenham sido perdidos."
-              >
-                {reprocessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                Reprocessar checkouts
-              </button>
-            )}
+          us->contact_events.
+
+          We render the panel even when empty: an empty list IS the
+          diagnostic signal — it means Shopify isn't reaching us (or
+          we're rejecting before logging). */}
+      <div className="bg-white border border-gray-200 rounded-xl">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <p className="text-[13px] font-semibold text-gray-900">Webhooks recebidos do Shopify</p>
+            <p className="text-[11px] text-gray-400">Últimas 30 entregas — confirma se o Shopify está mandando os eventos</p>
           </div>
-          {reprocessResult && (
-            <div className="px-4 py-2 bg-emerald-50 text-[12px] text-emerald-700 border-b border-emerald-100">
-              {reprocessResult}
-            </div>
+          {data.recentCheckouts && data.recentCheckouts.length > 0 && (
+            <button
+              onClick={reprocessCheckouts}
+              disabled={reprocessing}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-zinc-900 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-lg transition-colors disabled:opacity-50"
+              title="Reprocessa checkouts existentes para criar eventos checkout_started que talvez tenham sido perdidos."
+            >
+              {reprocessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Reprocessar checkouts
+            </button>
           )}
+        </div>
+        {reprocessResult && (
+          <div className="px-4 py-2 bg-emerald-50 text-[12px] text-emerald-700 border-b border-emerald-100">
+            {reprocessResult}
+          </div>
+        )}
+        {!data.recentWebhooks || data.recentWebhooks.length === 0 ? (
+          <div className="px-4 py-5">
+            <p className="text-[12.5px] font-medium text-gray-700 mb-1.5">
+              Nenhuma entrega registrada nos últimos 30 envios.
+            </p>
+            <p className="text-[11.5px] text-gray-500 leading-relaxed">
+              Se a loja teve atividade recente (pedido, checkout, customer atualizado) e nada apareceu aqui,
+              é porque <strong>o Shopify não está chegando neste endpoint</strong> ou estamos rejeitando antes de logar.
+              Causas comuns:
+            </p>
+            <ul className="mt-2 space-y-1 text-[11.5px] text-gray-600 list-disc list-inside">
+              <li><strong>HMAC inválido:</strong> o <code className="font-mono">api_secret</code> salvo não bate com o que o Shopify usa pra assinar — entregas voltam com 401 e ficam invisíveis. Reconecte a loja.</li>
+              <li><strong>Topics não registrados:</strong> mesmo com webhooks no Shopify, pode faltar <code className="font-mono">checkouts/create</code>. Confira a lista de topics abaixo.</li>
+              <li><strong>URL errada:</strong> webhooks registrados em outro endpoint que não <code className="font-mono">/api/webhooks/shopify</code>.</li>
+            </ul>
+          </div>
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-3 max-h-[280px] overflow-y-auto">
             {data.recentWebhooks.map(w => {
               const ageMs = Date.now() - new Date(w.received_at).getTime()
               const ageStr = ageMs < 60000 ? `${Math.floor(ageMs / 1000)}s` : ageMs < 3600000 ? `${Math.floor(ageMs / 60000)}m` : ageMs < 86400000 ? `${Math.floor(ageMs / 3600000)}h` : `${Math.floor(ageMs / 86400000)}d`
               const ok = w.status === 'processed' || w.status === 'success' || w.status === 'completed'
-              const failed = w.status === 'failed' || !!w.error_message
+              const failed = w.status === 'failed' || w.status === 'hmac_failed' || w.status === 'no_secret' || !!w.error_message
               return (
                 <div key={w.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-md border border-gray-100 hover:bg-gray-50">
                   <div className={`w-2 h-2 rounded-full flex-shrink-0 ${ok ? 'bg-emerald-500' : failed ? 'bg-red-500' : 'bg-amber-500'}`} />
@@ -299,6 +322,44 @@ export default function TrackingDebugPage() {
               )
             })}
           </div>
+        )}
+      </div>
+
+      {/* Topics registrados na Shopify — mostra QUAIS topics estão de fato
+          registrados (não só o count). Permite confirmar se checkouts/create
+          está entre eles. Se estiver mas não chegar nada no painel acima,
+          o problema é no caminho Shopify -> nossa API (HMAC, URL errada). */}
+      {data.install.webhooks && data.install.webhooks.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <p className="text-[13px] font-semibold text-gray-900">Topics registrados na Shopify</p>
+              <p className="text-[11px] text-gray-400">{data.install.webhooks.length} subscriptions ativas para esta loja</p>
+            </div>
+            {data.install.checkoutTopicsRegistered === false && (
+              <span className="text-[10.5px] px-2 py-1 bg-red-50 text-red-700 rounded font-semibold border border-red-200">
+                FALTA: checkouts/*
+              </span>
+            )}
+            {data.install.apiSecretConfigured === false && (
+              <span className="text-[10.5px] px-2 py-1 bg-amber-50 text-amber-700 rounded font-semibold border border-amber-200">
+                api_secret ausente
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 p-3 max-h-[200px] overflow-y-auto">
+            {data.install.webhooks.map((w, i) => (
+              <div key={i} className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-mono text-gray-700 bg-gray-50 rounded border border-gray-100">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                <span className="truncate">{w.topic}</span>
+              </div>
+            ))}
+          </div>
+          {data.install.syncCheckoutsEnabled === false && (
+            <div className="px-4 py-2.5 bg-amber-50 border-t border-amber-100 text-[11.5px] text-amber-800">
+              ⚠️ <strong>sync_checkouts está desativado</strong> nesta loja — webhooks de checkout chegam mas são ignorados antes de virar evento.
+            </div>
+          )}
         </div>
       )}
 

@@ -1890,16 +1890,50 @@ export async function POST(request: NextRequest) {
     //    - Caso contrário, tenta SHOPIFY_API_SECRET global (apps monolíticas).
     //    - Em produção sem nenhum secret → REJEITA (fail closed).
     //    - Em dev, permite passar para facilitar testes.
+    //
+    // Failures here used to silently 401 without any DB trace, which made
+    // "webhooks aren't arriving" debugging impossible. We now record the
+    // failed delivery in shopify_webhook_log so the diagnostic dashboard
+    // can surface "X HMAC failures from this shop" to the merchant.
     const effectiveSecret = store.api_secret || process.env.SHOPIFY_API_SECRET || null;
+    async function logRejectedDelivery(status: 'hmac_failed' | 'no_secret', errMsg: string) {
+      if (!webhookId) return;
+      try {
+        await getSupabase().from('shopify_webhook_log').insert({
+          store_id: store!.id,
+          organization_id: store!.organization_id,
+          webhook_id: webhookId,
+          topic,
+          shop_domain: shopDomain,
+          shopify_resource_id: body?.id ? String(body.id) : null,
+          status,
+          error_message: errMsg,
+          attempts: 1,
+          received_at: new Date().toISOString(),
+          processed_at: new Date().toISOString(),
+        });
+      } catch (e: any) {
+        // Unique constraint violations are fine (duplicate delivery retry).
+        if (e?.code !== '23505') console.error('[Shopify Webhook] log rejected delivery failed:', e);
+      }
+    }
     if (effectiveSecret) {
       const isValid = await verifyShopifyWebhook(bodyText, hmacHeader, effectiveSecret);
       if (!isValid) {
         console.error(`[Shopify Webhook] Invalid signature for store ${store.id}`);
+        await logRejectedDelivery(
+          'hmac_failed',
+          `HMAC mismatch — api_secret ${store.api_secret ? 'from store row' : 'from SHOPIFY_API_SECRET env'} doesn't match the signature Shopify sent. Reconnect the store or update the secret.`
+        );
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
       }
     } else if (process.env.NODE_ENV === 'production') {
       console.error(
         `[Shopify Webhook] No secret configured (store=${store.id}, shop=${shopDomain}) — REJECTING in production`
+      );
+      await logRejectedDelivery(
+        'no_secret',
+        'Store has no api_secret and SHOPIFY_API_SECRET env is unset — cannot verify HMAC.'
       );
       return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
     } else {

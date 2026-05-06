@@ -119,6 +119,7 @@ export async function GET(request: NextRequest) {
   // Webhooks registered on Shopify
   let webhookCount: number | null = null;
   let webhookList: any[] = [];
+  let webhookCheckoutTopicsRegistered = false;
   try {
     const apiVersion = store.api_version || '2026-04';
     const wRes = await fetch(
@@ -132,6 +133,9 @@ export async function GET(request: NextRequest) {
       );
       webhookCount = ours.length;
       webhookList = ours.map((w: any) => ({ topic: w.topic, address: w.address }));
+      webhookCheckoutTopicsRegistered = ours.some((w: any) =>
+        w.topic === 'checkouts/create' || w.topic === 'checkouts/update'
+      );
     }
   } catch { /* best-effort */ }
 
@@ -150,6 +154,9 @@ export async function GET(request: NextRequest) {
       scriptTagId: store.settings?.script_tag_id || null,
       webhooksRegistered: webhookCount,
       webhooks: webhookList,
+      checkoutTopicsRegistered: webhookCheckoutTopicsRegistered,
+      apiSecretConfigured: !!store.api_secret,
+      syncCheckoutsEnabled: store.sync_checkouts !== false,
       scopes: Array.isArray(store.scopes) ? store.scopes : [],
     },
     counts: {
