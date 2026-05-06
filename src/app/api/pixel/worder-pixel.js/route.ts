@@ -28,6 +28,27 @@ export async function GET(request: NextRequest) {
   const trackEndpoint = `${appUrl}/api/track/event`;
   const identityEndpoint = `${appUrl}/api/identity/resolve`;
 
+  // Log every pixel script fetch so the diagnostic dashboard can confirm
+  // the sandbox is at least reaching us. Best-effort, never blocks the
+  // response. We write to shopify_webhook_audit (already exists with the
+  // shape we need: shop_domain, topic, status, error_message,
+  // received_at) using topic='pixel.fetched' as a sentinel.
+  try {
+    const { getSupabaseAdmin } = await import('@/lib/supabase-admin');
+    const ua = request.headers.get('user-agent') || '';
+    const ref = request.headers.get('referer') || '';
+    getSupabaseAdmin()
+      .from('shopify_webhook_audit')
+      .insert({
+        shop_domain: shop || 'unknown',
+        topic: 'pixel.fetched',
+        status: 'served',
+        error_message: `${ua.slice(0, 200)} | ref=${ref.slice(0, 200)}`,
+        received_at: new Date().toISOString(),
+      })
+      .then(() => {}, () => {});
+  } catch { /* never block on logging */ }
+
   const js = `// Worder Tracking Pixel v4 — sync subscribe + async identity
 // Shop: ${shop}
 (function(){
@@ -301,6 +322,25 @@ try {
 } catch(_) {}
 
 // =============================================
+// PIXEL_LOADED PING — fired synchronously right after subscribes are
+// wired. This is our smoke test: if a pixel.loaded event lands in
+// contact_events for this store, we know:
+//   1. The sandbox executed the script end-to-end
+//   2. The synchronous subscribe phase completed
+//   3. fetch() to /api/track/event from sandbox works
+//   4. CORS isn't blocking
+// If this never lands, the issue is upstream of subscribers — no
+// amount of analytics.subscribe() variants will fire.
+// =============================================
+try {
+  send('pixel_loaded', {
+    pixel_version: 'v4',
+    user_agent: (init && init.context && init.context.window && init.context.window.navigator && init.context.window.navigator.userAgent) || '',
+    timestamp: new Date().toISOString(),
+  }, init && init.context);
+} catch(_) {}
+
+// =============================================
 // Active-on-Site (heartbeat-style — fires once every 30 min for
 // identified visitors). Registered as a second page_viewed subscriber
 // so it doesn't compete with the primary tracking call.
@@ -451,7 +491,10 @@ function resolveIdentity() {
   return new Response(js, {
     headers: {
       'Content-Type': 'application/javascript',
-      'Cache-Control': 'public, max-age=300',
+      // Short cache during the active debug iteration so pixel-side
+      // fixes propagate to merchant browsers within ~30s. Bump back
+      // to 5min once tracking is verified end-to-end.
+      'Cache-Control': 'public, max-age=30',
       'Access-Control-Allow-Origin': '*',
     },
   });

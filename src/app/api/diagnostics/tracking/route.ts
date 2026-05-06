@@ -144,6 +144,31 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(10);
 
+  // Pixel diagnostic activity — every fetch of /api/pixel/worder-pixel.js
+  // is logged in shopify_webhook_audit with topic='pixel.fetched'. If
+  // this list is empty for a store the merchant believes has the pixel
+  // installed, the sandbox isn't even reaching us (CSP, network block,
+  // wrong domain, etc).
+  const { data: pixelFetches } = await admin
+    .from('shopify_webhook_audit')
+    .select('id, shop_domain, topic, status, error_message, received_at')
+    .eq('topic', 'pixel.fetched')
+    .or(`shop_domain.eq.${store.shop_domain},shop_domain.in.(${(Array.isArray(store.shop_domain_aliases) && store.shop_domain_aliases.length > 0 ? store.shop_domain_aliases : ['__none__']).map((d: string) => `"${d}"`).join(',')})`)
+    .order('received_at', { ascending: false })
+    .limit(10);
+
+  // Pixel-loaded ping events — fired synchronously by the pixel script
+  // right after subscribes are wired. If we see fetches but no
+  // pixel_loaded events, the script is being downloaded but failing to
+  // execute (JS error, sandbox restriction, etc).
+  const { data: pixelLoadedPings } = await admin
+    .from('contact_events')
+    .select('id, event_type, occurred_at, properties')
+    .eq('store_id', store.id)
+    .eq('event_type', 'pixel_loaded')
+    .order('occurred_at', { ascending: false })
+    .limit(5);
+
   // Webhooks registered on Shopify
   let webhookCount: number | null = null;
   let webhookList: any[] = [];
@@ -226,6 +251,21 @@ export async function GET(request: NextRequest) {
     },
     recommendations: {
       totalRecsRows: recsCount || 0,
+    },
+    pixelDiagnostics: {
+      // Did the sandbox even fetch the pixel JS in the last 30 days?
+      fetchCount: (pixelFetches || []).length,
+      lastFetchAt: pixelFetches && pixelFetches.length > 0 ? pixelFetches[0].received_at : null,
+      lastFetchUserAgent: pixelFetches && pixelFetches.length > 0 ? (pixelFetches[0].error_message || '').split(' | ref=')[0] : null,
+      // Did the loaded pixel manage to execute and POST a heartbeat?
+      pingCount: (pixelLoadedPings || []).length,
+      lastPingAt: pixelLoadedPings && pixelLoadedPings.length > 0 ? pixelLoadedPings[0].occurred_at : null,
+      // Diagnosis hint
+      hint: (pixelFetches || []).length === 0
+        ? 'O sandbox não está nem buscando o script — verifique se o Custom Pixel está com status "Conectado" no Shopify Admin → Customer Events e que a privacidade está como "Não obrigatório".'
+        : (pixelLoadedPings || []).length === 0
+        ? 'O script é baixado mas não executa o ping inicial — pode ser erro de JS no sandbox, CSP bloqueando fetch ou problema de rede. Veja o painel "Atividade do pixel" abaixo.'
+        : 'Pixel carrega e executa. Se eventos comportamentais (page_view, viewed_product) ainda não chegam, o problema está nos subscribers da Shopify.',
     },
     recentEvents: (recentEvents || []).map(e => ({
       id: e.id,

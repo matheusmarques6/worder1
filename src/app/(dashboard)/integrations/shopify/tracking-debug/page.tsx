@@ -44,6 +44,14 @@ interface DiagResponse {
   recommendations?: {
     totalRecsRows: number
   }
+  pixelDiagnostics?: {
+    fetchCount: number
+    lastFetchAt: string | null
+    lastFetchUserAgent: string | null
+    pingCount: number
+    lastPingAt: string | null
+    hint: string
+  }
   recentEvents: Array<{
     id: string
     event_type: string
@@ -335,6 +343,62 @@ export default function TrackingDebugPage() {
             value={data.recommendations?.totalRecsRows || 0}
             hint={(data.recommendations?.totalRecsRows || 0) > 0 ? 'Cron materializou recs' : 'Cron ainda não rodou (4am UTC)'}
           />
+        </div>
+      )}
+
+      {/* Pixel diagnostic — surfaces whether the Custom Pixel is even
+          reaching us, and whether it executes after loading. Three
+          possible states:
+            - Zero fetches: sandbox isn't downloading the script (CSP,
+              wrong domain, pixel not "Conectado" in Customer Events)
+            - Fetches but zero pings: script downloads but JS error
+              prevents subscribe phase
+            - Fetches AND pings but no behavioral events: subscribers
+              aren't matching Shopify's event names */}
+      {data.pixelDiagnostics && (
+        <div className={cn(
+          'rounded-xl border overflow-hidden',
+          data.pixelDiagnostics.fetchCount === 0
+            ? 'bg-red-50 border-red-200'
+            : data.pixelDiagnostics.pingCount === 0
+            ? 'bg-amber-50 border-amber-200'
+            : 'bg-emerald-50 border-emerald-200'
+        )}>
+          <div className="px-4 py-3 border-b border-current border-opacity-20">
+            <p className="text-[13px] font-semibold text-gray-900">Atividade do pixel</p>
+            <p className="text-[11px] text-gray-600 mt-0.5">{data.pixelDiagnostics.hint}</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-current divide-opacity-20">
+            <div className="p-4 bg-white/50">
+              <p className="text-[10.5px] uppercase tracking-wide font-semibold text-gray-500">1. Sandbox baixou o script?</p>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-bold text-gray-900">{data.pixelDiagnostics.fetchCount}</span>
+                <span className="text-[11px] text-gray-500">fetches últimos 30 dias</span>
+              </div>
+              {data.pixelDiagnostics.lastFetchAt && (
+                <p className="text-[11px] text-gray-600 mt-1">
+                  Último: {new Date(data.pixelDiagnostics.lastFetchAt).toLocaleString('pt-BR')}
+                </p>
+              )}
+              {data.pixelDiagnostics.lastFetchUserAgent && (
+                <p className="text-[10px] text-gray-500 mt-0.5 font-mono truncate" title={data.pixelDiagnostics.lastFetchUserAgent}>
+                  UA: {data.pixelDiagnostics.lastFetchUserAgent.slice(0, 80)}
+                </p>
+              )}
+            </div>
+            <div className="p-4 bg-white/50">
+              <p className="text-[10.5px] uppercase tracking-wide font-semibold text-gray-500">2. Script executou e chamou /track/event?</p>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-bold text-gray-900">{data.pixelDiagnostics.pingCount}</span>
+                <span className="text-[11px] text-gray-500">pings pixel_loaded</span>
+              </div>
+              {data.pixelDiagnostics.lastPingAt && (
+                <p className="text-[11px] text-gray-600 mt-1">
+                  Último: {new Date(data.pixelDiagnostics.lastPingAt).toLocaleString('pt-BR')}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

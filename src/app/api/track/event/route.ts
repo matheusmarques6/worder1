@@ -25,6 +25,7 @@ const EVENT_TYPE_MAP: Record<string, WorderShopifyEventType> = {
   viewed_product: 'viewed_product',
   viewed_collection: 'viewed_collection',
   page_viewed: 'page_viewed',
+  page_view: 'page_viewed', // legacy alias from worder-pixel.js v3-
 
   // Web Pixel events
   added_to_cart: 'added_to_cart',
@@ -33,10 +34,16 @@ const EVENT_TYPE_MAP: Record<string, WorderShopifyEventType> = {
   checkout_completed: 'checkout_completed',
   submitted_search: 'submitted_search',
   cart_viewed: 'cart_viewed',
+  email_captured: 'email_captured' as any,
 
   // Pixel-only checkout progress events
   checkout_contact_submitted: 'checkout_contact_submitted',
   payment_submitted: 'payment_submitted',
+
+  // Diagnostic ping from the pixel — confirms the script loaded and
+  // can POST. Stored as a regular contact_event so the diagnostic
+  // dashboard surfaces it without needing a separate table.
+  pixel_loaded: 'pixel_loaded' as any,
 };
 
 // CORS headers for cross-origin requests from Shopify stores.
