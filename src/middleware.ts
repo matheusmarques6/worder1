@@ -10,7 +10,39 @@ import { createClient } from '@supabase/supabase-js';
 const publicRoutes = ['/', '/signup', '/login', '/register', '/forgot-password', '/reset-password', '/change-password', '/embed', '/unsubscribe'];
 
 // Public API routes (webhooks, etc)
-const publicApiRoutes = ['/api/auth', '/api/shopify', '/api/klaviyo', '/api/webhooks', '/api/public', '/api/cron', '/api/debug', '/api/dev', '/api/workers', '/api/track', '/api/t/', '/api/integrations/shopify/callback', '/api/email/track', '/api/email/unsubscribe', '/api/email/view', '/api/email/campaigns/send-batch', '/api/lgpd/consents', '/api/lgpd/data-requests', '/api/unsubscribe'];
+const publicApiRoutes = [
+  '/api/auth',
+  '/api/shopify',
+  '/api/klaviyo',
+  '/api/webhooks',
+  '/api/public',
+  '/api/cron',
+  '/api/debug',
+  '/api/dev',
+  '/api/workers',
+  '/api/track',
+  '/api/t/',
+  '/api/integrations/shopify/callback',
+  '/api/email/track',
+  '/api/email/unsubscribe',
+  '/api/email/view',
+  '/api/email/campaigns/send-batch',
+  '/api/lgpd/consents',
+  '/api/lgpd/data-requests',
+  '/api/unsubscribe',
+  // ⬇ Public storefront-side endpoints — called from merchant Shopify
+  // domains (different origin, no auth cookies). Without these here, the
+  // middleware returns 401 and the pixel/loader never even reaches the
+  // route handler.
+  //   /api/pixel       — Custom Pixel JS file served to Shopify sandbox
+  //   /api/identity    — identity resolver called by pixel on each boot
+  //   /api/recommendations — public storefront recommendations endpoint
+  //   /api/storefront  — popup loader.js for manual integrations
+  '/api/pixel',
+  '/api/identity',
+  '/api/recommendations',
+  '/api/storefront',
+];
 
 // Routes that should redirect to dashboard/inbox if already authenticated
 const authRoutes = ['/', '/signup', '/login'];
