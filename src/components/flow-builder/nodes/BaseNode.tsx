@@ -344,17 +344,22 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
       )}
 
       {/* Menu rendered via Portal so it isn't clipped by the card's
-          overflow-hidden container. Positioned below the 3-dot button. */}
+          overflow-hidden container. Positioned below the 3-dot button.
+
+          z-index must beat the fullscreen automation editor modal
+          (z-[9999] in automations/page.tsx). At z-[101] the menu was
+          rendering BEHIND the editor and looked like the click did
+          nothing. */}
       {showMenu && menuPos && typeof document !== 'undefined' && createPortal(
         <>
           <div
-            className="fixed inset-0 z-[100]"
+            className="fixed inset-0 z-[10000]"
             onClick={(e) => { e.stopPropagation(); setShowMenu(false); setConfirmingDelete(false); }}
           />
           <div
             role="menu"
             style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
-            className="nodrag z-[101] w-36 bg-white rounded-lg border border-gray-200 shadow-xl py-1"
+            className="nodrag z-[10001] w-36 bg-white rounded-lg border border-gray-200 shadow-xl py-1"
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >
