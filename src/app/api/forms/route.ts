@@ -31,43 +31,41 @@ export async function GET(request: NextRequest) {
       events:crm_form_events(count)
     `
 
-    let forms: any[] = []
-    let error: any = null
+    // Always fetch ALL forms in the org. The merchant typically has more than
+    // one store under the same org (e.g. one OAuth + one manual variant of the
+    // same shop) and silently filtering by storeId loses popups that were
+    // bound to a sibling store. The dashboard can still group/filter by store
+    // client-side if it wants. Multi-tenant isolation is preserved by the
+    // organization_id check.
+    let query = admin
+      .from('crm_forms')
+      .select(baseSelect)
+      .eq('organization_id', user.organization_id)
+      .order('created_at', { ascending: false })
 
-    if (storeId) {
-      // Two explicit queries (store_id = X) UNION (store_id IS NULL).
-      // .or() chained after .eq() with foreign-key joins was silently
-      // returning empty results in production for some rows even when the
-      // data was clearly there. Splitting avoids relying on the OR-with-
-      // joins quirk and the result is identical, just deduped + sorted in
-      // memory below.
-      let q1 = admin.from('crm_forms').select(baseSelect).eq('organization_id', user.organization_id).eq('store_id', storeId)
-      let q2 = admin.from('crm_forms').select(baseSelect).eq('organization_id', user.organization_id).is('store_id', null)
-      if (status) { q1 = q1.eq('status', status); q2 = q2.eq('status', status) }
-      const [r1, r2] = await Promise.all([q1, q2])
-      error = r1.error || r2.error
-      const merged = [...(r1.data || []), ...(r2.data || [])]
-      const seen = new Set<string>()
-      forms = merged.filter(f => seen.has(f.id) ? false : (seen.add(f.id), true))
-      forms.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
-    } else {
-      let query = admin
-        .from('crm_forms')
-        .select(baseSelect)
-        .eq('organization_id', user.organization_id)
-        .order('created_at', { ascending: false })
-      if (status) query = query.eq('status', status)
-      const r = await query
-      error = r.error
-      forms = r.data || []
+    if (status) {
+      query = query.eq('status', status)
     }
+
+    const { data: forms, error } = await query
 
     if (error) {
       console.error('[Forms] Error fetching:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ forms })
+    // If a storeId was passed AND there are forms exactly matching that
+    // store, prefer those (so a merchant who has popups on the current
+    // store doesn't see ones from sibling stores in the same org). If no
+    // form matches, fall back to all-in-org so the merchant never sees an
+    // empty list while popups exist somewhere in their account.
+    let result = forms || []
+    if (storeId) {
+      const matching = result.filter(f => f.store_id === storeId || !f.store_id)
+      if (matching.length > 0) result = matching
+    }
+
+    return NextResponse.json({ forms: result })
   } catch (error: any) {
     console.error('[Forms] GET error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

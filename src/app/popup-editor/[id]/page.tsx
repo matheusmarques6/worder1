@@ -261,7 +261,7 @@ function ToggleRow({ label, checked, onChange, hint }: { label: string; checked:
         {hint && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{hint}</p>}
       </div>
       <button type="button" onClick={() => onChange(!checked)}
-        className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-brand-500' : 'bg-gray-200'}`}>
+        className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-zinc-900' : 'bg-gray-200'}`}>
         <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
       </button>
     </div>
@@ -272,7 +272,7 @@ function ToggleRow({ label, checked, onChange, hint }: { label: string; checked:
 function PanelColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <Field label={label}>
-      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500/20">
+      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-zinc-900 focus-within:ring-1 focus-within:ring-zinc-900/10">
         <input type="text" className="flex-1 px-3 py-2 text-[13px] font-mono text-gray-800 outline-none" value={value || ''} onChange={e => onChange(e.target.value)} placeholder="#000000" />
         <label className="relative w-9 h-9 border-l border-gray-200 cursor-pointer flex-shrink-0" style={{ backgroundColor: value || '#FFFFFF' }}>
           <input type="color" value={value || '#000000'} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
@@ -282,7 +282,7 @@ function PanelColorField({ label, value, onChange }: { label: string; value: str
   )
 }
 
-const inp = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-colors"
+const inp = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 transition-colors"
 const sel = inp + " bg-white cursor-pointer"
 
 // Helper: compute input styles from props (used by preview AND public script logic)
@@ -482,10 +482,10 @@ function InlineEditableStyles() {
       }
       .worder-inline-editable[contenteditable="true"] { cursor: text; }
       .worder-inline-editable[contenteditable="true"]:hover {
-        box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.25) inset;
+        box-shadow: 0 0 0 1px rgba(24, 24, 27, 0.18) inset;
       }
       .worder-inline-editable[contenteditable="true"]:focus {
-        box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.5) inset;
+        box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.55) inset;
       }
     ` }} />
   )
@@ -630,14 +630,14 @@ function BlockPreview({ block, selected, onContentChange, onSelect }: { block: B
       return <div style={blockStyle}>
         {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1.5">{p.label}</label>}
         <div style={{ display: 'flex', flexDirection: p.layout === 'horizontal' ? 'row' : 'column', gap: p.layout === 'horizontal' ? 12 : 8 }}>
-          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="accent-brand-500" />{o}</label>)}
+          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="accent-zinc-900" />{o}</label>)}
         </div>
       </div>
     case 'checkbox':
       return <div style={blockStyle}>
         {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1.5">{p.label}</label>}
         <div className="space-y-2">
-          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="checkbox" className="rounded accent-brand-500" />{o}</label>)}
+          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="checkbox" className="rounded accent-zinc-900" />{o}</label>)}
         </div>
       </div>
     default: return <div className="text-xs text-gray-400 p-2">[{block.type}]</div>
@@ -678,7 +678,7 @@ const Toggle = ({ label, checked, onChange: oc, hint }: { label: string; checked
       {hint && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{hint}</p>}
     </div>
     <button type="button" onClick={() => oc(!checked)}
-      className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-brand-500' : 'bg-gray-200'}`}>
+      className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-zinc-900' : 'bg-gray-200'}`}>
       <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
     </button>
   </div>
@@ -719,7 +719,7 @@ const ColorField = ColorRow
 const UnitInput = ({ value, onChange: oc, unit = 'px', min = 0, max = 999, step = 1, className = '' }: { value: number; onChange: (v: number) => void; unit?: string; min?: number; max?: number; step?: number; className?: string }) => (
   <div className={`relative ${className}`}>
     <input type="number" min={min} max={max} step={step}
-      className="w-full border border-gray-200 rounded-lg px-3 py-2 pr-8 text-[13px] text-gray-800 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-colors"
+      className="w-full border border-gray-200 rounded-lg px-3 py-2 pr-8 text-[13px] text-gray-800 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900/10 transition-colors"
       value={value} onChange={e => oc(+e.target.value)} />
     <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-gray-400">{unit}</span>
   </div>
@@ -746,10 +746,10 @@ const Stepper = ({ value, onChange: oc, min = 0, max = 999, step = 1, unit }: { 
 const Slider = ({ value, onChange: oc, min = 0, max = 100, step = 1, unit = 'px' }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; unit?: string }) => (
   <div className="flex items-center gap-3">
     <input type="range" min={min} max={max} step={step} value={value} onChange={e => oc(+e.target.value)}
-      className="flex-1 accent-brand-500 h-1" />
+      className="flex-1 accent-zinc-900 h-1" />
     <div className="flex items-center gap-1 w-[64px] justify-end">
       <input type="number" min={min} max={max} step={step} value={value} onChange={e => oc(+e.target.value)}
-        className="w-10 px-1.5 py-1 text-[11px] text-gray-800 border border-gray-200 rounded text-center outline-none focus:border-brand-500" />
+        className="w-10 px-1.5 py-1 text-[11px] text-gray-800 border border-gray-200 rounded text-center outline-none focus:border-zinc-900" />
       <span className="text-[10px] text-gray-400">{unit}</span>
     </div>
   </div>
@@ -799,7 +799,7 @@ const SectionHeader = ({ title }: { title: string; icon?: React.ReactNode }) => 
 const PaddingNum = ({ value, onChange: oc }: { value: number; onChange: (v: number) => void }) => (
   <div className="relative">
     <input type="number" min={0} max={120}
-      className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-gray-800 text-center outline-none focus:border-brand-500"
+      className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-gray-800 text-center outline-none focus:border-zinc-900"
       value={value} onChange={e => oc(+e.target.value)} />
     <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span>
   </div>
@@ -979,7 +979,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
       <div className="space-y-5">
         {onApplyToAllInputs && (
           <button onClick={handleApplyToAll}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-[12px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 rounded-lg transition-colors">
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-[12px] font-semibold text-zinc-900 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-lg transition-colors">
             <Sparkles className="w-3.5 h-3.5" />
             Aplicar estes estilos a todos os inputs
           </button>
@@ -991,11 +991,11 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           <LabeledField label="Estilo do campo">
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => up('inputStyle', 'solid')}
-                className={`py-4 rounded-lg border-2 transition-colors flex items-center justify-center ${p.inputStyle !== 'underline' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                className={`py-4 rounded-lg border-2 transition-colors flex items-center justify-center ${p.inputStyle !== 'underline' ? 'border-zinc-900 bg-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
                 <div className="w-16 h-5 rounded border border-gray-700 bg-white" />
               </button>
               <button onClick={() => up('inputStyle', 'underline')}
-                className={`py-4 rounded-lg border-2 transition-colors flex items-center justify-center ${p.inputStyle === 'underline' ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                className={`py-4 rounded-lg border-2 transition-colors flex items-center justify-center ${p.inputStyle === 'underline' ? 'border-zinc-900 bg-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
                 <div className="w-16 h-5 border-b-2 border-gray-700" />
               </button>
             </div>
@@ -1189,7 +1189,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           </LabeledField>
           {p.action === 'url' && (
             <LabeledField label="URL de destino" hint="Abre em nova aba.">
-              <div className="flex items-center border border-gray-200 rounded-lg focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500/20">
+              <div className="flex items-center border border-gray-200 rounded-lg focus-within:border-zinc-900 focus-within:ring-1 focus-within:ring-zinc-900/10">
                 <Link2 className="w-3.5 h-3.5 text-gray-400 ml-3" />
                 <input className="flex-1 px-2 py-2 text-[13px] text-gray-800 outline-none bg-transparent" value={p.url || ''} onChange={e => up('url', e.target.value)} placeholder="https://..." />
               </div>
@@ -1295,9 +1295,9 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 </div>
               ) : (
                 <button onClick={() => onOpenMedia?.(url => up('src', url))}
-                  className="w-full border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/30 transition-colors group">
-                  <div className="w-12 h-12 rounded-xl bg-gray-50 group-hover:bg-brand-100 flex items-center justify-center mx-auto mb-3 transition-colors">
-                    <Upload className="w-5 h-5 text-gray-400 group-hover:text-brand-500" />
+                  className="w-full border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-gray-400 hover:bg-gray-100/40 transition-colors group">
+                  <div className="w-12 h-12 rounded-xl bg-gray-50 group-hover:bg-gray-200 flex items-center justify-center mx-auto mb-3 transition-colors">
+                    <Upload className="w-5 h-5 text-gray-400 group-hover:text-zinc-900" />
                   </div>
                   <span className="text-[13px] font-semibold text-gray-700 block">Escolher imagem</span>
                   <span className="text-[11px] text-gray-400">da biblioteca ou enviar nova</span>
@@ -1308,7 +1308,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
               <input className={inp} value={p.alt || ''} onChange={e => up('alt', e.target.value)} placeholder="Ex: Desconto de 10% em primeiros pedidos" />
             </LabeledField>
             <LabeledField label="Link ao clicar (opcional)">
-              <div className="flex items-center border border-gray-200 rounded-lg focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500/20">
+              <div className="flex items-center border border-gray-200 rounded-lg focus-within:border-zinc-900 focus-within:ring-1 focus-within:ring-zinc-900/10">
                 <Link2 className="w-3.5 h-3.5 text-gray-400 ml-3" />
                 <input className="flex-1 px-2 py-2 text-[13px] text-gray-800 outline-none bg-transparent" value={p.href || ''} onChange={e => up('href', e.target.value)} placeholder="https://..." />
               </div>
@@ -1401,7 +1401,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 </div>
               ))}
               <button onClick={() => up('options', [...(p.options || []), `Opção ${(p.options || []).length + 1}`])}
-                className="w-full py-2 text-[12px] font-semibold text-brand-600 border-2 border-dashed border-brand-200 rounded-lg hover:bg-brand-50 hover:border-brand-400 transition-colors flex items-center justify-center gap-1.5">
+                className="w-full py-2 text-[12px] font-semibold text-zinc-900 border-2 border-dashed border-gray-200 rounded-lg hover:bg-gray-100 hover:border-gray-400 transition-colors flex items-center justify-center gap-1.5">
                 <Plus className="w-3.5 h-3.5" /> Adicionar opção
               </button>
             </div>
@@ -1499,7 +1499,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
             <div className="grid grid-cols-4 gap-2">
               {[8, 16, 24, 48].map(h => (
                 <button key={h} onClick={() => up('height', h)}
-                  className={`py-2.5 rounded-lg border text-[12px] font-medium transition-colors ${p.height === h ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                  className={`py-2.5 rounded-lg border text-[12px] font-medium transition-colors ${p.height === h ? 'border-zinc-900 bg-gray-100 text-zinc-900' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                   {h}px
                 </button>
               ))}
@@ -1687,12 +1687,12 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
             <span className="text-xs font-semibold text-gray-700 block mb-2">Visibilidade por dispositivo</span>
             <div className="space-y-2">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={!p.hideOnDesktop} onChange={e => up('hideOnDesktop', !e.target.checked)} className="accent-brand-500" />
+                <input type="checkbox" checked={!p.hideOnDesktop} onChange={e => up('hideOnDesktop', !e.target.checked)} className="accent-zinc-900" />
                 <Monitor className="w-3.5 h-3.5 text-gray-500" />
                 <span className="text-xs text-gray-700">Exibir no desktop</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={!p.hideOnMobile} onChange={e => up('hideOnMobile', !e.target.checked)} className="accent-brand-500" />
+                <input type="checkbox" checked={!p.hideOnMobile} onChange={e => up('hideOnMobile', !e.target.checked)} className="accent-zinc-900" />
                 <Smartphone className="w-3.5 h-3.5 text-gray-500" />
                 <span className="text-xs text-gray-700">Exibir no mobile</span>
               </label>
@@ -1763,10 +1763,10 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 { value: 'close', label: 'Fechar formulario', hint: 'Fecha o popup imediatamente apos o envio.' },
                 { value: 'redirect', label: 'Redirecionar para URL', hint: 'Envia o visitante para uma pagina especifica.' },
               ].map(opt => (
-                <label key={opt.value} className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${postSubmit.action === opt.value ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                <label key={opt.value} className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${postSubmit.action === opt.value ? 'border-zinc-900 bg-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
                   <input type="radio" name="postAction" value={opt.value} checked={postSubmit.action === opt.value}
                     onChange={() => onPostSubmitChange({ ...postSubmit, action: opt.value as any })}
-                    className="accent-brand-500 mt-0.5" />
+                    className="accent-zinc-900 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-[13px] font-medium text-gray-900">{opt.label}</p>
                     <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{opt.hint}</p>
@@ -1814,7 +1814,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 checked={timeOn} onChange={v => setG('display', { timeEnabled: v })} />
               {timeOn && (
                 <div className="flex items-center gap-2 mt-2 ml-0">
-                  <input type="number" min={0} max={300} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  <input type="number" min={0} max={300} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
                     value={d.delay ?? 5} onChange={e => setG('display', { delay: +e.target.value })} />
                   <span className="text-[12px] text-gray-500">segundos</span>
                 </div>
@@ -1826,7 +1826,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 checked={scrollOn} onChange={v => setG('display', { scrollEnabled: v })} />
               {scrollOn && (
                 <div className="flex items-center gap-2 mt-2">
-                  <input type="number" min={0} max={100} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  <input type="number" min={0} max={100} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
                     value={d.scrollPercent ?? 30} onChange={e => setG('display', { scrollPercent: +e.target.value })} />
                   <span className="text-[12px] text-gray-500">% da pagina</span>
                 </div>
@@ -1838,7 +1838,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 checked={pvOn} onChange={v => setG('display', { pageViewEnabled: v })} />
               {pvOn && (
                 <div className="flex items-center gap-2 mt-2">
-                  <input type="number" min={1} max={50} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  <input type="number" min={1} max={50} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
                     value={d.pageViewCount ?? 3} onChange={e => setG('display', { pageViewCount: +e.target.value })} />
                   <span className="text-[12px] text-gray-500">paginas</span>
                 </div>
@@ -1873,10 +1873,10 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 { value: 'desktop', label: 'Somente desktop', icon: Monitor },
                 { value: 'mobile', label: 'Somente mobile', icon: Smartphone },
               ].map(opt => (
-                <label key={opt.value} className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${vis.devices === opt.value ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                <label key={opt.value} className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${vis.devices === opt.value ? 'border-zinc-900 bg-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
                   <input type="radio" name="devices" value={opt.value} checked={vis.devices === opt.value}
                     onChange={() => setG('visibility', { devices: opt.value })}
-                    className="accent-brand-500" />
+                    className="accent-zinc-900" />
                   <opt.icon className="w-4 h-4 text-gray-500" />
                   <span className="text-[13px] text-gray-800">{opt.label}</span>
                 </label>
@@ -2024,7 +2024,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                     </div>
                   ))}
                   <button onClick={() => setG('utm', { filters: [...utm.filters, { param: 'utm_source', value: '' }] })}
-                    className="w-full py-2 text-[12px] font-medium text-brand-600 border border-dashed border-brand-300 rounded-lg hover:bg-brand-50 transition-colors">
+                    className="w-full py-2 text-[12px] font-medium text-zinc-900 border border-dashed border-gray-300 rounded-lg hover:bg-gray-100 transition-colors">
                     + Adicionar filtro UTM
                   </button>
                 </div>
@@ -2092,13 +2092,13 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
           <p className="text-[12px] font-medium text-gray-700 mb-2">Padding interno</p>
           <div className="grid grid-cols-3 gap-1.5 max-w-[220px] mx-auto">
             <div />
-            <div className="relative"><input type="number" min={0} max={100} className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-center outline-none focus:border-brand-500" value={pt} onChange={e => setS({ paddingTop: +e.target.value })} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span></div>
+            <div className="relative"><input type="number" min={0} max={100} className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-center outline-none focus:border-zinc-900" value={pt} onChange={e => setS({ paddingTop: +e.target.value })} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span></div>
             <div />
-            <div className="relative"><input type="number" min={0} max={100} className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-center outline-none focus:border-brand-500" value={pl} onChange={e => setS({ paddingLeft: +e.target.value })} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span></div>
+            <div className="relative"><input type="number" min={0} max={100} className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-center outline-none focus:border-zinc-900" value={pl} onChange={e => setS({ paddingLeft: +e.target.value })} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span></div>
             <div className="flex items-center justify-center"><div className="w-6 h-6 rounded-sm bg-gray-100 border border-gray-200" /></div>
-            <div className="relative"><input type="number" min={0} max={100} className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-center outline-none focus:border-brand-500" value={pr} onChange={e => setS({ paddingRight: +e.target.value })} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span></div>
+            <div className="relative"><input type="number" min={0} max={100} className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-center outline-none focus:border-zinc-900" value={pr} onChange={e => setS({ paddingRight: +e.target.value })} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span></div>
             <div />
-            <div className="relative"><input type="number" min={0} max={100} className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-center outline-none focus:border-brand-500" value={pb} onChange={e => setS({ paddingBottom: +e.target.value })} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span></div>
+            <div className="relative"><input type="number" min={0} max={100} className="w-full px-2 py-1.5 pr-6 border border-gray-200 rounded-md text-[12px] text-center outline-none focus:border-zinc-900" value={pb} onChange={e => setS({ paddingBottom: +e.target.value })} /><span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">px</span></div>
             <div />
           </div>
         </div>
@@ -2143,7 +2143,7 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
               </div>
             ) : (
               <button onClick={() => onOpenMedia?.(url => setSi({ src: url }))}
-                className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center hover:border-brand-400 hover:bg-brand-50/30 transition-colors">
+                className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center hover:border-gray-400 hover:bg-gray-100/40 transition-colors">
                 <Upload className="w-6 h-6 text-gray-300 mx-auto mb-2" />
                 <span className="text-[12px] text-gray-500">Escolher imagem da biblioteca</span>
               </button>
@@ -2186,7 +2186,7 @@ function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
-      className={`group relative rounded transition ${isSelected ? 'outline outline-2 outline-offset-1 outline-brand-500/70' : 'hover:outline hover:outline-1 hover:outline-gray-300 cursor-pointer'}`}>
+      className={`group relative rounded transition ${isSelected ? 'outline outline-2 outline-offset-1 outline-zinc-900/70' : 'hover:outline hover:outline-1 hover:outline-gray-300 cursor-pointer'}`}>
       {/* Omnisend-style side toolbar — small, icon-only, sits to the LEFT of the
           selected block. Drag, duplicate, delete. No scary buttons-on-top. */}
       {isSelected && (
@@ -2580,14 +2580,14 @@ export default function PopupEditorPage() {
     <div className="h-screen flex flex-col bg-gray-100">
       <InlineEditableStyles />
       {/* Top bar — Omnisend-inspired with Worder identity */}
-      <header className="flex items-center justify-between px-5 h-[52px] bg-white border-b border-gray-200 shrink-0">
+      <header className="flex items-center justify-between px-5 h-[52px] bg-zinc-900 shrink-0">
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <button onClick={() => router.back()} className="flex-shrink-0 p-1.5 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors" title="Voltar">
+          <button onClick={() => router.back()} className="flex-shrink-0 p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors" title="Voltar">
             <ArrowLeft className="w-[18px] h-[18px]" />
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="Worder" className="h-7 flex-shrink-0" />
-          <div className="h-5 w-px bg-gray-200 flex-shrink-0 mx-1" />
+          <div className="h-5 w-px bg-zinc-700 flex-shrink-0 mx-1" />
           <div className="flex items-center gap-2.5 min-w-0">
             {editingName ? (
               <input
@@ -2596,12 +2596,12 @@ export default function PopupEditorPage() {
                 onChange={e => setFormName(e.target.value)}
                 onBlur={() => setEditingName(false)}
                 onKeyDown={e => { if (e.key === 'Enter') setEditingName(false) }}
-                className="text-[14px] font-medium text-gray-900 bg-transparent border-b border-gray-400 outline-none min-w-[200px] max-w-[400px] pb-0.5"
+                className="text-[14px] font-semibold text-white bg-zinc-700 border border-zinc-600 rounded px-2 py-0.5 outline-none min-w-[200px] max-w-[400px]"
               />
             ) : (
               <button
                 onClick={() => setEditingName(true)}
-                className="group flex items-center gap-1.5 text-[14px] font-medium text-gray-900 hover:text-gray-600 transition-colors"
+                className="group flex items-center gap-1.5 text-[14px] font-semibold text-white hover:bg-zinc-700 px-2 py-0.5 rounded transition-colors"
                 title="Renomear"
               >
                 <span className="truncate max-w-[280px]">{formName}</span>
@@ -2612,26 +2612,26 @@ export default function PopupEditorPage() {
               </button>
             )}
             {formStatus === 'published' && (
-              <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-600 rounded flex-shrink-0 tracking-wide">ATIVO</span>
+              <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 rounded flex-shrink-0 tracking-wide">ATIVO</span>
             )}
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <button onClick={undo} disabled={historyIdx <= 0} className="p-2 text-gray-400 hover:text-gray-700 rounded-md disabled:opacity-25 transition-colors" title="Desfazer"><Undo2 className="w-4 h-4" /></button>
-          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-2 text-gray-400 hover:text-gray-700 rounded-md disabled:opacity-25 transition-colors" title="Refazer"><Redo2 className="w-4 h-4" /></button>
-          <div className="h-5 w-px bg-gray-200 mx-1" />
-          <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
-            <button onClick={() => setPreview('desktop')} className={`p-1.5 rounded-md transition-all ${preview === 'desktop' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-700'}`} title="Desktop"><Monitor className="w-4 h-4" /></button>
-            <button onClick={() => setPreview('mobile')} className={`p-1.5 rounded-md transition-all ${preview === 'mobile' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-700'}`} title="Mobile"><Smartphone className="w-4 h-4" /></button>
+          <button onClick={undo} disabled={historyIdx <= 0} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-md disabled:opacity-25 transition-colors" title="Desfazer"><Undo2 className="w-4 h-4" /></button>
+          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-md disabled:opacity-25 transition-colors" title="Refazer"><Redo2 className="w-4 h-4" /></button>
+          <div className="h-5 w-px bg-zinc-700 mx-1" />
+          <div className="flex items-center bg-zinc-800 rounded-lg p-0.5">
+            <button onClick={() => setPreview('desktop')} className={`p-1.5 rounded-md transition-all ${preview === 'desktop' ? 'bg-zinc-600 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`} title="Desktop"><Monitor className="w-4 h-4" /></button>
+            <button onClick={() => setPreview('mobile')} className={`p-1.5 rounded-md transition-all ${preview === 'mobile' ? 'bg-zinc-600 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`} title="Mobile"><Smartphone className="w-4 h-4" /></button>
           </div>
-          <div className="h-5 w-px bg-gray-200 mx-1" />
-          <button onClick={() => setShowPreview(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
+          <div className="h-5 w-px bg-zinc-700 mx-1" />
+          <button onClick={() => setShowPreview(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors">
             <Eye className="w-4 h-4" /> Preview
           </button>
-          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-gray-600 hover:text-gray-900 bg-white border border-gray-200 hover:border-gray-300 rounded-lg transition-colors disabled:opacity-50">
+          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-white bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar
           </button>
-          <button onClick={handlePublish} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${formStatus === 'published' ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-gray-900 text-white hover:bg-gray-800'}`}>
+          <button onClick={handlePublish} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${formStatus === 'published' ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}>
             <Power className="w-4 h-4" /> {formStatus === 'published' ? 'Desativar' : 'Ativar'}
           </button>
         </div>
