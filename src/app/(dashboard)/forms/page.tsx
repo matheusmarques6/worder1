@@ -69,16 +69,26 @@ export default function FormsPage() {
   const [togglingStatus, setTogglingStatus] = useState<string | null>(null)
 
   const fetchForms = useCallback(async () => {
-    if (!currentStore?.id) return
     try {
       setIsLoading(true)
-      const params = new URLSearchParams();
-      if (currentStore?.id) params.set('storeId', currentStore.id);
-      const res = await fetch(`/api/forms?${params}`)
-      if (res.ok) {
-        const data = await res.json()
-        setForms(data.forms || [])
+      // Always fetch — don't gate on currentStore.id. If the merchant has no
+      // store yet (or currentStore is still hydrating), the API returns all
+      // popups in the org and we still display them. Without this guard, a
+      // stale Zustand store with a non-existent store ID would leave the
+      // page stuck at "0 popups" forever.
+      const params = new URLSearchParams()
+      if (currentStore?.id) params.set('storeId', currentStore.id)
+      // Cache buster so a freshly deployed API isn't masked by stale CDN.
+      params.set('_t', String(Date.now()))
+      const res = await fetch(`/api/forms?${params}`, { cache: 'no-store' })
+      if (!res.ok) {
+        console.error('[Forms] fetch failed:', res.status, await res.text())
+        setForms([])
+        return
       }
+      const data = await res.json()
+      console.log('[Forms] fetched', data.forms?.length ?? 0, 'forms')
+      setForms(data.forms || [])
     } catch (error) {
       console.error('Erro ao buscar formularios:', error)
     } finally {

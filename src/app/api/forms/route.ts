@@ -19,16 +19,20 @@ export async function GET(request: NextRequest) {
     const storeId = searchParams.get('storeId') || searchParams.get('store_id')
 
     const admin = getSupabaseAdmin()
+    // Keep the SELECT simple. The earlier version joined pipelines,
+    // crm_form_fields, and crm_form_events — but the FK relationships
+    // were either missing or returning errors that the supabase client
+    // swallowed, leaving the merchant with an empty list while four
+    // popups clearly existed in the DB. The dashboard list only needs
+    // the form metadata; submissions/views counts are already columns
+    // on crm_forms, and pipeline name isn't shown in the list cards.
     const baseSelect = `
-      id, name, slug, description, status,
+      id, name, slug, description, status, form_type,
       submissions_count, views_count,
       pipeline_id, stage_id, store_id,
       facebook_pixel_id, google_ads_id,
       theme, logo_url,
-      created_at, updated_at,
-      pipeline:pipelines(id, name, color),
-      fields:crm_form_fields(count),
-      events:crm_form_events(count)
+      created_at, updated_at
     `
 
     // Always fetch ALL forms in the org. The merchant typically has more than
@@ -50,9 +54,11 @@ export async function GET(request: NextRequest) {
     const { data: forms, error } = await query
 
     if (error) {
-      console.error('[Forms] Error fetching:', error)
+      console.error('[Forms] Error fetching:', { error, orgId: user.organization_id, storeId })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    console.log(`[Forms] Found ${forms?.length || 0} forms for org ${user.organization_id}, storeId=${storeId || 'none'}`)
 
     // If a storeId was passed AND there are forms exactly matching that
     // store, prefer those (so a merchant who has popups on the current
