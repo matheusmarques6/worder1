@@ -203,10 +203,21 @@ export default function ShopifyConnect() {
         const pJson = await pRes.json();
         if (pRes.ok && pJson.code) setPixelCode(pJson.code);
       } catch { /* non-blocking */ }
-      // IMPORTANT: do NOT call fetchStatus() here. Doing so would flip
-      // the component into its "connected" view and hide the Custom
-      // Pixel code block (the very next step the merchant needs). The
-      // user exits via the "Voltar para Integrações" button at the top.
+
+      // Redirect to the pixel install wizard — the merchant just connected
+      // a manual integration, which means webhooks work but ZERO frontend
+      // events flow until they paste the Custom Pixel. Forcing the wizard
+      // here is the only way to guarantee they see the snippet AND verify
+      // it fires before considering the integration "done".
+      try {
+        const sId = data.store?.id;
+        if (sId && typeof window !== 'undefined') {
+          // small delay so the success state flashes before we navigate
+          setTimeout(() => {
+            window.location.href = `/integrations/shopify/install-pixel?storeId=${sId}`;
+          }, 1500);
+        }
+      } catch { /* fall back to manual exit via "Voltar" */ }
     } catch {
       setError('Erro ao conectar. Tente novamente.');
     } finally {
@@ -369,13 +380,21 @@ export default function ShopifyConnect() {
                   O pixel captura visualizações de produto, carrinho, checkout e email. Sem ele, o tracking comportamental não funciona.
                 </p>
               </div>
-              <button
-                onClick={fetchPixelCode}
-                disabled={loadingPixelCode}
-                className="flex-shrink-0 px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
-              >
-                {loadingPixelCode ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ver código'}
-              </button>
+              <div className="flex-shrink-0 flex flex-col gap-1.5">
+                <a
+                  href={`/integrations/shopify/install-pixel?storeId=${store.id}`}
+                  className="px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  Instalar agora
+                </a>
+                <button
+                  onClick={fetchPixelCode}
+                  disabled={loadingPixelCode}
+                  className="px-3 py-1 text-amber-700 text-[11px] font-medium hover:text-amber-900 transition-colors"
+                >
+                  {loadingPixelCode ? <Loader2 className="w-3 h-3 animate-spin inline" /> : 'Só ver código'}
+                </button>
+              </div>
             </div>
           </div>
         )}

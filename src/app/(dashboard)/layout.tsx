@@ -52,6 +52,7 @@ import { ptBR } from 'date-fns/locale'
 
 import { useStoreStore, useAuthStore, useUIStore, type ShopifyStore } from '@/stores'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
+import { PixelHealthBanner } from '@/components/integrations/shopify/PixelHealthBanner'
 import { cn } from '@/lib/utils'
 
 // ============================================
@@ -789,6 +790,11 @@ export default function DashboardLayout({
             </div>
           </div>
         </header>
+
+        {/* Pixel install nag — global, dismissable for 1h, only renders
+            when the active store is a manual integration without a
+            firing pixel. */}
+        <PixelHealthBanner />
 
         {/* Page Content */}
         <div className="p-4 lg:p-6">
