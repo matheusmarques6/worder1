@@ -23,6 +23,8 @@ interface StoreData {
   initialSyncCompleted: boolean;
   pixelInstalled: boolean;
   embedInstalled: boolean;
+  loaderInstalled?: boolean;
+  scopes?: string[];
   installedAt: string;
   lastSyncAt: string;
   totalOrders: number;
@@ -437,20 +439,47 @@ export default function ShopifyConnect() {
           </div>
         )}
 
-        {/* Manual: the App Embed extension isn't available for the merchant's
-            own Custom App, so popups need a regular <script> in theme.liquid.
-            Tracking already works via the Custom Pixel — this is only for
-            displaying popups/forms on the storefront. */}
-        {store.connectionType === 'manual' && (
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="font-medium text-blue-900 text-sm mb-2">Ativar popups na sua loja</p>
-            <p className="text-xs text-blue-800 mb-2.5 leading-relaxed">
-              Cole este script no seu <code className="px-1 py-0.5 bg-white rounded font-mono text-[11px]">theme.liquid</code> antes de <code className="px-1 py-0.5 bg-white rounded font-mono text-[11px]">&lt;/body&gt;</code>. Ele carrega automaticamente todos os popups publicados.
-              <br/>
-              <span className="text-blue-700">(Só precisa fazer uma vez. Tracking já funciona via o Custom Pixel — isto é só para exibir popups/formulários.)</span>
+        {/* Manual storefront popup loader.
+            Three states for manual integrations:
+              1. loaderInstalled = true (auto-installed via ScriptTag) →
+                 show a green "Popups ativos" confirmation, no action needed.
+              2. write_script_tags scope missing → show how to add the scope.
+              3. Scope present but install failed → show manual paste fallback. */}
+        {store.connectionType === 'manual' && store.loaderInstalled && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2.5">
+            <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-[13px] font-medium text-emerald-800">Popups instalados na loja</p>
+              <p className="text-[11px] text-emerald-700/80 mt-0.5">
+                O loader é injetado automaticamente em todas as páginas via Shopify ScriptTag — sem precisar editar o tema.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {store.connectionType === 'manual' && !store.loaderInstalled && !(store.scopes || []).includes('write_script_tags') && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="font-medium text-amber-900 text-sm mb-2">Ative a instalação automática de popups</p>
+            <p className="text-xs text-amber-800 mb-2 leading-relaxed">
+              Para a Worder injetar os popups na sua loja sozinha (sem você editar o tema), adicione o escopo <code className="px-1 py-0.5 bg-white rounded font-mono text-[11px]">write_script_tags</code> ao seu Custom App no Shopify Dev Dashboard.
+            </p>
+            <div className="text-[11px] text-amber-800 space-y-0.5">
+              <p>1. Dev Dashboard &rarr; seu app &rarr; <strong>Configurações</strong> &rarr; Escopos do Admin API</p>
+              <p>2. Adicione <code className="font-mono">write_script_tags</code> e salve</p>
+              <p>3. <strong>Reinstale o app</strong> na loja</p>
+              <p>4. Volte aqui e clique <strong>Sincronizar Tudo</strong> — a Worder instalará o loader automaticamente</p>
+            </div>
+          </div>
+        )}
+
+        {store.connectionType === 'manual' && !store.loaderInstalled && (store.scopes || []).includes('write_script_tags') && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="font-medium text-amber-900 text-sm mb-2">Loader não pôde ser instalado automaticamente</p>
+            <p className="text-xs text-amber-800 mb-2.5 leading-relaxed">
+              Como fallback, cole este script no <code className="px-1 py-0.5 bg-white rounded font-mono text-[11px]">theme.liquid</code> antes de <code className="px-1 py-0.5 bg-white rounded font-mono text-[11px]">&lt;/body&gt;</code>.
             </p>
             <div className="relative">
-              <pre className="bg-white p-3 rounded border border-blue-200 text-[11px] font-mono overflow-x-auto text-gray-800">{`<script src="${typeof window !== 'undefined' ? window.location.origin : 'https://app.worder.com.br'}/api/storefront/loader.js" async></script>`}</pre>
+              <pre className="bg-white p-3 rounded border border-amber-200 text-[11px] font-mono overflow-x-auto text-gray-800">{`<script src="${typeof window !== 'undefined' ? window.location.origin : 'https://app.worder.com.br'}/api/storefront/loader.js" async></script>`}</pre>
               <button
                 onClick={async () => {
                   try {
@@ -460,16 +489,10 @@ export default function ShopifyConnect() {
                     setTimeout(() => setSuccessMessage(''), 2000);
                   } catch {}
                 }}
-                className="absolute top-2 right-2 px-2.5 py-1 bg-blue-600 text-white rounded text-[11px] font-medium hover:bg-blue-700 transition-colors"
+                className="absolute top-2 right-2 px-2.5 py-1 bg-amber-700 text-white rounded text-[11px] font-medium hover:bg-amber-800 transition-colors"
               >
                 Copiar
               </button>
-            </div>
-            <div className="mt-2.5 text-[11px] text-blue-700 space-y-0.5">
-              <p>Como editar o <code className="font-mono">theme.liquid</code>:</p>
-              <p>1. Loja Online &rarr; Temas &rarr; <strong>Editar código</strong> (no tema ativo)</p>
-              <p>2. Pasta Layout &rarr; <strong>theme.liquid</strong></p>
-              <p>3. Cole o script acima logo antes de <code className="font-mono">&lt;/body&gt;</code> e <strong>Salve</strong></p>
             </div>
           </div>
         )}

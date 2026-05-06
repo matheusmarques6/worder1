@@ -179,8 +179,83 @@ export async function POST(request: NextRequest) {
   }
 
   // ──────────────────────────────────────────
-  // 3. Mark initial sync done + bump api_version
+  // 3. Storefront popup loader via ScriptTag API
+  //
+  // Shopify Custom Pixels can't inject DOM into the storefront (sandboxed
+  // iframe), and our Theme App Embed extension is only available for OAuth
+  // installs. So for manual integrations we use the ScriptTag API to install
+  // a regular <script> tag — Shopify renders it on every storefront page and
+  // it loads /api/storefront/loader.js which fetches and injects published
+  // popups. Idempotent: if a tag for our URL already exists we reuse it.
+  //
+  // Requires write_script_tags scope. If the merchant's app doesn't have it,
+  // we surface a manual fallback (the inline <script> snippet).
   // ──────────────────────────────────────────
+  const loaderUrl = `${APP_URL}/api/storefront/loader.js`;
+  let scriptTagInstalled = false;
+  let scriptTagId: string | null = null;
+  let scriptTagError: string | null = null;
+  const hasScriptTagsScope = scopes.includes('write_script_tags');
+
+  if (hasScriptTagsScope) {
+    try {
+      // Look for existing tag pointing to our loader URL
+      const listRes = await fetch(
+        `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/script_tags.json?src=${encodeURIComponent(loaderUrl)}`,
+        { headers: { 'X-Shopify-Access-Token': accessToken } }
+      );
+      if (listRes.ok) {
+        const listJson = await listRes.json();
+        const existing = (listJson.script_tags || []).find((s: any) => s.src === loaderUrl);
+        if (existing) {
+          scriptTagInstalled = true;
+          scriptTagId = String(existing.id);
+        }
+      }
+
+      if (!scriptTagInstalled) {
+        const createRes = await fetch(
+          `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/script_tags.json`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': accessToken,
+            },
+            body: JSON.stringify({
+              script_tag: {
+                event: 'onload',
+                src: loaderUrl,
+                display_scope: 'online_store',
+              },
+            }),
+          }
+        );
+        if (createRes.ok) {
+          const created = await createRes.json();
+          if (created.script_tag?.id) {
+            scriptTagInstalled = true;
+            scriptTagId = String(created.script_tag.id);
+          }
+        } else {
+          scriptTagError = `${createRes.status}: ${(await createRes.text()).slice(0, 200)}`;
+        }
+      }
+    } catch (err: any) {
+      scriptTagError = err?.message || 'fetch error';
+    }
+  } else {
+    scriptTagError = 'missing_scope:write_script_tags';
+  }
+
+  // ──────────────────────────────────────────
+  // 4. Mark initial sync done + bump api_version + persist script_tag_id
+  // (in settings JSONB so we don't need a schema migration)
+  // ──────────────────────────────────────────
+  const updatedSettings = {
+    ...(store.settings || {}),
+    ...(scriptTagId ? { script_tag_id: scriptTagId, loader_installed_at: new Date().toISOString() } : {}),
+  };
   await supabase
     .from('shopify_stores')
     .update({
@@ -188,6 +263,7 @@ export async function POST(request: NextRequest) {
       initial_sync_completed: true,
       api_version: SHOPIFY_API_VERSION,
       last_sync_at: new Date().toISOString(),
+      settings: updatedSettings,
     })
     .eq('id', store.id);
 
@@ -201,6 +277,13 @@ export async function POST(request: NextRequest) {
       failedTopics: webhookFailed > 0 ? failedTopics : undefined,
     },
     pixel: { installed: pixelInstalled },
+    loader: {
+      installed: scriptTagInstalled,
+      scriptTagId,
+      error: scriptTagError,
+      missingScope: !hasScriptTagsScope,
+      manualFallbackSnippet: scriptTagInstalled ? null : `<script src="${loaderUrl}" async></script>`,
+    },
     apiVersion: SHOPIFY_API_VERSION,
   });
 }

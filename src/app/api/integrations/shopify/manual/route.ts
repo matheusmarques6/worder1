@@ -33,7 +33,9 @@ const REQUIRED_SCOPES = ['read_orders', 'read_customers', 'read_products'];
 // Recommended scopes for full feature support (warned if missing, not blocked)
 // read_all_orders is critical for stores with orders older than 60 days
 // (without it, Shopify only returns last 60 days of order history).
-const RECOMMENDED_SCOPES = ['read_all_orders', 'write_pixels', 'read_customer_events', 'read_fulfillments', 'read_discounts'];
+// write_script_tags lets us inject the popup loader automatically (otherwise
+// the merchant has to paste a <script> in their theme.liquid).
+const RECOMMENDED_SCOPES = ['read_all_orders', 'write_pixels', 'write_script_tags', 'read_customer_events', 'read_fulfillments', 'read_discounts'];
 
 // 17 webhook topics — must match the OAuth callback exactly so both
 // connection modes produce identical event coverage.

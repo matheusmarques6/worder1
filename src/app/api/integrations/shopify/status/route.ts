@@ -167,6 +167,12 @@ export async function GET(request: NextRequest) {
       initialSyncCompleted: store.initial_sync_completed,
       pixelInstalled: pixelDetected,
       embedInstalled: embedDetected,
+      // True when our popup loader script is auto-installed via Shopify
+      // ScriptTag API. Frontend uses this to decide whether to show the
+      // "paste in theme.liquid" fallback or hide it. The id is persisted in
+      // the existing settings jsonb (no schema migration needed).
+      loaderInstalled: !!(store.settings?.script_tag_id),
+      scopes: Array.isArray(store.scopes) ? store.scopes : [],
       installedAt: store.installed_at,
       lastSyncAt: store.last_sync_at,
       totalOrders: ordersCount,
