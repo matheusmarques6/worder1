@@ -100,6 +100,17 @@ export default function FormsPage() {
     fetchForms()
   }, [fetchForms, currentStore?.id])
 
+  // Pre-fill the form name with the default-selected template's name when the
+  // create modal opens. Lets the merchant click "Criar popup" without needing
+  // to type anything for the common case.
+  useEffect(() => {
+    if (showCreateModal && !newFormName.trim() && selectedTemplate && selectedTemplate !== 'blank') {
+      const tmpl = POPUP_TEMPLATES[selectedTemplate]
+      if (tmpl) setNewFormName(tmpl.name)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCreateModal])
+
   const POPUP_TEMPLATES: Record<string, { name: string; desc: string; recommended?: boolean; design: any }> = {
     // First so it's the most prominent in the picker. Default-selected
     // when the create modal opens (see selectedTemplate state above).
@@ -565,7 +576,7 @@ export default function FormsPage() {
         </div>
       )}
 
-      {/* Create Form Modal */}
+      {/* Create Form Modal — Klaviyo/Omnisend-style template gallery */}
       <AnimatePresence>
         {showCreateModal && (
           <motion.div
@@ -574,99 +585,90 @@ export default function FormsPage() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCreateModal(false)} />
+            <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={() => setShowCreateModal(false)} />
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
+              initial={{ scale: 0.96, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="relative bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-lg shadow-2xl"
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="relative bg-white rounded-2xl border border-gray-200 w-full max-w-3xl shadow-2xl overflow-hidden"
             >
-              <button onClick={() => setShowCreateModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
-              </button>
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">Criar Formulario</h3>
-              <p className="text-sm text-gray-500 mb-5">Escolha o tipo e configure seu formulario</p>
-
-              <div className="space-y-4">
-                {/* Form Type Selection */}
+              {/* Header (dark, matches email editor) */}
+              <div className="flex items-center justify-between px-6 h-[56px] bg-zinc-900">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Formulario</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { value: 'popup', label: 'Popup', icon: MessageSquare, desc: 'Janela sobreposta' },
-                      { value: 'flyout', label: 'Flyout', icon: MousePointer, desc: 'Lateral deslizante' },
-                      { value: 'fullscreen', label: 'Tela Cheia', icon: Maximize, desc: 'Ocupa toda a tela' },
-                      { value: 'bar', label: 'Barra', icon: Minus, desc: 'Barra superior/inferior' },
-                      { value: 'embedded', label: 'Incorporado', icon: Code, desc: 'Dentro da pagina' },
-                      { value: 'landing', label: 'Landing Page', icon: Globe, desc: 'Pagina dedicada' },
-                    ].map((t) => {
-                      const Icon = t.icon
-                      return (
-                        <button
-                          key={t.value}
-                          onClick={() => setNewFormType(t.value)}
-                          className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all text-center ${
-                            newFormType === t.value
-                              ? 'border-primary-500 bg-primary-50 text-primary-700'
-                              : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                          }`}
-                        >
-                          <Icon className="w-5 h-5" />
-                          <span className="text-xs font-semibold">{t.label}</span>
-                          <span className="text-[10px] text-gray-400">{t.desc}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <h3 className="text-[15px] font-semibold text-white">Criar popup</h3>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">Escolha um template para começar — você poderá editar tudo depois</p>
                 </div>
-
-                {/* Template Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Começar com template</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(POPUP_TEMPLATES).map(([key, tmpl]) => (
-                      <button key={key} onClick={() => { setSelectedTemplate(key); if (!newFormName && key !== 'blank') setNewFormName(tmpl.name) }}
-                        className={`relative text-left p-3 rounded-xl border-2 transition-all ${selectedTemplate === key ? 'border-zinc-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                        {tmpl.recommended && (
-                          <span className="absolute top-2 right-2 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 rounded">Recomendado</span>
-                        )}
-                        <p className="text-sm font-semibold text-gray-900 pr-16">{tmpl.name}</p>
-                        <p className="text-[11px] text-gray-500 mt-0.5">{tmpl.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome do Formulario</label>
-                  <input
-                    type="text"
-                    value={newFormName}
-                    onChange={(e) => setNewFormName(e.target.value)}
-                    placeholder="Ex: Popup de Desconto 10%"
-                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-primary-500"
-                    autoFocus
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Descricao (opcional)</label>
-                  <textarea
-                    value={newFormDescription}
-                    onChange={(e) => setNewFormDescription(e.target.value)}
-                    placeholder="Descreva o objetivo do formulario..."
-                    rows={2}
-                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-primary-500 resize-none"
-                  />
-                </div>
-                <button
-                  onClick={createForm}
-                  disabled={!newFormName.trim() || creating || !currentStore?.id}
-                  title={!currentStore?.id ? 'Aguardando loja carregar...' : ''}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl font-medium transition-colors"
-                >
-                  {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  {creating ? 'Criando...' : !currentStore?.id ? 'Aguardando loja...' : 'Criar Formulario'}
+                <button onClick={() => setShowCreateModal(false)} className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-md transition-colors">
+                  <X className="w-4 h-4" />
                 </button>
+              </div>
+
+              {/* Template gallery */}
+              <div className="px-6 pt-5 pb-4 max-h-[min(70vh,560px)] overflow-y-auto">
+                <div className="grid grid-cols-3 gap-3">
+                  {Object.entries(POPUP_TEMPLATES).map(([key, tmpl]) => {
+                    const isSelected = selectedTemplate === key
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => {
+                          setSelectedTemplate(key)
+                          if (!newFormName && key !== 'blank') setNewFormName(tmpl.name)
+                          // Templates that target popups force the form_type so the
+                          // create POST doesn't ship a mismatched type.
+                          if (tmpl.design?.formType) setNewFormType(tmpl.design.formType)
+                        }}
+                        className={`group relative text-left rounded-xl border-2 overflow-hidden transition-all ${isSelected ? 'border-zinc-900 ring-2 ring-zinc-900/10' : 'border-gray-200 hover:border-gray-300'}`}
+                      >
+                        {/* Mini-preview thumbnail */}
+                        <div className="aspect-[4/3] bg-gray-50 relative overflow-hidden flex items-center justify-center p-3">
+                          <TemplatePreview templateKey={key} />
+                          {tmpl.recommended && (
+                            <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 rounded">
+                              Recomendado
+                            </span>
+                          )}
+                        </div>
+                        {/* Card body */}
+                        <div className="px-3 py-2.5 bg-white border-t border-gray-100">
+                          <p className="text-[12px] font-semibold text-gray-900 leading-tight truncate">{tmpl.name}</p>
+                          <p className="text-[10.5px] text-gray-500 mt-0.5 line-clamp-2 leading-snug">{tmpl.desc}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Footer: name input + create */}
+              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/60">
+                <div className="flex items-end gap-3">
+                  <div className="flex-1 min-w-0">
+                    <label className="block text-[11px] font-medium text-gray-700 mb-1">Nome do popup</label>
+                    <input
+                      type="text"
+                      value={newFormName}
+                      onChange={(e) => setNewFormName(e.target.value)}
+                      placeholder="Ex: Popup de boas-vindas"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-[13px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900/10"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setShowCreateModal(false)}
+                    className="px-4 py-2 text-[13px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={createForm}
+                    disabled={!newFormName.trim() || creating || !currentStore?.id}
+                    title={!currentStore?.id ? 'Aguardando loja carregar...' : ''}
+                    className="flex items-center justify-center gap-1.5 px-5 py-2 bg-zinc-900 hover:bg-zinc-800 disabled:bg-gray-200 disabled:text-gray-400 text-white text-[13px] font-semibold rounded-lg transition-colors whitespace-nowrap"
+                  >
+                    {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    {creating ? 'Criando...' : !currentStore?.id ? 'Aguardando loja...' : 'Criar popup'}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -674,4 +676,60 @@ export default function FormsPage() {
       </AnimatePresence>
     </div>
   )
+}
+
+// CSS-rendered mini-preview for each popup template. Lightweight and matches
+// what the merchant will see in the editor when they click the card.
+function TemplatePreview({ templateKey }: { templateKey: string }) {
+  switch (templateKey) {
+    case 'lifestyle_image':
+      // Two-column: white form on left, gray "image" on right
+      return (
+        <div className="w-full aspect-[5/3] bg-white rounded shadow-sm border border-gray-200 flex overflow-hidden">
+          <div className="flex-1 p-2 flex flex-col items-center justify-center gap-1 bg-white">
+            <div className="w-5 h-2 rounded-sm bg-gray-300" />
+            <div className="h-1 w-12 bg-gray-900 rounded-full mt-1" />
+            <div className="h-0.5 w-8 bg-gray-300 rounded-full" />
+            <div className="w-full h-2 bg-gray-100 rounded mt-1" />
+            <div className="w-full h-2 bg-gray-100 rounded" />
+            <div className="w-full h-2.5 bg-red-500 rounded mt-0.5" />
+          </div>
+          <div className="flex-1 bg-gradient-to-br from-gray-300 to-gray-400" />
+        </div>
+      )
+    case 'discount':
+      return (
+        <div className="w-3/5 aspect-[4/5] bg-white rounded shadow-sm border border-gray-200 p-2.5 flex flex-col items-center gap-1.5">
+          <div className="h-1.5 w-14 bg-gray-900 rounded-full mt-1" />
+          <div className="h-1 w-10 bg-gray-300 rounded-full" />
+          <div className="w-full h-2 bg-gray-100 rounded mt-1" />
+          <div className="w-full h-2.5 bg-orange-500 rounded mt-0.5" />
+        </div>
+      )
+    case 'newsletter':
+      return (
+        <div className="w-3/5 aspect-[4/5] bg-white rounded shadow-sm border border-gray-200 p-2.5 flex flex-col items-center gap-1">
+          <div className="h-1.5 w-12 bg-gray-900 rounded-full mt-1.5" />
+          <div className="h-1 w-9 bg-gray-300 rounded-full" />
+          <div className="w-full h-2 bg-gray-100 rounded mt-1" />
+          <div className="w-full h-2.5 bg-gray-900 rounded mt-0.5" />
+        </div>
+      )
+    case 'exit_intent':
+      return (
+        <div className="w-3/5 aspect-[4/5] bg-white rounded shadow-sm border border-gray-200 p-2.5 flex flex-col items-center gap-1">
+          <div className="h-1.5 w-14 bg-gray-900 rounded-full mt-1" />
+          <div className="h-1 w-10 bg-gray-300 rounded-full" />
+          <div className="w-full h-2 bg-gray-100 rounded mt-1" />
+          <div className="w-full h-2.5 bg-red-600 rounded mt-0.5" />
+        </div>
+      )
+    case 'blank':
+    default:
+      return (
+        <div className="w-3/5 aspect-[4/5] bg-white rounded shadow-sm border-2 border-dashed border-gray-300 flex items-center justify-center">
+          <Plus className="w-5 h-5 text-gray-300" />
+        </div>
+      )
+  }
 }
