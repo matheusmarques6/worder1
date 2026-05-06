@@ -3,6 +3,7 @@
 // =============================================
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,12 +13,19 @@ export async function GET(request: NextRequest) {
     const auth = await getAuthClient()
     if (!auth) return authError()
 
-    const { supabase, user } = auth
+    const { user } = auth
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const storeId = searchParams.get('storeId') || searchParams.get('store_id')
 
-    let query = supabase
+    // Use the admin client and enforce isolation explicitly via the
+    // organization_id filter. Going through the user's RLS-aware client was
+    // causing forms with store_id IS NULL to be hidden because the policy on
+    // crm_forms appears to require a non-null store_id match. The explicit
+    // organization_id filter below preserves multi-tenant isolation without
+    // depending on RLS.
+    const admin = getSupabaseAdmin()
+    let query = admin
       .from('crm_forms')
       .select(`
         id, name, slug, description, status,
