@@ -62,7 +62,7 @@ export default function FormsPage() {
   const [newFormName, setNewFormName] = useState('')
   const [newFormDescription, setNewFormDescription] = useState('')
   const [newFormType, setNewFormType] = useState('popup')
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>('lifestyle_image')
   const [creating, setCreating] = useState(false)
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [copiedEmbed, setCopiedEmbed] = useState<string | null>(null)
@@ -100,7 +100,45 @@ export default function FormsPage() {
     fetchForms()
   }, [fetchForms, currentStore?.id])
 
-  const POPUP_TEMPLATES: Record<string, { name: string; desc: string; design: any }> = {
+  const POPUP_TEMPLATES: Record<string, { name: string; desc: string; recommended?: boolean; design: any }> = {
+    // First so it's the most prominent in the picker. Default-selected
+    // when the create modal opens (see selectedTemplate state above).
+    lifestyle_image: { name: 'Popup com imagem lateral', desc: 'Layout duas colunas: logo + formulário à esquerda, foto à direita.', recommended: true, design: {
+      formType: 'popup',
+      steps: [{ id: '1', name: 'Etapa 1', blocks: [
+        // Logo placeholder — clique no bloco e abra a Media Library para trocar
+        { id: 'logo', type: 'image', props: { src: '', alt: 'Logo', imgWidth: 50, maxHeight: 80, align: 'center', objectFit: 'contain', marginTop: 0, marginBottom: 24 } },
+        { id: 'h1', type: 'text', props: { content: 'GANHE 10% OFF', tag: 'h2', fontSize: 32, color: '#111827', fontWeight: '800', align: 'center', lineHeight: 1.1, marginBottom: 4, letterSpacing: 0 } },
+        { id: 'h2', type: 'text', props: { content: 'NO SEU PRIMEIRO PEDIDO', tag: 'p', fontSize: 13, color: '#6B7280', fontWeight: '600', align: 'center', letterSpacing: 1, marginBottom: 18 } },
+        { id: 'sub', type: 'text', props: { content: 'Preencha o formulário e receba seu desconto instantaneamente por e-mail', tag: 'p', fontSize: 13, color: '#6B7280', align: 'center', lineHeight: 1.5, marginBottom: 20 } },
+        { id: 'name', type: 'name-input', props: { placeholder: 'Digite seu nome', required: true, showLabel: false, mapTo: 'first_name', backgroundColor: '#F3F4F6', borderColor: '#F3F4F6', borderWidth: 0, corners: 'small', cornerRadius: 6, fontSize: 14, textColor: '#111827', placeholderColor: '#9CA3AF', inputPadTop: 14, inputPadRight: 16, inputPadBottom: 14, inputPadLeft: 16, marginBottom: 10 } },
+        { id: 'email', type: 'email', props: { placeholder: 'Digite seu e-mail', required: true, showLabel: false, backgroundColor: '#F3F4F6', borderColor: '#F3F4F6', borderWidth: 0, corners: 'small', cornerRadius: 6, fontSize: 14, textColor: '#111827', placeholderColor: '#9CA3AF', inputPadTop: 14, inputPadRight: 16, inputPadBottom: 14, inputPadLeft: 16, marginBottom: 16 } },
+        { id: 'btn', type: 'button', props: { text: 'RECEBER MEU DESCONTO', bgColor: '#DC2626', hoverColor: '#B91C1C', textColor: '#FFFFFF', fontSize: 14, btnFontWeight: '700', btnLetterSpacing: 0.5, borderRadius: 6, fullWidth: true, action: 'submit', paddingV: 16, paddingH: 28 } },
+      ] }],
+      successStep: { id: 'ok', name: 'Sucesso', blocks: [
+        { id: 'ok1', type: 'text', props: { content: 'Pronto! 🎉', tag: 'h2', fontSize: 32, color: '#111827', fontWeight: '800', align: 'center', marginBottom: 8 } },
+        { id: 'ok2', type: 'text', props: { content: 'Confira seu email para resgatar o cupom.', tag: 'p', fontSize: 14, color: '#6B7280', align: 'center', marginBottom: 16 } },
+      ] },
+      styles: {
+        width: 720,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 4,
+        padding: 40,
+        fontFamily: 'Inter, sans-serif',
+        overlay: { enabled: true, color: '#000', opacity: 60, closeOnClick: true },
+        closeButton: { show: true, color: '#FFFFFF', size: 22 },
+        sideImage: { enabled: true, src: '', position: 'right', width: 360 },
+        animation: 'fade',
+      },
+      behavior: {
+        display: { trigger: 'time_delay', delay: 5, scrollPercent: 50 },
+        visibility: { devices: 'all', visitorType: 'all', hideFromSubscribers: true },
+        frequency: { showAfterDays: 7, stopAfterSubmission: true },
+        targeting: { pages: 'all', pageUrls: [], excludeUrls: [] },
+        scheduling: { enabled: false, startDate: '', endDate: '' },
+        audience: { tags: ['popup-lifestyle'], listId: '', doubleOptIn: false },
+      },
+    }},
     discount: { name: 'Popup de Desconto', desc: 'Captura email com cupom de desconto', design: {
       formType: 'popup', steps: [{ id: '1', name: 'Etapa 1', blocks: [
         { id: 'h', type: 'text', props: { content: 'Ganhe 10% OFF', fontSize: 32, color: '#111827', fontWeight: 'bold', align: 'center', tag: 'h2' } },
@@ -135,49 +173,6 @@ export default function FormsPage() {
         { id: 'ok1', type: 'text', props: { content: 'Confira seu email! 📧', fontSize: 22, color: '#111827', fontWeight: 'bold', align: 'center' } },
       ] }, styles: { width: 440, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 32, fontFamily: 'Inter, sans-serif', overlay: { enabled: true, color: '#000', opacity: 60, closeOnClick: true }, closeButton: { show: true, color: '#fff', size: 24 }, sideImage: { enabled: false, src: '', position: 'right', width: 200 }, animation: 'scale' },
       behavior: { display: { trigger: 'exit_intent', delay: 5, scrollPercent: 50, exitEnabled: true }, visibility: { devices: 'desktop', visitorType: 'all', hideFromSubscribers: false }, frequency: { showAfterDays: 3, stopAfterSubmission: true }, targeting: { pages: 'all', pageUrls: [], excludeUrls: [] }, scheduling: { enabled: false, startDate: '', endDate: '' }, audience: { tags: [], listId: '', doubleOptIn: false } },
-    }},
-    // Two-column lifestyle popup, inspired by clube rock / fashion e-commerces.
-    // Logo on top, heading + subhead, name + email inputs, red CTA. Side image
-    // on the right (desktop only — mobile stacks vertically). Every block is a
-    // standard editor node so the merchant can rewrite text, change colors,
-    // swap padding, swap the logo and side image via the Media Library.
-    lifestyle_image: { name: 'Popup com imagem lateral', desc: 'Layout duas colunas: logo + formulário à esquerda, foto à direita. Inspirado em Clube Rock.', design: {
-      formType: 'popup',
-      steps: [{ id: '1', name: 'Etapa 1', blocks: [
-        // Logo placeholder — clique no bloco e abra a Media Library para trocar
-        { id: 'logo', type: 'image', props: { src: '', alt: 'Logo', imgWidth: 50, maxHeight: 80, align: 'center', objectFit: 'contain', marginTop: 0, marginBottom: 24 } },
-        { id: 'h1', type: 'text', props: { content: 'GANHE 10% OFF', tag: 'h2', fontSize: 32, color: '#111827', fontWeight: '800', align: 'center', lineHeight: 1.1, marginBottom: 4, letterSpacing: 0 } },
-        { id: 'h2', type: 'text', props: { content: 'NO SEU PRIMEIRO PEDIDO', tag: 'p', fontSize: 13, color: '#6B7280', fontWeight: '600', align: 'center', letterSpacing: 1, marginBottom: 18 } },
-        { id: 'sub', type: 'text', props: { content: 'Preencha o formulário e receba seu desconto instantaneamente por e-mail', tag: 'p', fontSize: 13, color: '#6B7280', align: 'center', lineHeight: 1.5, marginBottom: 20 } },
-        { id: 'name', type: 'name-input', props: { placeholder: 'Digite seu nome', required: true, showLabel: false, mapTo: 'first_name', backgroundColor: '#F3F4F6', borderColor: '#F3F4F6', borderWidth: 0, corners: 'small', cornerRadius: 6, fontSize: 14, textColor: '#111827', placeholderColor: '#9CA3AF', inputPadTop: 14, inputPadRight: 16, inputPadBottom: 14, inputPadLeft: 16, marginBottom: 10 } },
-        { id: 'email', type: 'email', props: { placeholder: 'Digite seu e-mail', required: true, showLabel: false, backgroundColor: '#F3F4F6', borderColor: '#F3F4F6', borderWidth: 0, corners: 'small', cornerRadius: 6, fontSize: 14, textColor: '#111827', placeholderColor: '#9CA3AF', inputPadTop: 14, inputPadRight: 16, inputPadBottom: 14, inputPadLeft: 16, marginBottom: 16 } },
-        { id: 'btn', type: 'button', props: { text: 'RECEBER MEU DESCONTO', bgColor: '#DC2626', hoverColor: '#B91C1C', textColor: '#FFFFFF', fontSize: 14, btnFontWeight: '700', btnLetterSpacing: 0.5, borderRadius: 6, fullWidth: true, action: 'submit', paddingV: 16, paddingH: 28 } },
-      ] }],
-      successStep: { id: 'ok', name: 'Sucesso', blocks: [
-        { id: 'ok1', type: 'text', props: { content: 'Pronto! 🎉', tag: 'h2', fontSize: 32, color: '#111827', fontWeight: '800', align: 'center', marginBottom: 8 } },
-        { id: 'ok2', type: 'text', props: { content: 'Confira seu email para resgatar o cupom.', tag: 'p', fontSize: 14, color: '#6B7280', align: 'center', marginBottom: 16 } },
-      ] },
-      styles: {
-        width: 720,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 4,
-        padding: 40,
-        fontFamily: 'Inter, sans-serif',
-        overlay: { enabled: true, color: '#000', opacity: 60, closeOnClick: true },
-        closeButton: { show: true, color: '#FFFFFF', size: 22 },
-        // sideImage placeholder is empty — merchant opens Estilos → Imagem
-        // lateral and uploads their own. Width = 50% of popup.
-        sideImage: { enabled: true, src: '', position: 'right', width: 360 },
-        animation: 'fade',
-      },
-      behavior: {
-        display: { trigger: 'time_delay', delay: 5, scrollPercent: 50 },
-        visibility: { devices: 'all', visitorType: 'all', hideFromSubscribers: true },
-        frequency: { showAfterDays: 7, stopAfterSubmission: true },
-        targeting: { pages: 'all', pageUrls: [], excludeUrls: [] },
-        scheduling: { enabled: false, startDate: '', endDate: '' },
-        audience: { tags: ['popup-lifestyle'], listId: '', doubleOptIn: false },
-      },
     }},
     blank: { name: 'Em Branco', desc: 'Comece do zero', design: {} },
   }
@@ -631,8 +626,11 @@ export default function FormsPage() {
                   <div className="grid grid-cols-2 gap-2">
                     {Object.entries(POPUP_TEMPLATES).map(([key, tmpl]) => (
                       <button key={key} onClick={() => { setSelectedTemplate(key); if (!newFormName && key !== 'blank') setNewFormName(tmpl.name) }}
-                        className={`text-left p-3 rounded-xl border-2 transition-all ${selectedTemplate === key ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                        <p className="text-sm font-semibold text-gray-900">{tmpl.name}</p>
+                        className={`relative text-left p-3 rounded-xl border-2 transition-all ${selectedTemplate === key ? 'border-zinc-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                        {tmpl.recommended && (
+                          <span className="absolute top-2 right-2 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 rounded">Recomendado</span>
+                        )}
+                        <p className="text-sm font-semibold text-gray-900 pr-16">{tmpl.name}</p>
                         <p className="text-[11px] text-gray-500 mt-0.5">{tmpl.desc}</p>
                       </button>
                     ))}
