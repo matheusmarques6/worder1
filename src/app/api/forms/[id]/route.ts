@@ -3,6 +3,7 @@
 // =============================================
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
+import { getSupabaseAdmin } from '@/lib/supabase-admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,10 +16,14 @@ export async function GET(
     const auth = await getAuthClient()
     if (!auth) return authError()
 
-    const { supabase, user } = auth
+    const { user } = auth
     const formId = params.id
 
-    const { data: form, error } = await supabase
+    // Use the admin client (the list endpoint also does this) so RLS on
+    // crm_forms can't silently strip fields like design_json on read.
+    // Isolation enforced by the explicit organization_id filter below.
+    const admin = getSupabaseAdmin()
+    const { data: form, error } = await admin
       .from('crm_forms')
       .select(`
         *,
@@ -33,8 +38,7 @@ export async function GET(
           event_value, event_currency,
           conditions, target_stage_id,
           is_active, position, created_at
-        ),
-        pipeline:pipelines(id, name, color, stages:pipeline_stages(id, name, color, position, is_won, is_lost))
+        )
       `)
       .eq('id', formId)
       .eq('organization_id', user.organization_id)
@@ -44,6 +48,11 @@ export async function GET(
       console.error('[Forms] Error fetching form:', error)
       return NextResponse.json({ error: 'Formulário não encontrado' }, { status: 404 })
     }
+
+    console.log('[Forms] GET', formId, {
+      design_json_keys: form.design_json ? Object.keys(form.design_json) : null,
+      design_json_steps: form.design_json?.steps?.length,
+    })
 
     // Sort fields and events by position
     if (form.fields) {
@@ -72,7 +81,7 @@ export async function PUT(
     const auth = await getAuthClient()
     if (!auth) return authError()
 
-    const { supabase, user } = auth
+    const { user } = auth
     const formId = params.id
     const body = await request.json()
 
@@ -105,7 +114,10 @@ export async function PUT(
     if (list_id !== undefined) updates.list_id = list_id
     if (store_id !== undefined) updates.store_id = store_id
 
-    const { data: form, error } = await supabase
+    // Same admin-client switch as POST/GET. RLS on crm_forms was silently
+    // stripping the design_json column on writes; admin bypasses it.
+    const admin = getSupabaseAdmin()
+    const { data: form, error } = await admin
       .from('crm_forms')
       .update(updates)
       .eq('id', formId)
@@ -133,10 +145,11 @@ export async function DELETE(
     const auth = await getAuthClient()
     if (!auth) return authError()
 
-    const { supabase, user } = auth
+    const { user } = auth
     const formId = params.id
 
-    const { error } = await supabase
+    const admin = getSupabaseAdmin()
+    const { error } = await admin
       .from('crm_forms')
       .delete()
       .eq('id', formId)

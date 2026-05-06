@@ -95,24 +95,44 @@ interface PopupDesign {
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 
-const BLOCK_TYPES = [
-  { type: 'email', label: 'Email', icon: AtSign },
-  { type: 'legal-consent', label: 'Consentimento', icon: ShieldCheck },
-  { type: 'phone', label: 'Telefone', icon: Phone },
-  { type: 'text-input', label: 'Campo Texto', icon: TextCursorInput },
-  { type: 'name-input', label: 'Nome', icon: User },
-  { type: 'date-input', label: 'Data', icon: Calendar },
-  { type: 'dropdown', label: 'Dropdown', icon: ChevronDown },
-  { type: 'radio', label: 'Radio', icon: CircleDot },
-  { type: 'checkbox', label: 'Checkbox', icon: CheckSquare },
-  { type: 'text', label: 'Texto', icon: Type },
-  { type: 'button', label: 'Botão', icon: MousePointerClick },
-  { type: 'image', label: 'Imagem', icon: ImageIcon },
-  { type: 'spacer', label: 'Espaçador', icon: Minus },
-  { type: 'line', label: 'Linha', icon: GripHorizontal },
-  { type: 'coupon', label: 'Cupom', icon: Tag },
-  { type: 'countdown', label: 'Contagem', icon: Clock },
+// Block types grouped by category, Klaviyo/Omnisend-style. Order inside each
+// group is the order they appear in the sidebar grid.
+const BLOCK_CATEGORIES: Array<{ name: string; items: Array<{ type: string; label: string; icon: any }> }> = [
+  {
+    name: 'Conteúdo',
+    items: [
+      { type: 'text', label: 'Texto', icon: Type },
+      { type: 'button', label: 'Botão', icon: MousePointerClick },
+      { type: 'image', label: 'Imagem', icon: ImageIcon },
+      { type: 'coupon', label: 'Cupom', icon: Tag },
+      { type: 'countdown', label: 'Contagem', icon: Clock },
+    ],
+  },
+  {
+    name: 'Campos',
+    items: [
+      { type: 'email', label: 'Email', icon: AtSign },
+      { type: 'name-input', label: 'Nome', icon: User },
+      { type: 'phone', label: 'Telefone', icon: Phone },
+      { type: 'text-input', label: 'Texto', icon: TextCursorInput },
+      { type: 'date-input', label: 'Data', icon: Calendar },
+      { type: 'dropdown', label: 'Lista', icon: ChevronDown },
+      { type: 'radio', label: 'Radio', icon: CircleDot },
+      { type: 'checkbox', label: 'Checkbox', icon: CheckSquare },
+      { type: 'legal-consent', label: 'Consentimento', icon: ShieldCheck },
+    ],
+  },
+  {
+    name: 'Layout',
+    items: [
+      { type: 'spacer', label: 'Espaço', icon: Minus },
+      { type: 'line', label: 'Linha', icon: GripHorizontal },
+    ],
+  },
 ]
+
+// Flat list kept around for any code that previously imported BLOCK_TYPES.
+const BLOCK_TYPES = BLOCK_CATEGORIES.flatMap(c => c.items)
 
 // Profile fields available for mapping (destinos no contato)
 const PROFILE_FIELDS = [

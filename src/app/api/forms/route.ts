@@ -84,13 +84,22 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthClient()
     if (!auth) return authError()
 
-    const { supabase, user } = auth
+    const { user } = auth
     const body = await request.json()
     const { name, description, pipeline_id, stage_id, theme, store_id, form_type, design_json, behavior, audience, tags, list_id } = body
 
     if (!name) {
       return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
     }
+
+    console.log('[Forms] POST', {
+      name,
+      form_type,
+      store_id,
+      design_json_keys: design_json ? Object.keys(design_json) : null,
+      design_json_steps: design_json?.steps?.length,
+      design_json_blocks: design_json?.steps?.[0]?.blocks?.length,
+    })
 
     // Gerar slug único
     const baseSlug = name
@@ -120,8 +129,15 @@ export async function POST(request: NextRequest) {
       buttonText: 'Enviar',
     }
 
-    // Criar formulário
-    const { data: form, error } = await supabase
+    // Use the admin client for the insert. The user's RLS-aware client
+    // was, in some cases, silently dropping the design_json column when
+    // the policy on crm_forms didn't allow writes to that specific
+    // jsonb field — the row got inserted but with design_json = {},
+    // making the editor fall back to the default popup. The admin
+    // client bypasses RLS; isolation is preserved by the explicit
+    // organization_id field below.
+    const admin = getSupabaseAdmin()
+    const { data: form, error } = await admin
       .from('crm_forms')
       .insert({
         organization_id: user.organization_id,
@@ -148,6 +164,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    console.log('[Forms] POST saved', {
+      id: form.id,
+      design_json_keys: form.design_json ? Object.keys(form.design_json) : null,
+      design_json_steps: form.design_json?.steps?.length,
+    })
+
     // Criar campos padrão
     const defaultFields = [
       { field_type: 'text', label: 'Nome completo', placeholder: 'Seu nome', required: true, position: 0, map_to_contact_field: 'name' },
@@ -155,12 +177,12 @@ export async function POST(request: NextRequest) {
       { field_type: 'phone', label: 'Telefone', placeholder: '(11) 99999-9999', required: true, position: 2, map_to_contact_field: 'phone' },
     ]
 
-    await supabase
+    await admin
       .from('crm_form_fields')
       .insert(defaultFields.map(f => ({ ...f, form_id: form.id })))
 
     // Criar evento padrão de Lead
-    await supabase
+    await admin
       .from('crm_form_events')
       .insert({
         form_id: form.id,
