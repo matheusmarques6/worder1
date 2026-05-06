@@ -118,13 +118,21 @@ async function verifyShopifyWebhook(
 async function getStoreConfig(shopDomain: string): Promise<ShopifyStoreConfig | null> {
   try {
     const supabase = getSupabase();
+    // Match either the primary shop_domain OR any entry in
+    // shop_domain_aliases. Shopify sends webhooks with the canonical
+    // myshopifyDomain (the one assigned at shop creation) which can
+    // differ from what the merchant entered during manual connection
+    // — e.g. they typed "sourosa.myshopify.com" but Shopify sends
+    // "lojalaclode.myshopify.com" because that's the original domain.
+    // Without this OR, the original-domain webhooks return 410 Gone
+    // and events silently drop.
     const { data: store } = await supabase
       .from('shopify_stores')
       .select('*')
-      .eq('shop_domain', shopDomain)
+      .or(`shop_domain.eq.${shopDomain},shop_domain_aliases.cs.{${shopDomain}}`)
       .eq('is_active', true)
-      .single();
-    
+      .maybeSingle();
+
     if (!store) return null;
     
     return {

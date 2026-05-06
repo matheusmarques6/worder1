@@ -85,13 +85,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (!store && storeDomain) {
-      const domain = String(storeDomain).replace(/^https?:\/\//, '').replace(/\/$/, '');
-      const { data } = await supabase
-        .from('shopify_stores')
-        .select('id, organization_id')
-        .eq('shop_domain', domain)
-        .maybeSingle();
-      store = data;
+      // Alias-aware lookup: handles canonical myshopifyDomain mismatches
+      const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain');
+      store = await resolveStoreByDomain<{ id: string; organization_id: string }>(
+        supabase,
+        storeDomain,
+        { select: 'id, organization_id', activeOnly: false }
+      );
     }
 
     if (!store) {

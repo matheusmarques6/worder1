@@ -197,6 +197,11 @@ export async function GET(request: NextRequest) {
       apiSecretConfigured: !!store.api_secret,
       syncCheckoutsEnabled: store.sync_checkouts !== false,
       scopes: Array.isArray(store.scopes) ? store.scopes : [],
+      // Domain aliases — secondary myshopifyDomains under which Shopify
+      // may send webhooks (canonical/permanent domain, expansion store
+      // subdomains, custom domains added later). Without these stored,
+      // webhooks for non-primary domains return 410.
+      shopDomainAliases: Array.isArray(store.shop_domain_aliases) ? store.shop_domain_aliases : [],
       // Manual install fallback — when auto webPixelCreate fails (the
       // store is on a Custom App without our extension installed), the
       // merchant has to paste this snippet into Shopify Admin → Settings

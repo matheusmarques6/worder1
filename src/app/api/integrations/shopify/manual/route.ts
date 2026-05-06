@@ -135,6 +135,12 @@ export async function POST(request: NextRequest) {
     let currency = 'BRL';
     let planName = '';
     let timezone = '';
+    // Canonical myshopifyDomain — Shopify's permanent identifier for the
+    // shop, what they always send in X-Shopify-Shop-Domain headers on
+    // webhooks. Often differs from what the merchant typed if they later
+    // renamed the admin slug. We persist this as an alias so webhooks
+    // for either domain resolve to the same store row.
+    let permanentDomain: string | null = null;
 
     try {
       const shopInfoRes = await fetch(
@@ -146,7 +152,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            query: `{ shop { name email currencyCode timezoneAbbreviation plan { displayName } } }`,
+            query: `{ shop { name email currencyCode timezoneAbbreviation myshopifyDomain plan { displayName } } }`,
           }),
         }
       );
@@ -160,6 +166,7 @@ export async function POST(request: NextRequest) {
           currency = s.currencyCode || 'BRL';
           planName = s.plan?.displayName || '';
           timezone = s.timezoneAbbreviation || '';
+          permanentDomain = (s.myshopifyDomain || '').toLowerCase() || null;
         }
       }
     } catch (err) {
@@ -179,9 +186,19 @@ export async function POST(request: NextRequest) {
       .eq('shop_domain', shopDomain)
       .maybeSingle();
 
+    // Build aliases array: include permanentDomain when it differs from
+    // what the merchant typed, so webhooks under the canonical domain
+    // resolve to this store. Always lowercase for consistency.
+    const aliases: string[] = [];
+    const lowDomain = String(shopDomain).toLowerCase();
+    if (permanentDomain && permanentDomain !== lowDomain) {
+      aliases.push(permanentDomain);
+    }
+
     const storeRecord: Record<string, any> = {
       organization_id: organizationId,
       shop_domain: shopDomain,
+      shop_domain_aliases: aliases,
       shop_name: shopName,
       shop_email: shopEmail,
       access_token: accessToken,

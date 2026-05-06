@@ -49,11 +49,12 @@ export async function GET(request: NextRequest) {
   }
 
   const admin = getSupabaseAdmin();
-  const { data: store } = await admin
-    .from('shopify_stores')
-    .select('id, organization_id')
-    .eq('shop_domain', storeDomain)
-    .maybeSingle();
+  const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain');
+  const store = await resolveStoreByDomain<{ id: string; organization_id: string }>(
+    admin,
+    storeDomain,
+    { select: 'id, organization_id', activeOnly: false }
+  );
 
   if (!store) {
     return NextResponse.json(

@@ -25,6 +25,7 @@ interface DiagResponse {
     syncCheckoutsEnabled?: boolean
     scopes: string[]
     manualPixelLoaderCode?: string
+    shopDomainAliases?: string[]
   }
   counts: {
     last1h: number
@@ -158,6 +159,45 @@ export default function TrackingDebugPage() {
   const [reinstalling, setReinstalling] = useState(false)
   const [reinstallResult, setReinstallResult] = useState<string | null>(null)
   const [copiedSnippet, setCopiedSnippet] = useState(false)
+
+  // Domain aliases (Shopify canonical myshopifyDomain mismatch fix)
+  const [newAlias, setNewAlias] = useState('')
+  const [savingAlias, setSavingAlias] = useState(false)
+  const [aliasError, setAliasError] = useState<string | null>(null)
+  async function addAlias() {
+    if (!currentStore?.id || !newAlias.trim()) return
+    setSavingAlias(true)
+    setAliasError(null)
+    try {
+      const res = await fetch('/api/integrations/shopify/aliases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: currentStore.id, domain: newAlias.trim() }),
+      })
+      const j = await res.json()
+      if (!res.ok || j.error) {
+        setAliasError(j.error || 'Falhou')
+      } else {
+        setNewAlias('')
+        await fetchDiag()
+      }
+    } catch (e: any) {
+      setAliasError(e?.message || 'Erro de rede')
+    } finally {
+      setSavingAlias(false)
+    }
+  }
+  async function removeAlias(domain: string) {
+    if (!currentStore?.id) return
+    try {
+      await fetch('/api/integrations/shopify/aliases', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: currentStore.id, domain }),
+      })
+      await fetchDiag()
+    } catch { /* silent */ }
+  }
   async function reinstallEverything() {
     if (!currentStore?.id) return
     setReinstalling(true)
@@ -430,6 +470,62 @@ export default function TrackingDebugPage() {
           {reinstallResult}
         </div>
       )}
+
+      {/* Domain aliases — fixes the case where Shopify's canonical
+          myshopifyDomain differs from what was entered during connect.
+          Example: merchant connected with sourosa.myshopify.com but
+          Shopify sends webhooks under lojalaclode.myshopify.com (the
+          original/permanent name). Without an alias, those webhooks
+          come back 410 and tracking is broken. */}
+      <div className="bg-white border border-gray-200 rounded-xl">
+        <div className="px-4 py-3 border-b border-gray-100">
+          <p className="text-[13px] font-semibold text-gray-900">Domínios da loja</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            Shopify pode enviar webhooks por <strong>qualquer um</strong> dos seus myshopifyDomains.
+            O domínio principal foi cadastrado na conexão; adicione aliases pra qualquer myshopifyDomain extra
+            (ex: <code className="font-mono">lojalaclode.myshopify.com</code>) sob o qual a loja seja conhecida na Shopify.
+          </p>
+        </div>
+        <div className="px-4 py-3 space-y-2">
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-md border border-gray-100">
+            <span className="text-[10.5px] uppercase tracking-wide font-semibold text-gray-500 w-16 flex-shrink-0">primário</span>
+            <code className="flex-1 text-[12px] font-mono text-gray-900 truncate">{data.store.shop_domain}</code>
+          </div>
+          {(data.install.shopDomainAliases || []).map((alias) => (
+            <div key={alias} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-md border border-gray-100">
+              <span className="text-[10.5px] uppercase tracking-wide font-semibold text-gray-500 w-16 flex-shrink-0">alias</span>
+              <code className="flex-1 text-[12px] font-mono text-gray-900 truncate">{alias}</code>
+              <button
+                onClick={() => removeAlias(alias)}
+                className="text-[11px] font-medium text-red-600 hover:text-red-700 px-2 py-0.5 rounded hover:bg-red-50"
+              >
+                Remover
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="text"
+              value={newAlias}
+              onChange={(e) => setNewAlias(e.target.value)}
+              placeholder="exemplo.myshopify.com"
+              className="flex-1 px-3 py-2 text-[12.5px] font-mono border border-gray-200 rounded-md focus:outline-none focus:border-zinc-900"
+              onKeyDown={(e) => { if (e.key === 'Enter') addAlias() }}
+              disabled={savingAlias}
+            />
+            <button
+              onClick={addAlias}
+              disabled={savingAlias || !newAlias.trim()}
+              className="px-3 py-2 text-[12.5px] font-semibold bg-zinc-900 text-white rounded-md hover:bg-zinc-800 disabled:opacity-50 transition-colors"
+            >
+              {savingAlias ? 'Salvando…' : 'Adicionar alias'}
+            </button>
+          </div>
+          {aliasError && (
+            <p className="text-[11.5px] text-red-600">{aliasError}</p>
+          )}
+        </div>
+      </div>
 
       {/* Manual Custom Pixel install fallback — the auto-install via
           webPixelCreate only works when the merchant has our published

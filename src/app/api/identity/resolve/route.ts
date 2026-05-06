@@ -63,15 +63,38 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
-    // Resolve org from store identifier
+    // Resolve org from store identifier — uses the alias-aware
+    // resolver so a pixel sending the merchant's canonical
+    // myshopifyDomain (e.g. lojalaclode.myshopify.com) still finds the
+    // store even when shop_domain in our DB is the renamed/secondary
+    // domain (e.g. sourosa.myshopify.com).
     let organizationId = accountId as string | undefined;
     let resolvedStoreId = storeId as string | undefined;
     if (!organizationId || !resolvedStoreId) {
-      let q = supabase.from('shopify_stores').select('id, organization_id').limit(1);
-      if (storeId) q = q.eq('id', storeId);
-      else if (storeDomain) q = q.eq('shop_domain', storeDomain);
-      else if (accountId) q = q.eq('organization_id', accountId);
-      const { data: store } = await q.maybeSingle();
+      let store: { id: string; organization_id: string } | null = null;
+      if (storeId) {
+        const { data } = await supabase
+          .from('shopify_stores')
+          .select('id, organization_id')
+          .eq('id', storeId)
+          .maybeSingle();
+        store = data;
+      } else if (storeDomain) {
+        const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain');
+        store = await resolveStoreByDomain<{ id: string; organization_id: string }>(
+          supabase,
+          storeDomain,
+          { select: 'id, organization_id', activeOnly: false }
+        );
+      } else if (accountId) {
+        const { data } = await supabase
+          .from('shopify_stores')
+          .select('id, organization_id')
+          .eq('organization_id', accountId)
+          .limit(1)
+          .maybeSingle();
+        store = data;
+      }
       if (!store) {
         return NextResponse.json(
           { error: 'Store not found' },

@@ -403,12 +403,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400, headers: CORS_HEADERS });
     }
 
-    // 1. Buscar store pelo domínio
-    const { data: store } = await supabase
-      .from('shopify_stores')
-      .select('id, organization_id')
-      .eq('shop_domain', shop_domain)
-      .maybeSingle();
+    // 1. Buscar store pelo domínio (alias-aware: matches primary
+    //    shop_domain OR any entry in shop_domain_aliases)
+    const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain');
+    const store = await resolveStoreByDomain<{ id: string; organization_id: string }>(
+      supabase,
+      shop_domain,
+      { select: 'id, organization_id', activeOnly: false }
+    );
 
     if (!store) {
       // Loja não encontrada, ignorar silenciosamente

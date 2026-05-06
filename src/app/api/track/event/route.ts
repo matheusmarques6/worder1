@@ -187,14 +187,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (!store && storeDomain) {
-      // Normalize domain: strip protocol and trailing slash
-      const domain = storeDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      const { data } = await supabase
-        .from('shopify_stores')
-        .select('id, organization_id')
-        .eq('shop_domain', domain)
-        .maybeSingle();
-      store = data;
+      // Alias-aware: matches shop_domain OR shop_domain_aliases so a
+      // pixel sending the canonical myshopifyDomain still resolves
+      // even when the merchant connected with a renamed domain.
+      const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain');
+      store = await resolveStoreByDomain<{ id: string; organization_id: string }>(
+        supabase,
+        storeDomain,
+        { select: 'id, organization_id', activeOnly: false }
+      );
     }
 
     if (!store) {
