@@ -494,7 +494,10 @@ function InlineEditable({
 
 function InlineEditableStyles() {
   return (
-    <style dangerouslySetInnerHTML={{ __html: `
+    <>
+      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;500;600;700&display=swap" />
+      <style dangerouslySetInnerHTML={{ __html: `
       .worder-inline-editable:empty:before {
         content: attr(data-placeholder);
         color: rgba(0,0,0,0.3);
@@ -508,6 +511,7 @@ function InlineEditableStyles() {
         box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.55) inset;
       }
     ` }} />
+    </>
   )
 }
 
@@ -2714,17 +2718,27 @@ export default function PopupEditorPage() {
                 ))}
               </div>
               {leftTab === 'blocks' ? (
-                <div className="flex-1 overflow-y-auto px-4 py-4">
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {BLOCK_TYPES.map(bt => (
-                      <button key={bt.type} onClick={() => addBlock(bt.type)}
-                        title={`Adicionar ${bt.label}`}
-                        className="group flex flex-col items-center gap-1.5 py-3.5 px-2 rounded-lg border border-gray-100 bg-white hover:border-gray-300 hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900">
-                        <bt.icon className="w-5 h-5" />
-                        <span className="text-[11px] font-medium leading-tight text-center">{bt.label}</span>
-                      </button>
-                    ))}
-                  </div>
+                <div className="flex-1 overflow-y-auto">
+                  {BLOCK_CATEGORIES.map((cat, idx) => (
+                    <div key={cat.name} className={idx > 0 ? 'mt-1 pt-3 border-t border-gray-100' : 'pt-3'}>
+                      <p className="px-4 mb-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        {cat.name}
+                      </p>
+                      <div className="px-3 pb-3 grid grid-cols-2 gap-1">
+                        {cat.items.map(bt => (
+                          <button
+                            key={bt.type}
+                            onClick={() => addBlock(bt.type)}
+                            title={`Adicionar ${bt.label}`}
+                            className="group flex flex-col items-center gap-1 py-3 px-2 rounded-md hover:bg-gray-100 active:bg-gray-200 transition-colors text-gray-500 hover:text-gray-900 cursor-grab active:cursor-grabbing"
+                          >
+                            <bt.icon className="w-[18px] h-[18px] stroke-[1.75]" />
+                            <span className="text-[11px] font-medium leading-tight text-center">{bt.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : leftTab === 'styles' ? (
                 <div className="flex-1 overflow-y-auto">

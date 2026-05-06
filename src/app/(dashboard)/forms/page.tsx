@@ -119,23 +119,23 @@ export default function FormsPage() {
       steps: [{ id: '1', name: 'Etapa 1', blocks: [
         // Logo placeholder — clique no bloco e abra a Media Library para trocar
         { id: 'logo', type: 'image', props: { src: '', alt: 'Logo', imgWidth: 50, maxHeight: 80, align: 'center', objectFit: 'contain', marginTop: 0, marginBottom: 24 } },
-        { id: 'h1', type: 'text', props: { content: 'GANHE 10% OFF', tag: 'h2', fontSize: 32, color: '#111827', fontWeight: '800', align: 'center', lineHeight: 1.1, marginBottom: 4, letterSpacing: 0 } },
-        { id: 'h2', type: 'text', props: { content: 'NO SEU PRIMEIRO PEDIDO', tag: 'p', fontSize: 13, color: '#6B7280', fontWeight: '600', align: 'center', letterSpacing: 1, marginBottom: 18 } },
-        { id: 'sub', type: 'text', props: { content: 'Preencha o formulário e receba seu desconto instantaneamente por e-mail', tag: 'p', fontSize: 13, color: '#6B7280', align: 'center', lineHeight: 1.5, marginBottom: 20 } },
-        { id: 'name', type: 'name-input', props: { placeholder: 'Digite seu nome', required: true, showLabel: false, mapTo: 'first_name', backgroundColor: '#F3F4F6', borderColor: '#F3F4F6', borderWidth: 0, corners: 'small', cornerRadius: 6, fontSize: 14, textColor: '#111827', placeholderColor: '#9CA3AF', inputPadTop: 14, inputPadRight: 16, inputPadBottom: 14, inputPadLeft: 16, marginBottom: 10 } },
-        { id: 'email', type: 'email', props: { placeholder: 'Digite seu e-mail', required: true, showLabel: false, backgroundColor: '#F3F4F6', borderColor: '#F3F4F6', borderWidth: 0, corners: 'small', cornerRadius: 6, fontSize: 14, textColor: '#111827', placeholderColor: '#9CA3AF', inputPadTop: 14, inputPadRight: 16, inputPadBottom: 14, inputPadLeft: 16, marginBottom: 16 } },
-        { id: 'btn', type: 'button', props: { text: 'RECEBER MEU DESCONTO', bgColor: '#DC2626', hoverColor: '#B91C1C', textColor: '#FFFFFF', fontSize: 14, btnFontWeight: '700', btnLetterSpacing: 0.5, borderRadius: 6, fullWidth: true, action: 'submit', paddingV: 16, paddingH: 28 } },
+        { id: 'h1', type: 'text', props: { content: 'GANHE 10% OFF', tag: 'h2', fontFamily: "'Montserrat', sans-serif", fontSize: 32, color: '#111827', fontWeight: '800', align: 'center', lineHeight: 1.1, marginBottom: 4, letterSpacing: 0 } },
+        { id: 'h2', type: 'text', props: { content: 'NO SEU PRIMEIRO PEDIDO', tag: 'p', fontFamily: "'Montserrat', sans-serif", fontSize: 13, color: '#6B7280', fontWeight: '600', align: 'center', letterSpacing: 1, marginBottom: 18 } },
+        { id: 'sub', type: 'text', props: { content: 'Preencha o formulário e receba seu desconto instantaneamente por e-mail', tag: 'p', fontFamily: "'Montserrat', sans-serif", fontSize: 13, color: '#6B7280', align: 'center', lineHeight: 1.5, marginBottom: 20 } },
+        { id: 'name', type: 'name-input', props: { placeholder: 'Digite seu nome', required: true, showLabel: false, mapTo: 'first_name', fontFamily: "'Montserrat', sans-serif", backgroundColor: '#F3F4F6', borderColor: '#F3F4F6', borderWidth: 0, corners: 'small', cornerRadius: 6, fontSize: 14, textColor: '#111827', placeholderColor: '#9CA3AF', inputPadTop: 14, inputPadRight: 16, inputPadBottom: 14, inputPadLeft: 16, marginBottom: 10 } },
+        { id: 'email', type: 'email', props: { placeholder: 'Digite seu e-mail', required: true, showLabel: false, fontFamily: "'Montserrat', sans-serif", backgroundColor: '#F3F4F6', borderColor: '#F3F4F6', borderWidth: 0, corners: 'small', cornerRadius: 6, fontSize: 14, textColor: '#111827', placeholderColor: '#9CA3AF', inputPadTop: 14, inputPadRight: 16, inputPadBottom: 14, inputPadLeft: 16, marginBottom: 16 } },
+        { id: 'btn', type: 'button', props: { text: 'RECEBER MEU DESCONTO', bgColor: '#DC2626', hoverColor: '#B91C1C', textColor: '#FFFFFF', fontFamily: "'Montserrat', sans-serif", fontSize: 14, btnFontWeight: '700', btnLetterSpacing: 0.5, borderRadius: 6, fullWidth: true, action: 'submit', paddingV: 16, paddingH: 28 } },
       ] }],
       successStep: { id: 'ok', name: 'Sucesso', blocks: [
-        { id: 'ok1', type: 'text', props: { content: 'Pronto! 🎉', tag: 'h2', fontSize: 32, color: '#111827', fontWeight: '800', align: 'center', marginBottom: 8 } },
-        { id: 'ok2', type: 'text', props: { content: 'Confira seu email para resgatar o cupom.', tag: 'p', fontSize: 14, color: '#6B7280', align: 'center', marginBottom: 16 } },
+        { id: 'ok1', type: 'text', props: { content: 'Pronto! 🎉', tag: 'h2', fontFamily: "'Montserrat', sans-serif", fontSize: 32, color: '#111827', fontWeight: '800', align: 'center', marginBottom: 8 } },
+        { id: 'ok2', type: 'text', props: { content: 'Confira seu email para resgatar o cupom.', tag: 'p', fontFamily: "'Montserrat', sans-serif", fontSize: 14, color: '#6B7280', align: 'center', marginBottom: 16 } },
       ] },
       styles: {
         width: 720,
         backgroundColor: '#FFFFFF',
         borderRadius: 4,
         padding: 40,
-        fontFamily: 'Inter, sans-serif',
+        fontFamily: "'Montserrat', sans-serif",
         overlay: { enabled: true, color: '#000', opacity: 60, closeOnClick: true },
         closeButton: { show: true, color: '#FFFFFF', size: 22 },
         sideImage: { enabled: true, src: '', position: 'right', width: 360 },
@@ -614,19 +614,22 @@ export default function FormsPage() {
                         onClick={() => {
                           setSelectedTemplate(key)
                           if (!newFormName && key !== 'blank') setNewFormName(tmpl.name)
-                          // Templates that target popups force the form_type so the
-                          // create POST doesn't ship a mismatched type.
                           if (tmpl.design?.formType) setNewFormType(tmpl.design.formType)
                         }}
-                        className={`group relative text-left rounded-xl border-2 overflow-hidden transition-all ${isSelected ? 'border-zinc-900 ring-2 ring-zinc-900/10' : 'border-gray-200 hover:border-gray-300'}`}
+                        className={`group relative text-left rounded-xl overflow-hidden transition-all duration-150 will-change-transform hover:-translate-y-0.5 hover:shadow-md ${isSelected ? 'ring-2 ring-zinc-900 shadow-sm' : 'ring-1 ring-gray-200 hover:ring-gray-300'}`}
                       >
                         {/* Mini-preview thumbnail */}
-                        <div className="aspect-[4/3] bg-gray-50 relative overflow-hidden flex items-center justify-center p-3">
+                        <div className="aspect-[4/3] relative overflow-hidden flex items-center justify-center p-3 bg-gradient-to-br from-gray-50 to-gray-100/50">
                           <TemplatePreview templateKey={key} />
                           {tmpl.recommended && (
-                            <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 rounded">
+                            <span className="absolute top-2 left-2 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 rounded shadow-sm">
                               Recomendado
                             </span>
+                          )}
+                          {isSelected && (
+                            <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-zinc-900 text-white flex items-center justify-center shadow">
+                              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="2 6 5 9 10 3" /></svg>
+                            </div>
                           )}
                         </div>
                         {/* Card body */}

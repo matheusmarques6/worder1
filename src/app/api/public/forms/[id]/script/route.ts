@@ -584,6 +584,16 @@ runLocationGate(function(locOk){
   }
 });
 var s=document.createElement("style");s.textContent="@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}";document.head.appendChild(s);
+// Inject the most common web fonts so popups using Montserrat / Inter / Poppins
+// / Roboto / Open Sans render correctly even on storefronts that don't already
+// load them. Idempotent: skips if any of our font links is already in the page.
+if(!document.getElementById("wf-fonts-link")){
+  var fl=document.createElement("link");
+  fl.id="wf-fonts-link";
+  fl.rel="stylesheet";
+  fl.href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;500;600;700&display=swap";
+  document.head.appendChild(fl);
+}
 })();`
 
     return new Response(script, {
