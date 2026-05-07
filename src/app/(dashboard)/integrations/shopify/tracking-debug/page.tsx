@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStoreStore } from '@/stores'
 import { cn } from '@/lib/utils'
+import { MergeStoresPanel } from '@/components/integrations/shopify/MergeStoresPanel'
 import {
   ArrowLeft, RefreshCw, CheckCircle, AlertCircle, Loader2, Activity,
   Eye, ShoppingCart, CreditCard, Package, Mail, User, Clock, Zap,
@@ -345,6 +346,12 @@ export default function TrackingDebugPage() {
           />
         </div>
       )}
+
+      {/* Duplicate store detector — surfaces when the active store
+          has a likely-duplicate row in the same org (same shop_id or
+          same shop_name). Lets the merchant consolidate without
+          contacting support, preserving all automations/contacts. */}
+      <MergeStoresPanel />
 
       {/* Pixel diagnostic — surfaces whether the Custom Pixel is even
           reaching us, and whether it executes after loading. Three

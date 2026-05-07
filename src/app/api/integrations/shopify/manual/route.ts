@@ -141,6 +141,13 @@ export async function POST(request: NextRequest) {
     // renamed the admin slug. We persist this as an alias so webhooks
     // for either domain resolve to the same store row.
     let permanentDomain: string | null = null;
+    // Shopify Shop GID — the ONE identifier that never changes. We use
+    // this to deduplicate reconnections: same shop_id = same store row,
+    // even if the merchant typed a different domain. Without this,
+    // reconnecting with a renamed myshopifyDomain produces a brand-new
+    // shopify_stores row and orphans every automation/contact/segment
+    // tied to the old row.
+    let shopifyShopId: string | null = null;
 
     try {
       const shopInfoRes = await fetch(
@@ -152,7 +159,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            query: `{ shop { name email currencyCode timezoneAbbreviation myshopifyDomain plan { displayName } } }`,
+            query: `{ shop { id name email currencyCode timezoneAbbreviation myshopifyDomain plan { displayName } } }`,
           }),
         }
       );
@@ -167,6 +174,12 @@ export async function POST(request: NextRequest) {
           planName = s.plan?.displayName || '';
           timezone = s.timezoneAbbreviation || '';
           permanentDomain = (s.myshopifyDomain || '').toLowerCase() || null;
+          // Strip the gid:// prefix so we store just the numeric ID,
+          // which is the format Shopify uses everywhere outside GraphQL.
+          if (s.id) {
+            const m = String(s.id).match(/Shop\/(\d+)/);
+            shopifyShopId = m ? m[1] : String(s.id);
+          }
         }
       }
     } catch (err) {
@@ -179,26 +192,80 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin();
     const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    const { data: existingStore } = await supabase
-      .from('shopify_stores')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('shop_domain', shopDomain)
-      .maybeSingle();
+    // Lookup cascade for existing store (in priority order):
+    //   1. shopify_shop_id match (THE canonical identifier — same shop
+    //      no matter what domain the merchant typed)
+    //   2. shop_domain exact match (legacy reconnections that predate
+    //      shop_id capture)
+    //   3. shop_domain_aliases contains the typed domain (covers
+    //      stores where the merchant previously added an alias and
+    //      now reconnects under that alias)
+    //
+    // Without #1, a reconnection with a different domain (e.g. typed
+    // sourosa.myshopify.com first, now typing lojalaclode.myshopify.com)
+    // bypasses #2 and creates a brand-new row, orphaning every
+    // automation, contact, segment, and analytics row tied to the
+    // original store. With #1, we update the existing row in place
+    // and add the new domain as an alias.
+    let existingStore: { id: string; shop_domain: string; shop_domain_aliases?: string[] } | null = null;
 
-    // Build aliases array: include permanentDomain when it differs from
-    // what the merchant typed, so webhooks under the canonical domain
-    // resolve to this store. Always lowercase for consistency.
-    const aliases: string[] = [];
-    const lowDomain = String(shopDomain).toLowerCase();
-    if (permanentDomain && permanentDomain !== lowDomain) {
-      aliases.push(permanentDomain);
+    if (shopifyShopId) {
+      const { data } = await supabase
+        .from('shopify_stores')
+        .select('id, shop_domain, shop_domain_aliases')
+        .eq('organization_id', organizationId)
+        .eq('shopify_shop_id', shopifyShopId)
+        .maybeSingle();
+      if (data) existingStore = data as any;
     }
+
+    if (!existingStore) {
+      const { data } = await supabase
+        .from('shopify_stores')
+        .select('id, shop_domain, shop_domain_aliases')
+        .eq('organization_id', organizationId)
+        .eq('shop_domain', shopDomain)
+        .maybeSingle();
+      if (data) existingStore = data as any;
+    }
+
+    if (!existingStore) {
+      // Last-resort: maybe the merchant is reconnecting with a domain
+      // that's already an alias of an existing row.
+      const { data } = await supabase
+        .from('shopify_stores')
+        .select('id, shop_domain, shop_domain_aliases')
+        .eq('organization_id', organizationId)
+        .contains('shop_domain_aliases', [shopDomain.toLowerCase()])
+        .maybeSingle();
+      if (data) existingStore = data as any;
+    }
+
+    // Build aliases array: merge any existing aliases with the
+    // canonical/permanent domain. When updating an existing row, also
+    // ensure the OLD primary domain (if it differed from the new one)
+    // is preserved as an alias — that way historic webhook subscriptions
+    // and any storefront pixel still pointing at the old domain keep
+    // resolving to this store.
+    const lowDomain = String(shopDomain).toLowerCase();
+    const aliasSet = new Set<string>();
+    if (existingStore?.shop_domain_aliases) {
+      for (const a of existingStore.shop_domain_aliases) aliasSet.add(String(a).toLowerCase());
+    }
+    if (existingStore?.shop_domain && existingStore.shop_domain.toLowerCase() !== lowDomain) {
+      aliasSet.add(existingStore.shop_domain.toLowerCase());
+    }
+    if (permanentDomain && permanentDomain !== lowDomain) {
+      aliasSet.add(permanentDomain);
+    }
+    aliasSet.delete(lowDomain); // primary should never duplicate in aliases
+    const aliases: string[] = Array.from(aliasSet);
 
     const storeRecord: Record<string, any> = {
       organization_id: organizationId,
       shop_domain: shopDomain,
       shop_domain_aliases: aliases,
+      shopify_shop_id: shopifyShopId,
       shop_name: shopName,
       shop_email: shopEmail,
       access_token: accessToken,
