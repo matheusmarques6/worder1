@@ -320,6 +320,26 @@ export async function POST(request: NextRequest) {
       processedHtml = resolveOrderBlocks(processedHtml, eventData);
     }
 
+    // 5b. Resolve dynamic product-grid + cart blocks the same way the
+    // production sender does. Without this, the "Produtos do Gatilho"
+    // block (and the older static product-grid blocks) render as empty
+    // <!-- WORDER_CART_BLOCK:... --> comments and the merchant sees a
+    // gap in the preview.
+    try {
+      const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render');
+      processedHtml = await resolveProductBlocks(processedHtml, organizationId, contactId, eventData);
+      processedHtml = await resolveCartBlocks(processedHtml, organizationId, contactId, eventData);
+    } catch (e: any) {
+      console.warn('[email-preview] dynamic block resolve failed:', e?.message);
+    }
+
+    // 5c. Smart trigger merge tags ({{ trigger.link }}, etc) — adapt
+    // checkout/product/order URL based on the active event.
+    try {
+      const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
+      processedHtml = resolveTriggerSmartTags(processedHtml, eventData);
+    } catch { /* best-effort */ }
+
     // 6. Resolve merge tags using the production engine — covers {{first_name}},
     // {{email}}, {{store_name}}, {{event.*}}, {{order_number}}, etc.
     const mergeData = buildMergeData(contact, eventData, store);
