@@ -1344,13 +1344,49 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
   // Salvar checkout para detecção de abandono.
   // Escrevemos em ambas as colunas de URL (recovery_url + abandoned_checkout_url)
   // porque diferentes versões do schema usaram nomes distintos.
+  // Extract email/phone from EVERY location Shopify might put them.
+  // Different webhook payloads carry contact info in different places:
+  //   - checkout.email (top-level — most common, but often null on the
+  //     first checkouts/create before the customer types it)
+  //   - checkout.customer.email (logged-in customer, present even when
+  //     they haven't typed email in the checkout form)
+  //   - checkout.contact_email (older API versions / draft orders)
+  //   - checkout.billing_address.email (rare, but seen in some flows)
+  //   - checkout.shipping_address.email (rarer still, but a real path)
+  //
+  // Without these fallbacks, every guest-checkout-with-Shopify-customer
+  // and every payload variation looked "Desconhecido" in the recovery
+  // dashboard even though Shopify clearly knew who the customer was.
+  const resolvedEmail = checkout.email
+    || checkout.customer?.email
+    || checkout.contact_email
+    || checkout.billing_address?.email
+    || checkout.shipping_address?.email
+    || null;
+  const resolvedPhone = checkout.phone
+    || checkout.customer?.phone
+    || checkout.billing_address?.phone
+    || checkout.shipping_address?.phone
+    || null;
+  const resolvedShopifyCustomerId = checkout.customer?.id
+    ? String(checkout.customer.id)
+    : null;
+  const resolvedFirstName = checkout.billing_address?.first_name
+    || checkout.shipping_address?.first_name
+    || checkout.customer?.first_name
+    || '';
+  const resolvedLastName = checkout.billing_address?.last_name
+    || checkout.shipping_address?.last_name
+    || checkout.customer?.last_name
+    || '';
+
   const checkoutRow: Record<string, any> = {
     store_id: store.id,
     organization_id: store.organization_id,
     shopify_checkout_id: checkoutKey,
     shopify_checkout_token: checkout.token || null,
-    email: checkout.email || null,
-    phone: checkout.phone || checkout.billing_address?.phone || null,
+    email: resolvedEmail,
+    phone: resolvedPhone,
     total_price: safeFloat(checkout.total_price),
     subtotal_price: safeFloat(checkout.subtotal_price),
     total_tax: safeFloat(checkout.total_tax),
@@ -1393,15 +1429,20 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
     }
   }
 
-  // Se tem email, criar/atualizar contato
+  // Resolve contact in priority order:
+  //   1. By email (most reliable, matches guest checkouts and registered)
+  //   2. By shopify_customer_id (catches logged-in customers even when
+  //      they haven't typed an email yet on this particular checkout)
+  // Either path lets us link the checkout, fire automations, and stop
+  // showing "Desconhecido" in the recovery dashboard.
   let contactId: string | null = null;
-  if (checkout.email) {
+  if (resolvedEmail || resolvedShopifyCustomerId) {
     const customerData: ShopifyCustomer = {
-      id: 0,
-      email: checkout.email,
-      phone: checkout.phone || checkout.billing_address?.phone,
-      first_name: checkout.billing_address?.first_name || '',
-      last_name: checkout.billing_address?.last_name || '',
+      id: resolvedShopifyCustomerId ? Number(resolvedShopifyCustomerId) : 0,
+      email: resolvedEmail || '',
+      phone: resolvedPhone || undefined,
+      first_name: resolvedFirstName,
+      last_name: resolvedLastName,
       orders_count: 0,
       total_spent: '0',
       tags: '',
@@ -1417,8 +1458,22 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       console.error(`[Shopify] syncContactFromShopify failed for checkout ${checkoutKey}:`, contactErr);
     }
 
+    // Last-resort fallback: match by shopify_customer_id directly when
+    // syncContactFromShopify didn't return a contact (e.g. it requires
+    // an email and we only have the customer_id).
+    if (!contactId && resolvedShopifyCustomerId) {
+      const { data: byCustomer } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', store.organization_id)
+        .eq('shopify_customer_id', resolvedShopifyCustomerId)
+        .maybeSingle();
+      contactId = byCustomer?.id || null;
+    }
+
     // Backfill: vincular contact_id no shopify_checkouts e em qualquer
     // contact_event órfão que já tenha sido criado para esse checkout.
+    // Now also runs when we resolved by shopify_customer_id alone.
     if (contactId) {
       await supabase
         .from('shopify_checkouts')

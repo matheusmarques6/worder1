@@ -168,6 +168,36 @@ export default function TrackingDebugPage() {
   const [reinstalling, setReinstalling] = useState(false)
   const [reinstallResult, setReinstallResult] = useState<string | null>(null)
   const [copiedSnippet, setCopiedSnippet] = useState(false)
+  // Backfill action: re-resolve contacts for old shopify_checkouts rows
+  // that show "Desconhecido" because they were captured before the
+  // multi-source email extraction shipped, or because the original
+  // webhook payload didn't carry the email.
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<string | null>(null)
+  async function backfillCheckouts() {
+    if (!currentStore?.id) return
+    setBackfilling(true)
+    setBackfillResult(null)
+    try {
+      const res = await fetch('/api/integrations/shopify/backfill-checkouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: currentStore.id }),
+      })
+      const j = await res.json()
+      if (j.success) {
+        setBackfillResult(`${j.processed} processados · ${j.linked} vinculados${j.enriched_from_shopify ? ` · ${j.enriched_from_shopify} enriquecidos via Shopify` : ''}`)
+      } else {
+        setBackfillResult(j.error || 'Falhou.')
+      }
+      await fetchDiag()
+    } catch (e: any) {
+      setBackfillResult(e?.message || 'Erro de rede')
+    } finally {
+      setBackfilling(false)
+      setTimeout(() => setBackfillResult(null), 12000)
+    }
+  }
 
   // Domain aliases (Shopify canonical myshopifyDomain mismatch fix)
   const [newAlias, setNewAlias] = useState('')
@@ -539,6 +569,36 @@ export default function TrackingDebugPage() {
       {reinstallResult && (
         <div className="px-4 py-2.5 bg-emerald-50 text-[12px] text-emerald-800 border border-emerald-200 rounded-lg">
           {reinstallResult}
+        </div>
+      )}
+
+      {/* Backfill checkouts: re-resolve contacts for "Desconhecido"
+          rows. Critical when the merchant has historic checkouts that
+          were captured before the multi-source email extraction shipped
+          (or with payloads that didn't carry email at all — happens on
+          checkouts/create before the customer types email). */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-end gap-3">
+        <div className="flex-1">
+          <p className="text-[13px] font-semibold text-gray-900 mb-0.5 flex items-center gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5 text-purple-500" /> Re-vincular checkouts "Desconhecido"
+          </p>
+          <p className="text-[11px] text-gray-500">
+            Tenta resolver contato por email/customer_id em checkouts antigos sem vínculo. Para os que ainda não têm email salvo,
+            consulta a Shopify via GraphQL pra recuperar o email/customer do registro mais recente. Idempotente.
+          </p>
+        </div>
+        <button
+          onClick={backfillCheckouts}
+          disabled={backfilling}
+          className="px-4 py-2 text-[13px] font-semibold bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+        >
+          {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Re-vincular agora
+        </button>
+      </div>
+      {backfillResult && (
+        <div className="px-4 py-2.5 bg-purple-50 text-[12px] text-purple-800 border border-purple-200 rounded-lg">
+          {backfillResult}
         </div>
       )}
 
