@@ -25,17 +25,65 @@ export async function POST(request: NextRequest) {
 
     let products: any[] = []
 
-    const mapTriggerItem = (it: any) => ({
-      title: it.ProductName || it.title || it.name || 'Product',
-      price: parseFloat(it.ItemPrice || it.price || '0'),
-      compare_at_price: it.CompareAtPrice ? parseFloat(it.CompareAtPrice) : (it.compare_at_price ? parseFloat(it.compare_at_price) : null),
-      image_url: it.ImageURL || it.image_url || it.image?.src || null,
-      url: it.ProductURL || it.url || '#',
-      quantity: it.Quantity || it.quantity || 1,
-      sku: it.SKU || it.sku || null,
-      variant_title: it.VariantName || it.variant_title || null,
-      brand: it.Brand || it.vendor || null,
-    })
+    // Map a line item from any payload shape (pixel = lowercase,
+    // webhook = capitalized, raw Shopify = nested under .product/.variant).
+    const mapTriggerItem = (it: any) => {
+      // Image URL — Shopify line items rarely embed images directly;
+      // they often live at .product.images[0].src, .product.image.src,
+      // or .product.product_image_urls[0]. Webhook handler sometimes
+      // pre-flattens to ImageURL/image_url. Cascade through all of
+      // them so we never end up with a blank product card.
+      const imageUrl =
+        it.ImageURL ||
+        it.image_url ||
+        it.imageUrl ||
+        it.image?.src ||
+        it.product?.image?.src ||
+        it.product?.images?.[0]?.src ||
+        it.product?.product_image_urls?.[0] ||
+        it.product?.variant_images_url ||
+        it.variant?.image?.src ||
+        null
+      const productUrl =
+        it.ProductURL ||
+        it.product_url ||
+        it.productUrl ||
+        it.url ||
+        it.product?.product_url ||
+        it.product?.url ||
+        '#'
+      const productId =
+        it.ProductID ||
+        it.product_id ||
+        it.productId ||
+        it.product?.id ||
+        it.variant?.product?.id ||
+        null
+      return {
+        product_id: productId,
+        title: it.ProductName || it.title || it.name || it.product?.title || 'Product',
+        price: parseFloat(
+          it.ItemPrice ||
+          it.price ||
+          it.variant?.price?.amount ||
+          it.variant?.price ||
+          '0'
+        ),
+        compare_at_price: it.CompareAtPrice
+          ? parseFloat(it.CompareAtPrice)
+          : it.compare_at_price
+            ? parseFloat(it.compare_at_price)
+            : it.compareAtPrice
+              ? parseFloat(it.compareAtPrice)
+              : null,
+        image_url: imageUrl,
+        url: productUrl,
+        quantity: it.Quantity || it.quantity || 1,
+        sku: it.SKU || it.sku || it.variant?.sku || null,
+        variant_title: it.VariantName || it.variant_title || it.variantTitle || it.variant?.title || null,
+        brand: it.Brand || it.vendor || it.product?.vendor || null,
+      }
+    }
 
     switch (type) {
       case 'bestsellers':
@@ -132,19 +180,72 @@ export async function POST(request: NextRequest) {
       //   2. shape of the payload (Items[] vs single product properties)
       case 'trigger_auto': {
         const eventType = String(event_data?.event_type || event_data?.type || '').toLowerCase()
-        // Pull items list from whichever shape the event uses
+        // Pull items list from whichever shape the event uses. Pixel
+        // events use lowercase `items`, webhook events use capitalized
+        // `Items`, and the full Shopify payload uses `line_items`.
+        // We check ALL of them so the same block resolves regardless
+        // of source.
         const itemsList: any[] =
           event_data?.Items ||
+          event_data?.items ||
           event_data?.line_items ||
           event_data?.extra?.line_items ||
           event_data?.raw?.line_items ||
           event_data?.properties?.Items ||
+          event_data?.properties?.items ||
           event_data?.properties?.line_items ||
           event_data?.properties?.raw?.line_items ||
           []
 
         if (Array.isArray(itemsList) && itemsList.length > 0) {
           products = itemsList.slice(0, limit).map((it: any) => mapTriggerItem(it))
+          // Enrich missing image_url + url from shopify_products.
+          // Pixel events from the Custom Pixel sandbox don't carry
+          // image URLs at all (Shopify's Customer Events sandbox only
+          // exposes title/price/sku) so we fill them in by joining on
+          // shopify_product_id. One batched query, not per-item.
+          const needEnrichment = products.filter((p: any) => p.product_id && (!p.image_url || !p.url || p.url === '#'))
+          if (needEnrichment.length > 0) {
+            const ids = Array.from(new Set(needEnrichment.map((p: any) => String(p.product_id))))
+            try {
+              const { data: dbProducts } = await supabaseAdmin
+                .from('shopify_products')
+                .select('shopify_product_id, title, handle, images, price')
+                .eq('organization_id', orgId)
+                .in('shopify_product_id', ids)
+              const byId = new Map<string, any>()
+              for (const dp of dbProducts || []) {
+                if (dp.shopify_product_id) byId.set(String(dp.shopify_product_id), dp)
+              }
+              // Look up store domain once for URL building
+              const { data: storeRow } = await supabaseAdmin
+                .from('shopify_stores')
+                .select('shop_domain')
+                .eq('organization_id', orgId)
+                .eq('is_active', true)
+                .limit(1)
+                .maybeSingle()
+              const shopDomain = storeRow?.shop_domain || ''
+              for (const p of products) {
+                const pid = p.product_id ? String(p.product_id) : null
+                if (!pid) continue
+                const dp = byId.get(pid)
+                if (!dp) continue
+                if (!p.image_url && Array.isArray(dp.images) && dp.images.length > 0) {
+                  p.image_url = dp.images[0]?.url || dp.images[0]?.src || null
+                }
+                if ((!p.url || p.url === '#') && shopDomain && dp.handle) {
+                  p.url = `https://${shopDomain}/products/${dp.handle}`
+                }
+                if (!p.title || p.title === 'Product') {
+                  p.title = dp.title || p.title
+                }
+                if ((!p.price || p.price === 0) && dp.price) {
+                  p.price = parseFloat(String(dp.price))
+                }
+              }
+            } catch { /* non-blocking */ }
+          }
         } else if (
           eventType === 'viewed_product' ||
           eventType === 'product_viewed' ||
