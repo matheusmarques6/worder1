@@ -230,6 +230,48 @@ export function resolveTriggerSmartTags(html: string, eventData: any, storeUrl?:
     const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     result = result.replace(new RegExp(escaped, 'g'), value);
   }
+
+  // Generic deep-path resolver for any other {{ trigger.<path> }} the
+  // template might use. Powered by lodash get against the event_data
+  // root so {{ trigger.raw.customer.first_name }}, {{ trigger.Items[0].sku }},
+  // {{ trigger.OrderId }} all resolve. Falls back to '' for missing
+  // paths so unknown vars don't show as literals.
+  // Hand-rolled lodash-style get to avoid bundling lodash here
+  function getPath(root: any, segments: string[]): any {
+    let cur: any = root;
+    for (const seg of segments) {
+      if (cur === null || cur === undefined) return undefined;
+      cur = cur[seg];
+    }
+    return cur;
+  }
+
+  result = result.replace(
+    /\{\{\s*trigger\.([a-zA-Z0-9_.\[\]]+)\s*\}\}/g,
+    (_match, path: string) => {
+      try {
+        // Normalize "Items[0].sku" → ["Items", "0", "sku"] so lodash-style
+        // walk handles array indices uniformly.
+        const segments = path
+          .replace(/\[(\d+)\]/g, '.$1')
+          .split('.')
+          .filter(Boolean);
+        // Three lookup attempts (most → least common shape):
+        //   1. event_data.<path>                 (flat shape)
+        //   2. event_data.properties.<path>      (CDP shape — most events)
+        //   3. event_data.properties.raw.<path>  (full Shopify payload)
+        let value: any = getPath(ev, segments);
+        if (value === undefined || value === null) value = getPath(props, segments);
+        if (value === undefined || value === null) value = getPath(raw, segments);
+        if (value === undefined || value === null) return '';
+        if (typeof value === 'object') return '';
+        return String(value);
+      } catch {
+        return '';
+      }
+    }
+  );
+
   return result;
 }
 

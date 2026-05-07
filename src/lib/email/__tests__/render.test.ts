@@ -91,4 +91,38 @@ describe('resolveTriggerSmartTags', () => {
     const out = resolveTriggerSmartTags(html, { properties: { TotalPrice: 199.9 } });
     expect(out).toBe('199.9 | 199.9');
   });
+
+  it('resolves arbitrary trigger.<path> via lodash-style get', () => {
+    // The picker emits any auto-discovered path as {{ trigger.<path> }}
+    // — this verifies the generic resolver in resolveTriggerSmartTags
+    // reaches deep into raw without per-field code.
+    const ev = {
+      properties: {
+        OrderId: '6539396579517',
+        raw: {
+          customer: { first_name: 'Gary', default_address: { zip: '15112' } },
+          discount_codes: [{ code: 'WELCOME10' }],
+        },
+      },
+    };
+    expect(resolveTriggerSmartTags('Hi {{ trigger.OrderId }}', ev)).toBe('Hi 6539396579517');
+    expect(resolveTriggerSmartTags('Hi {{ trigger.raw.customer.first_name }}!', ev)).toBe('Hi Gary!');
+    expect(resolveTriggerSmartTags('CEP {{ trigger.raw.customer.default_address.zip }}', ev)).toBe('CEP 15112');
+    expect(resolveTriggerSmartTags('{{ trigger.raw.discount_codes[0].code }}', ev)).toBe('WELCOME10');
+  });
+
+  it('returns empty string for unknown trigger.<path>', () => {
+    const out = resolveTriggerSmartTags('x{{ trigger.does.not.exist }}y', { properties: {} });
+    expect(out).toBe('xy');
+  });
+
+  it('falls back to nested .properties when path under root misses', () => {
+    // event_data passed in two shapes:
+    //   { properties: { OrderId: '1' } }  — common
+    //   { OrderId: '1' }                  — also common after flattening
+    const out1 = resolveTriggerSmartTags('{{ trigger.OrderId }}', { properties: { OrderId: '1' } });
+    const out2 = resolveTriggerSmartTags('{{ trigger.OrderId }}', { OrderId: '1' });
+    expect(out1).toBe('1');
+    expect(out2).toBe('1');
+  });
 });

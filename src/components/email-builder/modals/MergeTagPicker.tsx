@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { X, Search, User, Store, Package, ShoppingCart, Tag, Link, Zap, ShoppingBag, AlertCircle, type LucideIcon } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { X, Search, User, Store, Package, ShoppingCart, Tag, Link, Zap, ShoppingBag, AlertCircle, Sparkles, Database, Loader2, type LucideIcon } from 'lucide-react'
 import { MERGE_TAGS } from '../config/merge-tags'
 
 const MERGE_ICON_MAP: Record<string, LucideIcon> = {
-  User, Store, Package, ShoppingCart, Tag, Link, Zap, ShoppingBag,
+  User, Store, Package, ShoppingCart, Tag, Link, Zap, ShoppingBag, Sparkles, Database,
 }
 
 interface MergeTagPickerProps {
@@ -16,30 +16,126 @@ interface MergeTagPickerProps {
   triggerType?: string
 }
 
+interface DiscoveredPath {
+  path: string
+  sample: any
+  type: string
+}
+
+interface CustomVariable {
+  variable_key: string
+  label: string
+  description: string | null
+  category: string
+  variable_type: string
+  path: string
+  applicable_triggers: string[] | null
+  enabled: boolean
+}
+
 export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType }: MergeTagPickerProps) {
   const [search, setSearch] = useState('')
   const [copiedTag, setCopiedTag] = useState('')
+  const [discovered, setDiscovered] = useState<DiscoveredPath[]>([])
+  const [customVars, setCustomVars] = useState<CustomVariable[]>([])
+  const [loadingDynamic, setLoadingDynamic] = useState(false)
 
   const isAutomation = context === 'automation'
 
-  const availableGroups = useMemo(() => {
-    let groups = MERGE_TAGS
-
-    if (!isAutomation) {
-      groups = groups.filter(g => !g.name.includes('Evento'))
+  // Fetch event-specific paths from recent events for the active trigger.
+  // Same source as /settings/variables — auto-discovers every leaf in
+  // properties + properties.raw so the merchant sees EVERY field
+  // Shopify is sending right now, not just the static MERGE_TAGS list.
+  useEffect(() => {
+    if (!isOpen || !isAutomation || !triggerType) {
+      setDiscovered([])
+      return
     }
+    let cancelled = false
+    setLoadingDynamic(true)
+    Promise.all([
+      fetch(`/api/automations/variables/discover?triggerType=${encodeURIComponent(triggerType)}`)
+        .then(r => r.ok ? r.json() : { paths: [] })
+        .catch(() => ({ paths: [] })),
+      fetch('/api/automations/variables/custom')
+        .then(r => r.ok ? r.json() : { variables: [] })
+        .catch(() => ({ variables: [] })),
+    ]).then(([disc, cust]) => {
+      if (cancelled) return
+      setDiscovered(disc.paths || [])
+      // Filter custom vars by applicable_triggers
+      const all: CustomVariable[] = cust.variables || []
+      const filtered = all.filter(v =>
+        v.enabled &&
+        (!v.applicable_triggers || v.applicable_triggers.length === 0 || v.applicable_triggers.includes(triggerType))
+      )
+      setCustomVars(filtered)
+    }).finally(() => {
+      if (!cancelled) setLoadingDynamic(false)
+    })
+    return () => { cancelled = true }
+  }, [isOpen, isAutomation, triggerType])
+
+  // Build a virtual "Tags do Gatilho" group from auto-discovered paths.
+  // Each path becomes a {{ trigger.<path> }} merge tag — same syntax the
+  // event property tree in EmailPreviewMode copies, and the same syntax
+  // resolveTriggerSmartTags + the rendering pipeline understand.
+  const triggerGroup = useMemo(() => {
+    if (!isAutomation || discovered.length === 0) return null
+    return {
+      name: `Tags do Gatilho (${discovered.length})`,
+      icon: 'Zap',
+      tags: discovered.map(d => ({
+        name: d.path.replace(/^trigger\./, ''),
+        value: `{{ ${d.path} }}`,
+        sample: d.sample === null
+          ? 'null'
+          : typeof d.sample === 'object'
+            ? JSON.stringify(d.sample).slice(0, 60)
+            : String(d.sample).slice(0, 60),
+        hint: d.type,
+      })),
+    }
+  }, [isAutomation, discovered])
+
+  const customGroup = useMemo(() => {
+    if (customVars.length === 0) return null
+    return {
+      name: `Variáveis Personalizadas (${customVars.length})`,
+      icon: 'Sparkles',
+      tags: customVars.map(v => ({
+        name: v.label || v.variable_key,
+        value: `{{ custom.${v.variable_key} }}`,
+        sample: v.description || v.path,
+        hint: v.variable_type,
+      })),
+    }
+  }, [customVars])
+
+  const availableGroups = useMemo(() => {
+    const baseGroups = MERGE_TAGS
+
+    // Stitch the dynamic groups in: trigger-discovered tags first
+    // (most relevant to the active automation), then custom shortcuts,
+    // then the static catalog.
+    let groups: any[] = []
+    if (triggerGroup) groups.push(triggerGroup)
+    if (customGroup) groups.push(customGroup)
+    groups = groups.concat(
+      isAutomation ? baseGroups : baseGroups.filter(g => !g.name.includes('Evento'))
+    )
 
     if (!search.trim()) return groups
     const q = search.toLowerCase()
     return groups.map(group => ({
       ...group,
-      tags: group.tags.filter(t =>
+      tags: group.tags.filter((t: any) =>
         t.name.toLowerCase().includes(q) ||
         t.value.toLowerCase().includes(q) ||
-        t.sample.toLowerCase().includes(q)
+        (t.sample && String(t.sample).toLowerCase().includes(q))
       ),
     })).filter(g => g.tags.length > 0)
-  }, [search, isAutomation])
+  }, [search, isAutomation, triggerGroup, customGroup])
 
   const handleSelect = (value: string) => {
     onSelect(value)
@@ -52,7 +148,7 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-[420px] max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-xl shadow-2xl w-[480px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-900">Merge Tags</h3>
@@ -81,8 +177,9 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
           <div className="mx-4 mt-2 px-3 py-2 bg-violet-50 border border-violet-200 rounded-lg flex items-start gap-2">
             <Zap className="w-3.5 h-3.5 text-violet-500 mt-0.5 flex-shrink-0" />
             <p className="text-[11px] text-violet-700">
-              Tags de <strong>Evento</strong> são preenchidas com dados do gatilho da automação
-              {triggerType ? ` (${triggerType})` : ''}.
+              <strong>Tags do Gatilho</strong> são auto-detectadas dos eventos recentes
+              {triggerType ? ` de ${triggerType}` : ''} — todas as propriedades disponíveis no payload aparecem aqui em tempo real.
+              {loadingDynamic && <Loader2 className="w-3 h-3 inline-block ml-1 animate-spin" />}
             </p>
           </div>
         )}
@@ -101,7 +198,7 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
                     {(() => { const MIcon = MERGE_ICON_MAP[group.icon]; return MIcon ? <MIcon className="w-3 h-3 text-gray-400" /> : null })()}{group.name}
                   </p>
                   <div className="space-y-1">
-                    {group.tags.map(tag => (
+                    {group.tags.map((tag: any) => (
                       <button
                         key={tag.value}
                         onClick={() => handleSelect(tag.value)}
@@ -109,15 +206,15 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <p className="text-xs font-medium text-gray-800">{tag.name}</p>
-                            <code className="text-[10px] font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{tag.value}</code>
+                            <p className="text-xs font-medium text-gray-800 truncate">{tag.name}</p>
+                            <code className="text-[10px] font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded shrink-0 truncate max-w-[180px]">{tag.value}</code>
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             {tag.sample && (
-                              <p className="text-[10px] text-gray-400">Ex: {tag.sample}</p>
+                              <p className="text-[10px] text-gray-400 truncate">Ex: {tag.sample}</p>
                             )}
                             {tag.hint && (
-                              <p className="text-[10px] text-violet-500">{tag.hint}</p>
+                              <p className="text-[10px] text-violet-500 shrink-0">{tag.hint}</p>
                             )}
                           </div>
                         </div>
