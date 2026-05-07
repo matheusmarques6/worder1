@@ -180,21 +180,23 @@ export async function POST(request: NextRequest) {
       //   2. shape of the payload (Items[] vs single product properties)
       case 'trigger_auto': {
         const eventType = String(event_data?.event_type || event_data?.type || '').toLowerCase()
-        // Pull items list from whichever shape the event uses. Pixel
-        // events use lowercase `items`, webhook events use capitalized
-        // `Items`, and the full Shopify payload uses `line_items`.
-        // We check ALL of them so the same block resolves regardless
-        // of source.
+        // Pull items list. Priority order: raw.line_items (richest —
+        // full Shopify payload from webhook or DB enrichment) → Items
+        // (Klaviyo/Omnisend top-level convention) → items (pixel
+        // lowercase) → line_items (raw shopify) → properties.* fallbacks.
+        // raw.line_items wins when present because it carries product
+        // descriptions, image URLs, vendor, tags, collections — fields
+        // the pixel-side and even some webhook-side payloads omit.
         const itemsList: any[] =
+          event_data?.raw?.line_items ||
+          event_data?.properties?.raw?.line_items ||
           event_data?.Items ||
           event_data?.items ||
           event_data?.line_items ||
           event_data?.extra?.line_items ||
-          event_data?.raw?.line_items ||
           event_data?.properties?.Items ||
           event_data?.properties?.items ||
           event_data?.properties?.line_items ||
-          event_data?.properties?.raw?.line_items ||
           []
 
         if (Array.isArray(itemsList) && itemsList.length > 0) {

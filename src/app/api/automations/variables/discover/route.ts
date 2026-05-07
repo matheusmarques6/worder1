@@ -128,16 +128,27 @@ export async function GET(request: NextRequest) {
   }
 
   const admin = getSupabaseAdmin();
-  let q = admin
-    .from('contact_events')
-    .select('event_type, properties, occurred_at')
-    .eq('organization_id', orgId)
-    .in('event_type', eventTypes)
-    .order('occurred_at', { ascending: false })
-    .limit(20);
-  if (storeId) q = q.eq('store_id', storeId);
+  // Prefer webhook events first (they carry properties.raw with the full
+  // Shopify payload). Falls back to ANY event when no webhook exists yet.
+  // Walking webhook events first means the picker shows the rich path
+  // tree even when most of the merchant's recent events came from the
+  // pixel (which has a flat, sparse payload).
+  async function loadEvents(source: string | null) {
+    let q = admin
+      .from('contact_events')
+      .select('event_type, properties, occurred_at')
+      .eq('organization_id', orgId)
+      .in('event_type', eventTypes)
+      .order('occurred_at', { ascending: false })
+      .limit(20);
+    if (storeId) q = q.eq('store_id', storeId);
+    if (source) q = q.eq('event_source', source);
+    const { data } = await q;
+    return data || [];
+  }
 
-  const { data: events } = await q;
+  let events = await loadEvents('shopify_webhook');
+  if (events.length === 0) events = await loadEvents(null);
 
   // Aggregate paths across multiple recent events — different orders
   // have different fields populated, so sampling several gives us the

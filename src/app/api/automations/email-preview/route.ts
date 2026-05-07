@@ -329,30 +329,117 @@ export async function POST(request: NextRequest) {
       contact = anyContact;
     }
 
-    // 3. Fetch most recent event matching trigger type
+    // 3. Fetch most recent event matching trigger type — prefer webhook
+    // events (which carry properties.raw with the full Shopify payload)
+    // over pixel events (sandbox-limited, lowercase, no images). When
+    // only the pixel event exists, we enrich it from shopify_checkouts /
+    // shopify_orders so the merchant sees the rich Klaviyo/Omnisend-
+    // style payload regardless of source.
     const eventTypes = resolveEventTypes(triggerType);
     let eventData: Record<string, any> = {};
 
-    // Try to find event for this contact, fallback to any event of this type
-    let eventQuery = supabase
-      .from('contact_events')
-      .select('*')
-      .in('event_type', eventTypes)
-      .eq('organization_id', organizationId)
-      .order('occurred_at', { ascending: false })
-      .limit(1);
-
-    if (contactId) {
-      eventQuery = eventQuery.eq('contact_id', contactId);
+    // Try webhook events FIRST (event_source='shopify_webhook' carries
+    // full raw payload). Then fall back to any other source.
+    async function fetchEventWithSource(source: string | null) {
+      let q = supabase
+        .from('contact_events')
+        .select('*')
+        .in('event_type', eventTypes)
+        .eq('organization_id', organizationId)
+        .order('occurred_at', { ascending: false })
+        .limit(1);
+      if (contactId) q = q.eq('contact_id', contactId);
+      if (source) q = q.eq('event_source', source);
+      const { data } = await q.maybeSingle();
+      return data;
     }
 
-    const { data: recentEvent } = await eventQuery.maybeSingle();
+    let recentEvent = await fetchEventWithSource('shopify_webhook');
+    if (!recentEvent) recentEvent = await fetchEventWithSource(null);
 
     if (recentEvent) {
       eventData = recentEvent.properties || {};
       // Inject the occurred_at timestamp so the order resolver can render the order date
       if (recentEvent.occurred_at && !eventData.occurred_at) {
         eventData.occurred_at = recentEvent.occurred_at;
+      }
+      // If this event doesn't already have raw (e.g. it's a pixel event),
+      // enrich it from the matching shopify_checkouts / shopify_orders row.
+      // The webhook handler stores the full Shopify payload columns, so
+      // even pixel-source events end up with a rich raw to render against.
+      if (!eventData.raw) {
+        const checkoutId =
+          eventData.checkout_id ||
+          eventData.CheckoutId ||
+          recentEvent.shopify_resource_id ||
+          null;
+        const orderId =
+          eventData.order_id ||
+          eventData.OrderId ||
+          (recentEvent.shopify_resource_type === 'order' ? recentEvent.shopify_resource_id : null);
+
+        try {
+          if (checkoutId && (recentEvent.shopify_resource_type === 'checkout' || eventTypes.some((t: string) => t.startsWith('checkout_')))) {
+            const { data: chk } = await supabase
+              .from('shopify_checkouts')
+              .select('shopify_checkout_id, shopify_checkout_token, email, phone, total_price, subtotal_price, total_tax, total_discounts, currency, line_items, recovery_url, abandoned_checkout_url, status, shopify_created_at')
+              .eq('store_id', recentEvent.store_id)
+              .eq('shopify_checkout_id', String(checkoutId))
+              .maybeSingle();
+            if (chk) {
+              // Compose a Shopify-style raw object from the columns we
+              // persisted, so {{ trigger.raw.<anything> }} resolves and
+              // the cart block walks line_items with full product info.
+              eventData.raw = {
+                id: chk.shopify_checkout_id,
+                token: chk.shopify_checkout_token,
+                email: chk.email,
+                phone: chk.phone,
+                total_price: chk.total_price,
+                subtotal_price: chk.subtotal_price,
+                total_tax: chk.total_tax,
+                total_discounts: chk.total_discounts,
+                currency: chk.currency,
+                line_items: chk.line_items || [],
+                abandoned_checkout_url: chk.abandoned_checkout_url || chk.recovery_url,
+                recovery_url: chk.recovery_url || chk.abandoned_checkout_url,
+                status: chk.status,
+                created_at: chk.shopify_created_at,
+              };
+            }
+          } else if (orderId) {
+            const { data: ord } = await supabase
+              .from('shopify_orders')
+              .select('shopify_order_id, shopify_order_number, email, phone, total_price, subtotal_price, total_tax, total_discounts, currency, line_items, financial_status, fulfillment_status, order_status_url, billing_address, shipping_address, shopify_created_at, payment_gateway')
+              .eq('store_id', recentEvent.store_id)
+              .eq('shopify_order_id', String(orderId))
+              .maybeSingle();
+            if (ord) {
+              eventData.raw = {
+                id: ord.shopify_order_id,
+                order_number: ord.shopify_order_number,
+                name: `#${ord.shopify_order_number}`,
+                email: ord.email,
+                phone: ord.phone,
+                total_price: ord.total_price,
+                subtotal_price: ord.subtotal_price,
+                total_tax: ord.total_tax,
+                total_discounts: ord.total_discounts,
+                currency: ord.currency,
+                line_items: ord.line_items || [],
+                financial_status: ord.financial_status,
+                fulfillment_status: ord.fulfillment_status,
+                order_status_url: ord.order_status_url,
+                billing_address: ord.billing_address,
+                shipping_address: ord.shipping_address,
+                payment_gateway_names: ord.payment_gateway ? [ord.payment_gateway] : [],
+                created_at: ord.shopify_created_at,
+              };
+            }
+          }
+        } catch (e: any) {
+          console.warn('[email-preview] raw enrichment failed:', e?.message);
+        }
       }
     }
 
