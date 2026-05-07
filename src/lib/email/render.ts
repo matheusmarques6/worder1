@@ -109,13 +109,16 @@ export function evaluateBlockCondition(
  */
 function escapeHtml(value: unknown): string {
   if (value === null || value === undefined) return ''
+  // Standard HTML attribute escape set. We intentionally do NOT escape
+  // `/` — that's a legacy OWASP recommendation that doesn't add real
+  // XSS protection in modern browsers but DOES uglify every URL into
+  // https:&#x2F;&#x2F;... attribute output. URLs ship clean.
   return String(value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
-    .replace(/\//g, '&#x2F;')
 }
 
 /**
@@ -152,15 +155,19 @@ export function renderMergeTags(
     return rawMode ? final : escapeHtml(final)
   }
 
-  // Replace {{tag|fallback}} first (with fallback)
+  // Replace {{tag|fallback}} first (with fallback). Allows optional
+  // whitespace around the tag so both {{checkout_url|loja.com}} and
+  // {{ checkout_url | loja.com }} work — matches Klaviyo/Omnisend
+  // tolerance and lines up with how the variable picker generates
+  // tags ({{ trigger.path }} format).
   let result = html.replace(
-    /\{\{([a-zA-Z0-9_.]+)\|([^}]*)\}\}/g,
+    /\{\{\s*([a-zA-Z0-9_.\[\]]+)\s*\|\s*([^}]*?)\s*\}\}/g,
     (_, tag: string, fallback: string) => resolve(tag, fallback)
   )
 
-  // Replace {{tag}} (no fallback)
+  // Replace {{tag}} (no fallback) — same whitespace tolerance.
   result = result.replace(
-    /\{\{([a-zA-Z0-9_.]+)\}\}/g,
+    /\{\{\s*([a-zA-Z0-9_.\[\]]+)\s*\}\}/g,
     (_, tag: string) => resolve(tag, '')
   )
 

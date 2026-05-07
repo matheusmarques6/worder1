@@ -76,12 +76,47 @@ function buildMergeData(
     tracking_url: String(eventProps.tracking_url || ''),
     tracking_number: String(eventProps.tracking_number || ''),
 
-    // Cart / checkout
-    checkout_url: String(eventProps.checkout_url || eventProps.abandoned_checkout_url || ''),
-    cart_total: String(eventProps.cart_total || eventProps.total_price || ''),
-    cart_item_count: String(eventProps.item_count || eventProps.items?.length || ''),
-    cart_first_item: String(eventProps.items?.[0]?.title || ''),
-    cart_first_item_price: String(eventProps.items?.[0]?.price || ''),
+    // Cart / checkout — read from every place the URL can live in the
+    // event payload. New webhook events store the URL at .CheckoutURL
+    // (Klaviyo/Omnisend convention), legacy at .checkout_url, and the
+    // full Shopify payload's recovery URL is under .raw.abandoned_checkout_url.
+    checkout_url: String(
+      eventProps.CheckoutURL ||
+      eventProps.checkout_url ||
+      eventProps.abandoned_checkout_url ||
+      eventProps.raw?.abandoned_checkout_url ||
+      eventProps.raw?.recovery_url ||
+      ''
+    ),
+    cart_total: String(
+      eventProps.TotalPrice ||
+      eventProps.cart_total ||
+      eventProps.total_price ||
+      eventProps.raw?.total_price ||
+      ''
+    ),
+    cart_item_count: String(
+      eventProps.ItemCount ||
+      eventProps.item_count ||
+      (Array.isArray(eventProps.Items) ? eventProps.Items.length : null) ||
+      eventProps.items?.length ||
+      ''
+    ),
+    cart_first_item: String(
+      eventProps.Items?.[0]?.ProductName ||
+      eventProps.items?.[0]?.title ||
+      ''
+    ),
+    cart_first_item_price: String(
+      eventProps.Items?.[0]?.ItemPrice ||
+      eventProps.items?.[0]?.price ||
+      ''
+    ),
+    cart_first_item_image: String(
+      eventProps.Items?.[0]?.ImageURL ||
+      eventProps.items?.[0]?.image_url ||
+      ''
+    ),
   };
 
   // Event-scoped tags ({{event.OrderId}}, {{event.ProductName}}, …)
@@ -206,6 +241,22 @@ export async function POST(request: NextRequest) {
         await enrichOrderItemImages(testEvent, supabase, undefined, organizationId);
         html = resolveOrderBlocks(html, testEvent);
       }
+      // Run the SAME resolvers production uses, in the SAME order. Without
+      // this, send-test emails ship with raw <!-- WORDER_CART_BLOCK -->
+      // comments and unresolved {{ trigger.link }} smart tags — broken
+      // images, broken links. Now byte-for-byte matches what the
+      // recipient sees from a real campaign send.
+      try {
+        const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render');
+        html = await resolveProductBlocks(html, organizationId, contactId, testEvent);
+        html = await resolveCartBlocks(html, organizationId, contactId, testEvent);
+      } catch (e: any) {
+        console.warn('[email-preview send_test] dynamic block resolve failed:', e?.message);
+      }
+      try {
+        const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
+        html = resolveTriggerSmartTags(html, testEvent);
+      } catch { /* best-effort */ }
       html = renderMergeTags(html, buildMergeData(testContact, testEvent, testStore));
 
       // Send via Resend usando remetente configurado da org
