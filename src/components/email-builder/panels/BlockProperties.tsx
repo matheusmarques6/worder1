@@ -718,14 +718,21 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
     case 'abandoned-cart':
       return (
         <div className="space-y-4">
-          {/* Info banner */}
+          {/* Info banner — explains the dynamic trigger behavior */}
           <div className="flex gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
             <div className="w-7 h-7 rounded-md bg-zinc-100 flex items-center justify-center flex-shrink-0 mt-0.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3h-8l-2 4h12z"/></svg>
             </div>
             <div>
-              <p className="text-[11px] text-zinc-600 leading-snug">Os produtos serao preenchidos automaticamente do carrinho. A quantidade de itens se adapta ao carrinho real do cliente.</p>
-              <p className="text-[10px] text-zinc-400 mt-1">Clique nos elementos no canvas para editar individualmente.</p>
+              <p className="text-[11px] text-zinc-700 leading-snug font-medium">Bloco adaptativo — preenche os produtos automaticamente conforme o gatilho do fluxo:</p>
+              <ul className="text-[10.5px] text-zinc-500 leading-snug mt-1 space-y-0.5 list-disc pl-3.5">
+                <li>Carrinho abandonado → itens do carrinho</li>
+                <li>Checkout abandonado → linha do checkout + link de recuperação</li>
+                <li>Produto abandonado / browse → 1 produto visualizado</li>
+                <li>Pedido pago / cancelado → itens do pedido</li>
+                <li>Voltou em estoque → o produto que voltou</li>
+              </ul>
+              <p className="text-[10px] text-zinc-400 mt-1.5">O botão usa <code className="font-mono">{'{{ trigger.link }}'}</code> que se adapta para checkout/produto/pedido. Clique nos elementos no canvas para editar individualmente.</p>
             </div>
           </div>
 

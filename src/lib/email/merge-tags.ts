@@ -8,8 +8,9 @@
 export interface MergeTag {
   tag: string;
   label: string;
-  category: 'contact' | 'order' | 'store' | 'cart';
+  category: 'contact' | 'order' | 'store' | 'cart' | 'trigger';
   sampleValue: string;
+  description?: string;
 }
 
 export const MERGE_TAGS: MergeTag[] = [
@@ -110,6 +111,48 @@ export const MERGE_TAGS: MergeTag[] = [
     category: 'cart',
     sampleValue: '3',
   },
+
+  // Trigger tags — adapt based on whatever event fired the email.
+  // The renderer resolves these via resolveTriggerSmartTags() against
+  // the active event_data, so the same template works for any trigger.
+  {
+    tag: 'trigger.link',
+    label: 'Link do Gatilho',
+    category: 'trigger',
+    sampleValue: 'https://minhaloja.com.br/checkouts/recover/abc123',
+    description:
+      'Resolve para a URL mais relevante do evento: recuperação de checkout para abandono, página do produto para browse/back-in-stock, status do pedido para purchase.',
+  },
+  {
+    tag: 'trigger.first_item_image',
+    label: 'Imagem do 1º Item',
+    category: 'trigger',
+    sampleValue: 'https://cdn.shopify.com/.../product.jpg',
+  },
+  {
+    tag: 'trigger.first_item_name',
+    label: 'Nome do 1º Item',
+    category: 'trigger',
+    sampleValue: 'Camiseta Premium Black',
+  },
+  {
+    tag: 'trigger.first_item_price',
+    label: 'Preço do 1º Item',
+    category: 'trigger',
+    sampleValue: 'R$ 99,90',
+  },
+  {
+    tag: 'trigger.total',
+    label: 'Total do Gatilho',
+    category: 'trigger',
+    sampleValue: 'R$ 199,90',
+  },
+  {
+    tag: 'trigger.items_count',
+    label: 'Itens do Gatilho',
+    category: 'trigger',
+    sampleValue: '2',
+  },
 ];
 
 export const MERGE_TAG_CATEGORIES = [
@@ -117,7 +160,78 @@ export const MERGE_TAG_CATEGORIES = [
   { key: 'order', label: 'Pedido' },
   { key: 'store', label: 'Loja' },
   { key: 'cart', label: 'Carrinho' },
+  { key: 'trigger', label: 'Gatilho (Adapta)' },
 ] as const;
+
+// =============================================
+// resolveTriggerSmartTags
+// Replaces {{ trigger.* }} placeholders with values pulled from the
+// active event_data. Smart resolution priority:
+//   - trigger.link    → CheckoutURL > AbandonedCheckoutURL >
+//                       ProductURL > order_status_url > store URL
+//   - trigger.first_item_*  → first item from Items[] with all fallbacks
+//   - trigger.total / items_count → top-level then raw fallback
+// =============================================
+
+export function resolveTriggerSmartTags(html: string, eventData: any, storeUrl?: string): string {
+  if (!html) return html;
+  if (!eventData && !storeUrl) return html;
+
+  const ev = eventData || {};
+  const props = ev.properties || ev;
+  const raw = props.raw || ev.raw || {};
+
+  // Smart link — first non-empty wins
+  const link =
+    props.CheckoutURL ||
+    props.checkout_url ||
+    raw.abandoned_checkout_url ||
+    raw.recovery_url ||
+    props.AbandonedCheckoutURL ||
+    props.ProductURL ||
+    props.product_url ||
+    (Array.isArray(props.Items) && props.Items[0]?.ProductURL) ||
+    raw.order_status_url ||
+    storeUrl ||
+    '#';
+
+  const items =
+    props.Items ||
+    props.line_items ||
+    raw.line_items ||
+    [];
+  const first = Array.isArray(items) && items.length > 0 ? items[0] : null;
+
+  const firstName = first?.ProductName || first?.title || first?.name || '';
+  const firstImage = first?.ImageURL || first?.image_url || first?.product?.image?.src || '';
+  const firstPrice = first?.ItemPrice ?? first?.price ?? null;
+
+  const total = props.TotalPrice ?? props.$value ?? props.total_price ?? raw.total_price ?? null;
+  const itemsCount = props.ItemCount ?? (Array.isArray(items) ? items.length : 0);
+
+  const replacements: Record<string, string> = {
+    '{{ trigger.link }}': String(link),
+    '{{trigger.link}}': String(link),
+    '{{ trigger.first_item_image }}': String(firstImage || ''),
+    '{{trigger.first_item_image}}': String(firstImage || ''),
+    '{{ trigger.first_item_name }}': String(firstName || ''),
+    '{{trigger.first_item_name}}': String(firstName || ''),
+    '{{ trigger.first_item_price }}': firstPrice != null ? String(firstPrice) : '',
+    '{{trigger.first_item_price}}': firstPrice != null ? String(firstPrice) : '',
+    '{{ trigger.total }}': total != null ? String(total) : '',
+    '{{trigger.total}}': total != null ? String(total) : '',
+    '{{ trigger.items_count }}': String(itemsCount),
+    '{{trigger.items_count}}': String(itemsCount),
+  };
+
+  let result = html;
+  for (const [tag, value] of Object.entries(replacements)) {
+    // Escape regex special chars in the tag for safe global replace
+    const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    result = result.replace(new RegExp(escaped, 'g'), value);
+  }
+  return result;
+}
 
 /**
  * Returns a map of tag -> sampleValue for test/preview purposes.

@@ -360,7 +360,8 @@ export async function resolveProductBlocks(
 export async function resolveCartBlocks(
   html: string,
   orgId: string,
-  contactId?: string
+  contactId?: string,
+  eventData?: Record<string, any>
 ): Promise<string> {
   const regex = /<!-- WORDER_CART_BLOCK:([^ ]*?) -->/g
   let result = html
@@ -372,14 +373,26 @@ export async function resolveCartBlocks(
     let cfg: any = {}
     try { cfg = JSON.parse(decodeURIComponent(match[1])) } catch { continue }
 
-    // Fetch cart items for this contact
+    // Pick the resolver feed_type based on the block config. Default is
+    // trigger_auto, which lets the API resolver detect from event_data
+    // whether to pull cart items, checkout line items, viewed product,
+    // or placed-order items. cart_items keeps the legacy "last recovery
+    // cart" behavior for blocks that explicitly want it.
+    const feedType = cfg.feedType || 'trigger_auto'
+
     let products: any[] = []
     try {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
       const res = await fetch(`${baseUrl}/api/email/product-feeds/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feed_type: 'cart_items', contact_id: contactId, organization_id: orgId, max_products: cfg.maxItems || 2 }),
+        body: JSON.stringify({
+          feed_type: feedType,
+          contact_id: contactId,
+          organization_id: orgId,
+          max_products: cfg.maxItems || 2,
+          event_data: eventData,
+        }),
       })
       const data = await res.json()
       products = data.products || []

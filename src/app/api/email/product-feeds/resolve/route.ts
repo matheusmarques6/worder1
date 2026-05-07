@@ -121,6 +121,94 @@ export async function POST(request: NextRequest) {
         break
       }
 
+      // trigger_auto — single feed type that adapts to whatever trigger
+      // fired the email. The block in the editor uses this so the same
+      // template works for cart-abandon, checkout-abandon, browse-abandon,
+      // viewed-product, and placed-order without the merchant having to
+      // pick a feed type per flow.
+      //
+      // Detection priority:
+      //   1. event_data.event_type (new — set by execution-engine context)
+      //   2. shape of the payload (Items[] vs single product properties)
+      case 'trigger_auto': {
+        const eventType = String(event_data?.event_type || event_data?.type || '').toLowerCase()
+        // Pull items list from whichever shape the event uses
+        const itemsList: any[] =
+          event_data?.Items ||
+          event_data?.line_items ||
+          event_data?.extra?.line_items ||
+          event_data?.raw?.line_items ||
+          event_data?.properties?.Items ||
+          event_data?.properties?.line_items ||
+          event_data?.properties?.raw?.line_items ||
+          []
+
+        if (Array.isArray(itemsList) && itemsList.length > 0) {
+          products = itemsList.slice(0, limit).map((it: any) => mapTriggerItem(it))
+        } else if (
+          eventType === 'viewed_product' ||
+          eventType === 'product_viewed' ||
+          eventType === 'browse_abandoned' ||
+          eventType === 'back_in_stock' ||
+          // Single-product shape (no items array but has product fields)
+          event_data?.ProductName ||
+          event_data?.product_title ||
+          event_data?.properties?.product_id
+        ) {
+          // Single-product event — synthesize one item
+          const props = event_data?.properties || event_data || {}
+          const raw = props.raw || event_data?.raw || {}
+          products = [{
+            id: props.ProductID || props.product_id || raw.product_id || null,
+            title:
+              props.ProductName ||
+              props.product_title ||
+              props.title ||
+              raw.title ||
+              'Produto',
+            price: parseFloat(
+              props.Price || props.price || props.ItemPrice ||
+              raw.price || '0'
+            ),
+            compare_at_price: props.CompareAtPrice
+              ? parseFloat(props.CompareAtPrice)
+              : props.compare_at_price
+                ? parseFloat(props.compare_at_price)
+                : raw.compare_at_price
+                  ? parseFloat(raw.compare_at_price)
+                  : null,
+            image_url: props.ImageURL || props.image_url || raw.image_url || null,
+            url:
+              props.ProductURL ||
+              props.product_url ||
+              raw.product_url ||
+              raw.url ||
+              '#',
+            sku: props.SKU || props.sku || raw.sku || null,
+            variant_title: props.VariantName || props.variant_title || raw.variant_title || null,
+            brand: props.Brand || props.vendor || raw.vendor || null,
+            description: props.Description || props.description || raw.description || null,
+          }]
+        }
+        // Fallback: nothing in the trigger event → use contact's last
+        // recovery cart, same as cart_items behavior. Lets browse-abandon
+        // emails still surface SOMETHING when the event itself is empty.
+        if (products.length === 0 && contact_id) {
+          try {
+            const { data: recovery } = await supabaseAdmin.from('recovery_carts')
+              .select('items')
+              .eq('contact_id', contact_id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single()
+            if (recovery?.items && Array.isArray(recovery.items)) {
+              products = recovery.items.slice(0, limit).map((it: any) => mapTriggerItem(it))
+            }
+          } catch {}
+        }
+        break
+      }
+
       case 'trigger_viewed_product': {
         if (event_data) {
           const props = event_data.properties || event_data
