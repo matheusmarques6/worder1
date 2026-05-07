@@ -331,12 +331,31 @@ export async function POST(request: NextRequest) {
         : EVENT_SOURCES.WORDER_PIXEL;
 
     // ---- Enrich properties ----
+    // Top-level convenience fields PLUS the same set under `raw` so the
+    // flow builder can reach the full payload via {{ trigger.raw.<path> }}
+    // — same pattern as the webhook events for consistency.
+    const acceptLanguage = request.headers.get('accept-language');
+    const browserLang = (() => {
+      if (!acceptLanguage) return null;
+      const first = acceptLanguage.split(',')[0];
+      return first ? first.split('-')[0].toLowerCase() : null;
+    })();
+
     const enrichedProperties: Record<string, any> = {
       ...properties,
       url: url || properties?.url,
       referrer: referrer || properties?.referrer,
       title: title || properties?.title,
       user_agent: userAgent,
+      // Klaviyo/Omnisend-style top-level context fields. Auto-discovered
+      // by the variable picker so {{ trigger.device }}, {{ trigger.os }},
+      // {{ trigger.country }} all resolve in flow templates.
+      device: null as string | null,    // filled below from UA
+      browser: null as string | null,
+      os: null as string | null,
+      language: browserLang,
+      sessionId: sessionId || null,
+      visitorId: visitorId || null,
       _original_event_type: eventType,
     };
 
@@ -400,6 +419,11 @@ export async function POST(request: NextRequest) {
 
     // ---- Parse UA ----
     const { device_type, browser, os } = parseUserAgent(userAgent);
+    // Backfill top-level device fields on enriched properties so the
+    // variable picker can surface them as {{ trigger.device }} etc.
+    enrichedProperties.device = device_type;
+    enrichedProperties.browser = browser;
+    enrichedProperties.os = os;
 
     // ---- Insert event ----
     const now = new Date().toISOString();

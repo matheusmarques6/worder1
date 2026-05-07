@@ -148,6 +148,44 @@ export class ExecutionEngine {
       }
     }
 
+    // Populate merchant-defined custom variables. Each row maps a
+    // friendly key (e.g. customer_full_name) to a path expression
+    // (e.g. trigger.raw.customer.first_name). At render time we
+    // resolve each path against the rest of the context and expose the
+    // result on context.custom.<key> so templates can reference
+    // {{ custom.customer_full_name }} etc.
+    if (options.organizationId && !(context as any).custom) {
+      try {
+        const { getSupabaseAdmin } = await import('@/lib/supabase-admin');
+        // @ts-ignore — lodash types may not be installed
+        const lodashMod = await import('lodash');
+        const lodashGet = (lodashMod as any).get || (lodashMod as any).default?.get;
+        const admin = getSupabaseAdmin();
+        const { data: customVars } = await admin
+          .from('custom_variables')
+          .select('variable_key, path, fallback_path, default_value, applicable_triggers, enabled')
+          .eq('organization_id', options.organizationId)
+          .eq('enabled', true);
+        const customCtx: Record<string, any> = {};
+        for (const v of customVars || []) {
+          const triggerType = (context.trigger as any)?.type;
+          const apps = (v as any).applicable_triggers as string[] | null;
+          if (Array.isArray(apps) && apps.length > 0 && triggerType && !apps.includes(triggerType)) continue;
+          let value: any = lodashGet(context, (v as any).path);
+          if ((value === undefined || value === null || value === '') && (v as any).fallback_path) {
+            value = lodashGet(context, (v as any).fallback_path);
+          }
+          if ((value === undefined || value === null || value === '') && (v as any).default_value !== null) {
+            value = (v as any).default_value;
+          }
+          customCtx[(v as any).variable_key] = value ?? null;
+        }
+        (context as any).custom = customCtx;
+      } catch (e: any) {
+        console.warn('[Execution Engine] custom variables populate failed:', e?.message);
+      }
+    }
+
     // Ensure nodes object exists in context
     if (!context.nodes) {
       context.nodes = {};
