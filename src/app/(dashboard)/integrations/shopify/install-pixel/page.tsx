@@ -30,10 +30,18 @@ import { cn } from '@/lib/utils'
 interface VerifyResponse {
   detected: boolean
   pixelInstalled: boolean
+  stage?: 'not-fetched' | 'fetched-no-ping' | 'pinging-no-events' | 'detected'
   lastEventAt: string | null
   lastEventType: string | null
   recentEventCount: number
   recentEvents: Array<{ type: string; source: string; at: string; page_url: string | null }>
+  diagnostics?: {
+    fetchCount: number
+    lastFetchAt: string | null
+    lastFetchUserAgent: string | null
+    pingCount: number
+    lastPingAt: string | null
+  }
   hint: string | null
 }
 
@@ -331,15 +339,71 @@ export default function InstallPixelWizardPage() {
                 </a>
               )}
             </div>
+
+            {/* Cascata de 3 checks: download → ping → evento. Mostra
+                em qual etapa o pipeline está parando, em vez de só
+                "aguardando" genérico. */}
+            {verifyResult?.diagnostics && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <DiagStep
+                  num={1}
+                  label="Sandbox baixou o script?"
+                  count={verifyResult.diagnostics.fetchCount}
+                  ok={verifyResult.diagnostics.fetchCount > 0}
+                  detail={verifyResult.diagnostics.lastFetchAt ? `Último: ${new Date(verifyResult.diagnostics.lastFetchAt).toLocaleTimeString('pt-BR')}` : 'Nenhum fetch ainda'}
+                />
+                <DiagStep
+                  num={2}
+                  label="Pixel executou e POSTou?"
+                  count={verifyResult.diagnostics.pingCount}
+                  ok={verifyResult.diagnostics.pingCount > 0}
+                  detail={verifyResult.diagnostics.lastPingAt ? `Último: ${new Date(verifyResult.diagnostics.lastPingAt).toLocaleTimeString('pt-BR')}` : 'Aguardando ping inicial'}
+                />
+                <DiagStep
+                  num={3}
+                  label="Eventos comportamentais?"
+                  count={verifyResult.recentEventCount}
+                  ok={verifyResult.recentEventCount > 0}
+                  detail={verifyResult.lastEventAt ? `${verifyResult.lastEventType} às ${new Date(verifyResult.lastEventAt).toLocaleTimeString('pt-BR')}` : 'Aguardando page_view/viewed_product'}
+                />
+              </div>
+            )}
+
             {verifyResult && !verifyResult.detected && verifyResult.hint && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
-                <Clock className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                <p className="text-[11.5px] text-amber-800 leading-relaxed">{verifyResult.hint}</p>
+              <div className={cn(
+                'border rounded-lg p-3 flex gap-2',
+                verifyResult.stage === 'not-fetched' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+              )}>
+                <Clock className={cn('w-4 h-4 flex-shrink-0 mt-0.5', verifyResult.stage === 'not-fetched' ? 'text-red-600' : 'text-amber-600')} />
+                <p className={cn('text-[11.5px] leading-relaxed', verifyResult.stage === 'not-fetched' ? 'text-red-800' : 'text-amber-800')}>
+                  {verifyResult.hint}
+                </p>
               </div>
             )}
           </div>
         )}
       </Step>
+    </div>
+  )
+}
+
+function DiagStep({ num, label, count, ok, detail }: { num: number; label: string; count: number; ok: boolean; detail: string }) {
+  return (
+    <div className={cn(
+      'rounded-lg border p-2.5',
+      ok ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'
+    )}>
+      <div className="flex items-center gap-2 mb-1">
+        <span className={cn(
+          'w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0',
+          ok ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'
+        )}>{num}</span>
+        <span className={cn('text-[10.5px] font-semibold', ok ? 'text-emerald-900' : 'text-gray-600')}>{label}</span>
+      </div>
+      <div className="flex items-baseline gap-1.5 ml-6">
+        <span className={cn('text-lg font-bold', ok ? 'text-emerald-700' : 'text-gray-500')}>{count}</span>
+        <span className="text-[10px] text-gray-500 truncate">{detail}</span>
+      </div>
     </div>
   )
 }
