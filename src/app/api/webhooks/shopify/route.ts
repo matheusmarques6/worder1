@@ -1965,7 +1965,19 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
   }
 
   // Upsert product
-  const { error: productErr } = await supabase.from('shopify_products').upsert({
+  // Strip HTML tags from body_html for plain-text description used in
+  // emails. Keep both: html for templates that want rich copy, plain for
+  // ones that want clean text (most cart-recovery email blocks).
+  const bodyHtml: string | null = product.body_html || null;
+  const plainDescription: string | null = bodyHtml
+    ? String(bodyHtml).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    : null;
+  // Collections come from a separate /admin/api/.../collects.json fetch
+  // when product is synced by sync-now; the webhook payload itself
+  // doesn't carry them, but if a future webhook does we accept it.
+  const collections = Array.isArray(product.collections) ? product.collections : [];
+
+  const productRow: Record<string, any> = {
     store_id: store.id,
     organization_id: store.organization_id,
     shopify_product_id: String(product.id),
@@ -1977,11 +1989,36 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
     status: product.status || 'active',
     variants: product.variants,
     images: product.images,
+    body_html: bodyHtml,
+    description: plainDescription,
+    collections,
     price: product.variants?.[0]?.price ? parseFloat(product.variants[0].price) : null,
     updated_at: new Date().toISOString(),
-  }, {
-    onConflict: 'store_id,shopify_product_id',
-  });
+  };
+  // Resilient write: drop description/body_html/collections columns on
+  // error if the schema migration hasn't been applied yet.
+  function isMissingColumnErr(err: any, col: string): boolean {
+    if (!err) return false;
+    const code = err.code || '';
+    const msg = String(err.message || '');
+    if (code === 'PGRST204' || code === '42703') return msg.includes(col);
+    return msg.includes(col) && (msg.includes('column') || msg.includes('schema cache'));
+  }
+  let attemptRow: Record<string, any> = { ...productRow };
+  let productErr: any = null;
+  for (const col of ['', 'body_html', 'description', 'collections']) {
+    if (col && col in attemptRow) {
+      const { [col]: _omit, ...rest } = attemptRow;
+      attemptRow = rest;
+    }
+    const { error } = await supabase.from('shopify_products').upsert(attemptRow, { onConflict: 'store_id,shopify_product_id' });
+    if (!error) { productErr = null; break; }
+    productErr = error;
+    const next = ['body_html', 'description', 'collections'].find(c => isMissingColumnErr(error, c) && c in attemptRow);
+    if (!next) break;
+    const { [next]: _omit2, ...rest } = attemptRow;
+    attemptRow = rest;
+  }
   if (productErr) {
     console.error(`[Shopify] shopify_products upsert FAILED for product ${product.id}:`, productErr);
   }

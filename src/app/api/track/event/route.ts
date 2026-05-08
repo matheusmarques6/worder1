@@ -451,6 +451,9 @@ export async function POST(request: NextRequest) {
         shopDomain,
         contactId: contactId || null,
         email: email || null,
+        sessionId: sessionId || null,
+        visitorId: visitorId || null,
+        anonymousId: anonymousId || null,
       });
       // Merge enrichment back — preserves anything the caller already set.
       Object.assign(enrichedProperties, enrichedFull);

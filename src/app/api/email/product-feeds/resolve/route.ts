@@ -187,6 +187,12 @@ export async function POST(request: NextRequest) {
         // raw.line_items wins when present because it carries product
         // descriptions, image URLs, vendor, tags, collections — fields
         // the pixel-side and even some webhook-side payloads omit.
+        // Cascade: full cart state wins (raw.line_items, set by the
+        // server-side enricher for added_to_cart by aggregating session
+        // history, OR by webhook for checkout/order events). Falls
+        // through to single-product shapes (added_item, viewed_product)
+        // which the enricher writes for single-product events. Last
+        // resort: legacy Items/items/line_items from older events.
         const itemsList: any[] =
           event_data?.raw?.line_items ||
           event_data?.properties?.raw?.line_items ||
@@ -197,6 +203,11 @@ export async function POST(request: NextRequest) {
           event_data?.properties?.Items ||
           event_data?.properties?.items ||
           event_data?.properties?.line_items ||
+          // Single-rich-product fallbacks from the enricher
+          (event_data?.added_item ? [event_data.added_item] : null) ||
+          (event_data?.properties?.added_item ? [event_data.properties.added_item] : null) ||
+          (event_data?.viewed_product ? [event_data.viewed_product] : null) ||
+          (event_data?.properties?.viewed_product ? [event_data.properties.viewed_product] : null) ||
           []
 
         if (Array.isArray(itemsList) && itemsList.length > 0) {
