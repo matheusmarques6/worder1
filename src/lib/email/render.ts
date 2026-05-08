@@ -492,11 +492,32 @@ export async function resolveCartBlocks(
         []
       if (Array.isArray(fallbackItems) && fallbackItems.length > 0) {
         products = fallbackItems.slice(0, cfg.maxItems || 2).map((it: any) => {
-          const productObj = it.product || {}
-          const variant = it.variant || {}
+          const productObj = it.product || it.Product || {}
+          const variant = it.variant || it.Variant || {}
+          // Same cascade the canonical normalizer uses — every shape any
+          // source ships. Shopify cart line_items put the variant image
+          // at featured_image.url AND mirror it as a string in `image`.
+          const imageUrl =
+            it.ImageURL ||
+            it.image_url ||
+            it.imageUrl ||
+            it.featured_image?.url ||
+            it.featured_image?.src ||
+            (typeof it.image === 'string' ? it.image : null) ||
+            it.image?.src ||
+            it.image?.url ||
+            productObj.variant_images_url ||
+            productObj.image?.src ||
+            productObj.images?.[0]?.src ||
+            productObj.images?.[0]?.url ||
+            productObj.product_image_urls?.[0] ||
+            variant?.image?.src ||
+            it.Product?.VariantImage ||
+            it.Product?.Images?.[0] ||
+            null
           return {
-            product_id: it.product_id || it.productId || productObj.id || null,
-            title: it.ProductName || it.title || it.name || productObj.title || it.presentment_title || 'Produto',
+            product_id: it.product_id || it.productId || it.ProductID || productObj.id || null,
+            title: it.ProductName || it.title || it.name || it.product_title || productObj.title || it.presentment_title || 'Produto',
             price: parseFloat(
               it.ItemPrice ||
               it.price ||
@@ -506,22 +527,16 @@ export async function resolveCartBlocks(
               '0'
             ),
             compare_at_price: it.compare_at_price || it.CompareAtPrice || variant.compare_at_price || null,
-            image_url:
-              it.ImageURL ||
-              it.image_url ||
-              it.image?.src ||
-              productObj.image?.src ||
-              productObj.images?.[0]?.src ||
-              productObj.product_image_urls?.[0] ||
-              productObj.variant_images_url ||
-              null,
+            image_url: imageUrl,
             url:
               it.ProductURL ||
               it.product_url ||
+              it.url ||
               productObj.product_url ||
+              productObj.url ||
               '#',
             quantity: it.Quantity || it.quantity || 1,
-            variant_title: it.variant_title || it.VariantName || it.presentment_variant_title || null,
+            variant_title: it.variant_title || it.VariantName || it.variantTitle || it.presentment_variant_title || null,
           }
         })
       }
