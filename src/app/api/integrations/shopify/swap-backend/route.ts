@@ -166,22 +166,30 @@ export async function PATCH(request: NextRequest) {
       }
     } catch { /* best-effort — domain swap proceeds with what we have */ }
 
-    // Move the old domain into aliases so any straggling webhooks
-    // from the previous shop (if it's still installed for some hours)
-    // don't 410. Also include the new permanent domain if Shopify
-    // reports a different canonical one than what the merchant typed.
+    // Resolve canonical domain. If GraphQL reports a different
+    // myshopifyDomain than what the merchant typed, prefer the canonical
+    // as primary — that's what Shopify uses in webhook X-Shopify-Shop-Domain
+    // headers, so primary-as-canonical means O(1) webhook lookup.
+    // Merchant-typed and the previous primary ride along as aliases for
+    // back-compat.
+    const primaryDomain = (permanentDomain && permanentDomain !== cleanDomain)
+      ? permanentDomain
+      : cleanDomain;
+
     const existingAliases: string[] = Array.isArray(store.shop_domain_aliases) ? store.shop_domain_aliases : [];
     const aliases = new Set(existingAliases.map((a) => String(a).toLowerCase()));
-    if (store.shop_domain && store.shop_domain !== cleanDomain) {
+    if (store.shop_domain && store.shop_domain !== primaryDomain) {
       aliases.add(String(store.shop_domain).toLowerCase());
     }
-    if (permanentDomain && permanentDomain !== cleanDomain) {
-      aliases.add(permanentDomain);
+    // Merchant-typed domain rides as alias so old pixel/script_tags
+    // pointing at it keep resolving.
+    if (cleanDomain !== primaryDomain) {
+      aliases.add(cleanDomain);
     }
-    aliases.delete(cleanDomain); // primary doesn't go in aliases
+    aliases.delete(primaryDomain); // primary doesn't go in aliases
 
     const updates: Record<string, any> = {
-      shop_domain: cleanDomain,
+      shop_domain: primaryDomain,
       shop_domain_aliases: Array.from(aliases),
       access_token: accessToken,
       client_id: cleanClientId,
@@ -244,9 +252,16 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      // Surface BOTH so the UI can explain "you typed X but the
+      // canonical is Y — we registered Y as primary".
+      domainSwap: cleanDomain !== primaryDomain ? {
+        merchant_typed: cleanDomain,
+        canonical: primaryDomain,
+        explanation: `Você digitou ${cleanDomain} mas o domínio canônico (interno permanente) da Shopify é ${primaryDomain}. Salvamos ${primaryDomain} como principal e ${cleanDomain} como alias — webhooks chegam mais rápido e nada quebra.`,
+      } : null,
       store: {
         id: storeId,
-        shop_domain: cleanDomain,
+        shop_domain: primaryDomain,
         shop_name: shopName,
         currency,
         shopify_shop_id: shopifyShopId,

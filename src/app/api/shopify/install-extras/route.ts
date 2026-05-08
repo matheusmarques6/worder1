@@ -76,6 +76,58 @@ export async function POST(request: NextRequest) {
   }
   store = refreshed.store;
 
+  // ──────────────────────────────────────────
+  // 0. Canonicalize shop_domain
+  //
+  // If the merchant connected with a renamed admin slug (e.g.
+  // sourosa.myshopify.com) but Shopify's permanent canonical domain is
+  // different (e.g. lojalaclode.myshopify.com), webhooks arrive carrying
+  // the canonical in X-Shopify-Shop-Domain. Resolution falls back to
+  // alias scan instead of O(1) primary match. Worse, the diagnostic
+  // dashboard misleads the merchant into thinking they should match
+  // by what they typed.
+  //
+  // Fix: query GraphQL for shop.myshopifyDomain. If it differs from
+  // the stored shop_domain, swap them — canonical becomes primary,
+  // typed becomes alias. Idempotent (no-op when already canonical).
+  // ──────────────────────────────────────────
+  let domainCanonicalization: { swapped: boolean; canonical?: string; previous?: string } = { swapped: false };
+  try {
+    const canonRes = await fetch(
+      `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+      {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': store.access_token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: `{ shop { myshopifyDomain } }` }),
+      }
+    );
+    if (canonRes.ok) {
+      const j = await canonRes.json();
+      const canonical = (j.data?.shop?.myshopifyDomain || '').toLowerCase() || null;
+      const typed = String(store.shop_domain || '').toLowerCase();
+      if (canonical && canonical !== typed) {
+        const existingAliases: string[] = Array.isArray(store.shop_domain_aliases) ? store.shop_domain_aliases : [];
+        const aliases = new Set(existingAliases.map((a: string) => String(a).toLowerCase()));
+        aliases.add(typed);
+        aliases.delete(canonical);
+        const { error: swErr } = await supabase
+          .from('shopify_stores')
+          .update({ shop_domain: canonical, shop_domain_aliases: Array.from(aliases), updated_at: new Date().toISOString() })
+          .eq('id', store.id);
+        if (!swErr) {
+          domainCanonicalization = { swapped: true, canonical, previous: typed };
+          // Reflect in our local copy so the rest of this request uses
+          // the canonical domain for webhook/script_tag URLs.
+          store.shop_domain = canonical;
+          store.shop_domain_aliases = Array.from(aliases);
+        }
+      }
+    }
+  } catch { /* best-effort */ }
+
   const shopDomain = store.shop_domain;
   const accessToken = store.access_token;
   // Webhook URL carries `?store_id=<id>` so the handler can identify
@@ -379,6 +431,7 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     success: true,
+    domainCanonicalization,
     webhooks: {
       total: REQUIRED_WEBHOOKS.length,
       created: webhookCreated,

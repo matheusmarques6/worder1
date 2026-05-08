@@ -241,29 +241,45 @@ export async function POST(request: NextRequest) {
       if (data) existingStore = data as any;
     }
 
-    // Build aliases array: merge any existing aliases with the
-    // canonical/permanent domain. When updating an existing row, also
-    // ensure the OLD primary domain (if it differed from the new one)
-    // is preserved as an alias — that way historic webhook subscriptions
-    // and any storefront pixel still pointing at the old domain keep
-    // resolving to this store.
-    const lowDomain = String(shopDomain).toLowerCase();
+    // Resolve canonical domain. Shopify always sends webhooks with the
+    // PERMANENT myshopifyDomain in X-Shopify-Shop-Domain — never the
+    // public admin slug the merchant might have renamed. So the row's
+    // primary shop_domain MUST be the canonical one for webhook
+    // resolution to be O(1) (exact match instead of falling back to
+    // alias scan). When the merchant typed a different (renamed) slug,
+    // we swap automatically: canonical becomes primary, what they typed
+    // becomes an alias.
+    //
+    // Example (Based store):
+    //   merchant types:  sourosa.myshopify.com
+    //   GraphQL returns: lojalaclode.myshopify.com  ← canonical
+    //   result row:
+    //     shop_domain         = lojalaclode.myshopify.com  (primary)
+    //     shop_domain_aliases = [sourosa.myshopify.com]    (back-compat)
+    const userTypedDomain = String(shopDomain).toLowerCase();
+    const canonicalDomain = (permanentDomain && permanentDomain !== userTypedDomain)
+      ? permanentDomain
+      : userTypedDomain;
+    const primaryDomain = canonicalDomain;
+
     const aliasSet = new Set<string>();
     if (existingStore?.shop_domain_aliases) {
       for (const a of existingStore.shop_domain_aliases) aliasSet.add(String(a).toLowerCase());
     }
-    if (existingStore?.shop_domain && existingStore.shop_domain.toLowerCase() !== lowDomain) {
+    if (existingStore?.shop_domain && existingStore.shop_domain.toLowerCase() !== primaryDomain) {
       aliasSet.add(existingStore.shop_domain.toLowerCase());
     }
-    if (permanentDomain && permanentDomain !== lowDomain) {
-      aliasSet.add(permanentDomain);
+    // What the merchant typed always rides along as an alias so old
+    // pixel/script tags pointing at it still resolve.
+    if (userTypedDomain !== primaryDomain) {
+      aliasSet.add(userTypedDomain);
     }
-    aliasSet.delete(lowDomain); // primary should never duplicate in aliases
+    aliasSet.delete(primaryDomain); // primary should never duplicate in aliases
     const aliases: string[] = Array.from(aliasSet);
 
     const storeRecord: Record<string, any> = {
       organization_id: organizationId,
-      shop_domain: shopDomain,
+      shop_domain: primaryDomain,
       shop_domain_aliases: aliases,
       shopify_shop_id: shopifyShopId,
       shop_name: shopName,
