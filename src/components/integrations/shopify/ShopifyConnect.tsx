@@ -126,7 +126,12 @@ export default function ShopifyConnect() {
     try {
       setLoading(true);
 
-      // Try dedicated status endpoint first
+      // Status endpoint is the canonical source — it filters by store_id
+      // when present and respects is_active. We DO NOT fall back to
+      // /api/shopify/connect which returns "any active store in the org":
+      // that picked the wrong store when the merchant disconnects one of
+      // multiple stores (e.g. disconnect sourosa, get lojalaclode shown
+      // as 'connected' because it's the only active row left).
       const storeParam = currentStore?.id ? `?store_id=${currentStore.id}` : '';
       const res = await fetch(`/api/integrations/shopify/status${storeParam}`);
       const data = await res.json();
@@ -137,45 +142,13 @@ export default function ShopifyConnect() {
         return;
       }
 
-      // Fallback: try /api/shopify/connect (used by settings page).
-      // CRITICAL: only treat the merchant as "connected" if there's an
-      // ACTIVE store. Falling back to stores[0] regardless of is_active
-      // surfaced disconnected stores as connected, blocking the
-      // merchant from re-entering credentials after disconnect.
-      const res2 = await fetch('/api/shopify/connect');
-      const data2 = await res2.json();
-
-      const activeStore = (data2.stores || []).find((st: any) => st.is_active || st.isActive);
-      if (activeStore) {
-        const s = activeStore;
-        setConnected(true);
-        setStore({
-          id: s.id,
-          shopDomain: s.domain || s.shop_domain,
-          shopName: s.name || s.shop_name,
-          shopEmail: s.email || s.shop_email || '',
-          currency: s.currency || 'BRL',
-          planName: s.plan_name || '',
-          apiVersion: s.api_version || '2026-04',
-          status: s.status || s.connectionStatus || 'active',
-          connectionType: s.connection_type || s.connectionType || 'oauth',
-          tokenExpiresAt: s.token_expires_at || s.tokenExpiresAt,
-          initialSyncCompleted: s.initial_sync_completed || false,
-          pixelInstalled: s.pixel_installed || false,
-          embedInstalled: s.embed_installed || false,
-          installedAt: s.installed_at || '',
-          lastSyncAt: s.lastSyncAt || s.last_sync_at || '',
-          totalOrders: s.totalOrders || s.total_orders || 0,
-          totalRevenue: s.totalRevenue || s.total_revenue || 0,
-          totalCustomers: s.totalCustomers || s.total_customers || 0,
-        });
-        return;
-      }
-
+      // Not connected for the selected store — show the connect/reactivate form.
       setConnected(false);
       setStore(null);
     } catch {
       console.error('Failed to fetch shopify status');
+      setConnected(false);
+      setStore(null);
     } finally {
       setLoading(false);
     }
@@ -431,13 +404,22 @@ export default function ShopifyConnect() {
   }
 
   async function handleDisconnect() {
-    if (!confirm('Tem certeza? Os dados já importados serão mantidos.')) return;
+    if (!store?.id) return;
+    if (!confirm(`Desconectar ${store.shopName || store.shopDomain}?\n\nDados ficam preservados (contatos, fluxos, automações, financeiro). Você pode reativar com a mesma Shopify ou outra depois.`)) return;
     setDisconnecting(true);
     try {
-      await fetch('/api/integrations/shopify/disconnect', { method: 'POST' });
+      // Send the SPECIFIC store id — without it the disconnect endpoint
+      // deactivates EVERY active store in the org, which is catastrophic
+      // when the merchant has multiple stores and only wanted to disconnect
+      // one (the cause of "I disconnected sourosa but it broke lojalaclode too").
+      await fetch('/api/integrations/shopify/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: store.id }),
+      });
       setConnected(false);
       setStore(null);
-      setSuccessMessage('Loja desconectada.');
+      setSuccessMessage('Loja desconectada. Os dados foram preservados — reative quando quiser.');
     } catch {
       setError('Erro ao desconectar');
     } finally {
