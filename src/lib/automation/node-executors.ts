@@ -1476,8 +1476,23 @@ const conditionExecutors: Record<string, NodeExecutor> = {
 const controlExecutors: Record<string, NodeExecutor> = {
   control_delay: {
     async execute({ config, isTest }) {
-      const value = parseInt(config.value) || 1;
-      const unit = config.unit || 'hours';
+      // Cascade through every shape the editor might have saved the
+      // delay in. Current UI: config.delay.{value,unit}. Older variants:
+      // flat config.value/config.unit, config.minutes, config.duration.
+      // Without this cascade, a flow configured as "3 minutos" silently
+      // ran as "1 hours" (the parseInt(undefined)||1 + 'hours' default).
+      const rawValue =
+        config?.delay?.value ??
+        config?.value ??
+        config?.minutes ??
+        config?.duration ??
+        config?.amount ??
+        1;
+      const value = parseInt(String(rawValue)) || 1;
+      const unit =
+        config?.delay?.unit ??
+        config?.unit ??
+        (config?.minutes != null ? 'minutes' : 'hours');
 
       const multipliers: Record<string, number> = {
         seconds: 1000,
