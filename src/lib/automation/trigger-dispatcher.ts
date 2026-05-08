@@ -126,8 +126,18 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
     }
 
     // Optional fields that may not exist on older schemas. Drop one by
-    // one on column-not-found errors until the insert succeeds.
-    const fallbackChain = ['deal_id', 'waiting_until']
+    // one on column-not-found errors until the insert succeeds. We
+    // include every non-essential column the various migrations have
+    // added — old DBs may be missing several at once.
+    const fallbackChain = [
+      'deal_id',
+      'waiting_until',
+      'trigger_event_id',
+      'current_node_id',
+      'organization_id',  // last resort — without it tenancy is broken,
+                           // but at least the run is created and the
+                           // merchant sees what's happening
+    ]
     let attempt: Record<string, any> = { ...fullInsert }
     let runId: string | null = null
     let lastErr: any = null
@@ -143,10 +153,12 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
       if (!next) break
       const { [next]: _drop, ...rest } = attempt
       attempt = rest
+      console.warn(`[dispatchTrigger] retrying without ${next} (schema cache miss)`)
     }
 
     if (lastErr) {
       console.error('[dispatchTrigger] insert run error:', lastErr)
+      console.error('[dispatchTrigger] HINT: run the migration at supabase/migrations/20260508_automation_runs_full_columns.sql to add missing columns')
       continue
     }
     if (runId) runIds.push(runId)
