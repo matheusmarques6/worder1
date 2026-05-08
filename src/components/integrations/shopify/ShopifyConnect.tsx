@@ -104,12 +104,17 @@ export default function ShopifyConnect() {
         return;
       }
 
-      // Fallback: try /api/shopify/connect (used by settings page)
+      // Fallback: try /api/shopify/connect (used by settings page).
+      // CRITICAL: only treat the merchant as "connected" if there's an
+      // ACTIVE store. Falling back to stores[0] regardless of is_active
+      // surfaced disconnected stores as connected, blocking the
+      // merchant from re-entering credentials after disconnect.
       const res2 = await fetch('/api/shopify/connect');
       const data2 = await res2.json();
 
-      if (data2.stores?.length > 0) {
-        const s = data2.stores.find((st: any) => st.is_active || st.isActive) || data2.stores[0];
+      const activeStore = (data2.stores || []).find((st: any) => st.is_active || st.isActive);
+      if (activeStore) {
+        const s = activeStore;
         setConnected(true);
         setStore({
           id: s.id,
