@@ -51,21 +51,22 @@ export class RAGService {
       // Gerar embedding da query
       const queryEmbedding = await generateEmbedding(query, this.openaiKey)
 
-      // Buscar usando função RPC do Supabase (mais eficiente)
-      // Se a função não existir, fazer query direta
+      // RPC canônica do schema F0 (search_agent_chunks). Fallback p/ direct query.
       try {
-        const { data, error } = await this.supabase.rpc('search_agent_knowledge', {
+        const { data, error } = await this.supabase.rpc('search_agent_chunks', {
           p_agent_id: agentId,
           p_query_embedding: `[${queryEmbedding.join(',')}]`,
-          p_match_threshold: threshold,
+          p_layers: params.layers ?? null,
           p_match_count: topK,
+          p_match_threshold: threshold,
         })
 
         if (!error && data) {
           return this.formatResults(data, sourceIds)
         }
+        if (error) console.warn('[RAG] RPC search_agent_chunks erro:', error.message)
       } catch (rpcError) {
-        console.warn('RPC search not available, using direct query')
+        console.warn('[RAG] RPC indisponível, usando direct query')
       }
 
       // Fallback: Query direta (menos eficiente mas funciona)
@@ -183,6 +184,7 @@ export class RAGService {
       content: r.content,
       metadata: r.metadata || {},
       similarity: r.similarity,
+      layer: r.layer,
     }))
   }
 

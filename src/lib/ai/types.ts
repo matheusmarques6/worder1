@@ -172,7 +172,8 @@ export interface AgentSource {
   id: string
   organization_id: string
   agent_id: string
-  source_type: 'url' | 'file' | 'text' | 'products'
+  layer: KnowledgeLayer
+  source_type: 'url' | 'file' | 'text' | 'products' | 'faq' | 'integration'
   name: string
   url?: string
   pages_crawled?: number
@@ -191,6 +192,7 @@ export interface AgentSource {
   created_at: string
   updated_at?: string
   processed_at?: string
+  last_indexed_at?: string
 }
 
 export interface AgentChunk {
@@ -378,12 +380,20 @@ export interface ActionExecutionResult {
 // RAG - BUSCA SEMÂNTICA
 // =====================================================
 
+export type KnowledgeLayer =
+  | 'institutional'
+  | 'operational'
+  | 'catalog'
+  | 'faq'
+  | 'execution'
+
 export interface RAGSearchParams {
   agentId: string
   query: string
   topK?: number
   threshold?: number
   sourceIds?: string[]
+  layers?: KnowledgeLayer[]
 }
 
 export interface RAGResult {
@@ -393,6 +403,7 @@ export interface RAGResult {
   content: string
   metadata: Record<string, any>
   similarity: number
+  layer?: KnowledgeLayer
 }
 
 // =====================================================
@@ -546,6 +557,9 @@ export interface RunnerOutput {
   tokensOut: number
   costUsd: number
   durationMs: number
+  // Persona flags expostos pra o worker decidir como entregar
+  splitMessages: boolean
+  replyDelaySeconds: number
 }
 
 // =====================================================

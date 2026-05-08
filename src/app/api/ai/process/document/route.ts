@@ -103,20 +103,34 @@ export async function POST(request: NextRequest) {
     console.log(`Generated ${embeddings.length} embeddings for source ${sourceId}`)
 
     // Inserir chunks no banco
+    const crypto = await import('crypto')
     const chunkRecords = chunks.map((chunk, i) => ({
       organization_id,
       source_id: sourceId,
       agent_id: source.agent_id,
       content: chunk.content,
-      content_tokens: chunk.tokens,
+      token_count: chunk.tokens,
+      chunk_index: chunk.index ?? i,
+      content_hash: crypto
+        .createHash('sha256')
+        .update(`${sourceId}:${i}:${chunk.content}`)
+        .digest('hex')
+        .substring(0, 32),
       metadata: {
         ...chunk.metadata,
         index: chunk.index,
         source_name: source.name,
         source_type: source.source_type,
+        layer: source.layer,
       },
       embedding: `[${embeddings[i].join(',')}]`, // Formato para pgvector
     }))
+
+    // Idempotência: limpa chunks anteriores antes de reinsertir (re-process)
+    await supabase
+      .from('ai_agent_chunks')
+      .delete()
+      .eq('source_id', sourceId)
 
     // Inserir em batches para evitar timeout
     const batchSize = 50
@@ -139,7 +153,7 @@ export async function POST(request: NextRequest) {
       .update({
         status: 'ready',
         chunks_count: chunks.length,
-        processed_at: new Date().toISOString(),
+        last_indexed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         error_message: null,
       })

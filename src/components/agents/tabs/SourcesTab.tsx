@@ -33,13 +33,15 @@ interface SourcesTabProps {
   onRefresh: () => void
 }
 
-type SourceType = 'url' | 'file' | 'text' | 'products'
+type SourceType = 'url' | 'file' | 'text' | 'products' | 'faq' | 'integration'
 
-const sourceTypeConfig = {
+const sourceTypeConfig: Record<SourceType, { icon: any; label: string; color: string; bg: string }> = {
   url: { icon: Globe, label: 'URL', color: 'text-blue-400', bg: 'bg-blue-500/20' },
   file: { icon: File, label: 'Arquivo', color: 'text-green-400', bg: 'bg-green-500/20' },
   text: { icon: FileText, label: 'Texto', color: 'text-purple-400', bg: 'bg-purple-500/20' },
   products: { icon: ShoppingBag, label: 'Produtos', color: 'text-orange-400', bg: 'bg-orange-500/20' },
+  faq: { icon: FileText, label: 'FAQ', color: 'text-amber-500', bg: 'bg-amber-500/20' },
+  integration: { icon: Database, label: 'Integração', color: 'text-zinc-500', bg: 'bg-zinc-500/20' },
 }
 
 const statusConfig = {

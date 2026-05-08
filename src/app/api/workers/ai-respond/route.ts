@@ -20,6 +20,7 @@ import { runAgent, AgentNotPublishedError } from '@/lib/ai/runner'
 import { isLLMConfigured } from '@/lib/ai/llm/client'
 import { verifyQstashSignature } from '@/lib/redis/qstash'
 import { sendOutboundText } from '@/lib/whatsapp/send-outbound'
+import { splitMessages } from '@/lib/ai/splitter'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -112,51 +113,81 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // 4. Delay de "typing" antes de enviar (mais natural)
+  // 4. Splitter: quando persona.split_messages=true, envia 2-3 partes curtas.
+  const parts = result.splitMessages
+    ? splitMessages(result.replyText)
+    : [result.replyText]
+
+  // 5. Delay base de "typing" (sempre antes da primeira parte)
   const minMs = parseInt(process.env.AI_TYPING_MIN_MS || '1500', 10)
   const maxMs = parseInt(process.env.AI_TYPING_MAX_MS || '4000', 10)
-  const delayMs = Math.floor(Math.random() * (maxMs - minMs) + minMs)
-  await new Promise((r) => setTimeout(r, delayMs))
+  const baseDelay = Math.floor(Math.random() * (maxMs - minMs) + minMs)
+  await new Promise((r) => setTimeout(r, baseDelay))
 
-  // 5. Sender unificado (Cloud → whatsapp_business_accounts → Evolution)
-  const sendResult = await sendOutboundText(
-    {
-      organizationId: conv.organization_id,
-      conversationId,
-      whatsappAccountId: conv.whatsapp_account_id,
-      instanceId: conv.instance_id,
-      phoneNumber: conv.phone_number,
-    },
-    result.replyText,
-  )
+  // 6. Envia cada parte em sequência com pequena pausa pra simular digitação
+  const sendCtx = {
+    organizationId: conv.organization_id,
+    conversationId,
+    whatsappAccountId: conv.whatsapp_account_id,
+    instanceId: conv.instance_id,
+    phoneNumber: conv.phone_number,
+  }
 
-  const messageStatus: 'sent' | 'pending' | 'failed' = sendResult.ok
-    ? 'sent'
-    : sendResult.reason === 'no_sender_configured'
-    ? 'pending'
-    : 'failed'
+  const sendResults: Array<{
+    text: string
+    ok: boolean
+    waMessageId: string | null
+    channel?: string | null
+    reason?: string
+    error?: string
+  }> = []
 
-  // 6. Persiste a resposta da IA em whatsapp_messages
-  await supabase.from('whatsapp_messages').insert({
-    organization_id: conv.organization_id,
-    conversation_id: conversationId,
-    instance_id: conv.instance_id,
-    wa_message_id: sendResult.waMessageId ?? null,
-    message_id: sendResult.waMessageId ?? null,
-    direction: 'outbound',
-    type: 'text',
-    message_type: 'text',
-    content: result.replyText,
-    text_body: result.replyText,
-    status: messageStatus,
-    sender_type: 'ai_agent',
-    sender_name: 'IA',
-    is_from_me: true,
-    ai_execution_id: result.executionId,
-    sent_at: new Date().toISOString(),
-    timestamp: new Date().toISOString(),
-    error_message: sendResult.error ?? sendResult.reason ?? null,
-  })
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) {
+      // delay entre partes proporcional ao tamanho da próxima
+      const partDelay = Math.min(2500, 800 + parts[i].length * 25)
+      await new Promise((r) => setTimeout(r, partDelay))
+    }
+    const sendResult = await sendOutboundText(sendCtx, parts[i])
+    sendResults.push({
+      text: parts[i],
+      ok: sendResult.ok,
+      waMessageId: sendResult.waMessageId ?? null,
+      channel: sendResult.channel ?? null,
+      reason: sendResult.reason,
+      error: sendResult.error,
+    })
+
+    const messageStatus: 'sent' | 'pending' | 'failed' = sendResult.ok
+      ? 'sent'
+      : sendResult.reason === 'no_sender_configured'
+      ? 'pending'
+      : 'failed'
+
+    await supabase.from('whatsapp_messages').insert({
+      organization_id: conv.organization_id,
+      conversation_id: conversationId,
+      instance_id: conv.instance_id,
+      wa_message_id: sendResult.waMessageId ?? null,
+      message_id: sendResult.waMessageId ?? null,
+      direction: 'outbound',
+      type: 'text',
+      message_type: 'text',
+      content: parts[i],
+      text_body: parts[i],
+      status: messageStatus,
+      sender_type: 'ai_agent',
+      sender_name: 'IA',
+      is_from_me: true,
+      ai_execution_id: i === 0 ? result.executionId : null,
+      sent_at: new Date().toISOString(),
+      timestamp: new Date().toISOString(),
+      error_message: sendResult.error ?? sendResult.reason ?? null,
+    })
+  }
+
+  const allOk = sendResults.every((r) => r.ok)
+  const firstFail = sendResults.find((r) => !r.ok)
 
   return NextResponse.json({
     ok: true,
@@ -164,10 +195,11 @@ export async function POST(req: NextRequest) {
     tokens: result.tokensIn + result.tokensOut,
     costUsd: result.costUsd,
     durationMs: result.durationMs,
-    messageStatus,
-    channel: sendResult.channel ?? null,
-    waMessageId: sendResult.waMessageId ?? null,
-    sendError: sendResult.error ?? sendResult.reason ?? null,
+    parts: sendResults.length,
+    splitMessages: result.splitMessages,
+    allDelivered: allOk,
+    firstFailReason: firstFail?.reason ?? null,
+    firstFailError: firstFail?.error ?? null,
   })
 }
 

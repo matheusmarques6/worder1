@@ -73,15 +73,20 @@ export async function POST(
     const agentId = params.id
     const body = await request.json()
 
-    const { organization_id, source_type, name } = body
+    const { organization_id, source_type, name, layer } = body
 
     // Validações
     if (!organization_id) {
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
     }
 
-    if (!source_type || !['url', 'text', 'products'].includes(source_type)) {
+    if (!source_type || !['url', 'text', 'file', 'products', 'faq', 'integration'].includes(source_type)) {
       return NextResponse.json({ error: 'source_type inválido' }, { status: 400 })
+    }
+
+    const layerNorm = layer || 'operational'
+    if (!['institutional', 'operational', 'catalog', 'faq', 'execution'].includes(layerNorm)) {
+      return NextResponse.json({ error: 'layer inválida' }, { status: 400 })
     }
 
     if (!name || !name.trim()) {
@@ -104,6 +109,7 @@ export async function POST(
     const sourceData: Record<string, any> = {
       organization_id,
       agent_id: agentId,
+      layer: layerNorm,
       source_type,
       name: name.trim(),
       status: 'pending',

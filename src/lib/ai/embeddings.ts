@@ -1,15 +1,17 @@
 // =====================================================
 // SERVIÇO DE EMBEDDINGS COM CACHE REDIS
-// Gera embeddings usando OpenAI text-embedding-ada-002
-// Cache via Upstash Redis para economia de custos
+// text-embedding-3-small @ 1024 dim — alinhado com ai_agent_chunks.embedding
+// (vector(1024)) e ~5x mais barato que ada-002 com melhor recall.
 // =====================================================
 
 import crypto from 'crypto'
 import { getRedis, isRedisConfigured, CACHE_TTL, CACHE_PREFIX } from '@/lib/redis'
 
-const OPENAI_EMBEDDING_MODEL = 'text-embedding-ada-002'
-const OPENAI_EMBEDDING_DIMENSIONS = 1536
+const OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small'
+const OPENAI_EMBEDDING_DIMENSIONS = 1024
 const MAX_TOKENS_PER_REQUEST = 8191
+// bump de prefixo: invalida cache de vetores 1536-dim antigos
+const EMBED_CACHE_PREFIX = `${CACHE_PREFIX.EMBEDDING}v2:`
 
 // Estatísticas de cache (para monitoramento)
 let cacheStats = {
@@ -56,7 +58,7 @@ export async function generateEmbedding(
 
   // Gerar hash para cache
   const hash = hashText(truncatedText)
-  const cacheKey = `${CACHE_PREFIX.EMBEDDING}${hash}`
+  const cacheKey = `${EMBED_CACHE_PREFIX}${hash}`
 
   // ============================================
   // 1. TENTAR BUSCAR DO CACHE
@@ -93,6 +95,7 @@ export async function generateEmbedding(
       body: JSON.stringify({
         model: OPENAI_EMBEDDING_MODEL,
         input: truncatedText,
+        dimensions: OPENAI_EMBEDDING_DIMENSIONS,
       }),
     })
 
@@ -153,7 +156,7 @@ export async function generateEmbeddingsBatch(
     const cleanText = texts[i].trim().replace(/\n+/g, ' ')
     const truncated = truncateToTokenLimit(cleanText, MAX_TOKENS_PER_REQUEST)
     const hash = hashText(truncated)
-    const cacheKey = `${CACHE_PREFIX.EMBEDDING}${hash}`
+    const cacheKey = `${EMBED_CACHE_PREFIX}${hash}`
 
     if (redisAvailable) {
       try {
@@ -195,6 +198,7 @@ export async function generateEmbeddingsBatch(
           body: JSON.stringify({
             model: OPENAI_EMBEDDING_MODEL,
             input: batchTexts,
+            dimensions: OPENAI_EMBEDDING_DIMENSIONS,
           }),
         })
 
@@ -347,7 +351,7 @@ export async function getEmbeddingFromCache(text: string): Promise<number[] | nu
   const cleanText = text.trim().replace(/\n+/g, ' ')
   const truncated = truncateToTokenLimit(cleanText, MAX_TOKENS_PER_REQUEST)
   const hash = hashText(truncated)
-  const cacheKey = `${CACHE_PREFIX.EMBEDDING}${hash}`
+  const cacheKey = `${EMBED_CACHE_PREFIX}${hash}`
 
   try {
     const redis = getRedis()

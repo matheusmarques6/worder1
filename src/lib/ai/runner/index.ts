@@ -11,6 +11,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { complete } from '../llm/client'
 import { buildSystemPrompt } from '../prompt/system-builder'
 import { loadMemory, saveMemory } from '../memory/window'
+import { retrieveRelevantChunks } from './retrieval'
 import type { Agent, RunnerInput, RunnerOutput } from '../types'
 
 export class AgentNotPublishedError extends Error {
@@ -37,13 +38,33 @@ export async function runAgent(input: RunnerInput): Promise<RunnerOutput> {
   // 2. Carrega memória
   const memory = await loadMemory(input.conversationId, input.agentId)
 
-  // 3. Monta prompt
+  // 3. RAG retrieval — usa a última leva de mensagens do usuário como query
+  const ragQuery = input.newMessages.map((m) => m.content).join(' ').trim()
+  const retrieval = await retrieveRelevantChunks({
+    agentId: input.agentId,
+    query: ragQuery,
+  })
+
+  // 4. Monta prompt: system + (rolling summary) + (RAG context) + memória + novas mensagens
   const systemPrompt = buildSystemPrompt(typedAgent)
-  const messages = [
+  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system' as const, content: systemPrompt },
-    ...memory.window_messages.map((m) => ({ role: m.role, content: m.content })),
-    ...input.newMessages.map((m) => ({ role: 'user' as const, content: m.content })),
   ]
+  if (memory.summary && memory.summary.trim()) {
+    messages.push({
+      role: 'system' as const,
+      content: `Resumo de conversas anteriores:\n${memory.summary}`,
+    })
+  }
+  if (retrieval.contextBlock) {
+    messages.push({ role: 'system' as const, content: retrieval.contextBlock })
+  }
+  memory.window_messages.forEach((m) => {
+    messages.push({ role: m.role, content: m.content })
+  })
+  input.newMessages.forEach((m) => {
+    messages.push({ role: 'user' as const, content: m.content })
+  })
 
   // 4. Chama LLM
   const llmConfig = typedAgent.llm_config
@@ -77,6 +98,12 @@ export async function runAgent(input: RunnerInput): Promise<RunnerOutput> {
         },
       ],
       tool_calls: [],
+      retrieval_calls: retrieval.results.map((r) => ({
+        chunk_id: r.chunk_id,
+        source_id: r.source_id,
+        layer: r.layer,
+        similarity: r.similarity,
+      })),
       final_output: result.content,
       final_messages_sent: 1,
       tokens_total_in: result.tokensIn,
@@ -113,5 +140,7 @@ export async function runAgent(input: RunnerInput): Promise<RunnerOutput> {
     tokensOut: result.tokensOut,
     costUsd: result.costUsd,
     durationMs: Date.now() - start,
+    splitMessages: !!typedAgent.persona?.split_messages,
+    replyDelaySeconds: typedAgent.persona?.reply_delay_seconds ?? 2,
   }
 }
