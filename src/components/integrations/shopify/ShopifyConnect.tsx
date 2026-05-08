@@ -70,6 +70,30 @@ export default function ShopifyConnect() {
   const [swapClientSecret, setSwapClientSecret] = useState('');
   const [swapping, setSwapping] = useState(false);
 
+  // Disconnected stores in this org — surfaced on the connect form so
+  // the merchant can REACTIVATE an existing row with a new Shopify
+  // backend instead of creating a fresh row that orphans all data.
+  const [disconnectedStores, setDisconnectedStores] = useState<Array<{
+    id: string
+    shop_domain: string
+    shop_name: string | null
+    currency: string | null
+    plan_name: string | null
+    connection_type: string | null
+    status: string | null
+    uninstalled_at: string | null
+    installed_at: string | null
+    last_sync_at: string | null
+    preserved_data: { contacts: number; automations: number; events: number; orders: number }
+  }>>([])
+  // Which disconnected store is being reactivated (storeId) and the
+  // creds being typed for it.
+  const [reactivatingStoreId, setReactivatingStoreId] = useState<string | null>(null)
+  const [reactivateDomain, setReactivateDomain] = useState('')
+  const [reactivateClientId, setReactivateClientId] = useState('')
+  const [reactivateClientSecret, setReactivateClientSecret] = useState('')
+  const [reactivating, setReactivating] = useState(false)
+
   // When the page was opened via "Adicionar loja" from the integrations
   // list, the URL carries ?add=1. In that case we skip the "connected"
   // view even if there's already a store — the user explicitly wants
@@ -289,6 +313,70 @@ export default function ShopifyConnect() {
       setError('Erro ao atualizar credenciais. Tente novamente.');
     } finally {
       setSavingCreds(false);
+    }
+  }
+
+  // Fetch disconnected stores so we can offer reactivation paths.
+  // Runs whenever the form is shown (i.e. not connected).
+  useEffect(() => {
+    if (loading || (connected && store)) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/integrations/shopify/disconnected-stores')
+        if (!res.ok) return
+        const j = await res.json()
+        if (!cancelled) setDisconnectedStores(j.stores || [])
+      } catch { /* silent */ }
+    })()
+    return () => { cancelled = true }
+  }, [loading, connected, store])
+
+  async function handleReactivate(storeId: string) {
+    const domain = reactivateDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+    const cid = reactivateClientId.trim()
+    const cs = reactivateClientSecret.trim()
+    if (!domain || !cid || !cs) {
+      setError('Preencha domínio, Client ID e Client Secret da nova Shopify.')
+      return
+    }
+    const fullDomain = domain.endsWith('.myshopify.com') ? domain : `${domain}.myshopify.com`
+    setReactivating(true)
+    setError('')
+    setSuccessMessage('')
+    try {
+      const res = await fetch('/api/integrations/shopify/swap-backend', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storeId,
+          newDomain: fullDomain,
+          clientId: cid,
+          clientSecret: cs,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        setError(data.error || 'Falha ao reativar loja.')
+        return
+      }
+      setSuccessMessage(`Loja reativada apontando pra ${fullDomain}. Indo pro diagnóstico…`)
+      setReactivatingStoreId(null)
+      setReactivateDomain('')
+      setReactivateClientId('')
+      setReactivateClientSecret('')
+      // Send the merchant straight to /tracking-debug so they run
+      // Reinstalar tudo on the new shop. Without that step the new
+      // Shopify has no webhooks/pixel registered yet.
+      setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          window.location.href = `/integrations/shopify/tracking-debug`
+        }
+      }, 1500)
+    } catch {
+      setError('Erro ao reativar. Tente novamente.')
+    } finally {
+      setReactivating(false)
     }
   }
 
@@ -781,6 +869,123 @@ export default function ShopifyConnect() {
         <h3 className="text-lg font-semibold text-gray-900">Conecte sua loja Shopify</h3>
         <p className="text-sm text-gray-500">Sincronize pedidos, clientes e ative tracking completo</p>
       </div>
+
+      {/* Disconnected stores — offer reactivation INTO the existing row.
+          Surfaces only when there's data worth preserving (contacts/events/
+          automations) and crucially BEFORE the new-store form so the
+          merchant doesn't accidentally create a duplicate row by typing
+          into the form below. */}
+      {disconnectedStores.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-blue-200">
+            <p className="text-[13px] font-semibold text-blue-900">
+              {disconnectedStores.length === 1 ? 'Loja desativada com dados preservados' : `${disconnectedStores.length} lojas desativadas com dados preservados`}
+            </p>
+            <p className="text-[11.5px] text-blue-700 mt-0.5 leading-relaxed">
+              Em vez de criar uma loja nova (perdendo contatos, fluxos, automações, financeiro), reative a existente com uma <strong>nova Shopify</strong> — pode ser a mesma loja Shopify ou outra. Tudo o que você já tem na Worder fica.
+            </p>
+          </div>
+          <div className="divide-y divide-blue-100">
+            {disconnectedStores.map((s) => {
+              const isExpanded = reactivatingStoreId === s.id
+              const totalRecords = s.preserved_data.contacts + s.preserved_data.events + s.preserved_data.automations + s.preserved_data.orders
+              return (
+                <div key={s.id} className="bg-white">
+                  <div className="px-4 py-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium text-gray-900 truncate">
+                        {s.shop_name || s.shop_domain || 'Loja sem nome'}
+                      </p>
+                      <p className="text-[11px] text-gray-500 font-mono truncate">
+                        {s.shop_domain}
+                      </p>
+                      <p className="text-[10.5px] text-gray-500 mt-0.5">
+                        Dados preservados:{' '}
+                        <span className="font-semibold text-gray-700">{s.preserved_data.contacts}</span> contatos ·{' '}
+                        <span className="font-semibold text-gray-700">{s.preserved_data.events}</span> eventos ·{' '}
+                        <span className="font-semibold text-gray-700">{s.preserved_data.automations}</span> automações ·{' '}
+                        <span className="font-semibold text-gray-700">{s.preserved_data.orders}</span> pedidos
+                        {totalRecords === 0 && <span className="ml-1 text-amber-600">(loja sem histórico — pode ser mais limpo conectar nova)</span>}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (isExpanded) {
+                          setReactivatingStoreId(null)
+                          setReactivateDomain('')
+                          setReactivateClientId('')
+                          setReactivateClientSecret('')
+                        } else {
+                          setReactivatingStoreId(s.id)
+                          setReactivateDomain(s.shop_domain || '')
+                          setReactivateClientId('')
+                          setReactivateClientSecret('')
+                          setError('')
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex-shrink-0"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      {isExpanded ? 'Cancelar' : 'Reativar'}
+                    </button>
+                  </div>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 space-y-3 bg-blue-50/50 border-t border-blue-100 pt-3">
+                      <p className="text-[11.5px] text-blue-800 leading-relaxed">
+                        Cole as credenciais da Shopify pra qual quer apontar esta loja. Pode ser a <strong>mesma de antes</strong> (recuperando a integração) ou uma <strong>nova Shopify</strong>. Os {s.preserved_data.contacts + s.preserved_data.events} registros da Worder ficam preservados em qualquer caso.
+                      </p>
+                      <div>
+                        <label className="block text-[11px] font-medium text-blue-900 mb-1">Domínio da Shopify</label>
+                        <input
+                          type="text"
+                          value={reactivateDomain}
+                          onChange={(e) => setReactivateDomain(e.target.value)}
+                          placeholder="loja.myshopify.com"
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-blue-900 mb-1">Client ID</label>
+                        <input
+                          type="text"
+                          value={reactivateClientId}
+                          onChange={(e) => setReactivateClientId(e.target.value)}
+                          placeholder="Dev Dashboard → Custom App → Client ID"
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-blue-900 mb-1">Client Secret</label>
+                        <input
+                          type="password"
+                          value={reactivateClientSecret}
+                          onChange={(e) => setReactivateClientSecret(e.target.value)}
+                          placeholder="Dev Dashboard → Custom App → Client Secret"
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <button
+                        onClick={() => handleReactivate(s.id)}
+                        disabled={reactivating || !reactivateDomain.trim() || !reactivateClientId.trim() || !reactivateClientSecret.trim()}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+                      >
+                        {reactivating ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Validando e reativando…</>
+                        ) : (
+                          <>Reativar com esta Shopify</>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Connection mode tabs */}
       <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
