@@ -90,7 +90,8 @@ export function normalizeItem(it: any): WorderCanonicalItem {
   const quantity = toNumber(pick(it.Quantity, it.quantity)) ?? 1;
   const rowTotal = toNumber(pick(it.RowTotal, it.line_price, it.final_line_price)) ?? (itemPrice * quantity);
 
-  // Image cascade across every shape
+  // Image cascade across every shape, including the canonical
+  // Product.{VariantImage,Images[0]} produced by enrichShopifyEvent.
   const imageUrl = pick(
     it.ImageURL,
     it.image_url,
@@ -100,11 +101,15 @@ export function normalizeItem(it: any): WorderCanonicalItem {
     it.featured_image?.src,
     it.image?.src,
     it.image?.url,
+    // Canonical-shape paths (filled by the enricher)
+    productObj.VariantImage,
+    productObj.Images?.[0],
+    // Raw-shape paths
+    productObj.variant_images_url,
     productObj.image?.src,
     productObj.images?.[0]?.src,
     productObj.images?.[0]?.url,
-    productObj.product_image_urls?.[0],
-    productObj.variant_images_url
+    productObj.product_image_urls?.[0]
   );
 
   const productUrl = pick(
