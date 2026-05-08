@@ -21,7 +21,9 @@ import type {
   AgentPersonaV1,
   AgentRole,
   AgentSettingsV1,
+  AgentStatus,
 } from '@/lib/ai/types'
+import { statusPillClass, statusLabel } from '@/lib/ai/ui/status'
 
 // =============================================
 // Editor de agente — 5 blocos verticais (F1.8 versão simplificada).
@@ -56,22 +58,6 @@ const DEFAULT_VARIABLE_KEYS = [
   'Email de Contato',
   'Telefone/WhatsApp Oficial',
 ]
-
-const STATUS_PILL: Record<string, string> = {
-  draft: 'bg-amber-50 text-amber-700 border-amber-200',
-  simulating: 'bg-blue-50 text-blue-700 border-blue-200',
-  published: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  paused: 'bg-zinc-100 text-zinc-600 border-zinc-200',
-  archived: 'bg-red-50 text-red-700 border-red-200',
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: 'Rascunho',
-  simulating: 'Simulando',
-  published: 'Publicado',
-  paused: 'Pausado',
-  archived: 'Arquivado',
-}
 
 interface AgentForm {
   name: string
@@ -256,11 +242,11 @@ export default function AgentEditorPage() {
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               {agent && (
                 <span
-                  className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                    STATUS_PILL[agent.status] ?? STATUS_PILL.draft
-                  }`}
+                  className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusPillClass(
+                    agent.status as AgentStatus,
+                  )}`}
                 >
-                  {STATUS_LABEL[agent.status] ?? agent.status}
+                  {statusLabel(agent.status as AgentStatus)}
                 </span>
               )}
               <span className="text-xs text-zinc-500 inline-flex items-center gap-1">

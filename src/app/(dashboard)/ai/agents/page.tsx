@@ -14,7 +14,8 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
-import type { Agent, AgentRole } from '@/lib/ai/types'
+import type { Agent, AgentRole, AgentStatus } from '@/lib/ai/types'
+import { statusPillClass, statusLabel } from '@/lib/ai/ui/status'
 
 const ROLE_LABEL: Record<AgentRole, { label: string; Icon: typeof Sparkles }> = {
   pre_sales: { label: 'Pré-venda', Icon: Sparkles },
@@ -23,22 +24,6 @@ const ROLE_LABEL: Record<AgentRole, { label: string; Icon: typeof Sparkles }> = 
   post_sales: { label: 'Pós-venda', Icon: Package },
   support: { label: 'Atendimento', Icon: Headphones },
   custom: { label: 'Customizado', Icon: HeartHandshake },
-}
-
-const STATUS_PILL: Record<string, string> = {
-  draft: 'bg-amber-50 text-amber-700 border-amber-200',
-  simulating: 'bg-blue-50 text-blue-700 border-blue-200',
-  published: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  paused: 'bg-zinc-100 text-zinc-600 border-zinc-200',
-  archived: 'bg-red-50 text-red-700 border-red-200',
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: 'Rascunho',
-  simulating: 'Simulando',
-  published: 'Publicado',
-  paused: 'Pausado',
-  archived: 'Arquivado',
 }
 
 export default function AgentsListPage() {
@@ -118,7 +103,7 @@ export default function AgentsListPage() {
                 : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'
             }`}
           >
-            {s === 'all' ? 'Todos' : STATUS_LABEL[s]}
+            {s === 'all' ? 'Todos' : statusLabel(s as AgentStatus)}
           </button>
         ))}
       </div>
@@ -173,11 +158,11 @@ export default function AgentsListPage() {
                     <RoleIcon className="w-5 h-5 text-orange-600" strokeWidth={1.75} />
                   </div>
                   <span
-                    className={`text-xs font-medium px-2 py-1 rounded-full border ${
-                      STATUS_PILL[agent.status] ?? STATUS_PILL.draft
-                    }`}
+                    className={`text-xs font-medium px-2 py-1 rounded-full ${statusPillClass(
+                      agent.status as AgentStatus,
+                    )}`}
                   >
-                    {STATUS_LABEL[agent.status] ?? agent.status}
+                    {statusLabel(agent.status as AgentStatus)}
                   </span>
                 </div>
                 <h3 className="text-base font-semibold text-zinc-900 mb-1 truncate">

@@ -3,16 +3,16 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  Sparkle as Sparkles,
-  TrendUp as TrendingUp,
-  CurrencyDollar,
-  ChatCircleDots,
+  Sparkles,
+  TrendingUp,
+  DollarSign,
+  MessageCircle,
   Pause,
   ArrowRight,
   Gauge,
   Plus,
-} from '@phosphor-icons/react'
-import { Loader2 } from 'lucide-react'
+  Loader2,
+} from 'lucide-react'
 import { useAuthStore } from '@/stores'
 
 // =============================================
@@ -149,7 +149,7 @@ export default function AIOverviewPage() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm
                        font-medium rounded-md hover:bg-orange-600 transition-colors"
           >
-            <Plus size={16} />
+            <Plus className="w-4 h-4" strokeWidth={1.75} />
             Novo agente
           </Link>
         </div>
@@ -170,7 +170,7 @@ export default function AIOverviewPage() {
       {!loading && data && data.counts.totalAgents === 0 && (
         <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-orange-50 mb-3">
-            <Sparkles size={24} weight="regular" className="text-orange-600" />
+            <Sparkles className="w-6 h-6 text-orange-600" strokeWidth={1.75} />
           </div>
           <h2 className="text-lg font-semibold text-zinc-900 mb-1">
             Crie seu primeiro agente
@@ -183,7 +183,7 @@ export default function AIOverviewPage() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm
                        font-medium rounded-md hover:bg-orange-600 transition-colors"
           >
-            <Plus size={16} />
+            <Plus className="w-4 h-4" strokeWidth={1.75} />
             Novo agente
           </Link>
         </div>
@@ -194,7 +194,7 @@ export default function AIOverviewPage() {
           {/* KPI grid 4 col */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard
-              icon={<CurrencyDollar size={18} />}
+              icon={<DollarSign className="w-4 h-4" strokeWidth={1.75} />}
               label="Receita atribuída"
               value={formatBRL(data.current.revenueBrl)}
               delta={formatDelta(data.delta.revenueBrl)}
@@ -202,21 +202,21 @@ export default function AIOverviewPage() {
               highlight
             />
             <KpiCard
-              icon={<ChatCircleDots size={18} />}
+              icon={<MessageCircle className="w-4 h-4" strokeWidth={1.75} />}
               label="Conversas atendidas"
               value={data.current.total.toLocaleString('pt-BR')}
               delta={formatDelta(data.delta.total)}
               positive={data.delta.total >= 0}
             />
             <KpiCard
-              icon={<TrendingUp size={18} />}
+              icon={<TrendingUp className="w-4 h-4" strokeWidth={1.75} />}
               label="Taxa de conversão"
               value={formatPercent(data.current.conversionRate)}
               delta={formatDelta(data.delta.conversionRate, 'pp')}
               positive={data.delta.conversionRate >= 0}
             />
             <KpiCard
-              icon={<Gauge size={18} />}
+              icon={<Gauge className="w-4 h-4" strokeWidth={1.75} />}
               label="Latência média"
               value={`${(data.current.avgDurationMs / 1000).toFixed(1)}s`}
               delta="—"
@@ -226,28 +226,28 @@ export default function AIOverviewPage() {
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard
-              icon={<CurrencyDollar size={18} />}
+              icon={<DollarSign className="w-4 h-4" strokeWidth={1.75} />}
               label="Custo total (USD)"
               value={`$${data.current.costUsd.toFixed(2)}`}
               delta={formatDelta(data.delta.costUsd)}
               positive={data.delta.costUsd <= 0}
             />
             <KpiCard
-              icon={<Pause size={18} />}
+              icon={<Pause className="w-4 h-4" strokeWidth={1.75} />}
               label="IA pausada"
               value={data.counts.conversationsAIPaused.toLocaleString('pt-BR')}
               delta="—"
               positive={true}
             />
             <KpiCard
-              icon={<Sparkles size={18} weight="regular" />}
+              icon={<Sparkles className="w-4 h-4" strokeWidth={1.75} />}
               label="Agentes publicados"
               value={`${data.counts.publishedAgents} / ${data.counts.totalAgents}`}
               delta="—"
               positive={true}
             />
             <KpiCard
-              icon={<ArrowRight size={18} />}
+              icon={<ArrowRight className="w-4 h-4" strokeWidth={1.75} />}
               label="Taxa de escalação"
               value={formatPercent(data.current.escalationRate)}
               delta="—"
