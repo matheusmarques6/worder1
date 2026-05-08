@@ -333,6 +333,55 @@ const actionExecutors: Record<string, NodeExecutor> = {
           }
         }
 
+        // 2b-2. Conversion guard for cart-recovery / checkout-abandon flows.
+        //
+        // When the trigger fired on checkout_started, the merchant doesn't
+        // want the email going out if the customer has since completed
+        // the purchase (during the delay window). Same for added_to_cart.
+        //
+        // Check: was a placed_order / order_paid / checkout_completed
+        // event recorded for the same contact AFTER the trigger fired?
+        // If yes, this run is no longer relevant — skip the email.
+        if (!isTest && context.contact?.id) {
+          const triggerType = (context as any).trigger?.type || '';
+          const triggerEventType = String((context.trigger?.data as any)?.event_type || '').toLowerCase();
+          const isAbandonmentFlow =
+            triggerType === 'trigger_checkout_abandoned' ||
+            triggerType === 'trigger_added_to_cart' ||
+            triggerType === 'trigger_browse_abandoned' ||
+            triggerEventType === 'checkout_started' ||
+            triggerEventType === 'added_to_cart' ||
+            triggerEventType === 'browse_abandoned';
+
+          if (isAbandonmentFlow) {
+            // The trigger fired at metadata.created_at (from the run's
+            // origin); we don't have that here directly, so we use the
+            // contact's last_event_at as a proxy floor. Better: pull
+            // explicit window from automation config when present.
+            const windowMs = (config.conversionWindowHours || 24) * 60 * 60 * 1000;
+            const since = new Date(Date.now() - windowMs).toISOString();
+            const { data: completion } = await supabase
+              .from('contact_events')
+              .select('id, event_type, occurred_at')
+              .eq('contact_id', context.contact.id)
+              .in('event_type', ['placed_order', 'order_paid', 'checkout_completed'])
+              .gte('occurred_at', since)
+              .order('occurred_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (completion) {
+              return {
+                status: 'success',
+                output: {
+                  skipped: true,
+                  reason: `Conversão detectada (${completion.event_type} em ${completion.occurred_at}). Email de recuperação cancelado.`,
+                  converted_at: completion.occurred_at,
+                },
+              };
+            }
+          }
+        }
+
         // 2c. UTM Tracking — append UTM params to all links
         if (config.utmTracking) {
           const utmSource = config.utmSource || 'worder';

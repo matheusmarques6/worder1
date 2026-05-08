@@ -314,14 +314,31 @@ async function handleExecuteRun(runId: string) {
   }
 
   try {
+    // Resume context: when a previously-waiting run is being picked up
+    // by the delayed-runs cron, metadata.waiting_at carries the node id
+    // we paused at. We pass startFromNodeId so the engine continues
+    // AFTER that node (the engine looks up the next edge target).
+    // Without this, every resumed run restarts from the trigger and
+    // hits the same delay again — infinite loop / never completes.
+    const previousWaitingAt = (metadata as any).waiting_at;
+    const previousContext = (metadata as any).context;
+    const isResume = !!previousWaitingAt?.nodeId;
+
+    let startFromNodeId: string | undefined;
+    if (isResume) {
+      const edge = (workflow.edges || []).find((e: any) => e.source === previousWaitingAt.nodeId);
+      startFromNodeId = edge?.target;
+    }
+
     // Execute workflow with organization context
     const result = await executeWorkflow(workflow, {
       organizationId,  // ← PASSAR PARA O ENGINE
       executionId: runId,
+      startFromNodeId,
       triggerData: metadata.trigger_data || {},
       contactId: run.contact_id,
       dealId: metadata.deal_id,
-      context: {
+      context: previousContext || {
         organizationId,  // ← INCLUIR NO CONTEXTO
         contact: contact ? {
           id: contact.id,
@@ -340,21 +357,53 @@ async function handleExecuteRun(runId: string) {
       },
     });
 
-    // Update run with results
+    // Update run with results.
+    //
+    // CRITICAL: when the engine returns status='waiting', we MUST persist
+    // waiting_until + current_node_id so the delayed-runs cron can find
+    // and resume this run later. Without these writes, runs get stuck
+    // in 'waiting' forever — the cron query
+    //   WHERE status='waiting' AND waiting_until <= NOW()
+    // never matches a row with NULL waiting_until.
+    //
+    // Also persist waiting_at + context in metadata so the resume path
+    // above can pick up exactly where we left off (next node after the
+    // delay) instead of restarting the workflow.
+    const isWaiting = result.status === 'waiting';
+    const waitingAt = (result as any).waitingAt;
+    const updatePayload: Record<string, any> = {
+      status: isWaiting ? 'waiting' : (result.status === 'success' ? 'completed' : 'failed'),
+      completed_at: !isWaiting ? new Date().toISOString() : null,
+      last_error: result.error || null,
+      metadata: {
+        ...metadata,
+        result: {
+          duration: result.duration,
+          nodeResults: result.nodeResults,
+        },
+        // Snapshot for the cron to resume cleanly
+        ...(isWaiting && waitingAt ? {
+          waiting_at: {
+            nodeId: waitingAt.nodeId,
+            resumeAt: waitingAt.resumeAt,
+            data: waitingAt.data,
+          },
+          context: (result as any).context,
+        } : {}),
+      },
+    };
+    if (isWaiting && waitingAt?.resumeAt) {
+      updatePayload.waiting_until = waitingAt.resumeAt;
+      updatePayload.current_node_id = waitingAt.nodeId;
+    } else if (!isWaiting) {
+      // Clean up resume markers on terminal states.
+      updatePayload.waiting_until = null;
+      updatePayload.current_node_id = null;
+    }
+
     await supabase
       .from('automation_runs')
-      .update({
-        status: result.status === 'waiting' ? 'waiting' : (result.status === 'success' ? 'completed' : 'failed'),
-        completed_at: result.status !== 'waiting' ? new Date().toISOString() : null,
-        metadata: {
-          ...metadata,
-          result: {
-            duration: result.duration,
-            nodeResults: result.nodeResults,
-          },
-        },
-        last_error: result.error || null,
-      })
+      .update(updatePayload)
       .eq('id', runId);
 
     return NextResponse.json({
