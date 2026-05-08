@@ -328,9 +328,14 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
 
               {/* Preview frame — `min-h-0` is required for the inner
                   overflow-auto to actually scroll when nested in a
-                  flex column (the default min-height:auto would let the
-                  child grow to its content height, defeating overflow). */}
-              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-white px-6 py-8 flex justify-center">
+                  flex column. Scrollbar visually hidden via inline
+                  style block below; scroll itself stays functional. */}
+              <style>{`
+                .worder-preview-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
+                .worder-preview-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+              `}</style>
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-white px-6 py-8 flex justify-center items-start worder-preview-scroll"
+                   style={{ scrollBehavior: 'smooth' }}>
                 {loading ? (
                   <div className="flex items-center justify-center h-full">
                     <Loader2 className="w-5 h-5 text-zinc-400 animate-spin" />
@@ -560,23 +565,49 @@ function PreviewIframe({ html, viewMode }: { html: string; viewMode: 'desktop' |
 <head>
 <meta charset="utf-8">
 <base target="_blank">
-<style>html,body{margin:0;padding:0;}</style>
+<style>html,body{margin:0;padding:0;overflow:hidden;}</style>
 </head>
 <body>
 ${html}
 <script>
+  var lastReported = 0;
   function reportSize(){
-    var h = document.documentElement.scrollHeight || document.body.scrollHeight || 0;
-    try { parent.postMessage({ type: 'worder:preview-size', height: h }, '*'); } catch(_){}
+    var h = Math.max(
+      document.documentElement.scrollHeight || 0,
+      document.documentElement.offsetHeight || 0,
+      document.body.scrollHeight || 0,
+      document.body.offsetHeight || 0
+    );
+    if (h && Math.abs(h - lastReported) >= 1) {
+      lastReported = h;
+      try { parent.postMessage({ type: 'worder:preview-size', height: h }, '*'); } catch(_){}
+    }
   }
-  // Initial + after images load + after resize. Two RAFs cover late layout passes.
+  // Initial passes — RAF covers the late layout pass after style/asset
+  // application; load handles HTML+image full load.
   reportSize();
   requestAnimationFrame(function(){ requestAnimationFrame(reportSize); });
   window.addEventListener('load', reportSize);
   window.addEventListener('resize', reportSize);
+  // Watch every image — emails are heavily image-driven and the iframe
+  // must grow as each one decodes.
   Array.prototype.forEach.call(document.images, function(img){
     if (!img.complete) img.addEventListener('load', reportSize);
+    img.addEventListener('error', reportSize);
   });
+  // ResizeObserver: catches dynamic content (lazy-loaded images decoding,
+  // late web font swaps shifting line heights, etc.) without polling.
+  if (typeof ResizeObserver !== 'undefined') {
+    try {
+      new ResizeObserver(reportSize).observe(document.documentElement);
+    } catch(_){}
+  }
+  // Belt-and-suspenders polling for the first 5s in case all the above miss.
+  var pollGuard = 0;
+  var pollInterval = setInterval(function(){
+    reportSize();
+    if (++pollGuard >= 10) clearInterval(pollInterval);
+  }, 500);
 </script>
 </body>
 </html>`;

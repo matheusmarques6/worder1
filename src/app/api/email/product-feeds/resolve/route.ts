@@ -33,16 +33,27 @@ export async function POST(request: NextRequest) {
       // or .product.product_image_urls[0]. Webhook handler sometimes
       // pre-flattens to ImageURL/image_url. Cascade through all of
       // them so we never end up with a blank product card.
+      // Shopify cart line_items put the variant image at
+      // featured_image.url (not nested .product). Pixel events store
+      // strings directly. Webhook flattens to ImageURL/image_url.
+      // Canonical layer uses ImageURL. Cover them all.
       const imageUrl =
         it.ImageURL ||
         it.image_url ||
         it.imageUrl ||
+        it.featured_image?.url ||
+        it.featured_image?.src ||
+        (typeof it.image === 'string' ? it.image : null) ||
         it.image?.src ||
+        it.image?.url ||
+        it.product?.variant_images_url ||
         it.product?.image?.src ||
         it.product?.images?.[0]?.src ||
+        it.product?.images?.[0]?.url ||
         it.product?.product_image_urls?.[0] ||
-        it.product?.variant_images_url ||
         it.variant?.image?.src ||
+        it.Product?.VariantImage ||
+        it.Product?.Images?.[0] ||
         null
       const productUrl =
         it.ProductURL ||
@@ -211,7 +222,14 @@ export async function POST(request: NextRequest) {
           []
 
         if (Array.isArray(itemsList) && itemsList.length > 0) {
-          products = itemsList.slice(0, limit).map((it: any) => mapTriggerItem(it))
+          // Capture variant_id alongside each mapped product so we can
+          // resolve the VARIANT-specific image (not just the first
+          // product image) when enriching from shopify_products.
+          products = itemsList.slice(0, limit).map((it: any, idx: number) => ({
+            ...mapTriggerItem(it),
+            _variant_id: String(it.VariantID || it.variant_id || it.variantId || it.id || '') || null,
+            _idx: idx,
+          }))
           // Enrich missing image_url + url from shopify_products.
           // Pixel events from the Custom Pixel sandbox don't carry
           // image URLs at all (Shopify's Customer Events sandbox only
@@ -223,7 +241,7 @@ export async function POST(request: NextRequest) {
             try {
               const { data: dbProducts } = await supabaseAdmin
                 .from('shopify_products')
-                .select('shopify_product_id, title, handle, images, price')
+                .select('shopify_product_id, title, handle, images, variants, price')
                 .eq('organization_id', orgId)
                 .in('shopify_product_id', ids)
               const byId = new Map<string, any>()
@@ -244,11 +262,35 @@ export async function POST(request: NextRequest) {
                 if (!pid) continue
                 const dp = byId.get(pid)
                 if (!dp) continue
-                if (!p.image_url && Array.isArray(dp.images) && dp.images.length > 0) {
-                  p.image_url = dp.images[0]?.url || dp.images[0]?.src || null
+                // Variant-specific image: when the line item has a
+                // variant_id, find the matching variant's image_id, then
+                // pick the corresponding entry in the product's images
+                // array. This produces the image of the COLOR/SIZE the
+                // customer actually picked instead of always the
+                // featured product image.
+                if (!p.image_url) {
+                  const variantId = (p as any)._variant_id
+                  const variants: any[] = Array.isArray(dp.variants) ? dp.variants : []
+                  const matchedVariant = variantId
+                    ? variants.find((v: any) => String(v.id) === String(variantId))
+                    : null
+                  let pickedImage: string | null = null
+                  if (matchedVariant?.image_id && Array.isArray(dp.images)) {
+                    const variantImg = dp.images.find((img: any) => String(img?.id) === String(matchedVariant.image_id))
+                    pickedImage = variantImg?.src || variantImg?.url || null
+                  }
+                  if (!pickedImage && Array.isArray(dp.images) && dp.images.length > 0) {
+                    pickedImage = dp.images[0]?.url || dp.images[0]?.src || null
+                  }
+                  if (pickedImage) p.image_url = pickedImage
                 }
                 if ((!p.url || p.url === '#') && shopDomain && dp.handle) {
-                  p.url = `https://${shopDomain}/products/${dp.handle}`
+                  // Append variant=<id> so the deeplink lands on the
+                  // exact variant the customer picked.
+                  const variantId = (p as any)._variant_id
+                  p.url = variantId
+                    ? `https://${shopDomain}/products/${dp.handle}?variant=${variantId}`
+                    : `https://${shopDomain}/products/${dp.handle}`
                 }
                 if (!p.title || p.title === 'Product') {
                   p.title = dp.title || p.title
@@ -256,8 +298,16 @@ export async function POST(request: NextRequest) {
                 if ((!p.price || p.price === 0) && dp.price) {
                   p.price = parseFloat(String(dp.price))
                 }
+                // Strip the helper fields before the response
+                delete (p as any)._variant_id
+                delete (p as any)._idx
               }
             } catch { /* non-blocking */ }
+          }
+          // Final cleanup of helper fields (in case enrichment didn't run)
+          for (const p of products) {
+            delete (p as any)._variant_id
+            delete (p as any)._idx
           }
         } else if (
           eventType === 'viewed_product' ||
