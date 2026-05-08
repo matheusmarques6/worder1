@@ -524,13 +524,36 @@ async function handleCheckoutFromEvents(opts: {
     ) || null;
   }
 
-  // Filter at the source: only events with email/phone qualify.
-  // contact_id alone is NOT enough because we sometimes attach
-  // contact_id from earlier identity, but the merchant cares about
-  // checkouts where the buyer ACTUALLY entered contact info on the
-  // checkout form.
+  // Pre-compute which contacts have email/phone so we can pass the
+  // Shopify "contact info required" rule even when the event itself
+  // doesn't carry email (pixel sandbox + checkout_started fires
+  // BEFORE the customer types email at the checkout form). Identity
+  // graph link to a contact = customer is identifiable = qualifies.
+  const allContactIds = [...new Set((startedEvents || []).map((e: any) => e.contact_id).filter(Boolean))] as string[];
+  const contactsWithInfo = new Set<string>();
+  if (allContactIds.length > 0) {
+    try {
+      const { data: contactRows } = await supabaseAdmin
+        .from('contacts')
+        .select('id, email, phone')
+        .in('id', allContactIds);
+      for (const c of (contactRows || []) as any[]) {
+        if (c.email || c.phone) contactsWithInfo.add(c.id);
+      }
+    } catch {}
+  }
+
+  // Filter to events with contact info (Shopify rule). Three ways to
+  // qualify:
+  //   1. Event itself has email/phone in properties or raw
+  //   2. Event is linked to a contact that has email/phone (identity
+  //      graph stitched from popup, prior identification, or webhook)
+  //   3. Event has shopify_resource_id matching a webhook checkout that
+  //      DID carry email (covered by 1 since we also walk raw.email)
   const eligibleEvents = startedEvents.filter((e: any) => {
-    return !!extractEmail(e) || !!extractPhone(e);
+    if (extractEmail(e) || extractPhone(e)) return true;
+    if (e.contact_id && contactsWithInfo.has(e.contact_id)) return true;
+    return false;
   });
 
   // Group by canonical checkout_id when available, falling back to
