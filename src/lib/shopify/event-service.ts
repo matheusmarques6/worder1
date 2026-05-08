@@ -74,13 +74,46 @@ export interface EventQueryOptions {
 export async function createEvent(input: CreateEventInput): Promise<EventRecord | null> {
   const supabase = getSupabaseAdmin();
 
+  // Normalize properties to the canonical Worder schema BEFORE storage.
+  // Every event in contact_events ends up with stable top-level fields
+  // ({{CheckoutURL}}, {{Items[0].ProductName}}, …) regardless of which
+  // integration produced it (Shopify pixel, Shopify webhook, future
+  // Yampi / WooCommerce). Original payload preserved on properties.raw.
+  let mergedProperties: Record<string, any> = input.properties;
+  try {
+    const { normalizeToCanonical } = await import('@/lib/cdp/normalize-to-canonical');
+    let storeDomain: string | null = null;
+    if (input.store_id) {
+      try {
+        const { data: storeRow } = await supabase
+          .from('shopify_stores')
+          .select('shop_domain')
+          .eq('id', input.store_id)
+          .maybeSingle();
+        storeDomain = storeRow?.shop_domain || null;
+      } catch { /* best-effort */ }
+    }
+    const canonical = normalizeToCanonical(input.properties, {
+      source: input.event_source,
+      storeDomain,
+      rawEventType: input.event_type,
+    });
+    // Merge canonical onto incoming properties — top-level canonical
+    // names like CheckoutURL, Items, Customer, etc. overwrite anything
+    // that conflicts. Non-canonical keys (custom merchant data, source-
+    // specific extras) are preserved.
+    mergedProperties = { ...input.properties, ...canonical };
+  } catch (e) {
+    console.warn('[createEvent] canonical normalization failed (non-fatal):', e);
+  }
+
   const record = {
     organization_id: input.organization_id,
     contact_id: input.contact_id || null,
     store_id: input.store_id || null,
     event_type: input.event_type,
     event_source: input.event_source,
-    properties: input.properties,
+    properties: mergedProperties,
     monetary_value: input.monetary_value ?? null,
     currency: input.currency || 'BRL',
     shopify_resource_id: input.shopify_resource_id || null,

@@ -181,14 +181,16 @@ export function resolveTriggerSmartTags(html: string, eventData: any, storeUrl?:
   const props = ev.properties || ev;
   const raw = props.raw || ev.raw || {};
 
-  // Smart link — first non-empty wins
+  // Smart link — first non-empty wins. Canonical fields tried FIRST so
+  // future integrations work without changing this resolver.
   const link =
-    props.CheckoutURL ||
-    props.checkout_url ||
+    props.CheckoutURL ||                   // canonical
+    props.checkout_url ||                  // legacy lowercase
+    props.AbandonedCheckoutURL ||
+    props.ProductURL ||                    // canonical (single-product events)
+    props.OrderStatusURL ||                // canonical
     raw.abandoned_checkout_url ||
     raw.recovery_url ||
-    props.AbandonedCheckoutURL ||
-    props.ProductURL ||
     props.product_url ||
     (Array.isArray(props.Items) && props.Items[0]?.ProductURL) ||
     raw.order_status_url ||

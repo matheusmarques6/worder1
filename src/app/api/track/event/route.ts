@@ -461,6 +461,28 @@ export async function POST(request: NextRequest) {
       console.warn('[track/event] enrichment failed (non-fatal):', enrichErr);
     }
 
+    // ---- Normalize to canonical Worder schema ----
+    // Every event in the system flows through this — Shopify pixel,
+    // storefront tracker, future Yampi/WooCommerce handlers all converge
+    // on the same WorderCanonicalEvent shape. Templates reference stable
+    // names ({{ CheckoutURL }}, {{ Items[0].ProductName }}, etc.) that
+    // never change regardless of source. Original payload is preserved
+    // on `raw` so power-user templates can still drill in.
+    try {
+      const { normalizeToCanonical } = await import('@/lib/cdp/normalize-to-canonical');
+      const canonical = normalizeToCanonical(enrichedProperties, {
+        source: eventSource,
+        storeDomain: storeDomain || null,
+        rawEventType: eventType,
+      });
+      // Stamp the canonical fields onto the properties at the top level
+      // so {{ trigger.CheckoutURL }} resolves directly without traversing
+      // raw.* — the canonical layer is the contract.
+      Object.assign(enrichedProperties, canonical);
+    } catch (canonErr) {
+      console.warn('[track/event] canonical normalization failed (non-fatal):', canonErr);
+    }
+
     // ---- Insert event ----
     const now = new Date().toISOString();
     // Prefer the canonical worder_visitor_id from the identity graph when
