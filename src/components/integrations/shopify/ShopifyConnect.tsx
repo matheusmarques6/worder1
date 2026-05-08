@@ -215,22 +215,24 @@ export default function ShopifyConnect() {
         if (pRes.ok && pJson.code) setPixelCode(pJson.code);
       } catch { /* non-blocking */ }
 
-      // Auto-run install-extras + start sync. Replaces the old "you need
-      // to click Reinstalar tudo and Custom Pixel and sync separately"
-      // chain with a single connect-and-go flow.
+      // Kick off install-extras + sync in background. The merchant
+      // doesn't wait — both run server-side detached. The wizard +
+      // diagnostic dashboard show progress as webhooks register and
+      // products/orders stream in.
       const sId = data.store?.id;
       if (sId) {
-        await runPostConnectCascade(sId, data.store?.domain || domain);
+        startPostConnectCascade(sId);
+        setSuccessMessage(`Conectada! Registrando webhooks, pixel e importando dados em segundo plano. Aguarde alguns minutos pra ver tudo no diagnóstico.`);
       }
 
-      // Land on install-pixel — even with auto-install, manual integrations
-      // often lack write_pixels scope so the merchant has to paste the
-      // Custom Pixel snippet themselves. The wizard guides that step.
+      // Land on install-pixel — manual integrations usually lack the
+      // write_pixels scope so the merchant has to paste the Custom Pixel
+      // snippet themselves. The wizard guides that step.
       try {
         if (sId && typeof window !== 'undefined') {
           setTimeout(() => {
             window.location.href = `/integrations/shopify/install-pixel?storeId=${sId}`;
-          }, 2500);
+          }, 1500);
         }
       } catch { /* fall back to manual exit via "Voltar" */ }
     } catch {
@@ -309,38 +311,28 @@ export default function ShopifyConnect() {
     return () => { cancelled = true }
   }, [loading, connected, store])
 
-  // Run the post-connect cascade: register webhooks + install pixel +
-  // install storefront tracker + start initial sync. Each step shows a
-  // progressive status so the merchant sees what's happening instead of
-  // staring at a frozen UI for ~30s.
-  async function runPostConnectCascade(storeId: string, domain: string) {
-    try {
-      setSuccessMessage(`Conectada em ${domain}. Registrando webhooks e instalando scripts…`)
-      const installRes = await fetch('/api/shopify/install-extras', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId }),
-      })
-      const installJson = await installRes.json().catch(() => ({}))
-      if (!installRes.ok || installJson.error) {
-        setSuccessMessage(`Conectada em ${domain}. Houve problemas em alguns extras (${installJson.error || 'erro'}). Você pode rodar "Reinstalar tudo" no diagnóstico.`)
-      } else {
-        const wh = installJson.webhooks || {}
-        const swapped = installJson.domainCanonicalization?.swapped
-        const canonicalNote = swapped ? ` Domínio canônico: ${installJson.domainCanonicalization.canonical}.` : ''
-        setSuccessMessage(`Conectada.${canonicalNote} ${wh.created || 0} webhooks novos · ${wh.existing || 0} já existiam · pixel ${installJson.pixel?.installed ? 'instalado' : 'pendente'} · tracker ${installJson.tracker?.installed ? 'instalado' : 'pendente'}. Iniciando importação dos dados…`)
-      }
-    } catch (e: any) {
-      setSuccessMessage(`Conectada em ${domain}. Falha em "Reinstalar tudo": ${e?.message || 'erro de rede'}. Rode manualmente no diagnóstico.`)
-    }
+  // Kick off the post-connect cascade in the BACKGROUND:
+  //   1. install-extras (webhooks, Custom Pixel, loader, tracker)
+  //   2. sync-now       (products, customers, orders, refunds)
+  //
+  // Both fire-and-forget — the merchant doesn't wait. The diagnostic
+  // dashboard (/tracking-debug) auto-refreshes every 5s and shows
+  // webhooks appearing, pixel install status flipping, contact_events
+  // streaming in. That's better feedback than blocking the connect
+  // button for 30+ seconds while everything runs serially.
+  function startPostConnectCascade(storeId: string) {
+    fetch('/api/shopify/install-extras', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId }),
+      keepalive: true,
+    }).then(() => {}, () => {})
 
-    // Fire-and-forget sync. Importing thousands of products/orders can
-    // take several minutes — we don't block the UI on it. The status
-    // dashboard shows progress.
     fetch('/api/shopify/sync-now', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ storeId, syncType: 'all' }),
+      keepalive: true,
     }).then(() => {}, () => {})
   }
 
@@ -372,24 +364,23 @@ export default function ShopifyConnect() {
         setError(data.error || 'Falha ao reativar loja.')
         return
       }
-      setSuccessMessage(`Reativando ${fullDomain}…`)
+      const finalDomain = data.store?.shop_domain || fullDomain
+      setSuccessMessage(`Conectada em ${finalDomain}! Registrando webhooks, pixel e importando dados em segundo plano. Acompanhe o progresso no diagnóstico.`)
       setReactivatingStoreId(null)
       setReactivateDomain('')
       setReactivateClientId('')
       setReactivateClientSecret('')
 
-      // Auto-run install-extras + sync. The merchant doesn't need to
-      // click "Reinstalar tudo" anymore — webhooks/pixel/tracker get
-      // registered automatically and initial import starts in background.
-      const finalDomain = data.store?.shop_domain || fullDomain
-      await runPostConnectCascade(storeId, finalDomain)
+      // Kick off install-extras + sync in background. The merchant can
+      // navigate freely — both run server-side without blocking.
+      startPostConnectCascade(storeId)
 
-      // Land on the diagnostic so the merchant sees realtime status.
+      // Quick redirect to the diagnostic so progress is visible.
       setTimeout(() => {
         if (typeof window !== 'undefined') {
           window.location.href = `/integrations/shopify/tracking-debug`
         }
-      }, 2500)
+      }, 1200)
     } catch {
       setError('Erro ao reativar. Tente novamente.')
     } finally {
@@ -427,23 +418,22 @@ export default function ShopifyConnect() {
         setError(data.error || 'Falha ao trocar Shopify.');
         return;
       }
-      setSuccessMessage(`Shopify trocada pra ${fullDomain}. Configurando…`);
+      const finalDomain = data.store?.shop_domain || fullDomain;
+      setSuccessMessage(`Shopify trocada pra ${finalDomain}! Webhooks, pixel e importação rodando em segundo plano. Acompanhe no diagnóstico.`);
       setShowSwap(false);
       setSwapDomain('');
       setSwapClientId('');
       setSwapClientSecret('');
 
-      // Auto-run install-extras + sync — same cascade as manual connect
-      // and reactivate, so the merchant gets webhooks/pixel/tracker
-      // registered without any extra clicks.
-      const finalDomain = data.store?.shop_domain || fullDomain;
-      await runPostConnectCascade(store.id, finalDomain);
+      // Fire-and-forget cascade — install-extras + sync run server-side
+      // without blocking the merchant. Diagnostic dashboard streams progress.
+      startPostConnectCascade(store.id);
 
       setTimeout(() => {
         if (typeof window !== 'undefined') {
           window.location.href = `/integrations/shopify/tracking-debug`;
         }
-      }, 2500);
+      }, 1200);
     } catch {
       setError('Erro ao trocar Shopify. Tente novamente.');
     } finally {

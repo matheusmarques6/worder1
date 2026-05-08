@@ -425,6 +425,39 @@ export async function POST(request: NextRequest) {
     enrichedProperties.browser = browser;
     enrichedProperties.os = os;
 
+    // ---- Enrich checkout/cart/product events from local DB caches ----
+    // Pixel events arrive flat (just title, price, product_id). Webhook
+    // events ship a rich raw payload with nested customer + line_items[].
+    // To make pixel events feel as rich as Omnisend (so flow templates
+    // resolve {{ trigger.raw.line_items[0].product.tags }} the same way
+    // regardless of source), we enrich line items from shopify_products
+    // and customer info from contacts. Best-effort, never blocks insert.
+    try {
+      const { enrichShopifyEvent } = await import('@/lib/cdp/enrich-shopify-event');
+      // shopDomain for product_url construction
+      let shopDomain: string | null = null;
+      try {
+        const { data: storeRow } = await supabase
+          .from('shopify_stores')
+          .select('shop_domain')
+          .eq('id', store.id)
+          .maybeSingle();
+        shopDomain = storeRow?.shop_domain || null;
+      } catch { /* best-effort */ }
+      const enrichedFull = await enrichShopifyEvent(mappedEventType, enrichedProperties, {
+        supabase,
+        storeId: store.id,
+        organizationId,
+        shopDomain,
+        contactId: contactId || null,
+        email: email || null,
+      });
+      // Merge enrichment back — preserves anything the caller already set.
+      Object.assign(enrichedProperties, enrichedFull);
+    } catch (enrichErr) {
+      console.warn('[track/event] enrichment failed (non-fatal):', enrichErr);
+    }
+
     // ---- Insert event ----
     const now = new Date().toISOString();
     // Prefer the canonical worder_visitor_id from the identity graph when
