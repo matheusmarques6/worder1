@@ -316,6 +316,34 @@ export async function POST(request: NextRequest) {
       },
     };
 
+    // Free up the canonical primaryDomain if any OTHER inactive row is
+    // sitting on it. Without this the unique constraint idx_shopify_domain
+    // blocks every reconnection where the canonical was previously held
+    // by a row the merchant excluded.
+    {
+      const { data: blockers } = await supabase
+        .from('shopify_stores')
+        .select('id, shop_domain, is_active')
+        .eq('organization_id', organizationId)
+        .eq('shop_domain', primaryDomain)
+        .neq('id', existingStore?.id || '00000000-0000-0000-0000-000000000000');
+      for (const b of (blockers || []) as any[]) {
+        if (b.is_active) {
+          return NextResponse.json({
+            error: `Outra loja ATIVA já usa ${primaryDomain}. Mescle ou exclua antes de prosseguir.`,
+            collidingStoreId: b.id,
+          }, { status: 409 });
+        }
+        // Inactive — free the domain by renaming to a placeholder so
+        // the unique constraint releases. Row stays in DB for audit.
+        const placeholder = `archived-${b.id}.worder.local`;
+        await supabase
+          .from('shopify_stores')
+          .update({ shop_domain: placeholder, updated_at: new Date().toISOString() })
+          .eq('id', b.id);
+      }
+    }
+
     let storeId: string;
     // Helper: retry the write without columns that may not exist in
     // older schemas. Catches PGRST204 (PostgREST schema cache miss)

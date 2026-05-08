@@ -188,6 +188,42 @@ export async function PATCH(request: NextRequest) {
     }
     aliases.delete(primaryDomain); // primary doesn't go in aliases
 
+    // Free up the canonical primaryDomain if any OTHER row is currently
+    // sitting on it. Common case: merchant excluded the previously-active
+    // row (Based - lojalaclode) leaving it is_active=false but still
+    // holding shop_domain=lojalaclode. Then they reactivate Based - sourosa,
+    // which canonicalizes to lojalaclode, and the unique constraint
+    // idx_shopify_domain blocks the UPDATE.
+    //
+    // We renombre the colliding inactive row's domain to a placeholder
+    // so the canonical is free for the row being reactivated. The
+    // colliding row stays in DB (data preserved, audit trail intact)
+    // but won't resolve any webhook because its domain is now bogus
+    // and is_active=false anyway.
+    {
+      const { data: blockers } = await supabase
+        .from('shopify_stores')
+        .select('id, shop_domain, is_active')
+        .eq('organization_id', organizationId)
+        .neq('id', storeId)
+        .eq('shop_domain', primaryDomain);
+      for (const b of (blockers || []) as any[]) {
+        if (b.is_active) {
+          // Active conflict — refuse (user must merge first)
+          return NextResponse.json({
+            error: `Outra loja ATIVA já usa ${primaryDomain}. Mescle ou exclua antes de prosseguir.`,
+            collidingStoreId: b.id,
+          }, { status: 409 });
+        }
+        // Inactive — free the domain by renaming to a placeholder
+        const placeholder = `archived-${b.id}.worder.local`;
+        await supabase
+          .from('shopify_stores')
+          .update({ shop_domain: placeholder, updated_at: new Date().toISOString() })
+          .eq('id', b.id);
+      }
+    }
+
     const updates: Record<string, any> = {
       shop_domain: primaryDomain,
       shop_domain_aliases: Array.from(aliases),
