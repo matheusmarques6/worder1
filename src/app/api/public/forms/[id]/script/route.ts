@@ -408,6 +408,15 @@ function show(){
       if(currentUtms.utm_campaign)payload.utm_campaign=currentUtms.utm_campaign;
       if(currentUtms.utm_term)payload.utm_term=currentUtms.utm_term;
       if(currentUtms.utm_content)payload.utm_content=currentUtms.utm_content;
+      // Identity signals — let the server stitch this submission into the
+      // visitor_identities row that's been tracking this browser anonymously,
+      // so historic events get backfilled to the new contact.
+      try{
+        var vid=localStorage.getItem("_worder_canonical")||localStorage.getItem("_worder_vid");
+        var sid=sessionStorage.getItem("_worder_sid");
+        if(vid)payload.visitor_id=vid;
+        if(sid)payload.session_id=sid;
+      }catch(_){}
       fetch(BU+"/api/public/forms/"+FID+"/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .then(function(r){return r.json().catch(function(){return{}})})
       .then(function(res){

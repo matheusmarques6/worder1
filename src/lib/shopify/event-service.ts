@@ -74,13 +74,73 @@ export interface EventQueryOptions {
 export async function createEvent(input: CreateEventInput): Promise<EventRecord | null> {
   const supabase = getSupabaseAdmin();
 
+  // Pre-storage pipeline (every event flows through this):
+  //   1. enrichShopifyEvent — fills line item images + product URLs +
+  //      collections + descriptions from shopify_products. Variant-aware
+  //      (uses variants[].image_id → images[]). Falls back to images[0]
+  //      when the variant has no specific image. Also populates customer
+  //      data from contacts when contact_id is set.
+  //   2. normalizeToCanonical — produces stable top-level field names
+  //      ({{ CheckoutURL }}, {{ Items[0].ProductName }}, …) regardless
+  //      of source. Templates rely on these.
+  // Original payload always preserved on properties.raw.
+  let mergedProperties: Record<string, any> = input.properties;
+  try {
+    let storeDomain: string | null = null;
+    if (input.store_id) {
+      try {
+        const { data: storeRow } = await supabase
+          .from('shopify_stores')
+          .select('shop_domain')
+          .eq('id', input.store_id)
+          .maybeSingle();
+        storeDomain = storeRow?.shop_domain || null;
+      } catch { /* best-effort */ }
+    }
+
+    // Step 1: enrich line items + customer from local DB caches. Webhook
+    // events arrive with bare line_items (no images, no handles, no
+    // collections — Shopify's checkout webhook payload is sparse). This
+    // join makes the stored event self-contained so downstream renders
+    // don't have to hit the DB again.
+    let enrichedInput: Record<string, any> = input.properties;
+    try {
+      const { enrichShopifyEvent } = await import('@/lib/cdp/enrich-shopify-event');
+      const enriched = await enrichShopifyEvent(input.event_type, input.properties, {
+        supabase,
+        storeId: input.store_id || '',
+        organizationId: input.organization_id,
+        shopDomain: storeDomain,
+        contactId: input.contact_id || null,
+        sessionId: input.session_id || null,
+        anonymousId: input.anonymous_id || null,
+      });
+      enrichedInput = { ...input.properties, ...enriched };
+    } catch (e) {
+      console.warn('[createEvent] enrichment failed (non-fatal):', e);
+    }
+
+    // Step 2: canonicalize to the Worder schema
+    const { normalizeToCanonical } = await import('@/lib/cdp/normalize-to-canonical');
+    const canonical = normalizeToCanonical(enrichedInput, {
+      source: input.event_source,
+      storeDomain,
+      rawEventType: input.event_type,
+    });
+    // Merge: enriched first (preserves source-specific extras), canonical
+    // last (top-level stable names overwrite when conflicting).
+    mergedProperties = { ...enrichedInput, ...canonical };
+  } catch (e) {
+    console.warn('[createEvent] pre-storage pipeline failed (non-fatal):', e);
+  }
+
   const record = {
     organization_id: input.organization_id,
     contact_id: input.contact_id || null,
     store_id: input.store_id || null,
     event_type: input.event_type,
     event_source: input.event_source,
-    properties: input.properties,
+    properties: mergedProperties,
     monetary_value: input.monetary_value ?? null,
     currency: input.currency || 'BRL',
     shopify_resource_id: input.shopify_resource_id || null,

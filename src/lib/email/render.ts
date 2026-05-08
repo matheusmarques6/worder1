@@ -109,13 +109,16 @@ export function evaluateBlockCondition(
  */
 function escapeHtml(value: unknown): string {
   if (value === null || value === undefined) return ''
+  // Standard HTML attribute escape set. We intentionally do NOT escape
+  // `/` — that's a legacy OWASP recommendation that doesn't add real
+  // XSS protection in modern browsers but DOES uglify every URL into
+  // https:&#x2F;&#x2F;... attribute output. URLs ship clean.
   return String(value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
-    .replace(/\//g, '&#x2F;')
 }
 
 /**
@@ -152,15 +155,19 @@ export function renderMergeTags(
     return rawMode ? final : escapeHtml(final)
   }
 
-  // Replace {{tag|fallback}} first (with fallback)
+  // Replace {{tag|fallback}} first (with fallback). Allows optional
+  // whitespace around the tag so both {{checkout_url|loja.com}} and
+  // {{ checkout_url | loja.com }} work — matches Klaviyo/Omnisend
+  // tolerance and lines up with how the variable picker generates
+  // tags ({{ trigger.path }} format).
   let result = html.replace(
-    /\{\{([a-zA-Z0-9_.]+)\|([^}]*)\}\}/g,
+    /\{\{\s*([a-zA-Z0-9_.\[\]]+)\s*\|\s*([^}]*?)\s*\}\}/g,
     (_, tag: string, fallback: string) => resolve(tag, fallback)
   )
 
-  // Replace {{tag}} (no fallback)
+  // Replace {{tag}} (no fallback) — same whitespace tolerance.
   result = result.replace(
-    /\{\{([a-zA-Z0-9_.]+)\}\}/g,
+    /\{\{\s*([a-zA-Z0-9_.\[\]]+)\s*\}\}/g,
     (_, tag: string) => resolve(tag, '')
   )
 
@@ -360,7 +367,8 @@ export async function resolveProductBlocks(
 export async function resolveCartBlocks(
   html: string,
   orgId: string,
-  contactId?: string
+  contactId?: string,
+  eventData?: Record<string, any>
 ): Promise<string> {
   const regex = /<!-- WORDER_CART_BLOCK:([^ ]*?) -->/g
   let result = html
@@ -372,22 +380,170 @@ export async function resolveCartBlocks(
     let cfg: any = {}
     try { cfg = JSON.parse(decodeURIComponent(match[1])) } catch { continue }
 
-    // Fetch cart items for this contact
+    // Resolve the recovery / checkout URL directly from the event so the
+    // CTA button always lands on a working link — even when the
+    // `{{checkout_url}}` merge tag isn't resolved by the caller. We walk
+    // every place Shopify (webhook + pixel + enrichment) and Klaviyo can
+    // stash it. Order: top-level CheckoutURL/checkout_url → raw.* nested
+    // → recovery_url legacy → constructed from raw.token + landing_site
+    // → buttonHref override → fallback.
+    const ev: any = eventData || {}
+    const props: any = ev.properties || ev
+    const raw: any = props.raw || ev.raw || {}
+    let eventCheckoutUrl: string =
+      props.CheckoutURL ||
+      props.checkout_url ||
+      props.AbandonedCheckoutURL ||
+      raw.abandoned_checkout_url ||
+      raw.recovery_url ||
+      raw.order_status_url ||
+      ''
+    // Construct URL when raw has the cart token + the host. This is the
+    // common case for cart-abandon events where the merchant fetched
+    // /cart.js (which has token + host but no abandoned_checkout_url).
+    if (!eventCheckoutUrl) {
+      const referring = raw.referring_site || props.referring_site || ''
+      const cartHost = referring ? referring.replace(/\/$/, '') : ''
+      const cartToken = raw.cart_token || raw.token || props.cart_token || props.token || ''
+      const landingSite = raw.landing_site || props.landing_site || ''
+      if (cartHost && cartToken) {
+        // /cart/c/<token>?key=... when landing_site already carries the key,
+        // else /checkouts/c/<token>/recover (Shopify accepts both).
+        if (landingSite && landingSite.includes('?key=')) {
+          const keyMatch = landingSite.match(/[?&]key=([a-f0-9]+)/i)
+          eventCheckoutUrl = keyMatch
+            ? `${cartHost}/cart/c/${cartToken}?key=${keyMatch[1]}`
+            : `${cartHost}${landingSite.startsWith('/') ? '' : '/'}${landingSite}`
+        } else {
+          eventCheckoutUrl = `${cartHost}/checkouts/c/${cartToken}/recover`
+        }
+      }
+    }
+    // Currency for price formatting — falls through to BRL for
+    // backward compatibility when neither is set.
+    const eventCurrency: string =
+      props.Currency ||
+      props.currency ||
+      raw.currency ||
+      raw.presentment_currency ||
+      ev.currency ||
+      'BRL'
+    // Locale used by Intl.NumberFormat — pick a sensible default per
+    // currency so prices don't look weird (e.g. R$ for GBP).
+    const localeForCurrency: Record<string, string> = {
+      BRL: 'pt-BR',
+      USD: 'en-US',
+      GBP: 'en-GB',
+      EUR: 'de-DE',
+      CAD: 'en-CA',
+      AUD: 'en-AU',
+      MXN: 'es-MX',
+      ARS: 'es-AR',
+      CLP: 'es-CL',
+      COP: 'es-CO',
+      JPY: 'ja-JP',
+    }
+    const formatPrice = (n: number): string => {
+      try {
+        return new Intl.NumberFormat(localeForCurrency[eventCurrency] || 'en-US', {
+          style: 'currency',
+          currency: eventCurrency,
+          minimumFractionDigits: 2,
+        }).format(n)
+      } catch {
+        return `${eventCurrency} ${n.toFixed(2)}`
+      }
+    }
+    // Pick the resolver feed_type based on the block config. Default is
+    // trigger_auto, which lets the API resolver detect from event_data
+    // whether to pull cart items, checkout line items, viewed product,
+    // or placed-order items. cart_items keeps the legacy "last recovery
+    // cart" behavior for blocks that explicitly want it.
+    const feedType = cfg.feedType || 'trigger_auto'
+
     let products: any[] = []
     try {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
       const res = await fetch(`${baseUrl}/api/email/product-feeds/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feed_type: 'cart_items', contact_id: contactId, organization_id: orgId, max_products: cfg.maxItems || 2 }),
+        body: JSON.stringify({
+          feed_type: feedType,
+          contact_id: contactId,
+          organization_id: orgId,
+          max_products: cfg.maxItems || 2,
+          event_data: eventData,
+        }),
       })
       const data = await res.json()
       products = data.products || []
     } catch {}
 
+    // Fallback: when the API resolver returned nothing (network blip,
+    // store filter mismatch, etc.) but the event itself carries items,
+    // render directly from the event so the merchant doesn't see a gap.
     if (products.length === 0) {
-      result = result.replace(match[0], '')
-      continue
+      const fallbackItems: any[] =
+        raw.line_items ||
+        props.Items ||
+        props.items ||
+        props.line_items ||
+        ev.raw?.line_items ||
+        []
+      if (Array.isArray(fallbackItems) && fallbackItems.length > 0) {
+        products = fallbackItems.slice(0, cfg.maxItems || 2).map((it: any) => {
+          const productObj = it.product || it.Product || {}
+          const variant = it.variant || it.Variant || {}
+          // Same cascade the canonical normalizer uses — every shape any
+          // source ships. Shopify cart line_items put the variant image
+          // at featured_image.url AND mirror it as a string in `image`.
+          const imageUrl =
+            it.ImageURL ||
+            it.image_url ||
+            it.imageUrl ||
+            it.featured_image?.url ||
+            it.featured_image?.src ||
+            (typeof it.image === 'string' ? it.image : null) ||
+            it.image?.src ||
+            it.image?.url ||
+            productObj.variant_images_url ||
+            productObj.image?.src ||
+            productObj.images?.[0]?.src ||
+            productObj.images?.[0]?.url ||
+            productObj.product_image_urls?.[0] ||
+            variant?.image?.src ||
+            it.Product?.VariantImage ||
+            it.Product?.Images?.[0] ||
+            null
+          return {
+            product_id: it.product_id || it.productId || it.ProductID || productObj.id || null,
+            title: it.ProductName || it.title || it.name || it.product_title || productObj.title || it.presentment_title || 'Produto',
+            price: parseFloat(
+              it.ItemPrice ||
+              it.price ||
+              variant.price?.amount ||
+              variant.price ||
+              it.line_price ||
+              '0'
+            ),
+            compare_at_price: it.compare_at_price || it.CompareAtPrice || variant.compare_at_price || null,
+            image_url: imageUrl,
+            url:
+              it.ProductURL ||
+              it.product_url ||
+              it.url ||
+              productObj.product_url ||
+              productObj.url ||
+              '#',
+            quantity: it.Quantity || it.quantity || 1,
+            variant_title: it.variant_title || it.VariantName || it.variantTitle || it.presentment_variant_title || null,
+          }
+        })
+      }
+      if (products.length === 0) {
+        result = result.replace(match[0], '')
+        continue
+      }
     }
 
     const isVert = cfg.layoutType === 'vertical'
@@ -404,33 +560,70 @@ export async function resolveCartBlocks(
     products.forEach((prod: any, i: number) => {
       const title = prod.title || prod.name || 'Produto'
       const desc = prod.description || prod.variant_title || ''
-      const price = typeof prod.price === 'number' ? `R$ ${prod.price.toFixed(2)}` : (prod.price || 'R$ 0,00')
-      const oldPrice = prod.compare_at_price ? `R$ ${prod.compare_at_price}` : (prod.compare_price ? `R$ ${prod.compare_price}` : '')
-      const imgUrl = prod.image_url || prod.images?.[0]?.src || ''
+      const priceNum = typeof prod.price === 'number' ? prod.price : parseFloat(String(prod.price || '0'))
+      const price = isFinite(priceNum) && priceNum > 0 ? formatPrice(priceNum) : formatPrice(0)
+      const oldPriceNum = prod.compare_at_price != null ? parseFloat(String(prod.compare_at_price)) : (prod.compare_price != null ? parseFloat(String(prod.compare_price)) : null)
+      const oldPrice = oldPriceNum && isFinite(oldPriceNum) && oldPriceNum > priceNum ? formatPrice(oldPriceNum) : ''
+      // Image fallback cascade — tries every shape we ship, including
+      // featured_image.url (raw shopify) and product.product_image_urls[].
+      const imgUrl =
+        prod.image_url ||
+        prod.imageUrl ||
+        prod.image ||
+        prod.featured_image?.url ||
+        prod.featured_image?.src ||
+        prod.images?.[0]?.src ||
+        prod.images?.[0]?.url ||
+        prod.product?.product_image_urls?.[0] ||
+        prod.product?.variant_images_url ||
+        prod.product?.image?.src ||
+        ''
       const prodUrl = prod.url || (prod.handle ? `/products/${prod.handle}` : '#')
-      const checkoutUrl = cfg.buttonHref || '{{checkout_url}}'
+      // Button href: explicit per-product url > eventCheckoutUrl from event >
+      // configured buttonHref > merge-tag placeholder. The placeholder
+      // gets resolved later by buildMergeData; eventCheckoutUrl wins so
+      // that the URL is GUARANTEED present in preview + send, not
+      // dependent on a downstream resolver step.
+      const productCheckoutUrl: string = prod.checkout_url || prod.recovery_url || ''
+      const checkoutUrl = productCheckoutUrl || eventCheckoutUrl || cfg.buttonHref || '{{checkout_url}}'
 
-      const imgCell = cfg.showImage ? `<td width="${isVert ? '100%' : imgW}" style="vertical-align:top;${isVert ? 'padding-bottom:12px;' : ''}"><a href="${prodUrl}" style="display:block;text-decoration:none;">${imgUrl ? `<img src="${imgUrl}" alt="${title}" width="${isVert ? '100%' : imgW}" style="display:block;border-radius:${imgR}px;max-width:100%;height:auto;" />` : `<div style="width:${isVert ? '100%' : imgW + 'px'};height:${isVert ? '150px' : imgW + 'px'};background:#F3F4F6;border-radius:${imgR}px;"></div>`}</a></td>` : ''
+      // Image cell — uses CSS `aspect-ratio` to keep a square frame and
+      // `object-fit: cover` so the image fills without distortion.
+      // Fallback (no URL) renders a soft neutral placeholder instead of a
+      // jarring gray box.
+      const imgSize = isVert ? '100%' : `${imgW}px`
+      const imgCell = cfg.showImage ? `<td width="${isVert ? '100%' : imgW}" style="vertical-align:middle;${isVert ? 'padding:0 0 12px 0;' : 'padding:0;'}">
+        <a href="${prodUrl}" style="display:block;text-decoration:none;">${imgUrl
+          ? `<img src="${imgUrl}" alt="${title}" width="${isVert ? '100%' : imgW}" style="display:block;width:${imgSize};height:auto;max-width:100%;border-radius:${imgR}px;border:0;outline:none;" />`
+          : `<div style="width:${imgSize};${isVert ? 'aspect-ratio:1/1;min-height:160px;' : `height:${imgW}px;`}background:#F3F4F6;border-radius:${imgR}px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:11px;">imagem</div>`
+        }</a>
+      </td>` : ''
 
       const detailParts: string[] = []
-      if (cfg.showName) detailParts.push(`<p style="margin:0;font-size:${cfg.nameFontSize}px;font-weight:${cfg.nameWeight};color:${cfg.nameColor};">${title}</p>`)
-      if (cfg.showDescription && desc) detailParts.push(`<p style="margin:4px 0 0;font-size:${cfg.descFontSize}px;color:${cfg.descColor};">${desc}</p>`)
+      if (cfg.showName) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.nameFontSize}px;font-weight:${cfg.nameWeight};color:${cfg.nameColor};line-height:1.35;">${title}</p>`)
+      if (cfg.showDescription && desc) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.descFontSize}px;color:${cfg.descColor};line-height:1.4;">${desc}</p>`)
       if (cfg.showPrice) {
         let priceHtml = `<span style="font-size:${cfg.priceFontSize}px;font-weight:${cfg.priceWeight};color:${cfg.priceColor};">${price}</span>`
         if (cfg.showOldPrice && oldPrice) {
-          priceHtml += ` <span style="font-size:${cfg.priceFontSize - 1}px;color:${cfg.oldPriceColor};text-decoration:line-through;">${oldPrice}</span>`
+          priceHtml += ` <span style="font-size:${(cfg.priceFontSize || 14) - 1}px;color:${cfg.oldPriceColor};text-decoration:line-through;margin-left:6px;">${oldPrice}</span>`
         }
-        detailParts.push(`<p style="margin:8px 0 0;">${priceHtml}</p>`)
+        detailParts.push(`<p style="margin:0 0 ${cfg.showButton ? 12 : 0}px;line-height:1.3;">${priceHtml}</p>`)
       }
       if (cfg.showButton) {
-        detailParts.push(`<p style="margin:10px 0 0;text-align:${btnAlign === 'full' ? 'center' : btnAlign};"><a href="${checkoutUrl}" style="${btnDisplay}padding:${cfg.buttonPaddingV}px ${cfg.buttonPaddingH}px;background:${cfg.buttonColor};color:${cfg.buttonTextColor};border-radius:${cfg.buttonRadius}px;font-size:${cfg.buttonFontSize}px;font-weight:600;text-decoration:none;box-sizing:border-box;">${cfg.buttonText}</a></p>`)
+        detailParts.push(`<p style="margin:0;text-align:${btnAlign === 'full' ? 'center' : btnAlign};line-height:1;"><a href="${checkoutUrl}" style="${btnDisplay}padding:${cfg.buttonPaddingV}px ${cfg.buttonPaddingH}px;background:${cfg.buttonColor};color:${cfg.buttonTextColor};border-radius:${cfg.buttonRadius}px;font-size:${cfg.buttonFontSize}px;font-weight:600;text-decoration:none;box-sizing:border-box;mso-padding-alt:0;">${cfg.buttonText}</a></p>`)
       }
-      const detailsCell = `<td style="vertical-align:top;${isVert ? '' : 'padding-left:16px;'}">${detailParts.join('')}</td>`
+      // vertical-align:middle on the details cell — the user explicitly
+      // asked for vertically-centered text alongside the image.
+      const detailsCell = `<td style="vertical-align:middle;${isVert ? 'padding:0;' : `padding:0 0 0 ${isRight ? '0' : '20px'};${isRight ? 'padding-right:20px;' : ''}`}">${detailParts.join('')}</td>`
 
+      // Wrap each product row in its own table-row with consistent
+      // vertical padding so multi-item carts breathe.
+      const rowPadTop = i === 0 ? '0' : '16px'
+      const rowPadBottom = i === products.length - 1 ? '0' : '16px'
       if (isVert) {
-        cartHtml += `<tr>${imgCell}</tr><tr>${detailsCell}</tr>`
+        cartHtml += `<tr><td style="padding:${rowPadTop} 0 ${rowPadBottom};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${imgCell}</tr><tr>${detailsCell}</tr></table></td></tr>`
       } else {
-        cartHtml += `<tr>${isRight ? detailsCell + imgCell : imgCell + detailsCell}</tr>`
+        cartHtml += `<tr><td style="padding:${rowPadTop} 0 ${rowPadBottom};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${isRight ? detailsCell + imgCell : imgCell + detailsCell}</tr></table></td></tr>`
       }
 
       if (cfg.separator && i < products.length - 1) {

@@ -85,13 +85,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (!store && storeDomain) {
-      const domain = String(storeDomain).replace(/^https?:\/\//, '').replace(/\/$/, '');
-      const { data } = await supabase
-        .from('shopify_stores')
-        .select('id, organization_id')
-        .eq('shop_domain', domain)
-        .maybeSingle();
-      store = data;
+      // Alias-aware lookup: handles canonical myshopifyDomain mismatches
+      const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain');
+      store = await resolveStoreByDomain<{ id: string; organization_id: string }>(
+        supabase,
+        storeDomain,
+        { select: 'id, organization_id', activeOnly: false }
+      );
     }
 
     if (!store) {
@@ -231,6 +231,33 @@ export async function POST(request: NextRequest) {
       }
       if (sessionId && sessionId !== anonymousId) {
         linkedCount += await linkAnonymousEvents(sessionId, contact.id);
+      }
+
+      // Update the identity graph too: this is where Klaviyo's "Extended ID"
+      // shines — by writing email_hash + phone_hash here, future page loads
+      // (even from a different device, or after Safari ITP wipes localStorage)
+      // can re-match by deterministic identifier. Also backfills any historic
+      // events under aliases that the legacy linkers above missed.
+      try {
+        const { resolveIdentity, linkContactToIdentity } = await import('@/lib/identity/resolver');
+        const ua = request.headers.get('user-agent') || null;
+        const ip = (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || null;
+        const identity = await resolveIdentity({
+          organizationId: orgId,
+          storeId: store.id,
+          clientVisitorId: anonymousId || null,
+          fingerprintHash: (body as any).fingerprintHash || null,
+          userAgent: ua,
+          ip,
+          email: email || null,
+          phone: phone || null,
+          shopifyCustomerId: shopifyCustomerId ? String(shopifyCustomerId) : null,
+          source: 'identify',
+        });
+        const backfilled = await linkContactToIdentity(identity.identityId, contact.id, orgId);
+        linkedCount += backfilled.eventsLinked;
+      } catch (idErr) {
+        console.error('[Track Identify] identity graph link failed:', idErr);
       }
     }
 

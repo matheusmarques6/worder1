@@ -77,12 +77,15 @@ export async function POST(request: NextRequest) {
 
     console.log(`📦 Shopify webhook received: ${topic} from ${shopDomain} (event: ${eventId || 'unknown'})`);
 
-    // 4. Buscar configuração da loja
-    const { data: store, error: storeError } = await supabase
-      .from('shopify_stores')
-      .select('id, organization_id, api_secret, is_active, is_configured, sync_orders, sync_customers, sync_checkouts')
-      .eq('shop_domain', shopDomain)
-      .maybeSingle();
+    // 4. Buscar configuração da loja (alias-aware: matches primary
+    //    shop_domain OR any entry in shop_domain_aliases)
+    const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain');
+    const store = await resolveStoreByDomain<any>(
+      supabase,
+      shopDomain,
+      { select: 'id, organization_id, api_secret, is_active, is_configured, sync_orders, sync_customers, sync_checkouts', activeOnly: false }
+    );
+    const storeError: any = null;
 
     if (storeError) {
       console.error('Database error:', storeError);

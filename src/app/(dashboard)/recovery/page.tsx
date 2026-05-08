@@ -23,6 +23,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { useStoreStore } from '@/stores'
+import { cn } from '@/lib/utils'
 
 type TabKey = 'cart' | 'checkout' | 'pix' | 'boleto' | 'card'
 
@@ -32,6 +33,11 @@ interface RecoveryItem {
   customer_email: string
   customer_phone?: string
   amount: number
+  // Currency from the underlying checkout/order — NOT hardcoded BRL.
+  // A UK Shopify store ships checkouts with currency='GBP', a US one
+  // with 'USD', etc. The recovery page just formats whatever each row
+  // sends back, so cross-store reports keep the right symbol per row.
+  currency: string
   status: 'pending' | 'abandoned' | 'sent' | 'recovered' | 'expired' | 'failed'
   type: TabKey
   created_at: string
@@ -63,8 +69,31 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   failed: { label: 'Falhou', className: 'bg-red-50 text-red-700 border border-red-200' },
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+// Format using the row's actual currency. Locale picks an Intl format
+// that matches the currency naturally (GBP → en-GB style "£297.44",
+// BRL → pt-BR style "R$ 297,44", USD → en-US style "$297.44").
+const formatCurrency = (value: number, currency = 'BRL') => {
+  const cur = (currency || 'BRL').toUpperCase()
+  // Map currency → preferred locale for natural number/symbol layout.
+  const localeMap: Record<string, string> = {
+    BRL: 'pt-BR',
+    USD: 'en-US',
+    EUR: 'de-DE',
+    GBP: 'en-GB',
+    CAD: 'en-CA',
+    AUD: 'en-AU',
+    JPY: 'ja-JP',
+    MXN: 'es-MX',
+    ARS: 'es-AR',
+  }
+  const locale = localeMap[cur] || 'en-US'
+  try {
+    return new Intl.NumberFormat(locale, { style: 'currency', currency: cur }).format(value)
+  } catch {
+    // Unknown ISO code (custom currencies) — fall back to plain number + suffix
+    return `${value.toFixed(2)} ${cur}`
+  }
+}
 
 const formatNumber = (n: number) => new Intl.NumberFormat('pt-BR').format(n)
 
@@ -111,6 +140,9 @@ export default function RecoveryPage() {
           customer_email: item.email || item.customer_email || '',
           customer_phone: item.phone || item.customer_phone || '',
           amount: parseFloat(item.value || item.amount || '0'),
+          // Carry through the per-item currency from the API so each row
+          // formats with its own symbol (£, $, €, R$, etc).
+          currency: item.currency || 'BRL',
           status: statusMap[item.status] || 'pending',
           type: item.type || activeTab,
           created_at: item.created_at,
@@ -143,7 +175,7 @@ export default function RecoveryPage() {
     const phone = (item.customer_phone || '').replace(/\D/g, '')
     if (!phone) return
     const name = item.customer_name || 'Olá'
-    const value = formatCurrency(item.amount)
+    const value = formatCurrency(item.amount, item.currency)
     const text = encodeURIComponent(
       `Oi ${name}! Vi que você deixou itens no carrinho (${value}). Posso te ajudar a finalizar a compra?`
     )
@@ -180,7 +212,10 @@ export default function RecoveryPage() {
     },
     {
       label: 'VALOR RECUPERADO',
-      value: formatCurrency(stats.total_value_recovered),
+      // Aggregate stats use the active store's currency. Per-row values
+      // still show their own currency above (a store with mixed-currency
+      // checkouts gets each row formatted naturally).
+      value: formatCurrency(stats.total_value_recovered, currentStore?.currency || 'BRL'),
       icon: DollarSign,
       color: 'text-brand-500',
       bg: 'bg-brand-50',
@@ -339,7 +374,7 @@ export default function RecoveryPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-medium text-gray-900">
-                          {formatCurrency(item.amount)}
+                          {formatCurrency(item.amount, item.currency)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">

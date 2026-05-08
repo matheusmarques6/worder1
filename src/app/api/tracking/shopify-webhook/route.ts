@@ -22,11 +22,12 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Shopify Webhook] Topic: ${topic} | Shop: ${shopDomain}`)
 
-    const { data: store } = await supabase
-      .from('shopify_stores')
-      .select('id, organization_id, api_secret')
-      .eq('shop_domain', shopDomain)
-      .single()
+    const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain')
+    const store = await resolveStoreByDomain<{ id: string; organization_id: string; api_secret: string | null }>(
+      supabase,
+      shopDomain,
+      { select: 'id, organization_id, api_secret', activeOnly: false }
+    )
 
     if (!store) {
       console.warn(`[Shopify Webhook] Store not found: ${shopDomain}`)

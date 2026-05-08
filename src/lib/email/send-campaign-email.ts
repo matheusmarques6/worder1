@@ -104,7 +104,16 @@ export async function sendCampaignEmail({
 
     // 3. Resolve dynamic product blocks + cart blocks
     let htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, contactId, eventData);
-    htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, contactId);
+    // Pass eventData so the cart block can adapt to the active trigger
+    // (cart vs checkout vs browse vs order) via trigger_auto feed type.
+    htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, contactId, eventData);
+    // Resolve {{ trigger.link }}, {{ trigger.first_item_image }} etc.
+    // — smart tags that adapt the right URL/title/image to whichever
+    // event fired the email.
+    if (eventData) {
+      const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
+      htmlWithProducts = resolveTriggerSmartTags(htmlWithProducts, eventData);
+    }
 
     // 3. Prepare HTML with merge tags, tracking, unsubscribe
     const finalHtml = prepareEmailHtml({

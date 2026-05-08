@@ -1,7 +1,8 @@
 'use client';
 
+import * as React from 'react';
 import { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Monitor, Smartphone, ChevronDown, Send, Mail, CheckCircle2, XCircle, Inbox, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Monitor, Smartphone, ChevronDown, Send, Mail, CheckCircle2, XCircle, Inbox, Loader2, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ── Event-type labels (clean, muted style — no heavy coloring) ────────────
@@ -179,8 +180,23 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
 
   // Render nested object tree — Klaviyo-style: mono keys, indented values,
   // collapsible objects/arrays with accent lines.
-  const renderTree = (obj: Record<string, any>, depth = 0): React.ReactNode => {
+  // Each leaf is click-to-copy: clicking puts {{ trigger.<path> }} in
+  // the clipboard so the merchant can paste it directly into the email
+  // editor or automation node config.
+  const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  async function copyVarTag(path: string) {
+    const tag = `{{ trigger.${path} }}`;
+    try { await navigator.clipboard.writeText(tag); } catch {}
+    setCopiedPath(path);
+    setTimeout(() => setCopiedPath((v) => (v === path ? null : v)), 1500);
+  }
+
+  const renderTree = (obj: Record<string, any>, depth = 0, parentPath = ''): React.ReactNode => {
     return Object.entries(obj).map(([key, value]) => {
+      // Build the dotted path. Skip the "raw." prefix for top-level
+      // structured fields so the merchant doesn't see double "trigger.raw"
+      // when they click on top-level OrderId / Items / etc.
+      const path = parentPath ? `${parentPath}.${key}` : key;
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         return (
           <details key={key} open={depth < 1} className="group">
@@ -189,7 +205,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
               <span className="font-semibold">{key}</span>
               <span className="text-zinc-400 font-normal">{'{' + Object.keys(value).length + '}'}</span>
             </summary>
-            <div className="ml-2 pl-3 border-l border-zinc-200">{renderTree(value, depth + 1)}</div>
+            <div className="ml-2 pl-3 border-l border-zinc-200">{renderTree(value, depth + 1, path)}</div>
           </details>
         );
       }
@@ -202,31 +218,57 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
               <span className="text-zinc-400 font-normal">Array({value.length})</span>
             </summary>
             <div className="ml-2 pl-3 border-l border-zinc-200">
-              {value.map((item, i) =>
-                typeof item === 'object' && item !== null ? (
-                  <details key={i} className="group">
-                    <summary className="flex items-center gap-1.5 text-[11px] font-mono cursor-pointer text-zinc-600 hover:text-zinc-800 py-0.5 list-none">
-                      <ChevronDown className="w-3 h-3 text-zinc-400 transition-transform group-open:rotate-0 -rotate-90" />
-                      <span>[{i}]</span>
-                    </summary>
-                    <div className="ml-2 pl-3 border-l border-zinc-200">{renderTree(item, depth + 2)}</div>
-                  </details>
-                ) : (
-                  <div key={i} className="flex gap-2 py-0.5">
+              {value.map((item, i) => {
+                const itemPath = `${path}[${i}]`;
+                if (typeof item === 'object' && item !== null) {
+                  return (
+                    <details key={i} className="group">
+                      <summary className="flex items-center gap-1.5 text-[11px] font-mono cursor-pointer text-zinc-600 hover:text-zinc-800 py-0.5 list-none">
+                        <ChevronDown className="w-3 h-3 text-zinc-400 transition-transform group-open:rotate-0 -rotate-90" />
+                        <span>[{i}]</span>
+                      </summary>
+                      <div className="ml-2 pl-3 border-l border-zinc-200">{renderTree(item, depth + 2, itemPath)}</div>
+                    </details>
+                  );
+                }
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => copyVarTag(itemPath)}
+                    className="w-full flex items-center gap-2 py-0.5 hover:bg-zinc-50 rounded px-1 -mx-1 group/leaf text-left"
+                    title={`Copiar {{ trigger.${itemPath} }}`}
+                  >
                     <span className="text-[11px] font-mono text-zinc-400">[{i}]</span>
-                    <span className="text-[11px] text-zinc-700 font-mono break-all">{formatValue(item)}</span>
-                  </div>
-                )
-              )}
+                    <span className="text-[11px] text-zinc-700 font-mono break-all flex-1">{formatValue(item)}</span>
+                    {copiedPath === itemPath ? (
+                      <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                    ) : (
+                      <Copy className="w-3 h-3 text-zinc-300 group-hover/leaf:text-zinc-500 shrink-0 transition-colors" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </details>
         );
       }
       return (
-        <div key={key} className="flex gap-3 py-[3px] leading-tight">
+        <button
+          key={key}
+          type="button"
+          onClick={() => copyVarTag(path)}
+          className="w-full flex gap-3 py-[3px] leading-tight hover:bg-zinc-50 rounded px-1 -mx-1 group/leaf text-left"
+          title={`Copiar {{ trigger.${path} }}`}
+        >
           <span className="text-[11px] font-mono text-zinc-500 shrink-0 min-w-[110px]">{key}:</span>
-          <span className="text-[11px] text-zinc-900 break-all font-medium">{formatValue(value)}</span>
-        </div>
+          <span className="text-[11px] text-zinc-900 break-all font-medium flex-1">{formatValue(value)}</span>
+          {copiedPath === path ? (
+            <Check className="w-3 h-3 text-emerald-600 shrink-0 mt-0.5" />
+          ) : (
+            <Copy className="w-3 h-3 text-zinc-300 group-hover/leaf:text-zinc-500 shrink-0 mt-0.5 transition-colors" />
+          )}
+        </button>
       );
     });
   };
@@ -284,8 +326,16 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
                 </div>
               </div>
 
-              {/* Preview frame */}
-              <div className="flex-1 overflow-auto bg-white px-6 py-8 flex justify-center">
+              {/* Preview frame — `min-h-0` is required for the inner
+                  overflow-auto to actually scroll when nested in a
+                  flex column. Scrollbar visually hidden via inline
+                  style block below; scroll itself stays functional. */}
+              <style>{`
+                .worder-preview-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
+                .worder-preview-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+              `}</style>
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-white px-6 py-8 flex justify-center items-start worder-preview-scroll"
+                   style={{ scrollBehavior: 'smooth' }}>
                 {loading ? (
                   <div className="flex items-center justify-center h-full">
                     <Loader2 className="w-5 h-5 text-zinc-400 animate-spin" />
@@ -300,9 +350,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
                         <div className="w-16 h-1 bg-zinc-700 rounded-full" />
                       </div>
                     )}
-                    <iframe srcDoc={html}
-                      className={cn('w-full border-0', viewMode === 'mobile' ? 'h-[640px] bg-white' : 'h-[720px]')}
-                      sandbox="allow-same-origin" title="Email preview" />
+                    <PreviewIframe html={html} viewMode={viewMode} />
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-zinc-400">
@@ -431,7 +479,12 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
                 <div className="px-5 pb-4 bg-white mx-3 mb-3 rounded-lg border border-zinc-100">
                   <div className="pt-3">
                     {Object.keys(eventProps).length > 0 ? (
-                      <div className="space-y-0">{renderTree(eventProps)}</div>
+                      <>
+                        <p className="text-[10.5px] text-zinc-400 mb-2 leading-snug">
+                          Clique em qualquer campo para copiar a variável <code className="font-mono">{`{{ trigger.<path> }}`}</code> e colar no editor.
+                        </p>
+                        <div className="space-y-0">{renderTree(eventProps)}</div>
+                      </>
                     ) : (
                       <p className="text-[11px] text-zinc-400">Sem dados</p>
                     )}
@@ -483,6 +536,106 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
         </div>
       </div>
     </div>
+  );
+}
+
+// =============================================
+// PreviewIframe — renders the email HTML with these production-parity
+// behaviors:
+//   1. Auto-sizes height to the email's actual content (no white space
+//      below the email like a fixed h-720px would leave).
+//   2. Injects <base target="_blank"> so every link inside the email
+//      opens in a new tab when clicked, matching what the recipient
+//      sees in their inbox client.
+//   3. Sandbox flags include allow-popups + allow-popups-to-escape-sandbox
+//      so the new tab actually opens (without these the click is a
+//      no-op in modern Chromium).
+// =============================================
+function PreviewIframe({ html, viewMode }: { html: string; viewMode: 'desktop' | 'mobile' }) {
+  const ref = React.useRef<HTMLIFrameElement | null>(null);
+  const [height, setHeight] = React.useState<number>(viewMode === 'mobile' ? 640 : 720);
+
+  // Wrap the email with a <base target="_blank"> + a postMessage hook
+  // so we can size the iframe to its rendered content. Done as a
+  // wrapper rather than touching the original HTML so we don't change
+  // what eventually ships to the recipient.
+  const wrappedHtml = React.useMemo(() => {
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<base target="_blank">
+<style>html,body{margin:0;padding:0;overflow:hidden;}</style>
+</head>
+<body>
+${html}
+<script>
+  var lastReported = 0;
+  function reportSize(){
+    var h = Math.max(
+      document.documentElement.scrollHeight || 0,
+      document.documentElement.offsetHeight || 0,
+      document.body.scrollHeight || 0,
+      document.body.offsetHeight || 0
+    );
+    if (h && Math.abs(h - lastReported) >= 1) {
+      lastReported = h;
+      try { parent.postMessage({ type: 'worder:preview-size', height: h }, '*'); } catch(_){}
+    }
+  }
+  // Initial passes — RAF covers the late layout pass after style/asset
+  // application; load handles HTML+image full load.
+  reportSize();
+  requestAnimationFrame(function(){ requestAnimationFrame(reportSize); });
+  window.addEventListener('load', reportSize);
+  window.addEventListener('resize', reportSize);
+  // Watch every image — emails are heavily image-driven and the iframe
+  // must grow as each one decodes.
+  Array.prototype.forEach.call(document.images, function(img){
+    if (!img.complete) img.addEventListener('load', reportSize);
+    img.addEventListener('error', reportSize);
+  });
+  // ResizeObserver: catches dynamic content (lazy-loaded images decoding,
+  // late web font swaps shifting line heights, etc.) without polling.
+  if (typeof ResizeObserver !== 'undefined') {
+    try {
+      new ResizeObserver(reportSize).observe(document.documentElement);
+    } catch(_){}
+  }
+  // Belt-and-suspenders polling for the first 5s in case all the above miss.
+  var pollGuard = 0;
+  var pollInterval = setInterval(function(){
+    reportSize();
+    if (++pollGuard >= 10) clearInterval(pollInterval);
+  }, 500);
+</script>
+</body>
+</html>`;
+  }, [html]);
+
+  React.useEffect(() => {
+    function onMsg(e: MessageEvent) {
+      if (!e.data || e.data.type !== 'worder:preview-size') return;
+      const h = Number(e.data.height) || 0;
+      if (h > 0) setHeight(h);
+    }
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  return (
+    <iframe
+      ref={ref}
+      srcDoc={wrappedHtml}
+      // allow-popups + allow-popups-to-escape-sandbox: links with
+      // target="_blank" actually open. allow-same-origin: lets us read
+      // scrollHeight via postMessage. allow-scripts: required for the
+      // tiny size-reporter snippet above.
+      sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
+      title="Email preview"
+      className={cn('w-full border-0 block', viewMode === 'mobile' ? 'bg-white' : '')}
+      style={{ height: `${height}px` }}
+    />
   );
 }
 

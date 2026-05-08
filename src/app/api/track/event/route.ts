@@ -25,6 +25,7 @@ const EVENT_TYPE_MAP: Record<string, WorderShopifyEventType> = {
   viewed_product: 'viewed_product',
   viewed_collection: 'viewed_collection',
   page_viewed: 'page_viewed',
+  page_view: 'page_viewed', // legacy alias from worder-pixel.js v3-
 
   // Web Pixel events
   added_to_cart: 'added_to_cart',
@@ -33,20 +34,37 @@ const EVENT_TYPE_MAP: Record<string, WorderShopifyEventType> = {
   checkout_completed: 'checkout_completed',
   submitted_search: 'submitted_search',
   cart_viewed: 'cart_viewed',
+  email_captured: 'email_captured' as any,
 
   // Pixel-only checkout progress events
   checkout_contact_submitted: 'checkout_contact_submitted',
   payment_submitted: 'payment_submitted',
+
+  // Diagnostic ping from the pixel — confirms the script loaded and
+  // can POST. Stored as a regular contact_event so the diagnostic
+  // dashboard surfaces it without needing a separate table.
+  pixel_loaded: 'pixel_loaded' as any,
 };
 
-// CORS headers for cross-origin requests from Shopify stores
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+// CORS headers for cross-origin requests from Shopify stores.
+// Echoes the request Origin so the browser sends cookies (we use a
+// first-party __worder_id cookie set by /api/identity/resolve to
+// re-identify visitors across sessions). With a wildcard origin the
+// browser silently drops the cookie.
+const CORS_HEADERS_BASE = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, X-Requested-With',
   'Access-Control-Max-Age': '86400',
+  'Vary': 'Origin',
 };
-
+function corsForRequest(request: NextRequest) {
+  const origin = request.headers.get('origin');
+  return {
+    ...CORS_HEADERS_BASE,
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Credentials': origin ? 'true' : 'false',
+  };
+}
 // Simple UA parser for device/browser/os
 function parseUserAgent(ua: string | undefined | null) {
   if (!ua) return { device_type: null, browser: null, os: null };
@@ -72,11 +90,12 @@ function parseUserAgent(ua: string | undefined | null) {
   return { device_type, browser, os };
 }
 
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 200, headers: CORS_HEADERS });
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 200, headers: corsForRequest(request) });
 }
 
 export async function POST(request: NextRequest) {
+  const CORS = corsForRequest(request);
   try {
     // ---- Rate limit anti-DoS (pixel público) ----
     const ip = getClientIp(request);
@@ -87,7 +106,7 @@ export async function POST(request: NextRequest) {
     if (!rl.allowed) {
       return NextResponse.json(
         { error: 'Rate limited', retryAfterSec: Math.ceil((rl.resetAt - Date.now()) / 1000) },
-        { status: 429, headers: { ...CORS_HEADERS, 'Retry-After': '60' } }
+        { status: 429, headers: { ...CORS, 'Retry-After': '60' } }
       );
     }
 
@@ -101,6 +120,7 @@ export async function POST(request: NextRequest) {
       visitorId,
       sessionId,
       fingerprint,
+      fingerprintHash,
       // Event
       eventType,
       eventId,
@@ -138,14 +158,14 @@ export async function POST(request: NextRequest) {
     if (!eventType) {
       return NextResponse.json(
         { error: 'Missing eventType' },
-        { status: 400, headers: CORS_HEADERS }
+        { status: 400, headers: CORS }
       );
     }
 
     if (!accountId && !storeId && !storeDomain) {
       return NextResponse.json(
         { error: 'Missing store identifier (accountId, storeId, or storeDomain)' },
-        { status: 400, headers: CORS_HEADERS }
+        { status: 400, headers: CORS }
       );
     }
 
@@ -174,30 +194,59 @@ export async function POST(request: NextRequest) {
     }
 
     if (!store && storeDomain) {
-      // Normalize domain: strip protocol and trailing slash
-      const domain = storeDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      const { data } = await supabase
-        .from('shopify_stores')
-        .select('id, organization_id')
-        .eq('shop_domain', domain)
-        .maybeSingle();
-      store = data;
+      // Alias-aware: matches shop_domain OR shop_domain_aliases so a
+      // pixel sending the canonical myshopifyDomain still resolves
+      // even when the merchant connected with a renamed domain.
+      const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain');
+      store = await resolveStoreByDomain<{ id: string; organization_id: string }>(
+        supabase,
+        storeDomain,
+        { select: 'id, organization_id', activeOnly: false }
+      );
     }
 
     if (!store) {
       return NextResponse.json(
         { error: 'Store not found' },
-        { status: 404, headers: CORS_HEADERS }
+        { status: 404, headers: CORS }
       );
     }
 
     const organizationId = store.organization_id;
-
-    // ---- Resolve contact ----
-    let contactId: string | null = null;
     const resolvedCustomerId = shopifyCustomerId || clientId;
 
-    if (email) {
+    // ---- Resolve stable identity via the identity graph (NEW) ----
+    // Maps any combination of (clientVisitorId, fingerprintHash, UA, IP,
+    // email, phone, shopifyCustomerId) to a single worder_visitor_id row
+    // in visitor_identities. Survives Safari ITP localStorage wipes by
+    // re-matching on fingerprint+UA hash. Falls back gracefully when no
+    // fingerprint is present (legacy clients).
+    let identityResult: Awaited<ReturnType<typeof import('@/lib/identity/resolver').resolveIdentity>> | null = null;
+    try {
+      const { resolveIdentity } = await import('@/lib/identity/resolver');
+      const { getClientIp: getIp } = await import('@/lib/rate-limit');
+      identityResult = await resolveIdentity({
+        organizationId,
+        storeId: store.id,
+        clientVisitorId: visitorId || anonymousId || null,
+        fingerprintHash: fingerprintHash || (typeof fingerprint === 'string' ? fingerprint : null),
+        userAgent: userAgent || null,
+        ip: getIp(request) || null,
+        email: email || null,
+        phone: phone || null,
+        shopifyCustomerId: resolvedCustomerId ? String(resolvedCustomerId) : null,
+        source: source === 'shopify_pixel' ? 'pixel' : 'embed',
+      });
+    } catch (idErr) {
+      // Identity resolver failures must NEVER drop events. Log and fall
+      // back to the legacy resolution paths below.
+      console.error('[Track Event] Identity resolver failed:', idErr);
+    }
+
+    // ---- Resolve contact ----
+    let contactId: string | null = identityResult?.contactId || null;
+
+    if (email && !contactId) {
       const { data: contact } = await supabase
         .from('contacts')
         .select('id')
@@ -282,12 +331,31 @@ export async function POST(request: NextRequest) {
         : EVENT_SOURCES.WORDER_PIXEL;
 
     // ---- Enrich properties ----
+    // Top-level convenience fields PLUS the same set under `raw` so the
+    // flow builder can reach the full payload via {{ trigger.raw.<path> }}
+    // — same pattern as the webhook events for consistency.
+    const acceptLanguage = request.headers.get('accept-language');
+    const browserLang = (() => {
+      if (!acceptLanguage) return null;
+      const first = acceptLanguage.split(',')[0];
+      return first ? first.split('-')[0].toLowerCase() : null;
+    })();
+
     const enrichedProperties: Record<string, any> = {
       ...properties,
       url: url || properties?.url,
       referrer: referrer || properties?.referrer,
       title: title || properties?.title,
       user_agent: userAgent,
+      // Klaviyo/Omnisend-style top-level context fields. Auto-discovered
+      // by the variable picker so {{ trigger.device }}, {{ trigger.os }},
+      // {{ trigger.country }} all resolve in flow templates.
+      device: null as string | null,    // filled below from UA
+      browser: null as string | null,
+      os: null as string | null,
+      language: browserLang,
+      sessionId: sessionId || null,
+      visitorId: visitorId || null,
       _original_event_type: eventType,
     };
 
@@ -345,15 +413,85 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (existing) {
-        return NextResponse.json({ ok: true, deduplicated: true }, { status: 200, headers: CORS_HEADERS });
+        return NextResponse.json({ ok: true, deduplicated: true }, { status: 200, headers: CORS });
       }
     }
 
     // ---- Parse UA ----
     const { device_type, browser, os } = parseUserAgent(userAgent);
+    // Backfill top-level device fields on enriched properties so the
+    // variable picker can surface them as {{ trigger.device }} etc.
+    enrichedProperties.device = device_type;
+    enrichedProperties.browser = browser;
+    enrichedProperties.os = os;
+
+    // ---- Enrich checkout/cart/product events from local DB caches ----
+    // Pixel events arrive flat (just title, price, product_id). Webhook
+    // events ship a rich raw payload with nested customer + line_items[].
+    // To make pixel events feel as rich as Omnisend (so flow templates
+    // resolve {{ trigger.raw.line_items[0].product.tags }} the same way
+    // regardless of source), we enrich line items from shopify_products
+    // and customer info from contacts. Best-effort, never blocks insert.
+    try {
+      const { enrichShopifyEvent } = await import('@/lib/cdp/enrich-shopify-event');
+      // shopDomain for product_url construction
+      let shopDomain: string | null = null;
+      try {
+        const { data: storeRow } = await supabase
+          .from('shopify_stores')
+          .select('shop_domain')
+          .eq('id', store.id)
+          .maybeSingle();
+        shopDomain = storeRow?.shop_domain || null;
+      } catch { /* best-effort */ }
+      const enrichedFull = await enrichShopifyEvent(mappedEventType, enrichedProperties, {
+        supabase,
+        storeId: store.id,
+        organizationId,
+        shopDomain,
+        contactId: contactId || null,
+        email: email || null,
+        sessionId: sessionId || null,
+        visitorId: visitorId || null,
+        anonymousId: anonymousId || null,
+      });
+      // Merge enrichment back — preserves anything the caller already set.
+      Object.assign(enrichedProperties, enrichedFull);
+    } catch (enrichErr) {
+      console.warn('[track/event] enrichment failed (non-fatal):', enrichErr);
+    }
+
+    // ---- Normalize to canonical Worder schema ----
+    // Every event in the system flows through this — Shopify pixel,
+    // storefront tracker, future Yampi/WooCommerce handlers all converge
+    // on the same WorderCanonicalEvent shape. Templates reference stable
+    // names ({{ CheckoutURL }}, {{ Items[0].ProductName }}, etc.) that
+    // never change regardless of source. Original payload is preserved
+    // on `raw` so power-user templates can still drill in.
+    try {
+      const { normalizeToCanonical } = await import('@/lib/cdp/normalize-to-canonical');
+      const canonical = normalizeToCanonical(enrichedProperties, {
+        source: eventSource,
+        storeDomain: storeDomain || null,
+        rawEventType: eventType,
+      });
+      // Stamp the canonical fields onto the properties at the top level
+      // so {{ trigger.CheckoutURL }} resolves directly without traversing
+      // raw.* — the canonical layer is the contract.
+      Object.assign(enrichedProperties, canonical);
+    } catch (canonErr) {
+      console.warn('[track/event] canonical normalization failed (non-fatal):', canonErr);
+    }
 
     // ---- Insert event ----
     const now = new Date().toISOString();
+    // Prefer the canonical worder_visitor_id from the identity graph when
+    // available — this is the stable ID across Safari ITP wipes / device
+    // changes. Fall back to whatever the client sent for legacy paths.
+    const canonicalAnonId = identityResult?.worderVisitorId
+      || visitorId
+      || anonymousId
+      || sessionId;
     const eventData: Record<string, any> = {
       organization_id: organizationId,
       contact_id: contactId,
@@ -364,11 +502,16 @@ export async function POST(request: NextRequest) {
       monetary_value: monetaryValue,
       currency,
       session_id: sessionId || null,
-      anonymous_id: !contactId ? (visitorId || anonymousId || sessionId) : null,
+      anonymous_id: !contactId ? canonicalAnonId : null,
       occurred_at: timestamp || now,
       received_at: now,
       idempotency_key: idempotencyKey,
     };
+    if (identityResult?.identityId) {
+      enrichedProperties._identity_id = identityResult.identityId;
+      enrichedProperties._identity_match_source = identityResult.matchSource;
+      if (identityResult.stitched) enrichedProperties._identity_stitched = true;
+    }
 
     // Add optional shopify resource fields if present
     if (properties?.shopify_resource_id) {
@@ -380,9 +523,31 @@ export async function POST(request: NextRequest) {
 
     await supabase.from('contact_events').insert(eventData);
 
+    // ---- Link contact to identity row when newly resolved (NEW) ----
+    // If we just resolved a contact_id for an identity that didn't have
+    // one before, persist the link AND backfill historic anonymous events
+    // under any of this identity's aliases.
+    if (contactId && identityResult && !identityResult.contactId) {
+      try {
+        const { linkContactToIdentity } = await import('@/lib/identity/resolver');
+        await linkContactToIdentity(identityResult.identityId, contactId, organizationId);
+      } catch (linkErr) {
+        console.error('[Track Event] Identity link failed:', linkErr);
+      }
+    }
+
     // ---- Attribution touchpoints (first/last touch) ----
+    // Broader cascade than just gclid/fbclid/ttclid — any paid-traffic
+    // signal counts as a touchpoint. The dedicated columns still only
+    // store the big three (others ride along in event properties._click_ids
+    // so they aren't lost). Adapted from AdTracked.
     const hasUtm = utmParams && (utmParams.utm_source || utmParams.utm_medium || utmParams.utm_campaign);
-    const hasClickIds = clickIds && (clickIds.gclid || clickIds.fbclid || clickIds.ttclid);
+    const hasClickIds = clickIds && (
+      clickIds.gclid || clickIds.fbclid || clickIds.ttclid ||
+      clickIds.gbraid || clickIds.wbraid || clickIds.dclid ||
+      clickIds.msclkid || clickIds.li_fat_id || clickIds.twclid ||
+      clickIds.sccid || clickIds._kx
+    );
     if (hasUtm || hasClickIds) {
       const touchpointBase = {
         organization_id: organizationId,
@@ -518,10 +683,10 @@ export async function POST(request: NextRequest) {
         });
     }
 
-    return NextResponse.json({ ok: true }, { status: 200, headers: CORS_HEADERS });
+    return NextResponse.json({ ok: true }, { status: 200, headers: CORS });
   } catch (error: any) {
     console.error('[Track Event] Error:', error?.message || error);
     // Always return 200 to not break pixel/embed
-    return NextResponse.json({ ok: true }, { status: 200, headers: CORS_HEADERS });
+    return NextResponse.json({ ok: true }, { status: 200, headers: CORS });
   }
 }

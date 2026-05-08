@@ -17,6 +17,10 @@ register(({ analytics, browser, settings, init }) => {
     settings.trackingEndpoint ||
     init.data?.app?.metafields?.trackingEndpoint ||
     'https://app.worder.com/api/track/event';
+  // Identity resolve endpoint sits at the same host as the tracking endpoint.
+  // Derived rather than configured separately so merchants don't need to
+  // update settings when we ship the new identity feature.
+  const RESOLVE_ENDPOINT = ENDPOINT.replace(/\/api\/track\/event\/?$/, '/api/identity/resolve');
   const ACCOUNT_ID = settings.accountId;
   const STORE_ID = settings.storeId;
 
@@ -61,11 +65,13 @@ register(({ analytics, browser, settings, init }) => {
   // Persistent Visitor ID (365 days via localStorage)
   // =============================================
   const VISITOR_KEY = '__worder_visitor_id';
+  const CANONICAL_KEY = '__worder_canonical_id';
   const SESSION_KEY = '__worder_session_id';
   const SESSION_TS_KEY = '__worder_session_ts';
   const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
   let visitorId: string;
+  let canonicalVisitorId: string | null = null;  // server-issued, stable across ITP wipes
   let sessionId: string;
   let storageAvailable = false;
 
@@ -119,6 +125,15 @@ register(({ analytics, browser, settings, init }) => {
 
   initIds();
 
+  // Restore canonical visitor ID issued by the server's identity resolver.
+  // This survives Safari ITP localStorage wipes because the server
+  // re-matches by fingerprint+UA hash and reissues the same ID.
+  try {
+    browser.localStorage.getItem(CANONICAL_KEY).then((v) => {
+      if (v) canonicalVisitorId = v;
+    });
+  } catch { /* ignore */ }
+
   // Signal that the extension pixel is active so the legacy remote pixel
   // (worder-pixel.js) can skip itself and avoid double-tracking.
   try {
@@ -126,6 +141,85 @@ register(({ analytics, browser, settings, init }) => {
   } catch {
     /* sandbox may restrict */
   }
+
+  // =============================================
+  // Lightweight fingerprint (FNV-1a hash of stable browser signals).
+  // Sandboxed Web Pixel can't access canvas, but UA + screen + timezone +
+  // language + cores + memory still gives 70%+ uniqueness — enough to
+  // re-match returning visitors after localStorage wipe when combined
+  // with server-side UA hash and IP /24 subnet.
+  // =============================================
+  function generateFingerprint(): string | null {
+    try {
+      const ctx: any = init.context || {};
+      const win: any = ctx.window || {};
+      const nav = win.navigator || {};
+      const scr = win.screen || {};
+      const parts = [
+        String(nav.userAgent || ''),
+        String((nav.languages || [nav.language || '']).join(',')),
+        String(new Date().getTimezoneOffset()),
+        String(scr.width || ''),
+        String(scr.height || ''),
+        String(scr.colorDepth || ''),
+        String(nav.hardwareConcurrency || ''),
+        String((nav as any).deviceMemory || ''),
+        String(nav.platform || ''),
+      ];
+      const s = parts.join('|');
+      let h = 2166136261;
+      for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = (h * 16777619) >>> 0;
+      }
+      return ('00000000' + h.toString(16)).slice(-8);
+    } catch {
+      return null;
+    }
+  }
+  const fingerprintHash = generateFingerprint();
+
+  // Resolve canonical identity once at boot, fire-and-forget. Server
+  // returns the stable worder_visitor_id and (when fingerprint matches)
+  // restores the prior identity even after a localStorage wipe.
+  function resolveIdentity(): void {
+    try {
+      const customerId = init.data?.customer?.id || null;
+      const body = JSON.stringify({
+        accountId: ACCOUNT_ID,
+        storeId: STORE_ID,
+        clientVisitorId: visitorId,
+        fingerprintHash,
+        email: cartIdentity.email || init.data?.customer?.email || null,
+        phone: cartIdentity.phone || init.data?.customer?.phone || null,
+        shopifyCustomerId: customerId ? String(customerId) : null,
+        source: 'shopify_pixel',
+      });
+      const sent = browser.sendBeacon(
+        RESOLVE_ENDPOINT,
+        new Blob([body], { type: 'application/json' })
+      );
+      if (!sent) {
+        fetch(RESOLVE_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+          keepalive: true,
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((j: any) => {
+            if (j && j.worderVisitorId) {
+              canonicalVisitorId = j.worderVisitorId;
+              try { browser.localStorage.setItem(CANONICAL_KEY, j.worderVisitorId); } catch { /* ignore */ }
+            }
+          })
+          .catch(() => {});
+      }
+      // sendBeacon doesn't return a body so we trust the server to set
+      // the cookie; canonicalVisitorId stays in client cache from prior boots.
+    } catch { /* sandbox may restrict */ }
+  }
+  resolveIdentity();
 
   // Touch session timestamp on every event
   function touchSession(): void {
@@ -149,8 +243,12 @@ register(({ analytics, browser, settings, init }) => {
       accountId: ACCOUNT_ID,
       storeId: STORE_ID,
       eventType,
-      visitorId,
+      // Prefer the server-issued canonical ID (stable across ITP wipes)
+      // when we have it; fall back to local visitorId until resolveIdentity
+      // returns. The server resolver folds both into the same identity row.
+      visitorId: canonicalVisitorId || visitorId,
       sessionId,
+      fingerprintHash,
       properties: data,
       source: 'shopify_pixel',
       timestamp: new Date().toISOString(),
@@ -298,6 +396,29 @@ register(({ analytics, browser, settings, init }) => {
       title: event.context?.document?.title || null,
       referrer: event.context?.document?.referrer || null,
       pathname: event.context?.document?.location?.pathname || null,
+    });
+  });
+
+  // --- Product Viewed --- (was previously delegated to the Theme App
+  // Extension — but on stores that don't ship that extension, viewed_product
+  // fell through entirely. Subscribing in the Web Pixel as well closes the
+  // gap; the server dedupes by idempotency_key when both fire.)
+  analytics.subscribe('product_viewed', (event: any) => {
+    const v = event.data?.productVariant;
+    if (!v) return;
+    sendEvent('viewed_product', {
+      productId: v.product?.id || null,
+      title: v.product?.title || v.title || null,
+      vendor: v.product?.vendor || null,
+      productType: v.product?.type || null,
+      productUrl: v.product?.url || null,
+      price: parseFloat(v.price?.amount || '0'),
+      currency: v.price?.currencyCode || null,
+      compareAtPrice: v.compareAtPrice ? parseFloat(v.compareAtPrice.amount || '0') : null,
+      variantId: v.id || null,
+      variantTitle: v.title || null,
+      sku: v.sku || null,
+      imageUrl: v.image?.src || null,
     });
   });
 

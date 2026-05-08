@@ -44,9 +44,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ connected: false, store: null });
   }
 
-  // A store is connected to Shopify only if it has a real Shopify domain and token
+  // A store is connected to Shopify only if it has a real Shopify domain,
+  // a valid access token, AND is currently is_active. Without the
+  // is_active check, a store the merchant just disconnected (which keeps
+  // the credentials in the row for audit/restore) would still surface as
+  // "connected" — and the dashboard would block them from re-entering
+  // credentials, jumping straight to the connected view on every reload.
   const isManualStore = !store.shop_domain || store.shop_domain.endsWith('.worder.local') || store.access_token === 'manual'
-  const isShopifyConnected = !isManualStore && !!store.shop_domain && !!store.access_token;
+  const isShopifyConnected = !isManualStore && !!store.shop_domain && !!store.access_token && store.is_active === true;
 
   if (!isShopifyConnected) {
     return NextResponse.json({

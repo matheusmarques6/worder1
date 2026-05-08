@@ -247,6 +247,12 @@ export async function POST(
 
     const body = rawBody
     const { answers, utm_source, utm_medium, utm_campaign, utm_term, utm_content } = body
+    // Identity signals — sent by the popup/form runtime so we can stitch
+    // the new contact to the visitor_identities row that was tracking
+    // them anonymously before they submitted the form.
+    const visitorId = (body as any)?.visitor_id || (body as any)?.visitorId || null
+    const sessionId = (body as any)?.session_id || (body as any)?.sessionId || null
+    const fingerprintHash = (body as any)?.fingerprint_hash || (body as any)?.fingerprintHash || null
 
     if (!answers || typeof answers !== 'object') {
       return NextResponse.json({ error: 'answers é obrigatório' }, { status: 400 })
@@ -665,6 +671,32 @@ export async function POST(
         }
       } catch (e: any) {
         console.warn('[Form Submit] audience apply failed:', e?.message)
+      }
+    }
+
+    // 8.4. Identity graph stitching: link contact to visitor_identities
+    //      and backfill historic anonymous events under all aliases. This
+    //      is the popup → CDP bridge that catches every product view /
+    //      cart event the visitor did before identifying themselves.
+    if (contactId) {
+      try {
+        const { resolveIdentity, linkContactToIdentity } = await import('@/lib/identity/resolver')
+        const ua = request.headers.get('user-agent') || null
+        const ip = (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || null
+        const identity = await resolveIdentity({
+          organizationId: form.organization_id,
+          storeId: (form as any).store_id || null,
+          clientVisitorId: visitorId,
+          fingerprintHash,
+          userAgent: ua,
+          ip,
+          email: contactData.email || answers.email || null,
+          phone: contactData.phone || answers.phone || null,
+          source: 'form',
+        })
+        await linkContactToIdentity(identity.identityId, contactId, form.organization_id)
+      } catch (e: any) {
+        console.warn('[Form Submit] identity graph link failed:', e?.message)
       }
     }
 

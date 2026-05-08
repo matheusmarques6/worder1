@@ -155,15 +155,30 @@ export async function GET(request: NextRequest) {
 
         console.log(`[AutoProcess] Executing run ${run.id} with ${workflow.nodes.length} nodes, hasDeal=${!!deal}`);
 
+        // Resume context — same logic as /api/workers/automation. When
+        // metadata.waiting_at is set, the run was previously paused at
+        // a delay and is being re-enqueued by check-delayed-runs. Pass
+        // startFromNodeId so the engine continues AFTER the delay
+        // instead of restarting from the trigger.
+        const previousWaitingAt = (metadata as any).waiting_at;
+        const previousContext = (metadata as any).context;
+        const isResume = !!previousWaitingAt?.nodeId;
+        let startFromNodeId: string | undefined;
+        if (isResume) {
+          const edge = (workflow.edges || []).find((e: any) => e.source === previousWaitingAt.nodeId);
+          startFromNodeId = edge?.target;
+        }
+
         // Executa com heartbeat periódico (lock não expira durante execução longa)
         const result = await withHeartbeat(run.id, lock.token, () =>
           executeWorkflow(workflow, {
             organizationId: automation.organization_id,
             executionId: run.id,
+            startFromNodeId,
             triggerData: metadata.trigger_data || {},
             contactId: run.contact_id,
             dealId: metadata.deal_id,
-            context: {
+            context: previousContext || {
               organizationId: automation.organization_id,
               contact: contact ? {
                 id: contact.id,
@@ -197,6 +212,47 @@ export async function GET(request: NextRequest) {
           result.error || null,
           { nodeResults: result.nodeResults } as any
         );
+
+        // CRITICAL: releaseRun's RPC doesn't write waiting_until /
+        // current_node_id. Without these the check-delayed-runs cron
+        // never finds the row and the run is stuck forever in 'waiting'
+        // — exactly what caused 'no email ever shipped, Resend received
+        // zero requests' for the merchant. Write them here, post-release.
+        if (result.status === 'waiting') {
+          const waitingAt = (result as any).waitingAt;
+          if (waitingAt?.resumeAt) {
+            try {
+              await supabase
+                .from('automation_runs')
+                .update({
+                  waiting_until: waitingAt.resumeAt,
+                  current_node_id: waitingAt.nodeId,
+                  metadata: {
+                    ...metadata,
+                    result: { duration: result.duration, nodeResults: result.nodeResults },
+                    waiting_at: {
+                      nodeId: waitingAt.nodeId,
+                      resumeAt: waitingAt.resumeAt,
+                      data: waitingAt.data,
+                    },
+                    context: (result as any).context,
+                  },
+                })
+                .eq('id', run.id);
+            } catch (e: any) {
+              console.warn(`[AutoProcess] Failed to persist waiting state for ${run.id}:`, e?.message);
+            }
+          }
+        } else if (result.status === 'success' || result.status === 'cancelled' || finalStatus === 'failed') {
+          // Clean up resume markers on terminal states so future
+          // dispatches with idempotent keys can start fresh.
+          try {
+            await supabase
+              .from('automation_runs')
+              .update({ waiting_until: null, current_node_id: null })
+              .eq('id', run.id);
+          } catch { /* non-blocking */ }
+        }
 
         results.push({
           runId: run.id,

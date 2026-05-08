@@ -61,6 +61,39 @@ export default function ShopifyConnect() {
   const [editClientSecret, setEditClientSecret] = useState('');
   const [savingCreds, setSavingCreds] = useState(false);
 
+  // Swap Shopify backend (manual integration only) — point the SAME
+  // Worder store row at a DIFFERENT Shopify shop, preserving every
+  // related record (contacts, events, automations, financials, emails).
+  const [showSwap, setShowSwap] = useState(false);
+  const [swapDomain, setSwapDomain] = useState('');
+  const [swapClientId, setSwapClientId] = useState('');
+  const [swapClientSecret, setSwapClientSecret] = useState('');
+  const [swapping, setSwapping] = useState(false);
+
+  // Disconnected stores in this org — surfaced on the connect form so
+  // the merchant can REACTIVATE an existing row with a new Shopify
+  // backend instead of creating a fresh row that orphans all data.
+  const [disconnectedStores, setDisconnectedStores] = useState<Array<{
+    id: string
+    shop_domain: string
+    shop_name: string | null
+    currency: string | null
+    plan_name: string | null
+    connection_type: string | null
+    status: string | null
+    uninstalled_at: string | null
+    installed_at: string | null
+    last_sync_at: string | null
+    preserved_data: { contacts: number; automations: number; events: number; orders: number }
+  }>>([])
+  // Which disconnected store is being reactivated (storeId) and the
+  // creds being typed for it.
+  const [reactivatingStoreId, setReactivatingStoreId] = useState<string | null>(null)
+  const [reactivateDomain, setReactivateDomain] = useState('')
+  const [reactivateClientId, setReactivateClientId] = useState('')
+  const [reactivateClientSecret, setReactivateClientSecret] = useState('')
+  const [reactivating, setReactivating] = useState(false)
+
   // When the page was opened via "Adicionar loja" from the integrations
   // list, the URL carries ?add=1. In that case we skip the "connected"
   // view even if there's already a store — the user explicitly wants
@@ -93,7 +126,12 @@ export default function ShopifyConnect() {
     try {
       setLoading(true);
 
-      // Try dedicated status endpoint first
+      // Status endpoint is the canonical source — it filters by store_id
+      // when present and respects is_active. We DO NOT fall back to
+      // /api/shopify/connect which returns "any active store in the org":
+      // that picked the wrong store when the merchant disconnects one of
+      // multiple stores (e.g. disconnect sourosa, get lojalaclode shown
+      // as 'connected' because it's the only active row left).
       const storeParam = currentStore?.id ? `?store_id=${currentStore.id}` : '';
       const res = await fetch(`/api/integrations/shopify/status${storeParam}`);
       const data = await res.json();
@@ -104,40 +142,13 @@ export default function ShopifyConnect() {
         return;
       }
 
-      // Fallback: try /api/shopify/connect (used by settings page)
-      const res2 = await fetch('/api/shopify/connect');
-      const data2 = await res2.json();
-
-      if (data2.stores?.length > 0) {
-        const s = data2.stores.find((st: any) => st.is_active || st.isActive) || data2.stores[0];
-        setConnected(true);
-        setStore({
-          id: s.id,
-          shopDomain: s.domain || s.shop_domain,
-          shopName: s.name || s.shop_name,
-          shopEmail: s.email || s.shop_email || '',
-          currency: s.currency || 'BRL',
-          planName: s.plan_name || '',
-          apiVersion: s.api_version || '2026-04',
-          status: s.status || s.connectionStatus || 'active',
-          connectionType: s.connection_type || s.connectionType || 'oauth',
-          tokenExpiresAt: s.token_expires_at || s.tokenExpiresAt,
-          initialSyncCompleted: s.initial_sync_completed || false,
-          pixelInstalled: s.pixel_installed || false,
-          embedInstalled: s.embed_installed || false,
-          installedAt: s.installed_at || '',
-          lastSyncAt: s.lastSyncAt || s.last_sync_at || '',
-          totalOrders: s.totalOrders || s.total_orders || 0,
-          totalRevenue: s.totalRevenue || s.total_revenue || 0,
-          totalCustomers: s.totalCustomers || s.total_customers || 0,
-        });
-        return;
-      }
-
+      // Not connected for the selected store — show the connect/reactivate form.
       setConnected(false);
       setStore(null);
     } catch {
       console.error('Failed to fetch shopify status');
+      setConnected(false);
+      setStore(null);
     } finally {
       setLoading(false);
     }
@@ -203,10 +214,27 @@ export default function ShopifyConnect() {
         const pJson = await pRes.json();
         if (pRes.ok && pJson.code) setPixelCode(pJson.code);
       } catch { /* non-blocking */ }
-      // IMPORTANT: do NOT call fetchStatus() here. Doing so would flip
-      // the component into its "connected" view and hide the Custom
-      // Pixel code block (the very next step the merchant needs). The
-      // user exits via the "Voltar para Integrações" button at the top.
+
+      // Kick off install-extras + sync in background. The merchant
+      // doesn't wait — both run server-side detached. The wizard +
+      // diagnostic dashboard show progress as webhooks register and
+      // products/orders stream in.
+      const sId = data.store?.id;
+      if (sId) {
+        startPostConnectCascade(sId);
+        setSuccessMessage(`Conectada! Registrando webhooks, pixel e importando dados em segundo plano. Aguarde alguns minutos pra ver tudo no diagnóstico.`);
+      }
+
+      // Land on install-pixel — manual integrations usually lack the
+      // write_pixels scope so the merchant has to paste the Custom Pixel
+      // snippet themselves. The wizard guides that step.
+      try {
+        if (sId && typeof window !== 'undefined') {
+          setTimeout(() => {
+            window.location.href = `/integrations/shopify/install-pixel?storeId=${sId}`;
+          }, 1500);
+        }
+      } catch { /* fall back to manual exit via "Voltar" */ }
     } catch {
       setError('Erro ao conectar. Tente novamente.');
     } finally {
@@ -267,14 +295,169 @@ export default function ShopifyConnect() {
     }
   }
 
+  // Fetch disconnected stores so we can offer reactivation paths.
+  // Runs whenever the form is shown (i.e. not connected).
+  useEffect(() => {
+    if (loading || (connected && store)) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/integrations/shopify/disconnected-stores')
+        if (!res.ok) return
+        const j = await res.json()
+        if (!cancelled) setDisconnectedStores(j.stores || [])
+      } catch { /* silent */ }
+    })()
+    return () => { cancelled = true }
+  }, [loading, connected, store])
+
+  // Kick off the post-connect cascade in the BACKGROUND:
+  //   1. install-extras (webhooks, Custom Pixel, loader, tracker)
+  //   2. sync-now       (products, customers, orders, refunds)
+  //
+  // Both fire-and-forget — the merchant doesn't wait. The diagnostic
+  // dashboard (/tracking-debug) auto-refreshes every 5s and shows
+  // webhooks appearing, pixel install status flipping, contact_events
+  // streaming in. That's better feedback than blocking the connect
+  // button for 30+ seconds while everything runs serially.
+  function startPostConnectCascade(storeId: string) {
+    fetch('/api/shopify/install-extras', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId }),
+      keepalive: true,
+    }).then(() => {}, () => {})
+
+    fetch('/api/shopify/sync-now', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId, syncType: 'all' }),
+      keepalive: true,
+    }).then(() => {}, () => {})
+  }
+
+  async function handleReactivate(storeId: string) {
+    const domain = reactivateDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+    const cid = reactivateClientId.trim()
+    const cs = reactivateClientSecret.trim()
+    if (!domain || !cid || !cs) {
+      setError('Preencha domínio, Client ID e Client Secret da nova Shopify.')
+      return
+    }
+    const fullDomain = domain.endsWith('.myshopify.com') ? domain : `${domain}.myshopify.com`
+    setReactivating(true)
+    setError('')
+    setSuccessMessage('')
+    try {
+      const res = await fetch('/api/integrations/shopify/swap-backend', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storeId,
+          newDomain: fullDomain,
+          clientId: cid,
+          clientSecret: cs,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        setError(data.error || 'Falha ao reativar loja.')
+        return
+      }
+      const finalDomain = data.store?.shop_domain || fullDomain
+      setSuccessMessage(`Conectada em ${finalDomain}! Registrando webhooks, pixel e importando dados em segundo plano. Acompanhe o progresso no diagnóstico.`)
+      setReactivatingStoreId(null)
+      setReactivateDomain('')
+      setReactivateClientId('')
+      setReactivateClientSecret('')
+
+      // Kick off install-extras + sync in background. The merchant can
+      // navigate freely — both run server-side without blocking.
+      startPostConnectCascade(storeId)
+
+      // Quick redirect to the diagnostic so progress is visible.
+      setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          window.location.href = `/integrations/shopify/tracking-debug`
+        }
+      }, 1200)
+    } catch {
+      setError('Erro ao reativar. Tente novamente.')
+    } finally {
+      setReactivating(false)
+    }
+  }
+
+  async function handleSwapBackend() {
+    if (!store?.id) return;
+    const domain = swapDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const cid = swapClientId.trim();
+    const cs = swapClientSecret.trim();
+    if (!domain || !cid || !cs) {
+      setError('Preencha domínio, Client ID e Client Secret da nova Shopify.');
+      return;
+    }
+    const fullDomain = domain.endsWith('.myshopify.com') ? domain : `${domain}.myshopify.com`;
+    if (!confirm(`Trocar backend pra "${fullDomain}"?\n\nTodos os dados da Worder (contatos, eventos, automações, fluxos, emails, financeiro) ficam preservados. Apenas a Shopify de origem muda.\n\nWebhooks, pixel, loader e tracker são registrados automaticamente. A importação inicial de produtos/pedidos/clientes inicia em segundo plano.`)) return;
+    setSwapping(true);
+    setError('');
+    setSuccessMessage('');
+    try {
+      const res = await fetch('/api/integrations/shopify/swap-backend', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storeId: store.id,
+          newDomain: fullDomain,
+          clientId: cid,
+          clientSecret: cs,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || 'Falha ao trocar Shopify.');
+        return;
+      }
+      const finalDomain = data.store?.shop_domain || fullDomain;
+      setSuccessMessage(`Shopify trocada pra ${finalDomain}! Webhooks, pixel e importação rodando em segundo plano. Acompanhe no diagnóstico.`);
+      setShowSwap(false);
+      setSwapDomain('');
+      setSwapClientId('');
+      setSwapClientSecret('');
+
+      // Fire-and-forget cascade — install-extras + sync run server-side
+      // without blocking the merchant. Diagnostic dashboard streams progress.
+      startPostConnectCascade(store.id);
+
+      setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          window.location.href = `/integrations/shopify/tracking-debug`;
+        }
+      }, 1200);
+    } catch {
+      setError('Erro ao trocar Shopify. Tente novamente.');
+    } finally {
+      setSwapping(false);
+    }
+  }
+
   async function handleDisconnect() {
-    if (!confirm('Tem certeza? Os dados já importados serão mantidos.')) return;
+    if (!store?.id) return;
+    if (!confirm(`Desconectar ${store.shopName || store.shopDomain}?\n\nDados ficam preservados (contatos, fluxos, automações, financeiro). Você pode reativar com a mesma Shopify ou outra depois.`)) return;
     setDisconnecting(true);
     try {
-      await fetch('/api/integrations/shopify/disconnect', { method: 'POST' });
+      // Send the SPECIFIC store id — without it the disconnect endpoint
+      // deactivates EVERY active store in the org, which is catastrophic
+      // when the merchant has multiple stores and only wanted to disconnect
+      // one (the cause of "I disconnected sourosa but it broke lojalaclode too").
+      await fetch('/api/integrations/shopify/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: store.id }),
+      });
       setConnected(false);
       setStore(null);
-      setSuccessMessage('Loja desconectada.');
+      setSuccessMessage('Loja desconectada. Os dados foram preservados — reative quando quiser.');
     } catch {
       setError('Erro ao desconectar');
     } finally {
@@ -369,13 +552,21 @@ export default function ShopifyConnect() {
                   O pixel captura visualizações de produto, carrinho, checkout e email. Sem ele, o tracking comportamental não funciona.
                 </p>
               </div>
-              <button
-                onClick={fetchPixelCode}
-                disabled={loadingPixelCode}
-                className="flex-shrink-0 px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
-              >
-                {loadingPixelCode ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ver código'}
-              </button>
+              <div className="flex-shrink-0 flex flex-col gap-1.5">
+                <a
+                  href={`/integrations/shopify/install-pixel?storeId=${store.id}`}
+                  className="px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  Instalar agora
+                </a>
+                <button
+                  onClick={fetchPixelCode}
+                  disabled={loadingPixelCode}
+                  className="px-3 py-1 text-amber-700 text-[11px] font-medium hover:text-amber-900 transition-colors"
+                >
+                  {loadingPixelCode ? <Loader2 className="w-3 h-3 animate-spin inline" /> : 'Só ver código'}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -497,6 +688,76 @@ export default function ShopifyConnect() {
           </div>
         )}
 
+        {store.connectionType === 'manual' && showSwap && (
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-blue-900 text-sm">Trocar pra outra Shopify</p>
+                <p className="text-xs text-blue-700 mt-0.5">
+                  Aponta esta loja Worder pra um Shopify <strong>diferente</strong>, preservando todos os dados (contatos, eventos, automações, fluxos, emails, financeiro). Domínio atual: <code className="font-mono">{store.shopDomain}</code>.
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowSwap(false); setSwapDomain(''); setSwapClientId(''); setSwapClientSecret(''); setError(''); }}
+                className="text-xs text-blue-500 hover:text-blue-700"
+              >
+                Cancelar
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-blue-900 mb-1">Domínio da nova loja</label>
+              <input
+                type="text"
+                value={swapDomain}
+                onChange={(e) => setSwapDomain(e.target.value)}
+                placeholder="novalojanew.myshopify.com"
+                className="w-full px-3 py-2 border border-blue-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-blue-900 mb-1">Client ID (novo Custom App)</label>
+              <input
+                type="text"
+                value={swapClientId}
+                onChange={(e) => setSwapClientId(e.target.value)}
+                placeholder="Dev Dashboard → novo app → Client ID"
+                className="w-full px-3 py-2 border border-blue-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-blue-900 mb-1">Client Secret (novo Custom App)</label>
+              <input
+                type="password"
+                value={swapClientSecret}
+                onChange={(e) => setSwapClientSecret(e.target.value)}
+                placeholder="Dev Dashboard → novo app → Client Secret"
+                className="w-full px-3 py-2 border border-blue-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                autoComplete="off"
+              />
+            </div>
+            <div className="text-[11px] text-blue-700 bg-blue-100/50 px-3 py-2 rounded leading-relaxed">
+              <strong>O que muda:</strong> domínio, access token, shop_id, currency, plan_name, scopes.
+              <br />
+              <strong>O que fica:</strong> contatos, eventos, automações, fluxos, emails, segmentos, financeiro, deals, atividades.
+              <br />
+              <strong>Próximo passo:</strong> após salvar, você é redirecionado pro diagnóstico onde precisa clicar em <strong>Reinstalar tudo</strong> pra registrar webhooks na Shopify nova.
+            </div>
+            <button
+              onClick={handleSwapBackend}
+              disabled={swapping || !swapDomain.trim() || !swapClientId.trim() || !swapClientSecret.trim()}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            >
+              {swapping ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Validando e trocando…</>
+              ) : (
+                <>Trocar Shopify (preserva todos os dados)</>
+              )}
+            </button>
+          </div>
+        )}
+
         {store.connectionType === 'manual' && showEditCreds && (
           <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
             <div className="flex items-center justify-between">
@@ -573,11 +834,21 @@ export default function ShopifyConnect() {
           </a>
           {store.connectionType === 'manual' && (
             <button
-              onClick={() => setShowEditCreds((v) => !v)}
+              onClick={() => { setShowEditCreds((v) => !v); setShowSwap(false); }}
               className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
             >
               <KeyRound className="w-4 h-4" />
               {showEditCreds ? 'Fechar editor' : 'Editar credenciais'}
+            </button>
+          )}
+          {store.connectionType === 'manual' && (
+            <button
+              onClick={() => { setShowSwap((v) => !v); setShowEditCreds(false); }}
+              className="flex items-center gap-2 px-4 py-2 text-sm border border-blue-200 rounded-lg hover:bg-blue-50 text-blue-700"
+              title="Aponta esta loja pra outra Shopify mantendo todos os dados"
+            >
+              <RefreshCw className="w-4 h-4" />
+              {showSwap ? 'Fechar' : 'Trocar Shopify'}
             </button>
           )}
           <button
@@ -618,6 +889,123 @@ export default function ShopifyConnect() {
         <h3 className="text-lg font-semibold text-gray-900">Conecte sua loja Shopify</h3>
         <p className="text-sm text-gray-500">Sincronize pedidos, clientes e ative tracking completo</p>
       </div>
+
+      {/* Disconnected stores — offer reactivation INTO the existing row.
+          Surfaces only when there's data worth preserving (contacts/events/
+          automations) and crucially BEFORE the new-store form so the
+          merchant doesn't accidentally create a duplicate row by typing
+          into the form below. */}
+      {disconnectedStores.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-blue-200">
+            <p className="text-[13px] font-semibold text-blue-900">
+              {disconnectedStores.length === 1 ? 'Loja desativada com dados preservados' : `${disconnectedStores.length} lojas desativadas com dados preservados`}
+            </p>
+            <p className="text-[11.5px] text-blue-700 mt-0.5 leading-relaxed">
+              Em vez de criar uma loja nova (perdendo contatos, fluxos, automações, financeiro), reative a existente com uma <strong>nova Shopify</strong> — pode ser a mesma loja Shopify ou outra. Tudo o que você já tem na Worder fica.
+            </p>
+          </div>
+          <div className="divide-y divide-blue-100">
+            {disconnectedStores.map((s) => {
+              const isExpanded = reactivatingStoreId === s.id
+              const totalRecords = s.preserved_data.contacts + s.preserved_data.events + s.preserved_data.automations + s.preserved_data.orders
+              return (
+                <div key={s.id} className="bg-white">
+                  <div className="px-4 py-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium text-gray-900 truncate">
+                        {s.shop_name || s.shop_domain || 'Loja sem nome'}
+                      </p>
+                      <p className="text-[11px] text-gray-500 font-mono truncate">
+                        {s.shop_domain}
+                      </p>
+                      <p className="text-[10.5px] text-gray-500 mt-0.5">
+                        Dados preservados:{' '}
+                        <span className="font-semibold text-gray-700">{s.preserved_data.contacts}</span> contatos ·{' '}
+                        <span className="font-semibold text-gray-700">{s.preserved_data.events}</span> eventos ·{' '}
+                        <span className="font-semibold text-gray-700">{s.preserved_data.automations}</span> automações ·{' '}
+                        <span className="font-semibold text-gray-700">{s.preserved_data.orders}</span> pedidos
+                        {totalRecords === 0 && <span className="ml-1 text-amber-600">(loja sem histórico — pode ser mais limpo conectar nova)</span>}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (isExpanded) {
+                          setReactivatingStoreId(null)
+                          setReactivateDomain('')
+                          setReactivateClientId('')
+                          setReactivateClientSecret('')
+                        } else {
+                          setReactivatingStoreId(s.id)
+                          setReactivateDomain(s.shop_domain || '')
+                          setReactivateClientId('')
+                          setReactivateClientSecret('')
+                          setError('')
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex-shrink-0"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      {isExpanded ? 'Cancelar' : 'Reativar'}
+                    </button>
+                  </div>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 space-y-3 bg-blue-50/50 border-t border-blue-100 pt-3">
+                      <p className="text-[11.5px] text-blue-800 leading-relaxed">
+                        Cole as credenciais da Shopify pra qual quer apontar esta loja. Pode ser a <strong>mesma de antes</strong> (recuperando a integração) ou uma <strong>nova Shopify</strong>. Os {s.preserved_data.contacts + s.preserved_data.events} registros da Worder ficam preservados em qualquer caso.
+                      </p>
+                      <div>
+                        <label className="block text-[11px] font-medium text-blue-900 mb-1">Domínio da Shopify</label>
+                        <input
+                          type="text"
+                          value={reactivateDomain}
+                          onChange={(e) => setReactivateDomain(e.target.value)}
+                          placeholder="loja.myshopify.com"
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-blue-900 mb-1">Client ID</label>
+                        <input
+                          type="text"
+                          value={reactivateClientId}
+                          onChange={(e) => setReactivateClientId(e.target.value)}
+                          placeholder="Dev Dashboard → Custom App → Client ID"
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-blue-900 mb-1">Client Secret</label>
+                        <input
+                          type="password"
+                          value={reactivateClientSecret}
+                          onChange={(e) => setReactivateClientSecret(e.target.value)}
+                          placeholder="Dev Dashboard → Custom App → Client Secret"
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <button
+                        onClick={() => handleReactivate(s.id)}
+                        disabled={reactivating || !reactivateDomain.trim() || !reactivateClientId.trim() || !reactivateClientSecret.trim()}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+                      >
+                        {reactivating ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Validando e reativando…</>
+                        ) : (
+                          <>Reativar com esta Shopify</>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Connection mode tabs */}
       <div className="flex bg-gray-100 rounded-lg p-1 gap-1">

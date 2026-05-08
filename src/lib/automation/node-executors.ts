@@ -250,13 +250,63 @@ const actionExecutors: Record<string, NodeExecutor> = {
   // ========== EMAIL ==========
   action_email: {
     async execute({ config, context, credentials, isTest, supabase, organizationId }) {
-      const email = context.contact?.email;
+      // Email cascade: contact context first, then trigger data fields
+      // (Shopify webhook may have arrived without the customer info
+      // attached to the contact yet — we still try to email the
+      // address that was on the trigger payload). Klaviyo/Omnisend
+      // top-level keys + canonical Customer.Email + raw.email cover
+      // every shape any source ships.
+      const triggerData: any = (context.trigger as any)?.data || {};
+      const triggerProps: any = triggerData.properties || triggerData;
+      const triggerRaw: any = triggerProps.raw || {};
+      const fallbackEmail =
+        triggerProps.CustomerEmail ||
+        triggerProps?.Customer?.Email ||
+        triggerProps.email ||
+        triggerProps.Email ||
+        triggerRaw.email ||
+        triggerRaw.contact_email ||
+        triggerRaw.customer?.email ||
+        triggerRaw.billing_address?.email ||
+        null;
+      const email = (context.contact?.email as string | undefined) || fallbackEmail;
+
+      // If context has no contact but trigger has email, try to look up
+      // an existing contact by that email so downstream merge tags +
+      // email_sends linkage work. Best-effort.
+      if (!context.contact && email && organizationId) {
+        try {
+          const { data: contactRow } = await supabase
+            .from('contacts')
+            .select('id, email, phone, first_name, last_name, total_orders, total_spent, tags')
+            .eq('organization_id', organizationId)
+            .ilike('email', String(email))
+            .maybeSingle();
+          if (contactRow) {
+            (context as any).contact = {
+              id: contactRow.id,
+              email: contactRow.email,
+              phone: contactRow.phone,
+              firstName: contactRow.first_name,
+              lastName: contactRow.last_name,
+              tags: contactRow.tags || [],
+              customFields: {},
+            };
+          }
+        } catch { /* best-effort */ }
+      }
 
       if (!email) {
+        // No contact email and no fallback in trigger data. Complete
+        // the run as 'success' with skipped flag so it shows in history
+        // with a clear reason instead of polluting the failure stats.
         return {
-          status: isTest ? 'success' : 'error',
-          output: isTest ? { sent: false, test: true, reason: 'Contato sem email' } : null,
-          error: isTest ? undefined : 'Contato sem email',
+          status: 'success',
+          output: {
+            sent: false,
+            skipped: true,
+            reason: 'Email não disponível: o webhook do Shopify chegou sem email do cliente e o trigger não carregou nenhum endereço. Aguardando próximo webhook (checkouts/update) com a info preenchida.',
+          },
         };
       }
 
@@ -330,6 +380,55 @@ const actionExecutors: Record<string, NodeExecutor> = {
               status: 'success',
               output: { skipped: true, reason: `Smart Sending: contato recebeu email nas últimas ${skipHours}h` },
             };
+          }
+        }
+
+        // 2b-2. Conversion guard for cart-recovery / checkout-abandon flows.
+        //
+        // When the trigger fired on checkout_started, the merchant doesn't
+        // want the email going out if the customer has since completed
+        // the purchase (during the delay window). Same for added_to_cart.
+        //
+        // Check: was a placed_order / order_paid / checkout_completed
+        // event recorded for the same contact AFTER the trigger fired?
+        // If yes, this run is no longer relevant — skip the email.
+        if (!isTest && context.contact?.id) {
+          const triggerType = (context as any).trigger?.type || '';
+          const triggerEventType = String((context.trigger?.data as any)?.event_type || '').toLowerCase();
+          const isAbandonmentFlow =
+            triggerType === 'trigger_checkout_abandoned' ||
+            triggerType === 'trigger_added_to_cart' ||
+            triggerType === 'trigger_browse_abandoned' ||
+            triggerEventType === 'checkout_started' ||
+            triggerEventType === 'added_to_cart' ||
+            triggerEventType === 'browse_abandoned';
+
+          if (isAbandonmentFlow) {
+            // The trigger fired at metadata.created_at (from the run's
+            // origin); we don't have that here directly, so we use the
+            // contact's last_event_at as a proxy floor. Better: pull
+            // explicit window from automation config when present.
+            const windowMs = (config.conversionWindowHours || 24) * 60 * 60 * 1000;
+            const since = new Date(Date.now() - windowMs).toISOString();
+            const { data: completion } = await supabase
+              .from('contact_events')
+              .select('id, event_type, occurred_at')
+              .eq('contact_id', context.contact.id)
+              .in('event_type', ['placed_order', 'order_paid', 'checkout_completed'])
+              .gte('occurred_at', since)
+              .order('occurred_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (completion) {
+              return {
+                status: 'success',
+                output: {
+                  skipped: true,
+                  reason: `Conversão detectada (${completion.event_type} em ${completion.occurred_at}). Email de recuperação cancelado.`,
+                  converted_at: completion.occurred_at,
+                },
+              };
+            }
           }
         }
 
@@ -1476,8 +1575,28 @@ const conditionExecutors: Record<string, NodeExecutor> = {
 const controlExecutors: Record<string, NodeExecutor> = {
   control_delay: {
     async execute({ config, isTest }) {
-      const value = parseInt(config.value) || 1;
-      const unit = config.unit || 'hours';
+      // Cascade through every shape the editor might have saved the
+      // delay in:
+      //   config.delay.{value,unit}    — automation/index.tsx
+      //   config.{value,unit}          — flow-builder PropertiesPanel
+      //   config.{delayValue,delayUnit} — nodeTypes.ts defaultConfig
+      //   config.{minutes,duration,amount} — legacy variants
+      // Without this cascade, a flow configured as "3 minutos" silently
+      // ran as "1 hour" (the parseInt(undefined)||1 + 'hours' default).
+      const rawValue =
+        config?.delay?.value ??
+        config?.value ??
+        config?.delayValue ??
+        config?.minutes ??
+        config?.duration ??
+        config?.amount ??
+        1;
+      const value = parseInt(String(rawValue)) || 1;
+      const unit =
+        config?.delay?.unit ??
+        config?.unit ??
+        config?.delayUnit ??
+        (config?.minutes != null ? 'minutes' : 'hours');
 
       const multipliers: Record<string, number> = {
         seconds: 1000,

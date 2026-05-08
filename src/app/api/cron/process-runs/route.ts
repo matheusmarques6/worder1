@@ -154,13 +154,28 @@ export async function GET(request: NextRequest) {
 
         console.log(`[ProcessRuns] Executing workflow ${workflow.id} with ${workflow.nodes.length} nodes`);
 
+        // Resume context: when this run was previously paused at a
+        // delay node, metadata.waiting_at carries the node id we paused
+        // at. Pass startFromNodeId so the engine continues AFTER that
+        // node instead of restarting from the trigger (which would just
+        // hit the same delay → infinite loop).
+        const previousWaitingAt = (metadata as any).waiting_at;
+        const previousContext = (metadata as any).context;
+        const isResume = !!previousWaitingAt?.nodeId;
+        let startFromNodeId: string | undefined;
+        if (isResume) {
+          const edge = (workflow.edges || []).find((e: any) => e.source === previousWaitingAt.nodeId);
+          startFromNodeId = edge?.target;
+        }
+
         const result = await executeWorkflow(workflow, {
           organizationId: automation.organization_id,
           executionId: run.id,
+          startFromNodeId,
           triggerData: metadata.trigger_data || {},
           contactId: run.contact_id,
           dealId: metadata.deal_id,
-          context: {
+          context: previousContext || {
             organizationId: automation.organization_id,
             contact: contact ? {
               id: contact.id,
@@ -181,21 +196,47 @@ export async function GET(request: NextRequest) {
 
         console.log(`[ProcessRuns] Run ${run.id} result:`, result.status);
 
-        // Atualizar run com resultado
+        // CRITICAL: when result.status === 'waiting', we MUST persist
+        // waiting_until + current_node_id so the check-delayed-runs cron
+        // can find this row later (its WHERE clause is
+        // `status='waiting' AND waiting_until <= NOW()`). Without these
+        // writes the run is stuck forever in 'waiting' and the email
+        // never goes out — exactly what the merchant reported (Resend
+        // received zero requests).
+        const isWaiting = result.status === 'waiting';
+        const waitingAt = (result as any).waitingAt;
+        const updatePayload: Record<string, any> = {
+          status: isWaiting ? 'waiting' : (result.status === 'success' ? 'completed' : 'failed'),
+          completed_at: !isWaiting ? new Date().toISOString() : null,
+          last_error: result.error || null,
+          metadata: {
+            ...metadata,
+            result: {
+              duration: result.duration,
+              nodeResults: result.nodeResults,
+            },
+            // Snapshot for the resume path above
+            ...(isWaiting && waitingAt ? {
+              waiting_at: {
+                nodeId: waitingAt.nodeId,
+                resumeAt: waitingAt.resumeAt,
+                data: waitingAt.data,
+              },
+              context: (result as any).context,
+            } : {}),
+          },
+        };
+        if (isWaiting && waitingAt?.resumeAt) {
+          updatePayload.waiting_until = waitingAt.resumeAt;
+          updatePayload.current_node_id = waitingAt.nodeId;
+        } else if (!isWaiting) {
+          updatePayload.waiting_until = null;
+          updatePayload.current_node_id = null;
+        }
+
         await supabase
           .from('automation_runs')
-          .update({
-            status: result.status === 'waiting' ? 'waiting' : (result.status === 'success' ? 'completed' : 'failed'),
-            completed_at: result.status !== 'waiting' ? new Date().toISOString() : null,
-            metadata: {
-              ...metadata,
-              result: {
-                duration: result.duration,
-                nodeResults: result.nodeResults,
-              },
-            },
-            last_error: result.error || null,
-          })
+          .update(updatePayload)
           .eq('id', run.id);
 
         results.push({

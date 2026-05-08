@@ -165,6 +165,26 @@ export const BASE_VARIABLES: VariableCategory[] = [
       { key: 'system.automation_name', label: 'Nome da Automação', type: 'string' },
       { key: 'system.execution_id', label: 'ID da Execução', type: 'string' },
     ]
+  },
+  {
+    id: 'recommendations',
+    label: 'Recomendações de Produtos',
+    icon: 'Sparkles',
+    variables: [
+      // Frequently bought together — anchored to the product in the
+      // current trigger (viewed_product / added_to_cart / placed_order).
+      // Pre-populated by the executor when trigger data has a product_id.
+      { key: 'recommendations.fbt', label: 'Comprados Juntos (array)', type: 'array', example: [{ title: 'Produto X', price: 99.90 }] },
+      { key: 'recommendations.fbt[0].title', label: '#1 Comprados Juntos — Título', type: 'string' },
+      { key: 'recommendations.fbt[0].price', label: '#1 Comprados Juntos — Preço', type: 'currency' },
+      { key: 'recommendations.fbt[0].image_url', label: '#1 Comprados Juntos — Imagem', type: 'string' },
+      { key: 'recommendations.fbt[0].url', label: '#1 Comprados Juntos — URL', type: 'string' },
+      { key: 'recommendations.also_viewed', label: 'Também Viram (array)', type: 'array' },
+      { key: 'recommendations.also_viewed[0].title', label: '#1 Também Viram — Título', type: 'string' },
+      { key: 'recommendations.also_viewed[0].price', label: '#1 Também Viram — Preço', type: 'currency' },
+      { key: 'recommendations.also_viewed[0].image_url', label: '#1 Também Viram — Imagem', type: 'string' },
+      { key: 'recommendations.bestsellers', label: 'Mais Vendidos (array)', type: 'array' },
+    ]
   }
 ];
 

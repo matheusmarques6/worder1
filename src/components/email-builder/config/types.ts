@@ -225,12 +225,24 @@ export const BLOCK_DEFS: BlockDef[] = [
       backgroundColor: '',
     } },
 
-  // ── Carrinho Abandonado (Omnisend-style) ──
-  { type: 'abandoned-cart', label: 'Carrinho', icon: 'ShoppingCart', category: 'E-commerce',
+  // ── Produtos do Gatilho (works for cart/checkout/browse/order) ──
+  // The block auto-detects which trigger fired the email and pulls the
+  // right items + link from the event payload:
+  //   trigger_added_to_cart        → cart line items + cart URL
+  //   trigger_checkout_abandoned   → checkout line items + recovery URL
+  //   trigger_viewed_product       → 1 product + product URL
+  //   trigger_browse_abandoned     → recently-viewed products + product URL
+  //   trigger_order                → order line items + order status URL
+  //   trigger_back_in_stock        → the product back in stock + product URL
+  // Outside flow context, falls back to the contact's most recent recovery cart.
+  { type: 'abandoned-cart', label: 'Produtos do Gatilho', icon: 'ShoppingCart', category: 'E-commerce',
     defaultProps: {
       // Layout
       layoutType: 'image-left' as 'image-left' | 'image-right' | 'vertical',
       maxItems: 2,
+      // Source: 'trigger_auto' adapts to the active trigger; 'cart_items'
+      // forces "last recovery cart" lookup regardless of trigger.
+      feedType: 'trigger_auto' as 'trigger_auto' | 'cart_items' | 'trigger_cart' | 'trigger_viewed_product' | 'trigger_order',
       // Element visibility
       showImage: true,
       showName: true,
@@ -246,9 +258,11 @@ export const BLOCK_DEFS: BlockDef[] = [
       // Price styling
       priceFontSize: 14, priceColor: '#111827', priceWeight: '600',
       oldPriceColor: '#9CA3AF',
-      // Button styling
-      buttonText: 'Shop now',
-      buttonHref: '{{checkout_url}}',
+      // Button styling. {{ trigger.link }} is a smart merge tag that
+      // resolves to checkout URL / product URL / order status URL based
+      // on the active trigger. Falls back to {{checkout_url}} for legacy.
+      buttonText: 'Comprar agora',
+      buttonHref: '{{ trigger.link }}',
       buttonColor: '#111827', buttonTextColor: '#FFFFFF',
       buttonRadius: 4, buttonFontSize: 14,
       buttonAlign: 'left' as 'left' | 'center' | 'right' | 'full',

@@ -76,14 +76,80 @@ export async function POST(request: NextRequest) {
   }
   store = refreshed.store;
 
+  // ──────────────────────────────────────────
+  // 0. Canonicalize shop_domain
+  //
+  // If the merchant connected with a renamed admin slug (e.g.
+  // sourosa.myshopify.com) but Shopify's permanent canonical domain is
+  // different (e.g. lojalaclode.myshopify.com), webhooks arrive carrying
+  // the canonical in X-Shopify-Shop-Domain. Resolution falls back to
+  // alias scan instead of O(1) primary match. Worse, the diagnostic
+  // dashboard misleads the merchant into thinking they should match
+  // by what they typed.
+  //
+  // Fix: query GraphQL for shop.myshopifyDomain. If it differs from
+  // the stored shop_domain, swap them — canonical becomes primary,
+  // typed becomes alias. Idempotent (no-op when already canonical).
+  // ──────────────────────────────────────────
+  let domainCanonicalization: { swapped: boolean; canonical?: string; previous?: string } = { swapped: false };
+  try {
+    const canonRes = await fetch(
+      `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+      {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': store.access_token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: `{ shop { myshopifyDomain } }` }),
+      }
+    );
+    if (canonRes.ok) {
+      const j = await canonRes.json();
+      const canonical = (j.data?.shop?.myshopifyDomain || '').toLowerCase() || null;
+      const typed = String(store.shop_domain || '').toLowerCase();
+      if (canonical && canonical !== typed) {
+        const existingAliases: string[] = Array.isArray(store.shop_domain_aliases) ? store.shop_domain_aliases : [];
+        const aliases = new Set(existingAliases.map((a: string) => String(a).toLowerCase()));
+        aliases.add(typed);
+        aliases.delete(canonical);
+        const { error: swErr } = await supabase
+          .from('shopify_stores')
+          .update({ shop_domain: canonical, shop_domain_aliases: Array.from(aliases), updated_at: new Date().toISOString() })
+          .eq('id', store.id);
+        if (!swErr) {
+          domainCanonicalization = { swapped: true, canonical, previous: typed };
+          // Reflect in our local copy so the rest of this request uses
+          // the canonical domain for webhook/script_tag URLs.
+          store.shop_domain = canonical;
+          store.shop_domain_aliases = Array.from(aliases);
+        }
+      }
+    }
+  } catch { /* best-effort */ }
+
   const shopDomain = store.shop_domain;
   const accessToken = store.access_token;
-  const webhookUrl = `${APP_URL}/api/webhooks/shopify`;
+  // Webhook URL carries `?store_id=<id>` so the handler can identify
+  // the store from the URL itself — bulletproof against multi-domain
+  // shops, canonical-domain changes, or unknown myshopifyDomain aliases
+  // (the silent 410 cause that lost the Based store's checkouts).
+  // Pattern adapted from AdTracked.
+  const webhookUrl = `${APP_URL}/api/webhooks/shopify?store_id=${store.id}`;
 
   // ──────────────────────────────────────────
-  // 1. Webhooks — skip ones already registered for our URL
+  // 1. Webhooks — clean up stale URLs first, then create missing ones.
+  //
+  // We delete any subscription whose path is `/api/webhooks/shopify`
+  // (so it's clearly ours) but whose address ≠ the current expected URL
+  // — typical when NEXT_PUBLIC_APP_URL changed (preview deploy promoted
+  // to prod, custom domain swap, ngrok tunnel that died), OR when the
+  // store was registered before we started carrying ?store_id= in the
+  // URL. Without this, Shopify keeps delivering to the dead URL forever.
   // ──────────────────────────────────────────
   let existingTopics: string[] = [];
+  let staleDeleted = 0;
+  let staleFailed = 0;
   try {
     const listRes = await fetch(
       `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`,
@@ -91,9 +157,25 @@ export async function POST(request: NextRequest) {
     );
     if (listRes.ok) {
       const json = await listRes.json();
-      existingTopics = (json.webhooks || [])
+      const all = json.webhooks || [];
+      existingTopics = all
         .filter((w: any) => w.address === webhookUrl)
         .map((w: any) => w.topic);
+
+      const stale = all.filter((w: any) =>
+        typeof w.address === 'string' &&
+        w.address.includes('/api/webhooks/shopify') &&
+        w.address !== webhookUrl
+      );
+      for (const sw of stale) {
+        try {
+          const delRes = await fetch(
+            `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/webhooks/${sw.id}.json`,
+            { method: 'DELETE', headers: { 'X-Shopify-Access-Token': accessToken } }
+          );
+          if (delRes.ok) staleDeleted++; else staleFailed++;
+        } catch { staleFailed++; }
+      }
     }
   } catch { /* best-effort */ }
 
@@ -249,12 +331,92 @@ export async function POST(request: NextRequest) {
   }
 
   // ──────────────────────────────────────────
-  // 4. Mark initial sync done + bump api_version + persist script_tag_id
+  // 4. Storefront tracker via ScriptTag — fallback that doesn't depend
+  //    on the Custom Pixel sandbox. Captures page_viewed, viewed_product,
+  //    added_to_cart, checkout_started, checkout_completed (thank-you
+  //    page), plus the full click-IDs cascade (fbclid/fbc/fbp, gclid,
+  //    msclkid, ttclid, _kx, etc) and a richer canvas+webgl fingerprint.
+  //    Adapted from the AdTracked pattern.
+  // ──────────────────────────────────────────
+  const trackerUrl = `${APP_URL}/api/storefront/tracker.js?store_id=${store.id}`;
+  let trackerInstalled = false;
+  let trackerTagId: string | null = null;
+  let trackerError: string | null = null;
+  if (hasScriptTagsScope) {
+    try {
+      // Find any existing tracker tag (may use the OLD URL without
+      // ?store_id= or pointing at a previous APP_URL). Delete stale
+      // ones, then install the canonical one.
+      const listRes = await fetch(
+        `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/script_tags.json`,
+        { headers: { 'X-Shopify-Access-Token': accessToken } }
+      );
+      if (listRes.ok) {
+        const listJson = await listRes.json();
+        const tags = listJson.script_tags || [];
+        const ourTrackerTags = tags.filter((s: any) =>
+          typeof s.src === 'string' && s.src.includes('/api/storefront/tracker.js')
+        );
+        const matching = ourTrackerTags.find((s: any) => s.src === trackerUrl);
+        if (matching) {
+          trackerInstalled = true;
+          trackerTagId = String(matching.id);
+        }
+        // Delete stale tracker tags pointing at any other URL
+        for (const stale of ourTrackerTags) {
+          if (stale.src !== trackerUrl) {
+            try {
+              await fetch(
+                `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/script_tags/${stale.id}.json`,
+                { method: 'DELETE', headers: { 'X-Shopify-Access-Token': accessToken } }
+              );
+            } catch { /* best-effort */ }
+          }
+        }
+      }
+      if (!trackerInstalled) {
+        const createRes = await fetch(
+          `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/script_tags.json`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': accessToken,
+            },
+            body: JSON.stringify({
+              script_tag: {
+                event: 'onload',
+                src: trackerUrl,
+                display_scope: 'online_store',
+              },
+            }),
+          }
+        );
+        if (createRes.ok) {
+          const created = await createRes.json();
+          if (created.script_tag?.id) {
+            trackerInstalled = true;
+            trackerTagId = String(created.script_tag.id);
+          }
+        } else {
+          trackerError = `${createRes.status}: ${(await createRes.text()).slice(0, 200)}`;
+        }
+      }
+    } catch (err: any) {
+      trackerError = err?.message || 'fetch error';
+    }
+  } else {
+    trackerError = 'missing_scope:write_script_tags';
+  }
+
+  // ──────────────────────────────────────────
+  // 5. Mark initial sync done + bump api_version + persist script_tag_id
   // (in settings JSONB so we don't need a schema migration)
   // ──────────────────────────────────────────
   const updatedSettings = {
     ...(store.settings || {}),
     ...(scriptTagId ? { script_tag_id: scriptTagId, loader_installed_at: new Date().toISOString() } : {}),
+    ...(trackerTagId ? { tracker_tag_id: trackerTagId, tracker_installed_at: new Date().toISOString() } : {}),
   };
   await supabase
     .from('shopify_stores')
@@ -269,11 +431,14 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     success: true,
+    domainCanonicalization,
     webhooks: {
       total: REQUIRED_WEBHOOKS.length,
       created: webhookCreated,
       existing: webhookExisting,
       failed: webhookFailed,
+      staleDeleted,
+      staleFailed,
       failedTopics: webhookFailed > 0 ? failedTopics : undefined,
     },
     pixel: { installed: pixelInstalled },
@@ -283,6 +448,13 @@ export async function POST(request: NextRequest) {
       error: scriptTagError,
       missingScope: !hasScriptTagsScope,
       manualFallbackSnippet: scriptTagInstalled ? null : `<script src="${loaderUrl}" async></script>`,
+    },
+    tracker: {
+      installed: trackerInstalled,
+      scriptTagId: trackerTagId,
+      error: trackerError,
+      missingScope: !hasScriptTagsScope,
+      manualFallbackSnippet: trackerInstalled ? null : `<script src="${trackerUrl}" async></script>`,
     },
     apiVersion: SHOPIFY_API_VERSION,
   });

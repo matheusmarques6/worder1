@@ -710,11 +710,28 @@ export const useFlowStore = create<FlowStore>()(
           }
         }
 
-        // Check delay nodes have value
-        const delayNodes = nodes.filter((n) => n.data.nodeType === 'control_delay');
+        // Check delay nodes have value. Multiple shapes the UI / templates
+        // might have used historically. Accept any non-zero shape so
+        // legitimate flows don't get blocked:
+        //   nodeTypes defaultConfig: config.delayValue / config.delayUnit
+        //   PropertiesPanel:         config.value / config.unit
+        //   automation/index.tsx:    config.delay.value / config.delay.unit
+        //   legacy:                  config.minutes / config.duration / config.amount
+        const delayNodes = nodes.filter(
+          (n) => n.data.nodeType === 'control_delay' || n.data.nodeType === 'logic_delay'
+        );
         for (const delayNode of delayNodes) {
           const cfg = delayNode.data.config || {};
-          if (!cfg.value || cfg.value <= 0) {
+          const value = Number(
+            cfg?.delay?.value ??
+            cfg?.value ??
+            cfg?.delayValue ??
+            cfg?.minutes ??
+            cfg?.duration ??
+            cfg?.amount ??
+            0
+          );
+          if (!isFinite(value) || value <= 0) {
             errors.push(`Delay "${delayNode.data.label}" precisa de um tempo configurado`);
           }
         }

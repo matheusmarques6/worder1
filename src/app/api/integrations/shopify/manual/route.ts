@@ -135,6 +135,19 @@ export async function POST(request: NextRequest) {
     let currency = 'BRL';
     let planName = '';
     let timezone = '';
+    // Canonical myshopifyDomain — Shopify's permanent identifier for the
+    // shop, what they always send in X-Shopify-Shop-Domain headers on
+    // webhooks. Often differs from what the merchant typed if they later
+    // renamed the admin slug. We persist this as an alias so webhooks
+    // for either domain resolve to the same store row.
+    let permanentDomain: string | null = null;
+    // Shopify Shop GID — the ONE identifier that never changes. We use
+    // this to deduplicate reconnections: same shop_id = same store row,
+    // even if the merchant typed a different domain. Without this,
+    // reconnecting with a renamed myshopifyDomain produces a brand-new
+    // shopify_stores row and orphans every automation/contact/segment
+    // tied to the old row.
+    let shopifyShopId: string | null = null;
 
     try {
       const shopInfoRes = await fetch(
@@ -146,7 +159,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            query: `{ shop { name email currencyCode timezoneAbbreviation plan { displayName } } }`,
+            query: `{ shop { id name email currencyCode timezoneAbbreviation myshopifyDomain plan { displayName } } }`,
           }),
         }
       );
@@ -160,6 +173,13 @@ export async function POST(request: NextRequest) {
           currency = s.currencyCode || 'BRL';
           planName = s.plan?.displayName || '';
           timezone = s.timezoneAbbreviation || '';
+          permanentDomain = (s.myshopifyDomain || '').toLowerCase() || null;
+          // Strip the gid:// prefix so we store just the numeric ID,
+          // which is the format Shopify uses everywhere outside GraphQL.
+          if (s.id) {
+            const m = String(s.id).match(/Shop\/(\d+)/);
+            shopifyShopId = m ? m[1] : String(s.id);
+          }
         }
       }
     } catch (err) {
@@ -172,16 +192,96 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin();
     const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    const { data: existingStore } = await supabase
-      .from('shopify_stores')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('shop_domain', shopDomain)
-      .maybeSingle();
+    // Lookup cascade for existing store (in priority order):
+    //   1. shopify_shop_id match (THE canonical identifier — same shop
+    //      no matter what domain the merchant typed)
+    //   2. shop_domain exact match (legacy reconnections that predate
+    //      shop_id capture)
+    //   3. shop_domain_aliases contains the typed domain (covers
+    //      stores where the merchant previously added an alias and
+    //      now reconnects under that alias)
+    //
+    // Without #1, a reconnection with a different domain (e.g. typed
+    // sourosa.myshopify.com first, now typing lojalaclode.myshopify.com)
+    // bypasses #2 and creates a brand-new row, orphaning every
+    // automation, contact, segment, and analytics row tied to the
+    // original store. With #1, we update the existing row in place
+    // and add the new domain as an alias.
+    let existingStore: { id: string; shop_domain: string; shop_domain_aliases?: string[] } | null = null;
+
+    if (shopifyShopId) {
+      const { data } = await supabase
+        .from('shopify_stores')
+        .select('id, shop_domain, shop_domain_aliases')
+        .eq('organization_id', organizationId)
+        .eq('shopify_shop_id', shopifyShopId)
+        .maybeSingle();
+      if (data) existingStore = data as any;
+    }
+
+    if (!existingStore) {
+      const { data } = await supabase
+        .from('shopify_stores')
+        .select('id, shop_domain, shop_domain_aliases')
+        .eq('organization_id', organizationId)
+        .eq('shop_domain', shopDomain)
+        .maybeSingle();
+      if (data) existingStore = data as any;
+    }
+
+    if (!existingStore) {
+      // Last-resort: maybe the merchant is reconnecting with a domain
+      // that's already an alias of an existing row.
+      const { data } = await supabase
+        .from('shopify_stores')
+        .select('id, shop_domain, shop_domain_aliases')
+        .eq('organization_id', organizationId)
+        .contains('shop_domain_aliases', [shopDomain.toLowerCase()])
+        .maybeSingle();
+      if (data) existingStore = data as any;
+    }
+
+    // Resolve canonical domain. Shopify always sends webhooks with the
+    // PERMANENT myshopifyDomain in X-Shopify-Shop-Domain — never the
+    // public admin slug the merchant might have renamed. So the row's
+    // primary shop_domain MUST be the canonical one for webhook
+    // resolution to be O(1) (exact match instead of falling back to
+    // alias scan). When the merchant typed a different (renamed) slug,
+    // we swap automatically: canonical becomes primary, what they typed
+    // becomes an alias.
+    //
+    // Example (Based store):
+    //   merchant types:  sourosa.myshopify.com
+    //   GraphQL returns: lojalaclode.myshopify.com  ← canonical
+    //   result row:
+    //     shop_domain         = lojalaclode.myshopify.com  (primary)
+    //     shop_domain_aliases = [sourosa.myshopify.com]    (back-compat)
+    const userTypedDomain = String(shopDomain).toLowerCase();
+    const canonicalDomain = (permanentDomain && permanentDomain !== userTypedDomain)
+      ? permanentDomain
+      : userTypedDomain;
+    const primaryDomain = canonicalDomain;
+
+    const aliasSet = new Set<string>();
+    if (existingStore?.shop_domain_aliases) {
+      for (const a of existingStore.shop_domain_aliases) aliasSet.add(String(a).toLowerCase());
+    }
+    if (existingStore?.shop_domain && existingStore.shop_domain.toLowerCase() !== primaryDomain) {
+      aliasSet.add(existingStore.shop_domain.toLowerCase());
+    }
+    // What the merchant typed always rides along as an alias so old
+    // pixel/script tags pointing at it still resolve.
+    if (userTypedDomain !== primaryDomain) {
+      aliasSet.add(userTypedDomain);
+    }
+    aliasSet.delete(primaryDomain); // primary should never duplicate in aliases
+    const aliases: string[] = Array.from(aliasSet);
 
     const storeRecord: Record<string, any> = {
       organization_id: organizationId,
-      shop_domain: shopDomain,
+      shop_domain: primaryDomain,
+      shop_domain_aliases: aliases,
+      shopify_shop_id: shopifyShopId,
       shop_name: shopName,
       shop_email: shopEmail,
       access_token: accessToken,
@@ -216,22 +316,76 @@ export async function POST(request: NextRequest) {
       },
     };
 
+    // Free up the canonical primaryDomain if any OTHER inactive row is
+    // sitting on it. Without this the unique constraint idx_shopify_domain
+    // blocks every reconnection where the canonical was previously held
+    // by a row the merchant excluded.
+    {
+      const { data: blockers } = await supabase
+        .from('shopify_stores')
+        .select('id, shop_domain, is_active')
+        .eq('organization_id', organizationId)
+        .eq('shop_domain', primaryDomain)
+        .neq('id', existingStore?.id || '00000000-0000-0000-0000-000000000000');
+      for (const b of (blockers || []) as any[]) {
+        if (b.is_active) {
+          return NextResponse.json({
+            error: `Outra loja ATIVA já usa ${primaryDomain}. Mescle ou exclua antes de prosseguir.`,
+            collidingStoreId: b.id,
+          }, { status: 409 });
+        }
+        // Inactive — free the domain by renaming to a placeholder so
+        // the unique constraint releases. Row stays in DB for audit.
+        const placeholder = `archived-${b.id}.worder.local`;
+        await supabase
+          .from('shopify_stores')
+          .update({ shop_domain: placeholder, updated_at: new Date().toISOString() })
+          .eq('id', b.id);
+      }
+    }
+
     let storeId: string;
-    if (existingStore) {
-      const { error: updErr } = await supabase
-        .from('shopify_stores')
-        .update(storeRecord)
-        .eq('id', existingStore.id);
-      if (updErr) throw updErr;
-      storeId = existingStore.id;
-    } else {
-      const { data: newStore, error: insErr } = await supabase
-        .from('shopify_stores')
-        .insert(storeRecord)
-        .select('id')
-        .single();
-      if (insErr) throw insErr;
-      storeId = newStore!.id;
+    // Helper: retry the write without columns that may not exist in
+    // older schemas. Catches PGRST204 (PostgREST schema cache miss)
+    // and 42703 (undefined column) and progressively strips suspect
+    // fields. Lets manual integration succeed on databases that
+    // haven't run the recent shopify_shop_id / shop_domain_aliases
+    // migrations yet.
+    function isMissingColumnError(err: any, col: string): boolean {
+      if (!err) return false;
+      const code = err.code || '';
+      const msg = String(err.message || '');
+      if (code === 'PGRST204' || code === '42703') return msg.includes(col);
+      return msg.includes(col) && (msg.includes('column') || msg.includes('schema cache'));
+    }
+    async function writeStore(record: Record<string, any>): Promise<{ id: string } | null> {
+      // Try as-is, then progressively drop columns that may be missing.
+      const fallbackChain = ['shopify_shop_id', 'shop_domain_aliases'];
+      let attempt: Record<string, any> = { ...record };
+      let lastErr: any = null;
+      for (let i = 0; i <= fallbackChain.length; i++) {
+        if (existingStore) {
+          const { error } = await supabase.from('shopify_stores').update(attempt).eq('id', existingStore.id);
+          if (!error) return { id: existingStore.id };
+          lastErr = error;
+        } else {
+          const { data, error } = await supabase.from('shopify_stores').insert(attempt).select('id').single();
+          if (!error && data) return { id: data.id };
+          lastErr = error;
+        }
+        // If error mentions a known fallback column, drop it and retry.
+        const dropCol = fallbackChain.find(c => isMissingColumnError(lastErr, c) && c in attempt);
+        if (!dropCol) break;
+        const { [dropCol]: _, ...rest } = attempt;
+        attempt = rest;
+      }
+      throw lastErr;
+    }
+    try {
+      const result = await writeStore(storeRecord);
+      storeId = result!.id;
+    } catch (writeErr: any) {
+      throw writeErr;
     }
 
     // ──────────────────────────────────────────

@@ -317,6 +317,45 @@ export async function GET(request: NextRequest) {
         revenue: x.revenue,
       }));
 
+    // ── Sync state detection ──
+    //
+    // Common bug: merchant connects Shopify, sees R$ 0 everywhere, gets
+    // confused. shopify_orders is empty because sync-now hasn't run yet
+    // (post-connect cascade is fire-and-forget in some paths, can fail
+    // silently, or token expired). We detect this and:
+    //   1. Auto-trigger a background sync so data starts populating
+    //   2. Surface needs_sync flag so the UI can show "Sincronizando…"
+    //
+    // Heuristic: the store row exists but shopify_orders count is 0.
+    // We don't condition on `total_orders` from the row because that
+    // field isn't reliably maintained — the actual table count is
+    // ground truth.
+    let needsSync = false;
+    let syncTriggered = false;
+    if (stores.length > 0 && orders.length === 0) {
+      needsSync = true;
+      // Fire-and-forget background sync. Best-effort: we don't await,
+      // we don't surface failures. The next dashboard refresh will see
+      // the data once sync writes complete.
+      try {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+        const targetStoreId = storeId || stores[0]?.id;
+        if (appUrl && targetStoreId) {
+          fetch(`${appUrl}/api/shopify/sync-now`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Internal-Request': 'true',
+              cookie: request.headers.get('cookie') || '',
+            },
+            body: JSON.stringify({ storeId: targetStoreId, syncType: 'all' }),
+            keepalive: true,
+          }).then(() => {}, () => {});
+          syncTriggered = true;
+        }
+      } catch { /* never throw from dashboard */ }
+    }
+
     return NextResponse.json({
       worderRevenue,
       worderOrders,
@@ -334,6 +373,8 @@ export async function GET(request: NextRequest) {
       recentCampaigns,
       topAutomations,
       hasShopify: stores.length > 0,
+      needsSync,
+      syncTriggered,
       period: { range, granularity, days },
     });
   } catch (error: any) {

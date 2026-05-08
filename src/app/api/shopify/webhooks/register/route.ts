@@ -55,7 +55,10 @@ export async function POST(request: NextRequest) {
     }
 
     const results: any[] = []
-    const webhookUrl = `${WEBHOOK_URL_BASE}/api/webhooks/shopify`
+    // ?store_id= in the URL — the handler resolves the store from this
+    // first, eliminating the multi-domain alias mismatch that silently
+    // dropped webhooks for stores with a non-canonical myshopifyDomain.
+    const webhookUrl = `${WEBHOOK_URL_BASE}/api/webhooks/shopify?store_id=${store.id}`
 
     // 1. Listar webhooks existentes
     const listResponse = await fetch(
@@ -78,40 +81,33 @@ export async function POST(request: NextRequest) {
     const { webhooks: existingWebhooks } = await listResponse.json()
     console.log(`[Shopify] Found ${existingWebhooks?.length || 0} existing webhooks`)
 
-    // 2. Deletar webhooks com URL errada
+    // 2. Deletar webhooks NOSSOS (path = /api/webhooks/shopify) que
+    //    apontam pra URL diferente da atual — host antigo (ngrok morto,
+    //    preview promovido), OU sem ?store_id= (registro pré-fix).
+    //    Webhooks de OUTROS apps não são tocados.
     for (const webhook of existingWebhooks || []) {
-      if (!webhook.address.includes('/api/webhooks/shopify')) {
-        console.log(`[Shopify] Deleting webhook with wrong URL: ${webhook.address}`)
+      const isOurs = typeof webhook.address === 'string' && webhook.address.includes('/api/webhooks/shopify')
+      const isCurrent = webhook.address === webhookUrl
+      if (isOurs && !isCurrent) {
         try {
           await fetch(
             `https://${store.shop_domain}/admin/api/2026-04/webhooks/${webhook.id}.json`,
             {
               method: 'DELETE',
-              headers: {
-                'X-Shopify-Access-Token': store.access_token,
-              },
+              headers: { 'X-Shopify-Access-Token': store.access_token },
             }
           )
-          results.push({
-            action: 'deleted',
-            topic: webhook.topic,
-            oldUrl: webhook.address,
-          })
+          results.push({ action: 'deleted', topic: webhook.topic, oldUrl: webhook.address })
         } catch (e: any) {
-          results.push({
-            action: 'delete_failed',
-            topic: webhook.topic,
-            error: e.message,
-          })
+          results.push({ action: 'delete_failed', topic: webhook.topic, error: e.message })
         }
       }
     }
 
-    // 3. Registrar webhooks necessários
+    // 3. Registrar webhooks necessários — exigir EXATA URL atual
     for (const topic of REQUIRED_WEBHOOKS) {
-      // Verificar se já existe com URL correta
       const existingCorrect = existingWebhooks?.find(
-        (w: any) => w.topic === topic && w.address.includes('/api/webhooks/shopify')
+        (w: any) => w.topic === topic && w.address === webhookUrl
       )
 
       if (existingCorrect) {

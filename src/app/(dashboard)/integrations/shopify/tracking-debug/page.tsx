@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStoreStore } from '@/stores'
+import { cn } from '@/lib/utils'
+import { MergeStoresPanel } from '@/components/integrations/shopify/MergeStoresPanel'
 import {
   ArrowLeft, RefreshCw, CheckCircle, AlertCircle, Loader2, Activity,
   Eye, ShoppingCart, CreditCard, Package, Mail, User, Clock, Zap,
@@ -16,8 +18,15 @@ interface DiagResponse {
     loaderInstalled: boolean
     scriptTagId: string | null
     webhooksRegistered: number | null
-    webhooks: Array<{ topic: string; address: string }>
+    webhooks: Array<{ topic: string; address: string; matches_expected?: boolean }>
+    checkoutTopicsRegistered?: boolean
+    webhookUrlMismatchCount?: number
+    expectedWebhookUrl?: string
+    apiSecretConfigured?: boolean
+    syncCheckoutsEnabled?: boolean
     scopes: string[]
+    manualPixelLoaderCode?: string
+    shopDomainAliases?: string[]
   }
   counts: {
     last1h: number
@@ -26,6 +35,23 @@ interface DiagResponse {
     anonymous: number
     byType: Record<string, number>
     bySource: Record<string, number>
+  }
+  identity?: {
+    totalIdentities: number
+    identifiedCount: number
+    anonymousCount: number
+    stitchedByFingerprint: number
+  }
+  recommendations?: {
+    totalRecsRows: number
+  }
+  pixelDiagnostics?: {
+    fetchCount: number
+    lastFetchAt: string | null
+    lastFetchUserAgent: string | null
+    pingCount: number
+    lastPingAt: string | null
+    hint: string
   }
   recentEvents: Array<{
     id: string
@@ -139,6 +165,136 @@ export default function TrackingDebugPage() {
 
   const [reprocessing, setReprocessing] = useState(false)
   const [reprocessResult, setReprocessResult] = useState<string | null>(null)
+  const [reinstalling, setReinstalling] = useState(false)
+  const [reinstallResult, setReinstallResult] = useState<string | null>(null)
+  const [copiedSnippet, setCopiedSnippet] = useState(false)
+  // Backfill action: re-resolve contacts for old shopify_checkouts rows
+  // that show "Desconhecido" because they were captured before the
+  // multi-source email extraction shipped, or because the original
+  // webhook payload didn't carry the email.
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<string | null>(null)
+  async function backfillCheckouts() {
+    if (!currentStore?.id) return
+    setBackfilling(true)
+    setBackfillResult(null)
+    try {
+      const res = await fetch('/api/integrations/shopify/backfill-checkouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: currentStore.id }),
+      })
+      const j = await res.json()
+      if (j.success) {
+        setBackfillResult(`${j.processed} processados · ${j.linked} vinculados${j.enriched_from_shopify ? ` · ${j.enriched_from_shopify} enriquecidos via Shopify` : ''}`)
+      } else {
+        setBackfillResult(j.error || 'Falhou.')
+      }
+      await fetchDiag()
+    } catch (e: any) {
+      setBackfillResult(e?.message || 'Erro de rede')
+    } finally {
+      setBackfilling(false)
+      setTimeout(() => setBackfillResult(null), 12000)
+    }
+  }
+
+  // Domain aliases (Shopify canonical myshopifyDomain mismatch fix)
+  const [newAlias, setNewAlias] = useState('')
+  const [savingAlias, setSavingAlias] = useState(false)
+  const [aliasError, setAliasError] = useState<string | null>(null)
+
+  // Checkout trace: paste a Shopify checkout id (or order number) to see
+  // exactly where it stopped in the pipeline.
+  const [traceId, setTraceId] = useState('')
+  const [tracing, setTracing] = useState(false)
+  const [traceResult, setTraceResult] = useState<any | null>(null)
+  const [traceError, setTraceError] = useState<string | null>(null)
+  async function runTrace() {
+    if (!currentStore?.id || !traceId.trim()) return
+    setTracing(true)
+    setTraceError(null)
+    setTraceResult(null)
+    try {
+      const params = new URLSearchParams({ id: traceId.trim(), storeId: currentStore.id })
+      const res = await fetch(`/api/diagnostics/checkout-trace?${params}`, { cache: 'no-store' })
+      const j = await res.json()
+      if (!res.ok || j.error) {
+        setTraceError(j.error || 'Falhou')
+      } else {
+        setTraceResult(j)
+      }
+    } catch (e: any) {
+      setTraceError(e?.message || 'Erro de rede')
+    } finally {
+      setTracing(false)
+    }
+  }
+  async function addAlias() {
+    if (!currentStore?.id || !newAlias.trim()) return
+    setSavingAlias(true)
+    setAliasError(null)
+    try {
+      const res = await fetch('/api/integrations/shopify/aliases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: currentStore.id, domain: newAlias.trim() }),
+      })
+      const j = await res.json()
+      if (!res.ok || j.error) {
+        setAliasError(j.error || 'Falhou')
+      } else {
+        setNewAlias('')
+        await fetchDiag()
+      }
+    } catch (e: any) {
+      setAliasError(e?.message || 'Erro de rede')
+    } finally {
+      setSavingAlias(false)
+    }
+  }
+  async function removeAlias(domain: string) {
+    if (!currentStore?.id) return
+    try {
+      await fetch('/api/integrations/shopify/aliases', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: currentStore.id, domain }),
+      })
+      await fetchDiag()
+    } catch { /* silent */ }
+  }
+  async function reinstallEverything() {
+    if (!currentStore?.id) return
+    setReinstalling(true)
+    setReinstallResult(null)
+    try {
+      const res = await fetch('/api/shopify/install-extras', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: currentStore.id }),
+      })
+      const j = await res.json()
+      if (j.success) {
+        const w = j.webhooks || {}
+        const parts: string[] = []
+        if ((w.staleDeleted || 0) > 0) parts.push(`${w.staleDeleted} URL${w.staleDeleted > 1 ? 's' : ''} antiga${w.staleDeleted > 1 ? 's' : ''} removida${w.staleDeleted > 1 ? 's' : ''}`)
+        parts.push(`webhooks: ${w.created || 0} criados, ${w.existing || 0} já existiam` + (w.failed ? `, ${w.failed} falharam` : ''))
+        if (j.pixel?.installed) parts.push('pixel ✓')
+        if (j.loader?.installed) parts.push('loader ✓')
+        else if (j.loader?.missingScope) parts.push('loader: faltam scopes')
+        setReinstallResult(parts.join(' · '))
+      } else {
+        setReinstallResult(j.error || 'Falhou.')
+      }
+      await fetchDiag()
+    } catch (e: any) {
+      setReinstallResult(e?.message || 'Erro de rede')
+    } finally {
+      setReinstalling(false)
+      setTimeout(() => setReinstallResult(null), 12000)
+    }
+  }
   async function reprocessCheckouts() {
     if (!currentStore?.id) return
     setReprocessing(true)
@@ -218,6 +374,98 @@ export default function TrackingDebugPage() {
         <StatusCard label="Eventos última hora" ok={c.last1h > 0} value={c.last1h} hint={c.last1h > 0 ? 'Tracking ativo' : 'Nenhum evento — verifique o pixel'} />
       </div>
 
+      {/* Identity graph + Recommendations status */}
+      {(data.identity || data.recommendations) && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatusCard
+            label="Visitantes únicos"
+            ok={(data.identity?.totalIdentities || 0) > 0}
+            value={data.identity?.totalIdentities || 0}
+            hint="Linhas na tabela visitor_identities"
+          />
+          <StatusCard
+            label="Identificados"
+            ok={(data.identity?.identifiedCount || 0) > 0}
+            value={data.identity?.identifiedCount || 0}
+            hint={`${data.identity?.anonymousCount || 0} ainda anônimos`}
+          />
+          <StatusCard
+            label="Re-stitch por fingerprint"
+            ok={(data.identity?.stitchedByFingerprint || 0) > 0}
+            value={data.identity?.stitchedByFingerprint || 0}
+            hint="Identidades recuperadas após ITP wipe"
+          />
+          <StatusCard
+            label="Recomendações"
+            ok={(data.recommendations?.totalRecsRows || 0) > 0}
+            value={data.recommendations?.totalRecsRows || 0}
+            hint={(data.recommendations?.totalRecsRows || 0) > 0 ? 'Cron materializou recs' : 'Cron ainda não rodou (4am UTC)'}
+          />
+        </div>
+      )}
+
+      {/* Duplicate store detector — surfaces when the active store
+          has a likely-duplicate row in the same org (same shop_id or
+          same shop_name). Lets the merchant consolidate without
+          contacting support, preserving all automations/contacts. */}
+      <MergeStoresPanel />
+
+      {/* Pixel diagnostic — surfaces whether the Custom Pixel is even
+          reaching us, and whether it executes after loading. Three
+          possible states:
+            - Zero fetches: sandbox isn't downloading the script (CSP,
+              wrong domain, pixel not "Conectado" in Customer Events)
+            - Fetches but zero pings: script downloads but JS error
+              prevents subscribe phase
+            - Fetches AND pings but no behavioral events: subscribers
+              aren't matching Shopify's event names */}
+      {data.pixelDiagnostics && (
+        <div className={cn(
+          'rounded-xl border overflow-hidden',
+          data.pixelDiagnostics.fetchCount === 0
+            ? 'bg-red-50 border-red-200'
+            : data.pixelDiagnostics.pingCount === 0
+            ? 'bg-amber-50 border-amber-200'
+            : 'bg-emerald-50 border-emerald-200'
+        )}>
+          <div className="px-4 py-3 border-b border-current border-opacity-20">
+            <p className="text-[13px] font-semibold text-gray-900">Atividade do pixel</p>
+            <p className="text-[11px] text-gray-600 mt-0.5">{data.pixelDiagnostics.hint}</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-current divide-opacity-20">
+            <div className="p-4 bg-white/50">
+              <p className="text-[10.5px] uppercase tracking-wide font-semibold text-gray-500">1. Sandbox baixou o script?</p>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-bold text-gray-900">{data.pixelDiagnostics.fetchCount}</span>
+                <span className="text-[11px] text-gray-500">fetches últimos 30 dias</span>
+              </div>
+              {data.pixelDiagnostics.lastFetchAt && (
+                <p className="text-[11px] text-gray-600 mt-1">
+                  Último: {new Date(data.pixelDiagnostics.lastFetchAt).toLocaleString('pt-BR')}
+                </p>
+              )}
+              {data.pixelDiagnostics.lastFetchUserAgent && (
+                <p className="text-[10px] text-gray-500 mt-0.5 font-mono truncate" title={data.pixelDiagnostics.lastFetchUserAgent}>
+                  UA: {data.pixelDiagnostics.lastFetchUserAgent.slice(0, 80)}
+                </p>
+              )}
+            </div>
+            <div className="p-4 bg-white/50">
+              <p className="text-[10.5px] uppercase tracking-wide font-semibold text-gray-500">2. Script executou e chamou /track/event?</p>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-bold text-gray-900">{data.pixelDiagnostics.pingCount}</span>
+                <span className="text-[11px] text-gray-500">pings pixel_loaded</span>
+              </div>
+              {data.pixelDiagnostics.lastPingAt && (
+                <p className="text-[11px] text-gray-600 mt-1">
+                  Último: {new Date(data.pixelDiagnostics.lastPingAt).toLocaleString('pt-BR')}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Test event row */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-end gap-3">
         <div className="flex-1">
@@ -250,41 +498,131 @@ export default function TrackingDebugPage() {
         </button>
       </div>
 
+      {/* Checkout trace — paste a Shopify checkout ID (e.g. 40364168642834)
+          and see exactly where the checkout stopped in our pipeline:
+          webhook delivery → shopify_checkouts row → contact_event →
+          completion link. The verdict block tells the merchant which
+          step broke without making them read raw rows. */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="flex items-end gap-3 mb-3">
+          <div className="flex-1">
+            <p className="text-[13px] font-semibold text-gray-900 mb-0.5 flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-blue-500" /> Rastrear um checkout específico
+            </p>
+            <p className="text-[11px] text-gray-500">
+              Cole o ID do checkout do Shopify Admin (ex.: <code className="font-mono">40364168642834</code> ou <code className="font-mono">#40364168642834</code>) pra ver exatamente onde ele travou no pipeline.
+            </p>
+          </div>
+          <input
+            value={traceId}
+            onChange={e => setTraceId(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') runTrace() }}
+            placeholder="ID do checkout"
+            className="px-3 py-2 text-[13px] border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-zinc-900 font-mono"
+            style={{ width: 240 }}
+          />
+          <button
+            onClick={runTrace}
+            disabled={tracing || !traceId.trim()}
+            className="px-4 py-2 text-[13px] font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+          >
+            {tracing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+            Rastrear
+          </button>
+        </div>
+        {traceError && (
+          <div className="px-3 py-2 bg-red-50 text-[12px] text-red-700 border border-red-200 rounded-lg">
+            {traceError}
+          </div>
+        )}
+        {traceResult && (
+          <div className="space-y-3 mt-2">
+            {/* Verdict — the punch list */}
+            <div className="space-y-1.5">
+              {(traceResult.verdict || []).map((v: any, i: number) => {
+                const color = v.status === 'ok'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : v.status === 'completed'
+                  ? 'bg-blue-50 border-blue-200 text-blue-800'
+                  : v.status === 'missing'
+                  ? 'bg-amber-50 border-amber-200 text-amber-800'
+                  : 'bg-red-50 border-red-200 text-red-800'
+                const Icon = v.status === 'ok' || v.status === 'completed' ? CheckCircle : AlertCircle
+                return (
+                  <div key={i} className={cn('flex items-start gap-2 px-3 py-2 border rounded-lg', color)}>
+                    <Icon className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-mono font-semibold">{v.stage}</p>
+                      <p className="text-[12px] mt-0.5 leading-relaxed">{v.message}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {/* Raw — collapsible details */}
+            <details className="text-[11px]">
+              <summary className="cursor-pointer text-gray-500 hover:text-gray-700">Dados brutos do trace</summary>
+              <pre className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg overflow-auto max-h-[400px] text-[10px] font-mono">{JSON.stringify(traceResult, null, 2)}</pre>
+            </details>
+          </div>
+        )}
+      </div>
+
       {/* Webhook deliveries (Shopify -> us) — shows whether Shopify is
           actually reaching our endpoint, and whether we processed each
           delivery. If checkouts/orders aren't producing contact_events,
           this panel tells you whether the failure is at Shopify->us or
-          us->contact_events. */}
-      {data.recentWebhooks && data.recentWebhooks.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <p className="text-[13px] font-semibold text-gray-900">Webhooks recebidos do Shopify</p>
-              <p className="text-[11px] text-gray-400">Últimas 30 entregas — confirma se o Shopify está mandando os eventos</p>
-            </div>
-            {data.recentCheckouts && data.recentCheckouts.length > 0 && (
-              <button
-                onClick={reprocessCheckouts}
-                disabled={reprocessing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-zinc-900 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-lg transition-colors disabled:opacity-50"
-                title="Reprocessa checkouts existentes para criar eventos checkout_started que talvez tenham sido perdidos."
-              >
-                {reprocessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                Reprocessar checkouts
-              </button>
-            )}
+          us->contact_events.
+
+          We render the panel even when empty: an empty list IS the
+          diagnostic signal — it means Shopify isn't reaching us (or
+          we're rejecting before logging). */}
+      <div className="bg-white border border-gray-200 rounded-xl">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <p className="text-[13px] font-semibold text-gray-900">Webhooks recebidos do Shopify</p>
+            <p className="text-[11px] text-gray-400">Últimas 30 entregas — confirma se o Shopify está mandando os eventos</p>
           </div>
-          {reprocessResult && (
-            <div className="px-4 py-2 bg-emerald-50 text-[12px] text-emerald-700 border-b border-emerald-100">
-              {reprocessResult}
-            </div>
+          {data.recentCheckouts && data.recentCheckouts.length > 0 && (
+            <button
+              onClick={reprocessCheckouts}
+              disabled={reprocessing}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-zinc-900 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-lg transition-colors disabled:opacity-50"
+              title="Reprocessa checkouts existentes para criar eventos checkout_started que talvez tenham sido perdidos."
+            >
+              {reprocessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Reprocessar checkouts
+            </button>
           )}
+        </div>
+        {reprocessResult && (
+          <div className="px-4 py-2 bg-emerald-50 text-[12px] text-emerald-700 border-b border-emerald-100">
+            {reprocessResult}
+          </div>
+        )}
+        {!data.recentWebhooks || data.recentWebhooks.length === 0 ? (
+          <div className="px-4 py-5">
+            <p className="text-[12.5px] font-medium text-gray-700 mb-1.5">
+              Nenhuma entrega registrada nos últimos 30 envios.
+            </p>
+            <p className="text-[11.5px] text-gray-500 leading-relaxed">
+              Se a loja teve atividade recente (pedido, checkout, customer atualizado) e nada apareceu aqui,
+              é porque <strong>o Shopify não está chegando neste endpoint</strong> ou estamos rejeitando antes de logar.
+              Causas comuns:
+            </p>
+            <ul className="mt-2 space-y-1 text-[11.5px] text-gray-600 list-disc list-inside">
+              <li><strong>HMAC inválido:</strong> o <code className="font-mono">api_secret</code> salvo não bate com o que o Shopify usa pra assinar — entregas voltam com 401 e ficam invisíveis. Reconecte a loja.</li>
+              <li><strong>Topics não registrados:</strong> mesmo com webhooks no Shopify, pode faltar <code className="font-mono">checkouts/create</code>. Confira a lista de topics abaixo.</li>
+              <li><strong>URL errada:</strong> webhooks registrados em outro endpoint que não <code className="font-mono">/api/webhooks/shopify</code>.</li>
+            </ul>
+          </div>
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-3 max-h-[280px] overflow-y-auto">
             {data.recentWebhooks.map(w => {
               const ageMs = Date.now() - new Date(w.received_at).getTime()
               const ageStr = ageMs < 60000 ? `${Math.floor(ageMs / 1000)}s` : ageMs < 3600000 ? `${Math.floor(ageMs / 60000)}m` : ageMs < 86400000 ? `${Math.floor(ageMs / 3600000)}h` : `${Math.floor(ageMs / 86400000)}d`
               const ok = w.status === 'processed' || w.status === 'success' || w.status === 'completed'
-              const failed = w.status === 'failed' || !!w.error_message
+              const failed = w.status === 'failed' || w.status === 'hmac_failed' || w.status === 'no_secret' || !!w.error_message
               return (
                 <div key={w.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-md border border-gray-100 hover:bg-gray-50">
                   <div className={`w-2 h-2 rounded-full flex-shrink-0 ${ok ? 'bg-emerald-500' : failed ? 'bg-red-500' : 'bg-amber-500'}`} />
@@ -299,6 +637,232 @@ export default function TrackingDebugPage() {
               )
             })}
           </div>
+        )}
+      </div>
+
+      {/* Reinstall everything — one-click recovery: registers webhooks,
+          installs Custom Pixel (if write_pixels scope), installs the
+          storefront loader ScriptTag. Idempotent. Most useful when the
+          merchant sees "pixel não instalado" or webhook URL mismatches. */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-end gap-3">
+        <div className="flex-1">
+          <p className="text-[13px] font-semibold text-gray-900 mb-0.5 flex items-center gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5 text-blue-500" /> Reinstalar pixel + webhooks + loader
+          </p>
+          <p className="text-[11px] text-gray-500">
+            Re-executa <code className="font-mono">install-extras</code> — registra os 17 webhooks no endpoint correto, instala o Web Pixel
+            (se tiver scope <code className="font-mono">write_pixels</code>) e o ScriptTag do loader. Idempotente, pode rodar quantas vezes quiser.
+          </p>
+        </div>
+        <button
+          onClick={reinstallEverything}
+          disabled={reinstalling}
+          className="px-4 py-2 text-[13px] font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+        >
+          {reinstalling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Reinstalar tudo
+        </button>
+      </div>
+      {reinstallResult && (
+        <div className="px-4 py-2.5 bg-emerald-50 text-[12px] text-emerald-800 border border-emerald-200 rounded-lg">
+          {reinstallResult}
+        </div>
+      )}
+
+      {/* Backfill checkouts: re-resolve contacts for "Desconhecido"
+          rows. Critical when the merchant has historic checkouts that
+          were captured before the multi-source email extraction shipped
+          (or with payloads that didn't carry email at all — happens on
+          checkouts/create before the customer types email). */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-end gap-3">
+        <div className="flex-1">
+          <p className="text-[13px] font-semibold text-gray-900 mb-0.5 flex items-center gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5 text-purple-500" /> Re-vincular checkouts "Desconhecido"
+          </p>
+          <p className="text-[11px] text-gray-500">
+            Tenta resolver contato por email/customer_id em checkouts antigos sem vínculo. Para os que ainda não têm email salvo,
+            consulta a Shopify via GraphQL pra recuperar o email/customer do registro mais recente. Idempotente.
+          </p>
+        </div>
+        <button
+          onClick={backfillCheckouts}
+          disabled={backfilling}
+          className="px-4 py-2 text-[13px] font-semibold bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+        >
+          {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Re-vincular agora
+        </button>
+      </div>
+      {backfillResult && (
+        <div className="px-4 py-2.5 bg-purple-50 text-[12px] text-purple-800 border border-purple-200 rounded-lg">
+          {backfillResult}
+        </div>
+      )}
+
+      {/* Domain aliases — fixes the case where Shopify's canonical
+          myshopifyDomain differs from what was entered during connect.
+          Example: merchant connected with sourosa.myshopify.com but
+          Shopify sends webhooks under lojalaclode.myshopify.com (the
+          original/permanent name). Without an alias, those webhooks
+          come back 410 and tracking is broken. */}
+      <div className="bg-white border border-gray-200 rounded-xl">
+        <div className="px-4 py-3 border-b border-gray-100">
+          <p className="text-[13px] font-semibold text-gray-900">Domínios da loja</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            Shopify pode enviar webhooks por <strong>qualquer um</strong> dos seus myshopifyDomains.
+            O domínio principal foi cadastrado na conexão; adicione aliases pra qualquer myshopifyDomain extra
+            (ex: <code className="font-mono">lojalaclode.myshopify.com</code>) sob o qual a loja seja conhecida na Shopify.
+          </p>
+        </div>
+        <div className="px-4 py-3 space-y-2">
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-md border border-gray-100">
+            <span className="text-[10.5px] uppercase tracking-wide font-semibold text-gray-500 w-16 flex-shrink-0">primário</span>
+            <code className="flex-1 text-[12px] font-mono text-gray-900 truncate">{data.store.shop_domain}</code>
+          </div>
+          {(data.install.shopDomainAliases || []).map((alias) => (
+            <div key={alias} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-md border border-gray-100">
+              <span className="text-[10.5px] uppercase tracking-wide font-semibold text-gray-500 w-16 flex-shrink-0">alias</span>
+              <code className="flex-1 text-[12px] font-mono text-gray-900 truncate">{alias}</code>
+              <button
+                onClick={() => removeAlias(alias)}
+                className="text-[11px] font-medium text-red-600 hover:text-red-700 px-2 py-0.5 rounded hover:bg-red-50"
+              >
+                Remover
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="text"
+              value={newAlias}
+              onChange={(e) => setNewAlias(e.target.value)}
+              placeholder="exemplo.myshopify.com"
+              className="flex-1 px-3 py-2 text-[12.5px] font-mono border border-gray-200 rounded-md focus:outline-none focus:border-zinc-900"
+              onKeyDown={(e) => { if (e.key === 'Enter') addAlias() }}
+              disabled={savingAlias}
+            />
+            <button
+              onClick={addAlias}
+              disabled={savingAlias || !newAlias.trim()}
+              className="px-3 py-2 text-[12.5px] font-semibold bg-zinc-900 text-white rounded-md hover:bg-zinc-800 disabled:opacity-50 transition-colors"
+            >
+              {savingAlias ? 'Salvando…' : 'Adicionar alias'}
+            </button>
+          </div>
+          {aliasError && (
+            <p className="text-[11.5px] text-red-600">{aliasError}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Manual Custom Pixel install fallback — the auto-install via
+          webPixelCreate only works when the merchant has our published
+          Web Pixel Extension. For Custom App / manual integrations, the
+          mutation succeeds without actually installing anything visible
+          on the storefront. We surface the loader snippet so the
+          merchant can paste it into Customer Events directly. */}
+      {!data.install.pixelInstalled && data.install.manualPixelLoaderCode && (
+        <div className="bg-white border border-amber-200 rounded-xl">
+          <div className="px-4 py-3 border-b border-amber-100 bg-amber-50">
+            <p className="text-[13px] font-semibold text-amber-900">
+              Pixel não instalado — instalação manual necessária
+            </p>
+            <p className="text-[11.5px] text-amber-800 mt-0.5">
+              O auto-install via API falhou (provável: integração manual sem nossa Web Pixel Extension publicada).
+              Cole o código abaixo em <strong>Shopify Admin → Configurações → Customer Events → Adicionar pixel personalizado</strong> e marque "Não obrigatório" em privacidade.
+            </p>
+          </div>
+          <div className="p-4 space-y-2">
+            <div className="relative">
+              <pre className="text-[11px] font-mono bg-gray-900 text-emerald-400 p-3 rounded-lg overflow-x-auto whitespace-pre">{data.install.manualPixelLoaderCode}</pre>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(data.install.manualPixelLoaderCode || '')
+                  setCopiedSnippet(true)
+                  setTimeout(() => setCopiedSnippet(false), 2000)
+                }}
+                className="absolute top-2 right-2 px-2.5 py-1 text-[11px] font-medium bg-white text-gray-700 hover:bg-gray-50 rounded border border-gray-300 shadow-sm"
+              >
+                {copiedSnippet ? 'Copiado!' : 'Copiar'}
+              </button>
+            </div>
+            <ol className="text-[11.5px] text-gray-600 space-y-0.5 pl-4 list-decimal">
+              <li>No admin da Shopify, abra <strong>Configurações → Customer Events</strong>.</li>
+              <li>Clique em <strong>Adicionar pixel personalizado</strong> e nomeie como "Worder".</li>
+              <li>Cole o código acima no editor.</li>
+              <li>Em "Privacidade do cliente", mantenha <strong>Não obrigatório</strong> (ou ajuste conforme sua política LGPD).</li>
+              <li>Clique em <strong>Salvar</strong> e depois em <strong>Conectar</strong>.</li>
+              <li>Volte aqui e clique em "Atualizar" — pixelInstalled deve virar verde após o primeiro evento.</li>
+            </ol>
+          </div>
+        </div>
+      )}
+
+      {/* Webhook subscriptions on Shopify — shows the FULL address of
+          each subscription (not just the topic) so the merchant can spot
+          stale URLs (ngrok tunnels, wrong domains, old preview deploys).
+          A subscription's address must equal expectedWebhookUrl exactly
+          for our handler to receive deliveries. */}
+      {data.install.webhooks && data.install.webhooks.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-gray-900">Webhook subscriptions na Shopify</p>
+              <p className="text-[11px] text-gray-400 truncate">
+                Endpoint esperado: <code className="font-mono text-gray-600">{data.install.expectedWebhookUrl || '—'}</code>
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {data.install.checkoutTopicsRegistered === false && (
+                <span className="text-[10.5px] px-2 py-1 bg-red-50 text-red-700 rounded font-semibold border border-red-200">
+                  FALTA: checkouts/*
+                </span>
+              )}
+              {(data.install.webhookUrlMismatchCount || 0) > 0 && (
+                <span className="text-[10.5px] px-2 py-1 bg-red-50 text-red-700 rounded font-semibold border border-red-200">
+                  {data.install.webhookUrlMismatchCount} URL{(data.install.webhookUrlMismatchCount || 0) > 1 ? 's' : ''} fora do esperado
+                </span>
+              )}
+              {data.install.apiSecretConfigured === false && (
+                <span className="text-[10.5px] px-2 py-1 bg-amber-50 text-amber-700 rounded font-semibold border border-amber-200">
+                  api_secret ausente
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="divide-y divide-gray-100 max-h-[320px] overflow-y-auto">
+            {data.install.webhooks.map((w, i) => (
+              <div key={i} className="px-4 py-2 flex items-center gap-2.5">
+                <span className={cn(
+                  'w-2 h-2 rounded-full flex-shrink-0',
+                  w.matches_expected ? 'bg-emerald-500' : 'bg-red-500'
+                )} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-mono font-semibold text-gray-900 truncate">{w.topic}</p>
+                  <p className={cn(
+                    'text-[10.5px] truncate font-mono',
+                    w.matches_expected ? 'text-gray-500' : 'text-red-600'
+                  )}>{w.address}</p>
+                </div>
+                {!w.matches_expected && (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-red-50 text-red-700 rounded font-semibold flex-shrink-0">
+                    URL ERRADA
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+          {(data.install.webhookUrlMismatchCount || 0) > 0 && (
+            <div className="px-4 py-2.5 bg-red-50 border-t border-red-200 text-[11.5px] text-red-800">
+              ⚠️ <strong>{data.install.webhookUrlMismatchCount} subscription{(data.install.webhookUrlMismatchCount || 0) > 1 ? 's' : ''} apontando pra URL errada.</strong>{' '}
+              Shopify está mandando os eventos pra um endpoint que não é o nosso. Use <strong>"Reinstalar tudo"</strong> acima — ele apaga as antigas e cria no endpoint certo.
+            </div>
+          )}
+          {data.install.syncCheckoutsEnabled === false && (
+            <div className="px-4 py-2.5 bg-amber-50 border-t border-amber-100 text-[11.5px] text-amber-800">
+              ⚠️ <strong>sync_checkouts está desativado</strong> nesta loja — webhooks de checkout chegam mas são ignorados antes de virar evento.
+            </div>
+          )}
         </div>
       )}
 

@@ -26,6 +26,10 @@ import {
   Package,
   ArrowRight,
   Eye,
+  AlertCircle,
+  ArrowDownLeft,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useStoreStore } from '@/stores';
@@ -115,6 +119,10 @@ export default function AutomationsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [cloneToStoreTarget, setCloneToStoreTarget] = useState<{ id: string; name: string } | null>(null);
   const [moveToStoreTarget, setMoveToStoreTarget] = useState<{ id: string; name: string } | null>(null);
+  // Orphans = flows in this org that are NOT in the active store (other store, or null store_id)
+  const [orphans, setOrphans] = useState<Array<{ id: string; name: string; status: string; store_id: string | null; store_name: string | null; updated_at: string }>>([]);
+  const [orphansExpanded, setOrphansExpanded] = useState(false);
+  const [movingOrphanId, setMovingOrphanId] = useState<string | null>(null);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -176,6 +184,62 @@ export default function AutomationsPage() {
 
     fetchAutomations();
   }, [organizationId, currentStore?.id]);
+
+  // Fetch orphans — flows in this org that aren't in the active store.
+  // Useful when a flow "disappears" because it's actually attached to
+  // another store or to no store (legacy automations from before the
+  // strict store_id filter existed).
+  const fetchOrphans = useCallback(async () => {
+    if (!organizationId) return;
+    try {
+      const params = new URLSearchParams();
+      if (currentStore?.id) params.set('currentStoreId', currentStore.id);
+      const res = await fetch(`/api/automations/orphans?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setOrphans(data.orphans || []);
+      }
+    } catch (e) {
+      console.error('Error fetching orphan flows:', e);
+    }
+  }, [organizationId, currentStore?.id]);
+  useEffect(() => { fetchOrphans(); }, [fetchOrphans]);
+
+  // Move an orphan flow to the current store (one-click recovery)
+  async function recoverOrphan(orphanId: string, orphanName: string) {
+    if (!currentStore?.id) {
+      setToast({ msg: 'Selecione uma loja primeiro', type: 'error' });
+      return;
+    }
+    setMovingOrphanId(orphanId);
+    try {
+      const res = await fetch(`/api/automations/${orphanId}/move-to-store`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetStoreId: currentStore.id }),
+      });
+      const j = await res.json();
+      if (res.ok && j.success) {
+        setToast({ msg: `"${orphanName}" foi movida para ${currentStore.name || 'a loja atual'}`, type: 'success' });
+        // Refresh both lists: orphan goes away, main list gets the flow
+        await Promise.all([fetchOrphans(), (async () => {
+          const params = new URLSearchParams({ organizationId: organizationId! });
+          if (currentStore?.id) params.set('storeId', currentStore.id);
+          const r = await fetch(`/api/automations?${params}`);
+          if (r.ok) {
+            const d = await r.json();
+            setAutomations(d.automations || []);
+          }
+        })()]);
+      } else {
+        setToast({ msg: j.error || 'Falha ao mover automação', type: 'error' });
+      }
+    } catch (e: any) {
+      setToast({ msg: e.message || 'Erro de rede', type: 'error' });
+    } finally {
+      setMovingOrphanId(null);
+    }
+  }
 
   // Filter automations
   const filteredAutomations = automations.filter((automation) => {
@@ -370,8 +434,22 @@ export default function AutomationsPage() {
           }
         }
 
-        if (node.type === 'control_delay' || node.data?.nodeType === 'control_delay') {
-          if (!cfg.value || cfg.value <= 0) {
+        if (node.type === 'control_delay' || node.data?.nodeType === 'control_delay' || node.type === 'logic_delay' || node.data?.nodeType === 'logic_delay') {
+          // The delay UI stores the value at config.delay.value; older
+          // flows used config.value / config.minutes / config.duration.
+          // The Sidebar drop produces config.delayValue (defaultConfig
+          // in nodeTypes.ts). Accept all of them so legitimate flows
+          // don't get blocked at activation.
+          const value = Number(
+            cfg?.delay?.value ??
+            cfg?.value ??
+            cfg?.delayValue ??
+            cfg?.minutes ??
+            cfg?.duration ??
+            cfg?.amount ??
+            0
+          );
+          if (!isFinite(value) || value <= 0) {
             errors.push(`Delay "${label}" precisa de um tempo configurado`);
           }
         }
@@ -628,6 +706,67 @@ export default function AutomationsPage() {
 
         </div>
       </div>
+
+      {/* Orphan flows recovery banner — shows automations that exist
+          in this org but aren't in the active store. One-click "Trazer
+          pra cá" moves the flow to the current store. */}
+      {orphans.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden">
+          <button
+            onClick={() => setOrphansExpanded(v => !v)}
+            className="w-full px-4 py-3 flex items-center gap-3 hover:bg-amber-100/50 transition-colors text-left"
+          >
+            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-amber-900">
+                {orphans.length} {orphans.length === 1 ? 'fluxo está' : 'fluxos estão'} em outra loja ou sem loja
+              </p>
+              <p className="text-[11.5px] text-amber-700">
+                Clique pra ver e trazer{orphans.length === 1 ? '-lo' : '-los'} para {currentStore?.name || 'esta loja'}.
+              </p>
+            </div>
+            {orphansExpanded ? <ChevronUp className="w-4 h-4 text-amber-700" /> : <ChevronDown className="w-4 h-4 text-amber-700" />}
+          </button>
+          {orphansExpanded && (
+            <div className="border-t border-amber-200 divide-y divide-amber-100 max-h-[400px] overflow-y-auto bg-white">
+              {orphans.map(o => (
+                <div key={o.id} className="px-4 py-2.5 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-gray-900 truncate">{o.name}</p>
+                    <p className="text-[11px] text-gray-500 truncate">
+                      {o.store_name ? (
+                        <>Atualmente em: <span className="font-medium text-gray-700">{o.store_name}</span></>
+                      ) : (
+                        <span className="italic">Sem loja atribuída (legacy)</span>
+                      )}
+                      {' · '}
+                      <span className={cn(
+                        'font-medium',
+                        o.status === 'active' && 'text-emerald-700',
+                        o.status === 'paused' && 'text-amber-700',
+                        o.status === 'draft' && 'text-gray-500',
+                      )}>{o.status}</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => recoverOrphan(o.id, o.name)}
+                    disabled={movingOrphanId === o.id || !currentStore?.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg transition-colors flex-shrink-0"
+                    title={`Mover para ${currentStore?.name || 'loja atual'}`}
+                  >
+                    {movingOrphanId === o.id ? (
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <ArrowDownLeft className="w-3.5 h-3.5" />
+                    )}
+                    Trazer pra cá
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Automations Table — Omnisend/Klaviyo style */}
       {loading ? (

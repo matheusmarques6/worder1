@@ -89,220 +89,35 @@ export async function GET(request: NextRequest) {
     }
 
     // =====================================================================
-    // CHECKOUT tab: query shopify_checkouts table (webhook-backed)
-    // Falls back to contact_events if shopify_checkouts is empty (e.g.
-    // sync_checkouts not enabled, or table doesn't exist).
+    // CHECKOUT tab: source-of-truth is the EVENT LOG (contact_events).
+    //
+    // Every checkout_started event that doesn't have a follow-up
+    // checkout_completed / placed_order / order_paid within 15 minutes
+    // is considered abandoned. This way the recovery list reflects
+    // exactly what the tracking layer captured — same source as
+    // every other downstream metric — and doesn't depend on
+    // shopify_checkouts being kept in sync via webhooks.
+    //
+    // shopify_checkouts is used as an OPTIONAL enrichment when present
+    // (recovery_url, contact_id, status='converted' from the cron) but
+    // never as the primary list. Webhook deliveries that miss
+    // (HMAC mismatch, network drop, pre-alias era) no longer cause
+    // checkouts to disappear from this view.
     // =====================================================================
-    let items: any[] | null = null;
-    let count: number | null = null;
-    let checkoutError: any = null;
-
-    try {
-      let query = supabaseAdmin
-        .from('shopify_checkouts')
-        .select('id, store_id, shopify_checkout_id, shopify_checkout_token, email, phone, total_price, currency, line_items, abandoned_checkout_url, recovery_url, status, abandoned_at, converted_at, recovered_at, contact_id, shopify_created_at, created_at, updated_at, contacts(id, email, first_name, last_name, phone)', { count: 'exact' })
-        .in('organization_id', orgIds)
-        .in('store_id', activeStoreIds)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      if (storeId) query = query.eq('store_id', storeId);
-      if (statusFilter) {
-        query = query.eq('status', statusFilter);
-      } else {
-        query = query.in('status', ['pending', 'abandoned', 'recovered']);
-      }
-
-      query = query.not('email', 'is', null).neq('email', '');
-
-      const result = await query;
-      items = result.data;
-      count = result.count;
-      checkoutError = result.error;
-    } catch {
-      checkoutError = { code: '42P01' };
-    }
-
-    // Fallback: if shopify_checkouts is empty or missing, derive abandoned
-    // checkouts from contact_events (checkout_started without checkout_completed).
-    if ((!items || items.length === 0) && (!checkoutError || checkoutError.code === '42P01' || checkoutError.code === '42703' || checkoutError.message?.includes('relation'))) {
-      return await handleCheckoutFallback({
-        orgIds,
-        activeStoreIds,
-        storeId,
-        limit,
-        offset,
-      });
-    }
-
-    if (checkoutError) {
-      console.error('[Recovery] Error fetching checkouts:', checkoutError);
-      return NextResponse.json({ error: checkoutError.message || 'Failed to fetch' }, { status: 500 });
-    }
-
-    // ── Live conversion check: catch checkouts whose customer already placed ──
-    // an order but our webhook/cron didn't update status yet. Cross-reference
-    // emails against shopify_orders so Shopify + Worder lists match perfectly.
-    const checkoutEmails = [...new Set(
-      (items || []).map((c: any) => c.email?.toLowerCase()).filter(Boolean)
-    )] as string[];
-    const convertedEmails = new Set<string>();
-    if (checkoutEmails.length > 0) {
-      try {
-        const { data: orders } = await supabaseAdmin
-          .from('shopify_orders')
-          .select('email')
-          .in('store_id', activeStoreIds)
-          .in('email', checkoutEmails);
-        for (const o of (orders || []) as any[]) {
-          if (o.email) convertedEmails.add(String(o.email).toLowerCase());
-        }
-      } catch {}
-      // Also check contact_events for placed_order events
-      if (convertedEmails.size < checkoutEmails.length) {
-        try {
-          const remaining = checkoutEmails.filter(e => !convertedEmails.has(e));
-          if (remaining.length > 0) {
-            const { data: events } = await supabaseAdmin
-              .from('contact_events')
-              .select('properties')
-              .in('organization_id', orgIds)
-              .in('event_type', ['placed_order', 'order_paid'])
-              .in('store_id', activeStoreIds)
-              .limit(500);
-            for (const ev of (events || []) as any[]) {
-              const evEmail = (ev.properties?.email || ev.properties?.Email || '').toLowerCase();
-              if (evEmail && remaining.includes(evEmail)) convertedEmails.add(evEmail);
-            }
-          }
-        } catch {}
-      }
-      // Fire-and-forget: mark the stale rows as converted in the DB
-      if (convertedEmails.size > 0) {
-        for (const c of (items || []) as any[]) {
-          if (c.email && convertedEmails.has(c.email.toLowerCase()) && c.status !== 'converted') {
-            supabaseAdmin.from('shopify_checkouts')
-              .update({ status: 'converted', converted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-              .eq('id', c.id)
-              .then(() => {}, () => {});
-          }
-        }
-      }
-    }
-
-    // Filter out the converted ones from the results
-    const filteredItems = (items || []).filter((c: any) =>
-      !(c.email && convertedEmails.has(c.email.toLowerCase()))
-    );
-
-    // Stats are computed after the conversion check below so they match
-    let stats = { total: 0, pending: 0, abandoned: 0, converted: 0, recovered: 0 };
-    let revenueRecovered = 0;
-
-    // Backfill contact_id by email when the checkout wasn't linked at webhook time
-    // (Shopify often fires checkouts/create BEFORE the customer submits email)
-    const unlinkedByEmail = new Map<string, string>() // email -> checkout_id
-    for (const c of (items || [])) {
-      const ci = (c as any).contacts
-      const has = Array.isArray(ci) ? ci[0] : ci
-      if (!has && c.email) unlinkedByEmail.set(String(c.email).toLowerCase(), c.id)
-    }
-    const emailsToLookup = Array.from(unlinkedByEmail.keys())
-    const contactsByEmail = new Map<string, any>()
-    if (emailsToLookup.length > 0) {
-      const { data: foundContacts } = await supabaseAdmin
-        .from('contacts')
-        .select('id, email, first_name, last_name, phone')
-        .in('organization_id', orgIds)
-        .in('email', emailsToLookup)
-      for (const fc of (foundContacts || [])) {
-        if (fc.email) contactsByEmail.set(String(fc.email).toLowerCase(), fc)
-      }
-      // Fire-and-forget: persist the contact_id link back to shopify_checkouts
-      if (contactsByEmail.size > 0) {
-        for (const [email, checkoutId] of unlinkedByEmail.entries()) {
-          const fc = contactsByEmail.get(email)
-          if (fc) {
-            supabaseAdmin.from('shopify_checkouts').update({ contact_id: fc.id }).eq('id', checkoutId).then(() => {}, () => {})
-          }
-        }
-      }
-    }
-
-    // Compute stats from the filtered (post-conversion-check) items
-    const abandonmentCutoff = Date.now() - 15 * 60 * 1000;
-    for (const it of filteredItems as any[]) {
-      const createdMs = it.created_at ? new Date(it.created_at).getTime() : 0;
-      const effectiveStatus = (it.status === 'pending' && createdMs && createdMs < abandonmentCutoff)
-        ? 'abandoned' : it.status;
-      if (effectiveStatus === 'pending') stats.pending++;
-      else if (effectiveStatus === 'abandoned') stats.abandoned++;
-      else if (effectiveStatus === 'recovered') {
-        stats.recovered++;
-        revenueRecovered += Number(it.total_price) || 0;
-      }
-    }
-    stats.total = filteredItems.length;
-
-    // Normalize items to a simpler shape — use filteredItems (excludes live-detected converts)
-    const normalized = filteredItems.map((c: any) => {
-      const ci = Array.isArray(c.contacts) ? c.contacts[0] : c.contacts
-      const contact = ci || (c.email ? contactsByEmail.get(String(c.email).toLowerCase()) : null)
-      const name =
-        [contact?.first_name, contact?.last_name].filter(Boolean).join(' ') ||
-        contact?.email ||
-        c.email ||
-        'Desconhecido';
-      const items = Array.isArray(c.line_items) ? c.line_items : [];
-      // Show "abandoned" for old pending rows that the cron hasn't processed yet —
-      // UX-wise they are effectively abandoned. Keeps the UI consistent with Shopify.
-      const createdMs = c.created_at ? new Date(c.created_at).getTime() : 0;
-      const effectiveStatus = (c.status === 'pending' && createdMs && createdMs < abandonmentCutoff)
-        ? 'abandoned'
-        : c.status;
-      return {
-        id: c.id,
-        type,
-        status: effectiveStatus,
-        email: c.email || contact?.email || null,
-        phone: c.phone || contact?.phone || null,
-        contact_id: c.contact_id,
-        contact_name: name,
-        value: Number(c.total_price) || 0,
-        currency: c.currency || 'BRL',
-        items_count: items.length,
-        items_preview: items.slice(0, 3).map((i: any) => ({
-          title: i.title || i.name || '',
-          quantity: i.quantity || 1,
-          price: Number(i.price || 0),
-          image_url: i.image?.src || i.product?.image?.src || null,
-        })),
-        recovery_url: c.recovery_url || c.abandoned_checkout_url || null,
-        abandoned_at: c.abandoned_at,
-        converted_at: c.converted_at,
-        recovered_at: c.recovered_at,
-        created_at: c.shopify_created_at || c.created_at,
-        store_id: c.store_id,
-      };
+    return await handleCheckoutFromEvents({
+      orgIds,
+      activeStoreIds,
+      storeId,
+      limit,
+      offset,
     });
-
-    return NextResponse.json({
-      items: normalized,
-      total: filteredItems.length,
-      stats: {
-        ...stats,
-        revenue_recovered: revenueRecovered,
-        recovery_rate:
-          stats.total > 0
-            ? (((stats.recovered + stats.converted) / stats.total) * 100).toFixed(1)
-            : '0.0',
-      },
-    });
+    // (legacy shopify_checkouts code path retained below for reference;
+    //  unreachable now that events are the source of truth.)
   } catch (error: any) {
-    console.error('[Recovery] Error:', error);
-    return NextResponse.json({ error: error?.message || 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
 
 // =====================================================================
 // CART tab: Aggregates added_to_cart pixel events into real cart-abandonment
@@ -622,7 +437,7 @@ function zeroStats() {
 // Finds checkout_started events that were never followed by
 // checkout_completed / placed_order / order_paid.
 // =====================================================================
-async function handleCheckoutFallback(opts: {
+async function handleCheckoutFromEvents(opts: {
   orgIds: string[];
   activeStoreIds: string[];
   storeId: string | null;
@@ -630,11 +445,18 @@ async function handleCheckoutFallback(opts: {
   offset: number;
 }): Promise<NextResponse> {
   const { orgIds, activeStoreIds, storeId, limit, offset } = opts;
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  // 90-day window matches Shopify Admin's 3-month auto-deletion of
+  // abandoned checkouts. Older than that, Shopify itself drops the
+  // record from its abandoned list, so we mirror the behavior.
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
+  // Pull every checkout_started event in window. We also include
+  // shopify_resource_id so we can match completion by canonical
+  // checkout id (Shopify's source of truth) instead of relying on
+  // session_id alone.
   let q = supabaseAdmin
     .from('contact_events')
-    .select('id, contact_id, store_id, organization_id, properties, session_id, anonymous_id, monetary_value, currency, occurred_at, event_type')
+    .select('id, contact_id, store_id, organization_id, properties, session_id, anonymous_id, monetary_value, currency, occurred_at, event_type, shopify_resource_id')
     .in('organization_id', orgIds)
     .eq('event_type', 'checkout_started')
     .gte('occurred_at', since)
@@ -652,64 +474,282 @@ async function handleCheckoutFallback(opts: {
     return NextResponse.json({ items: [], total: 0, stats: zeroStats() });
   }
 
-  // Group by contact_id or session_id
-  const buckets = new Map<string, { key: string; contact_id: string | null; session_id: string | null; events: any[]; last_at: string; first_at: string; store_id: string }>();
+  // ============================================================
+  // Shopify's abandonment rule:
+  //   "A checkout is abandoned when the customer added items AND
+  //    provided contact information AND didn't complete the purchase."
+  //   Source: shopify.dev — AbandonedCheckout GraphQL object
+  //
+  // Hard requirement: contact info (email or phone) MUST be present.
+  // Checkouts without contact info don't appear in Shopify Admin's
+  // "Checkouts abandonados" list, so we mirror that behavior.
+  // ============================================================
+  function extractEmail(ev: any): string | null {
+    const p = ev?.properties || {};
+    const raw = p.raw || {};
+    const e =
+      p.email ||
+      p.Email ||
+      p.CustomerEmail ||
+      raw.email ||
+      raw.contact_email ||
+      raw.customer?.email ||
+      raw.billing_address?.email ||
+      null;
+    return e ? String(e).toLowerCase() : null;
+  }
+  function extractPhone(ev: any): string | null {
+    const p = ev?.properties || {};
+    const raw = p.raw || {};
+    return (
+      p.phone ||
+      p.Phone ||
+      p.CustomerPhone ||
+      raw.phone ||
+      raw.customer?.phone ||
+      raw.billing_address?.phone ||
+      null
+    );
+  }
+  function extractCheckoutId(ev: any): string | null {
+    const p = ev?.properties || {};
+    const raw = p.raw || {};
+    return String(
+      ev.shopify_resource_id ||
+      p.CheckoutId ||
+      p.checkout_id ||
+      raw.id ||
+      raw.token ||
+      ''
+    ) || null;
+  }
+
+  // Pre-compute which contacts have email/phone so we can pass the
+  // Shopify "contact info required" rule even when the event itself
+  // doesn't carry email (pixel sandbox + checkout_started fires
+  // BEFORE the customer types email at the checkout form). Identity
+  // graph link to a contact = customer is identifiable = qualifies.
+  const allContactIds = [...new Set((startedEvents || []).map((e: any) => e.contact_id).filter(Boolean))] as string[];
+  const contactsWithInfo = new Set<string>();
+  if (allContactIds.length > 0) {
+    try {
+      const { data: contactRows } = await supabaseAdmin
+        .from('contacts')
+        .select('id, email, phone')
+        .in('id', allContactIds);
+      for (const c of (contactRows || []) as any[]) {
+        if (c.email || c.phone) contactsWithInfo.add(c.id);
+      }
+    } catch {}
+  }
+
+  // Group by canonical checkout_id when available, falling back to
+  // contact_id then session_id. Same checkout fired by both pixel
+  // and webhook collapses into a single bucket — important because
+  // the pixel event may lack email/phone while the sibling webhook
+  // event for the same checkout carries it. We bucket FIRST then
+  // apply the Shopify "contact info required" rule at bucket level
+  // so identification on ANY sibling event qualifies the whole
+  // checkout.
+  const buckets = new Map<string, { key: string; contact_id: string | null; session_id: string | null; checkout_id: string | null; events: any[]; last_at: string; first_at: string; store_id: string }>();
   for (const e of startedEvents) {
-    const key = e.contact_id ? `c:${e.contact_id}` : e.session_id ? `s:${e.session_id}` : `e:${e.id}`;
+    const checkoutId = extractCheckoutId(e);
+    const key = checkoutId
+      ? `ck:${checkoutId}`
+      : e.contact_id
+        ? `c:${e.contact_id}`
+        : e.session_id
+          ? `s:${e.session_id}`
+          : `e:${e.id}`;
     const existing = buckets.get(key);
     if (existing) {
       existing.events.push(e);
       if (e.occurred_at > existing.last_at) existing.last_at = e.occurred_at;
       if (e.occurred_at < existing.first_at) existing.first_at = e.occurred_at;
       if (!existing.contact_id && e.contact_id) existing.contact_id = e.contact_id;
+      if (!existing.checkout_id && checkoutId) existing.checkout_id = checkoutId;
     } else {
-      buckets.set(key, { key, contact_id: e.contact_id, session_id: e.session_id, events: [e], last_at: e.occurred_at, first_at: e.occurred_at, store_id: e.store_id });
+      buckets.set(key, {
+        key,
+        contact_id: e.contact_id,
+        session_id: e.session_id,
+        checkout_id: checkoutId,
+        events: [e],
+        last_at: e.occurred_at,
+        first_at: e.occurred_at,
+        store_id: e.store_id,
+      });
     }
   }
 
-  // Check which of these have a matching checkout_completed / placed_order
+  // Apply Shopify's "checkout has contact info" rule at BUCKET level
+  // so identification on any sibling event qualifies the whole
+  // checkout. Three ways a bucket qualifies:
+  //   1. Any event in the bucket carries email/phone in properties or raw
+  //   2. The bucket is linked to a contact that has email/phone
+  //   3. Any event in the bucket has a contact_id whose contact has
+  //      email/phone (catches multi-event buckets where only one was linked)
+  for (const b of [...buckets.values()]) {
+    let qualifies = false;
+    if (b.contact_id && contactsWithInfo.has(b.contact_id)) qualifies = true;
+    if (!qualifies) {
+      for (const ev of b.events) {
+        if (extractEmail(ev) || extractPhone(ev)) { qualifies = true; break; }
+        if (ev.contact_id && contactsWithInfo.has(ev.contact_id)) { qualifies = true; break; }
+      }
+    }
+    if (!qualifies) buckets.delete(b.key);
+  }
+
+  // ============================================================
+  // Detect completion. Shopify marks a checkout complete by linking
+  // an order via order.checkout_token == checkout.token. We mirror
+  // that with a canonical match plus timestamp-aware fallbacks.
+  //
+  // Two categories of match:
+  //
+  // CANONICAL (no timestamp needed — link is 1:1 to the checkout):
+  //   A. shopify_checkouts row with status='converted'/'recovered'
+  //      for the bucket's checkout_id. The order webhook updates
+  //      this row when order.checkout_id or order.checkout_token
+  //      matches — this IS Shopify's own canonical link.
+  //   B. placed_order event whose properties.extra.checkout_token
+  //      equals the bucket's checkout_id. Same canonical signal,
+  //      derived from the event log instead of the table.
+  //
+  // TIMESTAMP-AWARE (the key was reused across multiple checkouts;
+  // only counts as completion if it happened AFTER abandonment):
+  //   C. session_id: a completion in the same session AFTER
+  //      the bucket's last activity.
+  //   D. contact_id: a completion by the same contact AFTER
+  //      the bucket's last activity. The repeat-customer trap:
+  //      without timestamp-awareness, ANY past order would hide
+  //      every future abandoned checkout from that customer.
+  //
+  // Email-only matching is intentionally dropped — it has the same
+  // false-positive risk as contact_id but with no signal we don't
+  // already have via the contact link.
+  // ============================================================
   const contactIds = [...new Set([...buckets.values()].map(b => b.contact_id).filter(Boolean))] as string[];
   const sessionIds = [...new Set([...buckets.values()].map(b => b.session_id).filter(Boolean))] as string[];
+  const checkoutIds = [...new Set([...buckets.values()].map(b => b.checkout_id).filter(Boolean))] as string[];
 
-  const completedSessions = new Set<string>();
-  const completedContacts = new Set<string>();
+  const completedCheckouts = new Set<string>();
+  // Latest completion per key — we only treat a bucket as completed
+  // when the completion happened AFTER the bucket's last activity.
+  const sessionCompletedAt = new Map<string, string>();
+  const contactCompletedAt = new Map<string, string>();
 
+  // A. Canonical match via shopify_checkouts.status. The order
+  //    webhook does this update authoritatively whenever Shopify's
+  //    order.checkout_id or order.checkout_token matches.
+  if (checkoutIds.length > 0) {
+    try {
+      const { data } = await supabaseAdmin
+        .from('shopify_checkouts')
+        .select('shopify_checkout_id, status')
+        .in('organization_id', orgIds)
+        .in('shopify_checkout_id', checkoutIds)
+        .in('status', ['converted', 'recovered']);
+      for (const r of (data || []) as any[]) {
+        if (r.shopify_checkout_id) completedCheckouts.add(String(r.shopify_checkout_id));
+      }
+    } catch {}
+  }
+
+  // B. Canonical match via placed_order events that carry
+  //    properties.extra.checkout_token. This is the SAME
+  //    Shopify-rule link, just sourced from the event log so it
+  //    works even when shopify_checkouts is empty (webhook missed
+  //    checkouts/create, only orders/paid arrived).
+  if (checkoutIds.length > 0) {
+    try {
+      const { data } = await supabaseAdmin
+        .from('contact_events')
+        .select('properties')
+        .in('organization_id', orgIds)
+        .in('event_type', ['checkout_completed', 'placed_order', 'order_paid'])
+        .gte('occurred_at', since)
+        .limit(2000);
+      const checkoutIdSet = new Set(checkoutIds);
+      for (const r of (data || []) as any[]) {
+        const p = r.properties || {};
+        const extra = p.extra || {};
+        const tokens = [
+          extra.checkout_token,
+          extra.checkout_id,
+          p.CheckoutId,
+          p.checkout_id,
+          p.checkout_token,
+        ].filter(Boolean).map(String);
+        for (const t of tokens) {
+          if (checkoutIdSet.has(t)) completedCheckouts.add(t);
+        }
+      }
+    } catch {}
+  }
+
+  // C. Timestamp-aware session match
   if (sessionIds.length > 0) {
     try {
       const { data } = await supabaseAdmin
         .from('contact_events')
-        .select('session_id')
+        .select('session_id, occurred_at')
         .in('organization_id', orgIds)
         .in('event_type', ['checkout_completed', 'placed_order', 'order_paid'])
         .in('session_id', sessionIds)
-        .gte('occurred_at', since);
+        .gte('occurred_at', since)
+        .order('occurred_at', { ascending: false });
       for (const r of (data || []) as any[]) {
-        if (r.session_id) completedSessions.add(r.session_id);
+        // Map keeps the FIRST entry seen, which is the latest because
+        // we ordered descending — so this stores the most recent
+        // completion per session.
+        if (r.session_id && !sessionCompletedAt.has(r.session_id)) {
+          sessionCompletedAt.set(r.session_id, r.occurred_at);
+        }
       }
     } catch {}
   }
 
+  // D. Timestamp-aware contact match — the critical fix for repeat
+  //    customers whose past orders were silently hiding their newly
+  //    abandoned checkouts.
   if (contactIds.length > 0) {
     try {
       const { data } = await supabaseAdmin
         .from('contact_events')
-        .select('contact_id')
+        .select('contact_id, occurred_at')
         .in('organization_id', orgIds)
         .in('event_type', ['checkout_completed', 'placed_order', 'order_paid'])
         .in('contact_id', contactIds)
-        .gte('occurred_at', since);
+        .gte('occurred_at', since)
+        .order('occurred_at', { ascending: false });
       for (const r of (data || []) as any[]) {
-        if (r.contact_id) completedContacts.add(r.contact_id);
+        if (r.contact_id && !contactCompletedAt.has(r.contact_id)) {
+          contactCompletedAt.set(r.contact_id, r.occurred_at);
+        }
       }
     } catch {}
   }
 
-  const cutoff15min = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  // ============================================================
+  // Filter to abandoned. Shopify shows abandoned checkouts as soon
+  // as the email is provided — no minimum wait time. We use a small
+  // 5-min grace so events still in the active checkout flow (user
+  // typing payment info) don't flicker into the abandoned list and
+  // back out when they complete a few seconds later.
+  // ============================================================
+  const cutoff5min = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
   const abandoned = [...buckets.values()].filter(b => {
-    if (b.last_at > cutoff15min) return false;
-    if (b.session_id && completedSessions.has(b.session_id)) return false;
-    if (b.contact_id && completedContacts.has(b.contact_id)) return false;
+    if (b.last_at > cutoff5min) return false;
+    // Canonical: this exact checkout was completed
+    if (b.checkout_id && completedCheckouts.has(b.checkout_id)) return false;
+    // Timestamp-aware: completion happened AFTER abandonment
+    const sAt = b.session_id ? sessionCompletedAt.get(b.session_id) : null;
+    if (sAt && sAt > b.last_at) return false;
+    const cAt = b.contact_id ? contactCompletedAt.get(b.contact_id) : null;
+    if (cAt && cAt > b.last_at) return false;
     return true;
   });
 
@@ -729,16 +769,82 @@ async function handleCheckoutFallback(opts: {
     let propEmail: string | null = null;
     let propPhone: string | null = null;
     let value = 0;
+    let currency: string | null = null;
+    let recoveryUrl: string | null = null;
     const lineItems: any[] = [];
     for (const ev of b.events) {
       const p = ev.properties || {};
-      if (!propEmail) propEmail = (p.email || p.Email || p.customer?.email || '').toLowerCase() || null;
-      if (!propPhone) propPhone = p.phone || p.Phone || p.customer?.phone || null;
-      if (p.totalPrice != null) value = Math.max(value, Number(p.totalPrice) || 0);
-      if (ev.monetary_value) value = Math.max(value, Number(ev.monetary_value));
-      const lis = p.lineItems || p.line_items || [];
+      const raw = p.raw || {};
+      // Email/phone: properties → raw → customer nested. Pixel events
+      // use lowercase, webhook events Klaviyo-style.
+      if (!propEmail) propEmail = (
+        p.email || p.Email || p.CustomerEmail ||
+        raw.email || raw.contact_email || raw.customer?.email ||
+        ''
+      ).toLowerCase() || null;
+      if (!propPhone) propPhone = (
+        p.phone || p.Phone || p.CustomerPhone ||
+        raw.phone || raw.customer?.phone || raw.billing_address?.phone ||
+        null
+      );
+      // Total: row-level monetary_value first (already in storage currency),
+      // then properties.TotalPrice (Klaviyo top-level), then raw.total_price,
+      // then pixel-side total_price/totalPrice.
+      const eventTotal = (
+        Number(ev.monetary_value || 0) ||
+        Number(p.TotalPrice || 0) ||
+        Number(p.total_price || 0) ||
+        Number(p.totalPrice || 0) ||
+        Number(raw.total_price || 0) ||
+        0
+      );
+      if (eventTotal > value) value = eventTotal;
+      // Currency: each event row carries its own (GBP, USD, EUR, BRL, …).
+      // Don't hardcode — recovery list mixes currencies for multi-store orgs.
+      if (!currency) currency = (
+        ev.currency ||
+        p.Currency ||
+        p.currency ||
+        raw.currency ||
+        raw.presentment_currency ||
+        null
+      );
+      // Recovery URL — checkouts/create webhooks save it as
+      // raw.abandoned_checkout_url or raw.recovery_url. Pixel events
+      // sometimes carry it as CheckoutURL (Klaviyo top-level).
+      if (!recoveryUrl) recoveryUrl = (
+        p.CheckoutURL ||
+        p.AbandonedCheckoutURL ||
+        p.checkout_url ||
+        raw.abandoned_checkout_url ||
+        raw.recovery_url ||
+        null
+      );
+      // Line items — accept every shape we ship from pixel/webhook/raw.
+      const lis =
+        p.Items ||
+        p.items ||
+        p.lineItems ||
+        p.line_items ||
+        raw.line_items ||
+        [];
       for (const li of (Array.isArray(lis) ? lis : [])) {
-        lineItems.push({ title: li.title || li.name || 'Produto', quantity: li.quantity || 1, price: Number(li.price || li.lineTotal || 0), image_url: li.imageUrl || li.image?.src || null });
+        const imageUrl =
+          li.ImageURL ||
+          li.image_url ||
+          li.imageUrl ||
+          li.image?.src ||
+          li.product?.image?.src ||
+          li.product?.images?.[0]?.src ||
+          li.product?.product_image_urls?.[0] ||
+          li.product?.variant_images_url ||
+          null;
+        lineItems.push({
+          title: li.ProductName || li.title || li.name || li.product?.title || 'Produto',
+          quantity: li.Quantity || li.quantity || 1,
+          price: Number(li.ItemPrice || li.price || li.variant_price || li.lineTotal || 0),
+          image_url: imageUrl,
+        });
       }
     }
     const name = [contact?.first_name, contact?.last_name].filter(Boolean).join(' ').trim() || contact?.email || propEmail || 'Desconhecido';
@@ -752,10 +858,10 @@ async function handleCheckoutFallback(opts: {
       contact_id: b.contact_id,
       contact_name: name,
       value,
-      currency: 'BRL',
+      currency: currency || 'BRL',
       items_count: lineItems.length || b.events.length,
       items_preview: lineItems.slice(0, 3),
-      recovery_url: null,
+      recovery_url: recoveryUrl,
       abandoned_at: b.last_at,
       converted_at: null,
       recovered_at: null,

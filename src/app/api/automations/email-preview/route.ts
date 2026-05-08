@@ -76,12 +76,47 @@ function buildMergeData(
     tracking_url: String(eventProps.tracking_url || ''),
     tracking_number: String(eventProps.tracking_number || ''),
 
-    // Cart / checkout
-    checkout_url: String(eventProps.checkout_url || eventProps.abandoned_checkout_url || ''),
-    cart_total: String(eventProps.cart_total || eventProps.total_price || ''),
-    cart_item_count: String(eventProps.item_count || eventProps.items?.length || ''),
-    cart_first_item: String(eventProps.items?.[0]?.title || ''),
-    cart_first_item_price: String(eventProps.items?.[0]?.price || ''),
+    // Cart / checkout — read from every place the URL can live in the
+    // event payload. New webhook events store the URL at .CheckoutURL
+    // (Klaviyo/Omnisend convention), legacy at .checkout_url, and the
+    // full Shopify payload's recovery URL is under .raw.abandoned_checkout_url.
+    checkout_url: String(
+      eventProps.CheckoutURL ||
+      eventProps.checkout_url ||
+      eventProps.abandoned_checkout_url ||
+      eventProps.raw?.abandoned_checkout_url ||
+      eventProps.raw?.recovery_url ||
+      ''
+    ),
+    cart_total: String(
+      eventProps.TotalPrice ||
+      eventProps.cart_total ||
+      eventProps.total_price ||
+      eventProps.raw?.total_price ||
+      ''
+    ),
+    cart_item_count: String(
+      eventProps.ItemCount ||
+      eventProps.item_count ||
+      (Array.isArray(eventProps.Items) ? eventProps.Items.length : null) ||
+      eventProps.items?.length ||
+      ''
+    ),
+    cart_first_item: String(
+      eventProps.Items?.[0]?.ProductName ||
+      eventProps.items?.[0]?.title ||
+      ''
+    ),
+    cart_first_item_price: String(
+      eventProps.Items?.[0]?.ItemPrice ||
+      eventProps.items?.[0]?.price ||
+      ''
+    ),
+    cart_first_item_image: String(
+      eventProps.Items?.[0]?.ImageURL ||
+      eventProps.items?.[0]?.image_url ||
+      ''
+    ),
   };
 
   // Event-scoped tags ({{event.OrderId}}, {{event.ProductName}}, …)
@@ -206,6 +241,22 @@ export async function POST(request: NextRequest) {
         await enrichOrderItemImages(testEvent, supabase, undefined, organizationId);
         html = resolveOrderBlocks(html, testEvent);
       }
+      // Run the SAME resolvers production uses, in the SAME order. Without
+      // this, send-test emails ship with raw <!-- WORDER_CART_BLOCK -->
+      // comments and unresolved {{ trigger.link }} smart tags — broken
+      // images, broken links. Now byte-for-byte matches what the
+      // recipient sees from a real campaign send.
+      try {
+        const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render');
+        html = await resolveProductBlocks(html, organizationId, contactId, testEvent);
+        html = await resolveCartBlocks(html, organizationId, contactId, testEvent);
+      } catch (e: any) {
+        console.warn('[email-preview send_test] dynamic block resolve failed:', e?.message);
+      }
+      try {
+        const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
+        html = resolveTriggerSmartTags(html, testEvent);
+      } catch { /* best-effort */ }
       html = renderMergeTags(html, buildMergeData(testContact, testEvent, testStore));
 
       // Send via Resend usando remetente configurado da org
@@ -278,30 +329,117 @@ export async function POST(request: NextRequest) {
       contact = anyContact;
     }
 
-    // 3. Fetch most recent event matching trigger type
+    // 3. Fetch most recent event matching trigger type — prefer webhook
+    // events (which carry properties.raw with the full Shopify payload)
+    // over pixel events (sandbox-limited, lowercase, no images). When
+    // only the pixel event exists, we enrich it from shopify_checkouts /
+    // shopify_orders so the merchant sees the rich Klaviyo/Omnisend-
+    // style payload regardless of source.
     const eventTypes = resolveEventTypes(triggerType);
     let eventData: Record<string, any> = {};
 
-    // Try to find event for this contact, fallback to any event of this type
-    let eventQuery = supabase
-      .from('contact_events')
-      .select('*')
-      .in('event_type', eventTypes)
-      .eq('organization_id', organizationId)
-      .order('occurred_at', { ascending: false })
-      .limit(1);
-
-    if (contactId) {
-      eventQuery = eventQuery.eq('contact_id', contactId);
+    // Try webhook events FIRST (event_source='shopify_webhook' carries
+    // full raw payload). Then fall back to any other source.
+    async function fetchEventWithSource(source: string | null) {
+      let q = supabase
+        .from('contact_events')
+        .select('*')
+        .in('event_type', eventTypes)
+        .eq('organization_id', organizationId)
+        .order('occurred_at', { ascending: false })
+        .limit(1);
+      if (contactId) q = q.eq('contact_id', contactId);
+      if (source) q = q.eq('event_source', source);
+      const { data } = await q.maybeSingle();
+      return data;
     }
 
-    const { data: recentEvent } = await eventQuery.maybeSingle();
+    let recentEvent = await fetchEventWithSource('shopify_webhook');
+    if (!recentEvent) recentEvent = await fetchEventWithSource(null);
 
     if (recentEvent) {
       eventData = recentEvent.properties || {};
       // Inject the occurred_at timestamp so the order resolver can render the order date
       if (recentEvent.occurred_at && !eventData.occurred_at) {
         eventData.occurred_at = recentEvent.occurred_at;
+      }
+      // If this event doesn't already have raw (e.g. it's a pixel event),
+      // enrich it from the matching shopify_checkouts / shopify_orders row.
+      // The webhook handler stores the full Shopify payload columns, so
+      // even pixel-source events end up with a rich raw to render against.
+      if (!eventData.raw) {
+        const checkoutId =
+          eventData.checkout_id ||
+          eventData.CheckoutId ||
+          recentEvent.shopify_resource_id ||
+          null;
+        const orderId =
+          eventData.order_id ||
+          eventData.OrderId ||
+          (recentEvent.shopify_resource_type === 'order' ? recentEvent.shopify_resource_id : null);
+
+        try {
+          if (checkoutId && (recentEvent.shopify_resource_type === 'checkout' || eventTypes.some((t: string) => t.startsWith('checkout_')))) {
+            const { data: chk } = await supabase
+              .from('shopify_checkouts')
+              .select('shopify_checkout_id, shopify_checkout_token, email, phone, total_price, subtotal_price, total_tax, total_discounts, currency, line_items, recovery_url, abandoned_checkout_url, status, shopify_created_at')
+              .eq('store_id', recentEvent.store_id)
+              .eq('shopify_checkout_id', String(checkoutId))
+              .maybeSingle();
+            if (chk) {
+              // Compose a Shopify-style raw object from the columns we
+              // persisted, so {{ trigger.raw.<anything> }} resolves and
+              // the cart block walks line_items with full product info.
+              eventData.raw = {
+                id: chk.shopify_checkout_id,
+                token: chk.shopify_checkout_token,
+                email: chk.email,
+                phone: chk.phone,
+                total_price: chk.total_price,
+                subtotal_price: chk.subtotal_price,
+                total_tax: chk.total_tax,
+                total_discounts: chk.total_discounts,
+                currency: chk.currency,
+                line_items: chk.line_items || [],
+                abandoned_checkout_url: chk.abandoned_checkout_url || chk.recovery_url,
+                recovery_url: chk.recovery_url || chk.abandoned_checkout_url,
+                status: chk.status,
+                created_at: chk.shopify_created_at,
+              };
+            }
+          } else if (orderId) {
+            const { data: ord } = await supabase
+              .from('shopify_orders')
+              .select('shopify_order_id, shopify_order_number, email, phone, total_price, subtotal_price, total_tax, total_discounts, currency, line_items, financial_status, fulfillment_status, order_status_url, billing_address, shipping_address, shopify_created_at, payment_gateway')
+              .eq('store_id', recentEvent.store_id)
+              .eq('shopify_order_id', String(orderId))
+              .maybeSingle();
+            if (ord) {
+              eventData.raw = {
+                id: ord.shopify_order_id,
+                order_number: ord.shopify_order_number,
+                name: `#${ord.shopify_order_number}`,
+                email: ord.email,
+                phone: ord.phone,
+                total_price: ord.total_price,
+                subtotal_price: ord.subtotal_price,
+                total_tax: ord.total_tax,
+                total_discounts: ord.total_discounts,
+                currency: ord.currency,
+                line_items: ord.line_items || [],
+                financial_status: ord.financial_status,
+                fulfillment_status: ord.fulfillment_status,
+                order_status_url: ord.order_status_url,
+                billing_address: ord.billing_address,
+                shipping_address: ord.shipping_address,
+                payment_gateway_names: ord.payment_gateway ? [ord.payment_gateway] : [],
+                created_at: ord.shopify_created_at,
+              };
+            }
+          }
+        } catch (e: any) {
+          console.warn('[email-preview] raw enrichment failed:', e?.message);
+        }
       }
     }
 
@@ -319,6 +457,26 @@ export async function POST(request: NextRequest) {
       await enrichOrderItemImages(eventData, supabase, undefined, organizationId);
       processedHtml = resolveOrderBlocks(processedHtml, eventData);
     }
+
+    // 5b. Resolve dynamic product-grid + cart blocks the same way the
+    // production sender does. Without this, the "Produtos do Gatilho"
+    // block (and the older static product-grid blocks) render as empty
+    // <!-- WORDER_CART_BLOCK:... --> comments and the merchant sees a
+    // gap in the preview.
+    try {
+      const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render');
+      processedHtml = await resolveProductBlocks(processedHtml, organizationId, contactId, eventData);
+      processedHtml = await resolveCartBlocks(processedHtml, organizationId, contactId, eventData);
+    } catch (e: any) {
+      console.warn('[email-preview] dynamic block resolve failed:', e?.message);
+    }
+
+    // 5c. Smart trigger merge tags ({{ trigger.link }}, etc) — adapt
+    // checkout/product/order URL based on the active event.
+    try {
+      const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
+      processedHtml = resolveTriggerSmartTags(processedHtml, eventData);
+    } catch { /* best-effort */ }
 
     // 6. Resolve merge tags using the production engine — covers {{first_name}},
     // {{email}}, {{store_name}}, {{event.*}}, {{order_number}}, etc.

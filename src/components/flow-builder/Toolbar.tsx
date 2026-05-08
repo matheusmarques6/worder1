@@ -296,6 +296,63 @@ export function Toolbar({ onSave, onTest, onBack, organizationId, automations, c
           <span className="hidden lg:inline">Histórico</span>
         </button>
 
+        {/* Diagnose — runs the automation-trace endpoint and shows the
+            punch list in a popup. Lets the merchant see WHY their
+            automation isn't firing without digging through Vercel logs. */}
+        <button
+          onClick={async () => {
+            if (!currentAutomationId) {
+              setToolbarToast('Salve a automação primeiro');
+              setTimeout(() => setToolbarToast(null), 3000);
+              return;
+            }
+            setToolbarToast('Diagnosticando…');
+            try {
+              const res = await fetch(`/api/diagnostics/automation-trace?automationId=${currentAutomationId}`);
+              const j = await res.json();
+              if (!res.ok || j.error) {
+                setToolbarToast(`Erro: ${j.error || 'falhou'}`);
+                setTimeout(() => setToolbarToast(null), 5000);
+                return;
+              }
+              // Open in a modal-like alert with full content (alert is
+              // ugly but avoids needing a new modal component for
+              // something this rare). The verdict carries the actionable
+              // summary; the full report is logged for inspection.
+              console.log('[automation-trace] Full report:', j);
+              const lines = [
+                `Automação: ${j.automation.name}`,
+                `Status: ${j.automation.status}`,
+                `Trigger type: ${j.automation.trigger_type}`,
+                `Nodes: ${j.automation.total_nodes} (${j.automation.trigger_nodes} triggers, ${j.automation.action_nodes} ações)`,
+                ``,
+                `Resumo: ${j.summary.ok} ok, ${j.summary.warnings} avisos, ${j.summary.missing} faltando, ${j.summary.failed} falhas`,
+                ``,
+                ...j.checks.map((c: any) => {
+                  const icon = c.status === 'ok' ? '✅' : c.status === 'warning' ? '⚠️' : c.status === 'missing' ? '❓' : '❌';
+                  return `${icon} [${c.stage}] ${c.message}`;
+                }),
+                ``,
+                `Veredicto:\n${j.verdict}`,
+              ];
+              alert(lines.join('\n'));
+              setToolbarToast(null);
+            } catch (e: any) {
+              setToolbarToast(`Erro: ${e?.message || 'falhou'}`);
+              setTimeout(() => setToolbarToast(null), 5000);
+            }
+          }}
+          className={cn(
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md',
+            'hover:bg-zinc-800 text-zinc-200 hover:text-white',
+            'transition-colors text-[13px] font-medium'
+          )}
+          title="Diagnosticar — ver onde a automação está parando"
+        >
+          <AlertTriangle className="w-4 h-4" strokeWidth={2} />
+          <span className="hidden lg:inline">Diagnosticar</span>
+        </button>
+
         {/* Test */}
         <button
           onClick={handleTest}

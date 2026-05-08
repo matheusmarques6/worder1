@@ -118,38 +118,71 @@ async function verifyShopifyWebhook(
 async function getStoreConfig(shopDomain: string): Promise<ShopifyStoreConfig | null> {
   try {
     const supabase = getSupabase();
+    // Match either the primary shop_domain OR any entry in
+    // shop_domain_aliases. Shopify sends webhooks with the canonical
+    // myshopifyDomain (the one assigned at shop creation) which can
+    // differ from what the merchant entered during manual connection
+    // — e.g. they typed "sourosa.myshopify.com" but Shopify sends
+    // "lojalaclode.myshopify.com" because that's the original domain.
+    // Without this OR, the original-domain webhooks return 410 Gone
+    // and events silently drop.
     const { data: store } = await supabase
       .from('shopify_stores')
       .select('*')
-      .eq('shop_domain', shopDomain)
+      .or(`shop_domain.eq.${shopDomain},shop_domain_aliases.cs.{${shopDomain}}`)
       .eq('is_active', true)
-      .single();
-    
+      .maybeSingle();
+
     if (!store) return null;
-    
-    return {
-      id: store.id,
-      organization_id: store.organization_id,
-      shop_domain: store.shop_domain,
-      shop_name: store.shop_name,
-      access_token: store.access_token,
-      api_secret: store.api_secret,
-      default_pipeline_id: store.default_pipeline_id,
-      default_stage_id: store.default_stage_id,
-      contact_type: store.contact_type || 'auto',
-      auto_tags: store.auto_tags || ['shopify'],
-      sync_orders: store.sync_orders ?? true,
-      sync_customers: store.sync_customers ?? true,
-      sync_checkouts: store.sync_checkouts ?? true,
-      sync_refunds: store.sync_refunds ?? false,
-      stage_mapping: store.stage_mapping || {},
-      is_configured: store.is_configured ?? false,
-      is_active: store.is_active ?? true,
-      connection_status: store.connection_status || 'active',
-    };
+    return mapStoreRowToConfig(store);
   } catch {
     return null;
   }
+}
+
+// Resolve by store_id directly — used when the webhook URL carries
+// `?store_id=<id>` (set by install-extras when registering subscriptions).
+// This is the bulletproof path: regardless of which myshopifyDomain
+// Shopify sends in the header (canonical, alias, custom domain, even
+// a typo'd one), the URL itself unambiguously identifies the store.
+// Adapted from the AdTracked pattern.
+async function getStoreConfigById(storeId: string): Promise<ShopifyStoreConfig | null> {
+  try {
+    const supabase = getSupabase();
+    const { data: store } = await supabase
+      .from('shopify_stores')
+      .select('*')
+      .eq('id', storeId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (!store) return null;
+    return mapStoreRowToConfig(store);
+  } catch {
+    return null;
+  }
+}
+
+function mapStoreRowToConfig(store: any): ShopifyStoreConfig {
+  return {
+    id: store.id,
+    organization_id: store.organization_id,
+    shop_domain: store.shop_domain,
+    shop_name: store.shop_name,
+    access_token: store.access_token,
+    api_secret: store.api_secret,
+    default_pipeline_id: store.default_pipeline_id,
+    default_stage_id: store.default_stage_id,
+    contact_type: store.contact_type || 'auto',
+    auto_tags: store.auto_tags || ['shopify'],
+    sync_orders: store.sync_orders ?? true,
+    sync_customers: store.sync_customers ?? true,
+    sync_checkouts: store.sync_checkouts ?? true,
+    sync_refunds: store.sync_refunds ?? false,
+    stage_mapping: store.stage_mapping || {},
+    is_configured: store.is_configured ?? false,
+    is_active: store.is_active ?? true,
+    connection_status: store.connection_status || 'active',
+  };
 }
 
 // ============================================
@@ -721,6 +754,11 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
           note_attributes: order.note_attributes || [],
           line_items: order.line_items || [],
         },
+        // Full raw Shopify webhook payload — every field accessible to
+        // flow builder variables via {{ trigger.raw.<path> }}, matching
+        // Omnisend/Klaviyo's "raw" pattern. Lets merchants reference
+        // any Shopify field without us shipping a code change.
+        raw: order,
       },
       monetary_value: orderValue,
       currency: order.currency || 'BRL',
@@ -979,6 +1017,38 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
         total_price: parseFloat(order.total_price || '0'),
         currency: order.currency,
         financial_status: 'paid',
+        // Top-level shortcuts matching Klaviyo/Omnisend convention.
+        OrderId: String(order.id),
+        OrderNumber: order.order_number,
+        Currency: order.currency,
+        TotalPrice: parseFloat(order.total_price || '0'),
+        SubtotalPrice: parseFloat(order.subtotal_price || '0'),
+        TotalDiscounts: parseFloat(order.total_discounts || '0'),
+        TotalTax: parseFloat(order.total_tax || '0'),
+        DiscountCodes: (order.discount_codes || []).map((d: any) => d.code || d).filter(Boolean),
+        PaymentGateway: (order.payment_gateway_names && order.payment_gateway_names[0]) || null,
+        FinancialStatus: order.financial_status || null,
+        ItemCount: (order.line_items || []).length,
+        Items: (order.line_items || []).map((it: any) => ({
+          ProductID: it.product_id ? String(it.product_id) : undefined,
+          ProductName: it.title || it.name,
+          Quantity: it.quantity || 1,
+          ItemPrice: parseFloat(it.price || '0'),
+          RowTotal: parseFloat(it.price || '0') * (it.quantity || 1),
+          SKU: it.sku, VariantName: it.variant_title,
+          VariantID: it.variant_id ? String(it.variant_id) : undefined,
+          ImageURL: it.product?.product_image_urls?.[0] || it.product?.image?.src || '',
+          ProductURL: it.product?.product_url || '',
+          Brand: it.vendor,
+        })),
+        ItemNames: (order.line_items || []).map((it: any) => it.title || it.name).filter(Boolean),
+        CustomerEmail: order.email || order.customer?.email || null,
+        CustomerFirstName: order.customer?.first_name || order.billing_address?.first_name || null,
+        CustomerLastName: order.customer?.last_name || order.billing_address?.last_name || null,
+        BillingAddress: order.billing_address || null,
+        ShippingAddress: order.shipping_address || null,
+        // Full raw Shopify payload — flow variables via {{ trigger.raw.<path> }}
+        raw: order,
       },
       monetary_value: parseFloat(order.total_price || '0'),
       currency: order.currency || 'BRL',
@@ -1115,6 +1185,8 @@ async function processOrderFulfilled(store: ShopifyStoreConfig, order: any) {
           Country: order.shipping_address.country,
           Zip: order.shipping_address.zip,
         } : undefined,
+        // Full raw payload — flow variables via {{ trigger.raw.<path> }}
+        raw: order,
       },
       monetary_value: parseFloat(order.total_price || '0'),
       currency: order.currency || 'BRL',
@@ -1272,6 +1344,8 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
         })),
         ItemNames: (order.line_items || []).map((item: any) => item.title || item.name),
         FinancialStatus: order.financial_status,
+        // Full raw payload — flow variables via {{ trigger.raw.<path> }}
+        raw: order,
       },
       monetary_value: parseFloat(order.total_price || '0'),
       currency: order.currency || 'BRL',
@@ -1336,13 +1410,49 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
   // Salvar checkout para detecção de abandono.
   // Escrevemos em ambas as colunas de URL (recovery_url + abandoned_checkout_url)
   // porque diferentes versões do schema usaram nomes distintos.
+  // Extract email/phone from EVERY location Shopify might put them.
+  // Different webhook payloads carry contact info in different places:
+  //   - checkout.email (top-level — most common, but often null on the
+  //     first checkouts/create before the customer types it)
+  //   - checkout.customer.email (logged-in customer, present even when
+  //     they haven't typed email in the checkout form)
+  //   - checkout.contact_email (older API versions / draft orders)
+  //   - checkout.billing_address.email (rare, but seen in some flows)
+  //   - checkout.shipping_address.email (rarer still, but a real path)
+  //
+  // Without these fallbacks, every guest-checkout-with-Shopify-customer
+  // and every payload variation looked "Desconhecido" in the recovery
+  // dashboard even though Shopify clearly knew who the customer was.
+  const resolvedEmail = checkout.email
+    || checkout.customer?.email
+    || checkout.contact_email
+    || checkout.billing_address?.email
+    || checkout.shipping_address?.email
+    || null;
+  const resolvedPhone = checkout.phone
+    || checkout.customer?.phone
+    || checkout.billing_address?.phone
+    || checkout.shipping_address?.phone
+    || null;
+  const resolvedShopifyCustomerId = checkout.customer?.id
+    ? String(checkout.customer.id)
+    : null;
+  const resolvedFirstName = checkout.billing_address?.first_name
+    || checkout.shipping_address?.first_name
+    || checkout.customer?.first_name
+    || '';
+  const resolvedLastName = checkout.billing_address?.last_name
+    || checkout.shipping_address?.last_name
+    || checkout.customer?.last_name
+    || '';
+
   const checkoutRow: Record<string, any> = {
     store_id: store.id,
     organization_id: store.organization_id,
     shopify_checkout_id: checkoutKey,
     shopify_checkout_token: checkout.token || null,
-    email: checkout.email || null,
-    phone: checkout.phone || checkout.billing_address?.phone || null,
+    email: resolvedEmail,
+    phone: resolvedPhone,
     total_price: safeFloat(checkout.total_price),
     subtotal_price: safeFloat(checkout.subtotal_price),
     total_tax: safeFloat(checkout.total_tax),
@@ -1385,15 +1495,20 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
     }
   }
 
-  // Se tem email, criar/atualizar contato
+  // Resolve contact in priority order:
+  //   1. By email (most reliable, matches guest checkouts and registered)
+  //   2. By shopify_customer_id (catches logged-in customers even when
+  //      they haven't typed an email yet on this particular checkout)
+  // Either path lets us link the checkout, fire automations, and stop
+  // showing "Desconhecido" in the recovery dashboard.
   let contactId: string | null = null;
-  if (checkout.email) {
+  if (resolvedEmail || resolvedShopifyCustomerId) {
     const customerData: ShopifyCustomer = {
-      id: 0,
-      email: checkout.email,
-      phone: checkout.phone || checkout.billing_address?.phone,
-      first_name: checkout.billing_address?.first_name || '',
-      last_name: checkout.billing_address?.last_name || '',
+      id: resolvedShopifyCustomerId ? Number(resolvedShopifyCustomerId) : 0,
+      email: resolvedEmail || '',
+      phone: resolvedPhone || undefined,
+      first_name: resolvedFirstName,
+      last_name: resolvedLastName,
       orders_count: 0,
       total_spent: '0',
       tags: '',
@@ -1409,8 +1524,22 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       console.error(`[Shopify] syncContactFromShopify failed for checkout ${checkoutKey}:`, contactErr);
     }
 
+    // Last-resort fallback: match by shopify_customer_id directly when
+    // syncContactFromShopify didn't return a contact (e.g. it requires
+    // an email and we only have the customer_id).
+    if (!contactId && resolvedShopifyCustomerId) {
+      const { data: byCustomer } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', store.organization_id)
+        .eq('shopify_customer_id', resolvedShopifyCustomerId)
+        .maybeSingle();
+      contactId = byCustomer?.id || null;
+    }
+
     // Backfill: vincular contact_id no shopify_checkouts e em qualquer
     // contact_event órfão que já tenha sido criado para esse checkout.
+    // Now also runs when we resolved by shopify_customer_id alone.
     if (contactId) {
       await supabase
         .from('shopify_checkouts')
@@ -1503,6 +1632,9 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
           cart_token: checkout.cart_token || '',
           line_items: checkout.line_items || [],
         },
+        // Full raw Shopify checkout payload — flow variables can reach
+        // any field via {{ trigger.raw.<path> }}, matching Omnisend.
+        raw: checkout,
       },
       monetary_value: checkoutValue,
       currency: checkout.currency || 'BRL',
@@ -1512,50 +1644,63 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       idempotency_key: `checkout_started:${checkout.id || checkout.token}`,
     });
 
-    // Dispatch automation trigger with full checkout data
-    if (contactId) {
-      try {
-        const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
-        await dispatchTrigger({
-          organizationId: store.organization_id,
-          triggerType: 'trigger_checkout_abandoned',
-          contactId,
-          triggerData: {
-            event_type: 'checkout_started',
-            CheckoutId: String(checkout.id || checkout.token),
-            CheckoutURL: checkout.abandoned_checkout_url || '',
-            Value: checkoutValue,
-            Currency: checkout.currency,
-            ItemCount: checkout.line_items?.length || 0,
-            Items: (checkout.line_items || []).map((item: any) => ({
-              ProductID: item.product_id ? String(item.product_id) : undefined,
-              ProductName: item.title || item.name,
-              Quantity: item.quantity || 1,
-              ItemPrice: parseFloat(item.price || '0'),
-              RowTotal: parseFloat(item.price || '0') * (item.quantity || 1),
-              CompareAtPrice: item.compare_at_price ? parseFloat(item.compare_at_price) : null,
-              ImageURL: item.product?.images?.[0]?.src || item.product?.image?.src || '',
-              ProductURL: item.product?.handle ? `https://${store.shop_domain}/products/${item.product.handle}` : '',
-              SKU: item.sku,
-              VariantName: item.variant_title,
-              VariantID: item.variant_id ? String(item.variant_id) : undefined,
-              Brand: item.vendor,
-            })),
-            ItemNames: (checkout.line_items || []).map((item: any) => item.title || item.name),
-            SubtotalPrice: parseFloat(checkout.subtotal_price || '0'),
-            TotalDiscounts: parseFloat(checkout.total_discounts || '0'),
-            DiscountCodes: checkout.discount_codes || [],
-            CustomerEmail: checkout.email,
-            CustomerPhone: checkout.phone,
-            ReferringSite: checkout.referring_site || '',
-            LandingSite: checkout.landing_site || '',
-            UTM: extractUtmFromNoteAttributes(extractNoteAttributes(checkout.note_attributes)),
-          },
-          idempotencyKey: `trigger:checkout_started:${checkout.id || checkout.token}`,
-        });
-      } catch (dispatchErr) {
-        console.warn('[Shopify] dispatchTrigger for checkout_started failed:', dispatchErr);
-      }
+    // Dispatch automation trigger with full checkout data.
+    //
+    // We dispatch UNCONDITIONALLY (no `if (contactId)` guard) so the
+    // automation_runs row is always created and surfaces in the
+    // automation history. Common case: Shopify fires checkouts/create
+    // before the customer types their email (resolvedEmail=null →
+    // contactId=null). With the guard, no run was created and the
+    // merchant saw nothing in history. Without the guard, the run
+    // exists, the worker can attempt to resolve email at send-time
+    // (via the trigger data's CustomerEmail / raw.email / etc.), and
+    // if still nothing, the run completes with output.skipped='no_email'
+    // — visible in history with a clear reason.
+    try {
+      const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
+      await dispatchTrigger({
+        organizationId: store.organization_id,
+        triggerType: 'trigger_checkout_abandoned',
+        contactId: contactId || null,
+        triggerData: {
+          event_type: 'checkout_started',
+          CheckoutId: String(checkout.id || checkout.token),
+          CheckoutURL: checkout.abandoned_checkout_url || '',
+          Value: checkoutValue,
+          Currency: checkout.currency,
+          ItemCount: checkout.line_items?.length || 0,
+          Items: (checkout.line_items || []).map((item: any) => ({
+            ProductID: item.product_id ? String(item.product_id) : undefined,
+            ProductName: item.title || item.name,
+            Quantity: item.quantity || 1,
+            ItemPrice: parseFloat(item.price || '0'),
+            RowTotal: parseFloat(item.price || '0') * (item.quantity || 1),
+            CompareAtPrice: item.compare_at_price ? parseFloat(item.compare_at_price) : null,
+            ImageURL: item.product?.images?.[0]?.src || item.product?.image?.src || '',
+            ProductURL: item.product?.handle ? `https://${store.shop_domain}/products/${item.product.handle}` : '',
+            SKU: item.sku,
+            VariantName: item.variant_title,
+            VariantID: item.variant_id ? String(item.variant_id) : undefined,
+            Brand: item.vendor,
+          })),
+          ItemNames: (checkout.line_items || []).map((item: any) => item.title || item.name),
+          SubtotalPrice: parseFloat(checkout.subtotal_price || '0'),
+          TotalDiscounts: parseFloat(checkout.total_discounts || '0'),
+          DiscountCodes: checkout.discount_codes || [],
+          CustomerEmail: resolvedEmail || checkout.email,
+          CustomerPhone: resolvedPhone || checkout.phone,
+          ReferringSite: checkout.referring_site || '',
+          LandingSite: checkout.landing_site || '',
+          UTM: extractUtmFromNoteAttributes(extractNoteAttributes(checkout.note_attributes)),
+          // Pass the cart_token so the worker can re-resolve contact at
+          // send-time if the run got created with contact_id=null.
+          cart_token: checkout.cart_token || null,
+          checkout_token: checkout.token || null,
+        },
+        idempotencyKey: `trigger:checkout_started:${checkout.id || checkout.token}`,
+      });
+    } catch (dispatchErr) {
+      console.warn('[Shopify] dispatchTrigger for checkout_started failed:', dispatchErr);
     }
   } catch (cdpError) {
     console.error('[Shopify Webhook] CDP event creation failed (checkout):', cdpError);
@@ -1636,6 +1781,8 @@ async function processRefundCreated(store: ShopifyStoreConfig, refund: any) {
           RefundAmount: parseFloat(rli.subtotal || '0'),
         })),
         ItemNames: (refund.refund_line_items || []).map((rli: any) => rli.line_item?.title || rli.line_item?.name),
+        // Full raw payload — flow variables via {{ trigger.raw.<path> }}
+        raw: refund,
       },
       monetary_value: refundAmount,
       currency: refund.currency || 'BRL',
@@ -1712,6 +1859,21 @@ async function processFulfillmentEvent(store: ShopifyStoreConfig, fulfillment: a
         tracking_number: fulfillment.tracking_number || null,
         tracking_url: fulfillment.tracking_url || null,
         tracking_company: fulfillment.tracking_company || null,
+        // Klaviyo/Omnisend-style top-level + full raw
+        OrderId: String(fulfillment.order_id),
+        FulfillmentId: String(fulfillment.id),
+        TrackingNumber: fulfillment.tracking_number || null,
+        TrackingUrl: fulfillment.tracking_url || null,
+        TrackingCompany: fulfillment.tracking_company || null,
+        Status: fulfillment.status,
+        ItemCount: (fulfillment.line_items || []).length,
+        Items: (fulfillment.line_items || []).map((it: any) => ({
+          ProductID: it.product_id ? String(it.product_id) : undefined,
+          ProductName: it.title || it.name,
+          Quantity: it.quantity || 1,
+          SKU: it.sku, VariantName: it.variant_title,
+        })),
+        raw: fulfillment,
       },
       shopify_resource_id: String(fulfillment.id),
       shopify_resource_type: 'fulfillment',
@@ -1816,7 +1978,19 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
   }
 
   // Upsert product
-  const { error: productErr } = await supabase.from('shopify_products').upsert({
+  // Strip HTML tags from body_html for plain-text description used in
+  // emails. Keep both: html for templates that want rich copy, plain for
+  // ones that want clean text (most cart-recovery email blocks).
+  const bodyHtml: string | null = product.body_html || null;
+  const plainDescription: string | null = bodyHtml
+    ? String(bodyHtml).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    : null;
+  // Collections come from a separate /admin/api/.../collects.json fetch
+  // when product is synced by sync-now; the webhook payload itself
+  // doesn't carry them, but if a future webhook does we accept it.
+  const collections = Array.isArray(product.collections) ? product.collections : [];
+
+  const productRow: Record<string, any> = {
     store_id: store.id,
     organization_id: store.organization_id,
     shopify_product_id: String(product.id),
@@ -1828,11 +2002,36 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
     status: product.status || 'active',
     variants: product.variants,
     images: product.images,
+    body_html: bodyHtml,
+    description: plainDescription,
+    collections,
     price: product.variants?.[0]?.price ? parseFloat(product.variants[0].price) : null,
     updated_at: new Date().toISOString(),
-  }, {
-    onConflict: 'store_id,shopify_product_id',
-  });
+  };
+  // Resilient write: drop description/body_html/collections columns on
+  // error if the schema migration hasn't been applied yet.
+  function isMissingColumnErr(err: any, col: string): boolean {
+    if (!err) return false;
+    const code = err.code || '';
+    const msg = String(err.message || '');
+    if (code === 'PGRST204' || code === '42703') return msg.includes(col);
+    return msg.includes(col) && (msg.includes('column') || msg.includes('schema cache'));
+  }
+  let attemptRow: Record<string, any> = { ...productRow };
+  let productErr: any = null;
+  for (const col of ['', 'body_html', 'description', 'collections']) {
+    if (col && col in attemptRow) {
+      const { [col]: _omit, ...rest } = attemptRow;
+      attemptRow = rest;
+    }
+    const { error } = await supabase.from('shopify_products').upsert(attemptRow, { onConflict: 'store_id,shopify_product_id' });
+    if (!error) { productErr = null; break; }
+    productErr = error;
+    const next = ['body_html', 'description', 'collections'].find(c => isMissingColumnErr(error, c) && c in attemptRow);
+    if (!next) break;
+    const { [next]: _omit2, ...rest } = attemptRow;
+    attemptRow = rest;
+  }
   if (productErr) {
     console.error(`[Shopify] shopify_products upsert FAILED for product ${product.id}:`, productErr);
   }
@@ -1872,16 +2071,42 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Buscar configuração da loja
-    const store = await getStoreConfig(shopDomain);
+    //
+    // Prefer ?store_id=<id> from the query string when present —
+    // install-extras registers webhooks with that param so the URL
+    // itself unambiguously identifies the store. This is the
+    // bulletproof path: works even when Shopify sends a myshopifyDomain
+    // we haven't aliased yet, when the canonical domain changed, or
+    // when the merchant has multiple stores under the same domain pattern.
+    // Falls back to header-based shop_domain lookup for stores
+    // registered before this URL pattern shipped.
+    const queryStoreId = request.nextUrl.searchParams.get('store_id');
+    let store = queryStoreId ? await getStoreConfigById(queryStoreId) : null;
+    if (!store) store = await getStoreConfig(shopDomain);
     if (!store) {
       // Orphan webhook subscription — typically from a store that was
       // disconnected/deleted on our side without uninstalling our app on
       // Shopify, so Shopify keeps delivering events for it forever.
       // Returning 410 Gone makes Shopify auto-remove the subscription
       // after a handful of failed deliveries (~48h), permanently
-      // stopping the noise without us needing valid credentials. We log
-      // at info level so this doesn't flood error monitoring.
+      // stopping the noise without us needing valid credentials.
+      //
+      // Also persist the attempt to shopify_webhook_audit so the
+      // diagnostic dashboard can show "Shopify is sending us X
+      // deliveries from shop_domain Y but no matching store row exists
+      // — was it deleted/inactivated?". The audit table doesn't require
+      // a store_id (which we don't have here).
       console.log(`[Shopify Webhook] Orphan subscription, replying 410: ${shopDomain}`);
+      try {
+        await getSupabase().from('shopify_webhook_audit').insert({
+          shop_domain: shopDomain,
+          topic,
+          webhook_id: webhookId,
+          status: 'orphan_store',
+          error_message: 'No active shopify_stores row matched this shop_domain. Reconnect the store or contact support.',
+          received_at: new Date().toISOString(),
+        });
+      } catch { /* table may not exist yet — best-effort */ }
       return NextResponse.json({ error: 'Shop not registered' }, { status: 410 });
     }
 
@@ -1890,16 +2115,50 @@ export async function POST(request: NextRequest) {
     //    - Caso contrário, tenta SHOPIFY_API_SECRET global (apps monolíticas).
     //    - Em produção sem nenhum secret → REJEITA (fail closed).
     //    - Em dev, permite passar para facilitar testes.
+    //
+    // Failures here used to silently 401 without any DB trace, which made
+    // "webhooks aren't arriving" debugging impossible. We now record the
+    // failed delivery in shopify_webhook_log so the diagnostic dashboard
+    // can surface "X HMAC failures from this shop" to the merchant.
     const effectiveSecret = store.api_secret || process.env.SHOPIFY_API_SECRET || null;
+    async function logRejectedDelivery(status: 'hmac_failed' | 'no_secret', errMsg: string) {
+      if (!webhookId) return;
+      try {
+        await getSupabase().from('shopify_webhook_log').insert({
+          store_id: store!.id,
+          organization_id: store!.organization_id,
+          webhook_id: webhookId,
+          topic,
+          shop_domain: shopDomain,
+          shopify_resource_id: body?.id ? String(body.id) : null,
+          status,
+          error_message: errMsg,
+          attempts: 1,
+          received_at: new Date().toISOString(),
+          processed_at: new Date().toISOString(),
+        });
+      } catch (e: any) {
+        // Unique constraint violations are fine (duplicate delivery retry).
+        if (e?.code !== '23505') console.error('[Shopify Webhook] log rejected delivery failed:', e);
+      }
+    }
     if (effectiveSecret) {
       const isValid = await verifyShopifyWebhook(bodyText, hmacHeader, effectiveSecret);
       if (!isValid) {
         console.error(`[Shopify Webhook] Invalid signature for store ${store.id}`);
+        await logRejectedDelivery(
+          'hmac_failed',
+          `HMAC mismatch — api_secret ${store.api_secret ? 'from store row' : 'from SHOPIFY_API_SECRET env'} doesn't match the signature Shopify sent. Reconnect the store or update the secret.`
+        );
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
       }
     } else if (process.env.NODE_ENV === 'production') {
       console.error(
         `[Shopify Webhook] No secret configured (store=${store.id}, shop=${shopDomain}) — REJECTING in production`
+      );
+      await logRejectedDelivery(
+        'no_secret',
+        'Store has no api_secret and SHOPIFY_API_SECRET env is unset — cannot verify HMAC.'
       );
       return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
     } else {

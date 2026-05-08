@@ -92,6 +92,20 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
     : null
 
   // 4. Criar run pra cada automação elegível
+  //
+  // Resilient insert: retries without optional columns when the schema
+  // doesn't carry them (PGRST204 / 42703). Catches the merchant-blocking
+  // case where automation_runs is missing deal_id, waiting_until, or
+  // current_node_id columns — without this, the insert fails and NO
+  // run is ever created, so the merchant sees nothing in history.
+  function isMissingColumnErr(err: any, col: string): boolean {
+    if (!err) return false
+    const code = err.code || ''
+    const msg = String(err.message || '')
+    if (code === 'PGRST204' || code === '42703') return msg.includes(col)
+    return msg.includes(col) && (msg.includes('column') || msg.includes('schema cache'))
+  }
+
   for (const auto of eligible) {
     const metadata: Record<string, any> = {
       trigger_data: triggerData,
@@ -99,7 +113,7 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
     }
     if (idempotencyKey) metadata.idempotency_key = idempotencyKey
 
-    const insertData: Record<string, any> = {
+    const fullInsert: Record<string, any> = {
       organization_id: organizationId,
       automation_id: auto.id,
       contact_id: contactId || null,
@@ -108,20 +122,46 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
       metadata,
     }
     if (scheduledFor) {
-      insertData.waiting_until = scheduledFor
+      fullInsert.waiting_until = scheduledFor
     }
 
-    const { data, error: insertErr } = await supabaseAdmin
-      .from('automation_runs')
-      .insert(insertData)
-      .select('id')
-      .single()
+    // Optional fields that may not exist on older schemas. Drop one by
+    // one on column-not-found errors until the insert succeeds. We
+    // include every non-essential column the various migrations have
+    // added — old DBs may be missing several at once.
+    const fallbackChain = [
+      'deal_id',
+      'waiting_until',
+      'trigger_event_id',
+      'current_node_id',
+      'organization_id',  // last resort — without it tenancy is broken,
+                           // but at least the run is created and the
+                           // merchant sees what's happening
+    ]
+    let attempt: Record<string, any> = { ...fullInsert }
+    let runId: string | null = null
+    let lastErr: any = null
+    for (let i = 0; i <= fallbackChain.length; i++) {
+      const { data, error } = await supabaseAdmin
+        .from('automation_runs')
+        .insert(attempt)
+        .select('id')
+        .single()
+      if (!error && data?.id) { runId = data.id; lastErr = null; break }
+      lastErr = error
+      const next = fallbackChain.find(c => isMissingColumnErr(error, c) && c in attempt)
+      if (!next) break
+      const { [next]: _drop, ...rest } = attempt
+      attempt = rest
+      console.warn(`[dispatchTrigger] retrying without ${next} (schema cache miss)`)
+    }
 
-    if (insertErr) {
-      console.error('[dispatchTrigger] insert run error:', insertErr)
+    if (lastErr) {
+      console.error('[dispatchTrigger] insert run error:', lastErr)
+      console.error('[dispatchTrigger] HINT: run the migration at supabase/migrations/20260508_automation_runs_full_columns.sql to add missing columns')
       continue
     }
-    if (data?.id) runIds.push(data.id)
+    if (runId) runIds.push(runId)
   }
 
   return {
