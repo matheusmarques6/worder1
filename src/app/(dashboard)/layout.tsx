@@ -46,6 +46,7 @@ import {
   MessageCircle,
   Bot,
   BookOpen,
+  Sparkles,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -155,13 +156,16 @@ const navigation: NavSection[] = [
   {
     label: 'IA',
     items: [
+      { name: 'Visão geral', href: '/ai', icon: Sparkles },
       {
-        name: 'Agentes IA', href: '/ai/persona', icon: Bot,
+        name: 'Agentes', href: '/ai/agents', icon: Bot,
         children: [
-          { name: 'Persona', href: '/ai/persona' },
-          { name: 'Knowledge Base', href: '/ai/knowledge' },
+          { name: 'Lista', href: '/ai/agents' },
+          { name: 'Novo agente', href: '/ai/agents/new' },
         ],
       },
+      { name: 'Persona (legado)', href: '/ai/persona', icon: Palette },
+      { name: 'Knowledge Base', href: '/ai/knowledge', icon: BookOpen },
     ],
   },
   {

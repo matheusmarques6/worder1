@@ -443,6 +443,34 @@ if (msgError) {
           .eq('id', contactId);
       } catch { /* silent */ }
     }
+
+    // ============================================
+    // AI TRIGGER (F1) — enfileira mensagem no buffer + agenda worker
+    // se a conversa tem agente IA atribuído. Falha silenciosa.
+    // ============================================
+    if (conversationId) {
+      try {
+        const { data: savedMsg } = await supabase
+          .from('whatsapp_messages')
+          .select('id')
+          .eq('instance_id', instance.id)
+          .eq('message_id', messageId)
+          .maybeSingle();
+        if (savedMsg?.id) {
+          const { triggerAIPipeline } = await import('@/lib/ai/trigger');
+          const aiResult = await triggerAIPipeline({
+            conversationId,
+            messageId: savedMsg.id,
+            organizationId: orgId,
+          });
+          if (aiResult.triggered) {
+            console.log('[Webhook] 🤖 AI scheduled', aiResult.messageScheduleId);
+          }
+        }
+      } catch (e) {
+        console.warn('[Webhook] AI trigger silent failure', e);
+      }
+    }
   }
 }
 

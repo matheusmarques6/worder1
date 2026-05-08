@@ -326,7 +326,7 @@ export default function AgentWizardPage() {
                 <li>Token de acesso permanente do app Meta</li>
               </ul>
               <a
-                href="/integrations/whatsapp"
+                href="/settings/whatsapp"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-orange-50 text-orange-700
                            border border-orange-200 rounded-md text-sm font-medium hover:bg-orange-100"
               >

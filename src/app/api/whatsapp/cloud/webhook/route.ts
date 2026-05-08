@@ -297,6 +297,32 @@ async function processMessage(
       console.log('[WhatsApp Cloud] Automation results (contact_created):', contactAutomationResults);
     }
 
+    // ============================================
+    // AI TRIGGER (F1) — enfileira mensagem no buffer + agenda worker
+    // se a conversa tem agente IA atribuído. Falha silenciosa.
+    // Usa whatsapp_cloud_messages.id como messageId pro buffer/worker.
+    // ============================================
+    try {
+      const { data: savedMsg } = await supabase
+        .from('whatsapp_cloud_messages')
+        .select('id')
+        .eq('message_id', message.id)
+        .maybeSingle();
+      if (savedMsg?.id) {
+        const { triggerAIPipeline } = await import('@/lib/ai/trigger')
+        const aiResult = await triggerAIPipeline({
+          conversationId: conversation.id,
+          messageId: savedMsg.id,
+          organizationId: account.organization_id,
+        })
+        if (aiResult.triggered) {
+          console.log('[WhatsApp Cloud] 🤖 AI scheduled', aiResult.messageScheduleId)
+        }
+      }
+    } catch (aiErr) {
+      console.warn('[WhatsApp Cloud] AI trigger silent failure', aiErr)
+    }
+
     console.log('[WhatsApp Cloud] Message saved successfully');
   } catch (error) {
     console.error('[WhatsApp Cloud] Error processing message:', error);
