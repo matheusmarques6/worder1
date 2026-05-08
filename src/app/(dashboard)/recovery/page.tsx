@@ -108,12 +108,6 @@ export default function RecoveryPage() {
     total_value_recovered: 0,
   })
   const [loading, setLoading] = useState(true)
-  // "Sincronizar com Shopify" — pulls abandoned checkouts from Shopify
-  // GraphQL into shopify_checkouts so the recovery list matches
-  // Shopify Admin's "Checkouts abandonados" page even when webhooks
-  // missed deliveries (HMAC mismatch, network drops, pre-alias era).
-  const [syncing, setSyncing] = useState(false)
-  const [syncResult, setSyncResult] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   // sendingWhatsApp kept for UI state parity even though wa.me opens instantly
   const [sendingWhatsApp] = useState<string | null>(null)
@@ -231,50 +225,12 @@ export default function RecoveryPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Recuperação de Vendas</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Recupere vendas perdidas por abandono de carrinho e pagamentos não concluídos
-          </p>
-        </div>
-        <button
-          onClick={async () => {
-            if (!currentStore?.id || syncing) return
-            setSyncing(true)
-            setSyncResult(null)
-            try {
-              const res = await fetch('/api/integrations/shopify/sync-checkouts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ storeId: currentStore.id }),
-              })
-              const j = await res.json()
-              if (j.success) {
-                setSyncResult(`${j.fetched} buscados · ${j.inserted} novos · ${j.updated} atualizados${j.contacts_linked ? ` · ${j.contacts_linked} contatos vinculados` : ''}`)
-                await fetchRecovery()
-              } else {
-                setSyncResult(j.error || 'Falhou.')
-              }
-            } catch (e: any) {
-              setSyncResult(e?.message || 'Erro de rede')
-            } finally {
-              setSyncing(false)
-              setTimeout(() => setSyncResult(null), 8000)
-            }
-          }}
-          disabled={syncing}
-          className="px-3.5 py-2 text-[13px] font-semibold bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 transition-colors flex items-center gap-1.5 flex-shrink-0"
-        >
-          <RefreshCw className={cn('w-3.5 h-3.5', syncing && 'animate-spin')} />
-          {syncing ? 'Sincronizando…' : 'Sincronizar com Shopify'}
-        </button>
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900">Recuperação de Vendas</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Recupere vendas perdidas por abandono de carrinho e pagamentos não concluídos
+        </p>
       </div>
-      {syncResult && (
-        <div className="px-3.5 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[12px] text-emerald-800">
-          {syncResult}
-        </div>
-      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
