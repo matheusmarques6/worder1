@@ -134,30 +134,55 @@ async function getStoreConfig(shopDomain: string): Promise<ShopifyStoreConfig | 
       .maybeSingle();
 
     if (!store) return null;
-    
-    return {
-      id: store.id,
-      organization_id: store.organization_id,
-      shop_domain: store.shop_domain,
-      shop_name: store.shop_name,
-      access_token: store.access_token,
-      api_secret: store.api_secret,
-      default_pipeline_id: store.default_pipeline_id,
-      default_stage_id: store.default_stage_id,
-      contact_type: store.contact_type || 'auto',
-      auto_tags: store.auto_tags || ['shopify'],
-      sync_orders: store.sync_orders ?? true,
-      sync_customers: store.sync_customers ?? true,
-      sync_checkouts: store.sync_checkouts ?? true,
-      sync_refunds: store.sync_refunds ?? false,
-      stage_mapping: store.stage_mapping || {},
-      is_configured: store.is_configured ?? false,
-      is_active: store.is_active ?? true,
-      connection_status: store.connection_status || 'active',
-    };
+    return mapStoreRowToConfig(store);
   } catch {
     return null;
   }
+}
+
+// Resolve by store_id directly — used when the webhook URL carries
+// `?store_id=<id>` (set by install-extras when registering subscriptions).
+// This is the bulletproof path: regardless of which myshopifyDomain
+// Shopify sends in the header (canonical, alias, custom domain, even
+// a typo'd one), the URL itself unambiguously identifies the store.
+// Adapted from the AdTracked pattern.
+async function getStoreConfigById(storeId: string): Promise<ShopifyStoreConfig | null> {
+  try {
+    const supabase = getSupabase();
+    const { data: store } = await supabase
+      .from('shopify_stores')
+      .select('*')
+      .eq('id', storeId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (!store) return null;
+    return mapStoreRowToConfig(store);
+  } catch {
+    return null;
+  }
+}
+
+function mapStoreRowToConfig(store: any): ShopifyStoreConfig {
+  return {
+    id: store.id,
+    organization_id: store.organization_id,
+    shop_domain: store.shop_domain,
+    shop_name: store.shop_name,
+    access_token: store.access_token,
+    api_secret: store.api_secret,
+    default_pipeline_id: store.default_pipeline_id,
+    default_stage_id: store.default_stage_id,
+    contact_type: store.contact_type || 'auto',
+    auto_tags: store.auto_tags || ['shopify'],
+    sync_orders: store.sync_orders ?? true,
+    sync_customers: store.sync_customers ?? true,
+    sync_checkouts: store.sync_checkouts ?? true,
+    sync_refunds: store.sync_refunds ?? false,
+    stage_mapping: store.stage_mapping || {},
+    is_configured: store.is_configured ?? false,
+    is_active: store.is_active ?? true,
+    connection_status: store.connection_status || 'active',
+  };
 }
 
 // ============================================
@@ -1996,7 +2021,18 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Buscar configuração da loja
-    const store = await getStoreConfig(shopDomain);
+    //
+    // Prefer ?store_id=<id> from the query string when present —
+    // install-extras registers webhooks with that param so the URL
+    // itself unambiguously identifies the store. This is the
+    // bulletproof path: works even when Shopify sends a myshopifyDomain
+    // we haven't aliased yet, when the canonical domain changed, or
+    // when the merchant has multiple stores under the same domain pattern.
+    // Falls back to header-based shop_domain lookup for stores
+    // registered before this URL pattern shipped.
+    const queryStoreId = request.nextUrl.searchParams.get('store_id');
+    let store = queryStoreId ? await getStoreConfigById(queryStoreId) : null;
+    if (!store) store = await getStoreConfig(shopDomain);
     if (!store) {
       // Orphan webhook subscription — typically from a store that was
       // disconnected/deleted on our side without uninstalling our app on

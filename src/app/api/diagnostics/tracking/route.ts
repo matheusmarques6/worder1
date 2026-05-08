@@ -174,7 +174,16 @@ export async function GET(request: NextRequest) {
   let webhookList: any[] = [];
   let webhookCheckoutTopicsRegistered = false;
   let webhookUrlMismatchCount = 0;
-  const expectedWebhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || ''}/api/webhooks/shopify`;
+  // Expect the URL to carry ?store_id=<id> so the handler resolves the
+  // store from the URL itself (bulletproof against multi-domain shops).
+  // Webhooks registered before this URL pattern shipped show up as
+  // "doesn't match expected" — they still work via shop_domain header
+  // fallback but should be re-registered via "Reinstalar tudo".
+  const expectedWebhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || ''}/api/webhooks/shopify?store_id=${store.id}`;
+  // Old format — what previous installs used. We treat URLs matching
+  // this prefix (without store_id) as "ours but stale" so the merchant
+  // sees them flagged in the dashboard.
+  const legacyWebhookPrefix = `${process.env.NEXT_PUBLIC_APP_URL || ''}/api/webhooks/shopify`;
   try {
     const apiVersion = store.api_version || '2026-04';
     const wRes = await fetch(
@@ -183,9 +192,6 @@ export async function GET(request: NextRequest) {
     );
     if (wRes.ok) {
       const json = await wRes.json();
-      // Show ALL webhooks (not just ones matching our domain) so the merchant
-      // can see if subscriptions point at a stale URL (e.g. ngrok tunnel,
-      // old Vercel preview deployment, wrong app domain).
       const all = json.webhooks || [];
       webhookCount = all.length;
       webhookList = all.map((w: any) => ({
@@ -193,9 +199,12 @@ export async function GET(request: NextRequest) {
         address: w.address,
         matches_expected: w.address === expectedWebhookUrl,
       }));
+      // checkouts/create registered under our endpoint counts as ok —
+      // either the canonical URL OR a legacy URL still works
+      // (handler falls back to shop_domain lookup).
       webhookCheckoutTopicsRegistered = all.some((w: any) =>
         (w.topic === 'checkouts/create' || w.topic === 'checkouts/update') &&
-        w.address === expectedWebhookUrl
+        typeof w.address === 'string' && w.address.startsWith(legacyWebhookPrefix)
       );
       webhookUrlMismatchCount = all.filter((w: any) => w.address !== expectedWebhookUrl).length;
     }

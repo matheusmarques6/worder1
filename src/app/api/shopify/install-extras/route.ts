@@ -78,7 +78,12 @@ export async function POST(request: NextRequest) {
 
   const shopDomain = store.shop_domain;
   const accessToken = store.access_token;
-  const webhookUrl = `${APP_URL}/api/webhooks/shopify`;
+  // Webhook URL carries `?store_id=<id>` so the handler can identify
+  // the store from the URL itself — bulletproof against multi-domain
+  // shops, canonical-domain changes, or unknown myshopifyDomain aliases
+  // (the silent 410 cause that lost the Based store's checkouts).
+  // Pattern adapted from AdTracked.
+  const webhookUrl = `${APP_URL}/api/webhooks/shopify?store_id=${store.id}`;
 
   // ──────────────────────────────────────────
   // 1. Webhooks — clean up stale URLs first, then create missing ones.
@@ -86,9 +91,9 @@ export async function POST(request: NextRequest) {
   // We delete any subscription whose path is `/api/webhooks/shopify`
   // (so it's clearly ours) but whose address ≠ the current expected URL
   // — typical when NEXT_PUBLIC_APP_URL changed (preview deploy promoted
-  // to prod, custom domain swap, ngrok tunnel that died). Without this,
-  // Shopify keeps delivering to the dead URL forever and the merchant
-  // sees zero events even though "17 subscriptions are registered".
+  // to prod, custom domain swap, ngrok tunnel that died), OR when the
+  // store was registered before we started carrying ?store_id= in the
+  // URL. Without this, Shopify keeps delivering to the dead URL forever.
   // ──────────────────────────────────────────
   let existingTopics: string[] = [];
   let staleDeleted = 0;
