@@ -10,8 +10,17 @@
 import OpenAI from 'openai'
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  // Quando o LLM responde com tool_calls (role=assistant)
+  tool_calls?: Array<{
+    id: string
+    type: 'function'
+    function: { name: string; arguments: string }
+  }>
+  // Quando enviamos resultado de tool (role=tool)
+  tool_call_id?: string
+  name?: string
 }
 
 export interface CompletionResult {
@@ -21,6 +30,21 @@ export interface CompletionResult {
   costUsd: number
   durationMs: number
   model: string
+  toolCalls?: Array<{
+    id: string
+    type: 'function'
+    function: { name: string; arguments: string }
+  }>
+  finishReason?: string
+}
+
+export interface ChatTool {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: Record<string, unknown>
+  }
 }
 
 export interface CompletionRequest {
@@ -28,6 +52,7 @@ export interface CompletionRequest {
   messages: ChatMessage[]
   temperature?: number
   maxTokens?: number
+  tools?: ChatTool[]
 }
 
 const PRICING_USD_PER_1M: Record<string, { in: number; out: number }> = {
@@ -61,12 +86,17 @@ export function isLLMConfigured(): boolean {
 export async function complete(req: CompletionRequest): Promise<CompletionResult> {
   const client = getOpenRouterClient()
   const start = Date.now()
-  const response = await client.chat.completions.create({
+  const params: Record<string, unknown> = {
     model: req.model,
     messages: req.messages,
     temperature: req.temperature ?? 0.7,
     max_tokens: req.maxTokens ?? 1000,
-  })
+  }
+  if (req.tools && req.tools.length > 0) {
+    params.tools = req.tools
+    params.tool_choice = 'auto'
+  }
+  const response = await client.chat.completions.create(params as any)
   const durationMs = Date.now() - start
   const tokensIn = response.usage?.prompt_tokens ?? 0
   const tokensOut = response.usage?.completion_tokens ?? 0
@@ -74,12 +104,16 @@ export async function complete(req: CompletionRequest): Promise<CompletionResult
   const costUsd = pricing
     ? (tokensIn * pricing.in + tokensOut * pricing.out) / 1_000_000
     : 0
+  const choice = response.choices[0]
+  const message = choice?.message
   return {
-    content: response.choices[0]?.message?.content ?? '',
+    content: message?.content ?? '',
     tokensIn,
     tokensOut,
     costUsd,
     durationMs,
     model: req.model,
+    toolCalls: (message as any)?.tool_calls,
+    finishReason: choice?.finish_reason ?? undefined,
   }
 }
