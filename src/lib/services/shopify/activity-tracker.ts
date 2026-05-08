@@ -97,33 +97,57 @@ export async function trackActivity(params: TrackActivityParams): Promise<string
     
     // Gerar título automático se não fornecido
     const title = params.title || generateActivityTitle(params.type, params.metadata);
-    
-    // Inserir atividade
-    const { data, error } = await supabase
-      .from('contact_activities')
-      .insert({
-        organization_id: params.organizationId,
-        contact_id: contactId,
-        type: params.type,
-        title,
-        description: params.description,
-        url: params.url,
-        metadata: params.metadata || {},
-        source: params.source || 'shopify',
-        source_id: params.sourceId,
-        occurred_at: params.occurredAt || new Date(),
-        created_at: new Date(),
-      })
-      .select('id')
-      .single();
-    
-    if (error) {
-      console.error('[ActivityTracker] Failed to track:', error);
+
+    // Resilient insert: drops occurred_at on schema-cache miss (older
+    // contact_activities tables don't carry it). Without this fallback,
+    // every Shopify activity write blew up with PGRST204 and the
+    // contact's activity timeline stayed empty.
+    function isMissingColumnErr(err: any, col: string): boolean {
+      if (!err) return false
+      const code = err.code || ''
+      const msg = String(err.message || '')
+      if (code === 'PGRST204' || code === '42703') return msg.includes(col)
+      return msg.includes(col) && (msg.includes('column') || msg.includes('schema cache'))
+    }
+
+    const fullInsert: Record<string, any> = {
+      organization_id: params.organizationId,
+      contact_id: contactId,
+      type: params.type,
+      title,
+      description: params.description,
+      url: params.url,
+      metadata: params.metadata || {},
+      source: params.source || 'shopify',
+      source_id: params.sourceId,
+      occurred_at: params.occurredAt || new Date(),
+      created_at: new Date(),
+    };
+
+    let attempt: Record<string, any> = { ...fullInsert };
+    let result: any = null;
+    let lastErr: any = null;
+    for (const drop of ['', 'occurred_at', 'url', 'description']) {
+      if (drop && drop in attempt) {
+        const { [drop]: _, ...rest } = attempt;
+        attempt = rest;
+      }
+      const r = await supabase.from('contact_activities').insert(attempt).select('id').single();
+      if (!r.error && r.data) { result = r.data; lastErr = null; break; }
+      lastErr = r.error;
+      const next = ['occurred_at', 'url', 'description'].find(c => isMissingColumnErr(r.error, c) && c in attempt);
+      if (!next) break;
+      const { [next]: _, ...rest } = attempt;
+      attempt = rest;
+    }
+
+    if (lastErr) {
+      console.error('[ActivityTracker] Failed to track:', lastErr);
       return null;
     }
-    
+
     console.log(`[ActivityTracker] ✅ Tracked: ${params.type} for contact ${contactId}`);
-    return data.id;
+    return result?.id || null;
     
   } catch (err) {
     console.error('[ActivityTracker] Error:', err);
