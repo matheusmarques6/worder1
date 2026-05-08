@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { decorateLegacyFields, toCanonicalAgentRow } from '@/lib/ai/mappers'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
+import { snapshotAgent } from '@/lib/ai/versioning';
 export const dynamic = 'force-dynamic';
 
 // =====================================================
@@ -152,6 +153,15 @@ export async function PATCH(
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
     }
 
+    // Detecta transição draft → published para auto-snapshot
+    const { data: prevAgent } = await supabase
+      .from('ai_agents')
+      .select('status')
+      .eq('id', agentId)
+      .eq('organization_id', organization_id)
+      .maybeSingle()
+    const prevStatus = prevAgent?.status as string | undefined
+
     const updateData = {
       ...toCanonicalAgentRow(body),
       updated_at: new Date().toISOString(),
@@ -170,6 +180,19 @@ export async function PATCH(
         return NextResponse.json({ error: 'Agente não encontrado' }, { status: 404 })
       }
       throw error
+    }
+
+    // Auto-snapshot quando publica pela primeira vez ou re-publica após rascunho
+    const newStatus = (agent as Record<string, unknown>).status as string | undefined
+    if (newStatus === 'published' && prevStatus !== 'published') {
+      try {
+        await snapshotAgent(agentId, organization_id, {
+          deployNotes: 'Auto-snapshot ao publicar',
+          createdByUserId: auth.user.id,
+        })
+      } catch (snapErr) {
+        console.warn('[agents/PATCH] auto-snapshot falhou:', snapErr)
+      }
     }
 
     return NextResponse.json({ agent: decorateLegacyFields(agent) })
