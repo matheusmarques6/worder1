@@ -35,84 +35,52 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 
-const aiKpis = [
-  { title: 'Receita Recuperada pela IA', value: 'R$ 42.800', change: '+32%', positive: true, icon: CurrencyDollar, highlight: true },
-  { title: 'Mensagens IA Enviadas', value: '3.240', change: '+18%', positive: true, icon: ChatCircleDots },
-  { title: 'Taxa de Recuperação', value: '38.6%', change: '+5.2%', positive: true, icon: ArrowClockwise },
-  { title: 'ROI da IA', value: '12.4x', change: '+2.1x', positive: true, icon: TrendUp },
+// Dados reais de IA virão de queries em ai_executions / ai_costs_daily na F3.
+// Por enquanto exibimos placeholders zerados ao invés de mocks.
+const aiKpis: Array<{
+  title: string
+  value: string
+  change: string
+  positive: boolean
+  icon: typeof CurrencyDollar
+  highlight?: boolean
+}> = [
+  { title: 'Receita Recuperada pela IA', value: 'R$ 0', change: '—', positive: true, icon: CurrencyDollar, highlight: true },
+  { title: 'Mensagens IA Enviadas', value: '0', change: '—', positive: true, icon: ChatCircleDots },
+  { title: 'Taxa de Recuperação', value: '0%', change: '—', positive: true, icon: ArrowClockwise },
+  { title: 'ROI da IA', value: '—', change: '—', positive: true, icon: TrendUp },
 ]
 
-const recoveryChannels = [
-  {
-    id: 'cart',
-    title: 'Carrinho Abandonado',
-    icon: ShoppingCartSimple,
-    enabled: true,
-    channel: 'whatsapp',
-    recovered: 'R$ 18.450',
-    sent: 1240,
-    rate: 38.6,
-    avgTime: '47min',
-  },
-  {
-    id: 'pix',
-    title: 'PIX Pendente',
-    icon: PixLogo,
-    enabled: true,
-    channel: 'whatsapp',
-    recovered: 'R$ 12.200',
-    sent: 680,
-    rate: 42.1,
-    avgTime: '28min',
-  },
-  {
-    id: 'boleto',
-    title: 'Boleto Pendente',
-    icon: Barcode,
-    enabled: true,
-    channel: 'email',
-    recovered: 'R$ 8.900',
-    sent: 520,
-    rate: 28.4,
-    avgTime: '2h 15min',
-  },
-  {
-    id: 'card',
-    title: 'Cartão Recusado',
-    icon: CreditCard,
-    enabled: false,
-    channel: 'whatsapp',
-    recovered: 'R$ 3.250',
-    sent: 180,
-    rate: 22.8,
-    avgTime: '1h 32min',
-  },
-]
+const recoveryChannels: Array<{
+  id: string
+  title: string
+  icon: typeof ShoppingCartSimple
+  enabled: boolean
+  channel: string
+  recovered: string
+  sent: number
+  rate: number
+  avgTime: string
+}> = []
 
-const recoveryTimeline = [
-  { time: '00h', recovered: 0 },
-  { time: '04h', recovered: 1200 },
-  { time: '08h', recovered: 4800 },
-  { time: '12h', recovered: 12400 },
-  { time: '16h', recovered: 24600 },
-  { time: '20h', recovered: 36200 },
-  { time: '24h', recovered: 42800 },
-]
+const recoveryTimeline: Array<{ time: string; recovered: number }> = []
 
-const recentRecoveries = [
-  { customer: 'Ana Silva', type: 'Carrinho', value: 'R$ 459,90', channel: 'WhatsApp', time: '12min', status: 'recovered' },
-  { customer: 'Carlos Lima', type: 'PIX', value: 'R$ 1.290,00', channel: 'WhatsApp', time: '28min', status: 'recovered' },
-  { customer: 'Maria Costa', type: 'Carrinho', value: 'R$ 189,90', channel: 'WhatsApp', time: '—', status: 'sent' },
-  { customer: 'João Santos', type: 'Boleto', value: 'R$ 2.150,00', channel: 'E-mail', time: '—', status: 'failed' },
-  { customer: 'Fernanda Dias', type: 'PIX', value: 'R$ 349,90', channel: 'WhatsApp', time: '45min', status: 'recovered' },
-]
+const recentRecoveries: Array<{
+  customer: string
+  type: string
+  value: string
+  channel: string
+  time: string
+  status: 'recovered' | 'sent' | 'failed'
+}> = []
 
-const incentiveRules = [
-  { step: 1, time: 'Imediato', action: 'Lembrete amigável', discount: '—', channel: 'WhatsApp' },
-  { step: 2, time: '1h depois', action: 'Urgência + benefício', discount: '5% OFF', channel: 'WhatsApp' },
-  { step: 3, time: '24h depois', action: 'Última chance', discount: '10% OFF', channel: 'E-mail' },
-  { step: 4, time: '48h depois', action: 'Frete grátis', discount: 'Frete grátis', channel: 'SMS' },
-]
+const incentiveRules: Array<{
+  step: number
+  time: string
+  action: string
+  discount: string
+  channel: string
+}> = []
 
 export default function AIPage() {
   const [enabledChannels, setEnabledChannels] = useState<Record<string, boolean>>({

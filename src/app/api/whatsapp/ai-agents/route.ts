@@ -1,93 +1,20 @@
 // =============================================
-// API: AI Agents CRUD
-// GET/POST /api/whatsapp/ai-agents
+// DEPRECATED — substituído por /api/ai/agents (F1, schema canônico ai_agents)
+// Mantido como stub durante a F0 para não quebrar a UI legada
+// (componente AIAgentsTab) enquanto F1 reescreve o editor de agentes.
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('whatsapp_ai_agents')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ data })
-  } catch (error: unknown) {
-    const err = error as Error
-    return NextResponse.json({ error: err.message }, { status: 500 })
-  }
+export async function GET(_request: NextRequest) {
+  return NextResponse.json({ data: [] })
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
-
-    const body = await request.json()
-    const {
-      name,
-      agent_type,
-      model,
-      system_prompt,
-      knowledge_base,
-      temperature,
-      max_tokens,
-      handoff_keywords,
-      mode,
-      max_interactions,
-      store_id,
-    } = body
-
-    if (!name || !system_prompt) {
-      return NextResponse.json({ error: 'name and system_prompt required' }, { status: 400 })
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('whatsapp_ai_agents')
-      .insert({
-        organization_id: organizationId,
-        store_id,
-        name,
-        agent_type: agent_type || 'support',
-        model: model || 'gpt-4o-mini',
-        system_prompt,
-        knowledge_base: knowledge_base || '',
-        temperature: temperature ?? 0.7,
-        max_tokens: max_tokens ?? 500,
-        handoff_keywords: handoff_keywords || [],
-        mode: mode || 'auto',
-        max_interactions,
-      })
-      .select()
-      .single()
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ data }, { status: 201 })
-  } catch (error: unknown) {
-    const err = error as Error
-    return NextResponse.json({ error: err.message }, { status: 500 })
-  }
+export async function POST(_request: NextRequest) {
+  return NextResponse.json(
+    { error: 'Endpoint legado desativado. Use /api/ai/agents.' },
+    { status: 410 }
+  )
 }
