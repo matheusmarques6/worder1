@@ -2,6 +2,22 @@
 -- WORDER AI — SCHEMA V1 (migration consolidada)
 -- =============================================================================
 -- Idempotente. Pode ser re-aplicada com segurança.
+--
+-- Reconciliada com o estado real do projeto Supabase admin convertfy
+-- (ppygkfeffknypfncsnlv) em 2026-05-08:
+--   - extensões `vector` e `pg_trgm` ainda não instaladas (CREATE EXTENSION
+--     habilita).
+--   - helper `public.current_org_id()` existente (substitui
+--     `auth.user_organization_id()` mencionado no autorun).
+--   - `profiles` neste DB não tem `organization_id`; o vínculo user↔org é via
+--     `org_members(org_id, profile_id, is_active)` que `current_org_id()`
+--     já consulta internamente.
+--   - convenção da casa é `org_id` (51 tabelas), mas o código Worder usa
+--     `organization_id`. Mantemos `organization_id` nas tabelas ai_* (com FK
+--     explícita para `organizations(id)`) para alinhar com o código.
+--   - `whatsapp_conversations` e `messages` em `public.` não existem ainda;
+--     os blocos DO IF EXISTS viram no-op até essas tabelas chegarem.
+--
 -- A seção 18 (migração de dados legados) está comentada — descomentar apenas
 -- após validar a estrutura nova em dev.
 -- =============================================================================
@@ -14,7 +30,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ============= 2. TABELA ai_agents (CANÔNICA) =============
 CREATE TABLE IF NOT EXISTS ai_agents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     store_id UUID,
     name TEXT NOT NULL,
     description TEXT,
@@ -100,59 +116,11 @@ CREATE TABLE IF NOT EXISTS ai_agents (
 DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'ai_agents_org_name_unique'
+        SELECT 1 FROM pg_constraint WHERE conname = 'ai_agents_org_name_unique'
     ) THEN
         BEGIN
             ALTER TABLE ai_agents ADD CONSTRAINT ai_agents_org_name_unique UNIQUE (organization_id, name);
-        EXCEPTION WHEN duplicate_table THEN
-            NULL;
-        END;
-    END IF;
-END $$;
-
--- Adiciona colunas faltantes caso a tabela já existisse com schema antigo
-ALTER TABLE ai_agents
-    ADD COLUMN IF NOT EXISTS store_id UUID,
-    ADD COLUMN IF NOT EXISTS role TEXT,
-    ADD COLUMN IF NOT EXISTS status TEXT,
-    ADD COLUMN IF NOT EXISTS current_version_id UUID,
-    ADD COLUMN IF NOT EXISTS total_versions INTEGER NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS persona JSONB,
-    ADD COLUMN IF NOT EXISTS identity JSONB,
-    ADD COLUMN IF NOT EXISTS behavior JSONB,
-    ADD COLUMN IF NOT EXISTS store_variables JSONB NOT NULL DEFAULT '{}'::jsonb,
-    ADD COLUMN IF NOT EXISTS settings JSONB,
-    ADD COLUMN IF NOT EXISTS escalation_rules JSONB,
-    ADD COLUMN IF NOT EXISTS llm_config JSONB,
-    ADD COLUMN IF NOT EXISTS safety JSONB,
-    ADD COLUMN IF NOT EXISTS metrics_cache JSONB,
-    ADD COLUMN IF NOT EXISTS created_by_user_id UUID,
-    ADD COLUMN IF NOT EXISTS last_published_at TIMESTAMPTZ;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'ai_agents_role_check'
-    ) THEN
-        BEGIN
-            ALTER TABLE ai_agents ADD CONSTRAINT ai_agents_role_check
-                CHECK (role IN ('pre_sales', 'recovery', 'sales', 'post_sales', 'support', 'custom'));
-        EXCEPTION WHEN others THEN
-            NULL;
-        END;
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'ai_agents_status_check'
-    ) THEN
-        BEGIN
-            ALTER TABLE ai_agents ADD CONSTRAINT ai_agents_status_check
-                CHECK (status IN ('draft', 'simulating', 'published', 'paused', 'archived'));
-        EXCEPTION WHEN others THEN
-            NULL;
+        EXCEPTION WHEN others THEN NULL;
         END;
     END IF;
 END $$;
@@ -165,7 +133,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_agents_role ON ai_agents(organization_id, role
 CREATE TABLE IF NOT EXISTS ai_agent_versions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES ai_agents(id) ON DELETE CASCADE,
-    organization_id UUID NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     version_number INTEGER NOT NULL,
     snapshot JSONB NOT NULL,
     deploy_notes TEXT,
@@ -185,7 +153,7 @@ ALTER TABLE ai_agents
 -- ============= 4. ai_agent_sources + ai_agent_chunks =============
 CREATE TABLE IF NOT EXISTS ai_agent_sources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     agent_id UUID NOT NULL REFERENCES ai_agents(id) ON DELETE CASCADE,
     layer TEXT NOT NULL DEFAULT 'operational' CHECK (layer IN (
         'institutional', 'operational', 'catalog', 'faq', 'execution'
@@ -215,28 +183,6 @@ CREATE TABLE IF NOT EXISTS ai_agent_sources (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_indexed_at TIMESTAMPTZ
 );
-
--- Adiciona colunas que podem não existir caso a tabela já tenha sido criada
-ALTER TABLE ai_agent_sources
-    ADD COLUMN IF NOT EXISTS layer TEXT NOT NULL DEFAULT 'operational',
-    ADD COLUMN IF NOT EXISTS faq_items JSONB DEFAULT '[]'::jsonb,
-    ADD COLUMN IF NOT EXISTS last_indexed_at TIMESTAMPTZ;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'ai_agent_sources_layer_check'
-    ) THEN
-        BEGIN
-            ALTER TABLE ai_agent_sources ADD CONSTRAINT ai_agent_sources_layer_check
-                CHECK (layer IN ('institutional', 'operational', 'catalog', 'faq', 'execution'));
-        EXCEPTION WHEN others THEN
-            NULL;
-        END;
-    END IF;
-END $$;
-
 CREATE INDEX IF NOT EXISTS idx_ai_agent_sources_agent ON ai_agent_sources(agent_id);
 CREATE INDEX IF NOT EXISTS idx_ai_agent_sources_layer ON ai_agent_sources(agent_id, layer);
 
@@ -244,7 +190,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_chunks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_id UUID NOT NULL REFERENCES ai_agent_sources(id) ON DELETE CASCADE,
     agent_id UUID NOT NULL REFERENCES ai_agents(id) ON DELETE CASCADE,
-    organization_id UUID NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     embedding vector(1024),
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -263,7 +209,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_agent_chunks_embedding
 CREATE TABLE IF NOT EXISTS ai_agent_tools (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES ai_agents(id) ON DELETE CASCADE,
-    organization_id UUID NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     tool_type TEXT NOT NULL CHECK (tool_type IN (
         'shopify_get_product', 'shopify_get_order', 'shopify_get_customer',
         'nuvemshop_get_product', 'nuvemshop_get_order',
@@ -290,7 +236,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_agent_tools_agent ON ai_agent_tools(agent_id);
 CREATE TABLE IF NOT EXISTS ai_agent_skills (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES ai_agents(id) ON DELETE CASCADE,
-    organization_id UUID NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT,
     trigger_phrases TEXT[] NOT NULL DEFAULT '{}',
@@ -309,7 +255,7 @@ CREATE TABLE IF NOT EXISTS ai_conversation_memory (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID NOT NULL,
     agent_id UUID NOT NULL REFERENCES ai_agents(id) ON DELETE CASCADE,
-    organization_id UUID NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     window_messages JSONB NOT NULL DEFAULT '[]'::jsonb,
     summary TEXT DEFAULT '',
     summary_token_count INTEGER NOT NULL DEFAULT 0,
@@ -325,7 +271,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_conv_memory_conv ON ai_conversation_memory(con
 -- ============= 8. ai_executions (TRACING) =============
 CREATE TABLE IF NOT EXISTS ai_executions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     agent_id UUID NOT NULL REFERENCES ai_agents(id) ON DELETE CASCADE,
     agent_version_id UUID REFERENCES ai_agent_versions(id) ON DELETE SET NULL,
     conversation_id UUID NOT NULL,
@@ -363,7 +309,7 @@ CREATE TABLE IF NOT EXISTS ai_simulations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES ai_agents(id) ON DELETE CASCADE,
     agent_version_id UUID REFERENCES ai_agent_versions(id) ON DELETE SET NULL,
-    organization_id UUID NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     scenario_name TEXT NOT NULL,
     persona_description TEXT NOT NULL,
     vertical TEXT,
@@ -385,7 +331,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_simulations_agent ON ai_simulations(agent_id, 
 CREATE TABLE IF NOT EXISTS ai_experiments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES ai_agents(id) ON DELETE CASCADE,
-    organization_id UUID NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT,
     variants JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -404,7 +350,7 @@ CREATE TABLE IF NOT EXISTS ai_experiments (
 CREATE TABLE IF NOT EXISTS ai_knowledge_gaps (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id UUID NOT NULL REFERENCES ai_agents(id) ON DELETE CASCADE,
-    organization_id UUID NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     detected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     sample_conversation_id UUID,
     topic TEXT NOT NULL,
@@ -425,7 +371,7 @@ CREATE TABLE IF NOT EXISTS ai_knowledge_gaps (
 -- ============= 12. ai_costs_daily =============
 CREATE TABLE IF NOT EXISTS ai_costs_daily (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     agent_id UUID REFERENCES ai_agents(id) ON DELETE CASCADE,
     date DATE NOT NULL,
     total_executions INTEGER NOT NULL DEFAULT 0,
@@ -438,15 +384,15 @@ CREATE TABLE IF NOT EXISTS ai_costs_daily (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_costs_daily_org ON ai_costs_daily(organization_id, date DESC);
 
--- ============= 13. Estender whatsapp_conversations =============
+-- ============= 13. Estender whatsapp_conversations (no-op se a tabela ainda não existe) =============
 DO $$
 BEGIN
     IF EXISTS (
         SELECT 1 FROM information_schema.tables
         WHERE table_name = 'whatsapp_conversations' AND table_schema = 'public'
     ) THEN
-        EXECUTE 'ALTER TABLE whatsapp_conversations
-            ADD COLUMN IF NOT EXISTS ai_agent_id UUID REFERENCES ai_agents(id) ON DELETE SET NULL,
+        EXECUTE 'ALTER TABLE public.whatsapp_conversations
+            ADD COLUMN IF NOT EXISTS ai_agent_id UUID REFERENCES public.ai_agents(id) ON DELETE SET NULL,
             ADD COLUMN IF NOT EXISTS ai_paused BOOLEAN NOT NULL DEFAULT false,
             ADD COLUMN IF NOT EXISTS ai_paused_reason TEXT,
             ADD COLUMN IF NOT EXISTS ai_paused_until TIMESTAMPTZ,
@@ -454,19 +400,19 @@ BEGIN
             ADD COLUMN IF NOT EXISTS outcome_reason TEXT,
             ADD COLUMN IF NOT EXISTS outcome_classified_at TIMESTAMPTZ,
             ADD COLUMN IF NOT EXISTS funnel_stage TEXT';
-        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_whatsapp_conv_ai_agent ON whatsapp_conversations(ai_agent_id) WHERE ai_agent_id IS NOT NULL';
-        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_whatsapp_conv_ai_paused ON whatsapp_conversations(ai_paused, ai_paused_until) WHERE ai_paused = true';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_whatsapp_conv_ai_agent ON public.whatsapp_conversations(ai_agent_id) WHERE ai_agent_id IS NOT NULL';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_whatsapp_conv_ai_paused ON public.whatsapp_conversations(ai_paused, ai_paused_until) WHERE ai_paused = true';
     END IF;
 END $$;
 
--- ============= 14. Estender messages =============
+-- ============= 14. Estender messages (no-op se a tabela ainda não existe) =============
 DO $$
 BEGIN
     IF EXISTS (
         SELECT 1 FROM information_schema.tables
         WHERE table_name = 'messages' AND table_schema = 'public'
     ) THEN
-        EXECUTE 'ALTER TABLE messages
+        EXECUTE 'ALTER TABLE public.messages
             ADD COLUMN IF NOT EXISTS sender_type TEXT,
             ADD COLUMN IF NOT EXISTS ai_metadata JSONB DEFAULT NULL,
             ADD COLUMN IF NOT EXISTS ai_execution_id UUID,
@@ -478,31 +424,31 @@ BEGIN
             SELECT 1 FROM pg_constraint WHERE conname = 'messages_sender_type_check'
         ) THEN
             BEGIN
-                EXECUTE 'ALTER TABLE messages ADD CONSTRAINT messages_sender_type_check
+                EXECUTE 'ALTER TABLE public.messages ADD CONSTRAINT messages_sender_type_check
                     CHECK (sender_type IS NULL OR sender_type IN (''contact'', ''ai_agent'', ''human_agent'', ''system''))';
             EXCEPTION WHEN others THEN
                 NULL;
             END;
         END IF;
 
-        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_messages_sender_type ON messages(sender_type) WHERE sender_type IS NOT NULL';
-        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_messages_ai_execution ON messages(ai_execution_id) WHERE ai_execution_id IS NOT NULL';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_messages_sender_type ON public.messages(sender_type) WHERE sender_type IS NOT NULL';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_messages_ai_execution ON public.messages(ai_execution_id) WHERE ai_execution_id IS NOT NULL';
     END IF;
 END $$;
 
--- ============= 15. RLS POLICIES =============
-ALTER TABLE ai_agents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ai_agent_versions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ai_agent_sources ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ai_agent_chunks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ai_agent_tools ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ai_agent_skills ENABLE ROW LEVEL SECURITY;
+-- ============= 15. RLS POLICIES (usa public.current_org_id() existente) =============
+ALTER TABLE ai_agents              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_agent_versions      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_agent_sources       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_agent_chunks        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_agent_tools         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_agent_skills        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_conversation_memory ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ai_executions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ai_simulations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ai_experiments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ai_knowledge_gaps ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ai_costs_daily ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_executions          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_simulations         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_experiments         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_knowledge_gaps      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_costs_daily         ENABLE ROW LEVEL SECURITY;
 
 DO $$
 DECLARE
@@ -517,12 +463,8 @@ BEGIN
     LOOP
         EXECUTE format('DROP POLICY IF EXISTS %I_org_isolation ON %I', t, t);
         EXECUTE format($f$CREATE POLICY %I_org_isolation ON %I
-            USING (organization_id IN (
-                SELECT organization_id FROM public.profiles WHERE id = auth.uid()
-            ))
-            WITH CHECK (organization_id IN (
-                SELECT organization_id FROM public.profiles WHERE id = auth.uid()
-            ))$f$, t, t);
+            USING (organization_id = public.current_org_id())
+            WITH CHECK (organization_id = public.current_org_id())$f$, t, t);
     END LOOP;
 END $$;
 
@@ -573,40 +515,6 @@ BEGIN
     LIMIT p_match_count;
 END;
 $$;
-
--- ============= 18. MIGRAÇÃO DE DADOS LEGADOS (DESCOMENTAR APÓS VALIDAR) =============
-/*
-INSERT INTO ai_agents (
-    id, organization_id, store_id, name, role, status,
-    identity, llm_config, total_messages, total_conversations, created_at, updated_at
-)
-SELECT
-    legacy.id, legacy.organization_id, legacy.store_id, legacy.name,
-    CASE legacy.agent_type
-        WHEN 'sales' THEN 'sales'
-        WHEN 'support' THEN 'support'
-        WHEN 'recovery' THEN 'recovery'
-        ELSE 'sales'
-    END,
-    CASE WHEN legacy.is_active THEN 'published' ELSE 'paused' END,
-    jsonb_build_object('context', legacy.system_prompt, 'personality', '', 'style', ''),
-    jsonb_build_object(
-        'provider', 'openrouter',
-        'model', legacy.model,
-        'temperature', legacy.temperature,
-        'max_tokens', legacy.max_tokens
-    ),
-    legacy.total_messages, legacy.total_conversations,
-    legacy.created_at, legacy.updated_at
-FROM whatsapp_ai_agents legacy
-WHERE NOT EXISTS (SELECT 1 FROM ai_agents a WHERE a.id = legacy.id);
-
--- Após validar:
--- DROP TABLE IF EXISTS whatsapp_ai_agents CASCADE;
--- DROP TABLE IF EXISTS whatsapp_ai_configs CASCADE;
--- DROP TABLE IF EXISTS whatsapp_ai_interactions CASCADE;
--- DROP TABLE IF EXISTS whatsapp_ai_analytics CASCADE;
-*/
 
 -- =============================================================================
 -- FIM DA MIGRATION
