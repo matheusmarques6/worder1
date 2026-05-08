@@ -445,11 +445,18 @@ async function handleCheckoutFromEvents(opts: {
   offset: number;
 }): Promise<NextResponse> {
   const { orgIds, activeStoreIds, storeId, limit, offset } = opts;
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  // 90-day window matches Shopify Admin's 3-month auto-deletion of
+  // abandoned checkouts. Older than that, Shopify itself drops the
+  // record from its abandoned list, so we mirror the behavior.
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
+  // Pull every checkout_started event in window. We also include
+  // shopify_resource_id so we can match completion by canonical
+  // checkout id (Shopify's source of truth) instead of relying on
+  // session_id alone.
   let q = supabaseAdmin
     .from('contact_events')
-    .select('id, contact_id, store_id, organization_id, properties, session_id, anonymous_id, monetary_value, currency, occurred_at, event_type')
+    .select('id, contact_id, store_id, organization_id, properties, session_id, anonymous_id, monetary_value, currency, occurred_at, event_type, shopify_resource_id')
     .in('organization_id', orgIds)
     .eq('event_type', 'checkout_started')
     .gte('occurred_at', since)
@@ -467,27 +474,134 @@ async function handleCheckoutFromEvents(opts: {
     return NextResponse.json({ items: [], total: 0, stats: zeroStats() });
   }
 
-  // Group by contact_id or session_id
-  const buckets = new Map<string, { key: string; contact_id: string | null; session_id: string | null; events: any[]; last_at: string; first_at: string; store_id: string }>();
-  for (const e of startedEvents) {
-    const key = e.contact_id ? `c:${e.contact_id}` : e.session_id ? `s:${e.session_id}` : `e:${e.id}`;
+  // ============================================================
+  // Shopify's abandonment rule:
+  //   "A checkout is abandoned when the customer added items AND
+  //    provided contact information AND didn't complete the purchase."
+  //   Source: shopify.dev — AbandonedCheckout GraphQL object
+  //
+  // Hard requirement: contact info (email or phone) MUST be present.
+  // Checkouts without contact info don't appear in Shopify Admin's
+  // "Checkouts abandonados" list, so we mirror that behavior.
+  // ============================================================
+  function extractEmail(ev: any): string | null {
+    const p = ev?.properties || {};
+    const raw = p.raw || {};
+    const e =
+      p.email ||
+      p.Email ||
+      p.CustomerEmail ||
+      raw.email ||
+      raw.contact_email ||
+      raw.customer?.email ||
+      raw.billing_address?.email ||
+      null;
+    return e ? String(e).toLowerCase() : null;
+  }
+  function extractPhone(ev: any): string | null {
+    const p = ev?.properties || {};
+    const raw = p.raw || {};
+    return (
+      p.phone ||
+      p.Phone ||
+      p.CustomerPhone ||
+      raw.phone ||
+      raw.customer?.phone ||
+      raw.billing_address?.phone ||
+      null
+    );
+  }
+  function extractCheckoutId(ev: any): string | null {
+    const p = ev?.properties || {};
+    const raw = p.raw || {};
+    return String(
+      ev.shopify_resource_id ||
+      p.CheckoutId ||
+      p.checkout_id ||
+      raw.id ||
+      raw.token ||
+      ''
+    ) || null;
+  }
+
+  // Filter at the source: only events with email/phone qualify.
+  // contact_id alone is NOT enough because we sometimes attach
+  // contact_id from earlier identity, but the merchant cares about
+  // checkouts where the buyer ACTUALLY entered contact info on the
+  // checkout form.
+  const eligibleEvents = startedEvents.filter((e: any) => {
+    return !!extractEmail(e) || !!extractPhone(e);
+  });
+
+  // Group by canonical checkout_id when available, falling back to
+  // contact_id then session_id. Same checkout fired by both pixel
+  // and webhook collapses into a single bucket.
+  const buckets = new Map<string, { key: string; contact_id: string | null; session_id: string | null; checkout_id: string | null; events: any[]; last_at: string; first_at: string; store_id: string }>();
+  for (const e of eligibleEvents) {
+    const checkoutId = extractCheckoutId(e);
+    const key = checkoutId
+      ? `ck:${checkoutId}`
+      : e.contact_id
+        ? `c:${e.contact_id}`
+        : e.session_id
+          ? `s:${e.session_id}`
+          : `e:${e.id}`;
     const existing = buckets.get(key);
     if (existing) {
       existing.events.push(e);
       if (e.occurred_at > existing.last_at) existing.last_at = e.occurred_at;
       if (e.occurred_at < existing.first_at) existing.first_at = e.occurred_at;
       if (!existing.contact_id && e.contact_id) existing.contact_id = e.contact_id;
+      if (!existing.checkout_id && checkoutId) existing.checkout_id = checkoutId;
     } else {
-      buckets.set(key, { key, contact_id: e.contact_id, session_id: e.session_id, events: [e], last_at: e.occurred_at, first_at: e.occurred_at, store_id: e.store_id });
+      buckets.set(key, {
+        key,
+        contact_id: e.contact_id,
+        session_id: e.session_id,
+        checkout_id: checkoutId,
+        events: [e],
+        last_at: e.occurred_at,
+        first_at: e.occurred_at,
+        store_id: e.store_id,
+      });
     }
   }
 
-  // Check which of these have a matching checkout_completed / placed_order
+  // ============================================================
+  // Detect completion. Shopify marks a checkout complete by setting
+  // completedAt — we mirror that by looking for any event that
+  // represents the order placement for the same checkout.
+  //
+  // Match strategy in priority order:
+  //   1. shopify_resource_id (canonical checkout/order id)
+  //   2. contact_id (same buyer placed an order in the window)
+  //   3. session_id (same browsing session converted)
+  //   4. email (same email on a placed_order event)
+  // ============================================================
   const contactIds = [...new Set([...buckets.values()].map(b => b.contact_id).filter(Boolean))] as string[];
   const sessionIds = [...new Set([...buckets.values()].map(b => b.session_id).filter(Boolean))] as string[];
+  const checkoutIds = [...new Set([...buckets.values()].map(b => b.checkout_id).filter(Boolean))] as string[];
+  const emails = [...new Set([...buckets.values()].map(b => extractEmail(b.events[0])).filter(Boolean))] as string[];
 
+  const completedCheckouts = new Set<string>();
   const completedSessions = new Set<string>();
   const completedContacts = new Set<string>();
+  const completedEmails = new Set<string>();
+
+  if (checkoutIds.length > 0) {
+    try {
+      const { data } = await supabaseAdmin
+        .from('contact_events')
+        .select('shopify_resource_id, properties')
+        .in('organization_id', orgIds)
+        .in('event_type', ['checkout_completed', 'placed_order', 'order_paid'])
+        .in('shopify_resource_id', checkoutIds)
+        .gte('occurred_at', since);
+      for (const r of (data || []) as any[]) {
+        if (r.shopify_resource_id) completedCheckouts.add(String(r.shopify_resource_id));
+      }
+    } catch {}
+  }
 
   if (sessionIds.length > 0) {
     try {
@@ -519,12 +633,42 @@ async function handleCheckoutFromEvents(opts: {
     } catch {}
   }
 
-  const cutoff15min = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  // Email-based fallback: catches the case where a guest checkout
+  // was abandoned, then later the same email placed an order via a
+  // different session/contact id (cross-device).
+  if (emails.length > 0) {
+    try {
+      const { data } = await supabaseAdmin
+        .from('contact_events')
+        .select('properties')
+        .in('organization_id', orgIds)
+        .in('event_type', ['checkout_completed', 'placed_order', 'order_paid'])
+        .gte('occurred_at', since)
+        .limit(2000);
+      for (const r of (data || []) as any[]) {
+        const p = r.properties || {};
+        const e = (p.email || p.CustomerEmail || p.raw?.email || p.raw?.customer?.email || '').toLowerCase();
+        if (e && emails.includes(e)) completedEmails.add(e);
+      }
+    } catch {}
+  }
+
+  // ============================================================
+  // Filter to abandoned. Shopify shows abandoned checkouts as soon
+  // as the email is provided — no minimum wait time. We use a small
+  // 5-min grace so events still in the active checkout flow (user
+  // typing payment info) don't flicker into the abandoned list and
+  // back out when they complete a few seconds later.
+  // ============================================================
+  const cutoff5min = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
   const abandoned = [...buckets.values()].filter(b => {
-    if (b.last_at > cutoff15min) return false;
+    if (b.last_at > cutoff5min) return false;
+    if (b.checkout_id && completedCheckouts.has(b.checkout_id)) return false;
     if (b.session_id && completedSessions.has(b.session_id)) return false;
     if (b.contact_id && completedContacts.has(b.contact_id)) return false;
+    const email = extractEmail(b.events[0]);
+    if (email && completedEmails.has(email)) return false;
     return true;
   });
 
