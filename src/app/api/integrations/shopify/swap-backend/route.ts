@@ -207,11 +207,34 @@ export async function PATCH(request: NextRequest) {
     if (planName) updates.plan_name = planName;
     if (shopifyShopId) updates.shopify_shop_id = shopifyShopId;
 
-    const { error: updErr } = await supabase
-      .from('shopify_stores')
-      .update(updates)
-      .eq('id', storeId);
-
+    // Resilient update: if the DB schema is missing the recent
+    // shopify_shop_id / shop_domain_aliases columns (migration not yet
+    // applied), drop those fields and retry. Without this the swap
+    // would fail with PGRST204 even though the merchant's credentials
+    // are valid.
+    function isMissingColumnError(err: any, col: string): boolean {
+      if (!err) return false;
+      const code = err.code || '';
+      const msg = String(err.message || '');
+      if (code === 'PGRST204' || code === '42703') return msg.includes(col);
+      return msg.includes(col) && (msg.includes('column') || msg.includes('schema cache'));
+    }
+    let attempt: Record<string, any> = { ...updates };
+    let updErr: any = null;
+    for (const col of ['', 'shopify_shop_id', 'shop_domain_aliases']) {
+      if (col && col in attempt) {
+        const { [col]: _, ...rest } = attempt;
+        attempt = rest;
+      }
+      const { error } = await supabase.from('shopify_stores').update(attempt).eq('id', storeId);
+      if (!error) { updErr = null; break; }
+      updErr = error;
+      // If error doesn't mention a known fallback column, give up.
+      const next = ['shopify_shop_id', 'shop_domain_aliases'].find(c => isMissingColumnError(error, c) && c in attempt);
+      if (!next) break;
+      const { [next]: _, ...rest } = attempt;
+      attempt = rest;
+    }
     if (updErr) {
       return NextResponse.json(
         { error: `Falha ao salvar: ${updErr.message}` },

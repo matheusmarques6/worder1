@@ -301,21 +301,47 @@ export async function POST(request: NextRequest) {
     };
 
     let storeId: string;
-    if (existingStore) {
-      const { error: updErr } = await supabase
-        .from('shopify_stores')
-        .update(storeRecord)
-        .eq('id', existingStore.id);
-      if (updErr) throw updErr;
-      storeId = existingStore.id;
-    } else {
-      const { data: newStore, error: insErr } = await supabase
-        .from('shopify_stores')
-        .insert(storeRecord)
-        .select('id')
-        .single();
-      if (insErr) throw insErr;
-      storeId = newStore!.id;
+    // Helper: retry the write without columns that may not exist in
+    // older schemas. Catches PGRST204 (PostgREST schema cache miss)
+    // and 42703 (undefined column) and progressively strips suspect
+    // fields. Lets manual integration succeed on databases that
+    // haven't run the recent shopify_shop_id / shop_domain_aliases
+    // migrations yet.
+    function isMissingColumnError(err: any, col: string): boolean {
+      if (!err) return false;
+      const code = err.code || '';
+      const msg = String(err.message || '');
+      if (code === 'PGRST204' || code === '42703') return msg.includes(col);
+      return msg.includes(col) && (msg.includes('column') || msg.includes('schema cache'));
+    }
+    async function writeStore(record: Record<string, any>): Promise<{ id: string } | null> {
+      // Try as-is, then progressively drop columns that may be missing.
+      const fallbackChain = ['shopify_shop_id', 'shop_domain_aliases'];
+      let attempt: Record<string, any> = { ...record };
+      let lastErr: any = null;
+      for (let i = 0; i <= fallbackChain.length; i++) {
+        if (existingStore) {
+          const { error } = await supabase.from('shopify_stores').update(attempt).eq('id', existingStore.id);
+          if (!error) return { id: existingStore.id };
+          lastErr = error;
+        } else {
+          const { data, error } = await supabase.from('shopify_stores').insert(attempt).select('id').single();
+          if (!error && data) return { id: data.id };
+          lastErr = error;
+        }
+        // If error mentions a known fallback column, drop it and retry.
+        const dropCol = fallbackChain.find(c => isMissingColumnError(lastErr, c) && c in attempt);
+        if (!dropCol) break;
+        const { [dropCol]: _, ...rest } = attempt;
+        attempt = rest;
+      }
+      throw lastErr;
+    }
+    try {
+      const result = await writeStore(storeRecord);
+      storeId = result!.id;
+    } catch (writeErr: any) {
+      throw writeErr;
     }
 
     // ──────────────────────────────────────────
