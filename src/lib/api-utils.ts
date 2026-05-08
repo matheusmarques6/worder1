@@ -53,16 +53,63 @@ export async function getAuthClient(): Promise<AuthResult | null> {
       console.log('[Auth] Invalid token');
       return null;
     }
-    
-    // Buscar org do perfil
-    const { data: profile } = await admin
-      .from('profiles')
-      .select('organization_id, role')
-      .eq('id', user.id)
-      .single();
-    
-    if (!profile?.organization_id) {
-      console.error('[Auth] No organization for user');
+
+    // Resolve organization_id do usuário.
+    // Estratégia em camadas:
+    //  1) profiles.organization_id (schema histórico do Worder, se existir)
+    //  2) org_members(profile_id, org_id, is_active) — schema atual do banco
+    //     (admin convertfy / projetos novos), priorizando role='owner'
+    //  3) organization_members(user_id, organization_id) — schema legado
+    //
+    // Cada lookup é tolerante a coluna ausente (PGRST204 / 42703); nesse caso
+    // simplesmente passa para a próxima camada.
+    let organizationId: string | null = null;
+    let role: string | undefined;
+
+    {
+      const { data: profile, error: profErr } = await admin
+        .from('profiles')
+        .select('organization_id, role')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (!profErr && profile?.organization_id) {
+        organizationId = profile.organization_id as string;
+        role = (profile.role as string | undefined) ?? undefined;
+      } else if (!profErr && profile?.role) {
+        role = profile.role as string;
+      }
+    }
+
+    if (!organizationId) {
+      const { data: membership } = await admin
+        .from('org_members')
+        .select('org_id, role')
+        .eq('profile_id', user.id)
+        .eq('is_active', true)
+        .order('role', { ascending: false }) // owner > admin > member alphabetical-ish; bom o suficiente
+        .limit(1)
+        .maybeSingle();
+      if (membership?.org_id) {
+        organizationId = membership.org_id as string;
+        role = role ?? ((membership.role as string | undefined) ?? undefined);
+      }
+    }
+
+    if (!organizationId) {
+      const { data: legacyMembership } = await admin
+        .from('organization_members')
+        .select('organization_id, role')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+      if (legacyMembership?.organization_id) {
+        organizationId = legacyMembership.organization_id as string;
+        role = role ?? ((legacyMembership.role as string | undefined) ?? undefined);
+      }
+    }
+
+    if (!organizationId) {
+      console.error('[Auth] No organization for user (profiles + org_members + organization_members all empty)');
       return null;
     }
 
@@ -87,8 +134,8 @@ export async function getAuthClient(): Promise<AuthResult | null> {
       user: {
         id: user.id,
         email: user.email || '',
-        organization_id: profile.organization_id,
-        role: profile.role,
+        organization_id: organizationId,
+        role,
       },
     };
   } catch (error) {
