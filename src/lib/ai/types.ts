@@ -1,9 +1,113 @@
 // =====================================================
 // TIPOS PARA O SISTEMA DE AGENTES DE IA
 // =====================================================
+// NOTA: este arquivo mantém o tipo legado `AIAgent` (usado em UI/stores
+// existentes) e adiciona o tipo canônico `Agent` da F1, que reflete o
+// schema real do banco (ai_agents com identity/behavior/llm_config etc).
+// Use mappers em src/lib/ai/mappers.ts para converter entre eles.
+// =====================================================
 
 // =====================================================
-// AGENTE
+// AGENTE — TIPO CANÔNICO (F1, schema do banco)
+// =====================================================
+
+export type AgentRole = 'pre_sales' | 'recovery' | 'sales' | 'post_sales' | 'support' | 'custom'
+export type AgentStatus = 'draft' | 'simulating' | 'published' | 'paused' | 'archived'
+
+export interface AgentPersonaV1 {
+  tone: string
+  response_length: 'short' | 'medium' | 'long'
+  language: string
+  reply_delay_seconds: number
+  split_messages: boolean
+}
+
+export interface AgentIdentity {
+  context: string
+  personality: string
+  style: string
+}
+
+export interface AgentBehavior {
+  persistence: string
+  primary_goal: string
+  secondary_goals: string[]
+  limitations: string
+  communication_rules: string
+}
+
+export interface AgentLLMConfig {
+  provider: string
+  model: string
+  fallback_model?: string
+  classifier_model?: string
+  temperature: number
+  max_tokens: number
+  pipeline_mode: 'monolithic' | 'multi_agent'
+}
+
+export interface AgentSafety {
+  anti_fraud_enabled: boolean
+  never_request_card_data: boolean
+  validate_pix_recipient: boolean
+  official_contact_response: string
+}
+
+export interface AgentEscalationRules {
+  transfer_keywords: string[]
+  max_attempts_before_escalate: number
+  escalate_on_low_confidence: boolean
+  escalate_on_negative_sentiment: boolean
+  escalate_to_user_id: string | null
+}
+
+export interface AgentSettingsV1 {
+  channels: { all_channels: boolean; channel_ids: string[] }
+  pipelines: { all_pipelines: boolean; pipeline_ids?: string[]; stage_ids?: string[] }
+  schedule: {
+    always_active: boolean
+    timezone: string
+    hours: { start: string; end: string }
+    days: string[]
+  }
+  behavior: {
+    activate_on: 'new_message' | 'pipeline_stage' | 'manual'
+    stop_on_human_reply: boolean
+    cooldown_after_transfer: number
+    max_messages_per_conversation: number
+  }
+}
+
+export interface Agent {
+  id: string
+  organization_id: string
+  store_id: string | null
+  name: string
+  description: string | null
+  role: AgentRole
+  status: AgentStatus
+  current_version_id: string | null
+  total_versions: number
+  persona: AgentPersonaV1
+  identity: AgentIdentity
+  behavior: AgentBehavior
+  store_variables: Record<string, string>
+  settings: AgentSettingsV1
+  escalation_rules: AgentEscalationRules
+  llm_config: AgentLLMConfig
+  safety: AgentSafety
+  metrics_cache: Record<string, number>
+  total_messages: number
+  total_conversations: number
+  total_tokens_used: number
+  created_at: string
+  updated_at: string
+  created_by_user_id: string | null
+  last_published_at: string | null
+}
+
+// =====================================================
+// AGENTE — TIPO LEGADO (UI / stores antigos)
 // =====================================================
 
 export interface AIAgent {
@@ -418,3 +522,61 @@ export const SENTIMENTS: Sentiment[] = [
   'sad',
   'angry',
 ]
+
+// =====================================================
+// RUNNER (F1) — entrada/saída do AgentRunner monolítico
+// =====================================================
+
+export interface RunnerMessage {
+  id: string
+  content: string
+  created_at: string
+}
+
+export interface RunnerInput {
+  agentId: string
+  conversationId: string
+  newMessages: RunnerMessage[]
+}
+
+export interface RunnerOutput {
+  replyText: string
+  executionId: string
+  tokensIn: number
+  tokensOut: number
+  costUsd: number
+  durationMs: number
+}
+
+// =====================================================
+// MEMÓRIA DE CONVERSA (F1)
+// =====================================================
+
+export interface ConversationMemoryMessage {
+  role: 'user' | 'assistant'
+  content: string
+  tokens: number
+  timestamp: string
+}
+
+export interface ConversationMemory {
+  window_messages: ConversationMemoryMessage[]
+  summary: string
+  facts: Record<string, unknown>
+}
+
+// =====================================================
+// TEMPLATE DE AGENTE (F1)
+// =====================================================
+
+export interface AgentTemplate {
+  id: string
+  label: string
+  description: string
+  vertical: string
+  role: AgentRole
+  persona: AgentPersonaV1
+  identity: AgentIdentity
+  behavior: AgentBehavior
+  store_variables_template: Record<string, string>
+}

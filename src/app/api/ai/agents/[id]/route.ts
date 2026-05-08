@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { decorateLegacyFields, toCanonicalAgentRow } from '@/lib/ai/mappers'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
@@ -51,7 +52,7 @@ export async function GET(
       throw error
     }
 
-    return NextResponse.json({ agent })
+    return NextResponse.json({ agent: decorateLegacyFields(agent) })
 
   } catch (error: any) {
     console.error('Error in GET /api/ai/agents/[id]:', error)
@@ -97,32 +98,13 @@ export async function PUT(
       return NextResponse.json({ error: 'Agente não encontrado' }, { status: 404 })
     }
 
-    // Preparar dados para atualização
-    const updateData: Record<string, any> = {
+    // Mapper aceita campos legados (system_prompt/provider/model/...) ou
+    // canônicos (identity/llm_config/...) e devolve apenas o que veio no body.
+    const updateData = {
+      ...toCanonicalAgentRow(body),
       updated_at: new Date().toISOString(),
     }
 
-    // Campos atualizáveis
-    const allowedFields = [
-      'name',
-      'description',
-      'system_prompt',
-      'provider',
-      'model',
-      'temperature',
-      'max_tokens',
-      'is_active',
-      'persona',
-      'settings',
-    ]
-
-    for (const field of allowedFields) {
-      if (body[field] !== undefined) {
-        updateData[field] = body[field]
-      }
-    }
-
-    // Atualizar
     const { data: agent, error } = await supabase
       .from('ai_agents')
       .update(updateData)
@@ -136,7 +118,7 @@ export async function PUT(
       throw error
     }
 
-    return NextResponse.json({ agent })
+    return NextResponse.json({ agent: decorateLegacyFields(agent) })
 
   } catch (error: any) {
     console.error('Error in PUT /api/ai/agents/[id]:', error)
@@ -170,32 +152,11 @@ export async function PATCH(
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
     }
 
-    // Preparar dados para atualização
-    const updateData: Record<string, any> = {
+    const updateData = {
+      ...toCanonicalAgentRow(body),
       updated_at: new Date().toISOString(),
     }
 
-    // Campos permitidos em PATCH
-    const allowedFields = [
-      'name',
-      'description',
-      'is_active',
-      'persona',
-      'settings',
-      'system_prompt',
-      'provider',
-      'model',
-      'temperature',
-      'max_tokens',
-    ]
-
-    for (const field of allowedFields) {
-      if (body[field] !== undefined) {
-        updateData[field] = body[field]
-      }
-    }
-
-    // Atualizar
     const { data: agent, error } = await supabase
       .from('ai_agents')
       .update(updateData)
@@ -211,7 +172,7 @@ export async function PATCH(
       throw error
     }
 
-    return NextResponse.json({ agent })
+    return NextResponse.json({ agent: decorateLegacyFields(agent) })
 
   } catch (error: any) {
     console.error('Error in PATCH /api/ai/agents/[id]:', error)

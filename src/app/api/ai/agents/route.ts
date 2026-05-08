@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { AIAgent, DEFAULT_PERSONA, DEFAULT_SETTINGS } from '@/lib/ai/types'
+import { decorateLegacyFields, toCanonicalAgentRow } from '@/lib/ai/mappers'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Acesso não autorizado a esta organização' }, { status: 403 })
     }
 
-    // Query
+    // Query — schema canônico usa `status` em vez de `is_active`
     let query = supabase
       .from('ai_agents')
       .select('*', { count: 'exact' })
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       .range(offset, offset + limit - 1)
 
     if (isActive !== null && isActive !== undefined) {
-      query = query.eq('is_active', isActive === 'true')
+      query = query.eq('status', isActive === 'true' ? 'published' : 'draft')
     }
 
     const { data: agents, error, count } = await query
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      agents: agents || [],
+      agents: (agents || []).map(decorateLegacyFields),
       total: count || 0,
       limit,
       offset,
@@ -83,43 +83,17 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabase()
     const body = await request.json()
 
-    // Validação
-    const { organization_id, name, provider, model } = body
-
-    if (!organization_id) {
+    if (!body.organization_id) {
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
     }
-
-    if (!name || !name.trim()) {
+    if (!body.name || !body.name.trim()) {
       return NextResponse.json({ error: 'name é obrigatório' }, { status: 400 })
     }
 
-    // Preparar dados
-    const agentData = {
-      organization_id,
-      name: name.trim(),
-      description: body.description?.trim() || null,
-      system_prompt: body.system_prompt?.trim() || null,
-      provider: provider || 'openai',
-      model: model || 'gpt-4o-mini',
-      temperature: body.temperature ?? 0.7,
-      max_tokens: body.max_tokens ?? 500,
-      is_active: body.is_active ?? false,
-      persona: {
-        ...DEFAULT_PERSONA,
-        ...(body.persona || {}),
-      },
-      settings: {
-        ...DEFAULT_SETTINGS,
-        ...(body.settings || {}),
-      },
-      total_messages: 0,
-      total_conversations: 0,
-      total_tokens_used: 0,
-      avg_response_time_ms: 0,
-    }
+    // Mapper aceita payload legado (system_prompt/provider/model/...) ou novo
+    // (identity/llm_config/...) e devolve sempre o shape canônico do banco.
+    const agentData = toCanonicalAgentRow(body)
 
-    // Inserir
     const { data: agent, error } = await supabase
       .from('ai_agents')
       .insert(agentData)
@@ -131,7 +105,7 @@ export async function POST(request: NextRequest) {
       throw error
     }
 
-    return NextResponse.json({ agent }, { status: 201 })
+    return NextResponse.json({ agent: decorateLegacyFields(agent) }, { status: 201 })
 
   } catch (error: any) {
     console.error('Error in POST /api/ai/agents:', error)

@@ -51,6 +51,7 @@
     "lucide-react": "^0.294.0",
     "nanoid": "^5.1.7",
     "next": "14.0.4",
+    "openai": "^6.37.0",
     "react": "^18",
     "react-dom": "^18",
     "react-querybuilder": "^8.14.3",
