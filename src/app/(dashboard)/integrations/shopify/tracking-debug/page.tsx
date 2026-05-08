@@ -203,6 +203,33 @@ export default function TrackingDebugPage() {
   const [newAlias, setNewAlias] = useState('')
   const [savingAlias, setSavingAlias] = useState(false)
   const [aliasError, setAliasError] = useState<string | null>(null)
+
+  // Checkout trace: paste a Shopify checkout id (or order number) to see
+  // exactly where it stopped in the pipeline.
+  const [traceId, setTraceId] = useState('')
+  const [tracing, setTracing] = useState(false)
+  const [traceResult, setTraceResult] = useState<any | null>(null)
+  const [traceError, setTraceError] = useState<string | null>(null)
+  async function runTrace() {
+    if (!currentStore?.id || !traceId.trim()) return
+    setTracing(true)
+    setTraceError(null)
+    setTraceResult(null)
+    try {
+      const params = new URLSearchParams({ id: traceId.trim(), storeId: currentStore.id })
+      const res = await fetch(`/api/diagnostics/checkout-trace?${params}`, { cache: 'no-store' })
+      const j = await res.json()
+      if (!res.ok || j.error) {
+        setTraceError(j.error || 'Falhou')
+      } else {
+        setTraceResult(j)
+      }
+    } catch (e: any) {
+      setTraceError(e?.message || 'Erro de rede')
+    } finally {
+      setTracing(false)
+    }
+  }
   async function addAlias() {
     if (!currentStore?.id || !newAlias.trim()) return
     setSavingAlias(true)
@@ -469,6 +496,76 @@ export default function TrackingDebugPage() {
           {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
           Disparar
         </button>
+      </div>
+
+      {/* Checkout trace — paste a Shopify checkout ID (e.g. 40364168642834)
+          and see exactly where the checkout stopped in our pipeline:
+          webhook delivery → shopify_checkouts row → contact_event →
+          completion link. The verdict block tells the merchant which
+          step broke without making them read raw rows. */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="flex items-end gap-3 mb-3">
+          <div className="flex-1">
+            <p className="text-[13px] font-semibold text-gray-900 mb-0.5 flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-blue-500" /> Rastrear um checkout específico
+            </p>
+            <p className="text-[11px] text-gray-500">
+              Cole o ID do checkout do Shopify Admin (ex.: <code className="font-mono">40364168642834</code> ou <code className="font-mono">#40364168642834</code>) pra ver exatamente onde ele travou no pipeline.
+            </p>
+          </div>
+          <input
+            value={traceId}
+            onChange={e => setTraceId(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') runTrace() }}
+            placeholder="ID do checkout"
+            className="px-3 py-2 text-[13px] border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-zinc-900 font-mono"
+            style={{ width: 240 }}
+          />
+          <button
+            onClick={runTrace}
+            disabled={tracing || !traceId.trim()}
+            className="px-4 py-2 text-[13px] font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+          >
+            {tracing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+            Rastrear
+          </button>
+        </div>
+        {traceError && (
+          <div className="px-3 py-2 bg-red-50 text-[12px] text-red-700 border border-red-200 rounded-lg">
+            {traceError}
+          </div>
+        )}
+        {traceResult && (
+          <div className="space-y-3 mt-2">
+            {/* Verdict — the punch list */}
+            <div className="space-y-1.5">
+              {(traceResult.verdict || []).map((v: any, i: number) => {
+                const color = v.status === 'ok'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : v.status === 'completed'
+                  ? 'bg-blue-50 border-blue-200 text-blue-800'
+                  : v.status === 'missing'
+                  ? 'bg-amber-50 border-amber-200 text-amber-800'
+                  : 'bg-red-50 border-red-200 text-red-800'
+                const Icon = v.status === 'ok' || v.status === 'completed' ? CheckCircle : AlertCircle
+                return (
+                  <div key={i} className={cn('flex items-start gap-2 px-3 py-2 border rounded-lg', color)}>
+                    <Icon className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-mono font-semibold">{v.stage}</p>
+                      <p className="text-[12px] mt-0.5 leading-relaxed">{v.message}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {/* Raw — collapsible details */}
+            <details className="text-[11px]">
+              <summary className="cursor-pointer text-gray-500 hover:text-gray-700">Dados brutos do trace</summary>
+              <pre className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg overflow-auto max-h-[400px] text-[10px] font-mono">{JSON.stringify(traceResult, null, 2)}</pre>
+            </details>
+          </div>
+        )}
       </div>
 
       {/* Webhook deliveries (Shopify -> us) — shows whether Shopify is
