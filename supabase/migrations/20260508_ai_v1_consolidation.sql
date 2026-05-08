@@ -442,7 +442,8 @@ CREATE INDEX IF NOT EXISTS idx_ai_costs_daily_org ON ai_costs_daily(organization
 DO $$
 BEGIN
     IF EXISTS (
-        SELECT 1 FROM information_schema.tables WHERE table_name = 'whatsapp_conversations'
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'whatsapp_conversations' AND table_schema = 'public'
     ) THEN
         EXECUTE 'ALTER TABLE whatsapp_conversations
             ADD COLUMN IF NOT EXISTS ai_agent_id UUID REFERENCES ai_agents(id) ON DELETE SET NULL,
@@ -461,7 +462,10 @@ END $$;
 -- ============= 14. Estender messages =============
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'messages') THEN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'messages' AND table_schema = 'public'
+    ) THEN
         EXECUTE 'ALTER TABLE messages
             ADD COLUMN IF NOT EXISTS sender_type TEXT,
             ADD COLUMN IF NOT EXISTS ai_metadata JSONB DEFAULT NULL,
