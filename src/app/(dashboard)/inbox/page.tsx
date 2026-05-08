@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
 import { useAgentPermissions } from '@/hooks/useAgentPermissions'
+import { useInboxRealtime } from '@/hooks/useInboxRealtime'
 
 // =====================================================
 // TYPES
@@ -150,6 +151,48 @@ export default function AgentInboxPage() {
       fetchMessages(selectedConversation.id)
     }
   }, [selectedConversation, fetchMessages])
+
+  // Realtime — atualiza thread + lista de conversas em tempo real.
+  // Reusa o hook útil já em produção no /(dashboard)/whatsapp.
+  useInboxRealtime({
+    organizationId: organizationId || '',
+    conversationId: selectedConversation?.id ?? null,
+    enabled: !!organizationId,
+    onNewMessage: (msg) => {
+      // Append na thread aberta. Re-buscar conversa também atualiza unread/last.
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev
+        return [
+          ...prev,
+          {
+            id: msg.id,
+            content: msg.content ?? msg.text_body ?? '',
+            type: (msg.type ?? msg.message_type ?? 'text') as Message['type'],
+            direction: msg.direction,
+            status: (msg.status ?? 'sent') as Message['status'],
+            created_at: msg.created_at ?? msg.sent_at ?? new Date().toISOString(),
+            media_url: msg.media_url,
+          },
+        ]
+      })
+      fetchConversations()
+    },
+    onMessageUpdate: (msg) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msg.id
+            ? { ...m, status: (msg.status ?? m.status) as Message['status'] }
+            : m,
+        ),
+      )
+    },
+    onConversationUpdate: () => {
+      fetchConversations()
+    },
+    onNewConversation: () => {
+      fetchConversations()
+    },
+  })
   
   // Send message
   const handleSendMessage = async () => {

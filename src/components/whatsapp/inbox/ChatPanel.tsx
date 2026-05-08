@@ -7,6 +7,7 @@ import {
   Check, CheckCheck, Clock, AlertCircle, Loader2, RefreshCw, CheckCircle,
 } from 'lucide-react'
 import { AIToggleButton } from './AIToggleButton'
+import { AgentAssignmentDropdown } from '@/components/ai/AgentAssignmentDropdown'
 import { ServiceWindowBar } from './ServiceWindowBar'
 import { QuickRepliesPicker } from './QuickRepliesPicker'
 import { CSATModal } from './modals/CSATModal'
@@ -480,6 +481,11 @@ export function ChatPanel({
         </div>
 
         <div className="flex items-center gap-2">
+          <AgentAssignmentDropdown
+            conversationId={conversation.id}
+            currentAgentId={conversation.ai_agent_id ?? null}
+            variant="compact"
+          />
           <AIToggleButton conversationId={conversation.id} initialEnabled={conversation.ai_enabled !== false} variant="default" />
 
           <button onClick={onToggleBot}

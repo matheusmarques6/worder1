@@ -19,7 +19,7 @@ import { drainBuffer } from '@/lib/inbox/buffer'
 import { runAgent, AgentNotPublishedError } from '@/lib/ai/runner'
 import { isLLMConfigured } from '@/lib/ai/llm/client'
 import { verifyQstashSignature } from '@/lib/redis/qstash'
-import { WhatsAppCloudAPI } from '@/lib/whatsapp/cloud-api'
+import { sendOutboundText } from '@/lib/whatsapp/send-outbound'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -31,6 +31,7 @@ interface ConversationRow {
   ai_paused: boolean | null
   ai_agent_id: string | null
   whatsapp_account_id: string | null
+  instance_id: string | null
   phone_number: string
 }
 
@@ -58,7 +59,9 @@ export async function POST(req: NextRequest) {
   // 1. Não responder se a IA está pausada na conversa
   const { data: convData } = await supabase
     .from('whatsapp_conversations')
-    .select('id, organization_id, ai_paused, ai_agent_id, whatsapp_account_id, phone_number')
+    .select(
+      'id, organization_id, ai_paused, ai_agent_id, whatsapp_account_id, instance_id, phone_number',
+    )
     .eq('id', conversationId)
     .single()
   if (!convData) return NextResponse.json({ ok: true, skipped: 'conversation not found' })
@@ -115,54 +118,44 @@ export async function POST(req: NextRequest) {
   const delayMs = Math.floor(Math.random() * (maxMs - minMs) + minMs)
   await new Promise((r) => setTimeout(r, delayMs))
 
-  // 5. Tenta resolver credencial Meta Cloud API e enviar
-  let waMessageId: string | null = null
-  let sendError: string | null = null
-  let messageStatus: 'sent' | 'pending' | 'failed' = 'pending'
+  // 5. Sender unificado (Cloud → whatsapp_business_accounts → Evolution)
+  const sendResult = await sendOutboundText(
+    {
+      organizationId: conv.organization_id,
+      conversationId,
+      whatsappAccountId: conv.whatsapp_account_id,
+      instanceId: conv.instance_id,
+      phoneNumber: conv.phone_number,
+    },
+    result.replyText,
+  )
 
-  if (conv.whatsapp_account_id) {
-    const { data: account } = await supabase
-      .from('whatsapp_accounts')
-      .select('phone_number_id, access_token, is_active')
-      .eq('id', conv.whatsapp_account_id)
-      .maybeSingle()
-
-    if (account?.is_active && account?.phone_number_id && account?.access_token) {
-      try {
-        const cloudAPI = new WhatsAppCloudAPI({
-          phoneNumberId: account.phone_number_id as string,
-          accessToken: account.access_token as string,
-        })
-        const sendResult = await cloudAPI.sendText(conv.phone_number, result.replyText)
-        waMessageId = sendResult.messages?.[0]?.id ?? null
-        messageStatus = 'sent'
-      } catch (err) {
-        sendError = err instanceof Error ? err.message : 'unknown send error'
-        messageStatus = 'failed'
-        console.error('[ai-respond] Meta Cloud API send failed:', err)
-      }
-    } else {
-      sendError = 'whatsapp_account inativo ou sem token'
-    }
-  } else {
-    sendError = 'conversa sem whatsapp_account_id; mensagem registrada como pending'
-  }
+  const messageStatus: 'sent' | 'pending' | 'failed' = sendResult.ok
+    ? 'sent'
+    : sendResult.reason === 'no_sender_configured'
+    ? 'pending'
+    : 'failed'
 
   // 6. Persiste a resposta da IA em whatsapp_messages
   await supabase.from('whatsapp_messages').insert({
     organization_id: conv.organization_id,
     conversation_id: conversationId,
-    wa_message_id: waMessageId,
+    instance_id: conv.instance_id,
+    wa_message_id: sendResult.waMessageId ?? null,
+    message_id: sendResult.waMessageId ?? null,
     direction: 'outbound',
     type: 'text',
+    message_type: 'text',
     content: result.replyText,
+    text_body: result.replyText,
     status: messageStatus,
     sender_type: 'ai_agent',
     sender_name: 'IA',
     is_from_me: true,
     ai_execution_id: result.executionId,
     sent_at: new Date().toISOString(),
-    error_message: sendError,
+    timestamp: new Date().toISOString(),
+    error_message: sendResult.error ?? sendResult.reason ?? null,
   })
 
   return NextResponse.json({
@@ -172,8 +165,9 @@ export async function POST(req: NextRequest) {
     costUsd: result.costUsd,
     durationMs: result.durationMs,
     messageStatus,
-    waMessageId,
-    sendError,
+    channel: sendResult.channel ?? null,
+    waMessageId: sendResult.waMessageId ?? null,
+    sendError: sendResult.error ?? sendResult.reason ?? null,
   })
 }
 
