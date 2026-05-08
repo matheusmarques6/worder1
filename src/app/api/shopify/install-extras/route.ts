@@ -279,12 +279,92 @@ export async function POST(request: NextRequest) {
   }
 
   // ──────────────────────────────────────────
-  // 4. Mark initial sync done + bump api_version + persist script_tag_id
+  // 4. Storefront tracker via ScriptTag — fallback that doesn't depend
+  //    on the Custom Pixel sandbox. Captures page_viewed, viewed_product,
+  //    added_to_cart, checkout_started, checkout_completed (thank-you
+  //    page), plus the full click-IDs cascade (fbclid/fbc/fbp, gclid,
+  //    msclkid, ttclid, _kx, etc) and a richer canvas+webgl fingerprint.
+  //    Adapted from the AdTracked pattern.
+  // ──────────────────────────────────────────
+  const trackerUrl = `${APP_URL}/api/storefront/tracker.js?store_id=${store.id}`;
+  let trackerInstalled = false;
+  let trackerTagId: string | null = null;
+  let trackerError: string | null = null;
+  if (hasScriptTagsScope) {
+    try {
+      // Find any existing tracker tag (may use the OLD URL without
+      // ?store_id= or pointing at a previous APP_URL). Delete stale
+      // ones, then install the canonical one.
+      const listRes = await fetch(
+        `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/script_tags.json`,
+        { headers: { 'X-Shopify-Access-Token': accessToken } }
+      );
+      if (listRes.ok) {
+        const listJson = await listRes.json();
+        const tags = listJson.script_tags || [];
+        const ourTrackerTags = tags.filter((s: any) =>
+          typeof s.src === 'string' && s.src.includes('/api/storefront/tracker.js')
+        );
+        const matching = ourTrackerTags.find((s: any) => s.src === trackerUrl);
+        if (matching) {
+          trackerInstalled = true;
+          trackerTagId = String(matching.id);
+        }
+        // Delete stale tracker tags pointing at any other URL
+        for (const stale of ourTrackerTags) {
+          if (stale.src !== trackerUrl) {
+            try {
+              await fetch(
+                `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/script_tags/${stale.id}.json`,
+                { method: 'DELETE', headers: { 'X-Shopify-Access-Token': accessToken } }
+              );
+            } catch { /* best-effort */ }
+          }
+        }
+      }
+      if (!trackerInstalled) {
+        const createRes = await fetch(
+          `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/script_tags.json`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': accessToken,
+            },
+            body: JSON.stringify({
+              script_tag: {
+                event: 'onload',
+                src: trackerUrl,
+                display_scope: 'online_store',
+              },
+            }),
+          }
+        );
+        if (createRes.ok) {
+          const created = await createRes.json();
+          if (created.script_tag?.id) {
+            trackerInstalled = true;
+            trackerTagId = String(created.script_tag.id);
+          }
+        } else {
+          trackerError = `${createRes.status}: ${(await createRes.text()).slice(0, 200)}`;
+        }
+      }
+    } catch (err: any) {
+      trackerError = err?.message || 'fetch error';
+    }
+  } else {
+    trackerError = 'missing_scope:write_script_tags';
+  }
+
+  // ──────────────────────────────────────────
+  // 5. Mark initial sync done + bump api_version + persist script_tag_id
   // (in settings JSONB so we don't need a schema migration)
   // ──────────────────────────────────────────
   const updatedSettings = {
     ...(store.settings || {}),
     ...(scriptTagId ? { script_tag_id: scriptTagId, loader_installed_at: new Date().toISOString() } : {}),
+    ...(trackerTagId ? { tracker_tag_id: trackerTagId, tracker_installed_at: new Date().toISOString() } : {}),
   };
   await supabase
     .from('shopify_stores')
@@ -315,6 +395,13 @@ export async function POST(request: NextRequest) {
       error: scriptTagError,
       missingScope: !hasScriptTagsScope,
       manualFallbackSnippet: scriptTagInstalled ? null : `<script src="${loaderUrl}" async></script>`,
+    },
+    tracker: {
+      installed: trackerInstalled,
+      scriptTagId: trackerTagId,
+      error: trackerError,
+      missingScope: !hasScriptTagsScope,
+      manualFallbackSnippet: trackerInstalled ? null : `<script src="${trackerUrl}" async></script>`,
     },
     apiVersion: SHOPIFY_API_VERSION,
   });

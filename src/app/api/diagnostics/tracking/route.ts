@@ -169,6 +169,25 @@ export async function GET(request: NextRequest) {
     .order('occurred_at', { ascending: false })
     .limit(5);
 
+  // Storefront tracker fetches — same audit table, topic='tracker.fetched'.
+  // Confirms the ScriptTag is being downloaded by real browsers on the
+  // storefront (independent of the Custom Pixel sandbox).
+  const { data: trackerFetches } = await admin
+    .from('shopify_webhook_audit')
+    .select('id, topic, status, error_message, received_at')
+    .eq('topic', 'tracker.fetched')
+    .order('received_at', { ascending: false })
+    .limit(5);
+  // storefront_tracker events — events with event_source='storefront_tracker'
+  // confirm the script not only loaded but successfully POSTed to /api/track.
+  const { data: trackerEvents } = await admin
+    .from('contact_events')
+    .select('id, event_type, occurred_at, properties')
+    .eq('store_id', store.id)
+    .eq('event_source', 'storefront_tracker')
+    .order('occurred_at', { ascending: false })
+    .limit(5);
+
   // Webhooks registered on Shopify
   let webhookCount: number | null = null;
   let webhookList: any[] = [];
@@ -236,6 +255,8 @@ export async function GET(request: NextRequest) {
       // subdomains, custom domains added later). Without these stored,
       // webhooks for non-primary domains return 410.
       shopDomainAliases: Array.isArray(store.shop_domain_aliases) ? store.shop_domain_aliases : [],
+      trackerInstalled: !!store.settings?.tracker_tag_id,
+      trackerTagId: store.settings?.tracker_tag_id || null,
       // Manual install fallback — when auto webPixelCreate fails (the
       // store is on a Custom App without our extension installed), the
       // merchant has to paste this snippet into Shopify Admin → Settings
@@ -260,6 +281,20 @@ export async function GET(request: NextRequest) {
     },
     recommendations: {
       totalRecsRows: recsCount || 0,
+    },
+    trackerDiagnostics: {
+      // ScriptTag fetches by real browsers (independent of the Custom Pixel
+      // sandbox path — surfaces issues like CSP blocks or wrong store_id).
+      fetchCount: (trackerFetches || []).length,
+      lastFetchAt: trackerFetches && trackerFetches.length > 0 ? trackerFetches[0].received_at : null,
+      // Events with event_source='storefront_tracker' — confirms POST works.
+      eventCount: (trackerEvents || []).length,
+      lastEventAt: trackerEvents && trackerEvents.length > 0 ? trackerEvents[0].occurred_at : null,
+      hint: (trackerFetches || []).length === 0
+        ? 'ScriptTag não foi baixado pelo navegador. Confirme que tracker_tag_id existe (rode "Reinstalar tudo") e que o tema não bloqueia <script src> via CSP.'
+        : (trackerEvents || []).length === 0
+        ? 'Script é baixado mas nenhum evento POSTa em /api/track/event. Pode ser bloqueio do navegador a sendBeacon ou CORS — abra o storefront com ?worder_debug=1 e veja o console.'
+        : 'Tracker carrega e envia eventos — fallback storefront 100%.',
     },
     pixelDiagnostics: {
       // Did the sandbox even fetch the pixel JS in the last 30 days?

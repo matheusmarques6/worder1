@@ -479,8 +479,17 @@ export async function POST(request: NextRequest) {
     }
 
     // ---- Attribution touchpoints (first/last touch) ----
+    // Broader cascade than just gclid/fbclid/ttclid — any paid-traffic
+    // signal counts as a touchpoint. The dedicated columns still only
+    // store the big three (others ride along in event properties._click_ids
+    // so they aren't lost). Adapted from AdTracked.
     const hasUtm = utmParams && (utmParams.utm_source || utmParams.utm_medium || utmParams.utm_campaign);
-    const hasClickIds = clickIds && (clickIds.gclid || clickIds.fbclid || clickIds.ttclid);
+    const hasClickIds = clickIds && (
+      clickIds.gclid || clickIds.fbclid || clickIds.ttclid ||
+      clickIds.gbraid || clickIds.wbraid || clickIds.dclid ||
+      clickIds.msclkid || clickIds.li_fat_id || clickIds.twclid ||
+      clickIds.sccid || clickIds._kx
+    );
     if (hasUtm || hasClickIds) {
       const touchpointBase = {
         organization_id: organizationId,
