@@ -61,6 +61,15 @@ export default function ShopifyConnect() {
   const [editClientSecret, setEditClientSecret] = useState('');
   const [savingCreds, setSavingCreds] = useState(false);
 
+  // Swap Shopify backend (manual integration only) — point the SAME
+  // Worder store row at a DIFFERENT Shopify shop, preserving every
+  // related record (contacts, events, automations, financials, emails).
+  const [showSwap, setShowSwap] = useState(false);
+  const [swapDomain, setSwapDomain] = useState('');
+  const [swapClientId, setSwapClientId] = useState('');
+  const [swapClientSecret, setSwapClientSecret] = useState('');
+  const [swapping, setSwapping] = useState(false);
+
   // When the page was opened via "Adicionar loja" from the integrations
   // list, the URL carries ?add=1. In that case we skip the "connected"
   // view even if there's already a store — the user explicitly wants
@@ -280,6 +289,56 @@ export default function ShopifyConnect() {
       setError('Erro ao atualizar credenciais. Tente novamente.');
     } finally {
       setSavingCreds(false);
+    }
+  }
+
+  async function handleSwapBackend() {
+    if (!store?.id) return;
+    const domain = swapDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const cid = swapClientId.trim();
+    const cs = swapClientSecret.trim();
+    if (!domain || !cid || !cs) {
+      setError('Preencha domínio, Client ID e Client Secret da nova Shopify.');
+      return;
+    }
+    const fullDomain = domain.endsWith('.myshopify.com') ? domain : `${domain}.myshopify.com`;
+    if (!confirm(`Trocar backend pra "${fullDomain}"?\n\nTodos os dados da Worder (contatos, eventos, automações, fluxos, emails, financeiro) ficam preservados. Apenas a Shopify de origem muda.\n\nApós a troca você precisa rodar "Reinstalar tudo" no diagnóstico pra registrar webhooks na nova Shopify.`)) return;
+    setSwapping(true);
+    setError('');
+    setSuccessMessage('');
+    try {
+      const res = await fetch('/api/integrations/shopify/swap-backend', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storeId: store.id,
+          newDomain: fullDomain,
+          clientId: cid,
+          clientSecret: cs,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || 'Falha ao trocar Shopify.');
+        return;
+      }
+      setSuccessMessage(`Shopify trocada pra ${fullDomain}. Indo pra Reinstalar tudo…`);
+      setShowSwap(false);
+      setSwapDomain('');
+      setSwapClientId('');
+      setSwapClientSecret('');
+      // Hop straight to the diagnostic so the merchant runs install-extras
+      // on the new shop. Without that step webhooks/pixel aren't registered
+      // on the new Shopify and tracking stays cold.
+      setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          window.location.href = `/integrations/shopify/tracking-debug`;
+        }
+      }, 1500);
+    } catch {
+      setError('Erro ao trocar Shopify. Tente novamente.');
+    } finally {
+      setSwapping(false);
     }
   }
 
@@ -521,6 +580,76 @@ export default function ShopifyConnect() {
           </div>
         )}
 
+        {store.connectionType === 'manual' && showSwap && (
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-blue-900 text-sm">Trocar pra outra Shopify</p>
+                <p className="text-xs text-blue-700 mt-0.5">
+                  Aponta esta loja Worder pra um Shopify <strong>diferente</strong>, preservando todos os dados (contatos, eventos, automações, fluxos, emails, financeiro). Domínio atual: <code className="font-mono">{store.shopDomain}</code>.
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowSwap(false); setSwapDomain(''); setSwapClientId(''); setSwapClientSecret(''); setError(''); }}
+                className="text-xs text-blue-500 hover:text-blue-700"
+              >
+                Cancelar
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-blue-900 mb-1">Domínio da nova loja</label>
+              <input
+                type="text"
+                value={swapDomain}
+                onChange={(e) => setSwapDomain(e.target.value)}
+                placeholder="novalojanew.myshopify.com"
+                className="w-full px-3 py-2 border border-blue-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-blue-900 mb-1">Client ID (novo Custom App)</label>
+              <input
+                type="text"
+                value={swapClientId}
+                onChange={(e) => setSwapClientId(e.target.value)}
+                placeholder="Dev Dashboard → novo app → Client ID"
+                className="w-full px-3 py-2 border border-blue-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-blue-900 mb-1">Client Secret (novo Custom App)</label>
+              <input
+                type="password"
+                value={swapClientSecret}
+                onChange={(e) => setSwapClientSecret(e.target.value)}
+                placeholder="Dev Dashboard → novo app → Client Secret"
+                className="w-full px-3 py-2 border border-blue-300 rounded-lg text-gray-900 placeholder-gray-400 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+                autoComplete="off"
+              />
+            </div>
+            <div className="text-[11px] text-blue-700 bg-blue-100/50 px-3 py-2 rounded leading-relaxed">
+              <strong>O que muda:</strong> domínio, access token, shop_id, currency, plan_name, scopes.
+              <br />
+              <strong>O que fica:</strong> contatos, eventos, automações, fluxos, emails, segmentos, financeiro, deals, atividades.
+              <br />
+              <strong>Próximo passo:</strong> após salvar, você é redirecionado pro diagnóstico onde precisa clicar em <strong>Reinstalar tudo</strong> pra registrar webhooks na Shopify nova.
+            </div>
+            <button
+              onClick={handleSwapBackend}
+              disabled={swapping || !swapDomain.trim() || !swapClientId.trim() || !swapClientSecret.trim()}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            >
+              {swapping ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Validando e trocando…</>
+              ) : (
+                <>Trocar Shopify (preserva todos os dados)</>
+              )}
+            </button>
+          </div>
+        )}
+
         {store.connectionType === 'manual' && showEditCreds && (
           <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
             <div className="flex items-center justify-between">
@@ -597,11 +726,21 @@ export default function ShopifyConnect() {
           </a>
           {store.connectionType === 'manual' && (
             <button
-              onClick={() => setShowEditCreds((v) => !v)}
+              onClick={() => { setShowEditCreds((v) => !v); setShowSwap(false); }}
               className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
             >
               <KeyRound className="w-4 h-4" />
               {showEditCreds ? 'Fechar editor' : 'Editar credenciais'}
+            </button>
+          )}
+          {store.connectionType === 'manual' && (
+            <button
+              onClick={() => { setShowSwap((v) => !v); setShowEditCreds(false); }}
+              className="flex items-center gap-2 px-4 py-2 text-sm border border-blue-200 rounded-lg hover:bg-blue-50 text-blue-700"
+              title="Aponta esta loja pra outra Shopify mantendo todos os dados"
+            >
+              <RefreshCw className="w-4 h-4" />
+              {showSwap ? 'Fechar' : 'Trocar Shopify'}
             </button>
           )}
           <button
