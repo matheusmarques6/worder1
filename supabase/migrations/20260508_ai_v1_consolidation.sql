@@ -516,9 +516,13 @@ BEGIN
     ])
     LOOP
         EXECUTE format('DROP POLICY IF EXISTS %I_org_isolation ON %I', t, t);
-        EXECUTE format('CREATE POLICY %I_org_isolation ON %I
-            USING (organization_id = (SELECT auth.user_organization_id()))
-            WITH CHECK (organization_id = (SELECT auth.user_organization_id()))', t, t);
+        EXECUTE format($f$CREATE POLICY %I_org_isolation ON %I
+            USING (organization_id IN (
+                SELECT organization_id FROM public.profiles WHERE id = auth.uid()
+            ))
+            WITH CHECK (organization_id IN (
+                SELECT organization_id FROM public.profiles WHERE id = auth.uid()
+            ))$f$, t, t);
     END LOOP;
 END $$;
 
