@@ -326,8 +326,11 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
                 </div>
               </div>
 
-              {/* Preview frame */}
-              <div className="flex-1 overflow-auto bg-white px-6 py-8 flex justify-center">
+              {/* Preview frame — `min-h-0` is required for the inner
+                  overflow-auto to actually scroll when nested in a
+                  flex column (the default min-height:auto would let the
+                  child grow to its content height, defeating overflow). */}
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-white px-6 py-8 flex justify-center">
                 {loading ? (
                   <div className="flex items-center justify-center h-full">
                     <Loader2 className="w-5 h-5 text-zinc-400 animate-spin" />
