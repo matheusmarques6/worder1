@@ -28,19 +28,20 @@ export async function POST(request: NextRequest) {
   try { body = await request.json(); } catch {}
   const storeId = body?.storeId;
 
-  // Clear credentials on disconnect so a future reconnect can't silently
-  // reuse them. Without nulling these, the merchant would click "Conectar
-  // novamente", the status endpoint would still find a row carrying a
-  // valid access_token, and the form would never appear — they'd jump
-  // straight to the connected view of the disconnected integration.
-  // We keep the row (data preservation) but strip what makes it
-  // "Shopify-connected" from the status endpoint's perspective.
+  // Mark the row inactive — that's the canonical signal for "disconnected"
+  // throughout Worder (status endpoint, webhook resolver, store switcher
+  // all filter on is_active). We DELIBERATELY do NOT null access_token /
+  // api_secret here:
+  //   - access_token has a NOT NULL constraint in older schemas, so the
+  //     UPDATE explodes with "null value violates not-null constraint"
+  //   - leaving them in place is fine because is_active=false stops every
+  //     downstream consumer from using them (webhook handler refuses,
+  //     status endpoint refuses, status_endpoint refuses)
+  //   - on reactivation the merchant pastes new credentials anyway via
+  //     swap-backend, which overwrites both
   //
-  // The full set is tried first; if the DB schema is missing any of the
-  // optional columns (connection_status from add-shopify-import-columns,
-  // uninstalled_at from 20260330_shopify_graphql_cdp), we fall back to a
-  // progressively smaller set so disconnect always works regardless of
-  // which migrations have been applied.
+  // The fallback chain handles missing optional columns (older schemas
+  // without connection_status / uninstalled_at).
   function isMissingColumnError(err: any, col: string): boolean {
     if (!err) return false;
     const code = err.code || '';
@@ -52,15 +53,13 @@ export async function POST(request: NextRequest) {
     is_active: false,
     status: 'disconnected',
     connection_status: 'disconnected',
-    access_token: null,
-    api_secret: null,
     pixel_installed: false,
     embed_installed: false,
     uninstalled_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
   // Optional fields whose absence shouldn't block disconnect
-  const fallbackChain = ['connection_status', 'uninstalled_at', 'pixel_installed', 'embed_installed', 'api_secret'];
+  const fallbackChain = ['connection_status', 'uninstalled_at', 'pixel_installed', 'embed_installed'];
 
   let attempt: Record<string, any> = { ...fullUpdate };
   let lastErr: any = null;
