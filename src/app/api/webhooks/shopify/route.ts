@@ -1644,50 +1644,63 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       idempotency_key: `checkout_started:${checkout.id || checkout.token}`,
     });
 
-    // Dispatch automation trigger with full checkout data
-    if (contactId) {
-      try {
-        const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
-        await dispatchTrigger({
-          organizationId: store.organization_id,
-          triggerType: 'trigger_checkout_abandoned',
-          contactId,
-          triggerData: {
-            event_type: 'checkout_started',
-            CheckoutId: String(checkout.id || checkout.token),
-            CheckoutURL: checkout.abandoned_checkout_url || '',
-            Value: checkoutValue,
-            Currency: checkout.currency,
-            ItemCount: checkout.line_items?.length || 0,
-            Items: (checkout.line_items || []).map((item: any) => ({
-              ProductID: item.product_id ? String(item.product_id) : undefined,
-              ProductName: item.title || item.name,
-              Quantity: item.quantity || 1,
-              ItemPrice: parseFloat(item.price || '0'),
-              RowTotal: parseFloat(item.price || '0') * (item.quantity || 1),
-              CompareAtPrice: item.compare_at_price ? parseFloat(item.compare_at_price) : null,
-              ImageURL: item.product?.images?.[0]?.src || item.product?.image?.src || '',
-              ProductURL: item.product?.handle ? `https://${store.shop_domain}/products/${item.product.handle}` : '',
-              SKU: item.sku,
-              VariantName: item.variant_title,
-              VariantID: item.variant_id ? String(item.variant_id) : undefined,
-              Brand: item.vendor,
-            })),
-            ItemNames: (checkout.line_items || []).map((item: any) => item.title || item.name),
-            SubtotalPrice: parseFloat(checkout.subtotal_price || '0'),
-            TotalDiscounts: parseFloat(checkout.total_discounts || '0'),
-            DiscountCodes: checkout.discount_codes || [],
-            CustomerEmail: checkout.email,
-            CustomerPhone: checkout.phone,
-            ReferringSite: checkout.referring_site || '',
-            LandingSite: checkout.landing_site || '',
-            UTM: extractUtmFromNoteAttributes(extractNoteAttributes(checkout.note_attributes)),
-          },
-          idempotencyKey: `trigger:checkout_started:${checkout.id || checkout.token}`,
-        });
-      } catch (dispatchErr) {
-        console.warn('[Shopify] dispatchTrigger for checkout_started failed:', dispatchErr);
-      }
+    // Dispatch automation trigger with full checkout data.
+    //
+    // We dispatch UNCONDITIONALLY (no `if (contactId)` guard) so the
+    // automation_runs row is always created and surfaces in the
+    // automation history. Common case: Shopify fires checkouts/create
+    // before the customer types their email (resolvedEmail=null →
+    // contactId=null). With the guard, no run was created and the
+    // merchant saw nothing in history. Without the guard, the run
+    // exists, the worker can attempt to resolve email at send-time
+    // (via the trigger data's CustomerEmail / raw.email / etc.), and
+    // if still nothing, the run completes with output.skipped='no_email'
+    // — visible in history with a clear reason.
+    try {
+      const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
+      await dispatchTrigger({
+        organizationId: store.organization_id,
+        triggerType: 'trigger_checkout_abandoned',
+        contactId: contactId || null,
+        triggerData: {
+          event_type: 'checkout_started',
+          CheckoutId: String(checkout.id || checkout.token),
+          CheckoutURL: checkout.abandoned_checkout_url || '',
+          Value: checkoutValue,
+          Currency: checkout.currency,
+          ItemCount: checkout.line_items?.length || 0,
+          Items: (checkout.line_items || []).map((item: any) => ({
+            ProductID: item.product_id ? String(item.product_id) : undefined,
+            ProductName: item.title || item.name,
+            Quantity: item.quantity || 1,
+            ItemPrice: parseFloat(item.price || '0'),
+            RowTotal: parseFloat(item.price || '0') * (item.quantity || 1),
+            CompareAtPrice: item.compare_at_price ? parseFloat(item.compare_at_price) : null,
+            ImageURL: item.product?.images?.[0]?.src || item.product?.image?.src || '',
+            ProductURL: item.product?.handle ? `https://${store.shop_domain}/products/${item.product.handle}` : '',
+            SKU: item.sku,
+            VariantName: item.variant_title,
+            VariantID: item.variant_id ? String(item.variant_id) : undefined,
+            Brand: item.vendor,
+          })),
+          ItemNames: (checkout.line_items || []).map((item: any) => item.title || item.name),
+          SubtotalPrice: parseFloat(checkout.subtotal_price || '0'),
+          TotalDiscounts: parseFloat(checkout.total_discounts || '0'),
+          DiscountCodes: checkout.discount_codes || [],
+          CustomerEmail: resolvedEmail || checkout.email,
+          CustomerPhone: resolvedPhone || checkout.phone,
+          ReferringSite: checkout.referring_site || '',
+          LandingSite: checkout.landing_site || '',
+          UTM: extractUtmFromNoteAttributes(extractNoteAttributes(checkout.note_attributes)),
+          // Pass the cart_token so the worker can re-resolve contact at
+          // send-time if the run got created with contact_id=null.
+          cart_token: checkout.cart_token || null,
+          checkout_token: checkout.token || null,
+        },
+        idempotencyKey: `trigger:checkout_started:${checkout.id || checkout.token}`,
+      });
+    } catch (dispatchErr) {
+      console.warn('[Shopify] dispatchTrigger for checkout_started failed:', dispatchErr);
     }
   } catch (cdpError) {
     console.error('[Shopify Webhook] CDP event creation failed (checkout):', cdpError);

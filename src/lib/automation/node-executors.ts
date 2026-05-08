@@ -250,13 +250,63 @@ const actionExecutors: Record<string, NodeExecutor> = {
   // ========== EMAIL ==========
   action_email: {
     async execute({ config, context, credentials, isTest, supabase, organizationId }) {
-      const email = context.contact?.email;
+      // Email cascade: contact context first, then trigger data fields
+      // (Shopify webhook may have arrived without the customer info
+      // attached to the contact yet — we still try to email the
+      // address that was on the trigger payload). Klaviyo/Omnisend
+      // top-level keys + canonical Customer.Email + raw.email cover
+      // every shape any source ships.
+      const triggerData: any = (context.trigger as any)?.data || {};
+      const triggerProps: any = triggerData.properties || triggerData;
+      const triggerRaw: any = triggerProps.raw || {};
+      const fallbackEmail =
+        triggerProps.CustomerEmail ||
+        triggerProps?.Customer?.Email ||
+        triggerProps.email ||
+        triggerProps.Email ||
+        triggerRaw.email ||
+        triggerRaw.contact_email ||
+        triggerRaw.customer?.email ||
+        triggerRaw.billing_address?.email ||
+        null;
+      const email = (context.contact?.email as string | undefined) || fallbackEmail;
+
+      // If context has no contact but trigger has email, try to look up
+      // an existing contact by that email so downstream merge tags +
+      // email_sends linkage work. Best-effort.
+      if (!context.contact && email && organizationId) {
+        try {
+          const { data: contactRow } = await supabase
+            .from('contacts')
+            .select('id, email, phone, first_name, last_name, total_orders, total_spent, tags')
+            .eq('organization_id', organizationId)
+            .ilike('email', String(email))
+            .maybeSingle();
+          if (contactRow) {
+            (context as any).contact = {
+              id: contactRow.id,
+              email: contactRow.email,
+              phone: contactRow.phone,
+              firstName: contactRow.first_name,
+              lastName: contactRow.last_name,
+              tags: contactRow.tags || [],
+              customFields: {},
+            };
+          }
+        } catch { /* best-effort */ }
+      }
 
       if (!email) {
+        // No contact email and no fallback in trigger data. Complete
+        // the run as 'success' with skipped flag so it shows in history
+        // with a clear reason instead of polluting the failure stats.
         return {
-          status: isTest ? 'success' : 'error',
-          output: isTest ? { sent: false, test: true, reason: 'Contato sem email' } : null,
-          error: isTest ? undefined : 'Contato sem email',
+          status: 'success',
+          output: {
+            sent: false,
+            skipped: true,
+            reason: 'Email não disponível: o webhook do Shopify chegou sem email do cliente e o trigger não carregou nenhum endereço. Aguardando próximo webhook (checkouts/update) com a info preenchida.',
+          },
         };
       }
 
