@@ -58,6 +58,8 @@ interface Overview {
   recentCampaigns: RecentCampaign[]
   topAutomations: TopAutomation[]
   hasShopify: boolean
+  needsSync?: boolean
+  syncTriggered?: boolean
 }
 
 const EMPTY_OVERVIEW: Overview = {
@@ -70,6 +72,8 @@ const EMPTY_OVERVIEW: Overview = {
   channels: { email: 0, whatsapp: 0, sms: 0 },
   recentCampaigns: [], topAutomations: [],
   hasShopify: false,
+  needsSync: false,
+  syncTriggered: false,
 }
 
 const RANGE_OPTIONS: Array<{ value: RangeKey; label: string }> = [
@@ -327,6 +331,50 @@ export default function DashboardPage() {
             >
               Conectar Shopify <ExternalLink className="w-3.5 h-3.5" />
             </Link>
+          </div>
+        )}
+
+        {/* ── Sync banner: store connected but data not yet synced ──
+            The dashboard endpoint detects this and auto-triggers sync-now
+            in the background. We surface a banner so the merchant knows
+            why values are R$ 0 and that data is on its way. */}
+        {!loading && data.hasShopify && data.needsSync && (
+          <div
+            className="mb-11 rounded-[14px] px-6 py-5 flex items-center justify-between gap-4 flex-wrap"
+            style={{ border: '1px solid #FDE68A', background: '#FFFBEB' }}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="text-[14px] font-bold text-[#92400E] flex items-center gap-2" style={{ letterSpacing: '-0.01em' }}>
+                <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                {data.syncTriggered ? 'Sincronizando dados da Shopify…' : 'Loja conectada — sem pedidos sincronizados'}
+              </div>
+              <p className="text-[13px] text-[#92400E] opacity-90 mt-1 leading-relaxed">
+                {data.syncTriggered
+                  ? 'Iniciamos uma sincronização automática (pedidos dos últimos 90 dias). Os valores aparecem nesta dashboard em alguns minutos. Pode atualizar a página.'
+                  : 'Conexão ok mas ainda não importamos os pedidos. Clique em sincronizar para começar.'}
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                if (!currentStore?.id) return;
+                showToast('Iniciando sync…');
+                try {
+                  await fetch('/api/shopify/sync-now', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ storeId: currentStore.id, syncType: 'all' }),
+                  });
+                  showToast('Sync iniciado. Atualizando…');
+                  setTimeout(fetchData, 3000);
+                } catch {
+                  showToast('Falhou — tente em /integrations/shopify');
+                }
+              }}
+              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-amber-600 hover:bg-amber-700 transition-colors px-4 py-2 rounded-[8px] shrink-0"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Sincronizar agora
+            </button>
           </div>
         )}
 
