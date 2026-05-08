@@ -5,8 +5,11 @@
 //
 // Detects when the active store has a likely-duplicate shopify_stores
 // row in the same organization (same shopify_shop_id or same shop_name)
-// and offers an inline "Mesclar" action that consolidates them into the
-// active row.
+// and offers two inline actions:
+//   - Mesclar: consolidates duplicate INTO the active store (data preserved)
+//   - Excluir: deactivates the duplicate (is_active=false), data kept but
+//              hidden. Use when the merchant wants to fully redo the
+//              integration on the kept store.
 //
 // Used on the tracking-debug dashboard so merchants who reconnected
 // Shopify with a different myshopifyDomain — and ended up with two
@@ -15,7 +18,7 @@
 
 import { useEffect, useState } from 'react'
 import { useStoreStore } from '@/stores'
-import { AlertTriangle, ArrowDownLeft, Loader2, CheckCircle2 } from 'lucide-react'
+import { AlertTriangle, ArrowDownLeft, Loader2, CheckCircle2, Trash2 } from 'lucide-react'
 
 interface Candidate {
   id: string
@@ -34,6 +37,7 @@ export function MergeStoresPanel() {
   const { currentStore } = useStoreStore()
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [merging, setMerging] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -83,6 +87,40 @@ export function MergeStoresPanel() {
     }
   }
 
+  // "Excluir" desativa a loja duplicada (is_active=false) sem mexer
+  // nos dados — preserva pra auditoria mas tira do dashboard. É a opção
+  // pra quando o lojista quer refazer a integração do zero na loja
+  // mantida (precisa o destino estar limpo de duplicatas).
+  async function disconnectStore(sourceId: string, label: string) {
+    if (!currentStore?.id) return
+    if (sourceId === currentStore.id) {
+      setError('Não dá pra excluir a loja atual. Troque pra outra antes.')
+      return
+    }
+    if (!confirm(`Excluir a loja "${label}"?\n\nDados ficam preservados (apenas desativados). Webhooks e pixels dela param de processar. Você poderá refazer a integração na loja atual depois.`)) return
+    setDeleting(sourceId)
+    setError(null)
+    setResult(null)
+    try {
+      const res = await fetch('/api/integrations/shopify/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: sourceId }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok || j.error) {
+        setError(j.error || 'Falhou.')
+        return
+      }
+      setResult(`Loja "${label}" desativada. Refaça a integração da loja atual quando quiser.`)
+      setCandidates((prev) => prev.filter((c) => c.id !== sourceId))
+    } catch (e: any) {
+      setError(e?.message || 'Erro de rede')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
   if (!candidates || candidates.length === 0) return null
 
   return (
@@ -95,8 +133,8 @@ export function MergeStoresPanel() {
           </p>
           <p className="text-[11.5px] text-amber-800 mt-0.5 leading-relaxed">
             Reconexões da Shopify com domínio diferente criaram registros separados.
-            Mesclar transfere todos os dados (automações, contatos, eventos, segmentos) para a loja atual e arquiva a duplicata.
-            <strong className="ml-1">A loja atual permanece como destino — todos os fluxos serão preservados.</strong>
+            <strong className="ml-1">Mesclar</strong> transfere todos os dados (automações, contatos, eventos) para a loja atual e arquiva a duplicata.
+            <strong className="ml-1">Excluir</strong> apenas desativa a duplicata sem mover dados — use quando quiser refazer a integração do zero.
           </p>
         </div>
       </div>
@@ -122,12 +160,21 @@ export function MergeStoresPanel() {
             </div>
             <button
               onClick={() => merge(c.id)}
-              disabled={merging === c.id}
+              disabled={merging === c.id || deleting === c.id}
               className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-lg transition-colors flex-shrink-0"
               title={`Mesclar dados desta loja em ${currentStore?.name || 'loja atual'}`}
             >
               {merging === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowDownLeft className="w-3.5 h-3.5" />}
               Mesclar
+            </button>
+            <button
+              onClick={() => disconnectStore(c.id, c.shop_name || c.shop_domain || 'esta loja')}
+              disabled={merging === c.id || deleting === c.id}
+              className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-red-700 border border-red-200 bg-white hover:bg-red-50 disabled:opacity-50 rounded-lg transition-colors flex-shrink-0"
+              title={`Desativar "${c.shop_name || c.shop_domain || 'duplicata'}" sem mover dados`}
+            >
+              {deleting === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              Excluir
             </button>
           </div>
         ))}
