@@ -14,6 +14,8 @@ import { buildSystemPrompt } from '../prompt/system-builder'
 import { loadMemory, saveMemory } from '../memory/window'
 import { retrieveRelevantChunks } from './retrieval'
 import { getBuiltinTool } from '../tools/builtins'
+import { assignVariant } from '../experiments'
+import { matchSkills, recordSkillInvocations } from '../skills'
 import type { Agent, RunnerInput, RunnerOutput } from '../types'
 import type { ToolCallExecution, ToolContext } from '../tools/types'
 
@@ -38,7 +40,20 @@ export async function runAgent(input: RunnerInput): Promise<RunnerOutput> {
     .eq('status', 'published')
     .maybeSingle()
   if (error || !agent) throw new AgentNotPublishedError(input.agentId)
-  const typedAgent = agent as Agent
+  let typedAgent = agent as Agent
+
+  // 1.a) Assign variant se houver experimento rodando — aplica snapshot
+  // da version sobre o agente. Tagging em ai_executions feito ao final.
+  const variantAssignment = await assignVariant(input.agentId, input.conversationId)
+  if (variantAssignment?.agentVersionId) {
+    const { data: versionRow } = await supabase
+      .from('ai_agent_versions')
+      .select('snapshot')
+      .eq('id', variantAssignment.agentVersionId)
+      .maybeSingle()
+    const snap = (versionRow?.snapshot as Record<string, unknown>) ?? {}
+    typedAgent = { ...typedAgent, ...snap } as Agent
+  }
 
   // 1.b) Carrega tools habilitadas pra esse agente
   const { data: agentTools } = await supabase
@@ -81,6 +96,9 @@ export async function runAgent(input: RunnerInput): Promise<RunnerOutput> {
     query: ragQuery,
   })
 
+  // 3.b) Skills match — instruções extras quando trigger_phrases batem
+  const matchedSkills = await matchSkills(input.agentId, ragQuery)
+
   // 4. Monta prompt
   const systemPrompt = buildSystemPrompt(typedAgent)
   const messages: ChatMessage[] = [
@@ -94,6 +112,12 @@ export async function runAgent(input: RunnerInput): Promise<RunnerOutput> {
   }
   if (retrieval.contextBlock) {
     messages.push({ role: 'system', content: retrieval.contextBlock })
+  }
+  for (const skill of matchedSkills) {
+    messages.push({
+      role: 'system',
+      content: `# Skill ativa: ${skill.name}\n${skill.instructions}`,
+    })
   }
   memory.window_messages.forEach((m) => {
     messages.push({ role: m.role, content: m.content })
@@ -241,6 +265,8 @@ export async function runAgent(input: RunnerInput): Promise<RunnerOutput> {
         layer: r.layer,
         similarity: r.similarity,
       })),
+      experiment_id: variantAssignment?.experimentId ?? null,
+      experiment_variant: variantAssignment?.variantId ?? null,
       final_output: finalContent,
       final_messages_sent: 1,
       outcome,
@@ -251,7 +277,10 @@ export async function runAgent(input: RunnerInput): Promise<RunnerOutput> {
     .select('id')
     .single()
 
-  // 7. Atualiza usage_stats das tools chamadas
+  // 7. Atualiza usage stats das skills que dispararam (best-effort)
+  await recordSkillInvocations(matchedSkills, !!finalContent)
+
+  // 7.b) Atualiza usage_stats das tools chamadas
   for (const exec of executedTools) {
     const tool = enabledTools.find(({ def }) => def!.type === exec.toolType)
     if (!tool) continue

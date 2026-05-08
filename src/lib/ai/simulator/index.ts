@@ -140,7 +140,7 @@ export async function runSimulation(input: SimulationInput): Promise<{
   await supabase
     .from('ai_simulations')
     .update({
-      status: 'completed',
+      status: 'success',
       transcript,
       eval_score: evalResult?.score ?? null,
       eval_feedback: evalResult ? { per_criterion: evalResult.per_criterion } : null,

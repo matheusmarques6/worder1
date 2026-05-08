@@ -59,7 +59,7 @@ export async function POST(
     await supabase
       .from('ai_simulations')
       .update({
-        status: 'failed',
+        status: 'failure',
         eval_feedback: { error: err instanceof Error ? err.message : 'unknown' },
       })
       .eq('id', params.simId)
