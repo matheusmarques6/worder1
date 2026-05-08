@@ -21,8 +21,12 @@ import type {
 import { EVENT_TYPE_MAP } from './canonical-schema';
 
 // Pull a value through several candidate paths. First non-empty wins.
-function pick(obj: any, ...paths: any[]): any {
-  for (const p of paths) {
+// CRITICAL: takes ALL args as candidates (previous version had `obj` as
+// first parameter which silently dropped the first candidate from
+// every call site — pick(it.ProductID, it.product_id) ignored
+// it.ProductID entirely).
+function pick(...candidates: any[]): any {
+  for (const p of candidates) {
     if (p === undefined || p === null) continue;
     if (typeof p === 'string' && p.length > 0) return p;
     if (typeof p === 'number') return p;
