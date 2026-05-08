@@ -380,6 +380,23 @@ export async function resolveCartBlocks(
     let cfg: any = {}
     try { cfg = JSON.parse(decodeURIComponent(match[1])) } catch { continue }
 
+    // Resolve the recovery / checkout URL directly from the event so the
+    // CTA button always lands on a working link — even when the
+    // `{{checkout_url}}` merge tag isn't resolved by the caller. We walk
+    // every place Shopify (webhook + pixel + enrichment) and Klaviyo can
+    // stash it. Order: top-level CheckoutURL/checkout_url → raw.* nested
+    // → recovery_url legacy → buttonHref override → fallback.
+    const ev: any = eventData || {}
+    const props: any = ev.properties || ev
+    const raw: any = props.raw || ev.raw || {}
+    const eventCheckoutUrl: string =
+      props.CheckoutURL ||
+      props.checkout_url ||
+      props.AbandonedCheckoutURL ||
+      raw.abandoned_checkout_url ||
+      raw.recovery_url ||
+      raw.order_status_url ||
+      ''
     // Pick the resolver feed_type based on the block config. Default is
     // trigger_auto, which lets the API resolver detect from event_data
     // whether to pull cart items, checkout line items, viewed product,
@@ -405,9 +422,56 @@ export async function resolveCartBlocks(
       products = data.products || []
     } catch {}
 
+    // Fallback: when the API resolver returned nothing (network blip,
+    // store filter mismatch, etc.) but the event itself carries items,
+    // render directly from the event so the merchant doesn't see a gap.
     if (products.length === 0) {
-      result = result.replace(match[0], '')
-      continue
+      const fallbackItems: any[] =
+        raw.line_items ||
+        props.Items ||
+        props.items ||
+        props.line_items ||
+        ev.raw?.line_items ||
+        []
+      if (Array.isArray(fallbackItems) && fallbackItems.length > 0) {
+        products = fallbackItems.slice(0, cfg.maxItems || 2).map((it: any) => {
+          const productObj = it.product || {}
+          const variant = it.variant || {}
+          return {
+            product_id: it.product_id || it.productId || productObj.id || null,
+            title: it.ProductName || it.title || it.name || productObj.title || it.presentment_title || 'Produto',
+            price: parseFloat(
+              it.ItemPrice ||
+              it.price ||
+              variant.price?.amount ||
+              variant.price ||
+              it.line_price ||
+              '0'
+            ),
+            compare_at_price: it.compare_at_price || it.CompareAtPrice || variant.compare_at_price || null,
+            image_url:
+              it.ImageURL ||
+              it.image_url ||
+              it.image?.src ||
+              productObj.image?.src ||
+              productObj.images?.[0]?.src ||
+              productObj.product_image_urls?.[0] ||
+              productObj.variant_images_url ||
+              null,
+            url:
+              it.ProductURL ||
+              it.product_url ||
+              productObj.product_url ||
+              '#',
+            quantity: it.Quantity || it.quantity || 1,
+            variant_title: it.variant_title || it.VariantName || it.presentment_variant_title || null,
+          }
+        })
+      }
+      if (products.length === 0) {
+        result = result.replace(match[0], '')
+        continue
+      }
     }
 
     const isVert = cfg.layoutType === 'vertical'
@@ -428,7 +492,13 @@ export async function resolveCartBlocks(
       const oldPrice = prod.compare_at_price ? `R$ ${prod.compare_at_price}` : (prod.compare_price ? `R$ ${prod.compare_price}` : '')
       const imgUrl = prod.image_url || prod.images?.[0]?.src || ''
       const prodUrl = prod.url || (prod.handle ? `/products/${prod.handle}` : '#')
-      const checkoutUrl = cfg.buttonHref || '{{checkout_url}}'
+      // Button href: explicit per-product url > eventCheckoutUrl from event >
+      // configured buttonHref > merge-tag placeholder. The placeholder
+      // gets resolved later by buildMergeData; eventCheckoutUrl wins so
+      // that the URL is GUARANTEED present in preview + send, not
+      // dependent on a downstream resolver step.
+      const productCheckoutUrl: string = prod.checkout_url || prod.recovery_url || ''
+      const checkoutUrl = productCheckoutUrl || eventCheckoutUrl || cfg.buttonHref || '{{checkout_url}}'
 
       const imgCell = cfg.showImage ? `<td width="${isVert ? '100%' : imgW}" style="vertical-align:top;${isVert ? 'padding-bottom:12px;' : ''}"><a href="${prodUrl}" style="display:block;text-decoration:none;">${imgUrl ? `<img src="${imgUrl}" alt="${title}" width="${isVert ? '100%' : imgW}" style="display:block;border-radius:${imgR}px;max-width:100%;height:auto;" />` : `<div style="width:${isVert ? '100%' : imgW + 'px'};height:${isVert ? '150px' : imgW + 'px'};background:#F3F4F6;border-radius:${imgR}px;"></div>`}</a></td>` : ''
 
