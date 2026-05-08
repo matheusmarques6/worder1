@@ -1477,13 +1477,17 @@ const controlExecutors: Record<string, NodeExecutor> = {
   control_delay: {
     async execute({ config, isTest }) {
       // Cascade through every shape the editor might have saved the
-      // delay in. Current UI: config.delay.{value,unit}. Older variants:
-      // flat config.value/config.unit, config.minutes, config.duration.
+      // delay in:
+      //   config.delay.{value,unit}    — automation/index.tsx
+      //   config.{value,unit}          — flow-builder PropertiesPanel
+      //   config.{delayValue,delayUnit} — nodeTypes.ts defaultConfig
+      //   config.{minutes,duration,amount} — legacy variants
       // Without this cascade, a flow configured as "3 minutos" silently
-      // ran as "1 hours" (the parseInt(undefined)||1 + 'hours' default).
+      // ran as "1 hour" (the parseInt(undefined)||1 + 'hours' default).
       const rawValue =
         config?.delay?.value ??
         config?.value ??
+        config?.delayValue ??
         config?.minutes ??
         config?.duration ??
         config?.amount ??
@@ -1492,6 +1496,7 @@ const controlExecutors: Record<string, NodeExecutor> = {
       const unit =
         config?.delay?.unit ??
         config?.unit ??
+        config?.delayUnit ??
         (config?.minutes != null ? 'minutes' : 'hours');
 
       const multipliers: Record<string, number> = {

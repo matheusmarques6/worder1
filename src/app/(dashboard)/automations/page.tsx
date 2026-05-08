@@ -437,10 +437,13 @@ export default function AutomationsPage() {
         if (node.type === 'control_delay' || node.data?.nodeType === 'control_delay' || node.type === 'logic_delay' || node.data?.nodeType === 'logic_delay') {
           // The delay UI stores the value at config.delay.value; older
           // flows used config.value / config.minutes / config.duration.
-          // Accept all of them so legitimate flows don't get blocked.
+          // The Sidebar drop produces config.delayValue (defaultConfig
+          // in nodeTypes.ts). Accept all of them so legitimate flows
+          // don't get blocked at activation.
           const value = Number(
             cfg?.delay?.value ??
             cfg?.value ??
+            cfg?.delayValue ??
             cfg?.minutes ??
             cfg?.duration ??
             cfg?.amount ??
