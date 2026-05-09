@@ -59,6 +59,7 @@ export interface ExecutionOptions {
   credentials?: Record<string, any>;
   executionId?: string;
   startFromNodeId?: string;
+  resumeAfterNodeId?: string;
   triggerData?: Record<string, any>;
   contactId?: string;
   dealId?: string;
@@ -194,7 +195,29 @@ export class ExecutionEngine {
     try {
       // Build execution order, optionally starting from a specific node (resume)
       let executionOrder = this.buildExecutionOrder(workflow);
-      if (options.startFromNodeId) {
+      const resumeAfter = options.resumeAfterNodeId;
+      if (resumeAfter) {
+        // Resume after a paused node: keep every node reachable from
+        // the paused node's outgoing edges, BUT skip the paused node
+        // itself (it already ran). This handles the case where the
+        // pause has multiple outgoing edges (e.g. delay → logic_split):
+        // a flat slice would silently drop one sibling when topological
+        // order puts it before the start point.
+        const reachable = new Set<string>();
+        const adj = new Map<string, string[]>();
+        for (const e of (workflow.edges || [])) {
+          if (!adj.has(e.source)) adj.set(e.source, []);
+          adj.get(e.source)!.push(e.target);
+        }
+        const queue: string[] = [...(adj.get(resumeAfter) || [])];
+        while (queue.length > 0) {
+          const id = queue.shift()!;
+          if (reachable.has(id)) continue;
+          reachable.add(id);
+          for (const next of adj.get(id) || []) queue.push(next);
+        }
+        executionOrder = executionOrder.filter(n => reachable.has(n.id));
+      } else if (options.startFromNodeId) {
         const startIdx = executionOrder.findIndex(n => n.id === options.startFromNodeId);
         if (startIdx > 0) {
           executionOrder = executionOrder.slice(startIdx);

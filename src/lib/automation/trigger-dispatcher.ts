@@ -119,9 +119,104 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
   }
 
   // 3. Aplicar matchConfig se fornecido (ex: filtra por form_id, segment_id)
-  const eligible = matchConfig
-    ? automations.filter((a) => matchConfig(a.trigger_config || {}))
+  let eligible: any[] = matchConfig
+    ? automations.filter((a: any) => matchConfig(a.trigger_config || {}))
     : automations
+
+  // 3b. Apply audience_filters (per-contact filters configured in the
+  // trigger node UI). The schema allows up to 5 rows of {field, operator,
+  // value} that filter on contact properties — until now this column
+  // was loaded but never evaluated, so the filters were silently
+  // ignored. Load the contact once and run the filters; drop any
+  // automation whose filters don't all match (AND logic).
+  if (contactId) {
+    const automationsWithFilters = eligible.filter(
+      (a: any) => Array.isArray(a.audience_filters) && a.audience_filters.length > 0
+    )
+    if (automationsWithFilters.length > 0) {
+      const { data: contact } = await supabaseAdmin
+        .from('contacts')
+        .select('email, first_name, last_name, phone, city, state, country, tags, lifecycle_stage, total_orders, total_spent, aov, last_order_at, created_at')
+        .eq('id', contactId)
+        .maybeSingle()
+
+      const matchesFilter = (row: any): boolean => {
+        if (!contact || !row?.field) return true
+        const raw = (contact as any)[row.field]
+        const op = row.operator || 'equals'
+        const val = row.value
+
+        // is_set / is_not_set don't need a value
+        const isPresent = raw !== null && raw !== undefined && raw !== ''
+        if (op === 'is_set') return isPresent
+        if (op === 'is_not_set') return !isPresent
+
+        if (val === undefined || val === '') return true // empty filter, ignore
+
+        // tags is an array — operate against it
+        if (row.field === 'tags' && Array.isArray(raw)) {
+          const needle = String(val).trim().toLowerCase()
+          const tags = raw.map((t: any) => String(t).trim().toLowerCase())
+          if (op === 'contains' || op === 'equals') return tags.includes(needle)
+          if (op === 'not_contains' || op === 'not_equals') return !tags.includes(needle)
+          if (op === 'in_list') {
+            const list = String(val).split(',').map((s: string) => s.trim().toLowerCase())
+            return tags.some((t: string) => list.includes(t))
+          }
+          return true
+        }
+
+        const isNumericField = ['total_orders', 'total_spent', 'aov'].includes(row.field)
+        const isDateField = ['last_order_at', 'created_at'].includes(row.field)
+
+        if (isNumericField) {
+          const a = parseFloat(raw)
+          const b = parseFloat(String(val))
+          if (Number.isNaN(a) || Number.isNaN(b)) return false
+          if (op === 'equals') return a === b
+          if (op === 'not_equals') return a !== b
+          if (op === 'greater_than') return a > b
+          if (op === 'less_than') return a < b
+          if (op === 'greater_or_equal') return a >= b
+          if (op === 'less_or_equal') return a <= b
+          return true
+        }
+
+        if (isDateField && op === 'in_last_x_days') {
+          const days = parseInt(String(val), 10)
+          if (!days || !raw) return false
+          const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+          return new Date(raw) >= cutoff
+        }
+
+        const a = String(raw ?? '').toLowerCase()
+        const b = String(val).toLowerCase()
+        switch (op) {
+          case 'equals': return a === b
+          case 'not_equals': return a !== b
+          case 'contains': return a.includes(b)
+          case 'not_contains': return !a.includes(b)
+          case 'starts_with': return a.startsWith(b)
+          case 'ends_with': return a.endsWith(b)
+          case 'in_list': return String(val).split(',').map(s => s.trim().toLowerCase()).includes(a)
+          default: return true
+        }
+      }
+
+      eligible = eligible.filter((a: any) => {
+        const filters = a.audience_filters
+        if (!Array.isArray(filters) || filters.length === 0) return true
+        // AND across all filter rows
+        return filters.every(matchesFilter)
+      })
+    }
+  } else {
+    // No contact resolved — drop any automation that requires audience
+    // filtering, since there's no contact to evaluate against.
+    eligible = eligible.filter(
+      (a: any) => !Array.isArray(a.audience_filters) || a.audience_filters.length === 0
+    )
+  }
 
   const runIds: string[] = []
   const scheduledFor = delayMinutes

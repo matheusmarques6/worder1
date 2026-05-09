@@ -204,16 +204,15 @@ export async function GET(request: NextRequest) {
         const previousWaitingAt = (metadata as any).waiting_at;
         const previousContext = (metadata as any).context;
         const isResume = !!previousWaitingAt?.nodeId;
-        let startFromNodeId: string | undefined;
-        if (isResume) {
-          const edge = (workflow.edges || []).find((e: any) => e.source === previousWaitingAt.nodeId);
-          startFromNodeId = edge?.target;
-        }
 
         const result = await executeWorkflow(workflow, {
           organizationId: automation.organization_id,
           executionId: run.id,
-          startFromNodeId,
+          // resumeAfterNodeId tells the engine "the pause node already
+          // ran, restart from its descendants" — handles delays with
+          // multiple outgoing edges correctly. startFromNodeId stays as
+          // a fallback for older callers.
+          ...(isResume ? { resumeAfterNodeId: previousWaitingAt.nodeId } : {}),
           triggerData: metadata.trigger_data || {},
           contactId: run.contact_id,
           dealId: metadata.deal_id,
