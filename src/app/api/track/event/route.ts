@@ -623,11 +623,36 @@ export async function POST(request: NextRequest) {
         Brand: it.vendor || it.brand || '',
       })) : [];
 
+      // Cart-style triggers wait before considering it abandoned, just
+      // like the Shopify checkouts/create path. Other triggers (viewed
+      // product, active on site) fire immediately.
+      const cartLikeTrigger =
+        triggerType === 'trigger_added_to_cart' || triggerType === 'trigger_checkout_abandoned';
+      // Per-automation wait — fall back to 30 min like Omnisend.
+      let pixelDelayMinutes: number | undefined;
+      if (cartLikeTrigger) {
+        try {
+          const { supabaseAdmin } = await import('@/lib/supabase-admin');
+          const { data: autos } = await supabaseAdmin
+            .from('automations')
+            .select('trigger_config')
+            .eq('organization_id', organizationId)
+            .eq('trigger_type', triggerType)
+            .eq('status', 'active')
+            .limit(1);
+          const cfg: any = (autos as any[])?.[0]?.trigger_config || {};
+          pixelDelayMinutes = cfg.abandonUnit === 'hours'
+            ? (cfg.abandonTime || 1) * 60
+            : (cfg.abandonTime || 30);
+        } catch { pixelDelayMinutes = 30; }
+      }
+
       import('@/lib/automation/trigger-dispatcher').then(({ dispatchTrigger }) =>
         dispatchTrigger({
           organizationId,
           triggerType,
           contactId,
+          ...(pixelDelayMinutes ? { delayMinutes: pixelDelayMinutes } : {}),
           triggerData: {
             event_type: mappedEventType,
             product_id: enrichedProperties.product_id || enrichedProperties.productId,

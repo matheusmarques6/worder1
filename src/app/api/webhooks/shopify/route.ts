@@ -1656,20 +1656,98 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
     // (via the trigger data's CustomerEmail / raw.email / etc.), and
     // if still nothing, the run completes with output.skipped='no_email'
     // — visible in history with a clear reason.
-    // Klaviyo / Omnisend pattern: do NOT dispatch the abandoned-checkout
-    // trigger here. A checkout that was just opened isn't abandoned yet —
-    // it only becomes abandoned if the customer doesn't complete the
-    // purchase within the merchant-configured window (default 30 min,
-    // settable per automation as trigger_config.abandonTime).
-    //
-    // The shopify_checkouts row is already saved above with status
-    // 'pending'. The check-abandoned-carts cron scans that table on a
-    // schedule and dispatches trigger_checkout_abandoned only for
-    // checkouts that are still pending after the threshold.
-    //
-    // We keep the contact_id resolution + the CDP event creation paths
-    // up the function so segmentation and tracking-debug see the data
-    // immediately — only the automation kickoff is deferred.
+    // Klaviyo / Omnisend pattern: dispatch the trigger immediately but
+    // PARK the run in waiting state for the merchant-configured window
+    // (default 30 min, settable per automation via
+    // trigger_config.abandonTime). check-delayed-runs (every minute)
+    // resumes the run after the wait — the engine evaluates
+    // exit_conditions before each node, so if the customer completed
+    // the purchase in the meantime the run is auto-cancelled. No
+    // table-wide cron polling.
+    try {
+      const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
+      // Need each automation's abandonTime separately so different
+      // configs in the same org each get the right wait. Fetch the
+      // matching automations once and dispatch per (automation,
+      // delayMinutes) bucket.
+      const supabaseLocal = getSupabase();
+      const { data: matchingAutos } = await supabaseLocal
+        .from('automations')
+        .select('id, trigger_config')
+        .eq('organization_id', store.organization_id)
+        .eq('trigger_type', 'trigger_checkout_abandoned')
+        .eq('status', 'active');
+
+      const buckets = new Map<number, string[]>();
+      for (const a of (matchingAutos as any[]) || []) {
+        const cfg = a.trigger_config || {};
+        const minutes = cfg.abandonUnit === 'hours'
+          ? (cfg.abandonTime || 1) * 60
+          : (cfg.abandonTime || 30);
+        if (!buckets.has(minutes)) buckets.set(minutes, []);
+        buckets.get(minutes)!.push(a.id);
+      }
+
+      const triggerData = {
+        event_type: 'checkout_started',
+        CheckoutId: String(checkout.id || checkout.token),
+        CheckoutURL: checkout.abandoned_checkout_url || '',
+        Value: checkoutValue,
+        Currency: checkout.currency,
+        ItemCount: checkout.line_items?.length || 0,
+        Items: (checkout.line_items || []).map((item: any) => ({
+          ProductID: item.product_id ? String(item.product_id) : undefined,
+          ProductName: item.title || item.name,
+          Quantity: item.quantity || 1,
+          ItemPrice: parseFloat(item.price || '0'),
+          RowTotal: parseFloat(item.price || '0') * (item.quantity || 1),
+          CompareAtPrice: item.compare_at_price ? parseFloat(item.compare_at_price) : null,
+          ImageURL: item.product?.images?.[0]?.src || item.product?.image?.src || '',
+          ProductURL: item.product?.handle ? `https://${store.shop_domain}/products/${item.product.handle}` : '',
+          SKU: item.sku,
+          VariantName: item.variant_title,
+          VariantID: item.variant_id ? String(item.variant_id) : undefined,
+          Brand: item.vendor,
+        })),
+        ItemNames: (checkout.line_items || []).map((item: any) => item.title || item.name),
+        SubtotalPrice: parseFloat(checkout.subtotal_price || '0'),
+        TotalDiscounts: parseFloat(checkout.total_discounts || '0'),
+        DiscountCodes: checkout.discount_codes || [],
+        CustomerEmail: resolvedEmail || checkout.email,
+        CustomerPhone: resolvedPhone || checkout.phone,
+        ReferringSite: checkout.referring_site || '',
+        LandingSite: checkout.landing_site || '',
+        UTM: extractUtmFromNoteAttributes(extractNoteAttributes(checkout.note_attributes)),
+        cart_token: checkout.cart_token || null,
+        checkout_token: checkout.token || null,
+      };
+
+      // If no automations match yet, still dispatch with default 30min so
+      // future automations (or the legacy code path) work consistently.
+      if (buckets.size === 0) {
+        await dispatchTrigger({
+          organizationId: store.organization_id,
+          triggerType: 'trigger_checkout_abandoned',
+          contactId: contactId || null,
+          triggerData,
+          delayMinutes: 30,
+          idempotencyKey: `trigger:checkout_abandoned:${checkout.id || checkout.token}`,
+        });
+      } else {
+        for (const [delayMinutes] of buckets.entries()) {
+          await dispatchTrigger({
+            organizationId: store.organization_id,
+            triggerType: 'trigger_checkout_abandoned',
+            contactId: contactId || null,
+            triggerData,
+            delayMinutes,
+            idempotencyKey: `trigger:checkout_abandoned:${checkout.id || checkout.token}:${delayMinutes}`,
+          });
+        }
+      }
+    } catch (dispatchErr) {
+      console.warn('[Shopify] dispatchTrigger for checkout_abandoned failed:', dispatchErr);
+    }
   } catch (cdpError) {
     console.error('[Shopify Webhook] CDP event creation failed (checkout):', cdpError);
   }

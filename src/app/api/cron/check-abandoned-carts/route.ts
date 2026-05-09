@@ -30,116 +30,20 @@ export async function GET(request: NextRequest) {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  // trigger_checkout_abandoned is now event-driven: the Shopify webhook
+  // dispatches with delayMinutes set to the merchant's wait window, the
+  // run sits in waiting status, and check-delayed-runs (every minute)
+  // resumes it. Exit conditions evaluate placed_order before each step
+  // so a converted checkout self-cancels. No full-table scan needed —
+  // this cron only handles the legacy abandoned_carts table for
+  // automations still on trigger_type='trigger_abandon'.
+  let checkoutDispatched = 0;
+
   try {
-    // ============================================================
-    // PART 1 — trigger_checkout_abandoned (Shopify checkouts table)
-    // Klaviyo / Omnisend pattern: a checkout is "abandoned" only AFTER
-    // the merchant-configured wait window expires without conversion.
-    // We scan shopify_checkouts where status='pending' and created_at
-    // is older than the threshold, then dispatch the trigger via
-    // dispatchTrigger (idempotent per checkout id).
-    // ============================================================
-    const { data: checkoutAutos } = await supabase
-      .from('automations')
-      .select('id, organization_id, trigger_config')
-      .eq('trigger_type', 'trigger_checkout_abandoned')
-      .eq('status', 'active');
+    // Legacy trigger_abandon (abandoned_carts table) only — the modern
+    // trigger_checkout_abandoned is now event-driven via the Shopify
+    // webhook + delayMinutes on dispatchTrigger. No table-wide scan.
 
-    let checkoutDispatched = 0;
-    if (checkoutAutos && checkoutAutos.length > 0) {
-      const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
-      // Group by org+threshold so we hit shopify_checkouts once per
-      // (org, threshold) combination — different automations can have
-      // different abandonTime windows in the same org.
-      const orgsByThreshold = new Map<string, { orgId: string; minutes: number; automationIds: string[] }>();
-      for (const a of checkoutAutos as any[]) {
-        const cfg = a.trigger_config || {};
-        // Default to 30 min like Omnisend; the merchant can drop to 5
-        // via trigger_config.abandonTime.
-        const minutes = (cfg.abandonUnit === 'hours' ? (cfg.abandonTime || 1) * 60 : (cfg.abandonTime || 30));
-        const key = `${a.organization_id}:${minutes}`;
-        const slot = orgsByThreshold.get(key) || { orgId: a.organization_id as string, minutes, automationIds: [] as string[] };
-        slot.automationIds.push(a.id as string);
-        orgsByThreshold.set(key, slot);
-      }
-
-      for (const slot of orgsByThreshold.values()) {
-        const cutoff = new Date(Date.now() - slot.minutes * 60_000).toISOString();
-        const { data: checkouts } = await supabase
-          .from('shopify_checkouts')
-          .select('id, organization_id, store_id, contact_id, email, phone, total_price, currency, line_items, recovery_url, abandoned_checkout_url, cart_token, checkout_token, shopify_checkout_id, created_at, status, customer_data')
-          .eq('organization_id', slot.orgId)
-          .eq('status', 'pending')
-          .not('email', 'is', null)
-          .lt('created_at', cutoff)
-          .order('created_at', { ascending: true })
-          .limit(200);
-
-        for (const c of checkouts || []) {
-          // Resolve contact from email if it isn't linked yet — the
-          // tracking-debug shows contacts are vinculados, but the
-          // checkout row sometimes lags. Look it up so the run carries
-          // the contact_id from the start.
-          let cid: string | null = c.contact_id || null;
-          if (!cid && c.email) {
-            const { data: existing } = await supabase
-              .from('contacts')
-              .select('id')
-              .eq('organization_id', c.organization_id)
-              .ilike('email', c.email)
-              .maybeSingle();
-            if (existing?.id) {
-              cid = existing.id;
-              // Backfill the checkout row so future runs don't repeat
-              // this lookup.
-              await supabase
-                .from('shopify_checkouts')
-                .update({ contact_id: cid })
-                .eq('id', c.id);
-            }
-          }
-
-          const lineItems = Array.isArray(c.line_items) ? c.line_items : [];
-          const checkoutKey = String(c.shopify_checkout_id || c.checkout_token || c.id);
-
-          await dispatchTrigger({
-            organizationId: c.organization_id,
-            triggerType: 'trigger_checkout_abandoned',
-            contactId: cid,
-            triggerData: {
-              event_type: 'checkout_abandoned',
-              CheckoutId: checkoutKey,
-              CheckoutURL: c.recovery_url || c.abandoned_checkout_url || '',
-              Value: parseFloat(String(c.total_price || 0)),
-              Currency: c.currency || '',
-              ItemCount: lineItems.length,
-              Items: lineItems.map((item: any) => ({
-                ProductID: item.product_id ? String(item.product_id) : undefined,
-                ProductName: item.title || item.name,
-                Quantity: item.quantity || 1,
-                ItemPrice: parseFloat(item.price || '0'),
-                RowTotal: parseFloat(item.price || '0') * (item.quantity || 1),
-                ImageURL: item.product?.images?.[0]?.src || item.product?.image?.src || '',
-                SKU: item.sku,
-                VariantID: item.variant_id ? String(item.variant_id) : undefined,
-                Brand: item.vendor,
-              })),
-              ItemNames: lineItems.map((item: any) => item.title || item.name),
-              CustomerEmail: c.email,
-              CustomerPhone: c.phone || null,
-              cart_token: c.cart_token || null,
-              checkout_token: c.checkout_token || null,
-            },
-            idempotencyKey: `trigger:checkout_abandoned:${checkoutKey}`,
-          }).catch((e) => console.error('[CheckAbandonedCarts] dispatch failed:', e));
-          checkoutDispatched++;
-        }
-      }
-    }
-
-    // ============================================================
-    // PART 2 — Legacy trigger_abandon (abandoned_carts table)
-    // ============================================================
     // Buscar automações de carrinho abandonado ativas
     const { data: automations, error: autoError } = await supabase
       .from('automations')

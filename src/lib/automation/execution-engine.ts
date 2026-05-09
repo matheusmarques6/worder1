@@ -227,7 +227,29 @@ export class ExecutionEngine {
       // Get exit conditions from the trigger node config or workflow settings
       const triggerNode = workflow.nodes.find(n => n.data.category === 'trigger');
       const exitConditions: Array<{ type: string; eventType?: string; field?: string; operator?: string; value?: string }> =
-        triggerNode?.data.config?.exitConditions || [];
+        [...(triggerNode?.data.config?.exitConditions || [])];
+
+      // Smart defaults: cart-recovery flows always cancel on conversion,
+      // even if the merchant forgot to add the exit condition manually.
+      // Mirrors Klaviyo's "has not placed order since starting this flow"
+      // step filter and Omnisend's default goal on Cart Abandonment.
+      const triggerType = triggerNode?.data.nodeType || (triggerNode?.type as any) || '';
+      const recoveryTriggers = new Set([
+        'trigger_checkout_abandoned',
+        'trigger_abandon',
+        'trigger_added_to_cart',
+        'trigger_browse_abandoned',
+      ]);
+      if (recoveryTriggers.has(triggerType)) {
+        const has = (et: string) =>
+          exitConditions.some(c => c.type === 'event' && c.eventType === et);
+        if (!has('placed_order')) {
+          exitConditions.push({ type: 'event', eventType: 'placed_order' });
+        }
+        if (!has('checkout_completed')) {
+          exitConditions.push({ type: 'event', eventType: 'checkout_completed' });
+        }
+      }
 
       // Execute nodes in order
       for (const node of executionOrder) {
