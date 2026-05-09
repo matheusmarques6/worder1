@@ -2,14 +2,16 @@
 
 // =============================================
 // Shell padrão para páginas internas do agente (/ai/agents/[id]/*).
-// Header com back-link + nome do agente + sub-nav + slot de conteúdo.
+// Estrutura: container Worder (px-8 py-10) + breadcrumb minimalista
+// + sub-nav + page header. Status badge alinhado ao /lib/ai/ui/status.
 // =============================================
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ChevronRight, Loader2 } from 'lucide-react'
 import { AgentSubNav } from './AgentSubNav'
-import { statusPillClass, statusLabel } from '@/lib/ai/ui/status'
+import { Badge } from './ui/primitives'
+import { statusLabel } from '@/lib/ai/ui/status'
 import type { AgentStatus } from '@/lib/ai/types'
 
 interface AgentLite {
@@ -25,6 +27,14 @@ interface AgentSubPageShellProps {
   pageDescription?: string
   actions?: React.ReactNode
   children: React.ReactNode
+}
+
+const STATUS_TONE: Record<AgentStatus, 'success' | 'subtle' | 'neutral'> = {
+  draft: 'neutral',
+  simulating: 'subtle',
+  published: 'success',
+  paused: 'neutral',
+  archived: 'neutral',
 }
 
 export function AgentSubPageShell({
@@ -62,52 +72,50 @@ export function AgentSubPageShell({
   }, [agentId])
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      {/* Top bar: back + agent identity */}
-      <div className="flex items-center gap-3 mb-3">
-        <Link
-          href="/ai/agents"
-          className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900
-                     transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" strokeWidth={1.75} />
+    <div className="px-8 py-10 lg:px-12 lg:py-12 pb-16 max-w-[1400px] mx-auto">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-1.5 text-[12px] text-[#71717A] mb-4">
+        <Link href="/ai" className="hover:text-[#18181B] transition-colors">
+          IA
+        </Link>
+        <ChevronRight className="w-3 h-3 text-[#A1A1AA]" strokeWidth={1.75} />
+        <Link href="/ai/agents" className="hover:text-[#18181B] transition-colors">
           Agentes
         </Link>
         {loadingAgent ? (
-          <Loader2 className="w-4 h-4 text-zinc-400 animate-spin" strokeWidth={1.75} />
+          <Loader2 className="w-3 h-3 animate-spin text-[#A1A1AA]" strokeWidth={1.75} />
         ) : agent ? (
           <>
-            <span className="text-zinc-300">/</span>
+            <ChevronRight className="w-3 h-3 text-[#A1A1AA]" strokeWidth={1.75} />
             <Link
               href={`/ai/agents/${agentId}`}
-              className="inline-flex items-center gap-2 text-sm font-medium text-zinc-900
-                         hover:text-orange-600 transition-colors"
+              className="text-[#18181B] hover:text-[#18181B] font-medium"
             >
               {agent.name}
             </Link>
-            <span
-              className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusPillClass(
-                agent.status,
-              )}`}
-            >
+            <Badge tone={STATUS_TONE[agent.status]} className="ml-1">
               {statusLabel(agent.status)}
-            </span>
+            </Badge>
           </>
         ) : null}
       </div>
 
       <AgentSubNav agentId={agentId} />
 
-      {/* Page header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
+      <header className="mb-8 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold text-zinc-900">{pageTitle}</h1>
+          <h1
+            className="text-[26px] font-bold text-[#18181B] leading-tight"
+            style={{ letterSpacing: '-0.03em' }}
+          >
+            {pageTitle}
+          </h1>
           {pageDescription && (
-            <p className="text-sm text-zinc-500 mt-1">{pageDescription}</p>
+            <p className="text-[14px] text-[#A1A1AA] mt-1">{pageDescription}</p>
           )}
         </div>
         {actions && <div className="flex items-center gap-2">{actions}</div>}
-      </div>
+      </header>
 
       {children}
     </div>

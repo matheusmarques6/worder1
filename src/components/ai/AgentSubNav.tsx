@@ -2,9 +2,8 @@
 
 // =============================================
 // Sub-navegação compartilhada entre as páginas internas do agente
-// (/ai/agents/[id]/*). Mantém a aparência consistente, com tabs simples
-// estilo Worder: subline orange para a aba ativa, zinc 500 para as
-// inativas. Lucide stroke 1.75.
+// (/ai/agents/[id]/*). Estilo Worder: tabs com underline charcoal no
+// ativo (não orange — orange fica reservado pra CTAs primárias).
 // =============================================
 
 import Link from 'next/link'
@@ -46,19 +45,20 @@ export function AgentSubNav({ agentId }: AgentSubNavProps) {
   ]
 
   return (
-    <nav className="border-b border-zinc-200 -mx-6 px-6 mb-6">
-      <div className="flex gap-1 overflow-x-auto -mb-px">
+    <nav className="border-b border-[#E4E4E7] mb-8">
+      <div className="flex gap-0.5 overflow-x-auto -mb-px">
         {tabs.map((t) => {
           const active = pathname === t.href
           return (
             <Link
               key={t.href}
               href={t.href}
-              className={`inline-flex items-center gap-2 px-3 py-2.5 text-sm font-medium
-                          border-b-2 whitespace-nowrap transition-colors ${
+              className={`inline-flex items-center gap-2 px-3 py-3 text-[13px] font-semibold
+                          border-b-2 whitespace-nowrap transition-colors
+                          ${
                             active
-                              ? 'text-orange-600 border-orange-500'
-                              : 'text-zinc-600 border-transparent hover:text-zinc-900 hover:border-zinc-300'
+                              ? 'text-[#18181B] border-[#18181B]'
+                              : 'text-[#71717A] border-transparent hover:text-[#18181B]'
                           }`}
             >
               <t.Icon className="w-4 h-4" strokeWidth={1.75} />

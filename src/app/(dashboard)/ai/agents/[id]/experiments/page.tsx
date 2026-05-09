@@ -2,17 +2,21 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import {
-  Layers,
-  Loader2,
-  Plus,
-  Play,
-  Square,
-  Trash2,
-  X,
-  Trophy,
-} from 'lucide-react'
+import { Layers, Plus, Play, Square, Trash2, Trophy } from 'lucide-react'
 import { AgentSubPageShell } from '@/components/ai/AgentSubPageShell'
+import {
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Modal,
+  Badge,
+  Spinner,
+  Input,
+  Textarea,
+  Select,
+  Num,
+} from '@/components/ai/ui/primitives'
 
 interface Variant {
   id: string
@@ -43,10 +47,10 @@ interface ExperimentRow {
   created_at: string
 }
 
-const STATUS_PILL: Record<ExperimentRow['status'], string> = {
-  draft: 'bg-zinc-100 text-zinc-600 border-zinc-200',
-  running: 'bg-orange-50 text-orange-700 border-orange-200',
-  ended: 'bg-zinc-50 text-zinc-700 border-zinc-200',
+const STATUS_TONE: Record<ExperimentRow['status'], 'neutral' | 'orange' | 'subtle'> = {
+  draft: 'neutral',
+  running: 'orange',
+  ended: 'subtle',
 }
 
 const STATUS_LABEL: Record<ExperimentRow['status'], string> = {
@@ -75,10 +79,12 @@ export default function AgentExperimentsPage() {
   const agentId = params.id
 
   const [experiments, setExperiments] = useState<ExperimentRow[]>([])
-  const [versions, setVersions] = useState<{ id: string; version_number: number; deploy_notes: string | null }[]>([])
+  const [versions, setVersions] = useState<
+    { id: string; version_number: number; deploy_notes: string | null }[]
+  >([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showForm, setShowForm] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const [form, setForm] = useState<NewExpForm>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
 
@@ -129,7 +135,7 @@ export default function AgentExperimentsPage() {
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error || 'Falha ao criar')
-      setShowForm(false)
+      setCreateOpen(false)
       setForm(EMPTY_FORM)
       await load()
     } catch (err) {
@@ -170,274 +176,248 @@ export default function AgentExperimentsPage() {
     <AgentSubPageShell
       agentId={agentId}
       pageTitle="Experimentos"
-      pageDescription="Compare variantes do agente em produção via A/B test determinístico por conversa."
+      pageDescription="Compare variantes do agente em produção via A/B test determinístico."
       actions={
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm
-                     font-medium rounded-md hover:bg-orange-600 transition-colors"
+        <Button
+          variant="cta"
+          onClick={() => setCreateOpen(true)}
+          leadingIcon={<Plus className="w-3.5 h-3.5" strokeWidth={1.75} />}
         >
-          <Plus className="w-4 h-4" strokeWidth={1.75} />
           Novo experimento
-        </button>
+        </Button>
       }
     >
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md px-3 py-2 mb-4">
-          {error}
-        </div>
+        <Card className="mb-4 border-red-200 bg-red-50">
+          <p className="text-[13px] text-red-700">{error}</p>
+        </Card>
       )}
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-6 h-6 text-zinc-400 animate-spin" strokeWidth={1.75} />
+          <Spinner />
         </div>
       ) : experiments.length === 0 ? (
-        <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-orange-50 mb-3">
-            <Layers className="w-6 h-6 text-orange-600" strokeWidth={1.75} />
-          </div>
-          <h3 className="text-base font-semibold text-zinc-900 mb-1">
-            Nenhum experimento ainda
-          </h3>
-          <p className="text-sm text-zinc-500 max-w-md mx-auto">
-            Crie variantes apontando pra versões diferentes do agente. O hash da conversa determina
-            qual variante cada cliente recebe.
-          </p>
-        </div>
+        <EmptyState
+          title="Nenhum experimento ainda"
+          description="Crie variantes apontando pra versões diferentes do agente. O hash da conversa determina qual variante cada cliente recebe."
+        />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {experiments.map((exp) => (
-            <div key={exp.id} className="bg-white border border-zinc-200 rounded-xl p-4">
-              <div className="flex items-start justify-between gap-4 mb-3">
+            <Card key={exp.id}>
+              <div className="flex items-start justify-between gap-4 mb-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="text-sm font-semibold text-zinc-900">{exp.name}</h4>
-                    <span
-                      className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                        STATUS_PILL[exp.status]
-                      }`}
-                    >
-                      {STATUS_LABEL[exp.status]}
-                    </span>
+                    <h4 className="text-[15px] font-semibold text-[#18181B]">{exp.name}</h4>
+                    <Badge tone={STATUS_TONE[exp.status]}>{STATUS_LABEL[exp.status]}</Badge>
                   </div>
                   {exp.description && (
-                    <p className="text-xs text-zinc-500 mt-0.5">{exp.description}</p>
+                    <p className="text-[13px] text-[#71717A] mt-1">{exp.description}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   {exp.status === 'draft' && (
                     <>
-                      <button
+                      <Button
+                        size="sm"
                         onClick={() => setStatus(exp, 'running')}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium
-                                   text-white bg-orange-500 rounded-md hover:bg-orange-600"
+                        leadingIcon={<Play className="w-3 h-3" strokeWidth={1.75} />}
                       >
-                        <Play className="w-3.5 h-3.5" strokeWidth={1.75} />
                         Iniciar
-                      </button>
+                      </Button>
                       <button
                         onClick={() => removeExperiment(exp)}
-                        className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-md"
+                        className="p-1.5 text-[#A1A1AA] hover:text-red-600 hover:bg-red-50 rounded-[6px] transition-colors"
+                        title="Remover"
                       >
                         <Trash2 className="w-4 h-4" strokeWidth={1.75} />
                       </button>
                     </>
                   )}
                   {exp.status === 'running' && (
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => setStatus(exp, 'ended')}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium
-                                 text-zinc-700 bg-white border border-zinc-200 rounded-md
-                                 hover:bg-zinc-50"
+                      leadingIcon={<Square className="w-3 h-3" strokeWidth={1.75} />}
                     >
-                      <Square className="w-3.5 h-3.5" strokeWidth={1.75} />
                       Finalizar
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
 
-              {/* Variant cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {exp.variants.map((v) => {
                   const m = exp.metrics_by_variant[v.id] ?? {}
                   const isWinner = exp.winning_variant === v.id
                   return (
                     <div
                       key={v.id}
-                      className={`border rounded-md p-3 ${
+                      className={`rounded-[12px] p-4 border ${
                         isWinner
-                          ? 'bg-orange-50 border-orange-200'
-                          : 'bg-zinc-50 border-zinc-200'
+                          ? 'bg-[#FFF7ED] border-[#FED7AA]'
+                          : 'bg-[#FAFAFA] border-[#E4E4E7]'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-mono font-semibold text-zinc-700">
+                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-[6px] bg-white border border-[#E4E4E7] text-[11px] font-mono font-bold text-[#52525B]">
                             {v.id}
                           </span>
-                          <span className="text-xs text-zinc-700">{v.name}</span>
+                          <span className="text-[13px] font-semibold text-[#18181B]">
+                            {v.name}
+                          </span>
                           {isWinner && (
-                            <Trophy className="w-3.5 h-3.5 text-orange-600" strokeWidth={1.75} />
+                            <Trophy
+                              className="w-3.5 h-3.5 text-[#C2410C]"
+                              strokeWidth={1.75}
+                            />
                           )}
                         </div>
-                        <span className="text-xs font-medium text-zinc-500">
-                          {v.traffic_pct}%
+                        <span className="text-[12px] font-semibold text-[#71717A]">
+                          <Num>{v.traffic_pct}%</Num>
                         </span>
                       </div>
                       {m.executions !== undefined && m.executions > 0 ? (
-                        <div className="text-xs text-zinc-600 space-y-0.5">
-                          <div>{m.executions} execuções</div>
-                          <div>
-                            Conversão: {((m.conversion_rate ?? 0) * 100).toFixed(1)}%
-                          </div>
+                        <dl className="grid grid-cols-3 gap-2 text-[11px]">
+                          <Stat label="Execuções" value={<Num>{m.executions}</Num>} />
+                          <Stat
+                            label="Conversão"
+                            value={<Num>{((m.conversion_rate ?? 0) * 100).toFixed(1)}%</Num>}
+                          />
                           {m.total_revenue_brl ? (
-                            <div>
-                              Receita: R$ {(m.total_revenue_brl ?? 0).toLocaleString('pt-BR')}
-                            </div>
+                            <Stat
+                              label="Receita"
+                              value={
+                                <Num>
+                                  {m.total_revenue_brl.toLocaleString('pt-BR', {
+                                    style: 'currency',
+                                    currency: 'BRL',
+                                  })}
+                                </Num>
+                              }
+                            />
                           ) : null}
-                        </div>
+                        </dl>
                       ) : (
-                        <p className="text-xs text-zinc-400">Sem dados ainda</p>
+                        <p className="text-[12px] text-[#A1A1AA]">Sem dados ainda</p>
                       )}
                     </div>
                   )
                 })}
               </div>
 
-              <p className="text-xs text-zinc-400 mt-3">
+              <p className="text-[11px] text-[#A1A1AA] mt-4">
                 {exp.started_at
                   ? `Iniciado ${new Date(exp.started_at).toLocaleString('pt-BR')}`
                   : `Criado ${new Date(exp.created_at).toLocaleString('pt-BR')}`}
-                {exp.ended_at ? ` · Finalizado ${new Date(exp.ended_at).toLocaleString('pt-BR')}` : ''}
+                {exp.ended_at
+                  ? ` · Finalizado ${new Date(exp.ended_at).toLocaleString('pt-BR')}`
+                  : ''}
               </p>
-            </div>
+            </Card>
           ))}
         </div>
       )}
 
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4">
-          <div className="bg-white rounded-xl border border-zinc-200 w-full max-w-lg max-h-[90vh] overflow-auto">
-            <div className="flex items-center justify-between p-5 border-b border-zinc-100 sticky top-0 bg-white">
-              <h3 className="text-lg font-semibold text-zinc-900">Novo experimento</h3>
-              <button
-                onClick={() => setShowForm(false)}
-                className="p-1 text-zinc-400 hover:text-zinc-600 rounded-md"
-              >
-                <X className="w-4 h-4" strokeWidth={1.75} />
-              </button>
-            </div>
-            <div className="p-5">
-              <Field label="Nome">
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder='Ex.: "Tom mais formal"'
-                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-md text-sm
-                             focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Novo experimento"
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCreateOpen(false)} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button onClick={createExperiment} loading={saving}>
+              Criar
+            </Button>
+          </>
+        }
+      >
+        <Field label="Nome" required>
+          <Input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder='Ex.: "Tom mais formal"'
+          />
+        </Field>
+        <Field label="Descrição">
+          <Textarea
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            rows={2}
+          />
+        </Field>
+        <div>
+          <label className="text-[12px] font-semibold text-[#52525B] mb-2 inline-block">
+            Variantes
+          </label>
+          <div className="space-y-2 mb-2">
+            {form.variants.map((v, idx) => (
+              <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                <Input
+                  className="col-span-1 text-center font-mono"
+                  value={v.id}
+                  onChange={(e) => updateVariant(idx, { id: e.target.value })}
+                  placeholder="A"
                 />
-              </Field>
-              <Field label="Descrição (opcional)">
-                <textarea
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  rows={2}
-                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-md text-sm
-                             focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                <Input
+                  className="col-span-5"
+                  value={v.name}
+                  onChange={(e) => updateVariant(idx, { name: e.target.value })}
+                  placeholder="Nome"
                 />
-              </Field>
-              <div className="text-xs font-medium text-zinc-700 mb-2">Variantes</div>
-              <div className="space-y-2 mb-3">
-                {form.variants.map((v, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                    <input
-                      type="text"
-                      value={v.id}
-                      onChange={(e) => updateVariant(idx, { id: e.target.value })}
-                      placeholder="A"
-                      className="col-span-1 px-2 py-2 text-center font-mono text-sm border border-zinc-200 rounded-md
-                                 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                    />
-                    <input
-                      type="text"
-                      value={v.name}
-                      onChange={(e) => updateVariant(idx, { name: e.target.value })}
-                      placeholder="Nome"
-                      className="col-span-5 px-3 py-2 text-sm border border-zinc-200 rounded-md
-                                 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                    />
-                    <select
-                      value={v.agent_version_id ?? ''}
-                      onChange={(e) =>
-                        updateVariant(idx, { agent_version_id: e.target.value || null })
-                      }
-                      className="col-span-4 px-2 py-2 text-sm border border-zinc-200 rounded-md
-                                 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                    >
-                      <option value="">Estado atual</option>
-                      {versions.map((ver) => (
-                        <option key={ver.id} value={ver.id}>
-                          v{ver.version_number}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="col-span-2 relative">
-                      <input
-                        type="number"
-                        value={v.traffic_pct}
-                        onChange={(e) =>
-                          updateVariant(idx, { traffic_pct: parseInt(e.target.value, 10) || 0 })
-                        }
-                        min={0}
-                        max={100}
-                        className="w-full px-2 py-2 pr-6 text-sm text-right border border-zinc-200 rounded-md
-                                   focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                      />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-zinc-400">
-                        %
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs text-zinc-400 mb-4">
-                Total: {form.variants.reduce((acc, v) => acc + v.traffic_pct, 0)}% (precisa somar 100)
-              </p>
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setShowForm(false)}
-                  disabled={saving}
-                  className="px-3 py-2 text-sm font-medium text-zinc-700 bg-white border border-zinc-200
-                             rounded-md hover:bg-zinc-50 disabled:opacity-50"
+                <Select
+                  className="col-span-4"
+                  value={v.agent_version_id ?? ''}
+                  onChange={(e) =>
+                    updateVariant(idx, { agent_version_id: e.target.value || null })
+                  }
                 >
-                  Cancelar
-                </button>
-                <button
-                  onClick={createExperiment}
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white
-                             bg-orange-500 rounded-md hover:bg-orange-600 disabled:opacity-50"
-                >
-                  {saving && <Loader2 className="w-4 h-4 animate-spin" strokeWidth={1.75} />}
-                  Criar
-                </button>
+                  <option value="">Estado atual</option>
+                  {versions.map((ver) => (
+                    <option key={ver.id} value={ver.id}>
+                      v{ver.version_number}
+                    </option>
+                  ))}
+                </Select>
+                <div className="col-span-2 relative">
+                  <Input
+                    className="text-right pr-7"
+                    type="number"
+                    value={v.traffic_pct}
+                    onChange={(e) =>
+                      updateVariant(idx, { traffic_pct: parseInt(e.target.value, 10) || 0 })
+                    }
+                    min={0}
+                    max={100}
+                  />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-[#A1A1AA]">
+                    %
+                  </span>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
+          <p className="text-[12px] text-[#A1A1AA]">
+            Total: <Num>{form.variants.reduce((acc, v) => acc + v.traffic_pct, 0)}%</Num> (precisa
+            somar 100)
+          </p>
         </div>
-      )}
+      </Modal>
     </AgentSubPageShell>
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="mb-3">
-      <label className="text-xs font-medium text-zinc-700 mb-1 block">{label}</label>
-      {children}
+    <div>
+      <dt className="text-[10px] uppercase tracking-wide font-semibold text-[#A1A1AA]">{label}</dt>
+      <dd className="text-[13px] font-semibold text-[#18181B] mt-0.5">{value}</dd>
     </div>
   )
 }

@@ -2,15 +2,21 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import {
-  Sparkles,
-  Loader2,
-  Plus,
-  Trash2,
-  X,
-  TrendingUp,
-} from 'lucide-react'
+import { Sparkles, Plus, Trash2, TrendingUp } from 'lucide-react'
 import { AgentSubPageShell } from '@/components/ai/AgentSubPageShell'
+import {
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Modal,
+  Badge,
+  Spinner,
+  Toggle,
+  Input,
+  Textarea,
+  Num,
+} from '@/components/ai/ui/primitives'
 
 interface SkillRow {
   id: string
@@ -45,7 +51,7 @@ export default function AgentSkillsPage() {
   const [skills, setSkills] = useState<SkillRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showForm, setShowForm] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<SkillForm>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
 
@@ -78,7 +84,7 @@ export default function AgentSkillsPage() {
       .map((p) => p.trim())
       .filter(Boolean)
     if (phrases.length === 0) {
-      alert('Adicione pelo menos uma frase de gatilho')
+      alert('Adicione pelo menos uma frase-gatilho')
       return
     }
     setSaving(true)
@@ -96,7 +102,7 @@ export default function AgentSkillsPage() {
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error || 'Falha ao criar')
-      setShowForm(false)
+      setModalOpen(false)
       setForm(EMPTY_FORM)
       await load()
     } catch (err) {
@@ -127,41 +133,32 @@ export default function AgentSkillsPage() {
     <AgentSubPageShell
       agentId={agentId}
       pageTitle="Skills"
-      pageDescription="Comportamentos extras disparados por frases-gatilho do cliente."
+      pageDescription="Comportamentos disparados quando o cliente menciona uma frase-gatilho."
       actions={
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm
-                     font-medium rounded-md hover:bg-orange-600 transition-colors"
+        <Button
+          variant="cta"
+          onClick={() => setModalOpen(true)}
+          leadingIcon={<Plus className="w-3.5 h-3.5" strokeWidth={1.75} />}
         >
-          <Plus className="w-4 h-4" strokeWidth={1.75} />
           Nova skill
-        </button>
+        </Button>
       }
     >
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md px-3 py-2 mb-4">
-          {error}
-        </div>
+        <Card className="mb-4 border-red-200 bg-red-50">
+          <p className="text-[13px] text-red-700">{error}</p>
+        </Card>
       )}
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-6 h-6 text-zinc-400 animate-spin" strokeWidth={1.75} />
+          <Spinner />
         </div>
       ) : skills.length === 0 ? (
-        <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-orange-50 mb-3">
-            <Sparkles className="w-6 h-6 text-orange-600" strokeWidth={1.75} />
-          </div>
-          <h3 className="text-base font-semibold text-zinc-900 mb-1">
-            Crie sua primeira skill
-          </h3>
-          <p className="text-sm text-zinc-500 max-w-md mx-auto">
-            Defina frases-gatilho (ex.: "quanto custa", "preço") e instruções extras que o agente
-            seguirá quando o cliente mencionar uma delas.
-          </p>
-        </div>
+        <EmptyState
+          title="Crie sua primeira skill"
+          description='Defina frases-gatilho (ex.: "quanto custa", "preço") e instruções extras que o agente seguirá quando o cliente mencionar uma delas.'
+        />
       ) : (
         <div className="space-y-3">
           {skills.map((s) => {
@@ -170,183 +167,116 @@ export default function AgentSkillsPage() {
                 ? Math.round((s.total_successes / s.total_invocations) * 100)
                 : null
             return (
-              <div
-                key={s.id}
-                className="bg-white border border-zinc-200 rounded-xl p-4"
-              >
+              <Card key={s.id} size="sm">
                 <div className="flex items-start gap-4">
-                  <div className="inline-flex items-center justify-center w-9 h-9 rounded-md bg-orange-50 border border-orange-100 flex-shrink-0">
-                    <Sparkles className="w-4 h-4 text-orange-600" strokeWidth={1.75} />
+                  <div className="inline-flex items-center justify-center w-9 h-9 rounded-[10px] bg-[#FAFAFA] border border-[#E4E4E7] flex-shrink-0">
+                    <Sparkles className="w-4 h-4 text-[#71717A]" strokeWidth={1.75} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="text-sm font-semibold text-zinc-900">{s.name}</h4>
-                      {!s.enabled && (
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-500 border border-zinc-200">
-                          Desativada
-                        </span>
-                      )}
+                      <h4 className="text-[14px] font-semibold text-[#18181B]">{s.name}</h4>
+                      {!s.enabled && <Badge tone="neutral">Desativada</Badge>}
                       {s.total_invocations > 0 && (
-                        <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
+                        <span className="inline-flex items-center gap-1 text-[12px] text-[#71717A]">
                           <TrendingUp className="w-3 h-3" strokeWidth={1.75} />
-                          {s.total_invocations} usos · {successRate}% sucesso
+                          <Num>{s.total_invocations}</Num> usos · <Num>{successRate}%</Num> sucesso
                         </span>
                       )}
                     </div>
                     {s.description && (
-                      <p className="text-xs text-zinc-500 mt-0.5">{s.description}</p>
+                      <p className="text-[12px] text-[#71717A] mt-0.5">{s.description}</p>
                     )}
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {s.trigger_phrases.map((p, i) => (
                         <span
                           key={i}
-                          className="inline-flex items-center px-2 py-0.5 text-xs text-zinc-700
-                                     bg-zinc-50 border border-zinc-200 rounded-md"
+                          className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium text-[#52525B]
+                                     bg-[#F4F4F5] border border-[#E4E4E7] rounded-[6px]"
                         >
                           {p}
                         </span>
                       ))}
                     </div>
-                    <p className="text-xs text-zinc-600 mt-3 line-clamp-2 whitespace-pre-wrap">
+                    <p className="text-[12px] text-[#52525B] mt-3 line-clamp-2 whitespace-pre-wrap">
                       {s.instructions}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <Toggle enabled={s.enabled} onClick={() => toggleEnabled(s)} />
+                    <Toggle
+                      enabled={s.enabled}
+                      onClick={() => toggleEnabled(s)}
+                      ariaLabel="Ativar/desativar skill"
+                    />
                     <button
                       onClick={() => removeSkill(s)}
-                      className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-md
-                                 transition-colors"
+                      className="p-1.5 text-[#A1A1AA] hover:text-red-600 hover:bg-red-50 rounded-[6px] transition-colors"
                       title="Remover"
                     >
                       <Trash2 className="w-4 h-4" strokeWidth={1.75} />
                     </button>
                   </div>
                 </div>
-              </div>
+              </Card>
             )
           })}
         </div>
       )}
 
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 p-4">
-          <div className="bg-white rounded-xl border border-zinc-200 w-full max-w-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-zinc-900">Nova skill</h3>
-              <button
-                onClick={() => setShowForm(false)}
-                className="p-1 text-zinc-400 hover:text-zinc-600 rounded-md"
-              >
-                <X className="w-4 h-4" strokeWidth={1.75} />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <Field label="Nome">
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder='Ex.: "Modo orçamento"'
-                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-md text-sm
-                             focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                />
-              </Field>
-              <Field label="Descrição (opcional)">
-                <input
-                  type="text"
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-md text-sm
-                             focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                />
-              </Field>
-              <Field
-                label="Frases-gatilho"
-                hint="Uma por linha ou separadas por vírgula. Match por substring (case-insensitive)."
-              >
-                <textarea
-                  value={form.triggerPhrases}
-                  onChange={(e) => setForm({ ...form, triggerPhrases: e.target.value })}
-                  rows={3}
-                  placeholder={'quanto custa\npreço\nvalor'}
-                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-md text-sm
-                             focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                />
-              </Field>
-              <Field
-                label="Instruções"
-                hint="Texto que o agente recebe como contexto extra quando a skill é ativada."
-              >
-                <textarea
-                  value={form.instructions}
-                  onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-                  rows={5}
-                  placeholder="Quando perguntar preço, ofereça opções e pergunte forma de pagamento..."
-                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-md text-sm
-                             focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                />
-              </Field>
-            </div>
-            <div className="flex justify-end gap-2 mt-5">
-              <button
-                onClick={() => setShowForm(false)}
-                disabled={saving}
-                className="px-3 py-2 text-sm font-medium text-zinc-700 bg-white border border-zinc-200
-                           rounded-md hover:bg-zinc-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={createSkill}
-                disabled={saving}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white
-                           bg-orange-500 rounded-md hover:bg-orange-600 disabled:opacity-50"
-              >
-                {saving && <Loader2 className="w-4 h-4 animate-spin" strokeWidth={1.75} />}
-                Criar skill
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Nova skill"
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button onClick={createSkill} loading={saving}>
+              Criar skill
+            </Button>
+          </>
+        }
+      >
+        <Field label="Nome" required>
+          <Input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder='Ex.: "Modo orçamento"'
+          />
+        </Field>
+        <Field label="Descrição">
+          <Input
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            placeholder="Resumo curto do que essa skill faz"
+          />
+        </Field>
+        <Field
+          label="Frases-gatilho"
+          hint="Uma por linha ou separadas por vírgula. Match por substring (case-insensitive)."
+          required
+        >
+          <Textarea
+            value={form.triggerPhrases}
+            onChange={(e) => setForm({ ...form, triggerPhrases: e.target.value })}
+            rows={3}
+            placeholder={'quanto custa\npreço\nvalor'}
+          />
+        </Field>
+        <Field
+          label="Instruções"
+          hint="Texto que o agente recebe como contexto extra quando a skill é ativada."
+          required
+        >
+          <Textarea
+            value={form.instructions}
+            onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+            rows={5}
+            placeholder="Quando perguntar preço, ofereça opções e pergunte forma de pagamento..."
+          />
+        </Field>
+      </Modal>
     </AgentSubPageShell>
-  )
-}
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string
-  hint?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div>
-      <label className="text-xs font-medium text-zinc-700 mb-1 block">{label}</label>
-      {children}
-      {hint && <p className="text-xs text-zinc-400 mt-1">{hint}</p>}
-    </div>
-  )
-}
-
-function Toggle({ enabled, onClick }: { enabled: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      role="switch"
-      aria-checked={enabled}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-        enabled ? 'bg-orange-500' : 'bg-zinc-200'
-      }`}
-    >
-      <span
-        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-          enabled ? 'translate-x-5' : 'translate-x-1'
-        }`}
-      />
-    </button>
   )
 }

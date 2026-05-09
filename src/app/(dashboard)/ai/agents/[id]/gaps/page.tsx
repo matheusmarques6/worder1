@@ -2,15 +2,16 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import {
-  AlertTriangle,
-  Loader2,
-  Search,
-  Check,
-  X,
-  TrendingUp,
-} from 'lucide-react'
+import { AlertTriangle, Search, Check, X, TrendingUp } from 'lucide-react'
 import { AgentSubPageShell } from '@/components/ai/AgentSubPageShell'
+import {
+  Button,
+  Card,
+  EmptyState,
+  Spinner,
+  Badge,
+  Num,
+} from '@/components/ai/ui/primitives'
 
 interface GapRow {
   id: string
@@ -102,44 +103,37 @@ export default function AgentGapsPage() {
     <AgentSubPageShell
       agentId={agentId}
       pageTitle="Gaps de conhecimento"
-      pageDescription="Tópicos onde o agente teve dificuldade em responder. Adicione fontes para resolver."
+      pageDescription="Tópicos onde o agente teve dificuldade. Adicione fontes para resolver."
       actions={
-        <button
+        <Button
           onClick={runScan}
-          disabled={scanning}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm
-                     font-medium rounded-md hover:bg-orange-600 disabled:opacity-50 transition-colors"
+          loading={scanning}
+          leadingIcon={<Search className="w-3.5 h-3.5" strokeWidth={1.75} />}
         >
-          {scanning ? (
-            <Loader2 className="w-4 h-4 animate-spin" strokeWidth={1.75} />
-          ) : (
-            <Search className="w-4 h-4" strokeWidth={1.75} />
-          )}
           Rastrear gaps
-        </button>
+        </Button>
       }
     >
       {scanResult && (
-        <div className="bg-zinc-50 border border-zinc-200 text-zinc-700 text-sm rounded-md px-3 py-2 mb-4">
-          {scanResult}
-        </div>
+        <Card size="sm" className="mb-4">
+          <p className="text-[13px] text-[#52525B]">{scanResult}</p>
+        </Card>
       )}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md px-3 py-2 mb-4">
-          {error}
-        </div>
+        <Card className="mb-4 border-red-200 bg-red-50">
+          <p className="text-[13px] text-red-700">{error}</p>
+        </Card>
       )}
 
-      {/* Filtros de status */}
-      <div className="flex items-center gap-1.5 mb-4">
+      <div className="inline-flex items-center gap-1 mb-5 p-1 bg-[#F4F4F5] rounded-[10px]">
         {STATUS_OPTIONS.map((s) => (
           <button
             key={s.key}
             onClick={() => setStatusFilter(s.key)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+            className={`px-3 py-1.5 rounded-[8px] text-[12px] font-semibold transition-colors ${
               statusFilter === s.key
-                ? 'bg-orange-50 text-orange-700 border-orange-200'
-                : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'
+                ? 'bg-white text-[#18181B] shadow-sm'
+                : 'text-[#71717A] hover:text-[#18181B]'
             }`}
           >
             {s.label}
@@ -149,63 +143,58 @@ export default function AgentGapsPage() {
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-6 h-6 text-zinc-400 animate-spin" strokeWidth={1.75} />
+          <Spinner />
         </div>
       ) : gaps.length === 0 ? (
-        <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-orange-50 mb-3">
-            <AlertTriangle className="w-6 h-6 text-orange-600" strokeWidth={1.75} />
-          </div>
-          <h3 className="text-base font-semibold text-zinc-900 mb-1">
-            {statusFilter === 'open'
+        <EmptyState
+          title={
+            statusFilter === 'open'
               ? 'Nenhum gap aberto'
               : statusFilter === 'addressed'
               ? 'Nenhum gap resolvido'
-              : 'Nenhum gap descartado'}
-          </h3>
-          <p className="text-sm text-zinc-500">
-            {statusFilter === 'open'
+              : 'Nenhum gap descartado'
+          }
+          description={
+            statusFilter === 'open'
               ? 'Rode o rastreamento para detectar tópicos onde o agente precisou de ajuda.'
-              : 'Mude o filtro acima ou rastreie novos gaps.'}
-          </p>
-        </div>
+              : 'Mude o filtro acima ou rastreie novos gaps.'
+          }
+        />
       ) : (
         <div className="space-y-3">
           {gaps.map((g) => (
-            <div key={g.id} className="bg-white border border-zinc-200 rounded-xl p-4">
+            <Card key={g.id} size="sm">
               <div className="flex items-start gap-4">
-                <div className="inline-flex items-center justify-center w-9 h-9 rounded-md bg-orange-50 border border-orange-100 flex-shrink-0">
-                  <AlertTriangle className="w-4 h-4 text-orange-600" strokeWidth={1.75} />
+                <div className="inline-flex items-center justify-center w-9 h-9 rounded-[10px] bg-[#FFF7ED] border border-[#FED7AA] flex-shrink-0">
+                  <AlertTriangle className="w-4 h-4 text-[#C2410C]" strokeWidth={1.75} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="text-sm font-semibold text-zinc-900">{g.topic}</h4>
-                    <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
+                    <h4 className="text-[14px] font-semibold text-[#18181B]">{g.topic}</h4>
+                    <span className="inline-flex items-center gap-1 text-[12px] text-[#71717A]">
                       <TrendingUp className="w-3 h-3" strokeWidth={1.75} />
-                      {g.frequency} ocorrências
+                      <Num>{g.frequency}</Num> ocorrências
                     </span>
                   </div>
                   {g.suggested_action && (
-                    <p className="text-xs text-zinc-600 mt-2">
-                      <span className="font-medium text-zinc-700">Sugestão:</span>{' '}
-                      {g.suggested_action}
+                    <p className="text-[12px] text-[#52525B] mt-2">
+                      <span className="font-semibold">Sugestão:</span> {g.suggested_action}
                       {g.suggested_source_type && (
-                        <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-50 border border-zinc-200 text-zinc-600">
-                          {SOURCE_TYPE_LABEL[g.suggested_source_type] ??
-                            g.suggested_source_type}
-                        </span>
+                        <Badge tone="subtle" className="ml-1.5">
+                          {SOURCE_TYPE_LABEL[g.suggested_source_type] ?? g.suggested_source_type}
+                        </Badge>
                       )}
                     </p>
                   )}
                   {g.sample_questions.length > 0 && (
                     <div className="mt-3 space-y-1">
                       {g.sample_questions.slice(0, 3).map((q, i) => (
-                        <p key={i} className="text-xs text-zinc-600 italic">
+                        <p key={i} className="text-[12px] text-[#71717A] italic">
                           “{q}”
                         </p>
                       ))}
                       {g.sample_questions.length > 3 && (
-                        <p className="text-xs text-zinc-400">
+                        <p className="text-[11px] text-[#A1A1AA]">
                           +{g.sample_questions.length - 3} outras
                         </p>
                       )}
@@ -214,20 +203,17 @@ export default function AgentGapsPage() {
                 </div>
                 {g.status === 'open' && (
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => updateStatus(g, 'addressed')}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium
-                                 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md
-                                 hover:bg-emerald-100 transition-colors"
-                      title="Marcar como resolvido"
+                      leadingIcon={<Check className="w-3 h-3" strokeWidth={1.75} />}
                     >
-                      <Check className="w-3.5 h-3.5" strokeWidth={1.75} />
                       Resolver
-                    </button>
+                    </Button>
                     <button
                       onClick={() => updateStatus(g, 'dismissed')}
-                      className="inline-flex items-center justify-center p-1.5 text-xs
-                                 text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50 rounded-md transition-colors"
+                      className="p-1.5 text-[#A1A1AA] hover:text-[#52525B] hover:bg-[#F4F4F5] rounded-[6px] transition-colors"
                       title="Descartar"
                     >
                       <X className="w-4 h-4" strokeWidth={1.75} />
@@ -235,7 +221,7 @@ export default function AgentGapsPage() {
                   </div>
                 )}
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}

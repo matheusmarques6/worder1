@@ -11,11 +11,19 @@ import {
   HeartHandshake,
   ShoppingCart,
   Headphones,
-  Loader2,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
 import type { Agent, AgentRole, AgentStatus } from '@/lib/ai/types'
-import { statusPillClass, statusLabel } from '@/lib/ai/ui/status'
+import { statusLabel } from '@/lib/ai/ui/status'
+import {
+  Page,
+  Card,
+  Button,
+  EmptyState,
+  Input,
+  Badge,
+  Num,
+} from '@/components/ai/ui/primitives'
 
 const ROLE_LABEL: Record<AgentRole, { label: string; Icon: typeof Sparkles }> = {
   pre_sales: { label: 'Pré-venda', Icon: Sparkles },
@@ -24,6 +32,14 @@ const ROLE_LABEL: Record<AgentRole, { label: string; Icon: typeof Sparkles }> = 
   post_sales: { label: 'Pós-venda', Icon: Package },
   support: { label: 'Atendimento', Icon: Headphones },
   custom: { label: 'Customizado', Icon: HeartHandshake },
+}
+
+const STATUS_TONE: Record<AgentStatus, 'success' | 'subtle' | 'neutral'> = {
+  draft: 'neutral',
+  simulating: 'subtle',
+  published: 'success',
+  paused: 'neutral',
+  archived: 'neutral',
 }
 
 export default function AgentsListPage() {
@@ -59,48 +75,45 @@ export default function AgentsListPage() {
   })
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <header className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900">Agentes</h1>
-          <p className="text-sm text-zinc-500 mt-1">Configure seus agentes de IA</p>
-        </div>
-        <div className="flex items-center gap-2">
+    <Page
+      title="Agentes"
+      description="Configure e gerencie seus agentes de IA."
+      actions={
+        <>
           <div className="relative">
             <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A1AA]"
               strokeWidth={1.75}
             />
-            <input
+            <Input
               type="text"
-              placeholder="Buscar..."
+              placeholder="Buscar agente..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-3 py-2 text-sm bg-white border border-zinc-200 rounded-md
-                         focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              className="pl-9"
             />
           </div>
-          <Link
-            href="/ai/agents/new"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm
-                       font-medium rounded-md hover:bg-orange-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" strokeWidth={1.75} />
-            Novo agente
+          <Link href="/ai/agents/new">
+            <Button
+              variant="cta"
+              leadingIcon={<Plus className="w-3.5 h-3.5" strokeWidth={1.75} />}
+            >
+              Novo agente
+            </Button>
           </Link>
-        </div>
-      </header>
-
-      <div className="flex gap-2 flex-wrap">
+        </>
+      }
+    >
+      <div className="inline-flex items-center gap-1 mb-6 p-1 bg-[#F4F4F5] rounded-[10px]">
         {(['all', 'published', 'draft', 'paused'] as const).map((s) => (
           <button
             key={s}
             type="button"
             onClick={() => setStatusFilter(s)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+            className={`px-3 py-1.5 rounded-[8px] text-[12px] font-semibold transition-colors ${
               statusFilter === s
-                ? 'bg-orange-50 text-orange-700 border-orange-200'
-                : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'
+                ? 'bg-white text-[#18181B] shadow-sm'
+                : 'text-[#71717A] hover:text-[#18181B]'
             }`}
           >
             {s === 'all' ? 'Todos' : statusLabel(s as AgentStatus)}
@@ -113,34 +126,33 @@ export default function AgentsListPage() {
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="bg-white border border-zinc-200 rounded-xl p-5 h-40 animate-pulse"
+              className="bg-white border border-[#E4E4E7] rounded-[14px] p-7 h-40 animate-pulse"
             />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-orange-50 mb-3">
-            <Sparkles className="w-6 h-6 text-orange-600" strokeWidth={1.75} />
-          </div>
-          <h2 className="text-lg font-semibold text-zinc-900 mb-1">
-            {agents.length === 0
-              ? 'Crie seu primeiro agente'
-              : 'Nenhum agente encontrado'}
-          </h2>
-          <p className="text-sm text-zinc-500 mb-4">
-            {agents.length === 0
+        <EmptyState
+          title={
+            agents.length === 0 ? 'Crie seu primeiro agente' : 'Nenhum agente encontrado'
+          }
+          description={
+            agents.length === 0
               ? 'Em 5 minutos seu agente já estará respondendo no WhatsApp.'
-              : 'Ajuste os filtros ou crie um novo.'}
-          </p>
-          <Link
-            href="/ai/agents/new"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm
-                       font-medium rounded-md hover:bg-orange-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" strokeWidth={1.75} />
-            Novo agente
-          </Link>
-        </div>
+              : 'Ajuste os filtros ou crie um novo agente.'
+          }
+          action={
+            agents.length === 0 ? (
+              <Link href="/ai/agents/new">
+                <Button
+                  variant="cta"
+                  leadingIcon={<Plus className="w-3.5 h-3.5" strokeWidth={1.75} />}
+                >
+                  Novo agente
+                </Button>
+              </Link>
+            ) : undefined
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((agent) => {
@@ -150,35 +162,38 @@ export default function AgentsListPage() {
               <Link
                 key={agent.id}
                 href={`/ai/agents/${agent.id}`}
-                className="bg-white border border-zinc-200 rounded-xl p-5 hover:border-zinc-300
-                           hover:shadow-sm transition-all"
+                className="block bg-white border border-[#E4E4E7] rounded-[14px] px-7 py-6
+                           hover:bg-[#FAFAFA] hover:border-[#D4D4D8] transition-colors"
               >
                 <div className="flex items-start justify-between mb-3">
-                  <div className="inline-flex items-center justify-center w-10 h-10 rounded-md bg-orange-50">
-                    <RoleIcon className="w-5 h-5 text-orange-600" strokeWidth={1.75} />
+                  <div className="inline-flex items-center justify-center w-10 h-10 rounded-[10px] bg-[#FAFAFA] border border-[#E4E4E7]">
+                    <RoleIcon className="w-4.5 h-4.5 text-[#52525B]" strokeWidth={1.75} />
                   </div>
-                  <span
-                    className={`text-xs font-medium px-2 py-1 rounded-full ${statusPillClass(
-                      agent.status as AgentStatus,
-                    )}`}
-                  >
+                  <Badge tone={STATUS_TONE[agent.status as AgentStatus]}>
                     {statusLabel(agent.status as AgentStatus)}
-                  </span>
+                  </Badge>
                 </div>
-                <h3 className="text-base font-semibold text-zinc-900 mb-1 truncate">
+                <h3
+                  className="text-[15px] font-bold text-[#18181B] mb-0.5 truncate"
+                  style={{ letterSpacing: '-0.01em' }}
+                >
                   {agent.name}
                 </h3>
-                <p className="text-xs text-zinc-500 mb-3">{role.label}</p>
-                <div className="flex items-center gap-3 text-xs text-zinc-600 pt-3 border-t border-zinc-100">
-                  <span>{agent.total_conversations ?? 0} conversas</span>
-                  <span>·</span>
-                  <span>{agent.total_messages ?? 0} mensagens</span>
+                <p className="text-[12px] text-[#A1A1AA] mb-4">{role.label}</p>
+                <div className="flex items-center gap-3 text-[12px] text-[#71717A] pt-3 border-t border-[#F4F4F5]">
+                  <span>
+                    <Num>{agent.total_conversations ?? 0}</Num> conversas
+                  </span>
+                  <span className="text-[#D4D4D8]">·</span>
+                  <span>
+                    <Num>{agent.total_messages ?? 0}</Num> mensagens
+                  </span>
                 </div>
               </Link>
             )
           })}
         </div>
       )}
-    </div>
+    </Page>
   )
 }

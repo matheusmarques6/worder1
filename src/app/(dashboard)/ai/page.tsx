@@ -3,22 +3,32 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  Sparkles,
   TrendingUp,
+  TrendingDown,
   DollarSign,
   MessageCircle,
   Pause,
   ArrowRight,
   Gauge,
   Plus,
-  Loader2,
+  Sparkles,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
+import {
+  Page,
+  Card,
+  Button,
+  EmptyState,
+  Spinner,
+  Select,
+  Num,
+  SectionHeader,
+} from '@/components/ai/ui/primitives'
 
 // =============================================
-// /ai — Visão geral do módulo IA. Lê do endpoint
-// /api/ai/overview, que agrega ai_executions + whatsapp_conversations.
-// Sem dados, mostra empty state com CTA.
+// /ai — Visão geral do módulo IA. Agrega ai_executions +
+// whatsapp_conversations da janela escolhida e mostra KPIs + ranking
+// por agente + últimas atividades.
 // =============================================
 
 interface OverviewResponse {
@@ -77,9 +87,11 @@ function formatPercent(v: number) {
 }
 
 function formatDelta(d: number, kind: 'percent' | 'pp' = 'percent') {
-  if (Math.abs(d) < 0.0001) return '—'
+  if (Math.abs(d) < 0.0001) return null
   const sign = d > 0 ? '+' : ''
-  return kind === 'pp' ? `${sign}${(d * 100).toFixed(1)}pp` : `${sign}${(d * 100).toFixed(1)}%`
+  const value =
+    kind === 'pp' ? `${sign}${(d * 100).toFixed(1)}pp` : `${sign}${(d * 100).toFixed(1)}%`
+  return { value, positive: d >= 0 }
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -89,6 +101,18 @@ const ROLE_LABEL: Record<string, string> = {
   post_sales: 'Pós-venda',
   support: 'Atendimento',
   custom: 'Customizado',
+}
+
+const OUTCOME_DOT: Record<string, string> = {
+  converted: 'bg-[#16A34A]',
+  escalated: 'bg-[#F97316]',
+  error: 'bg-[#DC2626]',
+}
+
+const OUTCOME_LABEL: Record<string, string> = {
+  converted: 'Convertido',
+  escalated: 'Escalado',
+  error: 'Erro',
 }
 
 export default function AIOverviewPage() {
@@ -123,281 +147,281 @@ export default function AIOverviewPage() {
   }, [load])
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <header className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900">Inteligência Artificial</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Visão geral dos seus agentes e do atendimento automatizado.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={days}
-            onChange={(e) => setDays(parseInt(e.target.value, 10))}
-            className="px-3 py-2 bg-white border border-zinc-200 rounded-md text-sm
-                       focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-          >
+    <Page
+      title="Inteligência Artificial"
+      description="Visão geral dos seus agentes e do atendimento automatizado."
+      actions={
+        <>
+          <Select value={days} onChange={(e) => setDays(parseInt(e.target.value, 10))}>
             {periods.map((p) => (
               <option key={p.days} value={p.days}>
                 {p.label}
               </option>
             ))}
-          </select>
-          <Link
-            href="/ai/agents/new"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm
-                       font-medium rounded-md hover:bg-orange-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" strokeWidth={1.75} />
-            Novo agente
+          </Select>
+          <Link href="/ai/agents/new">
+            <Button
+              variant="cta"
+              leadingIcon={<Plus className="w-3.5 h-3.5" strokeWidth={1.75} />}
+            >
+              Novo agente
+            </Button>
           </Link>
-        </div>
-      </header>
-
+        </>
+      }
+    >
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-6 h-6 text-zinc-400 animate-spin" strokeWidth={1.75} />
+          <Spinner />
         </div>
       )}
 
       {error && !loading && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md px-3 py-2">
-          {error}
-        </div>
+        <Card className="mb-4 border-red-200 bg-red-50">
+          <p className="text-[13px] text-red-700">{error}</p>
+        </Card>
       )}
 
       {!loading && data && data.counts.totalAgents === 0 && (
-        <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-orange-50 mb-3">
-            <Sparkles className="w-6 h-6 text-orange-600" strokeWidth={1.75} />
-          </div>
-          <h2 className="text-lg font-semibold text-zinc-900 mb-1">
-            Crie seu primeiro agente
-          </h2>
-          <p className="text-sm text-zinc-500 mb-4">
-            Em 5 minutos seu agente já estará respondendo no WhatsApp.
-          </p>
-          <Link
-            href="/ai/agents/new"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm
-                       font-medium rounded-md hover:bg-orange-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" strokeWidth={1.75} />
-            Novo agente
-          </Link>
-        </div>
+        <EmptyState
+          title="Crie seu primeiro agente"
+          description="Em 5 minutos seu agente já estará respondendo no WhatsApp."
+          action={
+            <Link href="/ai/agents/new">
+              <Button
+                variant="cta"
+                leadingIcon={<Plus className="w-3.5 h-3.5" strokeWidth={1.75} />}
+              >
+                Novo agente
+              </Button>
+            </Link>
+          }
+        />
       )}
 
       {!loading && data && data.counts.totalAgents > 0 && (
-        <>
-          {/* KPI grid 4 col */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard
+        <div className="space-y-8">
+          {/* KPIs principais */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Kpi
               icon={<DollarSign className="w-4 h-4" strokeWidth={1.75} />}
               label="Receita atribuída"
               value={formatBRL(data.current.revenueBrl)}
               delta={formatDelta(data.delta.revenueBrl)}
-              positive={data.delta.revenueBrl >= 0}
-              highlight
+              accent
             />
-            <KpiCard
+            <Kpi
               icon={<MessageCircle className="w-4 h-4" strokeWidth={1.75} />}
               label="Conversas atendidas"
               value={data.current.total.toLocaleString('pt-BR')}
               delta={formatDelta(data.delta.total)}
-              positive={data.delta.total >= 0}
             />
-            <KpiCard
+            <Kpi
               icon={<TrendingUp className="w-4 h-4" strokeWidth={1.75} />}
               label="Taxa de conversão"
               value={formatPercent(data.current.conversionRate)}
               delta={formatDelta(data.delta.conversionRate, 'pp')}
-              positive={data.delta.conversionRate >= 0}
             />
-            <KpiCard
+            <Kpi
               icon={<Gauge className="w-4 h-4" strokeWidth={1.75} />}
               label="Latência média"
               value={`${(data.current.avgDurationMs / 1000).toFixed(1)}s`}
-              delta="—"
-              positive={true}
             />
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard
+          {/* KPIs secundários */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Kpi
               icon={<DollarSign className="w-4 h-4" strokeWidth={1.75} />}
-              label="Custo total (USD)"
+              label="Custo total"
               value={`$${data.current.costUsd.toFixed(2)}`}
-              delta={formatDelta(data.delta.costUsd)}
-              positive={data.delta.costUsd <= 0}
+              delta={(() => {
+                const d = formatDelta(data.delta.costUsd)
+                return d ? { ...d, positive: !d.positive } : null
+              })()}
             />
-            <KpiCard
+            <Kpi
               icon={<Pause className="w-4 h-4" strokeWidth={1.75} />}
               label="IA pausada"
               value={data.counts.conversationsAIPaused.toLocaleString('pt-BR')}
-              delta="—"
-              positive={true}
             />
-            <KpiCard
+            <Kpi
               icon={<Sparkles className="w-4 h-4" strokeWidth={1.75} />}
               label="Agentes publicados"
               value={`${data.counts.publishedAgents} / ${data.counts.totalAgents}`}
-              delta="—"
-              positive={true}
             />
-            <KpiCard
+            <Kpi
               icon={<ArrowRight className="w-4 h-4" strokeWidth={1.75} />}
               label="Taxa de escalação"
               value={formatPercent(data.current.escalationRate)}
-              delta="—"
-              positive={true}
             />
           </div>
 
           {/* Performance por agente */}
-          <section className="bg-white border border-zinc-200 rounded-xl p-6">
-            <h2 className="text-base font-semibold text-zinc-900 mb-4">
-              Performance por agente
-            </h2>
-            {data.perAgent.length === 0 ? (
-              <p className="text-sm text-zinc-500">
-                Nenhuma execução registrada nesse período.
-              </p>
-            ) : (
-              <div className="divide-y divide-zinc-100">
-                {data.perAgent.map((row) => (
-                  <Link
-                    key={row.agent.id}
-                    href={`/ai/agents/${row.agent.id}`}
-                    className="flex items-center gap-4 py-3 hover:bg-zinc-50 -mx-2 px-2 rounded-md transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-zinc-900 truncate">
-                        {row.agent.name}
-                      </div>
-                      <div className="text-xs text-zinc-500">
-                        {ROLE_LABEL[row.agent.role] || row.agent.role}
-                      </div>
-                    </div>
-                    <div className="hidden sm:flex items-center gap-6 text-xs text-zinc-600">
-                      <span>
-                        <span className="text-zinc-900 font-medium">{row.metrics.total}</span>{' '}
-                        execuções
-                      </span>
-                      <span>
-                        <span className="text-zinc-900 font-medium">
-                          {formatPercent(row.metrics.conversionRate)}
-                        </span>{' '}
-                        conv.
-                      </span>
-                      <span>
-                        <span className="text-zinc-900 font-medium">
-                          ${row.metrics.costUsd.toFixed(2)}
-                        </span>{' '}
-                        custo
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+          <section>
+            <SectionHeader
+              title="Performance por agente"
+              description="Ranking pela janela selecionada acima."
+            />
+            <Card className="!p-0">
+              {data.perAgent.length === 0 ? (
+                <div className="px-7 py-10 text-center">
+                  <p className="text-[13px] text-[#A1A1AA]">
+                    Nenhuma execução registrada nesse período.
+                  </p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-[#F4F4F5]">
+                  {data.perAgent.map((row) => (
+                    <li key={row.agent.id}>
+                      <Link
+                        href={`/ai/agents/${row.agent.id}`}
+                        className="flex items-center gap-4 px-7 py-4 hover:bg-[#FAFAFA] transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[14px] font-semibold text-[#18181B] truncate">
+                            {row.agent.name}
+                          </div>
+                          <div className="text-[12px] text-[#A1A1AA]">
+                            {ROLE_LABEL[row.agent.role] || row.agent.role}
+                          </div>
+                        </div>
+                        <dl className="hidden sm:grid grid-cols-3 gap-8 text-[12px]">
+                          <Stat label="Execuções" value={<Num>{row.metrics.total}</Num>} />
+                          <Stat
+                            label="Conversão"
+                            value={<Num>{formatPercent(row.metrics.conversionRate)}</Num>}
+                          />
+                          <Stat
+                            label="Custo"
+                            value={<Num>${row.metrics.costUsd.toFixed(2)}</Num>}
+                          />
+                        </dl>
+                        <ArrowRight
+                          className="w-4 h-4 text-[#A1A1AA] flex-shrink-0"
+                          strokeWidth={1.75}
+                        />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
           </section>
 
           {/* Atividade recente */}
-          <section className="bg-white border border-zinc-200 rounded-xl p-6">
-            <h2 className="text-base font-semibold text-zinc-900 mb-4">
-              Atividade recente
-            </h2>
-            {data.recent.length === 0 ? (
-              <p className="text-sm text-zinc-500">Sem atividade no período.</p>
-            ) : (
-              <ul className="space-y-2">
-                {data.recent.map((r, i) => (
-                  <li
-                    key={`${r.agent_id}-${i}`}
-                    className="flex items-center gap-3 text-xs text-zinc-700"
-                  >
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        r.outcome === 'converted'
-                          ? 'bg-emerald-500'
-                          : r.outcome === 'escalated'
-                          ? 'bg-amber-500'
-                          : r.outcome === 'error'
-                          ? 'bg-red-500'
-                          : 'bg-zinc-300'
-                      }`}
-                    />
-                    <span className="flex-1 truncate">
-                      {r.outcome ?? 'Execução'} ·{' '}
-                      <span className="text-zinc-500">
-                        {r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s · ` : ''}
-                        {r.cost_usd ? `$${Number(r.cost_usd).toFixed(4)}` : ''}
+          <section>
+            <SectionHeader
+              title="Atividade recente"
+              description="Últimas 10 execuções no período."
+            />
+            <Card className="!p-0">
+              {data.recent.length === 0 ? (
+                <div className="px-7 py-10 text-center">
+                  <p className="text-[13px] text-[#A1A1AA]">Sem atividade no período.</p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-[#F4F4F5]">
+                  {data.recent.map((r, i) => (
+                    <li
+                      key={`${r.agent_id}-${i}`}
+                      className="flex items-center gap-3 px-7 py-3 text-[13px]"
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          OUTCOME_DOT[r.outcome ?? ''] ?? 'bg-[#D4D4D8]'
+                        }`}
+                      />
+                      <span className="text-[#18181B] font-medium">
+                        {OUTCOME_LABEL[r.outcome ?? ''] ?? 'Execução'}
                       </span>
-                    </span>
-                    <span className="text-zinc-400">
-                      {new Date(r.started_at).toLocaleTimeString('pt-BR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+                      <span className="text-[#A1A1AA]">
+                        <Num>
+                          {r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : ''}
+                          {r.cost_usd
+                            ? `${r.duration_ms ? ' · ' : ''}$${Number(r.cost_usd).toFixed(4)}`
+                            : ''}
+                        </Num>
+                      </span>
+                      <span className="ml-auto text-[12px] text-[#A1A1AA]">
+                        <Num>
+                          {new Date(r.started_at).toLocaleTimeString('pt-BR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </Num>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
           </section>
-        </>
+        </div>
+      )}
+    </Page>
+  )
+}
+
+function Kpi({
+  icon,
+  label,
+  value,
+  delta,
+  accent,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  delta?: { value: string; positive: boolean } | null
+  accent?: boolean
+}) {
+  return (
+    <div
+      className={`rounded-[14px] border px-5 py-[18px] ${
+        accent
+          ? 'bg-[#FFF7ED] border-[#FED7AA]'
+          : 'bg-white border-[#E4E4E7]'
+      }`}
+    >
+      <div
+        className={`flex items-center gap-1.5 mb-1.5 ${
+          accent ? 'text-[#C2410C]' : 'text-[#A1A1AA]'
+        }`}
+      >
+        {icon}
+        <span className="text-[11px] font-semibold uppercase tracking-wider">{label}</span>
+      </div>
+      <p
+        className={`text-[22px] font-bold ${accent ? 'text-[#C2410C]' : 'text-[#18181B]'}`}
+        style={{ fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}
+      >
+        {value}
+      </p>
+      {delta && (
+        <span
+          className={`inline-flex items-center gap-0.5 text-[12px] font-semibold mt-1 ${
+            delta.positive ? 'text-[#16A34A]' : 'text-[#DC2626]'
+          }`}
+          style={{ fontVariantNumeric: 'tabular-nums' }}
+        >
+          {delta.positive ? (
+            <TrendingUp className="w-3 h-3" strokeWidth={2} />
+          ) : (
+            <TrendingDown className="w-3 h-3" strokeWidth={2} />
+          )}
+          {delta.value}
+        </span>
       )}
     </div>
   )
 }
 
-function KpiCard({
-  icon,
-  label,
-  value,
-  delta,
-  positive,
-  highlight = false,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  delta: string
-  positive: boolean
-  highlight?: boolean
-}) {
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div
-      className={`border rounded-xl p-4 ${
-        highlight ? 'bg-orange-50 border-orange-200' : 'bg-white border-zinc-200'
-      }`}
-    >
-      <div
-        className={`flex items-center gap-2 mb-2 ${
-          highlight ? 'text-orange-700' : 'text-zinc-500'
-        }`}
-      >
-        {icon}
-        <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
-      </div>
-      <p
-        className={`text-xl font-semibold ${
-          highlight ? 'text-orange-700' : 'text-zinc-900'
-        }`}
-      >
-        {value}
-      </p>
-      {delta !== '—' && (
-        <span
-          className={`text-xs ${
-            positive ? 'text-emerald-600' : 'text-red-600'
-          }`}
-        >
-          {delta}
-        </span>
-      )}
+    <div>
+      <dt className="text-[10px] uppercase tracking-wide font-semibold text-[#A1A1AA]">{label}</dt>
+      <dd className="text-[13px] font-semibold text-[#18181B] mt-0.5">{value}</dd>
     </div>
   )
 }
