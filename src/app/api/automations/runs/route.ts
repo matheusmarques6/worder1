@@ -97,6 +97,10 @@ export async function GET(request: NextRequest) {
     // we can backfill contact_id and display name+email.
     const orphanRuns = (runs || []).filter((r: any) => !r.contacts);
     const orphanEmails: string[] = [];
+    // Track checkout/cart tokens for runs that came in without email so
+    // we can do a second-pass lookup against shopify_checkouts (which
+    // gets refreshed on every checkouts/update with the latest email).
+    const orphanTokens: string[] = [];
     for (const r of orphanRuns) {
       const td: any = r.metadata?.trigger_data || {};
       const props: any = td.properties || td;
@@ -109,6 +113,43 @@ export async function GET(request: NextRequest) {
       ).toString().trim().toLowerCase();
       (r as any)._payloadEmail = email || null;
       if (email) orphanEmails.push(email);
+      const token = td.checkout_token || td.cart_token || td.CheckoutId || props.checkout_token || props.cart_token;
+      if (token && !email) {
+        (r as any)._token = String(token);
+        orphanTokens.push(String(token));
+      }
+    }
+
+    // Second pass: for runs still without email, look the checkout up
+    // in shopify_checkouts. That table is refreshed by every
+    // checkouts/update with the latest email even if the original
+    // checkouts/create came in anonymous.
+    if (orphanTokens.length > 0) {
+      const uniqTokens = Array.from(new Set(orphanTokens));
+      const { data: checkouts } = await supabase
+        .from('shopify_checkouts')
+        .select('checkout_token, cart_token, shopify_checkout_id, email, contact_id')
+        .or(uniqTokens.map(t => `checkout_token.eq.${t},cart_token.eq.${t},shopify_checkout_id.eq.${t}`).join(','));
+      const tokenMap = new Map<string, any>();
+      for (const c of checkouts || []) {
+        if (c.checkout_token) tokenMap.set(String(c.checkout_token), c);
+        if (c.cart_token) tokenMap.set(String(c.cart_token), c);
+        if (c.shopify_checkout_id) tokenMap.set(String(c.shopify_checkout_id), c);
+      }
+      for (const r of orphanRuns) {
+        if ((r as any)._payloadEmail) continue;
+        const tok = (r as any)._token;
+        const c = tok ? tokenMap.get(tok) : null;
+        if (c?.email) {
+          const e = String(c.email).trim().toLowerCase();
+          (r as any)._payloadEmail = e;
+          orphanEmails.push(e);
+        }
+        if (c?.contact_id && !r.contact_id) {
+          // Backfill so future renders are O(1).
+          supabase.from('automation_runs').update({ contact_id: c.contact_id }).eq('id', r.id).then(() => {}, () => {});
+        }
+      }
     }
 
     let payloadContactByEmail = new Map<string, any>();

@@ -1556,6 +1556,26 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
         .eq('shopify_resource_type', 'checkout')
         .is('contact_id', null);
 
+      // Backfill any waiting automation_runs that were dispatched from
+      // the early checkouts/create webhook (before the customer typed
+      // their email). The run still references this checkout via
+      // metadata.trigger_data.checkout_token / CheckoutId — set its
+      // contact_id so the History panel stops showing "Sem contato".
+      try {
+        await supabase
+          .from('automation_runs')
+          .update({ contact_id: contactId })
+          .eq('organization_id', store.organization_id)
+          .is('contact_id', null)
+          .or(
+            `metadata->trigger_data->>checkout_token.eq.${checkout.token || checkoutKey},` +
+            `metadata->trigger_data->>CheckoutId.eq.${checkoutKey},` +
+            `metadata->trigger_data->>cart_token.eq.${checkout.cart_token || checkout.token || ''}`
+          );
+      } catch (e) {
+        console.warn('[Shopify] backfill automation_runs.contact_id failed:', e);
+      }
+
       // Atividade visível na timeline do contato (lê de contact_activities)
       try {
         const itemsCount = checkout.line_items?.length || 0;
@@ -1666,11 +1686,36 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
     // table-wide cron polling.
     try {
       const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
-      // Need each automation's abandonTime separately so different
-      // configs in the same org each get the right wait. Fetch the
-      // matching automations once and dispatch per (automation,
-      // delayMinutes) bucket.
       const supabaseLocal = getSupabase();
+
+      // Defensive email pull. checkouts/create may arrive before the
+      // customer types their email; checkouts/update fires later with
+      // it. Re-read shopify_checkouts (we just upserted it) so we always
+      // pick the freshest email Shopify has shared with us. Then if we
+      // still don't have a contactId, look the contact up here.
+      let dispatchEmail: string | null = resolvedEmail || checkout.email || null;
+      let dispatchContactId: string | null = contactId || null;
+      const checkoutKey = String(checkout.id || checkout.token);
+      try {
+        const { data: existingCheckout } = await supabaseLocal
+          .from('shopify_checkouts')
+          .select('email, contact_id')
+          .or(`shopify_checkout_id.eq.${checkoutKey},checkout_token.eq.${checkout.token || ''}`)
+          .maybeSingle();
+        if (!dispatchEmail && existingCheckout?.email) dispatchEmail = existingCheckout.email;
+        if (!dispatchContactId && existingCheckout?.contact_id) dispatchContactId = existingCheckout.contact_id;
+      } catch { /* best-effort */ }
+
+      if (!dispatchContactId && dispatchEmail) {
+        const { data: c } = await supabaseLocal
+          .from('contacts')
+          .select('id')
+          .eq('organization_id', store.organization_id)
+          .ilike('email', dispatchEmail)
+          .maybeSingle();
+        if (c?.id) dispatchContactId = c.id;
+      }
+
       const { data: matchingAutos } = await supabaseLocal
         .from('automations')
         .select('id, trigger_config')
@@ -1727,8 +1772,8 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
         await dispatchTrigger({
           organizationId: store.organization_id,
           triggerType: 'trigger_checkout_abandoned',
-          contactId: contactId || null,
-          triggerData,
+          contactId: dispatchContactId,
+          triggerData: { ...triggerData, CustomerEmail: dispatchEmail || triggerData.CustomerEmail },
           delayMinutes: 30,
           idempotencyKey: `trigger:checkout_abandoned:${checkout.id || checkout.token}`,
         });

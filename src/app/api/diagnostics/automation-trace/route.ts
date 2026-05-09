@@ -335,7 +335,7 @@ export async function GET(request: NextRequest) {
     },
     // Stamped at file-edit time so the merchant can verify a deploy
     // actually propagated. Bump whenever you change the email pipeline.
-    code_version: 'history-contact-2026-05-09i',
+    code_version: 'contact-backfill-2026-05-09j',
     checks,
     verdict,
     summary: {
