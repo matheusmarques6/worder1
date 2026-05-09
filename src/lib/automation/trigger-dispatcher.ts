@@ -41,12 +41,49 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
     organizationId,
     triggerType,
     triggerData = {},
-    contactId,
     dealId,
     matchConfig,
     idempotencyKey,
     delayMinutes,
   } = opts
+  let { contactId } = opts
+
+  // 1a. Late contact resolution — when the upstream caller couldn't sync
+  // the contact in time (race with the contacts upsert from another
+  // webhook), look the contact up by email here so the run isn't
+  // created orphan. Without this every run shows "Sem contato" and
+  // the email node has no merge data.
+  if (!contactId) {
+    const td: any = triggerData || {}
+    const props: any = td.properties || td
+    const candidateEmail =
+      td.CustomerEmail || td.email || td.Email ||
+      props.CustomerEmail || props.email || props.Email ||
+      props?.Customer?.Email || props?.raw?.email ||
+      props?.raw?.customer?.email || props?.raw?.billing_address?.email
+    if (candidateEmail && typeof candidateEmail === 'string') {
+      const { data: existing } = await supabaseAdmin
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', organizationId)
+        .ilike('email', candidateEmail)
+        .maybeSingle()
+      if (existing?.id) {
+        contactId = existing.id
+      } else {
+        const { data: created } = await supabaseAdmin
+          .from('contacts')
+          .insert({
+            organization_id: organizationId,
+            email: candidateEmail,
+            source: `trigger:${triggerType}`,
+          })
+          .select('id')
+          .single()
+        if (created?.id) contactId = created.id
+      }
+    }
+  }
 
   // 1. Idempotência: se já existe run idempotente nas últimas 24h, pula
   if (idempotencyKey) {

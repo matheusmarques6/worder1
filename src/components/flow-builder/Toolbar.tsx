@@ -15,6 +15,7 @@ import {
   BarChart3,
   ChevronDown,
   FastForward,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useIsValidFlow } from '@/stores/flowStore';
@@ -395,6 +396,51 @@ export function Toolbar({ onSave, onTest, onBack, organizationId, automations, c
         >
           <FastForward className="w-4 h-4" strokeWidth={2} />
           <span className="hidden lg:inline">Retomar</span>
+        </button>
+
+        {/* Limpar runs travados — cancela todos os runs desta automação
+            que estão em waiting/pending/running. Útil quando o canvas
+            mudou e os runs antigos referenciam node ids que não existem
+            mais no flow atual. */}
+        <button
+          onClick={async () => {
+            if (!currentAutomationId) {
+              setToolbarToast('Salve a automação primeiro');
+              setTimeout(() => setToolbarToast(null), 3000);
+              return;
+            }
+            if (!confirm('Cancelar todos os runs em waiting/pending/running desta automação? Use para limpar histórico antes de retestar.')) {
+              return;
+            }
+            setToolbarToast('Cancelando runs ativos…');
+            try {
+              const res = await fetch('/api/automations/runs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'cancel_active', automationId: currentAutomationId }),
+              });
+              const j = await res.json();
+              if (!res.ok) {
+                setToolbarToast(`Erro: ${j.error || 'falhou'}`);
+                setTimeout(() => setToolbarToast(null), 5000);
+                return;
+              }
+              setToolbarToast(`${j.cancelled} run(s) cancelados`);
+              setTimeout(() => setToolbarToast(null), 4000);
+            } catch (e: any) {
+              setToolbarToast(`Erro: ${e?.message || 'falhou'}`);
+              setTimeout(() => setToolbarToast(null), 5000);
+            }
+          }}
+          className={cn(
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md',
+            'hover:bg-zinc-800 text-zinc-200 hover:text-white',
+            'transition-colors text-[13px] font-medium'
+          )}
+          title="Cancelar todos os runs ativos desta automação"
+        >
+          <Trash2 className="w-4 h-4" strokeWidth={2} />
+          <span className="hidden lg:inline">Limpar</span>
         </button>
 
         {/* Test */}

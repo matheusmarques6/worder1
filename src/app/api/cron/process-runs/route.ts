@@ -105,7 +105,13 @@ export async function GET(request: NextRequest) {
           .update({ status: 'running' })
           .eq('id', run.id);
 
-        // Buscar contact se houver
+        const metadata = run.metadata || {};
+
+        // Buscar contact — fallback path: when the run was created
+        // before we had contact_id resolved (race with the contacts
+        // upsert), look it up now using the email that came in on the
+        // trigger payload. Persist back to the run so the History panel
+        // stops showing "Sem contato" and downstream sends have ids.
         let contact;
         if (run.contact_id) {
           const { data: c } = await supabase
@@ -116,9 +122,45 @@ export async function GET(request: NextRequest) {
             .single();
           contact = c;
         }
+        if (!contact) {
+          const td: any = metadata.trigger_data || {};
+          const props: any = td.properties || td;
+          const candidateEmail =
+            td.CustomerEmail || td.email || td.Email ||
+            props.CustomerEmail || props.email || props.Email ||
+            props?.Customer?.Email || props?.raw?.email ||
+            props?.raw?.customer?.email || props?.raw?.billing_address?.email;
+          if (candidateEmail && typeof candidateEmail === 'string') {
+            const { data: existing } = await supabase
+              .from('contacts')
+              .select('*')
+              .eq('organization_id', automation.organization_id)
+              .ilike('email', candidateEmail)
+              .maybeSingle();
+            if (existing) {
+              contact = existing;
+            } else {
+              const { data: created } = await supabase
+                .from('contacts')
+                .insert({
+                  organization_id: automation.organization_id,
+                  email: candidateEmail,
+                  source: `run:${run.id}`,
+                })
+                .select('*')
+                .single();
+              if (created) contact = created;
+            }
+            if (contact?.id && !run.contact_id) {
+              await supabase
+                .from('automation_runs')
+                .update({ contact_id: contact.id })
+                .eq('id', run.id);
+            }
+          }
+        }
 
         // Buscar deal se houver
-        const metadata = run.metadata || {};
         let deal;
         if (metadata.deal_id) {
           const { data: d } = await supabase

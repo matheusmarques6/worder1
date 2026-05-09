@@ -247,7 +247,32 @@ export async function POST(request: NextRequest) {
     if (action === 'test' && automationId) {
       return testAutomation(supabase, automationId, testData);
     }
-    
+
+    // Ação: cancelar runs em estado intermediário (waiting/pending/running)
+    // Permite ao merchant limpar a fila para retestar do zero quando o
+    // flow está num estado inconsistente. Só cancela do automationId
+    // informado (RLS já isola por organização).
+    if (action === 'cancel_active' && automationId) {
+      const { data, error: cancelErr, count } = await supabase
+        .from('automation_runs')
+        .update({
+          status: 'cancelled',
+          waiting_until: null,
+          completed_at: new Date().toISOString(),
+          last_error: 'Cancelado manualmente',
+        }, { count: 'exact' })
+        .in('status', ['waiting', 'pending', 'running'])
+        .eq('automation_id', automationId)
+        .select('id');
+      if (cancelErr) {
+        return NextResponse.json({ error: cancelErr.message }, { status: 500 });
+      }
+      return NextResponse.json({
+        message: 'Runs cancelados',
+        cancelled: data?.length ?? count ?? 0,
+      });
+    }
+
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     
   } catch (error: any) {

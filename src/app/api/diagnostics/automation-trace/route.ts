@@ -279,6 +279,43 @@ export async function GET(request: NextRequest) {
   }
 
   // ============================================================
+  // STAGE 5: Email pipeline sanity — Resend key + per-email-node status
+  // so the merchant can see at a glance which emails are "live" and
+  // which are still draft (will be skipped by action_email).
+  // ============================================================
+  if (!process.env.RESEND_API_KEY) {
+    checks.push({
+      stage: 'resend_api_key',
+      status: 'failed',
+      message: 'RESEND_API_KEY não configurada nas env vars do Vercel — nenhum envio sai.',
+    });
+  } else {
+    checks.push({
+      stage: 'resend_api_key',
+      status: 'ok',
+      message: 'RESEND_API_KEY configurada.',
+    });
+  }
+
+  const emailNodes = nodes.filter((n: any) => (n?.data?.nodeType || n?.type) === 'action_email');
+  if (emailNodes.length > 0) {
+    const draft = emailNodes.filter((n: any) => (n.data?.config?.emailStatus || 'draft') !== 'live');
+    if (draft.length > 0) {
+      checks.push({
+        stage: 'email_nodes_publish',
+        status: 'warning',
+        message: `${draft.length} de ${emailNodes.length} email(s) com status ≠ "live" — não enviarão. Nodes: ${draft.map((n: any) => n.data?.config?.emailName || n.data?.label || n.id).join(', ')}`,
+      });
+    } else {
+      checks.push({
+        stage: 'email_nodes_publish',
+        status: 'ok',
+        message: `Todos os ${emailNodes.length} email(s) estão Live.`,
+      });
+    }
+  }
+
+  // ============================================================
   // Verdict
   // ============================================================
   const errorChecks = checks.filter(c => c.status === 'failed');
@@ -298,7 +335,7 @@ export async function GET(request: NextRequest) {
     },
     // Stamped at file-edit time so the merchant can verify a deploy
     // actually propagated. Bump whenever you change the email pipeline.
-    code_version: 'uuid-fix-2026-05-09',
+    code_version: 'audit-2026-05-09b',
     checks,
     verdict,
     summary: {
