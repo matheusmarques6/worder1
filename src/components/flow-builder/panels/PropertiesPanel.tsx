@@ -12,6 +12,15 @@ import { MessageEditor, VariableButton } from '../variables';
 import { WhatsAppTemplateEditor } from '../whatsapp';
 import { EmailPreviewMode } from './EmailPreviewMode';
 import { EmailEditorOverlay } from './EmailEditorOverlay';
+import {
+  AIClassifyConfig,
+  AIExtractConfig,
+  AIGenerateConfig,
+  AISummarizeConfig,
+  AIHandoffConfig,
+  AISentimentConfig,
+  AIMatchConfig,
+} from './AIConfigBlocks';
 
 // ============================================
 // TYPES
@@ -1222,6 +1231,45 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 organizationId={organizationId}
                 isRemove={selectedNode.data.nodeType === 'action_remove_from_list'}
               />
+            )}
+
+            {/* AI: action_ai_classify */}
+            {selectedNode.data.nodeType === 'action_ai_classify' && (
+              <AIClassifyConfig config={selectedNode.data.config || {}} onUpdate={handleUpdate} />
+            )}
+
+            {/* AI: action_ai_extract */}
+            {selectedNode.data.nodeType === 'action_ai_extract' && (
+              <AIExtractConfig config={selectedNode.data.config || {}} onUpdate={handleUpdate} />
+            )}
+
+            {/* AI: action_ai_generate */}
+            {selectedNode.data.nodeType === 'action_ai_generate' && (
+              <AIGenerateConfig config={selectedNode.data.config || {}} onUpdate={handleUpdate} />
+            )}
+
+            {/* AI: action_ai_summarize */}
+            {selectedNode.data.nodeType === 'action_ai_summarize' && (
+              <AISummarizeConfig config={selectedNode.data.config || {}} onUpdate={handleUpdate} />
+            )}
+
+            {/* AI: action_ai_handoff */}
+            {selectedNode.data.nodeType === 'action_ai_handoff' && (
+              <AIHandoffConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+                organizationId={organizationId}
+              />
+            )}
+
+            {/* AI: condition_ai_sentiment */}
+            {selectedNode.data.nodeType === 'condition_ai_sentiment' && (
+              <AISentimentConfig />
+            )}
+
+            {/* AI: condition_ai_match */}
+            {selectedNode.data.nodeType === 'condition_ai_match' && (
+              <AIMatchConfig config={selectedNode.data.config || {}} onUpdate={handleUpdate} />
             )}
           </section>
 

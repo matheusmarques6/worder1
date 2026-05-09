@@ -21,6 +21,7 @@ import { isLLMConfigured } from '@/lib/ai/llm/client'
 import { verifyQstashSignature } from '@/lib/redis/qstash'
 import { sendOutboundText } from '@/lib/whatsapp/send-outbound'
 import { splitMessages } from '@/lib/ai/splitter'
+import { processMedia } from '@/lib/ai/multimodal'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -78,12 +79,40 @@ export async function POST(req: NextRequest) {
   }
   const { data: newMessages } = await supabase
     .from('whatsapp_messages')
-    .select('id, content, created_at')
+    .select('id, content, created_at, message_type, type, media_url, media_mime_type, media_filename')
     .in('id', messageIds)
     .order('created_at', { ascending: true })
   if (!newMessages || newMessages.length === 0) {
     return NextResponse.json({ ok: true, skipped: 'no messages found' })
   }
+
+  // 2.b) Multimodal: transcreve audio/imagem/documento antes da LLM
+  const processed = await Promise.all(
+    newMessages.map(async (m) => {
+      const msgType = (m.message_type as string) || (m.type as string) || 'text'
+      const isMedia =
+        msgType !== 'text' && (m.media_url as string | null) && msgType !== 'reaction'
+      let content = (m.content as string) ?? ''
+      if (isMedia) {
+        const out = await processMedia({
+          mediaUrl: m.media_url as string,
+          mimeType: (m.media_mime_type as string | null) ?? null,
+          filename: (m.media_filename as string | null) ?? null,
+        })
+        const transcribed = out.content?.trim()
+        if (transcribed) {
+          content = content
+            ? `${content}\n[${out.kind}] ${transcribed}`
+            : `[${out.kind}] ${transcribed}`
+        }
+      }
+      return {
+        id: m.id as string,
+        content,
+        created_at: m.created_at as string,
+      }
+    }),
+  )
 
   // 3. Roda o agente (LLM)
   if (!isLLMConfigured()) {
@@ -97,11 +126,7 @@ export async function POST(req: NextRequest) {
     result = await runAgent({
       agentId,
       conversationId,
-      newMessages: newMessages.map((m) => ({
-        id: m.id as string,
-        content: (m.content as string) ?? '',
-        created_at: m.created_at as string,
-      })),
+      newMessages: processed,
     })
   } catch (err) {
     if (err instanceof AgentNotPublishedError) {

@@ -56,3 +56,30 @@ export async function verifyQstashSignature(
     return false
   }
 }
+
+/**
+ * Cria/atualiza um schedule recorrente no QStash. Usado pra crons como
+ * o cost rollup diário. `cron` é um cron expression UTC (ex: "0 3 * * *"
+ * = todos os dias às 3h UTC = 0h em São Paulo).
+ *
+ * Idempotente: se já existe schedule com o mesmo destination+body, o
+ * QStash atualiza em vez de duplicar.
+ */
+export async function upsertSchedule(params: {
+  url: string
+  cron: string
+  body?: unknown
+  scheduleId?: string
+}) {
+  if (!qstash) {
+    console.warn('[qstash] não configurado — schedule não criado')
+    return null
+  }
+  return (qstash.schedules as any).create({
+    destination: params.url,
+    cron: params.cron,
+    body: params.body ? JSON.stringify(params.body) : undefined,
+    scheduleId: params.scheduleId,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}

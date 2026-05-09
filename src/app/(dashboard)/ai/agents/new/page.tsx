@@ -175,7 +175,7 @@ export default function AgentWizardPage() {
                   <div
                     className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium border transition-colors ${
                       i < step
-                        ? 'bg-orange-500 text-white border-orange-500'
+                        ? 'bg-[#18181B] text-white border-[#18181B]'
                         : i === step
                         ? 'bg-orange-50 text-orange-700 border-orange-300'
                         : 'bg-white text-zinc-500 border-zinc-200'
@@ -390,8 +390,8 @@ export default function AgentWizardPage() {
               type="button"
               onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
               disabled={!canAdvance}
-              className="inline-flex items-center gap-2 px-5 py-2 bg-orange-500 text-white
-                         text-sm font-medium rounded-md hover:bg-orange-600 transition-colors
+              className="inline-flex items-center gap-2 px-5 py-2 bg-[#18181B] text-white
+                         text-sm font-semibold rounded-[8px] hover:bg-[#27272A] transition-colors
                          disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Continuar <ArrowRight className="w-4 h-4" strokeWidth={1.75} />
@@ -401,8 +401,8 @@ export default function AgentWizardPage() {
               type="button"
               onClick={handlePublish}
               disabled={submitting || !canAdvance}
-              className="inline-flex items-center gap-2 px-5 py-2 bg-orange-500 text-white
-                         text-sm font-medium rounded-md hover:bg-orange-600 transition-colors
+              className="inline-flex items-center gap-2 px-5 py-2 bg-[#18181B] text-white
+                         text-sm font-semibold rounded-[8px] hover:bg-[#27272A] transition-colors
                          disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
@@ -430,7 +430,12 @@ function Step({
 }) {
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-zinc-900">{title}</h1>
+      <h1
+        className="text-[26px] font-bold text-[#18181B] leading-tight"
+        style={{ letterSpacing: '-0.03em' }}
+      >
+        {title}
+      </h1>
       {subtitle && <p className="text-sm text-zinc-500 mt-1 mb-6">{subtitle}</p>}
       {children}
     </div>

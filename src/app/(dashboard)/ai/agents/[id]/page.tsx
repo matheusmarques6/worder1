@@ -220,7 +220,7 @@ export default function AgentEditorPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="px-8 py-10 lg:px-12 lg:py-12 pb-16 max-w-[1400px] mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-start gap-3">
@@ -236,7 +236,8 @@ export default function AgentEditorPage() {
               value={form.name}
               onChange={(e) => updateForm({ name: e.target.value })}
               placeholder="Nome do agente"
-              className="text-2xl font-semibold text-zinc-900 bg-transparent border-0 outline-none
+              style={{ letterSpacing: '-0.03em' }}
+              className="text-[26px] font-bold text-[#18181B] bg-transparent border-0 outline-none
                          focus:bg-orange-50 px-1 -ml-1 rounded transition-colors"
             />
             <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -280,7 +281,7 @@ export default function AgentEditorPage() {
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               agent?.status === 'published'
                 ? 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-                : 'bg-orange-500 text-white hover:bg-orange-600'
+                : 'bg-[#18181B] text-white hover:bg-[#27272A]'
             } disabled:opacity-50`}
           >
             {publishing ? (

@@ -161,17 +161,65 @@ const shopifyGetProduct: ToolDefinition = {
     const q = String(args.query).trim()
     if (!q) return { ok: false, error: 'query vazia' }
 
-    const { data, error } = await supabase
-      .from('shopify_products')
-      .select('id, title, handle, status, price, compare_at_price, image_url, sku, inventory_quantity')
-      .eq('organization_id', ctx.organizationId)
-      .or(`title.ilike.%${q}%,sku.ilike.%${q}%,handle.ilike.%${q}%`)
-      .limit(3)
-    if (error) return { ok: false, error: error.message }
-    if (!data || data.length === 0) {
-      return { ok: true, data: { found: false, message: 'Nenhum produto encontrado' } }
+    // Tier 1: tabela local (caso a sincronização tenha rodado)
+    try {
+      const { data, error } = await supabase
+        .from('shopify_products')
+        .select('id, title, handle, status, price, compare_at_price, image_url, sku, inventory_quantity')
+        .eq('organization_id', ctx.organizationId)
+        .or(`title.ilike.%${q}%,sku.ilike.%${q}%,handle.ilike.%${q}%`)
+        .limit(3)
+      if (!error && data && data.length > 0) {
+        return { ok: true, data: { found: true, products: data, source: 'local' } }
+      }
+    } catch {
+      // tabela pode não existir nesse projeto — tier 2 tenta API direta
     }
-    return { ok: true, data: { found: true, products: data } }
+
+    // Tier 2: chama Shopify Admin API direto via credenciais da integration
+    try {
+      const { data: integ } = await supabase
+        .from('integrations')
+        .select('credentials')
+        .eq('org_id', ctx.organizationId)
+        .eq('type', 'shopify')
+        .eq('is_active', true)
+        .maybeSingle()
+      const creds = (integ?.credentials as Record<string, string> | null) ?? null
+      const shop = creds?.shop_domain || creds?.shop || creds?.shopDomain
+      const token = creds?.access_token || creds?.token || creds?.accessToken
+      if (!shop || !token) {
+        return { ok: true, data: { found: false, message: 'Shopify não conectado' } }
+      }
+      const url = `https://${shop}/admin/api/2024-04/products.json?title=${encodeURIComponent(
+        q,
+      )}&limit=3`
+      const res = await fetch(url, {
+        headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+      })
+      if (!res.ok) {
+        return { ok: false, error: `Shopify API ${res.status}` }
+      }
+      const json: { products?: Array<Record<string, unknown>> } = await res.json()
+      const products = (json.products ?? []).map((p) => ({
+        id: p.id,
+        title: p.title,
+        handle: p.handle,
+        status: p.status,
+        price: (p.variants as Array<{ price: string }> | undefined)?.[0]?.price,
+        sku: (p.variants as Array<{ sku: string }> | undefined)?.[0]?.sku,
+        image_url: (p.image as { src?: string } | undefined)?.src,
+      }))
+      if (products.length === 0) {
+        return { ok: true, data: { found: false, message: 'Nenhum produto encontrado' } }
+      }
+      return { ok: true, data: { found: true, products, source: 'shopify_api' } }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'erro Shopify API',
+      }
+    }
   },
 }
 

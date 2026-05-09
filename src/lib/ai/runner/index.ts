@@ -13,6 +13,7 @@ import { complete, type ChatMessage, type ChatTool } from '../llm/client'
 import { buildSystemPrompt } from '../prompt/system-builder'
 import { loadMemory, saveMemory } from '../memory/window'
 import { retrieveRelevantChunks } from './retrieval'
+import { classifyIntent, classifierToSystemBlock } from './classifier'
 import { getBuiltinTool } from '../tools/builtins'
 import { assignVariant } from '../experiments'
 import { matchSkills, recordSkillInvocations } from '../skills'
@@ -89,12 +90,13 @@ export async function runAgent(input: RunnerInput): Promise<RunnerOutput> {
   // 2. Carrega memória
   const memory = await loadMemory(input.conversationId, input.agentId)
 
-  // 3. RAG retrieval — usa a última leva de mensagens do usuário como query
+  // 3. RAG retrieval + (F6) classifier em paralelo quando pipeline_mode=multi_agent
   const ragQuery = input.newMessages.map((m) => m.content).join(' ').trim()
-  const retrieval = await retrieveRelevantChunks({
-    agentId: input.agentId,
-    query: ragQuery,
-  })
+  const isMultiAgent = typedAgent.llm_config?.pipeline_mode === 'multi_agent'
+  const [retrieval, classification] = await Promise.all([
+    retrieveRelevantChunks({ agentId: input.agentId, query: ragQuery }),
+    isMultiAgent ? classifyIntent({ query: ragQuery }) : Promise.resolve(null),
+  ])
 
   // 3.b) Skills match — instruções extras quando trigger_phrases batem
   const matchedSkills = await matchSkills(input.agentId, ragQuery)
@@ -112,6 +114,9 @@ export async function runAgent(input: RunnerInput): Promise<RunnerOutput> {
   }
   if (retrieval.contextBlock) {
     messages.push({ role: 'system', content: retrieval.contextBlock })
+  }
+  if (classification) {
+    messages.push({ role: 'system', content: classifierToSystemBlock(classification) })
   }
   for (const skill of matchedSkills) {
     messages.push({
@@ -142,6 +147,21 @@ export async function runAgent(input: RunnerInput): Promise<RunnerOutput> {
   let totalCostUsd = 0
   let finalContent = ''
   let stoppedByTool: 'transferred' | 'converted' | 'escalated' | undefined
+
+  // Classifier counts as a llm_call quando F6 está ativo
+  if (classification) {
+    totalTokensIn += classification.tokensIn
+    totalTokensOut += classification.tokensOut
+    totalCostUsd += classification.costUsd
+    llmCalls.push({
+      agent_role: 'classifier',
+      model: classification.model,
+      tokens_in: classification.tokensIn,
+      tokens_out: classification.tokensOut,
+      latency_ms: classification.durationMs,
+      cost_usd: classification.costUsd,
+    })
+  }
 
   for (let iter = 0; iter < MAX_TOOL_ITER; iter++) {
     const result = await complete({
