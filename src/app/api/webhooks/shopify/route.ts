@@ -1728,7 +1728,7 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
         const cfg = a.trigger_config || {};
         const minutes = cfg.abandonUnit === 'hours'
           ? (cfg.abandonTime || 1) * 60
-          : (cfg.abandonTime || 30);
+          : (cfg.abandonTime || 5);
         if (!buckets.has(minutes)) buckets.set(minutes, []);
         buckets.get(minutes)!.push(a.id);
       }
@@ -1767,14 +1767,15 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
         checkout_token: checkout.token || null,
       };
 
-      // Omnisend default for Started Checkout: 30 minutes.
+      // Default Started Checkout wait: 5 minutes (was 30; tightened for
+      // testing — adjust per-automation via trigger_config.abandonTime).
       if (buckets.size === 0) {
         await dispatchTrigger({
           organizationId: store.organization_id,
           triggerType: 'trigger_checkout_abandoned',
           contactId: dispatchContactId,
           triggerData: { ...triggerData, CustomerEmail: dispatchEmail || triggerData.CustomerEmail },
-          delayMinutes: 30,
+          delayMinutes: 5,
           idempotencyKey: `trigger:checkout_abandoned:${checkout.id || checkout.token}`,
         });
       } else {
