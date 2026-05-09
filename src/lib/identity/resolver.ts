@@ -319,6 +319,75 @@ export async function resolveIdentity(input: ResolveInput): Promise<ResolveOutpu
 }
 
 // =============================================
+// Server-side bridge: resolve identity by hashed email / phone /
+// shopify_customer_id and link a contact to it (if not already linked).
+// Used by Shopify webhook handlers — they create/find contacts but
+// don't have browser signals (visitorId / fingerprint), so they can't
+// call resolveIdentity. This walks the same email_hash → phone_hash →
+// shopify_customer_id cascade and triggers the standard backfill.
+//
+// Returns { eventsLinked, matched } summing the backfills across any
+// matched identity rows. No-op when nothing matches (e.g. the customer
+// never visited the storefront, only checked out via Shopify Pay).
+// =============================================
+export async function linkContactToIdentityByContactInfo(input: {
+  organizationId: string;
+  contactId: string;
+  email?: string | null;
+  phone?: string | null;
+  shopifyCustomerId?: string | null;
+}): Promise<{ eventsLinked: number; matched: number }> {
+  const supabase = getSupabaseAdmin();
+  const { organizationId, contactId } = input;
+
+  const matchers: Array<{ field: string; value: string | null }> = [
+    {
+      field: 'shopify_customer_id',
+      value: input.shopifyCustomerId ? String(input.shopifyCustomerId) : null,
+    },
+    { field: 'email_hash', value: hashEmail(input.email) },
+    { field: 'phone_hash', value: hashPhone(input.phone) },
+  ];
+
+  let totalLinked = 0;
+  let matched = 0;
+  const seen = new Set<string>();
+
+  for (const { field, value } of matchers) {
+    if (!value) continue;
+    const { data: identities } = await supabase
+      .from('visitor_identities')
+      .select('id, contact_id')
+      .eq('organization_id', organizationId)
+      .eq(field, value)
+      .is('merged_into_id', null);
+
+    for (const identity of identities || []) {
+      if (seen.has(identity.id)) continue;
+      seen.add(identity.id);
+      // Already pointing at this contact → nothing to do.
+      if (identity.contact_id === contactId) {
+        matched++;
+        continue;
+      }
+      // Pointing at a different contact: leave alone, never silently
+      // overwrite. The merchant resolves merges from the contact UI.
+      if (identity.contact_id && identity.contact_id !== contactId) continue;
+
+      try {
+        const result = await linkContactToIdentity(identity.id, contactId, organizationId);
+        totalLinked += result.eventsLinked;
+        matched++;
+      } catch (err) {
+        console.warn('[Identity] linkContactToIdentityByContactInfo: link failed', err);
+      }
+    }
+  }
+
+  return { eventsLinked: totalLinked, matched };
+}
+
+// =============================================
 // Backfill: when an identity is later linked to a contact, retroactively
 // attach all historic anonymous events under any of its aliases.
 // =============================================

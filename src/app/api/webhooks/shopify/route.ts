@@ -203,10 +203,24 @@ async function processCustomerCreated(store: ShopifyStoreConfig, customer: any) 
     store,
     'customer'
   );
-  
+
   if (!contact) {
     console.log('[Shopify] Failed to create contact, skipping automation');
     return;
+  }
+
+  // Identity graph bridge — see comment in processCheckout for rationale.
+  try {
+    const { linkContactToIdentityByContactInfo } = await import('@/lib/identity/resolver');
+    await linkContactToIdentityByContactInfo({
+      organizationId: store.organization_id,
+      contactId: contact.id,
+      email: customer.email || null,
+      phone: customer.phone || null,
+      shopifyCustomerId: customer.id ? String(customer.id) : null,
+    });
+  } catch (idErr) {
+    console.warn('[Shopify] identity graph bridge (customer) failed:', idErr);
   }
 
   // ======================================
@@ -341,6 +355,20 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   if (!contact) {
     console.error('[Shopify] Failed to create contact for order');
     return;
+  }
+
+  // Identity graph bridge — see processCheckout for rationale.
+  try {
+    const { linkContactToIdentityByContactInfo } = await import('@/lib/identity/resolver');
+    await linkContactToIdentityByContactInfo({
+      organizationId: store.organization_id,
+      contactId: contact.id,
+      email: order.email || order.customer?.email || null,
+      phone: order.phone || order.customer?.phone || null,
+      shopifyCustomerId: order.customer?.id ? String(order.customer.id) : null,
+    });
+  } catch (idErr) {
+    console.warn('[Shopify] identity graph bridge (order) failed:', idErr);
   }
 
   // Se contato foi criado agora (customer não existia antes do pedido),
@@ -1537,6 +1565,31 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       contactId = byCustomer?.id || null;
     }
 
+    // Bridge to identity graph: webhooks don't have browser signals so
+    // they can't call resolveIdentity, but we DO have email / phone /
+    // shopify_customer_id — enough to find any visitor_identities row
+    // the pixel previously created for the same person. Linking now
+    // triggers the standard alias backfill so historic anonymous
+    // events (page_viewed / viewed_product / added_to_cart that fired
+    // before the customer typed an email) get their contact_id
+    // populated. Without this, the contact's timeline showed a hard
+    // cutoff at "first webhook" — everything before it stayed orphaned
+    // even when it was clearly the same person.
+    if (contactId) {
+      try {
+        const { linkContactToIdentityByContactInfo } = await import('@/lib/identity/resolver');
+        await linkContactToIdentityByContactInfo({
+          organizationId: store.organization_id,
+          contactId,
+          email: resolvedEmail,
+          phone: resolvedPhone,
+          shopifyCustomerId: resolvedShopifyCustomerId,
+        });
+      } catch (idErr) {
+        console.warn('[Shopify] identity graph bridge failed (non-fatal):', idErr);
+      }
+    }
+
     // Backfill: vincular contact_id no shopify_checkouts e em qualquer
     // contact_event órfão que já tenha sido criado para esse checkout.
     // Now also runs when we resolved by shopify_customer_id alone.
@@ -1731,6 +1784,27 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
           : (cfg.abandonTime || 5);
         if (!buckets.has(minutes)) buckets.set(minutes, []);
         buckets.get(minutes)!.push(a.id);
+      }
+
+      // Email gate: Shopify fires checkouts/create immediately when the
+      // customer lands on /checkouts (often before any contact info is
+      // typed) and then checkouts/update repeatedly as they fill the
+      // form. Dispatching on the first webhook leaves us with an orphan
+      // run (contact_id=null, trigger_data.CustomerEmail empty) that
+      // may execute its email node before the next webhook brings the
+      // email via backfill. We defer until we have a way to email — a
+      // resolved email or a shopify_customer_id. The next
+      // checkouts/update with email will fire dispatch; idempotencyKey
+      // prevents duplicate runs across all the webhooks for one
+      // checkout. processCheckout has nothing useful left to do for
+      // this webhook, so a plain return is fine.
+      if (!dispatchEmail && !dispatchContactId) {
+        console.log('[Shopify] checkout_abandoned dispatch DEFERRED — no email or customer_id yet, waiting for next checkouts/update', {
+          checkoutId: checkoutKey,
+          checkoutToken: checkout.token,
+          matchingAutomations: (matchingAutos || []).length,
+        });
+        return;
       }
 
       const triggerData = {

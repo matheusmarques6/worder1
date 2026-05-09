@@ -648,6 +648,30 @@ export async function POST(request: NextRequest) {
         } catch { pixelDelayMinutes = omnisendDefault; }
       }
 
+      // Idempotency: for cart/checkout-abandoned triggers we MUST use a
+      // resource-only key (no sessionId/visitorId in it) so pixel +
+      // Shopify webhook converge on the same dedup. Without this, one
+      // checkout could spawn two runs — one via pixel, one via webhook
+      // — because their per-source idempotency suffixes never match.
+      const checkoutId =
+        enrichedProperties.checkoutId ||
+        enrichedProperties.checkout_id ||
+        enrichedProperties.CheckoutId ||
+        enrichedProperties.checkout_token ||
+        enrichedProperties.cart_token;
+      const productId =
+        enrichedProperties.product_id || enrichedProperties.productId;
+      let triggerIdempotencyKey: string | undefined;
+      if (triggerType === 'trigger_checkout_abandoned' && checkoutId) {
+        triggerIdempotencyKey = `trigger:checkout_abandoned:${checkoutId}`;
+      } else if (triggerType === 'trigger_added_to_cart' && checkoutId) {
+        triggerIdempotencyKey = `trigger:added_to_cart:${checkoutId}`;
+      } else if (triggerType === 'trigger_viewed_product' && productId && contactId) {
+        triggerIdempotencyKey = `trigger:viewed_product:${contactId}:${productId}`;
+      } else if (idempotencyKey) {
+        triggerIdempotencyKey = `trigger:${triggerType}:${idempotencyKey}`;
+      }
+
       import('@/lib/automation/trigger-dispatcher').then(({ dispatchTrigger }) =>
         dispatchTrigger({
           organizationId,
@@ -656,7 +680,7 @@ export async function POST(request: NextRequest) {
           ...(pixelDelayMinutes ? { delayMinutes: pixelDelayMinutes } : {}),
           triggerData: {
             event_type: mappedEventType,
-            product_id: enrichedProperties.product_id || enrichedProperties.productId,
+            product_id: productId,
             product_name: enrichedProperties.product_name || enrichedProperties.title,
             monetary_value: monetaryValue,
             Value: monetaryValue || enrichedProperties.totalPrice || enrichedProperties.$value,
@@ -668,12 +692,11 @@ export async function POST(request: NextRequest) {
             SubtotalPrice: enrichedProperties.subtotalPrice || 0,
             TotalDiscounts: enrichedProperties.totalDiscounts || 0,
             DiscountCodes: enrichedProperties.discountCodes || [],
-            CustomerEmail: enrichedProperties._first_name ? undefined : undefined,
+            CustomerEmail: email || undefined,
+            CheckoutId: checkoutId || undefined,
             properties: enrichedProperties,
           },
-          idempotencyKey: idempotencyKey
-            ? `trigger:${triggerType}:${idempotencyKey}`
-            : undefined,
+          idempotencyKey: triggerIdempotencyKey,
         }).catch(() => { /* silent */ })
       ).catch(() => { /* silent */ });
     }
