@@ -1977,6 +1977,22 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
     return;
   }
 
+  // Price-drop detection: capture the previous price BEFORE we upsert
+  // so we can compare. If the new price is lower, fire trigger_price_drop
+  // for every contact that viewed or added this product in the last
+  // 30 days. Fire-and-forget so the webhook stays fast.
+  const newPrice = product.variants?.[0]?.price ? parseFloat(product.variants[0].price) : null;
+  let previousPrice: number | null = null;
+  if (topic === 'products/update' && newPrice && newPrice > 0) {
+    const { data: prev } = await supabase
+      .from('shopify_products')
+      .select('price')
+      .eq('store_id', store.id)
+      .eq('shopify_product_id', String(product.id))
+      .maybeSingle();
+    previousPrice = prev?.price ?? null;
+  }
+
   // Upsert product
   // Strip HTML tags from body_html for plain-text description used in
   // emails. Keep both: html for templates that want rich copy, plain for
@@ -2034,6 +2050,67 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
   }
   if (productErr) {
     console.error(`[Shopify] shopify_products upsert FAILED for product ${product.id}:`, productErr);
+  }
+
+  // Fire-and-forget price drop dispatch. We don't await because
+  // contact-event scanning can take seconds — Shopify gives us 5s
+  // before retrying the webhook.
+  if (previousPrice && newPrice && newPrice < previousPrice) {
+    const dropPct = ((previousPrice - newPrice) / previousPrice) * 100;
+    (async () => {
+      try {
+        const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: events } = await supabase
+          .from('contact_events')
+          .select('contact_id')
+          .eq('organization_id', store.organization_id)
+          .in('event_type', ['viewed_product', 'added_to_cart', 'checkout_started'])
+          .contains('properties', { product_id: String(product.id) })
+          .gte('occurred_at', since)
+          .limit(2000);
+        const uniqueContactIds: string[] = Array.from(
+          new Set((events || []).map((e: any) => e.contact_id as string).filter(Boolean))
+        );
+        if (uniqueContactIds.length === 0) return;
+        const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
+        const today = new Date().toISOString().slice(0, 10);
+        for (const cid of uniqueContactIds) {
+          await dispatchTrigger({
+            organizationId: store.organization_id,
+            triggerType: 'trigger_price_drop',
+            contactId: cid,
+            triggerData: {
+              event_type: 'price_drop',
+              ProductID: String(product.id),
+              ProductName: product.title,
+              ProductURL: product.handle ? `https://${store.shop_domain}/products/${product.handle}` : '',
+              OldPrice: previousPrice,
+              NewPrice: newPrice,
+              DiscountAmount: previousPrice - newPrice,
+              DiscountPercent: Math.round(dropPct * 100) / 100,
+              Items: [{
+                ProductID: String(product.id),
+                ProductName: product.title,
+                ItemPrice: newPrice,
+                CompareAtPrice: previousPrice,
+              }],
+              properties: {
+                product_id: String(product.id),
+                old_price: previousPrice,
+                new_price: newPrice,
+                discount_percent: dropPct,
+              },
+            },
+            // Idempotent per (contact, product, day) — multiple webhook
+            // updates the same day for the same product won't double-fire.
+            idempotencyKey: `price_drop:${cid}:${product.id}:${today}`,
+          }).catch((e) => console.error('[price_drop] dispatch failed:', e));
+        }
+        console.log(`[price_drop] product ${product.id} dropped ${dropPct.toFixed(1)}% — dispatched to ${uniqueContactIds.length} contact(s)`);
+      } catch (e) {
+        console.error('[price_drop] background error:', e);
+      }
+    })();
   }
 }
 

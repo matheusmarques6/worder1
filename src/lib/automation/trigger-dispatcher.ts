@@ -104,7 +104,7 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
   // 2. Buscar automações com esse trigger
   const { data: automations, error } = await supabaseAdmin
     .from('automations')
-    .select('id, trigger_config, audience_filters')
+    .select('id, trigger_config, audience_filters, trigger_filters, frequency_config')
     .eq('organization_id', organizationId)
     .eq('status', 'active')
     .eq('trigger_type', triggerType)
@@ -216,6 +216,151 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
     eligible = eligible.filter(
       (a: any) => !Array.isArray(a.audience_filters) || a.audience_filters.length === 0
     )
+  }
+
+  // 3c. Apply trigger_filters (per-event-payload filters configured in
+  // the trigger node UI). Same {field, operator, value} shape as
+  // audience_filters but evaluated against the trigger payload instead
+  // of the contact. Crucial for "only fire viewed_product when SKU =
+  // X" / "only fire placed_order when value > 100".
+  const evalAgainstPayload = (filters: any[], payload: any): boolean => {
+    if (!Array.isArray(filters) || filters.length === 0) return true
+    const props = payload?.properties || payload || {}
+    const items: any[] = Array.isArray(props.Items) ? props.Items : []
+    const pickValue = (field: string): any => {
+      // Item-level lookups: any item satisfying the predicate is enough
+      if (['sku', 'product_id', 'product_name', 'variant_id', 'brand'].includes(field)) {
+        return items.length > 0 ? items.map((it: any) => {
+          if (field === 'sku') return it.SKU || it.sku
+          if (field === 'product_id') return it.ProductID || it.product_id
+          if (field === 'product_name') return it.ProductName || it.title
+          if (field === 'variant_id') return it.VariantID || it.variant_id
+          if (field === 'brand') return it.Brand || it.brand
+          return undefined
+        }) : []
+      }
+      // Cart/order level
+      if (field === 'cart_value' || field === 'order_value' || field === 'value') {
+        return parseFloat(props.$value || props.Value || props.cart_value || props.value || 0)
+      }
+      if (field === 'item_count') return items.length || parseInt(props.ItemCount || 0, 10)
+      if (field === 'currency') return props.Currency || props.currency
+      // generic
+      return props[field]
+    }
+
+    const numericFields = new Set(['cart_value', 'order_value', 'value', 'item_count'])
+
+    return filters.every((row: any) => {
+      const op = row.operator || 'equals'
+      const val = row.value
+      const raw = pickValue(row.field)
+      const isArray = Array.isArray(raw)
+      const isPresent = isArray ? raw.some((x: any) => x !== null && x !== undefined && x !== '') :
+        (raw !== null && raw !== undefined && raw !== '')
+      if (op === 'is_set') return isPresent
+      if (op === 'is_not_set') return !isPresent
+      if (val === undefined || val === '') return true
+
+      if (numericFields.has(row.field)) {
+        const a = parseFloat(String(raw))
+        const b = parseFloat(String(val))
+        if (Number.isNaN(a) || Number.isNaN(b)) return false
+        switch (op) {
+          case 'equals': return a === b
+          case 'not_equals': return a !== b
+          case 'greater_than': return a > b
+          case 'less_than': return a < b
+          case 'greater_or_equal': return a >= b
+          case 'less_or_equal': return a <= b
+        }
+        return true
+      }
+
+      const haystack = isArray
+        ? raw.map((x: any) => String(x ?? '').toLowerCase())
+        : [String(raw ?? '').toLowerCase()]
+      const needle = String(val).toLowerCase()
+      const list = String(val).split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+      switch (op) {
+        case 'equals': return haystack.some(h => h === needle)
+        case 'not_equals': return haystack.every(h => h !== needle)
+        case 'contains': return haystack.some(h => h.includes(needle))
+        case 'not_contains': return haystack.every(h => !h.includes(needle))
+        case 'starts_with': return haystack.some(h => h.startsWith(needle))
+        case 'ends_with': return haystack.some(h => h.endsWith(needle))
+        case 'in_list': return haystack.some(h => list.includes(h))
+        case 'not_in_list': return haystack.every(h => !list.includes(h))
+        default: return true
+      }
+    })
+  }
+
+  eligible = eligible.filter((a: any) =>
+    evalAgainstPayload(a.trigger_filters || [], triggerData)
+  )
+
+  // 3d. Skip Contacts overlap protection (Omnisend-style). When the
+  // same contact already has an active run (waiting / pending /
+  // running) in another automation in this org and the merchant opted
+  // into the org-level skip_contacts_in_active_flows flag, drop new
+  // dispatches so we don't pile messages on top of each other.
+  if (contactId) {
+    const { data: org } = await supabaseAdmin
+      .from('organizations')
+      .select('skip_contacts_in_active_flows')
+      .eq('id', organizationId)
+      .maybeSingle()
+    if (org?.skip_contacts_in_active_flows) {
+      const { data: active } = await supabaseAdmin
+        .from('automation_runs')
+        .select('id, automation_id')
+        .eq('organization_id', organizationId)
+        .eq('contact_id', contactId)
+        .in('status', ['waiting', 'pending', 'running'])
+        .limit(1)
+        .maybeSingle()
+      if (active) {
+        return { automationsMatched: 0, runsCreated: 0, runIds: [] }
+      }
+    }
+  }
+
+  // 3e. Frequency config — re-entry guard. The merchant can configure
+  // each automation as "once" (one run per contact ever), "interval"
+  // (one run per X hours/days), or "unlimited". Without this the same
+  // contact can pile into the same flow 10x in an hour from repeated
+  // page views / cart adds.
+  if (contactId) {
+    const eligibleAfterFreq: any[] = []
+    for (const auto of eligible) {
+      const fc = auto.frequency_config || {}
+      const ftype = fc.type || 'unlimited'
+      if (ftype === 'unlimited') { eligibleAfterFreq.push(auto); continue }
+
+      let since: string | null = null
+      if (ftype === 'once') {
+        since = '1970-01-01T00:00:00.000Z'
+      } else if (ftype === 'interval' && fc.value && fc.unit) {
+        const mult: Record<string, number> = {
+          minutes: 60_000, hours: 3_600_000, days: 86_400_000, weeks: 604_800_000,
+        }
+        const ms = (parseInt(String(fc.value), 10) || 0) * (mult[fc.unit] || 0)
+        if (ms > 0) since = new Date(Date.now() - ms).toISOString()
+      }
+      if (!since) { eligibleAfterFreq.push(auto); continue }
+
+      const { data: prev } = await supabaseAdmin
+        .from('automation_runs')
+        .select('id')
+        .eq('automation_id', auto.id)
+        .eq('contact_id', contactId)
+        .gte('created_at', since)
+        .limit(1)
+        .maybeSingle()
+      if (!prev) eligibleAfterFreq.push(auto)
+    }
+    eligible = eligibleAfterFreq
   }
 
   const runIds: string[] = []

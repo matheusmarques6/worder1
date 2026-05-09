@@ -62,36 +62,45 @@ export async function GET(req: NextRequest) {
       stockMap.set(String(p.shopify_product_id), inStock)
     }
 
-    // 4. Dispara automation_runs para interests cujo produto está em estoque
+    // 4. Dispatch via dispatchTrigger so trigger_filters / audience_filters
+    // / frequency_config / idempotencyKey all apply consistently with the
+    // rest of the trigger surface. The previous direct insert bypassed
+    // every filter and could create the same run twice if the cron ran
+    // back-to-back.
+    const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
     let notified = 0
     for (const interest of interests) {
       if (!interest.product_id) continue
       if (!stockMap.get(String(interest.product_id))) continue
 
-      // Busca automações com trigger_type = 'trigger_back_in_stock' para esta org
-      const { data: automations } = await supabaseAdmin
-        .from('automations')
-        .select('id, trigger_config')
-        .eq('organization_id', interest.organization_id)
-        .eq('trigger_type', 'trigger_back_in_stock')
-        .eq('status', 'active')
-
-      for (const auto of automations || []) {
-        await supabaseAdmin.from('automation_runs').insert({
-          organization_id: interest.organization_id,
-          automation_id: auto.id,
-          contact_id: interest.contact_id,
-          status: 'pending',
-          metadata: {
-            trigger_data: {
-              product_id: interest.product_id,
-              product_title: interest.product_title,
-              variant_id: interest.variant_id,
-              source: 'back_in_stock',
-            },
+      await dispatchTrigger({
+        organizationId: interest.organization_id,
+        triggerType: 'trigger_back_in_stock',
+        contactId: interest.contact_id,
+        triggerData: {
+          event_type: 'back_in_stock',
+          product_id: interest.product_id,
+          ProductID: interest.product_id,
+          product_name: interest.product_title,
+          ProductName: interest.product_title,
+          variant_id: interest.variant_id,
+          VariantID: interest.variant_id,
+          Items: [{
+            ProductID: interest.product_id,
+            ProductName: interest.product_title,
+            VariantID: interest.variant_id,
+          }],
+          properties: {
+            product_id: interest.product_id,
+            product_title: interest.product_title,
+            variant_id: interest.variant_id,
+            source: 'back_in_stock',
           },
-        })
-      }
+        },
+        // Idempotency: contact + product + day. Same product back in
+        // stock today won't double-fire even if cron runs every 10min.
+        idempotencyKey: `back_in_stock:${interest.contact_id}:${interest.product_id}:${new Date().toISOString().slice(0, 10)}`,
+      }).catch((e) => console.error('[back-in-stock] dispatch failed:', e))
 
       // Marca como notificado
       await supabaseAdmin

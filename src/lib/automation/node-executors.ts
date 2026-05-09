@@ -268,6 +268,39 @@ const actionExecutors: Record<string, NodeExecutor> = {
         };
       }
 
+      // Quiet Hours + Frequency Cap (org-level rules). If we'd be sending
+      // inside the merchant's quiet window, postpone the run until the
+      // window closes. If the contact has hit the daily cap, skip the
+      // send (let the flow continue without spamming).
+      if (!isTest && organizationId) {
+        try {
+          const { getOrgSendingRules, nextAllowedSendTime, isFrequencyCapped } =
+            await import('@/lib/email/sending-rules');
+          const rules = await getOrgSendingRules(organizationId);
+          const resumeAt = nextAllowedSendTime(rules);
+          if (resumeAt) {
+            return {
+              status: 'waiting',
+              output: { postponedFor: 'quiet_hours', resumeAt: resumeAt.toISOString() },
+              waitUntil: resumeAt,
+            };
+          }
+          const contactIdForCap = (context.contact as any)?.id;
+          if (await isFrequencyCapped(organizationId, contactIdForCap, rules)) {
+            return {
+              status: 'success',
+              output: {
+                sent: false,
+                skipped: true,
+                reason: `Frequency cap atingido (${rules.maxSendsPerContactPerDay}/dia)`,
+              },
+            };
+          }
+        } catch (e) {
+          console.warn('[action_email] sending-rules check failed (proceeding):', e);
+        }
+      }
+
       // Email cascade: contact context first, then trigger data fields
       // (Shopify webhook may have arrived without the customer info
       // attached to the contact yet — we still try to email the
