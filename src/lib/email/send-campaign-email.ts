@@ -42,16 +42,50 @@ export async function sendCampaignEmail({
   let emailSendId = '' as string;
 
   try {
-    // 1. Create email_sends row with status 'pending'
-    // campaign_id is UUID — drop any non-UUID surrogate (flow runs pass null)
     const isUuid = (v: any) =>
       typeof v === 'string' &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+    // 0. Ensure we have a real contact row to attach the send to.
+    // email_sends.contact_id is NOT NULL on the production schema, so a
+    // brand-new abandoned-cart lead (no Worder contact yet) would fail
+    // the INSERT below. Upsert by (org, email) so the FK is satisfied
+    // and the same contact is reused across future sends.
+    let resolvedContactId: string | null = isUuid(contactId) ? contactId : null;
+    if (!resolvedContactId && contactEmail && organizationId) {
+      const { data: existing } = await supabaseAdmin
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', organizationId)
+        .ilike('email', contactEmail)
+        .maybeSingle();
+      if (existing?.id) {
+        resolvedContactId = existing.id;
+      } else {
+        const { data: created, error: createErr } = await supabaseAdmin
+          .from('contacts')
+          .insert({
+            organization_id: organizationId,
+            email: contactEmail,
+            source: 'flow_email',
+          })
+          .select('id')
+          .single();
+        if (createErr) {
+          console.error('[SendCampaignEmail] Failed to create contact:', createErr);
+        } else {
+          resolvedContactId = created?.id || null;
+        }
+      }
+    }
+
+    // 1. Create email_sends row with status 'pending'
+    // campaign_id is UUID — drop any non-UUID surrogate (flow runs pass null)
     const { data: emailSend, error: insertError } = await supabaseAdmin
       .from('email_sends')
       .insert({
         campaign_id: isUuid(campaignId) ? campaignId : null,
-        contact_id: isUuid(contactId) ? contactId : null,
+        contact_id: resolvedContactId,
         email: contactEmail,
         status: 'pending',
         organization_id: organizationId,

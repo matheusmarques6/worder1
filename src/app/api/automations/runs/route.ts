@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       .from('automation_runs')
       .select(`
         *,
-        automations(name, trigger_type),
+        automations(name, trigger_type, nodes),
         contacts(id, email, first_name, last_name)
       `, { count: 'exact' })
       .order('started_at', { ascending: false });
@@ -80,6 +80,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     
+    // Resolve a friendly label for the node where each run is currently
+    // sitting (or where it failed) so the History panel can render
+    // "Travado em: Aguardar 6 horas" instead of just an opaque status.
+    const labelForNode = (nodes: any[] | undefined, nodeId: string | null | undefined): string | undefined => {
+      if (!nodeId || !Array.isArray(nodes)) return undefined;
+      const n = nodes.find((x: any) => x?.id === nodeId);
+      if (!n) return undefined;
+      return n.data?.label || n.data?.config?.emailName || n.data?.config?.subject || n.type || nodeId;
+    };
+
     // Formatar resposta
     const formattedRuns = runs?.map((run: any) => ({
       id: run.id,
@@ -104,6 +114,9 @@ export async function GET(request: NextRequest) {
       completed_steps: run.completed_steps,
       failed_steps: run.failed_steps,
       duration_ms: run.duration_ms,
+      current_node_id: run.current_node_id || run.error_node_id,
+      current_node_label: labelForNode(run.automations?.nodes, run.current_node_id || run.error_node_id),
+      waiting_until: run.waiting_until,
       error_message: run.error_message,
       error_node_id: run.error_node_id,
       started_at: run.started_at,

@@ -296,6 +296,9 @@ export async function GET(request: NextRequest) {
       trigger_nodes: triggerNodes.length,
       action_nodes: actionNodes.length,
     },
+    // Stamped at file-edit time so the merchant can verify a deploy
+    // actually propagated. Bump whenever you change the email pipeline.
+    code_version: 'uuid-fix-2026-05-09',
     checks,
     verdict,
     summary: {

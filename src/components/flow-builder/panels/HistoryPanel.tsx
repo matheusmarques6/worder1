@@ -66,6 +66,9 @@ interface ExecutionRun {
   error_node_id?: string;
   started_at: string;
   completed_at?: string;
+  current_node_id?: string;
+  current_node_label?: string;
+  waiting_until?: string;
 }
 
 interface HistoryPanelProps {
@@ -895,7 +898,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                         ) : (
                           <p className="text-xs text-gray-400 italic">Sem contato</p>
                         )}
-                        <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                        <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 flex-wrap">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {formatDate(run.started_at)}
@@ -904,10 +907,21 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                           {run.duration_ms && (
                             <span>{formatDuration(run.duration_ms)}</span>
                           )}
-                          {run.status === 'waiting' && (
-                            <span className="text-amber-600 font-medium">aguardando delay</span>
-                          )}
                         </div>
+                        {(run.status === 'waiting' || run.status === 'running') && run.current_node_label && (
+                          <div className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-block">
+                            ⏳ Em: {run.current_node_label}
+                            {run.waiting_until && (
+                              <span className="text-amber-600 ml-1.5">· retoma {formatDate(run.waiting_until)}</span>
+                            )}
+                          </div>
+                        )}
+                        {(run.status === 'failed' || run.status === 'error') && (run.current_node_label || run.error_message) && (
+                          <div className="mt-1.5 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+                            ❌ {run.current_node_label && <span className="font-medium">Falhou em: {run.current_node_label}. </span>}
+                            <span className="text-red-600">{run.error_message?.slice(0, 120)}</span>
+                          </div>
+                        )}
                       </div>
                       <ChevronRight className="w-5 h-5 text-gray-400" />
                     </div>
