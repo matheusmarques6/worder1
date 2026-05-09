@@ -10,7 +10,12 @@ export interface OrgSendingRules {
   quietHoursStart: number; // 0-23 (hour)
   quietHoursEnd: number;   // 0-23
   quietHoursTimezone: string; // IANA tz name e.g. "America/Sao_Paulo"
-  maxSendsPerContactPerDay: number; // 0 = unlimited
+  // Per-channel caps. 0 = unlimited. maxSendsPerContactPerDay (legacy)
+  // becomes the default when a channel-specific cap isn't set.
+  maxSendsPerContactPerDay: number;
+  maxEmailPerContactPerDay: number | null;
+  maxSmsPerContactPerDay: number | null;
+  maxWhatsappPerContactPerDay: number | null;
 }
 
 const DEFAULTS: OrgSendingRules = {
@@ -19,6 +24,10 @@ const DEFAULTS: OrgSendingRules = {
   quietHoursEnd: 8,
   quietHoursTimezone: 'America/Sao_Paulo',
   maxSendsPerContactPerDay: 0,
+  maxEmailPerContactPerDay: null,
+  // Omnisend default for SMS: 3/day per recipient.
+  maxSmsPerContactPerDay: 3,
+  maxWhatsappPerContactPerDay: null,
 };
 
 const cache = new Map<string, { rules: OrgSendingRules; ts: number }>();
@@ -30,7 +39,7 @@ export async function getOrgSendingRules(organizationId: string): Promise<OrgSen
 
   const { data } = await supabaseAdmin
     .from('organizations')
-    .select('quiet_hours_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_timezone, max_sends_per_contact_per_day')
+    .select('quiet_hours_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_timezone, max_sends_per_contact_per_day, max_email_per_contact_per_day, max_sms_per_contact_per_day, max_whatsapp_per_contact_per_day')
     .eq('id', organizationId)
     .maybeSingle();
 
@@ -40,6 +49,9 @@ export async function getOrgSendingRules(organizationId: string): Promise<OrgSen
     quietHoursEnd: data?.quiet_hours_end ?? DEFAULTS.quietHoursEnd,
     quietHoursTimezone: data?.quiet_hours_timezone ?? DEFAULTS.quietHoursTimezone,
     maxSendsPerContactPerDay: data?.max_sends_per_contact_per_day ?? DEFAULTS.maxSendsPerContactPerDay,
+    maxEmailPerContactPerDay: data?.max_email_per_contact_per_day ?? DEFAULTS.maxEmailPerContactPerDay,
+    maxSmsPerContactPerDay: data?.max_sms_per_contact_per_day ?? DEFAULTS.maxSmsPerContactPerDay,
+    maxWhatsappPerContactPerDay: data?.max_whatsapp_per_contact_per_day ?? DEFAULTS.maxWhatsappPerContactPerDay,
   };
 
   cache.set(organizationId, { rules, ts: Date.now() });
@@ -114,22 +126,55 @@ export function nextAllowedSendTime(rules: OrgSendingRules, now: Date = new Date
 }
 
 /**
- * Returns true if the contact has hit the per-day cap.
+ * Returns true if the contact has hit the per-day cap on a channel.
+ * Channel-specific cap takes precedence; falls back to the org-wide
+ * total cap (maxSendsPerContactPerDay).
  */
 export async function isFrequencyCapped(
   organizationId: string,
   contactId: string | null | undefined,
-  rules: OrgSendingRules
+  rules: OrgSendingRules,
+  channel: 'email' | 'sms' | 'whatsapp' = 'email'
 ): Promise<boolean> {
-  if (!rules.maxSendsPerContactPerDay || rules.maxSendsPerContactPerDay <= 0) return false;
   if (!contactId) return false;
+
+  const channelCap = channel === 'email' ? rules.maxEmailPerContactPerDay
+    : channel === 'sms' ? rules.maxSmsPerContactPerDay
+    : rules.maxWhatsappPerContactPerDay;
+  const totalCap = rules.maxSendsPerContactPerDay;
+
+  if ((!channelCap || channelCap <= 0) && (!totalCap || totalCap <= 0)) return false;
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  // Channel-specific count + total count from email_sends (and other
+  // tables when those land in the schema). For now email_sends is the
+  // canonical send log and SMS/WhatsApp send through their own tables;
+  // fall through gracefully when those tables aren't queried.
+  if (channel === 'email') {
+    const { count } = await supabaseAdmin
+      .from('email_sends')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+      .eq('contact_id', contactId)
+      .gte('created_at', since)
+      .not('status', 'in', '("failed","cancelled")');
+    const sent = count || 0;
+    if (channelCap && channelCap > 0 && sent >= channelCap) return true;
+    if (totalCap && totalCap > 0 && sent >= totalCap) return true;
+    return false;
+  }
+
+  // For SMS/WhatsApp the conservative behaviour is to still enforce the
+  // total cap against email_sends until the dedicated send tables are
+  // wired in.
   const { count } = await supabaseAdmin
     .from('email_sends')
     .select('id', { count: 'exact', head: true })
     .eq('organization_id', organizationId)
     .eq('contact_id', contactId)
-    .gte('created_at', since)
-    .not('status', 'in', '("failed","cancelled")');
-  return (count || 0) >= rules.maxSendsPerContactPerDay;
+    .gte('created_at', since);
+  const sent = count || 0;
+  if (channelCap && channelCap > 0 && sent >= channelCap) return true;
+  if (totalCap && totalCap > 0 && sent >= totalCap) return true;
+  return false;
 }

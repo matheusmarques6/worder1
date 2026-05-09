@@ -85,6 +85,37 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
     }
   }
 
+  // 0b. Welcome trigger: by default Omnisend only fires on the contact's
+  // first marketing subscription (so existing customers don't suddenly
+  // get a welcome series when their consent is re-confirmed). We honor
+  // that unless the merchant explicitly opts into "every signup" via
+  // trigger_config.fireOnEverySignup.
+  if (triggerType === 'trigger_signup' && contactId) {
+    const { data: prev } = await supabaseAdmin
+      .from('automation_runs')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .eq('contact_id', contactId)
+      // Any prior signup-triggered run for this contact disqualifies new ones.
+      .eq('trigger_type', 'trigger_signup')
+      .limit(1)
+      .maybeSingle()
+    if (prev) {
+      // Will be filtered later only against automations that DON'T have
+      // fireOnEverySignup. Fast-path: if zero automations care, skip.
+      const { data: opted } = await supabaseAdmin
+        .from('automations')
+        .select('id, trigger_config')
+        .eq('organization_id', organizationId)
+        .eq('status', 'active')
+        .eq('trigger_type', 'trigger_signup')
+      const anyOptIn = (opted || []).some((a: any) => a?.trigger_config?.fireOnEverySignup)
+      if (!anyOptIn) {
+        return { automationsMatched: 0, runsCreated: 0, runIds: [] }
+      }
+    }
+  }
+
   // 1. Idempotência: se já existe run idempotente nas últimas 24h, pula
   if (idempotencyKey) {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
@@ -335,17 +366,33 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
     const eligibleAfterFreq: any[] = []
     for (const auto of eligible) {
       const fc = auto.frequency_config || {}
-      const ftype = fc.type || 'unlimited'
+      // Omnisend defaults: cart-recovery + browsing flows have a 1-day
+      // re-entry cooldown by default — same contact can't pile into the
+      // same flow multiple times in a day from repeated checkout/view
+      // events. Lifecycle/order triggers default to "unlimited" so a
+      // merchant can keep getting Order Confirmation emails per order.
+      const recoveryTriggers = new Set([
+        'trigger_checkout_abandoned',
+        'trigger_abandon',
+        'trigger_added_to_cart',
+        'trigger_browse_abandoned',
+      ])
+      const omnisendDefault = recoveryTriggers.has(triggerType)
+        ? { type: 'interval', value: 1, unit: 'days' }
+        : { type: 'unlimited' as const }
+      const ftype = fc.type || omnisendDefault.type
       if (ftype === 'unlimited') { eligibleAfterFreq.push(auto); continue }
 
       let since: string | null = null
       if (ftype === 'once') {
         since = '1970-01-01T00:00:00.000Z'
-      } else if (ftype === 'interval' && fc.value && fc.unit) {
+      } else if (ftype === 'interval') {
         const mult: Record<string, number> = {
           minutes: 60_000, hours: 3_600_000, days: 86_400_000, weeks: 604_800_000,
         }
-        const ms = (parseInt(String(fc.value), 10) || 0) * (mult[fc.unit] || 0)
+        const value = fc.value ?? (omnisendDefault as any).value
+        const unit = fc.unit ?? (omnisendDefault as any).unit
+        const ms = (parseInt(String(value || 0), 10) || 0) * (mult[unit || ''] || 0)
         if (ms > 0) since = new Date(Date.now() - ms).toISOString()
       }
       if (!since) { eligibleAfterFreq.push(auto); continue }

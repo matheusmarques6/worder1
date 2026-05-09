@@ -111,6 +111,36 @@ export async function POST(request: NextRequest) {
       await supabaseAdmin.from('contacts')
         .update({ last_active_at: now, last_event_type: eventType })
         .eq('id', contactId);
+
+      // Dispatch matching automation trigger so flows like "tag VIPs who
+      // opened" / "stop sending to anyone who reported as spam" can react.
+      const triggerMap: Record<string, string> = {
+        email_opened: 'trigger_email_opened',
+        email_clicked: 'trigger_email_clicked',
+        email_bounced: 'trigger_email_bounced',
+        email_complained: 'trigger_email_complained',
+        email_unsubscribed: 'trigger_email_unsubscribed',
+      };
+      const triggerType = triggerMap[eventType];
+      if (triggerType) {
+        try {
+          const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
+          await dispatchTrigger({
+            organizationId: orgId,
+            triggerType,
+            contactId,
+            triggerData: {
+              event_type: eventType,
+              CampaignId: campaignId,
+              SendId: emailSendId,
+              ...props,
+            },
+            idempotencyKey: `${triggerType}:${emailSendId}`,
+          });
+        } catch (e) {
+          console.warn(`[resend webhook] dispatch ${triggerType} failed:`, e);
+        }
+      }
     };
 
     switch (type) {

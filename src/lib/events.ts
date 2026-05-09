@@ -44,6 +44,8 @@ export enum EventType {
   EMAIL_OPENED = 'email.opened',
   EMAIL_CLICKED = 'email.clicked',
   EMAIL_BOUNCED = 'email.bounced',
+  EMAIL_COMPLAINED = 'email.complained',
+  EMAIL_UNSUBSCRIBED = 'email.unsubscribed',
   WHATSAPP_RECEIVED = 'whatsapp.received',
   WHATSAPP_READ = 'whatsapp.read',
   
@@ -94,6 +96,8 @@ const EVENT_TO_TRIGGER_MAP: Record<EventType, string> = {
   [EventType.EMAIL_OPENED]: 'trigger_email_opened',
   [EventType.EMAIL_CLICKED]: 'trigger_email_clicked',
   [EventType.EMAIL_BOUNCED]: 'trigger_email_bounced',
+  [EventType.EMAIL_COMPLAINED]: 'trigger_email_complained',
+  [EventType.EMAIL_UNSUBSCRIBED]: 'trigger_email_unsubscribed',
   [EventType.WHATSAPP_RECEIVED]: 'trigger_whatsapp',
   [EventType.WHATSAPP_READ]: 'trigger_whatsapp_read',
   [EventType.FORM_SUBMITTED]: 'trigger_form',

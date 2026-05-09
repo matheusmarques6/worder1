@@ -14,6 +14,9 @@ interface OrgRules {
   quiet_hours_end: number
   quiet_hours_timezone: string
   max_sends_per_contact_per_day: number
+  max_email_per_contact_per_day: number | null
+  max_sms_per_contact_per_day: number | null
+  max_whatsapp_per_contact_per_day: number | null
   skip_contacts_in_active_flows: boolean
 }
 
@@ -23,6 +26,9 @@ const DEFAULTS: OrgRules = {
   quiet_hours_end: 8,
   quiet_hours_timezone: 'America/Sao_Paulo',
   max_sends_per_contact_per_day: 0,
+  max_email_per_contact_per_day: null,
+  max_sms_per_contact_per_day: 3,
+  max_whatsapp_per_contact_per_day: null,
   skip_contacts_in_active_flows: false,
 }
 
@@ -55,6 +61,9 @@ export default function SendingRulesPage() {
           quiet_hours_end: o.quiet_hours_end ?? 8,
           quiet_hours_timezone: o.quiet_hours_timezone || 'America/Sao_Paulo',
           max_sends_per_contact_per_day: o.max_sends_per_contact_per_day ?? 0,
+          max_email_per_contact_per_day: o.max_email_per_contact_per_day ?? null,
+          max_sms_per_contact_per_day: o.max_sms_per_contact_per_day ?? 3,
+          max_whatsapp_per_contact_per_day: o.max_whatsapp_per_contact_per_day ?? null,
           skip_contacts_in_active_flows: !!o.skip_contacts_in_active_flows,
         })
       } finally {
@@ -160,25 +169,68 @@ export default function SendingRulesPage() {
       </section>
 
       {/* Frequency Cap */}
-      <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+      <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <div className="flex items-start gap-3">
           <Hash className="w-5 h-5 text-emerald-500 mt-0.5" />
           <div className="flex-1">
             <h2 className="font-medium text-gray-900">Frequency Cap</h2>
             <p className="text-sm text-gray-500">
-              Máximo de emails por contato em 24h. <code>0</code> = sem limite.
+              Máximo de mensagens por contato em 24h. Por canal — <code>0</code> ou vazio = sem limite específico do canal.
+              Padrão Omnisend: 3 SMS/dia.
             </p>
           </div>
         </div>
-        <input
-          type="number"
-          min={0}
-          max={50}
-          value={rules.max_sends_per_contact_per_day}
-          onChange={(e) => update('max_sends_per_contact_per_day', parseInt(e.target.value, 10) || 0)}
-          className="w-32 px-3 py-2 border border-gray-200 rounded-md text-sm"
-          placeholder="0"
-        />
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-gray-600">Total (todos canais)</span>
+            <input
+              type="number"
+              min={0}
+              max={50}
+              value={rules.max_sends_per_contact_per_day}
+              onChange={(e) => update('max_sends_per_contact_per_day', parseInt(e.target.value, 10) || 0)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
+              placeholder="0"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-gray-600">Email/dia</span>
+            <input
+              type="number"
+              min={0}
+              max={50}
+              value={rules.max_email_per_contact_per_day ?? ''}
+              onChange={(e) => update('max_email_per_contact_per_day', e.target.value === '' ? null : parseInt(e.target.value, 10))}
+              className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
+              placeholder="—"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-gray-600">SMS/dia</span>
+            <input
+              type="number"
+              min={0}
+              max={50}
+              value={rules.max_sms_per_contact_per_day ?? ''}
+              onChange={(e) => update('max_sms_per_contact_per_day', e.target.value === '' ? null : parseInt(e.target.value, 10))}
+              className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
+              placeholder="3"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-gray-600">WhatsApp/dia</span>
+            <input
+              type="number"
+              min={0}
+              max={50}
+              value={rules.max_whatsapp_per_contact_per_day ?? ''}
+              onChange={(e) => update('max_whatsapp_per_contact_per_day', e.target.value === '' ? null : parseInt(e.target.value, 10))}
+              className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
+              placeholder="—"
+            />
+          </label>
+        </div>
       </section>
 
       {/* Skip Contacts */}

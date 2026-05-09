@@ -25,6 +25,15 @@ ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS max_sends_per_contact_per_day INTEGER NOT NULL DEFAULT 0
   CHECK (max_sends_per_contact_per_day >= 0);
 
+-- Per-channel caps. NULL = no per-channel cap (falls back to total).
+-- Omnisend's SMS default is 3/day; we default to 3 for sms, NULL for the rest.
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS max_email_per_contact_per_day INTEGER;
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS max_sms_per_contact_per_day INTEGER DEFAULT 3;
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS max_whatsapp_per_contact_per_day INTEGER;
+
 ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS skip_contacts_in_active_flows BOOLEAN NOT NULL DEFAULT false;
 
