@@ -7,7 +7,7 @@
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { sendEmail } from '@/lib/email/resend';
+import { getEmailProviderForOrg } from '@/lib/email/providers';
 import { prepareEmailHtml, resolveProductBlocks, resolveCartBlocks } from '@/lib/email/render';
 
 export interface SendCampaignEmailParams {
@@ -166,16 +166,22 @@ export async function sendCampaignEmail({
     const finalSubject = renderMergeTags(subject, mergeData);
 
     // 5. Send via Resend
-    const result = await sendEmail({
+    // 5. Send via the org's configured provider (defaults to Resend).
+    // The factory caches per-org so we don't hit the DB on every send.
+    const { provider, config } = await getEmailProviderForOrg(organizationId);
+    const effectiveFrom = fromEmail || config.defaultFrom || 'onboarding@resend.dev';
+    const effectiveSenderName = senderName || config.defaultSenderName;
+    const result = await provider.send({
       to: contactEmail,
-      from: fromEmail,
-      senderName,
+      from: effectiveFrom,
+      senderName: effectiveSenderName,
       subject: finalSubject,
       html: finalHtml,
       replyTo,
       tags: [
-        { name: 'campaign_id', value: campaignId },
+        { name: 'campaign_id', value: campaignId || 'flow' },
         { name: 'email_send_id', value: emailSendId },
+        { name: 'provider', value: provider.id },
       ],
     });
 

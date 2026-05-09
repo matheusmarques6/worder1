@@ -34,6 +34,20 @@ ALTER TABLE organizations
 ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS max_whatsapp_per_contact_per_day INTEGER;
 
+-- Multi-provider email — pick which provider sends per org. Defaults to
+-- 'resend' for backward compat. Provider-specific connection details
+-- live in email_provider_config (jsonb) so adding new providers
+-- doesn't require a schema migration.
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS email_provider TEXT NOT NULL DEFAULT 'resend'
+  CHECK (email_provider IN ('resend', 'smtp', 'sendgrid', 'postmark', 'ses'));
+ALTER TABLE organizations
+  ADD COLUMN IF NOT EXISTS email_provider_config JSONB NOT NULL DEFAULT '{}'::jsonb;
+COMMENT ON COLUMN organizations.email_provider IS
+  'Active email backend. Worder picks an EmailProvider impl by this id.';
+COMMENT ON COLUMN organizations.email_provider_config IS
+  'Per-provider blob: {"provider":"smtp","smtp":{"host":"...","port":587,"user":"...","pass":"..."}} or {"provider":"resend","resend":{"apiKey":"..."}}';
+
 ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS skip_contacts_in_active_flows BOOLEAN NOT NULL DEFAULT false;
 

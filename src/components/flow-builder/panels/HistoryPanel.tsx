@@ -938,6 +938,18 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                             <span className="text-red-600">{run.error_message?.slice(0, 120)}</span>
                           </div>
                         )}
+                        {/* Inline Debug action — opens the per-run trace
+                            in a new tab so the merchant can see exactly
+                            which check is blocking this run. */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(`/api/diagnostics/run-trace/${run.id}`, '_blank');
+                          }}
+                          className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          🔬 Debug este run
+                        </button>
                       </div>
                       <ChevronRight className="w-5 h-5 text-gray-400" />
                     </div>

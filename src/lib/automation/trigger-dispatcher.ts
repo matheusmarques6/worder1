@@ -482,6 +482,17 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
       if (!next) break
       const { [next]: _drop, ...rest } = attempt
       attempt = rest
+      // CRITICAL: if we just dropped waiting_until, the run would still
+      // carry status='waiting' but be invisible to check-delayed-runs
+      // (which filters by waiting_until <= NOW()) — it would sit in
+      // waiting forever. Force status='pending' so process-runs picks
+      // it up immediately. The merchant loses the dispatch-time delay
+      // (better than a stuck run), and gets a clear log line so they
+      // know to add the column.
+      if (next === 'waiting_until' && attempt.status === 'waiting') {
+        console.error('[dispatchTrigger] CRITICAL: automation_runs.waiting_until column missing — falling back to status=pending so the run can execute. Apply 20260508_automation_runs_full_columns.sql.')
+        attempt.status = 'pending'
+      }
       console.warn(`[dispatchTrigger] retrying without ${next} (schema cache miss)`)
     }
 
