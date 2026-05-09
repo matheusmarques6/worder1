@@ -39,6 +39,8 @@ import {
   Target,
   Globe,
   Bot,
+  Filter,
+  Activity,
   type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -128,6 +130,20 @@ const LIBRARY_SECTIONS: SectionConfig[] = [
       { type: 'condition_field', label: 'Divisão Condicional', description: 'Divide caminho por condição', icon: GitBranch, category: 'condition', color: '#eab308' },
       { type: 'condition_whatsapp_keyword', label: 'Condição WhatsApp', description: 'Verifica keyword na resposta', icon: GitBranch, category: 'condition', color: '#f59e0b' },
       { type: 'logic_split', label: 'Teste A/B', description: 'Divide contatos aleatoriamente', icon: Shuffle, category: 'condition', color: '#6366f1' },
+    ],
+  },
+  {
+    id: 'ai',
+    label: 'Inteligência Artificial',
+    defaultExpanded: true,
+    items: [
+      { type: 'action_ai_classify', label: 'Classificar Intenção', description: 'IA detecta intenção e separa o fluxo', icon: Filter, category: 'action', color: '#a855f7', hasAI: true },
+      { type: 'action_ai_extract', label: 'Extrair Dados', description: 'IA captura email, telefone, endereço', icon: UserCog, category: 'action', color: '#a855f7', hasAI: true },
+      { type: 'action_ai_generate', label: 'Gerar Mensagem', description: 'IA gera resposta com prompt customizado', icon: Sparkles, category: 'action', color: '#a855f7', hasAI: true },
+      { type: 'action_ai_summarize', label: 'Resumir Conversa', description: 'IA resume últimas mensagens em contexto', icon: List, category: 'action', color: '#a855f7', hasAI: true },
+      { type: 'action_ai_handoff', label: 'Transferir Agente', description: 'Passa conversa pra outro agente IA', icon: Bot, category: 'action', color: '#a855f7', hasAI: true },
+      { type: 'condition_ai_sentiment', label: 'Sentimento da Mensagem', description: 'Separa positivo / neutro / negativo', icon: Activity, category: 'condition', color: '#a855f7', hasAI: true },
+      { type: 'condition_ai_match', label: 'Pergunta da IA', description: 'IA responde sim/não pra um critério', icon: GitBranch, category: 'condition', color: '#a855f7', hasAI: true },
     ],
   },
   {

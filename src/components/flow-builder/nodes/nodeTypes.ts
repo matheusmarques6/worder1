@@ -45,6 +45,7 @@ import {
   List,
   MessageCircle,
   Activity,
+  Sparkles,
   LucideIcon,
 } from 'lucide-react';
 
@@ -486,6 +487,100 @@ export const actionTypes: NodeTypeDefinition[] = [
     category: 'action',
     color: '#84cc16',
   },
+  // ============================================
+  // IA — Nodes específicos do módulo de Inteligência Artificial.
+  // Todos consomem a infra de F2/F3/F4 (runner, RAG, tools) sem
+  // necessariamente "ativar o agente" — fazem operações isoladas.
+  // ============================================
+  {
+    type: 'action_ai_classify',
+    label: 'Classificar Intenção',
+    description: 'IA detecta intenção da mensagem e separa o fluxo',
+    icon: Filter,
+    category: 'action',
+    color: '#a855f7',
+    defaultConfig: {
+      intents: ['compra', 'duvida', 'reclamacao', 'outro'],
+      model: 'anthropic/claude-haiku-4-5',
+    },
+  },
+  {
+    type: 'action_ai_extract',
+    label: 'Extrair Dados',
+    description: 'IA extrai email, telefone, endereço e salva no contato',
+    icon: UserCog,
+    category: 'action',
+    color: '#a855f7',
+    defaultConfig: {
+      fields: ['email', 'full_name', 'phone'],
+      saveToContact: true,
+    },
+  },
+  {
+    type: 'action_ai_generate',
+    label: 'Gerar Mensagem',
+    description: 'IA gera resposta personalizada com prompt + variáveis',
+    icon: Sparkles,
+    category: 'action',
+    color: '#a855f7',
+    defaultConfig: {
+      prompt: '',
+      maxTokens: 300,
+      temperature: 0.7,
+    },
+  },
+  {
+    type: 'action_ai_summarize',
+    label: 'Resumir Conversa',
+    description: 'IA resume últimas N mensagens e salva no contexto',
+    icon: List,
+    category: 'action',
+    color: '#a855f7',
+    defaultConfig: {
+      windowSize: 20,
+      saveToMemory: true,
+    },
+  },
+  {
+    type: 'action_ai_handoff',
+    label: 'Transferir Agente',
+    description: 'Passa conversa de um agente IA pra outro',
+    icon: Bot,
+    category: 'action',
+    color: '#a855f7',
+    defaultConfig: {
+      targetAgentId: '',
+    },
+  },
+];
+
+// ============================================
+// IA — Conditions (separadas pra ficarem disponíveis no group de Lógica)
+// ============================================
+
+export const aiConditionTypes: NodeTypeDefinition[] = [
+  {
+    type: 'condition_ai_sentiment',
+    label: 'Sentimento da Mensagem',
+    description: 'IA detecta sentimento e separa positivo/neutro/negativo',
+    icon: Activity,
+    category: 'condition',
+    color: '#a855f7',
+    defaultConfig: {
+      threshold: 0.6,
+    },
+  },
+  {
+    type: 'condition_ai_match',
+    label: 'Pergunta da IA',
+    description: 'IA responde sim/não pra um critério em linguagem natural',
+    icon: Sparkles,
+    category: 'condition',
+    color: '#a855f7',
+    defaultConfig: {
+      question: 'O cliente demonstrou interesse em comprar?',
+    },
+  },
 ];
 
 // ============================================
@@ -689,6 +784,17 @@ export const nodeTypes: Record<string, any> = {
   action_whatsapp_payment: ActionNode,
   action_update_contact: ActionNode,
   action_back_in_stock_notify: ActionNode,
+
+  // IA actions (módulo AI)
+  action_ai_classify: ActionNode,
+  action_ai_extract: ActionNode,
+  action_ai_generate: ActionNode,
+  action_ai_summarize: ActionNode,
+  action_ai_handoff: ActionNode,
+
+  // IA conditions (módulo AI)
+  condition_ai_sentiment: ConditionNode,
+  condition_ai_match: ConditionNode,
 
   // Conditions
   condition_whatsapp_keyword: ConditionNode,

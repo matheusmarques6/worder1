@@ -1718,11 +1718,14 @@ function normalizeValue(value: any): any {
 // EXPORT ALL EXECUTORS
 // ============================================
 
+import { aiNodeExecutors } from './ai-node-executors';
+
 export const nodeExecutors: Record<string, NodeExecutor> = {
   ...triggerExecutors,
   ...actionExecutors,
   ...conditionExecutors,
   ...controlExecutors,
+  ...aiNodeExecutors,
 };
 
 export default nodeExecutors;
