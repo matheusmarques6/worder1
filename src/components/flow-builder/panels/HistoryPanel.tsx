@@ -336,17 +336,33 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
     const date = new Date(dateStr);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
+    const future = diffMs < 0;
+    const absMs = Math.abs(diffMs);
+    const diffMins = Math.floor(absMs / 60000);
+    const diffHours = Math.floor(absMs / 3600000);
+    const diffDays = Math.floor(absMs / 86400000);
+
+    if (future) {
+      // waiting_until lookups: "em 5m" / "em 3h" / "em 2d"
+      if (diffMins < 1) return 'agora';
+      if (diffMins < 60) return `em ${diffMins}m`;
+      if (diffHours < 24) return `em ${diffHours}h`;
+      if (diffDays < 7) return `em ${diffDays}d`;
+      return date.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
 
     if (diffMins < 1) return 'Agora';
     if (diffMins < 60) return `${diffMins}m atrás`;
     if (diffHours < 24) return `${diffHours}h atrás`;
     if (diffDays < 7) return `${diffDays}d atrás`;
-    
-    return date.toLocaleDateString('pt-BR', { 
-      day: '2-digit', 
+
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
       month: 'short',
       hour: '2-digit',
       minute: '2-digit',
