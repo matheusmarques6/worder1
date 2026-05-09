@@ -249,14 +249,36 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
   // ========== EMAIL ==========
   action_email: {
-    async execute({ config, context, credentials, isTest, supabase, organizationId }) {
+    async execute({ node, config, context, credentials, isTest, supabase, organizationId }) {
+      // Trace marker so we can grep Vercel logs for "did this email
+      // node even run?". Logged once per execute() call, before any
+      // skip / postpone / cap shortcuts can return.
+      console.log('[action_email] ▶ start', {
+        nodeId: node?.id,
+        emailStatus: config?.emailStatus || '(default→draft)',
+        templateId: config?.templateId,
+        contactId: (context.contact as any)?.id,
+        contactEmail: (context.contact as any)?.email,
+        triggerType: (context as any)?.trigger?.type,
+        organizationId,
+      });
+
       // Per-node publish gate: the UI lets the merchant flip an email
       // between draft / live / manual. Anything that isn't 'live' must
       // not actually send — the node returns success+skipped so the rest
       // of the flow continues. Test runs always send (the editor uses a
       // separate /api/email/test endpoint anyway).
+      //
+      // Default stays 'draft' on purpose: a freshly-created email node
+      // must not auto-send before the merchant explicitly publishes it.
+      // The skip is logged with the node id so you can correlate with
+      // the History panel.
       const emailStatus = (config.emailStatus || 'draft').toLowerCase();
       if (!isTest && emailStatus !== 'live') {
+        console.log('[action_email] ⊘ skipped — not live', {
+          nodeId: node?.id,
+          emailStatus,
+        });
         return {
           status: 'success',
           output: {

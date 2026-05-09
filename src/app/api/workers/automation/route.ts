@@ -316,25 +316,37 @@ async function handleExecuteRun(runId: string) {
   try {
     // Resume context: when a previously-waiting run is being picked up
     // by the delayed-runs cron, metadata.waiting_at carries the node id
-    // we paused at. We pass startFromNodeId so the engine continues
-    // AFTER that node (the engine looks up the next edge target).
-    // Without this, every resumed run restarts from the trigger and
-    // hits the same delay again — infinite loop / never completes.
+    // we paused at, plus a rerunOnResume flag the engine writes.
+    //   • Delay nodes (control_delay, action_delay) finished waiting
+    //     before they returned 'waiting' — on resume we SKIP them via
+    //     resumeAfterNodeId, otherwise we hit the same delay forever.
+    //   • Email nodes that returned 'waiting' (postponed by quiet
+    //     hours / frequency cap) DID NOT actually send — on resume we
+    //     RE-EXECUTE them via startFromNodeId.
+    // The previous code unconditionally jumped to edge.target which
+    // skipped both kinds — emails postponed for quiet hours never sent.
     const previousWaitingAt = (metadata as any).waiting_at;
     const previousContext = (metadata as any).context;
     const isResume = !!previousWaitingAt?.nodeId;
+    const shouldRerunPaused =
+      isResume && previousWaitingAt?.rerunOnResume === true;
 
-    let startFromNodeId: string | undefined;
-    if (isResume) {
-      const edge = (workflow.edges || []).find((e: any) => e.source === previousWaitingAt.nodeId);
-      startFromNodeId = edge?.target;
-    }
+    const triggerType =
+      (metadata as any).trigger_type ||
+      (automation as any).trigger_type ||
+      'manual';
+    const runStartedAt = (run as any).started_at || (run as any).created_at;
 
     // Execute workflow with organization context
     const result = await executeWorkflow(workflow, {
       organizationId,  // ← PASSAR PARA O ENGINE
       executionId: runId,
-      startFromNodeId,
+      runStartedAt,
+      ...(isResume && shouldRerunPaused
+        ? { startFromNodeId: previousWaitingAt.nodeId }
+        : isResume
+          ? { resumeAfterNodeId: previousWaitingAt.nodeId }
+          : {}),
       triggerData: metadata.trigger_data || {},
       contactId: run.contact_id,
       dealId: metadata.deal_id,
@@ -353,7 +365,19 @@ async function handleExecuteRun(runId: string) {
           updatedAt: contact.updated_at,
         } : undefined,
         deal,
-        trigger: metadata.trigger_data || {},
+        // Variable engine wants {type, data, timestamp}; passing raw
+        // trigger_data here used to wipe out every {{event.*}} merge tag.
+        trigger: {
+          type: triggerType,
+          data: metadata.trigger_data || {},
+          timestamp: runStartedAt,
+        },
+        workflow: {
+          id: automation.id,
+          name: automation.name,
+          executionId: runId,
+          startedAt: runStartedAt,
+        },
       },
     });
 
@@ -381,12 +405,15 @@ async function handleExecuteRun(runId: string) {
           duration: result.duration,
           nodeResults: result.nodeResults,
         },
-        // Snapshot for the cron to resume cleanly
+        // Snapshot for the cron to resume cleanly. rerunOnResume
+        // tells the next pickup whether to re-execute the paused node
+        // (email postponed for quiet hours) or skip it (delay).
         ...(isWaiting && waitingAt ? {
           waiting_at: {
             nodeId: waitingAt.nodeId,
             resumeAt: waitingAt.resumeAt,
             data: waitingAt.data,
+            rerunOnResume: (waitingAt as any).rerunOnResume === true,
           },
           context: (result as any).context,
         } : {}),

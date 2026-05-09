@@ -721,9 +721,15 @@ export function createExecutionContext(options: {
   deal?: VariableContext['deal'];
   order?: VariableContext['order'];
   timezone?: string;
+  // ISO timestamp of when the automation_run row was created. Used by
+  // exit-condition checks as the floor when scanning contact_events —
+  // without this they fell back to "last 24h" and cancelled any
+  // cart-recovery run for contacts who had bought ANYTHING in the
+  // previous day, even if the purchase predated the abandoned cart.
+  runStartedAt?: string;
 }): VariableContext {
   const now = new Date();
-  
+
   return {
     trigger: {
       type: options.triggerType,
@@ -738,7 +744,8 @@ export function createExecutionContext(options: {
       id: options.automationId,
       name: options.automationName,
       executionId: options.executionId,
-    },
+      startedAt: options.runStartedAt || now.toISOString(),
+    } as any,
     now: {
       iso: now.toISOString(),
       timestamp: now.getTime(),

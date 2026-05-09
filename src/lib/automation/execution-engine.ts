@@ -65,6 +65,10 @@ export interface ExecutionOptions {
   dealId?: string;
   orderId?: string;
   organizationId?: string;  // ← CRÍTICO: Para isolamento multi-tenant
+  // ISO timestamp of when this run was created — used as the floor for
+  // exit-condition event scans so we only cancel on events that
+  // happened AFTER the run started, not on unrelated past purchases.
+  runStartedAt?: string;
 }
 
 export interface ExecutionResult {
@@ -123,7 +127,18 @@ export class ExecutionEngine {
       triggerType: triggerNode?.data.nodeType || 'manual',
       triggerData: options.context?.trigger?.data || {},
       timezone: workflow.settings?.timezone,
+      runStartedAt: options.runStartedAt,
     });
+
+    // Belt-and-suspenders: callers that build the context themselves
+    // (process-runs cron, automation worker) may forget to set
+    // workflow.startedAt. Backfill from options.runStartedAt so the
+    // exit-condition check below has a real floor.
+    if (options.runStartedAt) {
+      const wf: any = (context as any).workflow || {};
+      if (!wf.startedAt) wf.startedAt = options.runStartedAt;
+      (context as any).workflow = wf;
+    }
 
     // ⚠️ CRÍTICO: Garantir organizationId no contexto para isolamento
     if (options.organizationId) {
@@ -337,12 +352,22 @@ export class ExecutionEngine {
           }
 
           if (result.status === 'waiting' && result.waitUntil) {
+            // Disambiguate "this node finished its work and just needs
+            // wall-clock time" (delay nodes) from "this node punted; it
+            // hasn't actually run yet" (email postponed for quiet hours).
+            // The resume code in process-runs / workers reads this flag:
+            //   rerunOnResume=false → skip the paused node (resumeAfterNodeId)
+            //   rerunOnResume=true  → re-execute it (startFromNodeId)
+            const pausedType = node.data?.nodeType || (node as any).type || '';
+            const isDelayNode =
+              pausedType === 'control_delay' || pausedType === 'action_delay';
             return this.createResult(executionId, 'waiting', startedAt, nodeResults, context, {
               waitingAt: {
                 nodeId: node.id,
                 resumeAt: result.waitUntil,
                 data: result.output,
-              },
+                rerunOnResume: !isDelayNode,
+              } as any,
             });
           }
 
@@ -520,19 +545,37 @@ export class ExecutionEngine {
     for (const cond of exitConditions) {
       try {
         if (cond.type === 'event' && cond.eventType) {
-          // Check if a specific event occurred for this contact since the run started
+          // Check if a specific event occurred for this contact since the run started.
+          //
+          // CRITICAL: the floor MUST be the run's started_at, not "24h
+          // ago". Cart-recovery flows used to cancel for any contact
+          // who had placed_order in the past 24h — including unrelated
+          // purchases from yesterday — so all repeat customers with a
+          // new abandoned cart had their recovery flow killed before
+          // the first email.
+          //
+          // Without a floor we'd match the original "placed_order" that
+          // happened weeks ago for this contact. With a 24h fallback we
+          // matched yesterday's order. Default now to the run created_at
+          // (always set when we come through createExecutionContext or
+          // the engine's backfill above), and only fall back to 5
+          // minutes ago — enough to catch racy completions that fired
+          // right after the trigger but before the engine started.
           const contactId = context.contact?.id;
           if (contactId && organizationId) {
+            const startedAt =
+              (context as any).workflow?.startedAt ||
+              new Date(Date.now() - 5 * 60 * 1000).toISOString();
             const { data: events } = await this.supabase
               .from('contact_events')
               .select('id')
               .eq('contact_id', contactId)
               .eq('event_type', cond.eventType)
-              .gte('occurred_at', (context as any).workflow?.startedAt || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+              .gte('occurred_at', startedAt)
               .limit(1);
 
             if (events && events.length > 0) {
-              console.log(`[ExitCondition] Event "${cond.eventType}" found for contact ${contactId} — exiting`);
+              console.log(`[ExitCondition] Event "${cond.eventType}" found for contact ${contactId} since ${startedAt} — exiting`);
               return true;
             }
           }

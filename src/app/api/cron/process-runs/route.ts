@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     
     const { data: pendingRuns, error: runsError } = await supabase
       .from('automation_runs')
-      .select('id, automation_id, contact_id, created_at, metadata')
+      .select('id, automation_id, contact_id, created_at, started_at, metadata')
       .eq('status', 'pending')
       .lt('created_at', fiveSecondsAgo)
       .order('created_at', { ascending: true })
@@ -197,22 +197,38 @@ export async function GET(request: NextRequest) {
         console.log(`[ProcessRuns] Executing workflow ${workflow.id} with ${workflow.nodes.length} nodes`);
 
         // Resume context: when this run was previously paused at a
-        // delay node, metadata.waiting_at carries the node id we paused
-        // at. Pass startFromNodeId so the engine continues AFTER that
-        // node instead of restarting from the trigger (which would just
-        // hit the same delay → infinite loop).
+        // delay/email node, metadata.waiting_at carries the node id +
+        // a rerunOnResume flag.
+        //   • Delay nodes (control_delay, action_delay) finished their
+        //     wait when they returned 'waiting' — on resume we SKIP
+        //     them via resumeAfterNodeId, otherwise we'd hit the same
+        //     delay forever.
+        //   • Email nodes that returned 'waiting' (postponed by quiet
+        //     hours / frequency cap) DID NOT actually send — on resume
+        //     we must RE-EXECUTE them via startFromNodeId.
+        // The engine writes rerunOnResume into metadata.waiting_at when
+        // the paused node is non-delay, so we route accordingly here.
         const previousWaitingAt = (metadata as any).waiting_at;
         const previousContext = (metadata as any).context;
         const isResume = !!previousWaitingAt?.nodeId;
+        const shouldRerunPaused =
+          isResume && previousWaitingAt?.rerunOnResume === true;
+
+        const triggerType =
+          (metadata as any).trigger_type ||
+          (automation as any).trigger_type ||
+          'manual';
+        const runStartedAt = (run as any).started_at || run.created_at;
 
         const result = await executeWorkflow(workflow, {
           organizationId: automation.organization_id,
           executionId: run.id,
-          // resumeAfterNodeId tells the engine "the pause node already
-          // ran, restart from its descendants" — handles delays with
-          // multiple outgoing edges correctly. startFromNodeId stays as
-          // a fallback for older callers.
-          ...(isResume ? { resumeAfterNodeId: previousWaitingAt.nodeId } : {}),
+          runStartedAt,
+          ...(isResume && shouldRerunPaused
+            ? { startFromNodeId: previousWaitingAt.nodeId }
+            : isResume
+              ? { resumeAfterNodeId: previousWaitingAt.nodeId }
+              : {}),
           triggerData: metadata.trigger_data || {},
           contactId: run.contact_id,
           dealId: metadata.deal_id,
@@ -231,7 +247,20 @@ export async function GET(request: NextRequest) {
               updatedAt: contact.updated_at,
             } : undefined,
             deal,
-            trigger: metadata.trigger_data || {},
+            // Variable engine expects {type, data, timestamp}; passing
+            // raw trigger_data here used to wipe out every {{event.*}}
+            // and {{trigger.data.*}} merge tag.
+            trigger: {
+              type: triggerType,
+              data: metadata.trigger_data || {},
+              timestamp: runStartedAt,
+            },
+            workflow: {
+              id: automation.id,
+              name: automation.name,
+              executionId: run.id,
+              startedAt: runStartedAt,
+            },
           },
         });
 
@@ -256,12 +285,15 @@ export async function GET(request: NextRequest) {
               duration: result.duration,
               nodeResults: result.nodeResults,
             },
-            // Snapshot for the resume path above
+            // Snapshot for the resume path above. rerunOnResume tells
+            // the next pickup whether to re-execute the paused node
+            // (email postponed for quiet hours) or skip it (delay).
             ...(isWaiting && waitingAt ? {
               waiting_at: {
                 nodeId: waitingAt.nodeId,
                 resumeAt: waitingAt.resumeAt,
                 data: waitingAt.data,
+                rerunOnResume: (waitingAt as any).rerunOnResume === true,
               },
               context: (result as any).context,
             } : {}),
