@@ -250,9 +250,36 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
             )} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 leading-snug">
-              {displayLabel}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-gray-900 leading-snug truncate">
+                {displayLabel}
+              </p>
+              {nodeType === 'action_email' && (() => {
+                const s = (nodeConfig?.emailStatus || 'draft').toLowerCase();
+                const cls =
+                  s === 'live'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : s === 'manual'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : 'bg-amber-50 text-amber-700 border-amber-200';
+                const label = s === 'live' ? 'Live' : s === 'manual' ? 'Manual' : 'Draft';
+                return (
+                  <span
+                    className={cn(
+                      'shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border',
+                      cls
+                    )}
+                    title={s === 'live' ? 'Email publicado — vai enviar' : 'Email não publicado — não envia'}
+                  >
+                    <span className={cn(
+                      'w-1.5 h-1.5 rounded-full',
+                      s === 'live' ? 'bg-emerald-500' : s === 'manual' ? 'bg-blue-500' : 'bg-amber-500'
+                    )} />
+                    {label}
+                  </span>
+                );
+              })()}
+            </div>
             {summary && (
               <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">
                 {summary}

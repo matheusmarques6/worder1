@@ -881,12 +881,21 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                             {run.status}
                           </span>
                         </div>
-                        {run.contact && (
-                          <p className="text-xs text-gray-600/50 truncate">
-                            {run.contact.name || run.contact.email}
-                          </p>
+                        {run.contact ? (
+                          <div className="space-y-0.5">
+                            {run.contact.name && run.contact.name !== run.contact.email && (
+                              <p className="text-xs font-medium text-gray-800 truncate">
+                                {run.contact.name}
+                              </p>
+                            )}
+                            <p className="text-xs text-gray-600 truncate">
+                              {run.contact.email || '(sem email)'}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-400 italic">Sem contato</p>
                         )}
-                        <div className="flex items-center gap-3 mt-2 text-xs text-gray-600/40">
+                        <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {formatDate(run.started_at)}
@@ -894,6 +903,9 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
                           <span>{run.completed_steps}/{run.total_steps} passos</span>
                           {run.duration_ms && (
                             <span>{formatDuration(run.duration_ms)}</span>
+                          )}
+                          {run.status === 'waiting' && (
+                            <span className="text-amber-600 font-medium">aguardando delay</span>
                           )}
                         </div>
                       </div>

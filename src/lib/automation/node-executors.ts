@@ -250,6 +250,24 @@ const actionExecutors: Record<string, NodeExecutor> = {
   // ========== EMAIL ==========
   action_email: {
     async execute({ config, context, credentials, isTest, supabase, organizationId }) {
+      // Per-node publish gate: the UI lets the merchant flip an email
+      // between draft / live / manual. Anything that isn't 'live' must
+      // not actually send — the node returns success+skipped so the rest
+      // of the flow continues. Test runs always send (the editor uses a
+      // separate /api/email/test endpoint anyway).
+      const emailStatus = (config.emailStatus || 'draft').toLowerCase();
+      if (!isTest && emailStatus !== 'live') {
+        return {
+          status: 'success',
+          output: {
+            sent: false,
+            skipped: true,
+            reason: `Email ${emailStatus} — publique para enviar`,
+            emailStatus,
+          },
+        };
+      }
+
       // Email cascade: contact context first, then trigger data fields
       // (Shopify webhook may have arrived without the customer info
       // attached to the contact yet — we still try to email the
