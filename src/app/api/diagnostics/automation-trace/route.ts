@@ -335,7 +335,7 @@ export async function GET(request: NextRequest) {
     },
     // Stamped at file-edit time so the merchant can verify a deploy
     // actually propagated. Bump whenever you change the email pipeline.
-    code_version: 'omnisend-full-2026-05-09h',
+    code_version: 'history-contact-2026-05-09i',
     checks,
     verdict,
     summary: {

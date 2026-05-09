@@ -90,38 +90,101 @@ export async function GET(request: NextRequest) {
       return n.data?.label || n.data?.config?.emailName || n.data?.config?.subject || n.type || nodeId;
     };
 
+    // Pull the trigger payload email for each run (used as fallback
+    // contact label when automation_runs.contact_id is null but the
+    // payload had an email — common when the dispatch happened before
+    // the contacts upsert finished). Also try a real contacts lookup so
+    // we can backfill contact_id and display name+email.
+    const orphanRuns = (runs || []).filter((r: any) => !r.contacts);
+    const orphanEmails: string[] = [];
+    for (const r of orphanRuns) {
+      const td: any = r.metadata?.trigger_data || {};
+      const props: any = td.properties || td;
+      const email = (
+        td.CustomerEmail || td.email || td.Email ||
+        props.CustomerEmail || props.email || props.Email ||
+        props?.Customer?.Email || props?.raw?.email ||
+        props?.raw?.customer?.email || props?.raw?.billing_address?.email ||
+        ''
+      ).toString().trim().toLowerCase();
+      (r as any)._payloadEmail = email || null;
+      if (email) orphanEmails.push(email);
+    }
+
+    let payloadContactByEmail = new Map<string, any>();
+    if (orphanEmails.length > 0) {
+      const uniq = Array.from(new Set(orphanEmails));
+      const { data: matched } = await supabase
+        .from('contacts')
+        .select('id, email, first_name, last_name')
+        .in('email', uniq);
+      payloadContactByEmail = new Map(
+        (matched || []).map((c: any) => [String(c.email).toLowerCase(), c])
+      );
+      // Backfill automation_runs.contact_id so the next render is O(1).
+      const updates: { id: string; contact_id: string }[] = [];
+      for (const r of orphanRuns) {
+        const email = (r as any)._payloadEmail;
+        if (!email) continue;
+        const c = payloadContactByEmail.get(email);
+        if (c?.id) updates.push({ id: r.id, contact_id: c.id });
+      }
+      // Fire-and-forget; we don't block the response on this.
+      for (const u of updates) {
+        supabase.from('automation_runs').update({ contact_id: u.contact_id }).eq('id', u.id).then(() => {}, () => {});
+      }
+    }
+
     // Formatar resposta
-    const formattedRuns = runs?.map((run: any) => ({
-      id: run.id,
-      automation_id: run.automation_id,
-      automation_name: run.automations?.name,
-      status: run.status,
-      // Top-level column was added later; older runs only carry the type
-      // inside metadata. Fall back to the parent automation's trigger so
-      // the UI never renders "Manual" for an event-driven flow.
-      trigger_type:
-        run.trigger_type ||
-        run.metadata?.trigger_type ||
-        run.automations?.trigger_type ||
-        null,
-      contact: run.contacts ? {
-        id: run.contacts.id,
-        email: run.contacts.email,
-        name: `${run.contacts.first_name || ''} ${run.contacts.last_name || ''}`.trim() || run.contacts.email
-      } : null,
-      deal_id: run.deal_id,
-      total_steps: run.total_steps,
-      completed_steps: run.completed_steps,
-      failed_steps: run.failed_steps,
-      duration_ms: run.duration_ms,
-      current_node_id: run.current_node_id || run.error_node_id,
-      current_node_label: labelForNode(run.automations?.nodes, run.current_node_id || run.error_node_id),
-      waiting_until: run.waiting_until,
-      error_message: run.error_message,
-      error_node_id: run.error_node_id,
-      started_at: run.started_at,
-      completed_at: run.completed_at
-    }));
+    const formattedRuns = runs?.map((run: any) => {
+      // Build the contact object with three layers of fallback:
+      // 1) joined contacts row (run.contacts) — happy path
+      // 2) contact resolved by trigger payload email (just looked up)
+      // 3) bare email from the trigger payload — at least show that
+      const payloadEmail = (run as any)._payloadEmail as string | null;
+      const matched = payloadEmail ? payloadContactByEmail.get(payloadEmail) : null;
+      let contact: { id: string | null; email: string; name: string } | null = null;
+      if (run.contacts) {
+        contact = {
+          id: run.contacts.id,
+          email: run.contacts.email,
+          name: `${run.contacts.first_name || ''} ${run.contacts.last_name || ''}`.trim() || run.contacts.email,
+        };
+      } else if (matched) {
+        contact = {
+          id: matched.id,
+          email: matched.email,
+          name: `${matched.first_name || ''} ${matched.last_name || ''}`.trim() || matched.email,
+        };
+      } else if (payloadEmail) {
+        contact = { id: null, email: payloadEmail, name: payloadEmail };
+      }
+
+      return {
+        id: run.id,
+        automation_id: run.automation_id,
+        automation_name: run.automations?.name,
+        status: run.status,
+        trigger_type:
+          run.trigger_type ||
+          run.metadata?.trigger_type ||
+          run.automations?.trigger_type ||
+          null,
+        contact,
+        deal_id: run.deal_id,
+        total_steps: run.total_steps,
+        completed_steps: run.completed_steps,
+        failed_steps: run.failed_steps,
+        duration_ms: run.duration_ms,
+        current_node_id: run.current_node_id || run.error_node_id,
+        current_node_label: labelForNode(run.automations?.nodes, run.current_node_id || run.error_node_id),
+        waiting_until: run.waiting_until,
+        error_message: run.error_message,
+        error_node_id: run.error_node_id,
+        started_at: run.started_at,
+        completed_at: run.completed_at,
+      };
+    });
     
     return NextResponse.json({
       runs: formattedRuns,

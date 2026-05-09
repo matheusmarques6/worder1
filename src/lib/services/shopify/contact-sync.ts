@@ -359,15 +359,32 @@ async function createNewContact(
     .insert(contactData)
     .select()
     .single();
-  
+
   if (error) {
     console.error('[ContactSync] Failed to create contact:', error);
     throw error;
   }
-  
+
   const fullName = [data.firstName, data.lastName].filter(Boolean).join(' ') || data.email || data.phone;
   console.log(`[ContactSync] ✅ Contact created: ${fullName}`);
-  
+
+  // Backfill: any automation_runs created with contact_id=null because
+  // this contact didn't exist yet (race between checkout webhook and
+  // contact sync) get linked now. Without this, the History panel keeps
+  // showing "Sem contato" forever for those waiting runs.
+  if (data.email && newContact?.id) {
+    try {
+      await supabase
+        .from('automation_runs')
+        .update({ contact_id: newContact.id })
+        .eq('organization_id', store.organization_id)
+        .is('contact_id', null)
+        .or(`metadata->trigger_data->>CustomerEmail.eq.${data.email},metadata->trigger_data->>email.eq.${data.email}`);
+    } catch (e) {
+      console.warn('[ContactSync] backfill automation_runs failed:', e);
+    }
+  }
+
   return {
     id: newContact.id,
     isNew: true,
