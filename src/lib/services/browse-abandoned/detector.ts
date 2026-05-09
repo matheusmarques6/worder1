@@ -58,8 +58,31 @@ export async function runBrowseAbandonedDetection(): Promise<BrowseAbandonedResu
 }
 
 async function processOrg(orgId: string, targetStores: Set<string>): Promise<number> {
+  // Per-automation wait window — Omnisend default for Browse Abandonment
+  // is 4 hours. Read trigger_config.abandonTime from the org's active
+  // browse-abandoned automation; fall back to the env default (or 4 h).
+  let waitMinutes = MIN_MIN;
+  try {
+    const { data: auto } = await supabaseAdmin
+      .from('automations')
+      .select('trigger_config')
+      .eq('organization_id', orgId)
+      .eq('trigger_type', 'trigger_browse_abandoned')
+      .eq('status', 'active')
+      .limit(1)
+      .maybeSingle();
+    const cfg: any = (auto as any)?.trigger_config || {};
+    if (cfg.abandonTime) {
+      waitMinutes = cfg.abandonUnit === 'hours'
+        ? cfg.abandonTime * 60
+        : cfg.abandonTime;
+    } else if (!process.env.BROWSE_ABANDONED_MIN_MIN) {
+      waitMinutes = 4 * 60; // Omnisend default
+    }
+  } catch { /* keep default */ }
+
   const minTime = new Date(Date.now() - MAX_HOURS * 3600 * 1000).toISOString();
-  const maxTime = new Date(Date.now() - MIN_MIN * 60 * 1000).toISOString();
+  const maxTime = new Date(Date.now() - waitMinutes * 60 * 1000).toISOString();
 
   const { data: candidates, error } = await supabaseAdmin.rpc('detect_browse_abandoned', {
     p_organization_id: orgId,

@@ -341,6 +341,49 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               </div>
             )}
 
+            {/* TRIGGER: ADDED TO CART / BROWSE ABANDONED — same wait
+                window pattern as checkout_abandoned. Omnisend defaults:
+                Cart 60 min, Browse 4 h. */}
+            {(selectedNode.data.nodeType === 'trigger_added_to_cart' ||
+              selectedNode.data.nodeType === 'trigger_browse_abandoned') && (
+              <div className="space-y-3 px-1">
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">
+                    Esperar antes de considerar abandonado
+                  </label>
+                  <p className="text-[11px] text-gray-500 mb-2">
+                    {selectedNode.data.nodeType === 'trigger_added_to_cart'
+                      ? 'Padrão Omnisend para Cart Abandonment: 60 minutos.'
+                      : 'Padrão Omnisend para Browse Abandonment: 4 horas.'}
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={1440}
+                      value={
+                        selectedNode.data.config?.abandonTime ??
+                        (selectedNode.data.nodeType === 'trigger_added_to_cart' ? 60 : 4)
+                      }
+                      onChange={(e) => handleUpdate('abandonTime', parseInt(e.target.value, 10) || 1)}
+                      className="w-24 px-3 py-2 border border-gray-200 rounded-md text-sm"
+                    />
+                    <select
+                      value={
+                        selectedNode.data.config?.abandonUnit ||
+                        (selectedNode.data.nodeType === 'trigger_browse_abandoned' ? 'hours' : 'minutes')
+                      }
+                      onChange={(e) => handleUpdate('abandonUnit', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-md text-sm"
+                    >
+                      <option value="minutes">minutos</option>
+                      <option value="hours">horas</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* TRIGGER: ORDER CREATED */}
             {selectedNode.data.nodeType === 'trigger_order' && (
               <OrderTriggerConfig

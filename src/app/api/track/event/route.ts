@@ -628,9 +628,10 @@ export async function POST(request: NextRequest) {
       // product, active on site) fire immediately.
       const cartLikeTrigger =
         triggerType === 'trigger_added_to_cart' || triggerType === 'trigger_checkout_abandoned';
-      // Per-automation wait — fall back to 30 min like Omnisend.
+      // Omnisend defaults: Cart 60 min, Checkout 30 min.
       let pixelDelayMinutes: number | undefined;
       if (cartLikeTrigger) {
+        const omnisendDefault = triggerType === 'trigger_added_to_cart' ? 60 : 30;
         try {
           const { supabaseAdmin } = await import('@/lib/supabase-admin');
           const { data: autos } = await supabaseAdmin
@@ -643,8 +644,8 @@ export async function POST(request: NextRequest) {
           const cfg: any = (autos as any[])?.[0]?.trigger_config || {};
           pixelDelayMinutes = cfg.abandonUnit === 'hours'
             ? (cfg.abandonTime || 1) * 60
-            : (cfg.abandonTime || 30);
-        } catch { pixelDelayMinutes = 30; }
+            : (cfg.abandonTime || omnisendDefault);
+        } catch { pixelDelayMinutes = omnisendDefault; }
       }
 
       import('@/lib/automation/trigger-dispatcher').then(({ dispatchTrigger }) =>

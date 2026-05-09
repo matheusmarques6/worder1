@@ -1722,8 +1722,7 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
         checkout_token: checkout.token || null,
       };
 
-      // If no automations match yet, still dispatch with default 30min so
-      // future automations (or the legacy code path) work consistently.
+      // Omnisend default for Started Checkout: 30 minutes.
       if (buckets.size === 0) {
         await dispatchTrigger({
           organizationId: store.organization_id,
