@@ -14,6 +14,7 @@ import {
   Redo2,
   BarChart3,
   ChevronDown,
+  FastForward,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useIsValidFlow } from '@/stores/flowStore';
@@ -351,6 +352,49 @@ export function Toolbar({ onSave, onTest, onBack, organizationId, automations, c
         >
           <AlertTriangle className="w-4 h-4" strokeWidth={2} />
           <span className="hidden lg:inline">Diagnosticar</span>
+        </button>
+
+        {/* Force resume — manually run the check-delayed-runs cron so
+            stuck waiting runs (whose waiting_until has already passed)
+            unblock immediately. Useful when the Vercel cron is delayed
+            or the merchant doesn't want to wait. */}
+        <button
+          onClick={async () => {
+            setToolbarToast('Retomando runs em waiting…');
+            try {
+              const res = await fetch('/api/cron/check-delayed-runs', {
+                method: 'POST',
+                headers: { 'X-Internal-Request': 'true' },
+              });
+              const j = await res.json();
+              if (!res.ok) {
+                setToolbarToast(`Erro: ${j.error || 'falhou'}`);
+                setTimeout(() => setToolbarToast(null), 5000);
+                return;
+              }
+              const checked = j.checked ?? 0;
+              const enqueued = j.enqueued ?? 0;
+              const cancelled = j.cancelled ?? 0;
+              setToolbarToast(
+                checked === 0
+                  ? 'Nenhum run em waiting com tempo já vencido'
+                  : `${enqueued} retomados, ${cancelled} cancelados (de ${checked})`
+              );
+              setTimeout(() => setToolbarToast(null), 5000);
+            } catch (e: any) {
+              setToolbarToast(`Erro: ${e?.message || 'falhou'}`);
+              setTimeout(() => setToolbarToast(null), 5000);
+            }
+          }}
+          className={cn(
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md',
+            'hover:bg-zinc-800 text-zinc-200 hover:text-white',
+            'transition-colors text-[13px] font-medium'
+          )}
+          title="Forçar retomada dos runs em waiting cujo tempo já venceu"
+        >
+          <FastForward className="w-4 h-4" strokeWidth={2} />
+          <span className="hidden lg:inline">Retomar</span>
         </button>
 
         {/* Test */}
