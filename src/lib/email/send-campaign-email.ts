@@ -43,11 +43,15 @@ export async function sendCampaignEmail({
 
   try {
     // 1. Create email_sends row with status 'pending'
+    // campaign_id is UUID — drop any non-UUID surrogate (flow runs pass null)
+    const isUuid = (v: any) =>
+      typeof v === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
     const { data: emailSend, error: insertError } = await supabaseAdmin
       .from('email_sends')
       .insert({
-        campaign_id: campaignId,
-        contact_id: contactId,
+        campaign_id: isUuid(campaignId) ? campaignId : null,
+        contact_id: isUuid(contactId) ? contactId : null,
         email: contactEmail,
         status: 'pending',
         organization_id: organizationId,

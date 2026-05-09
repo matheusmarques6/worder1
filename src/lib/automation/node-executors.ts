@@ -578,13 +578,15 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app';
 
-        // Use flowId as campaignId surrogate so email_sends rows carry
-        // a stable key we can aggregate by when the Automations ranking
-        // queries attribution revenue.
-        const campaignIdSurrogate = (context as any).flowId || (context as any).flow_id || `flow-${Date.now()}`;
+        // email_sends.campaign_id is UUID — only pass it through when
+        // the flow id actually is a UUID. Flow attribution lives in the
+        // flow_id column we set on the row right after the send.
+        const flowIdRaw = (context as any).flowId || (context as any).flow_id || '';
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(flowIdRaw);
+        const campaignIdSurrogate = isUuid ? flowIdRaw : null;
 
         const result = await sendCampaignEmail({
-          campaignId: campaignIdSurrogate,
+          campaignId: campaignIdSurrogate as any,
           contactId: (context.contact as any)?.id || '',
           contactEmail: email,
           mergeData,
