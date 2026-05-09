@@ -1656,52 +1656,20 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
     // (via the trigger data's CustomerEmail / raw.email / etc.), and
     // if still nothing, the run completes with output.skipped='no_email'
     // — visible in history with a clear reason.
-    try {
-      const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
-      await dispatchTrigger({
-        organizationId: store.organization_id,
-        triggerType: 'trigger_checkout_abandoned',
-        contactId: contactId || null,
-        triggerData: {
-          event_type: 'checkout_started',
-          CheckoutId: String(checkout.id || checkout.token),
-          CheckoutURL: checkout.abandoned_checkout_url || '',
-          Value: checkoutValue,
-          Currency: checkout.currency,
-          ItemCount: checkout.line_items?.length || 0,
-          Items: (checkout.line_items || []).map((item: any) => ({
-            ProductID: item.product_id ? String(item.product_id) : undefined,
-            ProductName: item.title || item.name,
-            Quantity: item.quantity || 1,
-            ItemPrice: parseFloat(item.price || '0'),
-            RowTotal: parseFloat(item.price || '0') * (item.quantity || 1),
-            CompareAtPrice: item.compare_at_price ? parseFloat(item.compare_at_price) : null,
-            ImageURL: item.product?.images?.[0]?.src || item.product?.image?.src || '',
-            ProductURL: item.product?.handle ? `https://${store.shop_domain}/products/${item.product.handle}` : '',
-            SKU: item.sku,
-            VariantName: item.variant_title,
-            VariantID: item.variant_id ? String(item.variant_id) : undefined,
-            Brand: item.vendor,
-          })),
-          ItemNames: (checkout.line_items || []).map((item: any) => item.title || item.name),
-          SubtotalPrice: parseFloat(checkout.subtotal_price || '0'),
-          TotalDiscounts: parseFloat(checkout.total_discounts || '0'),
-          DiscountCodes: checkout.discount_codes || [],
-          CustomerEmail: resolvedEmail || checkout.email,
-          CustomerPhone: resolvedPhone || checkout.phone,
-          ReferringSite: checkout.referring_site || '',
-          LandingSite: checkout.landing_site || '',
-          UTM: extractUtmFromNoteAttributes(extractNoteAttributes(checkout.note_attributes)),
-          // Pass the cart_token so the worker can re-resolve contact at
-          // send-time if the run got created with contact_id=null.
-          cart_token: checkout.cart_token || null,
-          checkout_token: checkout.token || null,
-        },
-        idempotencyKey: `trigger:checkout_started:${checkout.id || checkout.token}`,
-      });
-    } catch (dispatchErr) {
-      console.warn('[Shopify] dispatchTrigger for checkout_started failed:', dispatchErr);
-    }
+    // Klaviyo / Omnisend pattern: do NOT dispatch the abandoned-checkout
+    // trigger here. A checkout that was just opened isn't abandoned yet —
+    // it only becomes abandoned if the customer doesn't complete the
+    // purchase within the merchant-configured window (default 30 min,
+    // settable per automation as trigger_config.abandonTime).
+    //
+    // The shopify_checkouts row is already saved above with status
+    // 'pending'. The check-abandoned-carts cron scans that table on a
+    // schedule and dispatches trigger_checkout_abandoned only for
+    // checkouts that are still pending after the threshold.
+    //
+    // We keep the contact_id resolution + the CDP event creation paths
+    // up the function so segmentation and tracking-debug see the data
+    // immediately — only the automation kickoff is deferred.
   } catch (cdpError) {
     console.error('[Shopify Webhook] CDP event creation failed (checkout):', cdpError);
   }

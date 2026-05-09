@@ -300,6 +300,47 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               />
             )}
 
+            {/* TRIGGER: CHECKOUT ABANDONED — wait window so the trigger
+                only fires after N minutes of inactivity (Omnisend pattern). */}
+            {selectedNode.data.nodeType === 'trigger_checkout_abandoned' && (
+              <div className="space-y-3 px-1">
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">
+                    Esperar antes de considerar abandonado
+                  </label>
+                  <p className="text-[11px] text-gray-500 mb-2">
+                    O trigger só dispara depois desse tempo sem o cliente concluir o pedido. Padrão: 30 min.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={1440}
+                      value={selectedNode.data.config?.abandonTime ?? 30}
+                      onChange={(e) => handleUpdate('abandonTime', parseInt(e.target.value, 10) || 30)}
+                      className="w-24 px-3 py-2 border border-gray-200 rounded-md text-sm"
+                    />
+                    <select
+                      value={selectedNode.data.config?.abandonUnit || 'minutes'}
+                      onChange={(e) => handleUpdate('abandonUnit', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-md text-sm"
+                    >
+                      <option value="minutes">minutos</option>
+                      <option value="hours">horas</option>
+                    </select>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={selectedNode.data.config?.onlyWithEmail !== false}
+                    onChange={(e) => handleUpdate('onlyWithEmail', e.target.checked)}
+                  />
+                  Só disparar quando o checkout tem email
+                </label>
+              </div>
+            )}
+
             {/* TRIGGER: ORDER CREATED */}
             {selectedNode.data.nodeType === 'trigger_order' && (
               <OrderTriggerConfig

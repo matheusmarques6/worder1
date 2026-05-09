@@ -335,7 +335,7 @@ export async function GET(request: NextRequest) {
     },
     // Stamped at file-edit time so the merchant can verify a deploy
     // actually propagated. Bump whenever you change the email pipeline.
-    code_version: 'parity-2026-05-09d',
+    code_version: 'omnisend-pattern-2026-05-09e',
     checks,
     verdict,
     summary: {
