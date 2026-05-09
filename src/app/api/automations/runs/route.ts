@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       .from('automation_runs')
       .select(`
         *,
-        automations(name),
+        automations(name, trigger_type),
         contacts(id, email, first_name, last_name)
       `, { count: 'exact' })
       .order('started_at', { ascending: false });
@@ -86,7 +86,14 @@ export async function GET(request: NextRequest) {
       automation_id: run.automation_id,
       automation_name: run.automations?.name,
       status: run.status,
-      trigger_type: run.trigger_type,
+      // Top-level column was added later; older runs only carry the type
+      // inside metadata. Fall back to the parent automation's trigger so
+      // the UI never renders "Manual" for an event-driven flow.
+      trigger_type:
+        run.trigger_type ||
+        run.metadata?.trigger_type ||
+        run.automations?.trigger_type ||
+        null,
       contact: run.contacts ? {
         id: run.contacts.id,
         email: run.contacts.email,
@@ -176,7 +183,11 @@ async function getRunDetail(
       automation_id: run.automation_id,
       automation_name: run.automations?.name,
       status: run.status,
-      trigger_type: run.trigger_type,
+      trigger_type:
+        run.trigger_type ||
+        run.metadata?.trigger_type ||
+        run.automations?.trigger_type ||
+        null,
       trigger_data: run.trigger_data,
       contact: run.contacts ? {
         id: run.contacts.id,

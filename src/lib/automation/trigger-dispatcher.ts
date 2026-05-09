@@ -119,6 +119,10 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
       contact_id: contactId || null,
       deal_id: dealId || null,
       status: scheduledFor ? 'waiting' : 'pending',
+      // Persist as top-level column so the History panel doesn't fall
+      // back to "Manual". Still mirrored in metadata for schemas where
+      // this column hasn't been added yet (handled by the fallback chain).
+      trigger_type: triggerType,
       metadata,
     }
     if (scheduledFor) {
@@ -134,6 +138,7 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
       'waiting_until',
       'trigger_event_id',
       'current_node_id',
+      'trigger_type',
       'organization_id',  // last resort — without it tenancy is broken,
                            // but at least the run is created and the
                            // merchant sees what's happening
