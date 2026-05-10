@@ -463,8 +463,18 @@ const actionExecutors: Record<string, NodeExecutor> = {
         // the purchase (during the delay window). Same for added_to_cart.
         //
         // Check: was a placed_order / order_paid / checkout_completed
-        // event recorded for the same contact AFTER the trigger fired?
+        // event recorded for the same contact AFTER the run started?
         // If yes, this run is no longer relevant — skip the email.
+        //
+        // CRITICAL: floor MUST be the run's started_at (via
+        // workflow.startedAt that the cron + worker plumb in). Earlier
+        // versions used Date.now() - 24h, which counted ANY past purchase
+        // in the last day as a conversion — repeat customers had every
+        // recovery email silently skipped because they bought yesterday,
+        // showing the symptom "fluxo entra, espera dispatch, não envia,
+        // pula pra próximo delay". 5-minute safety margin catches racy
+        // completions that fired right after the trigger but before the
+        // engine kicked in.
         if (!isTest && context.contact?.id) {
           const triggerType = (context as any).trigger?.type || '';
           const triggerEventType = String((context.trigger?.data as any)?.event_type || '').toLowerCase();
@@ -477,12 +487,15 @@ const actionExecutors: Record<string, NodeExecutor> = {
             triggerEventType === 'browse_abandoned';
 
           if (isAbandonmentFlow) {
-            // The trigger fired at metadata.created_at (from the run's
-            // origin); we don't have that here directly, so we use the
-            // contact's last_event_at as a proxy floor. Better: pull
-            // explicit window from automation config when present.
-            const windowMs = (config.conversionWindowHours || 24) * 60 * 60 * 1000;
-            const since = new Date(Date.now() - windowMs).toISOString();
+            const runStartedAtIso =
+              (context as any).workflow?.startedAt ||
+              new Date(Date.now() - 5 * 60 * 1000).toISOString();
+            const runStartedAtMs = Date.parse(runStartedAtIso);
+            const since = new Date(
+              Number.isFinite(runStartedAtMs)
+                ? runStartedAtMs - 5 * 60 * 1000
+                : Date.now() - 5 * 60 * 1000
+            ).toISOString();
             const { data: completion } = await supabase
               .from('contact_events')
               .select('id, event_type, occurred_at')
@@ -493,6 +506,13 @@ const actionExecutors: Record<string, NodeExecutor> = {
               .limit(1)
               .maybeSingle();
             if (completion) {
+              console.log('[action_email] ⊘ skipped — conversion guard', {
+                nodeId: node?.id,
+                contactId: context.contact.id,
+                conversionEvent: completion.event_type,
+                conversionAt: completion.occurred_at,
+                runStartedAt: runStartedAtIso,
+              });
               return {
                 status: 'success',
                 output: {
