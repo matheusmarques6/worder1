@@ -104,12 +104,52 @@ export async function releaseRun(
 }
 
 /**
- * Cron helper: recupera runs com heartbeat stale.
- * Gracefully handles missing columns in automation_runs table.
+ * Cron helper: recupera runs com heartbeat / status stale.
+ *
+ * A run is stale when it sits in 'running' but nothing has touched it
+ * for `minutes`. We prefer last_heartbeat_at (set by claim/heartbeat)
+ * because it reflects active work, then updated_at (process-runs bumps
+ * it when flipping to running) as a fallback, and finally created_at
+ * for ancient rows that never got either column populated.
+ *
+ * The previous implementation used created_at alone, which caused a
+ * brand-new run that legitimately just started executing to look stale
+ * the moment created_at was older than the threshold (e.g. a run that
+ * waited 1h before becoming pending and then ran 30s).
+ *
+ * Gracefully handles missing columns in automation_runs table — the
+ * full migration may not have been applied to every tenant DB.
  */
-export async function reclaimStaleRuns(minutes: number = 10): Promise<number> {
+export async function reclaimStaleRuns(minutes: number = 5): Promise<number> {
+  const threshold = new Date(Date.now() - minutes * 60 * 1000).toISOString()
+  const ids: string[] = []
+
+  // Phase 1: heartbeat-based runs (claimRun / withHeartbeat workflow).
   try {
-    const threshold = new Date(Date.now() - minutes * 60 * 1000).toISOString()
+    const { data, error } = await supabaseAdmin
+      .from('automation_runs')
+      .update({
+        status: 'pending',
+        lock_token: null,
+        locked_at: null,
+        locked_by: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('status', 'running')
+      .not('last_heartbeat_at', 'is', null)
+      .lt('last_heartbeat_at', threshold)
+      .select('id')
+    if (!error && data) ids.push(...data.map((r: any) => r.id))
+    else if (error && !(error.code === 'PGRST204' || error.message?.includes('Could not find'))) {
+      console.warn('[run-lock] reclaim heartbeat:', error.message)
+    }
+  } catch { /* phase falls through */ }
+
+  // Phase 2: lockless runs (process-runs cron path) — no heartbeat,
+  // but updated_at is bumped when flipping to running. If updated_at
+  // is older than threshold AND last_heartbeat_at is unset, the run is
+  // a zombie from a function that died.
+  try {
     const { data, error } = await supabaseAdmin
       .from('automation_runs')
       .update({
@@ -117,20 +157,22 @@ export async function reclaimStaleRuns(minutes: number = 10): Promise<number> {
         updated_at: new Date().toISOString(),
       })
       .eq('status', 'running')
-      .lt('created_at', threshold)
+      .is('last_heartbeat_at', null)
+      .lt('updated_at', threshold)
       .select('id')
-
-    if (error) {
-      if (error.code === 'PGRST204' || error.message?.includes('Could not find')) {
-        return 0
+    if (!error && data) ids.push(...data.map((r: any) => r.id))
+    else if (error && !(error.code === 'PGRST204' || error.message?.includes('Could not find'))) {
+      // Older schema — no updated_at column. Fall through to phase 3.
+      if (!error.message?.includes('updated_at')) {
+        console.warn('[run-lock] reclaim updated_at:', error.message)
       }
-      console.warn('[run-lock] reclaim:', error.message)
-      return 0
     }
-    return data?.length ?? 0
-  } catch {
-    return 0
+  } catch { /* phase falls through */ }
+
+  if (ids.length > 0) {
+    console.log(`[run-lock] reclaimed ${ids.length} stale runs:`, ids)
   }
+  return ids.length
 }
 
 /**

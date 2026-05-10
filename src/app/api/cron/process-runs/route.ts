@@ -8,6 +8,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, Workflow } from '@/lib/automation/execution-engine';
 export const dynamic = 'force-dynamic';
+// Vercel default for cron is 60s on Pro. Action_email itself has a 60s
+// node timeout, plus DB writes + Resend round-trip — one slow run can
+// blow past 60s. We claim the full Pro cap (300s) so the function
+// finishes before Vercel kills it and leaves runs stuck in 'running'.
+export const maxDuration = 300;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -39,13 +44,19 @@ export async function GET(request: NextRequest) {
     // 1. Buscar runs pendentes (criados há mais de 5 segundos para evitar race condition)
     const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
     
+    // Batch=3 keeps us well below the 300s function cap even if every
+    // run hits the worst-case action_email path (~60s with quiet hours
+    // + Resend retry). With batch=10 a single slow run could starve
+    // the others and leave them stuck in 'running' when Vercel killed
+    // the function. The check-delayed-runs / reclaim crons re-pick
+    // anything we don't process this tick.
     const { data: pendingRuns, error: runsError } = await supabase
       .from('automation_runs')
       .select('id, automation_id, contact_id, created_at, started_at, metadata')
       .eq('status', 'pending')
       .lt('created_at', fiveSecondsAgo)
       .order('created_at', { ascending: true })
-      .limit(10);
+      .limit(3);
 
     if (runsError) {
       console.error('[ProcessRuns] Error fetching runs:', runsError);
@@ -99,10 +110,13 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        // Atualizar para running
+        // Atualizar para running. Touching updated_at explicitly so
+        // reclaim-stale-runs can detect zombies — that cron filters on
+        // updated_at, and Supabase doesn't auto-bump the column without
+        // a server-side trigger.
         await supabase
           .from('automation_runs')
-          .update({ status: 'running' })
+          .update({ status: 'running', updated_at: new Date().toISOString() })
           .eq('id', run.id);
 
         const metadata = run.metadata || {};

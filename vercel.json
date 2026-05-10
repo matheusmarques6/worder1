@@ -42,7 +42,7 @@
     },
     {
       "path": "/api/cron/reclaim-stale-runs",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/cron/check-back-in-stock",

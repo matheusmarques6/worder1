@@ -3,6 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, resumeExecution, Workflow } from '@/lib/automation/execution-engine';
 import { verifyQStashSignature } from '@/lib/queue';
 export const dynamic = 'force-dynamic';
+// Per-run worker — needs the full Pro cap so action_email (60s timeout)
+// plus enrichment + Resend send + DB writes never get killed mid-flight.
+export const maxDuration = 300;
 
 // ============================================
 // ENVIRONMENT
