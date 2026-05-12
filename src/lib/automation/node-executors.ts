@@ -536,6 +536,14 @@ const actionExecutors: Record<string, NodeExecutor> = {
             /(<a\s[^>]*href=["'])([^"'#][^"']*)(["'][^>]*>)/gi,
             (match: string, before: string, url: string, after: string) => {
               if (url.includes('utm_source') || url.includes('unsubscribe') || url.includes('mailto:')) return match;
+              // Skip unresolved merge tags and URLs that don't look like
+              // navigable destinations. Appending UTM to a leftover
+              // `{{ trigger.X }}` or to a stray `&discount=...` (which
+              // happens when an earlier merge tag rendered to '') would
+              // produce a URL the click-tracker then encodes verbatim,
+              // and the redirect handler bounces to the store home.
+              if (url.includes('{{')) return match;
+              if (!/^(https?:\/\/|\/)/i.test(url)) return match;
               const separator = url.includes('?') ? '&' : '?';
               return `${before}${url}${separator}${utmParams}${after}`;
             }

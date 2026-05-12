@@ -458,6 +458,27 @@ export class VariableEngine {
       return get(context, eventPath);
     }
 
+    // Alias: trigger.<X> → trigger.data.<X> when X is not a direct
+    // field of the trigger envelope (type/data/timestamp/source).
+    //
+    // The merge tag picker presents canonical names as
+    // {{ trigger.CheckoutURL }}, {{ trigger.OrderId }}, etc., but the
+    // payload is stored under context.trigger.data.*. Without this
+    // alias, a lookup like get(context, 'trigger.CheckoutURL') falls
+    // off the end and returns undefined, which the engine converts
+    // to '' — emails went out with empty links and the click-tracker
+    // wrapping that empty href turned the merchant's checkout button
+    // into a redirect to the store home page.
+    if (path.startsWith('trigger.') && !/^trigger\.(type|data|timestamp|source)\b/.test(path)) {
+      const direct = get(context, path);
+      if (direct !== undefined && direct !== null && direct !== '') return direct;
+      const aliased = get(context, 'trigger.data.' + path.slice(8));
+      if (aliased !== undefined && aliased !== null) return aliased;
+      // Last-chance fallback for raw Shopify payloads where the
+      // canonical field sits one level deeper under .raw
+      return get(context, 'trigger.data.raw.' + path.slice(8));
+    }
+
     // Use lodash get for nested paths
     return get(context, path);
   }
