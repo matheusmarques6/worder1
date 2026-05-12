@@ -333,7 +333,8 @@ export async function POST(req: NextRequest) {
         mergeData.current_date = new Date().toLocaleDateString('pt-BR');
         mergeData.current_year = String(new Date().getFullYear());
 
-        // Create the send row (status pending) to get emailSendId
+        // Create the send row (status queued) to get emailSendId
+        // 'queued' matches email_sends_status_check; 'pending' is not allowed.
         const contactIsp = detectISP(contact.email || '')
         const { data: emailSend, error: insertErr } = await supabaseAdmin
           .from('email_sends')
@@ -341,7 +342,7 @@ export async function POST(req: NextRequest) {
             campaign_id: campaign_id,
             contact_id: contact.id,
             email: contact.email,
-            status: 'pending',
+            status: 'queued',
             organization_id: organizationId,
             isp_domain: contactIsp,
           })

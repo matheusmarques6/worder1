@@ -57,6 +57,7 @@ interface NodeItemConfig {
   color: string;
   isPremium?: boolean;
   hasAI?: boolean;
+  defaultConfig?: Record<string, any>;
 }
 
 interface SectionConfig {
@@ -124,7 +125,7 @@ const LIBRARY_SECTIONS: SectionConfig[] = [
     label: 'Lógica',
     defaultExpanded: true,
     items: [
-      { type: 'control_delay', label: 'Atraso / Delay', description: 'Aguarda tempo determinado', icon: Clock, category: 'control', color: '#f59e0b' },
+      { type: 'control_delay', label: 'Atraso / Delay', description: 'Aguarda tempo determinado', icon: Clock, category: 'control', color: '#f59e0b', defaultConfig: { value: 1, unit: 'hours' } },
       { type: 'condition_field', label: 'Divisão Condicional', description: 'Divide caminho por condição', icon: GitBranch, category: 'condition', color: '#eab308' },
       { type: 'condition_whatsapp_keyword', label: 'Condição WhatsApp', description: 'Verifica keyword na resposta', icon: GitBranch, category: 'condition', color: '#f59e0b' },
       { type: 'logic_split', label: 'Teste A/B', description: 'Divide contatos aleatoriamente', icon: Shuffle, category: 'condition', color: '#6366f1' },
@@ -320,7 +321,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
       category: node.category,
       icon: node.icon?.displayName || 'Zap',
       color: node.color,
-      defaultConfig: {},
+      defaultConfig: node.defaultConfig || {},
     };
     e.dataTransfer.setData('application/reactflow', JSON.stringify(dragData));
     e.dataTransfer.effectAllowed = 'move';
@@ -338,7 +339,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
         category: nodeDef.category,
         nodeType: nodeDef.type,
         icon: nodeDef.icon?.displayName || 'Zap',
-        config: {},
+        config: nodeDef.defaultConfig || {},
       },
     };
     addNode(newNode);

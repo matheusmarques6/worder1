@@ -79,15 +79,16 @@ export async function sendCampaignEmail({
       }
     }
 
-    // 1. Create email_sends row with status 'pending'
-    // campaign_id is UUID — drop any non-UUID surrogate (flow runs pass null)
+    // 1. Create email_sends row with status 'queued'
+    // 'queued' is the initial state allowed by email_sends_status_check;
+    // 'pending' is NOT in the allowlist and would fail the CHECK constraint.
     const { data: emailSend, error: insertError } = await supabaseAdmin
       .from('email_sends')
       .insert({
         campaign_id: isUuid(campaignId) ? campaignId : null,
         contact_id: resolvedContactId,
         email: contactEmail,
-        status: 'pending',
+        status: 'queued',
         organization_id: organizationId,
       })
       .select('id')
