@@ -53,10 +53,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: uploadError.message }, { status: 500 })
     }
 
-    const { data: urlData } = supabaseAdmin.storage.from('email-images').getPublicUrl(fileName)
+    // Default response uses the transform/CDN endpoint so the URL
+    // saved into email templates is the optimised one — auto-resized
+    // to email width, served as WebP when supported, cached at the
+    // edge. The raw /object/public URL is too slow for Gmail's image
+    // proxy on mobile (broken-image icons). render-html rewriter
+    // also catches legacy templates that still reference the raw URL.
+    const { data: rawUrlData } = supabaseAdmin.storage.from('email-images').getPublicUrl(fileName)
+    const { data: transformUrlData } = supabaseAdmin.storage.from('email-images').getPublicUrl(fileName, {
+      transform: {
+        width: 1200,
+        quality: 85,
+      },
+    })
 
     return NextResponse.json({
-      url: urlData.publicUrl,
+      url: transformUrlData?.publicUrl || rawUrlData.publicUrl,
+      url_original: rawUrlData.publicUrl,
       fileName: file.name,
       size: file.size,
       storage_path: fileName,

@@ -7,6 +7,7 @@
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { rewriteImagesForEmail } from './image-rewrite'
 
 /**
  * Resolve saved/universal blocks in an EmailDocument.
@@ -1036,6 +1037,15 @@ export function prepareEmailHtml({
 
   // 1. Replace merge tags
   result = renderMergeTags(result, mergeData);
+
+  // 1b. Rewrite Supabase Storage image URLs to the transform/CDN
+  // endpoint. Same-host URLs but the /render/image/ path serves
+  // through Supabase's edge cache + auto-resizes to email width +
+  // negotiates WebP. Without this rewrite Gmail's image proxy
+  // pulls the raw object from origin, times out on mobile, and the
+  // recipient sees a broken icon even though Resend's preview
+  // rendered fine.
+  result = rewriteImagesForEmail(result, { width: 600, quality: 80 });
 
   // 2. Add unsubscribe link with HMAC token (before tracking rewrites)
   result = addUnsubscribeLink(result, emailSendId, baseUrl, contactId, orgId, campaignId);
