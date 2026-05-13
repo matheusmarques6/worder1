@@ -96,11 +96,25 @@ export function useStore(): UseStoreReturn {
     }
   }, [stores, setCurrentStore]);
 
+  // Refresh on mount even when zustand already has cached stores —
+  // the cached row can be stale (e.g. embedInstalled=false from before
+  // the merchant ran install-extras). 30s TTL avoids hammering the
+  // endpoint when the user clicks around quickly.
   useEffect(() => {
-    if (stores.length === 0 && !isLoading) {
-      refreshStores();
+    if (isLoading) return;
+    const STALE_MS = 30_000;
+    let lastFetch = 0;
+    try {
+      lastFetch = Number(sessionStorage.getItem('worder-stores-last-fetch') || '0');
+    } catch { /* ignore */ }
+    const isStale = Date.now() - lastFetch > STALE_MS;
+    if (stores.length === 0 || isStale) {
+      refreshStores().then(() => {
+        try { sessionStorage.setItem('worder-stores-last-fetch', String(Date.now())); } catch { /* ignore */ }
+      });
     }
-  }, [stores.length, isLoading, refreshStores]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     stores,

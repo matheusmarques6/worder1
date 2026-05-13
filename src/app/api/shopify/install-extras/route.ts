@@ -46,15 +46,48 @@ const WEBHOOK_PATH_OVERRIDES: Record<string, string> = {
 };
 
 export async function POST(request: NextRequest) {
-  const auth = await getAuthClient();
-  if (!auth) return authError();
-  const organizationId = auth.user.organization_id;
-
   let storeId: string | null = null;
   try {
     const body = await request.json().catch(() => ({}));
     storeId = body?.storeId || null;
   } catch { /* ignore */ }
+
+  // Two auth paths:
+  // 1) Merchant clicking "Instalar automaticamente" in the dashboard —
+  //    session-cookie auth via getAuthClient. organization_id is bound
+  //    to the user.
+  // 2) Internal fire-and-forget from /api/shopify/connect / sync-now /
+  //    form publish — bearer CRON_SECRET + X-Internal-Request:true.
+  //    No user session, so organization_id is resolved from the store
+  //    row itself.
+  const cronSecret = process.env.CRON_SECRET || '';
+  const isInternal =
+    request.headers.get('X-Internal-Request') === 'true' &&
+    cronSecret &&
+    request.headers.get('authorization') === `Bearer ${cronSecret}`;
+
+  let organizationId: string | null = null;
+  if (isInternal) {
+    if (!storeId) {
+      return NextResponse.json({ error: 'storeId required for internal call' }, { status: 400 });
+    }
+    // Resolve the org from the store. install-extras only operates on
+    // the store passed in the body, so this is the canonical identity.
+    const supabase = getSupabaseAdmin();
+    const { data: row } = await supabase
+      .from('shopify_stores')
+      .select('organization_id')
+      .eq('id', storeId)
+      .maybeSingle();
+    if (!row?.organization_id) {
+      return NextResponse.json({ error: 'Store not found' }, { status: 404 });
+    }
+    organizationId = row.organization_id;
+  } else {
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    organizationId = auth.user.organization_id;
+  }
 
   const supabase = getSupabaseAdmin();
   let store: any;

@@ -93,6 +93,15 @@ export async function POST(request: NextRequest) {
 
       if (updateError) throw updateError;
 
+      // Re-run install-extras on every reconnect. The merchant only
+      // ever hits this path after either (a) a fresh OAuth/manual
+      // connect or (b) updating the access_token because they bumped
+      // scopes — both are exactly the moments when the script tag /
+      // theme.liquid / webhooks / pixel might be missing or stale.
+      // Idempotent on the install-extras side, fire-and-forget so the
+      // connect endpoint stays sub-second.
+      fireInstallExtras(existingStore.id);
+
       return NextResponse.json({
         success: true,
         message: 'Loja atualizada com sucesso',
@@ -119,6 +128,12 @@ export async function POST(request: NextRequest) {
 
     if (insertError) throw insertError;
 
+    // First connect — kick off install-extras so the merchant doesn't
+    // have to click anything to get the storefront script tag, web
+    // pixel, and webhooks wired. Async fire-and-forget (it takes a
+    // few seconds to round-trip the Shopify admin API).
+    fireInstallExtras(newStore.id);
+
     return NextResponse.json({
       success: true,
       message: 'Loja conectada com sucesso',
@@ -128,6 +143,31 @@ export async function POST(request: NextRequest) {
     console.error('Connect store error:', error);
     return NextResponse.json({ error: error.message || 'Erro ao conectar loja' }, { status: 500 });
   }
+}
+
+// Internal helper: call install-extras for a store without holding up
+// the response. install-extras is auth-protected so we POST with the
+// CRON_SECRET header to bypass user-auth. Failures are logged but never
+// surfaced to the merchant — connect succeeds either way; if install
+// fails the dashboard banner will show the retry CTA.
+function fireInstallExtras(storeId: string): void {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  const secret = process.env.CRON_SECRET || '';
+  if (!baseUrl) return;
+  fetch(`${baseUrl}/api/shopify/install-extras`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(secret ? { 'Authorization': `Bearer ${secret}` } : {}),
+      'X-Internal-Request': 'true',
+    },
+    body: JSON.stringify({ storeId }),
+    // keepalive ensures the request survives even if the connect
+    // response races ahead and the function instance recycles.
+    keepalive: true,
+  }).catch((err) => {
+    console.warn('[Connect] install-extras fire-and-forget failed:', err?.message);
+  });
 }
 
 // ✅ GET CORRIGIDO - Retorna organization_id e busca de todas as orgs do usuário

@@ -491,6 +491,13 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Sync] DONE: ${results.products} products, ${results.customers} customers, ${results.orders} orders, ${results.errors.length} errors`);
 
+    // "Sincronizar tudo" should re-converge the store's wiring at the
+    // same time it re-pulls data. Fire install-extras now so any
+    // missing script tag / pixel / webhook gets re-attached. The
+    // endpoint is idempotent — existing artifacts are detected and
+    // reused, no duplicates created.
+    fireInstallExtrasAfterSync(store.id);
+
     return NextResponse.json({
       success: results.errors.length === 0,
       data: results,
@@ -500,4 +507,26 @@ export async function POST(request: NextRequest) {
     console.error('[Sync] Fatal error:', error.message, error.stack);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
+
+// Fire-and-forget call to install-extras so a "Sincronizar tudo"
+// click re-installs anything that fell out (script tag deleted on
+// the Shopify side, webhooks revoked, pixel uninstalled). Idempotent
+// — install-extras detects existing artifacts and reuses them.
+function fireInstallExtrasAfterSync(storeId: string): void {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  const secret = process.env.CRON_SECRET || '';
+  if (!baseUrl) return;
+  fetch(`${baseUrl}/api/shopify/install-extras`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(secret ? { 'Authorization': `Bearer ${secret}` } : {}),
+      'X-Internal-Request': 'true',
+    },
+    body: JSON.stringify({ storeId }),
+    keepalive: true,
+  }).catch((err) => {
+    console.warn('[Sync] install-extras chain failed (non-blocking):', err?.message);
+  });
 }

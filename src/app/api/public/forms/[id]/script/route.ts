@@ -372,18 +372,29 @@ function show(){
   var popMinH=hasSide?Math.max(Number(st.minHeight)||500,400):(Number(st.minHeight)||0);
   var pop=document.createElement("div");pop.id="wf-pop-"+FID;
 
-  // Pop (inner card) style depends on form type
-  var popStyle="position:relative;display:flex;overflow:hidden;animation:"+(st.animation==="slide-up"?"wfSlide":"wfFade")+" .3s ease;";
+  // Pop (inner card) style depends on form type. !important on the
+  // flex + width pair because Shopify themes (especially Dawn-based)
+  // ship aggressive CSS like `* { max-width: 100%; }` and
+  // `.section img { width: 100%; }` that bleed into our subtree and
+  // override the flex layout — the side image ended up filling the
+  // viewport instead of staying inside its 50% column. box-sizing
+  // pinned explicitly so a theme that sets * { box-sizing: content-box }
+  // (rare but exists) doesn't desync the math.
+  var popStyle="box-sizing:border-box!important;position:relative!important;display:flex!important;flex-direction:row!important;overflow:hidden!important;animation:"+(st.animation==="slide-up"?"wfSlide":"wfFade")+" .3s ease;";
   if(formType==="banner"){
-    popStyle+="width:100%;max-width:100%;border-radius:0;box-shadow:0 2px 8px rgba(0,0,0,0.08);";
+    popStyle+="width:100%!important;max-width:100%!important;border-radius:0;box-shadow:0 2px 8px rgba(0,0,0,0.08);";
   } else if(formType==="flyout"){
-    popStyle+="max-width:"+popW+"px;width:"+(isMob?"calc(100vw - 32px)":popW+"px")+";border-radius:"+(st.borderRadius||16)+"px;box-shadow:0 20px 40px -10px rgba(0,0,0,0.3);";
+    popStyle+="width:"+(isMob?"calc(100vw - 32px)":popW+"px")+"!important;max-width:calc(100vw - 32px)!important;border-radius:"+(st.borderRadius||16)+"px;box-shadow:0 20px 40px -10px rgba(0,0,0,0.3);";
   } else if(formType==="fullpage"){
-    popStyle+="max-width:"+popW+"px;width:calc(100% - 32px);border-radius:"+(st.borderRadius||16)+"px;box-shadow:none;";
+    popStyle+="width:"+popW+"px!important;max-width:calc(100vw - 32px)!important;border-radius:"+(st.borderRadius||16)+"px;box-shadow:none;";
   } else {
-    popStyle+="max-width:"+popW+"px;width:calc(100% - 32px);border-radius:"+(st.borderRadius||16)+"px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);";
+    // Modal popup: prefer the configured pixel width on desktop,
+    // collapse to viewport - 32px on small screens. !important so
+    // theme CSS can't widen us to viewport (which used to cascade
+    // into the side image filling the whole screen).
+    popStyle+="width:"+popW+"px!important;max-width:calc(100vw - 32px)!important;border-radius:"+(st.borderRadius||16)+"px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);";
   }
-  if(popMinH>0)popStyle+="min-height:"+popMinH+"px;";
+  if(popMinH>0)popStyle+="min-height:"+popMinH+"px!important;";
   pop.style.cssText=popStyle;
   // Per-side padding with fallback to single value
   var padT=st.paddingTop!=null?st.paddingTop:(typeof st.padding==="number"?st.padding:32);
@@ -399,7 +410,10 @@ function show(){
   // basis caused the content + image to fight for the same width and
   // pushed the image past its column).
   var contentBasis=hasSide?(100-sidePct)+"%":"100%";
-  content.style.cssText="flex:1 1 "+contentBasis+";min-width:0;background:"+(st.backgroundColor||"#fff")+";padding:"+padT+"px "+padR+"px "+padB+"px "+padL+"px;overflow-y:auto;max-height:"+maxH+";font-family:"+fontFam;
+  // !important on flex props for the same reason as pop above: theme
+  // CSS overrides on .section / form / div elements would re-stretch
+  // this pane to 100% and squeeze the side image to 0.
+  content.style.cssText="box-sizing:border-box!important;flex:1 1 "+contentBasis+"!important;min-width:0!important;max-width:"+contentBasis+"!important;background:"+(st.backgroundColor||"#fff")+";padding:"+padT+"px "+padR+"px "+padB+"px "+padL+"px;overflow-y:auto;max-height:"+maxH+";font-family:"+fontFam;
   if(st.closeButton&&st.closeButton.show!==false){
     var cb=document.createElement("button");cb.innerHTML="&times;";cb.onclick=close;
     cb.style.cssText="position:absolute;top:12px;right:12px;z-index:2;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,0.06);border:none;font-size:20px;color:"+(st.closeButton.color||"#6B7280")+";cursor:pointer;display:flex;align-items:center;justify-content:center";
@@ -419,7 +433,7 @@ function show(){
       // align-self stretch makes it match popup height even when
       // content is short, background-size cover keeps the photo from
       // distorting at any aspect ratio.
-      side.style.cssText="flex:0 0 "+sidePct+"%;align-self:stretch;background:url("+encodeURI(sideUrl)+") center/cover no-repeat;background-color:#F4F4F5";
+      side.style.cssText="box-sizing:border-box!important;flex:0 0 "+sidePct+"%!important;width:"+sidePct+"%!important;max-width:"+sidePct+"%!important;align-self:stretch!important;background:url("+encodeURI(sideUrl)+") center/cover no-repeat;background-color:#F4F4F5";
       if(st.sideImage.position==="left")pop.insertBefore(side,content);else pop.appendChild(side);
     }
   }

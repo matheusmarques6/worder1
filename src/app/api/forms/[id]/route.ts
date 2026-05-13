@@ -129,11 +129,40 @@ export async function PUT(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // When a popup flips to published, make sure the storefront loader
+    // is actually live on the bound store. The loader is what fetches
+    // and renders this popup on the merchant's site — without it the
+    // popup is "published" in our DB but invisible in the storefront.
+    // install-extras is idempotent so re-running on every publish is
+    // safe (existing script tags / pixel / webhooks are detected and
+    // reused). Fire-and-forget so the toggle stays snappy.
+    if (status === 'published' && form?.store_id) {
+      fireInstallExtrasForPublishedForm(form.store_id)
+    }
+
     return NextResponse.json({ form })
   } catch (error: any) {
     console.error('[Forms] PUT error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+}
+
+function fireInstallExtrasForPublishedForm(storeId: string): void {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || ''
+  const secret = process.env.CRON_SECRET || ''
+  if (!baseUrl) return
+  fetch(`${baseUrl}/api/shopify/install-extras`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(secret ? { 'Authorization': `Bearer ${secret}` } : {}),
+      'X-Internal-Request': 'true',
+    },
+    body: JSON.stringify({ storeId }),
+    keepalive: true,
+  }).catch((err) => {
+    console.warn('[Forms] install-extras after publish failed (non-blocking):', err?.message)
+  })
 }
 
 // DELETE - Deletar formulário
