@@ -231,7 +231,7 @@ const defaultDesign: PopupDesign = {
     width: 700, minHeight: 500, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 32, fontFamily: 'Inter, sans-serif',
     overlay: { enabled: true, color: '#000000', opacity: 50, closeOnClick: true },
     closeButton: { show: true, color: '#6B7280', size: 24 },
-    sideImage: { enabled: false, src: '', position: 'left', width: 200 },
+    sideImage: { enabled: false, src: '', position: 'left', width: 50 },
     animation: 'fade',
   },
   behavior: {

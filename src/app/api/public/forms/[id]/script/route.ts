@@ -354,8 +354,22 @@ function show(){
   var coxEnabled=isMob?cox.mobile!==false:cox.desktop!==false;
   if(coxEnabled&&(formType==="popup"||formType==="fullpage"))ov.addEventListener("click",function(e){if(e.target===ov)close()});
   var w=isMob?Math.min(st.width||480,window.innerWidth-32):(st.width||480);
+  // hasSide = render the left/right hero column (Klaviyo / Omnisend
+  // two-pane style). Mobile collapses to single column. Banner +
+  // flyout are too narrow to host an image lane, so we skip them.
   var hasSide=st.sideImage&&st.sideImage.enabled&&st.sideImage.src&&!isMob&&formType!=="banner"&&formType!=="flyout";
-  var popW=hasSide?w+(st.sideImage.width||200):w;
+  // CRITICAL: sideImage.width is a PERCENTAGE of the popup, NOT pixels.
+  // The previous bug treated it as pixels in popW math (700+200=900px
+  // popup) AND as a percentage in the side panel (width:200% → image
+  // exploded out of the container). Clamp to 20-80% so the content
+  // pane is never crushed; default 50% matches the editor's hint.
+  var sidePct=hasSide?Math.min(Math.max(Number(st.sideImage.width)||50,20),80):0;
+  // Popup width does NOT grow when a side image is present — the
+  // image takes its share of the same width, content gets the rest.
+  var popW=w;
+  // Min-height keeps the image lane from collapsing when the content
+  // is short (otherwise the cover background renders into a 0×0 box).
+  var popMinH=hasSide?Math.max(Number(st.minHeight)||500,400):(Number(st.minHeight)||0);
   var pop=document.createElement("div");pop.id="wf-pop-"+FID;
 
   // Pop (inner card) style depends on form type
@@ -369,6 +383,7 @@ function show(){
   } else {
     popStyle+="max-width:"+popW+"px;width:calc(100% - 32px);border-radius:"+(st.borderRadius||16)+"px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);";
   }
+  if(popMinH>0)popStyle+="min-height:"+popMinH+"px;";
   pop.style.cssText=popStyle;
   // Per-side padding with fallback to single value
   var padT=st.paddingTop!=null?st.paddingTop:(typeof st.padding==="number"?st.padding:32);
@@ -378,7 +393,13 @@ function show(){
   var fontFam=st.fontFamily||"Inter, sans-serif";
   var content=document.createElement("div");
   var maxH=formType==="banner"?"none":(formType==="flyout"?"80vh":"90vh");
-  content.style.cssText="flex:1;background:"+(st.backgroundColor||"#fff")+";padding:"+padT+"px "+padR+"px "+padB+"px "+padL+"px;overflow-y:auto;max-height:"+maxH+";font-family:"+fontFam;
+  // Content pane sits beside the optional side image. flex-basis +
+  // min-width:0 lets the pane shrink correctly inside the flex row
+  // without overflowing horizontally (the previous "flex:1" without a
+  // basis caused the content + image to fight for the same width and
+  // pushed the image past its column).
+  var contentBasis=hasSide?(100-sidePct)+"%":"100%";
+  content.style.cssText="flex:1 1 "+contentBasis+";min-width:0;background:"+(st.backgroundColor||"#fff")+";padding:"+padT+"px "+padR+"px "+padB+"px "+padL+"px;overflow-y:auto;max-height:"+maxH+";font-family:"+fontFam;
   if(st.closeButton&&st.closeButton.show!==false){
     var cb=document.createElement("button");cb.innerHTML="&times;";cb.onclick=close;
     cb.style.cssText="position:absolute;top:12px;right:12px;z-index:2;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,0.06);border:none;font-size:20px;color:"+(st.closeButton.color||"#6B7280")+";cursor:pointer;display:flex;align-items:center;justify-content:center";
@@ -393,7 +414,12 @@ function show(){
     if(sideUrl&&!/^(https?:|\\/)/i.test(sideUrl))sideUrl="";
     if(sideUrl){
       var side=document.createElement("div");
-      side.style.cssText="width:"+(st.sideImage.width||50)+"%;flex-shrink:0;background:url("+encodeURI(sideUrl)+") center/cover no-repeat";
+      // Klaviyo/Omnisend pattern: side panel reserves a fixed slice
+      // of the popup (sidePct already clamped 20-80) via flex-basis,
+      // align-self stretch makes it match popup height even when
+      // content is short, background-size cover keeps the photo from
+      // distorting at any aspect ratio.
+      side.style.cssText="flex:0 0 "+sidePct+"%;align-self:stretch;background:url("+encodeURI(sideUrl)+") center/cover no-repeat;background-color:#F4F4F5";
       if(st.sideImage.position==="left")pop.insertBefore(side,content);else pop.appendChild(side);
     }
   }

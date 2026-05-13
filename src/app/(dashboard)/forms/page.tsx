@@ -269,19 +269,37 @@ export default function FormsPage() {
   }
 
   const toggleStatus = async (form: Form) => {
-    const newStatus = form.status === 'published' ? 'draft' : 'published'
+    const newStatus: Form['status'] = form.status === 'published' ? 'draft' : 'published'
     setTogglingStatus(form.id)
+
+    // Optimistic update so the merchant sees the badge flip the moment
+    // they click. Reverted if the PUT comes back non-ok.
+    setForms((prev) => prev.map((f) => f.id === form.id ? { ...f, status: newStatus } : f))
+
     try {
       const res = await fetch(`/api/forms/${form.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       })
-      if (res.ok) {
-        setForms(prev => prev.map(f => f.id === form.id ? { ...f, status: newStatus } : f))
+      if (!res.ok) {
+        // Surface the failure: revert the optimistic flip + log the
+        // server's message. Previously the UI silently kept the wrong
+        // badge state and the merchant assumed nothing happened — so
+        // they'd delete the popup as a workaround.
+        const errBody = await res.json().catch(() => ({}))
+        console.error('[Forms] toggleStatus PUT failed:', res.status, errBody)
+        setForms((prev) => prev.map((f) => f.id === form.id ? { ...f, status: form.status } : f))
+        alert(`Não consegui ${form.status === 'published' ? 'desativar' : 'ativar'} esse popup: ${errBody?.error || res.statusText}`)
+        return
       }
+      // Re-fetch from server to pick up any side effects (updated_at,
+      // counts, etc.) so the row reflects truth.
+      fetchForms()
     } catch (error) {
-      console.error('Erro ao alterar status:', error)
+      console.error('[Forms] toggleStatus exception:', error)
+      setForms((prev) => prev.map((f) => f.id === form.id ? { ...f, status: form.status } : f))
+      alert('Erro de rede ao alterar status. Tente novamente.')
     } finally {
       setTogglingStatus(null)
     }
