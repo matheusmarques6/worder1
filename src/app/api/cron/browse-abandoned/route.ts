@@ -4,7 +4,17 @@ import { runBrowseAbandonedDetection } from '@/lib/services/browse-abandoned/det
 export const dynamic = 'force-dynamic';
 
 function isAuthorized(req: NextRequest): boolean {
-  return req.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET}`;
+  // Vercel Cron sends x-vercel-cron: 1 instead of Bearer auth, so the
+  // legacy Bearer-only check meant Vercel could never invoke this cron
+  // — browse-abandonment runs would only fire from manual curl. Mirror
+  // the auth shape used by check-delayed-runs / process-runs so Vercel
+  // schedule actually triggers it. Internal callers (tests, dev) still
+  // get the Bearer path.
+  if (req.headers.get('x-vercel-cron') === '1') return true;
+  if (req.headers.get('X-Internal-Request') === 'true') return true;
+  if (process.env.NODE_ENV === 'development') return true;
+  const cronSecret = process.env.CRON_SECRET;
+  return !!(cronSecret && req.headers.get('authorization') === `Bearer ${cronSecret}`);
 }
 
 export async function GET(req: NextRequest) {

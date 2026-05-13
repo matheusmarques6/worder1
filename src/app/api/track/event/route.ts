@@ -599,6 +599,8 @@ export async function POST(request: NextRequest) {
     // Mapeia event types do pixel para trigger_types de automação
     const triggerMap: Record<string, string> = {
       viewed_product: 'trigger_viewed_product',
+      viewed_collection: 'trigger_viewed_collection',
+      page_viewed: 'trigger_viewed_page',
       added_to_cart: 'trigger_added_to_cart',
       checkout_started: 'trigger_checkout_abandoned',
       checkout_completed: 'trigger_order',
@@ -671,6 +673,30 @@ export async function POST(request: NextRequest) {
         triggerIdempotencyKey = `trigger:added_to_cart:${checkoutId}`;
       } else if (triggerType === 'trigger_viewed_product' && productId && contactId) {
         triggerIdempotencyKey = `trigger:viewed_product:${contactId}:${productId}`;
+      } else if (triggerType === 'trigger_viewed_collection' && contactId) {
+        // Collection page: dedupe per (contact, collection_handle, day) so
+        // browsing 5 products in the same collection only fires once a day.
+        const collectionHandle =
+          enrichedProperties.collection_handle ||
+          enrichedProperties.collectionHandle ||
+          enrichedProperties.collection_id ||
+          'unknown';
+        const dayBucket = new Date().toISOString().slice(0, 10);
+        triggerIdempotencyKey = `trigger:viewed_collection:${contactId}:${collectionHandle}:${dayBucket}`;
+      } else if (triggerType === 'trigger_viewed_page' && contactId) {
+        // Page view triggers are noisy by design — Klaviyo's equivalent
+        // dedupes per (contact, url, day) to keep flow re-entry sane.
+        const pageUrl = enrichedProperties.page_url || enrichedProperties.url || 'unknown';
+        const dayBucket = new Date().toISOString().slice(0, 10);
+        triggerIdempotencyKey = `trigger:viewed_page:${contactId}:${pageUrl}:${dayBucket}`;
+      } else if (triggerType === 'trigger_active_on_site' && contactId) {
+        // Klaviyo Active on Site: 1x per session per contact. Without
+        // session-level dedup the same browsing session re-triggers on
+        // every page navigation; with ${timestamp} in the key (the old
+        // behaviour) every page view was a fresh "active" event and the
+        // flow re-entered the contact dozens of times per visit.
+        const sid = sessionId || anonymousId || visitorId || 'no-session';
+        triggerIdempotencyKey = `trigger:active_on_site:${contactId}:${sid}`;
       } else if (idempotencyKey) {
         triggerIdempotencyKey = `trigger:${triggerType}:${idempotencyKey}`;
       }

@@ -9,6 +9,7 @@ import {
   ShoppingCart,
   CreditCard,
   ShoppingBag,
+  Activity,
   UserPlus,
   Tag,
   Briefcase,
@@ -81,6 +82,10 @@ const TRIGGER_OPTIONS: NodeItemConfig[] = [
   { type: 'trigger_fulfilled_order', label: 'Pedido Enviado', description: 'Dispara quando pedido é enviado', icon: Truck, category: 'trigger', color: '#10b981' },
   { type: 'trigger_cancelled_order', label: 'Pedido Cancelado', description: 'Dispara quando pedido é cancelado', icon: XCircle, category: 'trigger', color: '#10b981' },
   { type: 'trigger_viewed_product', label: 'Produto Visualizado', description: 'Dispara quando produto é visto', icon: Eye, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_viewed_collection', label: 'Coleção Visualizada', description: 'Dispara quando uma coleção/categoria é visualizada', icon: ShoppingBag, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_viewed_page', label: 'Página Visualizada', description: 'Dispara em qualquer pageview identificado', icon: Eye, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_active_on_site', label: 'Ativo no Site', description: 'Lead identificado entrou no site (1x por sessão)', icon: Activity, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_browse_abandoned', label: 'Navegação Abandonada', description: 'Viu produto e saiu sem comprar (delay configurável)', icon: Eye, category: 'trigger', color: '#10b981' },
   { type: 'trigger_added_to_cart', label: 'Produto Adicionado', description: 'Produto adicionado ao carrinho', icon: PlusCircle, category: 'trigger', color: '#10b981' },
   { type: 'trigger_back_in_stock', label: 'Produto Voltou ao Estoque', description: 'Dispara quando produto volta ao estoque', icon: ShoppingBag, category: 'trigger', color: '#10b981' },
   // Contato
