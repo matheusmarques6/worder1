@@ -1750,7 +1750,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 }
 
 // ── Behavior Panel ─────────────────────────────────────────────────────────────
-function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, successMessage, onSuccessMessageChange }: {
+function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, successMessage, onSuccessMessageChange, trackingIds, onTrackingIdsChange }: {
   beh: PopupDesign['behavior']
   onChange: (b: PopupDesign['behavior']) => void
   formId: string
@@ -1758,6 +1758,8 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
   onPostSubmitChange: (ps: NonNullable<PopupDesign['postSubmit']>) => void
   successMessage: string
   onSuccessMessageChange: (v: string) => void
+  trackingIds: { facebook_pixel_id: string; google_ads_id: string; google_analytics_id: string }
+  onTrackingIdsChange: React.Dispatch<React.SetStateAction<{ facebook_pixel_id: string; google_ads_id: string; google_analytics_id: string }>>
 }) {
   const [tab, setTab] = useState<'display' | 'targeting' | 'postsubmit'>('display')
   const setG = (key: keyof PopupDesign['behavior'], val: any) =>
@@ -1842,6 +1844,27 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 </Field>
               </div>
             )}
+          </Section>
+
+          <Section title="Rastreamento (Pixels)">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">
+              Dispara eventos de conversao para Facebook Ads e Google Ads/Analytics quando o formulario e enviado. Deixe em branco para nao rastrear.
+            </p>
+            <Field label="Facebook Pixel ID" hint="Numero do pixel (ex: 1234567890123456). Dispara o evento Lead.">
+              <input className={inp} placeholder="1234567890123456"
+                value={trackingIds.facebook_pixel_id}
+                onChange={e => onTrackingIdsChange(s => ({ ...s, facebook_pixel_id: e.target.value }))} />
+            </Field>
+            <Field label="Google Ads Conversion ID" hint="Formato AW-XXXXXXXXXX. Dispara o evento generate_lead.">
+              <input className={inp} placeholder="AW-123456789"
+                value={trackingIds.google_ads_id}
+                onChange={e => onTrackingIdsChange(s => ({ ...s, google_ads_id: e.target.value }))} />
+            </Field>
+            <Field label="Google Analytics ID" hint="Formato G-XXXXXXXXXX (GA4) ou UA-XXXXXXXX-X.">
+              <input className={inp} placeholder="G-XXXXXXXXXX"
+                value={trackingIds.google_analytics_id}
+                onChange={e => onTrackingIdsChange(s => ({ ...s, google_analytics_id: e.target.value }))} />
+            </Field>
           </Section>
         </div>
       ) : tab === 'display' ? (
@@ -2443,6 +2466,14 @@ export default function PopupEditorPage() {
   const [saving, setSaving] = useState(false)
   const [formStatus, setFormStatus] = useState<'draft' | 'published'>('draft')
   const [formName, setFormName] = useState('Popup sem título')
+  // Tracking pixel IDs live on the crm_forms row (not in design_json) so
+  // the public popup script can pull them server-side and fire fbq/gtag
+  // on submit. The editor surfaces them here under the "Após envio" tab.
+  const [trackingIds, setTrackingIds] = useState<{
+    facebook_pixel_id: string
+    google_ads_id: string
+    google_analytics_id: string
+  }>({ facebook_pixel_id: '', google_ads_id: '', google_analytics_id: '' })
   const [editingName, setEditingName] = useState(false)
   const [preview, setPreview] = useState<'desktop' | 'mobile'>('desktop')
   const [activeStepIdx, setActiveStepIdx] = useState(0)
@@ -2541,6 +2572,14 @@ export default function PopupEditorPage() {
         setDesign(merged)
       }
       if (form.status) setFormStatus(form.status === 'published' ? 'published' : 'draft')
+      // Hydrate pixel IDs from top-level columns. Empty string is the
+      // controlled-input-friendly default; null/undefined from the API
+      // would put React in uncontrolled mode and warn.
+      setTrackingIds({
+        facebook_pixel_id: form.facebook_pixel_id || '',
+        google_ads_id: form.google_ads_id || '',
+        google_analytics_id: form.google_analytics_id || '',
+      })
     }).catch(() => {}).finally(() => setLoading(false))
   }, [formId])
 
@@ -2562,6 +2601,11 @@ export default function PopupEditorPage() {
           audience: design.behavior.audience || null,
           tags: design.behavior.audience?.tags || [],
           list_id: design.behavior.audience?.listId || null,
+          // Tracking pixel IDs — null when blank so the public script's
+          // existence checks (tr.facebook_pixel_id) actually short-circuit.
+          facebook_pixel_id: trackingIds.facebook_pixel_id.trim() || null,
+          google_ads_id: trackingIds.google_ads_id.trim() || null,
+          google_analytics_id: trackingIds.google_analytics_id.trim() || null,
           // Auto-attach to the current store on every save. Covers the case where
           // the form was created with store_id=NULL because currentStore was still
           // hydrating when the merchant clicked Create — without this, the popup
@@ -2570,7 +2614,7 @@ export default function PopupEditorPage() {
         }),
       })
     } finally { setSaving(false) }
-  }, [formId, design, formStatus, formName, currentStore?.id])
+  }, [formId, design, formStatus, formName, currentStore?.id, trackingIds])
 
   const handlePublish = useCallback(async () => {
     const newStatus = formStatus === 'published' ? 'draft' : 'published'
@@ -2834,6 +2878,8 @@ export default function PopupEditorPage() {
                     onPostSubmitChange={ps => setDesign(d => ({ ...d, postSubmit: ps }))}
                     successMessage={design.successMessage || ''}
                     onSuccessMessageChange={v => setDesign(d => ({ ...d, successMessage: v }))}
+                    trackingIds={trackingIds}
+                    onTrackingIdsChange={setTrackingIds}
                   />
                 </div>
               )}

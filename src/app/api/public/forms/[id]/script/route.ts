@@ -65,7 +65,9 @@ var isMob=window.innerWidth<768;
 // Device gate
 if(vis.devices==="desktop"&&isMob)return;
 if(vis.devices==="mobile"&&!isMob)return;
-// Subscriber gate
+// Fast subscriber gate — _wf_sub is set on any submit in this browser.
+// Catches the common "already submitted here" case without a round-trip.
+// The async runSubscriberGate below covers cross-device / imported contacts.
 if(vis.hideFromSubscribers&&gc("_wf_sub"))return;
 // Visitor type gate (new vs returning based on first-seen cookie)
 var firstSeenCk="_wf_seen";
@@ -601,7 +603,34 @@ function perVisitorBlocked(){
 }
 if(perVisitorBlocked()&&!useCustomTrigger)return;
 
-// Run location + cart gates (both async), then trigger setup
+// Async subscriber gate — server check against contacts.email_consent
+// and prior submissions, keyed by the __worder_id visitor cookie. Closes
+// the "imported contact still sees the popup" gap. 10-minute localStorage
+// cache so the check happens at most once per visitor every 10 minutes.
+function runSubscriberGate(cb){
+  if(!vis.hideFromSubscribers){cb(true);return}
+  var vid=gc("__worder_id");
+  if(!vid){cb(true);return}
+  var ckCache="_wf_paw_"+FID;
+  try{
+    var raw=localStorage.getItem(ckCache);
+    if(raw){
+      var c=JSON.parse(raw);
+      if(c&&c.t&&Date.now()-c.t<600000){cb(c.a!==false);return}
+    }
+  }catch(e){}
+  var url=BU+"/api/public/forms/"+FID+"/preview-allowed?vid="+encodeURIComponent(vid)+
+    "&domain="+encodeURIComponent((window.__worder&&window.__worder.config&&window.__worder.config.shopDomain)||location.hostname);
+  fetch(url).then(function(r){return r.json()}).then(function(j){
+    var allowed=j&&j.allowed!==false;
+    try{localStorage.setItem(ckCache,JSON.stringify({t:Date.now(),a:allowed}))}catch(e){}
+    cb(allowed);
+  }).catch(function(){cb(true)});
+}
+
+// Run subscriber + location + cart gates (all async), then trigger setup
+runSubscriberGate(function(subOk){
+  if(!subOk)return;
 runLocationGate(function(locOk){
   if(!locOk)return;
   runCartGate(function(cartOk){
@@ -675,6 +704,7 @@ runLocationGate(function(locOk){
     if(pvCount>=need)tryShow("pv");
   }
   });
+});
 });
 var s=document.createElement("style");s.textContent="@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}";document.head.appendChild(s);
 // Inject the most common web fonts so popups using Montserrat / Inter / Poppins
