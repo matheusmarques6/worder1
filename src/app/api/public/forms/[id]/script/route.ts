@@ -374,12 +374,12 @@ function show(){
 
   // Pop (inner card) style depends on form type. !important on the
   // flex + width pair because Shopify themes (especially Dawn-based)
-  // ship aggressive CSS like `* { max-width: 100%; }` and
-  // `.section img { width: 100%; }` that bleed into our subtree and
-  // override the flex layout — the side image ended up filling the
+  // ship aggressive CSS like "* { max-width: 100% }" and
+  // ".section img { width: 100% }" that bleed into our subtree and
+  // override the flex layout - the side image ended up filling the
   // viewport instead of staying inside its 50% column. box-sizing
   // pinned explicitly so a theme that sets * { box-sizing: content-box }
-  // (rare but exists) doesn't desync the math.
+  // (rare but exists) does not desync the math.
   var popStyle="box-sizing:border-box!important;position:relative!important;display:flex!important;flex-direction:row!important;overflow:hidden!important;animation:"+(st.animation==="slide-up"?"wfSlide":"wfFade")+" .3s ease;";
   if(formType==="banner"){
     popStyle+="width:100%!important;max-width:100%!important;border-radius:0;box-shadow:0 2px 8px rgba(0,0,0,0.08);";
