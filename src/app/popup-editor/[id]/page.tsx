@@ -1503,9 +1503,64 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
         return <div className="space-y-5">
           <div className="space-y-3">
             <SectionHeader title="Conteúdo" icon={<Tag className="w-3 h-3" />} />
-            <LabeledField label="Código do cupom" hint="Exibido em destaque para ser copiado.">
-              <input className={inp + ' font-mono tracking-wider uppercase'} value={p.code || ''} onChange={e => up('code', e.target.value.toUpperCase())} placeholder="DESCONTO10" />
+            <LabeledField label="Modo do cupom" hint="Estático: mesmo código para todos. Dinâmico: gera código único na Shopify para cada inscrição (anti-fraude).">
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button"
+                  onClick={() => up('mode', 'static')}
+                  className={`px-3 py-2 text-[12px] rounded-lg border transition-colors ${(p.mode || 'static') === 'static' ? 'border-zinc-900 bg-gray-100 text-gray-900 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                  Estático
+                </button>
+                <button type="button"
+                  onClick={() => up('mode', 'dynamic')}
+                  className={`px-3 py-2 text-[12px] rounded-lg border transition-colors ${p.mode === 'dynamic' ? 'border-zinc-900 bg-gray-100 text-gray-900 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                  Dinâmico (Shopify)
+                </button>
+              </div>
             </LabeledField>
+            {(p.mode || 'static') === 'static' ? (
+              <LabeledField label="Código do cupom" hint="Exibido em destaque para ser copiado.">
+                <input className={inp + ' font-mono tracking-wider uppercase'} value={p.code || ''} onChange={e => up('code', e.target.value.toUpperCase())} placeholder="DESCONTO10" />
+              </LabeledField>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <LabeledField label="Tipo">
+                    <select className={inp} value={p.discountType || 'percentage'} onChange={e => up('discountType', e.target.value)}>
+                      <option value="percentage">Percentual (%)</option>
+                      <option value="fixed_amount">Valor fixo</option>
+                    </select>
+                  </LabeledField>
+                  <LabeledField label={p.discountType === 'fixed_amount' ? 'Valor' : 'Desconto (%)'}>
+                    <input type="number" min={1} step="0.01" className={inp}
+                      value={p.discountValue ?? 10}
+                      onChange={e => up('discountValue', +e.target.value)} />
+                  </LabeledField>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <LabeledField label="Prefixo" hint="Código fica PREFIXO-XXXXXX">
+                    <input className={inp + ' font-mono uppercase'}
+                      value={p.codePrefix || 'POPUP'}
+                      onChange={e => up('codePrefix', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+                  </LabeledField>
+                  <LabeledField label="Validade (dias)">
+                    <input type="number" min={1} max={365} className={inp}
+                      value={p.validityDays ?? 7}
+                      onChange={e => up('validityDays', +e.target.value)} />
+                  </LabeledField>
+                </div>
+                <LabeledField label="Valor mínimo da compra (opcional)" hint="0 = sem mínimo. Bloqueia uso em pedidos menores.">
+                  <input type="number" min={0} step="0.01" className={inp}
+                    value={p.minimumAmount ?? 0}
+                    onChange={e => up('minimumAmount', +e.target.value)} />
+                </LabeledField>
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2.5 leading-snug">
+                  Cada inscrição gera um código novo na Shopify com uso único por cliente. Se a API da Shopify falhar, o popup mostra o código estático abaixo como fallback.
+                </p>
+                <LabeledField label="Código de fallback" hint="Mostrado se a Shopify estiver indisponível.">
+                  <input className={inp + ' font-mono tracking-wider uppercase'} value={p.code || ''} onChange={e => up('code', e.target.value.toUpperCase())} placeholder="DESCONTO10" />
+                </LabeledField>
+              </>
+            )}
             <LabeledField label="Descrição">
               <input className={inp} value={p.description || ''} onChange={e => up('description', e.target.value)} placeholder="Seu cupom de desconto:" />
             </LabeledField>

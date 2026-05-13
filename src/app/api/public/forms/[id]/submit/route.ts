@@ -753,6 +753,57 @@ export async function POST(
       console.warn('[Form Submit] automation dispatch failed:', e?.message)
     }
 
+    // 8.5. Dynamic Shopify coupon. If the design has a coupon block in
+    // `dynamic` mode, generate a unique price_rule + discount_code on
+    // the merchant's Shopify so each subscriber gets a single-use code
+    // (anti-abuse). Falls back silently to whatever is in block.code on
+    // any error so the success step still shows *something*.
+    let dynamicCoupon: { code: string; endsAt: string } | null = null
+    const allBlocks: any[] = []
+    if (Array.isArray(designJson.steps)) {
+      for (const step of designJson.steps) {
+        if (Array.isArray(step?.blocks)) allBlocks.push(...step.blocks)
+      }
+    }
+    if (Array.isArray(designJson.successStep?.blocks)) {
+      allBlocks.push(...designJson.successStep.blocks)
+    }
+    const dynamicCouponBlock = allBlocks.find(
+      (b: any) => b?.type === 'coupon' && b?.props?.mode === 'dynamic'
+    )
+    if (dynamicCouponBlock && form.store_id) {
+      try {
+        const { data: store } = await supabase
+          .from('shopify_stores')
+          .select('shop_domain, access_token')
+          .eq('id', form.store_id)
+          .maybeSingle()
+        if (store?.shop_domain && store?.access_token) {
+          const cp = dynamicCouponBlock.props || {}
+          const { generateShopifyCoupon } = await import('@/lib/services/whatsapp/shopify-coupon-service')
+          const result = await generateShopifyCoupon({
+            shopDomain: store.shop_domain,
+            accessToken: store.access_token,
+            discountType: cp.discountType === 'fixed_amount' ? 'fixed_amount' : 'percentage',
+            value: Number(cp.discountValue) || 10,
+            validityDays: Number(cp.validityDays) || 7,
+            prefix: String(cp.codePrefix || 'POPUP').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) || 'POPUP',
+            usageLimit: 1,
+            minimumAmount: cp.minimumAmount > 0 ? Number(cp.minimumAmount) : undefined,
+            contactEmail: contactData.email,
+            title: `Popup ${form.name || form.id}`,
+          })
+          if (result.data) {
+            dynamicCoupon = { code: result.data.code, endsAt: result.data.endsAt }
+          } else {
+            console.warn('[Form Submit] dynamic coupon failed (using fallback):', result.error)
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Form Submit] dynamic coupon errored (using fallback):', e?.message)
+      }
+    }
+
     // 9. Return success with tracking data for client-side pixels
     const response = NextResponse.json({
       success: true,
@@ -762,6 +813,9 @@ export async function POST(
       events_fired: eventsFired,
       redirect_url: form.redirect_url || null,
       success_message: form.success_message,
+      // Dynamic coupon (null when the form is static-only or generation failed).
+      // The popup script splices this into any coupon block on the success step.
+      coupon: dynamicCoupon,
       // Client-side tracking data
       tracking: {
         facebook_pixel_id: form.facebook_pixel_id,

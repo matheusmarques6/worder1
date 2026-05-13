@@ -240,7 +240,14 @@ function renderBlock(b){
     case"spacer":h='<div style="height:'+(p.height||16)+'px"></div>';break;
     case"line":h='<hr style="border:none;border-top:'+(p.thickness||1)+'px solid '+(p.color||"#E5E7EB")+';margin:8px 0" />';break;
     case"coupon":{
-      h='<div style="margin:8px 0;padding:12px 16px;border:2px dashed '+(p.borderColor||"#F97316")+';border-radius:'+(p.borderRadius||8)+'px;text-align:center;background:'+(p.bgColor||"#FFF7ED")+'"><p style="font-size:11px;color:#6B7280;margin:0 0 4px">'+esc(p.description||"Seu cupom:")+'</p><p style="font-size:'+(p.fontSize||20)+'px;font-weight:bold;color:'+(p.codeColor||"#F97316")+';letter-spacing:2px;margin:0;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent)">'+esc(p.code||"CODIGO")+'</p></div>';
+      // Dynamic mode: submit endpoint returns a freshly-minted Shopify
+      // discount code in res.coupon. Cached on window.__wfDynCoupon[FID]
+      // so re-renders (e.g. multi-step flows) keep the same code.
+      var couponCode=p.code||"CODIGO";
+      if(p.mode==="dynamic"&&window.__wfDynCoupon&&window.__wfDynCoupon[FID]){
+        couponCode=window.__wfDynCoupon[FID];
+      }
+      h='<div style="margin:8px 0;padding:12px 16px;border:2px dashed '+(p.borderColor||"#F97316")+';border-radius:'+(p.borderRadius||8)+'px;text-align:center;background:'+(p.bgColor||"#FFF7ED")+'"><p style="font-size:11px;color:#6B7280;margin:0 0 4px">'+esc(p.description||"Seu cupom:")+'</p><p style="font-size:'+(p.fontSize||20)+'px;font-weight:bold;color:'+(p.codeColor||"#F97316")+';letter-spacing:2px;margin:0;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent)">'+esc(couponCode)+'</p></div>';
       break;
     }
     case"countdown":{
@@ -531,6 +538,14 @@ function show(){
         if(act==="close"){
           close();
           return;
+        }
+        // Stash the freshly-minted Shopify discount code so the coupon
+        // block on the success step renders the dynamic code instead of
+        // the configured fallback. Keyed by form id so two popups on the
+        // same page don't trample each other.
+        if(res&&res.coupon&&res.coupon.code){
+          window.__wfDynCoupon=window.__wfDynCoupon||{};
+          window.__wfDynCoupon[FID]=res.coupon.code;
         }
         // Default: show-success step, then auto-close after delay (0 = stay open)
         content.innerHTML=renderStep(-1);
