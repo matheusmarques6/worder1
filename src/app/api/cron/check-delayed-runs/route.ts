@@ -79,13 +79,27 @@ export async function GET(request: NextRequest) {
     let cancelled = 0;
     const errors: string[] = [];
 
-    for (const run of runs) {
+    // Parallelise the dispatch loop. QStash publishes used to be
+    // awaited sequentially, so 50 delayed runs × ~1s QStash latency
+    // alone added up to 50s of wallclock time even before the worker
+    // started executing anything. Promise.allSettled keeps the cron
+    // resilient — one bad run can't take down the rest — while still
+    // letting QStash absorb 50 publishes in parallel.
+    //
+    // When QStash itself is misconfigured (expired token), the
+    // sequential path used to throw and leave the run rotting in
+    // 'pending' forever because the fallback only triggered on
+    // messageId === null, never on thrown errors. We now treat any
+    // QStash failure as "fall through to a direct fetch so the
+    // worker still picks it up" — the run survives an Upstash
+    // outage / rotation window without manual intervention.
+    const { getAppBaseUrl } = await import('@/lib/app-url');
+    const workerUrl = `${getAppBaseUrl()}/api/workers/automation`;
+    const dispatchRun = async (run: any) => {
       try {
-        // ⚠️ CRITICAL: Check if automation is still active
         const automation = (run as any).automations;
         if (automation?.status !== 'active') {
           console.log(`[Check Delayed] Automation ${run.automation_id} is not active, cancelling run ${run.id}`);
-          
           await supabase
             .from('automation_runs')
             .update({
@@ -95,47 +109,46 @@ export async function GET(request: NextRequest) {
               last_error: `Automação desativada (status: ${automation?.status})`,
             })
             .eq('id', run.id);
-          
           cancelled++;
-          continue;
+          return;
         }
 
-        // Atualizar status para pending
         await supabase
           .from('automation_runs')
-          .update({ 
-            status: 'pending',
-            waiting_until: null,
-          })
+          .update({ status: 'pending', waiting_until: null })
           .eq('id', run.id);
 
-        // Enfileirar para execução
-        const messageId = await enqueueAutomationRun(run.id);
-        
+        let messageId: string | null = null;
+        try {
+          messageId = await enqueueAutomationRun(run.id);
+        } catch (qErr: any) {
+          console.warn(`[Check Delayed] QStash publish failed for ${run.id}, falling back to direct fetch:`, qErr?.message || qErr);
+        }
+
         if (messageId) {
           enqueued++;
           console.log(`[Check Delayed] Enqueued run ${run.id}`);
-        } else {
-          // Fallback: executar diretamente
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
-          await fetch(`${appUrl}/api/workers/automation`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Internal-Request': 'true',
-            },
-            body: JSON.stringify({
-              action: 'execute_run',
-              runId: run.id,
-            }),
-          });
-          enqueued++;
+          return;
         }
+
+        // Direct-fetch fallback. Fire-and-forget so a slow worker
+        // can't gum up the cron — process-runs / reclaim-stale-runs
+        // pick up anything that doesn't complete on this trip.
+        fetch(workerUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Internal-Request': 'true' },
+          body: JSON.stringify({ action: 'execute_run', runId: run.id }),
+        }).catch((fetchErr) => {
+          console.warn(`[Check Delayed] direct fetch failed for ${run.id}:`, fetchErr?.message || fetchErr);
+        });
+        enqueued++;
       } catch (err: any) {
         console.error(`[Check Delayed] Error processing run ${run.id}:`, err);
         errors.push(`${run.id}: ${err.message}`);
       }
-    }
+    };
+
+    await Promise.allSettled(runs.map(dispatchRun));
 
     return NextResponse.json({
       message: 'Delayed runs checked',
