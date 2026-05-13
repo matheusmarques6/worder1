@@ -5,7 +5,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { useStoreStore } from '@/stores'
+import { useStore as useStoreHook } from '@/hooks/useStore'
 import { EmbedActivationBanner } from '@/components/store/EmbedActivationBanner'
+import { fireConfetti } from '@/lib/confetti'
 import {
   Plus, FileText, Eye, Users, BarChart3, Settings,
   Loader2, Search, Trash2, Copy, ExternalLink,
@@ -55,6 +57,11 @@ function getFormType(form: Form): string {
 export default function FormsPage() {
   const { confirm } = useConfirm()
   const { currentStore } = useStoreStore()
+  // Force a fresh /api/shopify/connect read on mount so the embed
+  // banner reflects the current install state (not the stale snapshot
+  // zustand had cached when the merchant first opened the app).
+  const { refreshStores } = useStoreHook()
+  useEffect(() => { refreshStores() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [])
   const [forms, setForms] = useState<Form[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -68,6 +75,14 @@ export default function FormsPage() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [copiedEmbed, setCopiedEmbed] = useState<string | null>(null)
   const [togglingStatus, setTogglingStatus] = useState<string | null>(null)
+  // Lightweight toast state — shown for ~3s after a status toggle so
+  // the merchant gets a clear "Popup X está no ar!" / "foi pausado"
+  // confirmation instead of just watching a badge flip.
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; msg: string } | null>(null)
+  const showToast = (t: { type: 'success' | 'error' | 'info'; msg: string }) => {
+    setToast(t)
+    window.setTimeout(() => setToast(null), 3200)
+  }
 
   // Zustand persists currentStore in localStorage. On the first render
   // after a page reload _hasHydrated is still false and currentStore is
@@ -290,8 +305,19 @@ export default function FormsPage() {
         const errBody = await res.json().catch(() => ({}))
         console.error('[Forms] toggleStatus PUT failed:', res.status, errBody)
         setForms((prev) => prev.map((f) => f.id === form.id ? { ...f, status: form.status } : f))
-        alert(`Não consegui ${form.status === 'published' ? 'desativar' : 'ativar'} esse popup: ${errBody?.error || res.statusText}`)
+        showToast({
+          type: 'error',
+          msg: `Não consegui ${form.status === 'published' ? 'desativar' : 'ativar'} esse popup: ${errBody?.error || res.statusText}`,
+        })
         return
+      }
+      // Celebrate activation — confetti + green toast (Omnisend pattern).
+      // Deactivation gets a quieter neutral toast.
+      if (newStatus === 'published') {
+        fireConfetti()
+        showToast({ type: 'success', msg: `Popup "${form.name}" está no ar!` })
+      } else {
+        showToast({ type: 'info', msg: `Popup "${form.name}" foi pausado.` })
       }
       // Re-fetch from server to pick up any side effects (updated_at,
       // counts, etc.) so the row reflects truth.
@@ -299,7 +325,7 @@ export default function FormsPage() {
     } catch (error) {
       console.error('[Forms] toggleStatus exception:', error)
       setForms((prev) => prev.map((f) => f.id === form.id ? { ...f, status: form.status } : f))
-      alert('Erro de rede ao alterar status. Tente novamente.')
+      showToast({ type: 'error', msg: 'Erro de rede ao alterar status. Tente novamente.' })
     } finally {
       setTogglingStatus(null)
     }
@@ -718,6 +744,39 @@ export default function FormsPage() {
                 </div>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Status-toggle toast. Lives at the bottom so it doesn't fight
+          the modal stack. Auto-dismisses after ~3s. */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            key={toast.msg}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.18 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg border"
+            style={
+              toast.type === 'success'
+                ? { background: '#ECFDF5', borderColor: '#A7F3D0', color: '#065F46' }
+                : toast.type === 'error'
+                  ? { background: '#FEF2F2', borderColor: '#FECACA', color: '#991B1B' }
+                  : { background: '#F4F4F5', borderColor: '#E4E4E7', color: '#18181B' }
+            }
+            role="status"
+            aria-live="polite"
+          >
+            {toast.type === 'success' ? (
+              <CheckCircle className="w-4 h-4" />
+            ) : toast.type === 'error' ? (
+              <X className="w-4 h-4" />
+            ) : (
+              <Power className="w-4 h-4" />
+            )}
+            <span className="text-[13px] font-medium">{toast.msg}</span>
           </motion.div>
         )}
       </AnimatePresence>

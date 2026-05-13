@@ -186,8 +186,8 @@ var allData={};
 function visibleBlocks(bs){
   return (bs||[]).filter(function(b){
     var pp=b.props||{};
-    if(isMob&&pp.hideOnMobile)return false;
-    if(!isMob&&pp.hideOnDesktop)return false;
+    if(isMob&&pp.hideOnMobile){dlog("hide block "+b.type+"#"+b.id+" (hideOnMobile)");return false;}
+    if(!isMob&&pp.hideOnDesktop){dlog("hide block "+b.type+"#"+b.id+" (hideOnDesktop)");return false;}
     return true;
   });
 }
