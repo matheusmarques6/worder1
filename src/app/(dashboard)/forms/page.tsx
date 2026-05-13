@@ -145,7 +145,7 @@ export default function FormsPage() {
         fontFamily: "'Montserrat', sans-serif",
         overlay: { enabled: true, color: '#000', opacity: 60, closeOnClick: true },
         closeButton: { show: true, color: '#FFFFFF', size: 22 },
-        sideImage: { enabled: true, src: '', position: 'right', width: 360 },
+        sideImage: { enabled: true, src: '', position: 'right', width: 50 },
         animation: 'fade',
       },
       behavior: {
@@ -167,7 +167,7 @@ export default function FormsPage() {
       ] }], successStep: { id: 'ok', name: 'Sucesso', blocks: [
         { id: 'ok1', type: 'text', props: { content: 'Pronto! 🎉', fontSize: 28, color: '#111827', fontWeight: 'bold', align: 'center' } },
         { id: 'ok2', type: 'coupon', props: { code: 'DESCONTO10', description: 'Use este cupom:', bgColor: '#FFF7ED', borderColor: '#F97316', fontSize: 24 } },
-      ] }, styles: { width: 420, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 32, fontFamily: 'Inter, sans-serif', overlay: { enabled: true, color: '#000', opacity: 50, closeOnClick: true }, closeButton: { show: true, color: '#fff', size: 24 }, sideImage: { enabled: false, src: '', position: 'right', width: 200 }, animation: 'fade' },
+      ] }, styles: { width: 420, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 32, fontFamily: 'Inter, sans-serif', overlay: { enabled: true, color: '#000', opacity: 50, closeOnClick: true }, closeButton: { show: true, color: '#fff', size: 24 }, sideImage: { enabled: false, src: '', position: 'right', width: 50 }, animation: 'fade' },
       behavior: { display: { trigger: 'time_delay', delay: 5, scrollPercent: 50 }, visibility: { devices: 'all', visitorType: 'all', hideFromSubscribers: false }, frequency: { showAfterDays: 7, stopAfterSubmission: true }, targeting: { pages: 'all', pageUrls: [], excludeUrls: [] }, scheduling: { enabled: false, startDate: '', endDate: '' }, audience: { tags: [], listId: '', doubleOptIn: false } },
     }},
     newsletter: { name: 'Newsletter', desc: 'Captura simples de email para newsletter', design: {
@@ -178,7 +178,7 @@ export default function FormsPage() {
         { id: 'b', type: 'button', props: { text: 'INSCREVER-SE', bgColor: '#111827', textColor: '#fff', fontSize: 14, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 12, paddingH: 24 } },
       ] }], successStep: { id: 'ok', name: 'Sucesso', blocks: [
         { id: 'ok1', type: 'text', props: { content: 'Obrigado! Você foi inscrito.', fontSize: 20, color: '#111827', fontWeight: 'bold', align: 'center' } },
-      ] }, styles: { width: 400, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 28, fontFamily: 'Inter, sans-serif', overlay: { enabled: true, color: '#000', opacity: 40, closeOnClick: true }, closeButton: { show: true, color: '#9CA3AF', size: 20 }, sideImage: { enabled: false, src: '', position: 'right', width: 200 }, animation: 'slide-up' },
+      ] }, styles: { width: 400, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 28, fontFamily: 'Inter, sans-serif', overlay: { enabled: true, color: '#000', opacity: 40, closeOnClick: true }, closeButton: { show: true, color: '#9CA3AF', size: 20 }, sideImage: { enabled: false, src: '', position: 'right', width: 50 }, animation: 'slide-up' },
       behavior: { display: { trigger: 'time_delay', delay: 10, scrollPercent: 50 }, visibility: { devices: 'all', visitorType: 'new', hideFromSubscribers: true }, frequency: { showAfterDays: 30, stopAfterSubmission: true }, targeting: { pages: 'all', pageUrls: [], excludeUrls: [] }, scheduling: { enabled: false, startDate: '', endDate: '' }, audience: { tags: ['newsletter'], listId: '', doubleOptIn: false } },
     }},
     exit_intent: { name: 'Exit Intent', desc: 'Popup quando visitante vai sair da página', design: {
@@ -189,7 +189,7 @@ export default function FormsPage() {
         { id: 'b', type: 'button', props: { text: 'VER OFERTA', bgColor: '#DC2626', textColor: '#fff', fontSize: 15, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 14, paddingH: 28 } },
       ] }], successStep: { id: 'ok', name: 'Sucesso', blocks: [
         { id: 'ok1', type: 'text', props: { content: 'Confira seu email! 📧', fontSize: 22, color: '#111827', fontWeight: 'bold', align: 'center' } },
-      ] }, styles: { width: 440, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 32, fontFamily: 'Inter, sans-serif', overlay: { enabled: true, color: '#000', opacity: 60, closeOnClick: true }, closeButton: { show: true, color: '#fff', size: 24 }, sideImage: { enabled: false, src: '', position: 'right', width: 200 }, animation: 'scale' },
+      ] }, styles: { width: 440, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 32, fontFamily: 'Inter, sans-serif', overlay: { enabled: true, color: '#000', opacity: 60, closeOnClick: true }, closeButton: { show: true, color: '#fff', size: 24 }, sideImage: { enabled: false, src: '', position: 'right', width: 50 }, animation: 'scale' },
       behavior: { display: { trigger: 'exit_intent', delay: 5, scrollPercent: 50, exitEnabled: true }, visibility: { devices: 'desktop', visitorType: 'all', hideFromSubscribers: false }, frequency: { showAfterDays: 3, stopAfterSubmission: true }, targeting: { pages: 'all', pageUrls: [], excludeUrls: [] }, scheduling: { enabled: false, startDate: '', endDate: '' }, audience: { tags: [], listId: '', doubleOptIn: false } },
     }},
     blank: { name: 'Em Branco', desc: 'Comece do zero', design: {} },
