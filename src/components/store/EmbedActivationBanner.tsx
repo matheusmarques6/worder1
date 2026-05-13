@@ -21,7 +21,7 @@
 'use client'
 
 import { CheckCircle2, AlertTriangle, ExternalLink, Copy, Check, Loader2, Zap } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStoreStore } from '@/stores'
 
 interface Props {
