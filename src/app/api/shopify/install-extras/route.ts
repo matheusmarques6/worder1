@@ -217,7 +217,34 @@ export async function POST(request: NextRequest) {
   // 2. Web Pixel — install if scope allows and not already installed
   // ──────────────────────────────────────────
   let pixelInstalled = !!store.pixel_installed;
-  const scopes: string[] = Array.isArray(store.scopes) ? store.scopes : [];
+  // Read scopes live from Shopify. The local copy on shopify_stores.scopes
+  // can be stale: the merchant might have just added write_script_tags
+  // (or write_themes) to the Custom App and reinstalled, but the row
+  // was last written days ago. Without the live read, install-extras
+  // would keep reporting "missing_scope" and the merchant would re-add
+  // the scope in a panic. Falls back to the DB copy on network error.
+  let scopes: string[] = Array.isArray(store.scopes) ? store.scopes : [];
+  try {
+    const scopesRes = await fetch(
+      `https://${shopDomain}/admin/oauth/access_scopes.json`,
+      { headers: { 'X-Shopify-Access-Token': accessToken } }
+    );
+    if (scopesRes.ok) {
+      const sj = await scopesRes.json();
+      const live = Array.isArray(sj?.access_scopes)
+        ? sj.access_scopes.map((s: any) => String(s.handle || s.name || '').toLowerCase()).filter(Boolean)
+        : [];
+      if (live.length > 0) {
+        scopes = live;
+        // Persist so other endpoints (banner gating, sync, etc.) read fresh.
+        await supabase
+          .from('shopify_stores')
+          .update({ scopes: live })
+          .eq('id', store.id);
+      }
+    }
+  } catch { /* fall back to DB copy */ }
+
   if (!pixelInstalled && scopes.includes('write_pixels')) {
     try {
       const pixelRes = await fetch(
