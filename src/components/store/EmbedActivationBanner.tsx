@@ -187,13 +187,20 @@ export function EmbedActivationBanner({ storeId, hideWhenInstalled = false }: Pr
             </div>
           )}
 
-          {/* FAILURE STATE — scopes faltando + snippet */}
+          {/* FAILURE STATE — scopes faltando + reinstall warning + snippet.
+              Custom Apps pegadinha: scopes editados na configuração só
+              entram em vigor depois de REINSTALAR o app na loja. Tem
+              merchant que adiciona o scope, salva, e clica em "Instalar
+              automaticamente" achando que basta — o token continua com
+              os scopes antigos até a reinstalação. Esse bloco enfatiza
+              o passo da reinstalação como o que provavelmente está
+              faltando. */}
           {failed && (
             <>
               {install.missingScopes.length > 0 && (
                 <div className="mt-3 rounded-lg border border-amber-200 bg-white px-3 py-3">
                   <p className="text-[12px] font-semibold text-amber-900">
-                    Adicione pelo menos um destes escopos no Custom App:
+                    1. Adicione pelo menos um destes escopos no Custom App:
                   </p>
                   <ul className="mt-2 space-y-1">
                     {install.missingScopes.map((sc) => (
@@ -211,10 +218,47 @@ export function EmbedActivationBanner({ storeId, hideWhenInstalled = false }: Pr
                     Abrir Custom App na Shopify
                     <ExternalLink className="w-3 h-3" />
                   </a>
-                  <p className="text-[11px] text-amber-700 mt-2 leading-snug">
-                    Depois de salvar os escopos, reinstale o app na sua loja, volte aqui
-                    e clique em "Instalar automaticamente".
-                  </p>
+
+                  {/* Reinstall step — this is the bit merchants miss. */}
+                  <div className="mt-3 pt-3 border-t border-amber-100">
+                    <p className="text-[12px] font-semibold text-red-700">
+                      2. Reinstale o app na loja (passo crítico)
+                    </p>
+                    <p className="text-[11px] text-amber-800 mt-1 leading-snug">
+                      Adicionar o escopo no Custom App <strong>não atualiza o
+                      token</strong> que a Worder usa. Você precisa reinstalar
+                      o app na <strong>{store.domain}</strong>:
+                    </p>
+                    <ul className="mt-1.5 text-[11px] text-amber-800 list-disc list-inside space-y-0.5">
+                      <li>No Custom App, clique em <strong>Install app</strong> / <strong>Reinstall</strong>.</li>
+                      <li>Confirme as novas permissões.</li>
+                      <li>Copie o <strong>novo</strong> Admin API access token que aparece.</li>
+                      <li>Cole na tela de <strong>conectar loja manual</strong> da Worder (mesmo domínio — só atualiza o token).</li>
+                    </ul>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-amber-100 flex flex-wrap items-center gap-2">
+                    <a
+                      href="/integrations/shopify"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 rounded-md transition-colors"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Atualizar token agora
+                    </a>
+                    <button
+                      type="button"
+                      onClick={autoInstall}
+                      disabled={install.kind === 'running'}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-amber-50 bg-amber-900 hover:bg-amber-800 disabled:opacity-50 rounded-md transition-colors"
+                    >
+                      {install.kind === 'running' ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Zap className="w-3 h-3" />
+                      )}
+                      Tentar instalar de novo
+                    </button>
+                  </div>
                 </div>
               )}
 
