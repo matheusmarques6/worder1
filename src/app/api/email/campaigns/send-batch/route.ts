@@ -429,10 +429,14 @@ export async function POST(req: NextRequest) {
         // ---- Headers anti-spam (RFC 2369 + RFC 8058) ----
         // List-Unsubscribe: obrigatório pra Gmail/Yahoo desde Fev 2024
         // List-Unsubscribe-Post: one-click unsubscribe (RFC 8058)
-        const unsubUrl = `${baseUrl}/api/email/unsubscribe?token=unsub`;
+        // The URL must be the signed-token endpoint (per recipient)
+        // so Gmail's one-click button actually unsubscribes the right
+        // contact — the placeholder '?token=unsub' was a no-op that
+        // wouldn't have processed any clicks.
+        const { buildUnsubscribeUrl, buildListUnsubscribeHeaders } = await import('@/lib/email/render');
+        const unsubUrl = buildUnsubscribeUrl(emailSend.id, baseUrl, contact.id, organizationId, campaign_id || undefined);
         const antiSpamHeaders: Record<string, string> = {
-          'List-Unsubscribe': `<${unsubUrl}>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          ...buildListUnsubscribeHeaders(unsubUrl),
           'Precedence': 'bulk',
           'X-Mailer': 'Worder/1.0',
         };

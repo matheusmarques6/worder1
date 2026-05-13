@@ -250,6 +250,47 @@ export function injectOpenPixel(
 }
 
 /**
+ * Build the canonical unsubscribe URL for a recipient. Used both
+ * in the visible footer link and in the List-Unsubscribe header so
+ * Gmail's one-click unsub button (RFC 8058) hits the same endpoint.
+ */
+export function buildUnsubscribeUrl(
+  emailSendId: string,
+  baseUrl: string,
+  contactId?: string,
+  orgId?: string,
+  campaignId?: string
+): string {
+  if (contactId && orgId) {
+    try {
+      const { signUnsubscribeToken } = require('@/lib/email/unsubscribe-token');
+      const token = signUnsubscribeToken({ contactId, orgId, campaignId });
+      return `${baseUrl}/unsubscribe?token=${token}`;
+    } catch {
+      return `${baseUrl}/api/unsubscribe/${emailSendId}`;
+    }
+  }
+  return `${baseUrl}/api/unsubscribe/${emailSendId}`;
+}
+
+/**
+ * RFC 2369 + RFC 8058 List-Unsubscribe headers. Gmail Postmaster
+ * Tools requires both List-Unsubscribe and List-Unsubscribe-Post
+ * for high-volume senders to qualify for the inbox; without them
+ * deliverability craters and the dashboard flags the domain.
+ *
+ * The mailto: secondary is a fallback for clients that don't speak
+ * one-click HTTP unsub; we don't actually run an SMTP unsubscribe
+ * mailbox but Gmail accepts the header even when nothing reads it.
+ */
+export function buildListUnsubscribeHeaders(unsubUrl: string): Record<string, string> {
+  return {
+    'List-Unsubscribe': `<${unsubUrl}>, <mailto:unsubscribe@worder.email?subject=unsubscribe>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+  };
+}
+
+/**
  * Add unsubscribe link with HMAC-signed token before </body>.
  */
 export function addUnsubscribeLink(
@@ -260,22 +301,7 @@ export function addUnsubscribeLink(
   orgId?: string,
   campaignId?: string
 ): string {
-  let unsubUrl: string;
-
-  if (contactId && orgId) {
-    // Token HMAC seguro (novo — Klaviyo-style)
-    try {
-      const { signUnsubscribeToken } = require('@/lib/email/unsubscribe-token');
-      const token = signUnsubscribeToken({ contactId, orgId, campaignId });
-      unsubUrl = `${baseUrl}/unsubscribe?token=${token}`;
-    } catch {
-      // Fallback se import falhar
-      unsubUrl = `${baseUrl}/api/unsubscribe/${emailSendId}`;
-    }
-  } else {
-    // Fallback legacy
-    unsubUrl = `${baseUrl}/api/unsubscribe/${emailSendId}`;
-  }
+  const unsubUrl = buildUnsubscribeUrl(emailSendId, baseUrl, contactId, orgId, campaignId);
 
   const unsubscribeHtml = `
 <div style="text-align:center;padding:20px 0 10px;font-size:12px;color:#999;">

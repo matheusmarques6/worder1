@@ -169,12 +169,22 @@ export async function sendCampaignEmail({
     const { renderMergeTags } = await import('@/lib/email/render');
     const finalSubject = renderMergeTags(subject, mergeData);
 
-    // 5. Send via Resend
     // 5. Send via the org's configured provider (defaults to Resend).
     // The factory caches per-org so we don't hit the DB on every send.
     const { provider, config } = await getEmailProviderForOrg(organizationId);
     const effectiveFrom = fromEmail || config.defaultFrom || 'onboarding@resend.dev';
     const effectiveSenderName = senderName || config.defaultSenderName;
+
+    // List-Unsubscribe + List-Unsubscribe-Post headers (RFC 2369 +
+    // 8058). Gmail Postmaster Tools demands both for high-volume
+    // senders to qualify for the inbox; without them deliverability
+    // craters and mail-tester subtracts a full point. Build the same
+    // URL the visible footer link uses so one-click and manual
+    // unsubscribe both resolve through the same signed-token path.
+    const { buildUnsubscribeUrl, buildListUnsubscribeHeaders } = await import('@/lib/email/render');
+    const unsubUrl = buildUnsubscribeUrl(emailSendId, baseUrl, resolvedContactId || undefined, organizationId, campaignId || undefined);
+    const listUnsubHeaders = buildListUnsubscribeHeaders(unsubUrl);
+
     const result = await provider.send({
       to: contactEmail,
       from: effectiveFrom,
@@ -182,6 +192,7 @@ export async function sendCampaignEmail({
       subject: finalSubject,
       html: finalHtml,
       replyTo,
+      headers: listUnsubHeaders,
       tags: [
         { name: 'campaign_id', value: campaignId || 'flow' },
         { name: 'email_send_id', value: emailSendId },
