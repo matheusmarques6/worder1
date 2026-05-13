@@ -102,10 +102,22 @@ function getGreeting() {
   return 'Boa noite'
 }
 
-function formatBRL(v: number): string {
+function formatBRL(v: number, currency = 'BRL'): string {
   const rounded = Math.round(v)
-  if (rounded === 0) return 'R$ 0'
-  return 'R$ ' + rounded.toLocaleString('pt-BR')
+  // Render in the store's actual currency. The label below the hero is
+  // built from the same `currency` so a GBP store doesn't see R$ next to
+  // a £ chart. Falls back to a `CCC 1.234` shape if Intl rejects the
+  // currency code (paranoia: shop_domain.currency is text from Shopify).
+  try {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 0,
+    }).format(rounded)
+  } catch {
+    if (rounded === 0) return `${currency} 0`
+    return `${currency} ${rounded.toLocaleString('pt-BR')}`
+  }
 }
 
 function formatBRLCompact(v: number): string {
@@ -154,6 +166,13 @@ export default function DashboardPage() {
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore()
   const firstName = (user?.name?.split(' ')[0]) || user?.email?.split('@')[0] || 'por aí'
+
+  // Currency comes from the connected Shopify store. A merchant on a
+  // GBP shop would otherwise see "R$" prefixes everywhere because the
+  // formatter was hardcoded to BRL. Falls back to BRL when no store is
+  // selected (first-time onboarding or manual organizations).
+  const currency = (currentStore?.currency || 'BRL').toUpperCase()
+  const fmtMoney = (v: number) => formatBRL(v, currency)
 
   // Persist filter choices across sessions so users land where they
   // left off. Defaults to 30d / weekly / revenue on first visit.
@@ -452,7 +471,7 @@ export default function DashboardPage() {
                 {loading && data.worderRevenue === 0 ? (
                   <span className="inline-block w-36 h-7 rounded bg-white/15 animate-pulse" />
                 ) : (
-                  formatBRL(heroAnim)
+                  fmtMoney(heroAnim)
                 )}
               </div>
               <div className="flex items-center justify-between mt-3 relative">
@@ -488,7 +507,7 @@ export default function DashboardPage() {
                 className="text-[24px] font-bold text-[#18181B]"
                 style={{ letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}
               >
-                {formatBRL(data.storeRevenue)}
+                {fmtMoney(data.storeRevenue)}
               </div>
               <div className="text-[12px] text-[#A1A1AA] mt-[6px]">
                 {data.storeOrders.toLocaleString('pt-BR')} pedidos
@@ -638,11 +657,12 @@ export default function DashboardPage() {
 // ──────────────────────────────────────────────────────────────
 
 function MiniKPI({ label, value, sub, spark }: { label: string; value: number; sub: string; spark?: number[] }) {
+  const currency = (useStoreStore.getState().currentStore?.currency || 'BRL').toUpperCase()
   return (
     <div className="flex-1 rounded-[12px] bg-white px-5 py-[18px] transition-colors hover:bg-[#FAFAFA] relative overflow-hidden" style={{ border: '1px solid #E4E4E7' }}>
       <div className="text-[12px] font-semibold text-[#71717A] mb-2">{label}</div>
       <div className="text-[19px] font-bold text-[#18181B]" style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
-        {formatBRL(value)}
+        {formatBRL(value, currency)}
       </div>
       <div className="text-[12px] text-[#A1A1AA] mt-[6px]">{sub}</div>
       {spark && spark.length > 1 && spark.some((v) => v > 0) && (
@@ -677,6 +697,7 @@ function Sparkline({ values }: { values: number[] }) {
 // the total so it reads like the Klaviyo / Linear tooltip style.
 function RichTooltip({ active, payload, label, isRevenue }: any) {
   if (!active || !payload || !payload.length) return null
+  const currency = (useStoreStore.getState().currentStore?.currency || 'BRL').toUpperCase()
   const rows: Array<{ name: string; value: number; color: string }> = []
   const keyMap: Record<string, { name: string; color: string }> = {
     campanhas: { name: 'Campanhas', color: '#18181B' },
@@ -690,7 +711,7 @@ function RichTooltip({ active, payload, label, isRevenue }: any) {
     rows.push({ name: meta.name, value: Number(p?.value) || 0, color: meta.color })
   }
   const total = rows.reduce((s, r) => s + r.value, 0)
-  const fmt = (v: number) => (isRevenue ? formatBRL(v) : v.toLocaleString('pt-BR'))
+  const fmt = (v: number) => (isRevenue ? formatBRL(v, currency) : v.toLocaleString('pt-BR'))
 
   return (
     <div
@@ -738,6 +759,7 @@ function LegendDot({ color, label, border }: { color: string; label: string; bor
 }
 
 function ChannelItem({ label, value, pct, color }: { label: string; value: number; pct: number; color: string }) {
+  const currency = (useStoreStore.getState().currentStore?.currency || 'BRL').toUpperCase()
   return (
     <div>
       <div className="flex items-center gap-2 text-[13px] font-semibold text-[#71717A]">
@@ -745,7 +767,7 @@ function ChannelItem({ label, value, pct, color }: { label: string; value: numbe
         {label}
       </div>
       <div className="text-[22px] font-bold text-[#18181B] mt-2" style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
-        {formatBRL(value)}
+        {formatBRL(value, currency)}
       </div>
       <div className="text-[12px] text-[#A1A1AA] mt-1">{formatPct(pct)}</div>
     </div>
@@ -800,6 +822,7 @@ function RankingCard<T extends { id: string; name: string; status: string; reven
 }: {
   title: string
   seeAllHref: string
+  // (currency captured below from the live store; not threaded through props)
   items: T[]
   itemHref?: (item: T) => string
   renderDetails: (item: T) => string
@@ -807,6 +830,7 @@ function RankingCard<T extends { id: string; name: string; status: string; reven
   emptyHref: string
   emptyAction: string
 }) {
+  const currency = (useStoreStore.getState().currentStore?.currency || 'BRL').toUpperCase()
   return (
     <div className="flex-1 min-w-0 rounded-[14px] bg-white px-7 py-6" style={{ border: '1px solid #E4E4E7' }}>
       <div className="flex items-center justify-between mb-1">
@@ -840,7 +864,7 @@ function RankingCard<T extends { id: string; name: string; status: string; reven
                 </span>
               </div>
               <div className="text-[16px] font-bold text-[#18181B] mt-[5px]" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                {formatBRL(item.revenue)}
+                {formatBRL(item.revenue, currency)}
               </div>
             </>
           )

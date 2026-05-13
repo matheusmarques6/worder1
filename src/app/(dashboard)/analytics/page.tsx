@@ -80,8 +80,15 @@ function rangeForApi(p: Period): string {
   return p
 }
 
-function fmtCurrency(v: number): string {
-  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0, maximumFractionDigits: 0 })
+function fmtCurrency(v: number, currency = 'BRL'): string {
+  // Honor the connected store's currency code (GBP/USD/EUR/etc.) instead
+  // of hardcoding BRL. Falls back to the currency code prefix if Intl
+  // doesn't recognize the value (paranoia: it's text from Shopify).
+  try {
+    return v.toLocaleString('pt-BR', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  } catch {
+    return `${currency} ${Math.round(v).toLocaleString('pt-BR')}`
+  }
 }
 
 function fmtNumber(v: number): string {
@@ -150,6 +157,8 @@ function EmptyState({ message }: { message: string }) {
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>('30d')
   const { currentStore } = useStoreStore()
+  const currency = (currentStore?.currency || 'BRL').toUpperCase()
+  const fmt = (v: number) => fmtCurrency(v, currency)
 
   const [loading, setLoading] = useState(true)
   const [overview, setOverview] = useState<OverviewData | null>(null)
@@ -210,12 +219,12 @@ export default function AnalyticsPage() {
     },
     {
       title: 'Receita Total da Loja',
-      value: totalRevenue !== null ? fmtCurrency(totalRevenue) : '—',
+      value: totalRevenue !== null ? fmt(totalRevenue) : '—',
       icon: CurrencyDollar,
     },
     {
       title: 'Receita Atribuída (Worder)',
-      value: worderRevenue !== null ? fmtCurrency(worderRevenue) : '—',
+      value: worderRevenue !== null ? fmt(worderRevenue) : '—',
       icon: CurrencyDollar,
     },
     {
@@ -336,9 +345,9 @@ export default function AnalyticsPage() {
                     {overview.series.map((row, i) => (
                       <tr key={i} className="border-b border-gray-200/50">
                         <td className="py-2 text-gray-700">{row.label}</td>
-                        <td className="py-2 text-right text-gray-500">{fmtCurrency(row.campanhas)}</td>
-                        <td className="py-2 text-right text-gray-500">{fmtCurrency(row.automacoes)}</td>
-                        <td className="py-2 text-right text-gray-500">{fmtCurrency(row.fora)}</td>
+                        <td className="py-2 text-right text-gray-500">{fmt(row.campanhas)}</td>
+                        <td className="py-2 text-right text-gray-500">{fmt(row.automacoes)}</td>
+                        <td className="py-2 text-right text-gray-500">{fmt(row.fora)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -375,7 +384,7 @@ export default function AnalyticsPage() {
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ch.color }} />
                       <span className="text-gray-500">{ch.name}</span>
                     </div>
-                    <span className="text-gray-900 font-medium">{fmtCurrency(ch.value)}</span>
+                    <span className="text-gray-900 font-medium">{fmt(ch.value)}</span>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-2">
                     <div
@@ -386,7 +395,7 @@ export default function AnalyticsPage() {
                 </div>
               ))}
               <div className="pt-2 border-t border-gray-100 text-xs text-gray-400">
-                Total: {fmtCurrency(channelTotal)}
+                Total: {fmt(channelTotal)}
               </div>
             </div>
           ) : (
@@ -423,7 +432,7 @@ export default function AnalyticsPage() {
                     <td className="py-3 text-sm text-gray-500 text-right">{fmtNumber(camp.sends)}</td>
                     <td className="py-3 text-sm text-gray-500 text-right">{fmtPercent(camp.openRate)}</td>
                     <td className="py-3 text-sm text-gray-500 text-right">{fmtPercent(camp.clickRate)}</td>
-                    <td className="py-3 text-sm text-emerald-500 font-medium text-right">{fmtCurrency(camp.revenue)}</td>
+                    <td className="py-3 text-sm text-emerald-500 font-medium text-right">{fmt(camp.revenue)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -459,7 +468,7 @@ export default function AnalyticsPage() {
                     <td className="py-3 text-sm text-gray-500">{auto.status}</td>
                     <td className="py-3 text-sm text-gray-500 text-right">{fmtNumber(auto.sends)}</td>
                     <td className="py-3 text-sm text-gray-500 text-right">{fmtPercent(auto.conversionRate)}</td>
-                    <td className="py-3 text-sm text-emerald-500 font-medium text-right">{fmtCurrency(auto.revenue)}</td>
+                    <td className="py-3 text-sm text-emerald-500 font-medium text-right">{fmt(auto.revenue)}</td>
                   </tr>
                 ))}
               </tbody>

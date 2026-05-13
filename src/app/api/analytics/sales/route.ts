@@ -74,13 +74,19 @@ export async function GET(request: NextRequest) {
     const { data: pipelines } = await pipelinesQuery
 
     // 2. FETCH ALL DEALS - ✅ MODIFICADO: Filtrar por store_id
+    //
+    // The deals → contacts relationship has no FK on production, so a
+    // nested `contact:contacts(...)` embed makes PostgREST reject the
+    // whole query with "Could not find a relationship". That's what was
+    // surfacing as "Failed to fetch analytics" on /analytics/sales. We
+    // join the stage (FK exists) and hydrate contact rows in a separate
+    // round-trip below.
     let dealsQuery = supabase
       .from('deals')
       .select(`
         id, title, value, status, probability, commit_level, stage_id, pipeline_id,
         contact_id, created_at, updated_at, won_at, lost_at, expected_close_date,
-        stage:pipeline_stages(id, name, color, probability, position),
-        contact:contacts(id, first_name, last_name, email)
+        stage:pipeline_stages(id, name, color, probability, position)
       `)
 
     // ✅ NOVO: Filtrar por store_id
@@ -95,7 +101,23 @@ export async function GET(request: NextRequest) {
     const { data: allDeals, error: dealsError } = await dealsQuery
     if (dealsError) throw dealsError
 
-    const deals = allDeals || []
+    let deals: any[] = allDeals || []
+
+    // Hydrate contacts in a single batch query (replaces the failing
+    // nested embed). Skip when there are no deals.
+    if (deals.length > 0) {
+      const contactIds = Array.from(
+        new Set(deals.map((d) => d.contact_id).filter(Boolean))
+      ) as string[]
+      if (contactIds.length > 0) {
+        const { data: contactRows } = await supabase
+          .from('contacts')
+          .select('id, first_name, last_name, email')
+          .in('id', contactIds)
+        const byId = new Map((contactRows || []).map((c: any) => [c.id, c]))
+        deals = deals.map((d) => ({ ...d, contact: byId.get(d.contact_id) || null }))
+      }
+    }
 
     // 3. FETCH PREVIOUS PERIOD DEALS - ✅ MODIFICADO: Filtrar por store_id
     let previousDealsQuery = supabase
