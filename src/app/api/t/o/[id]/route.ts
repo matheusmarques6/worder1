@@ -1,20 +1,27 @@
 // =============================================
 // WORDER: Open Pixel Tracker
 // Retorna 1x1 GIF + grava open no CDP (contact_events).
+// Apple MPP (Mail Privacy Protection) auto-fetches the pixel the
+// moment the email is delivered, which inflates open rates and
+// poisons attribution. We detect MPP server-side and write to
+// mpp_opened_at instead of opened_at; the attribution RPC only
+// honors real opens by default (matches Klaviyo).
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { detectMpp } from '@/lib/email/mpp-detection';
 
 const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const emailSendId = params.id;
 
-  // Fire-and-forget
-  recordOpen(emailSendId).catch(() => {});
+  // Fire-and-forget — the pixel response can't block on DB writes
+  // or the email client will give up waiting and show a broken image.
+  recordOpen(emailSendId, request.headers).catch(() => {});
 
   return new NextResponse(GIF, {
     status: 200,
@@ -27,13 +34,13 @@ export async function GET(
   });
 }
 
-async function recordOpen(emailSendId: string) {
+async function recordOpen(emailSendId: string, headers: Headers) {
   try {
     const { supabaseAdmin } = await import('@/lib/supabase-admin');
 
     const { data: send } = await supabaseAdmin
       .from('email_sends')
-      .select('id, campaign_id, contact_id, ab_variant')
+      .select('id, campaign_id, contact_id, ab_variant, sent_at, opened_at, mpp_opened_at')
       .eq('id', emailSendId).maybeSingle();
     if (!send) return;
 
@@ -45,13 +52,23 @@ async function recordOpen(emailSendId: string) {
     }
 
     const now = new Date().toISOString();
+    const mpp = detectMpp({ headers, sentAt: send.sent_at });
 
-    // email_sends.opened_at (primeiro open)
-    await supabaseAdmin.from('email_sends')
-      .update({ opened_at: now }).eq('id', emailSendId).is('opened_at', null);
+    // Route the timestamp to the right column. MPP opens land in
+    // mpp_opened_at so dashboards + the attribution RPC can ignore
+    // them by default. Genuine opens land in opened_at as before.
+    if (mpp.isMpp) {
+      await supabaseAdmin.from('email_sends')
+        .update({ mpp_opened_at: now }).eq('id', emailSendId).is('mpp_opened_at', null);
+    } else {
+      await supabaseAdmin.from('email_sends')
+        .update({ opened_at: now }).eq('id', emailSendId).is('opened_at', null);
+    }
 
-    // CDP: contact_events
-    if (orgId && send.contact_id) {
+    // CDP: contact_events — only record human opens. MPP opens are
+    // noise in the timeline; we keep the column-level record but
+    // don't pollute the activity feed.
+    if (orgId && send.contact_id && !mpp.isMpp) {
       const day = now.slice(0, 10);
       await supabaseAdmin.from('contact_events').insert({
         organization_id: orgId, contact_id: send.contact_id,
@@ -66,8 +83,8 @@ async function recordOpen(emailSendId: string) {
         .eq('id', send.contact_id);
     }
 
-    // Campaign stats
-    if (send.campaign_id) {
+    // Campaign stats — only count real opens, not MPP prefetches.
+    if (send.campaign_id && !mpp.isMpp) {
       const { error: rpcErr } = await supabaseAdmin.rpc('increment_campaign_opens', { campaign_id: send.campaign_id }); if (rpcErr) { /* silent */ }
     }
   } catch (e) { console.error('[OpenPixel]', e); }

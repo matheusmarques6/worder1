@@ -7,14 +7,31 @@ interface AttributionSettings {
   email_window_days: number;
   whatsapp_window_days: number;
   sms_window_days: number;
+  // Klaviyo/Omnisend-style toggles. count_opens controls whether
+  // opens (in addition to clicks) qualify as engagement for the
+  // attribution window. exclude_mpp_opens hides Apple Mail Privacy
+  // Protection auto-opens (pre-fetched the moment the email is
+  // delivered) from both reporting and attribution — matches
+  // Klaviyo's default.
+  count_opens: boolean;
+  exclude_mpp_opens: boolean;
 }
 
+const DEFAULTS: AttributionSettings = {
+  email_window_days: 5,
+  whatsapp_window_days: 2,
+  sms_window_days: 2,
+  count_opens: true,
+  exclude_mpp_opens: true,
+};
+
+// Aligned with Klaviyo (31 days max) and Omnisend (30 days max). We
+// cap at 30 across all channels so the per-channel logic stays
+// symmetric.
+const WINDOW_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 10, 14, 21, 30];
+
 export default function AttributionSettingsPage() {
-  const [settings, setSettings] = useState<AttributionSettings>({
-    email_window_days: 5,
-    whatsapp_window_days: 2,
-    sms_window_days: 2,
-  });
+  const [settings, setSettings] = useState<AttributionSettings>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -78,7 +95,8 @@ export default function AttributionSettingsPage() {
           <p className="text-sm text-blue-700">
             A janela de atribuição define por quantos dias uma conversão é creditada ao canal que
             gerou o último contato antes da compra. Janelas maiores atribuem mais conversões; janelas
-            menores são mais conservadoras.
+            menores são mais conservadoras. <strong>Última interação ganha</strong> — modelo last-touch
+            por canal, igual ao Klaviyo e Omnisend.
           </p>
         </div>
 
@@ -97,73 +115,117 @@ export default function AttributionSettingsPage() {
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">E-mail</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Janela padrão de 5 dias (recomendado para e-commerce).
+                  Padrão de 5 dias. Klaviyo recomenda 5–7, Omnisend usa 7.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={settings.email_window_days}
-                  onChange={e =>
-                    setSettings(s => ({ ...s, email_window_days: Number(e.target.value) }))
-                  }
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-                >
-                  {[1, 2, 3, 4, 5, 6, 7].map(d => (
-                    <option key={d} value={d}>
-                      {d} {d === 1 ? 'dia' : 'dias'}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <select
+                value={settings.email_window_days}
+                onChange={e =>
+                  setSettings(s => ({ ...s, email_window_days: Number(e.target.value) }))
+                }
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
+              >
+                {WINDOW_OPTIONS.map(d => (
+                  <option key={d} value={d}>
+                    {d} {d === 1 ? 'dia' : 'dias'}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="border-t border-gray-100 pt-5 flex items-center justify-between gap-4">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">WhatsApp</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Conversas tendem a converter mais rápido; janela mais curta é adequada.
+                  Conversas convertem rápido; janela curta (2–3 dias) é o sweet spot.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={settings.whatsapp_window_days}
-                  onChange={e =>
-                    setSettings(s => ({ ...s, whatsapp_window_days: Number(e.target.value) }))
-                  }
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-                >
-                  {[1, 2, 3].map(d => (
-                    <option key={d} value={d}>
-                      {d} {d === 1 ? 'dia' : 'dias'}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <select
+                value={settings.whatsapp_window_days}
+                onChange={e =>
+                  setSettings(s => ({ ...s, whatsapp_window_days: Number(e.target.value) }))
+                }
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
+              >
+                {WINDOW_OPTIONS.map(d => (
+                  <option key={d} value={d}>
+                    {d} {d === 1 ? 'dia' : 'dias'}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="border-t border-gray-100 pt-5 flex items-center justify-between gap-4">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">SMS</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  SMS geralmente convertem em poucas horas após o envio.
+                  SMS convertem em horas; Klaviyo usa 5 dias, Omnisend 24h.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={settings.sms_window_days}
-                  onChange={e =>
-                    setSettings(s => ({ ...s, sms_window_days: Number(e.target.value) }))
-                  }
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-                >
-                  {[1, 2, 3].map(d => (
-                    <option key={d} value={d}>
-                      {d} {d === 1 ? 'dia' : 'dias'}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <select
+                value={settings.sms_window_days}
+                onChange={e =>
+                  setSettings(s => ({ ...s, sms_window_days: Number(e.target.value) }))
+                }
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
+              >
+                {WINDOW_OPTIONS.map(d => (
+                  <option key={d} value={d}>
+                    {d} {d === 1 ? 'dia' : 'dias'}
+                  </option>
+                ))}
+              </select>
             </div>
+          </div>
+        </div>
+
+        {/* Engagement signals */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 bg-orange-50 rounded-lg">
+              <Info className="w-5 h-5 text-orange-500" />
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900">Sinais de Engajamento</h2>
+          </div>
+
+          <div className="space-y-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.count_opens}
+                onChange={e => setSettings(s => ({ ...s, count_opens: e.target.checked }))}
+                className="w-4 h-4 mt-0.5 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+              />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Contar aberturas para atribuição</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Quando desligado, só cliques entram na janela. Útil pra negócios onde abertura
+                  não é um sinal forte (transacional, B2B).
+                </p>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.exclude_mpp_opens}
+                onChange={e =>
+                  setSettings(s => ({ ...s, exclude_mpp_opens: e.target.checked }))
+                }
+                className="w-4 h-4 mt-0.5 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+              />
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  Excluir aberturas falsas do Apple MPP
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Apple Mail Privacy Protection pré-carrega imagens assim que o email é entregue —
+                  isso registra uma "abertura" falsa que não corresponde a engajamento real. Quando
+                  marcado, essas aberturas ficam separadas (em <code>mpp_opened_at</code>) e não
+                  qualificam pra atribuição. Klaviyo aplica esse filtro por padrão.
+                </p>
+              </div>
+            </label>
           </div>
         </div>
 
@@ -188,6 +250,13 @@ export default function AttributionSettingsPage() {
               SMS:{' '}
               <span className="font-medium text-gray-900">
                 {settings.sms_window_days} {settings.sms_window_days === 1 ? 'dia' : 'dias'}
+              </span>
+            </li>
+            <li>
+              Engajamento:{' '}
+              <span className="font-medium text-gray-900">
+                {settings.count_opens ? 'aberturas + cliques' : 'somente cliques'}
+                {settings.count_opens && settings.exclude_mpp_opens ? ' (MPP excluído)' : ''}
               </span>
             </li>
           </ul>

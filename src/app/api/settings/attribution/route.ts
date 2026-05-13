@@ -2,11 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
+// Defaults mirror Klaviyo's out-of-the-box behavior: 5-day windows for
+// email/SMS, opens count, Apple MPP opens excluded. WhatsApp is a
+// shorter conversational channel so we default 2 days.
 const DEFAULTS = {
   email_window_days: 5,
   whatsapp_window_days: 2,
   sms_window_days: 2,
+  count_opens: true,
+  exclude_mpp_opens: true,
 };
+
+function clampWindow(value: any, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(30, Math.max(1, Math.round(n)));
+}
 
 export async function GET() {
   const auth = await getAuthClient();
@@ -49,9 +60,11 @@ export async function POST(request: NextRequest) {
         email_settings: {
           ...existingSettings,
           attribution: {
-            email_window_days: Number(body.email_window_days) || 5,
-            whatsapp_window_days: Number(body.whatsapp_window_days) || 2,
-            sms_window_days: Number(body.sms_window_days) || 2,
+            email_window_days: clampWindow(body.email_window_days, 5),
+            whatsapp_window_days: clampWindow(body.whatsapp_window_days, 2),
+            sms_window_days: clampWindow(body.sms_window_days, 2),
+            count_opens: body.count_opens !== false,
+            exclude_mpp_opens: body.exclude_mpp_opens !== false,
           },
         },
       })

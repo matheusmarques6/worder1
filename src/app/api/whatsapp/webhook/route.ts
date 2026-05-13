@@ -147,11 +147,12 @@ async function handleMessageStatus(instanceName: string, data: any) {
   if (!instance) return;
 
   const updates = Array.isArray(data) ? data : [data];
-  
+  const now = new Date().toISOString();
+
   for (const update of updates) {
     const messageId = update.key?.id || update.id;
     const status = update.status || update.update?.status;
-    
+
     if (messageId && status) {
       // Mapear status
       let mappedStatus = status;
@@ -161,15 +162,48 @@ async function handleMessageStatus(instanceName: string, data: any) {
         };
         mappedStatus = statusMap[status] || 'unknown';
       }
-      
+
+      // Legacy inbound-conversation log (unchanged).
       await supabase
         .from('whatsapp_messages')
-        .update({ 
+        .update({
           status: mappedStatus,
-          updated_at: new Date().toISOString()
+          updated_at: now,
         })
         .or(`message_id.eq.${messageId},external_id.eq.${messageId}`);
-        
+
+      // Attribution-aware send log. whatsapp_sends is the per-message
+      // outbound record action_whatsapp writes — same shape email_sends
+      // uses. Promoting status transitions to distinct timestamps
+      // (delivered_at / read_at / replied_at) lets the attribution
+      // RPC pick last-engagement consistently with how email does it.
+      const sendPatch: Record<string, any> = {
+        status: mappedStatus,
+        updated_at: now,
+      };
+      if (mappedStatus === 'delivered') sendPatch.delivered_at = now;
+      if (mappedStatus === 'read' || mappedStatus === 'played') {
+        sendPatch.delivered_at = sendPatch.delivered_at || now;
+        sendPatch.read_at = now;
+      }
+      // Only patch columns whose timestamp isn't already set — first
+      // ACK wins, later ACKs only fill in fields that were null.
+      try {
+        const { data: sendRow } = await supabase
+          .from('whatsapp_sends')
+          .select('id, delivered_at, read_at')
+          .eq('external_message_id', messageId)
+          .maybeSingle();
+        if (sendRow?.id) {
+          const finalPatch: Record<string, any> = { status: mappedStatus, updated_at: now };
+          if (sendPatch.delivered_at && !sendRow.delivered_at) finalPatch.delivered_at = sendPatch.delivered_at;
+          if (sendPatch.read_at && !sendRow.read_at) finalPatch.read_at = sendPatch.read_at;
+          await supabase.from('whatsapp_sends').update(finalPatch).eq('id', sendRow.id);
+        }
+      } catch (e) {
+        console.warn('[Webhook] whatsapp_sends status update failed:', e);
+      }
+
       console.log('[Webhook] ✅ Message status updated:', messageId, '->', mappedStatus);
     }
   }

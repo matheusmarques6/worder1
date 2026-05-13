@@ -603,22 +603,24 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   }
 
   // ======================================
-  // Email revenue attribution. Fired here on orders/create so stores
-  // with instant-capture gateways (which often skip orders/paid)
-  // still get credit. The RPC is idempotent on order_id, so when
-  // orders/paid lands later for the same order it's a safe no-op.
+  // Multi-channel revenue attribution. Each channel uses its own
+  // window from org settings (Settings → Atribuição). The Shopify
+  // order might have been preceded by an email open, a WhatsApp
+  // delivery, or an SMS click — we attribute to the most recent
+  // engagement on each channel independently. Idempotent on
+  // (org, order_id) so the orders/paid call later is a safe no-op.
   // ======================================
   if (orderValue > 0) {
     try {
-      const { attributeEmailConversion } = await import('@/lib/email/attribution');
-      await attributeEmailConversion({
+      const { attributeAcrossChannels } = await import('@/lib/attribution');
+      await attributeAcrossChannels({
         contactId: contact.id,
         organizationId: store.organization_id,
         orderId: String(order.id),
         orderValue,
       });
     } catch (attribErr) {
-      console.error('[Shopify Webhook] Email attribution failed (orders/create):', attribErr);
+      console.error('[Shopify Webhook] Attribution failed (orders/create):', attribErr);
     }
   }
 
@@ -1021,33 +1023,23 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
       sourceId: String(order.id),
     });
 
-    // Email revenue attribution. Mirrors Klaviyo/Omnisend semantics
-    // (last-touch, engagement-required, configurable window per org).
-    // attributeEmailConversion reads
-    // organizations.email_settings.attribution.email_window_days
-    // (default 5 days) and calls the attribute_email_conversion RPC,
-    // which atomically:
-    //   - finds the most recent email_sends row for this contact
-    //     where sent_at >= NOW() - window AND (opened_at IS NOT NULL
-    //     OR clicked_at IS NOT NULL) — i.e. engagement required;
-    //   - sets conversion_value / converted_at / order_id on it;
-    //   - bumps email_campaigns.revenue + .conversions.
-    // The webhook-processor.ts copy of this handler already did this,
-    // but the active route dispatched here instead, leaving every
-    // "Sales R$" card sitting at zero in production. Best-effort —
-    // failing attribution must not block automation rules below.
+    // Multi-channel revenue attribution. Same orchestrator as
+    // orders/create — safe to call again because each channel's RPC
+    // is idempotent on (org, order_id). orders/paid is the fallback
+    // entry point for stores that use manual capture / COD where
+    // orders/create runs before the order is actually paid.
     const orderValue = parseFloat(order.total_price || '0');
     if (orderValue > 0) {
       try {
-        const { attributeEmailConversion } = await import('@/lib/email/attribution');
-        await attributeEmailConversion({
+        const { attributeAcrossChannels } = await import('@/lib/attribution');
+        await attributeAcrossChannels({
           contactId: contact.id,
           organizationId: store.organization_id,
           orderId: String(order.id),
           orderValue,
         });
       } catch (attribErr) {
-        console.error('[Shopify Webhook] Email attribution failed:', attribErr);
+        console.error('[Shopify Webhook] Attribution failed (orders/paid):', attribErr);
       }
     }
     
@@ -1369,6 +1361,20 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
       source: 'shopify',
       sourceId: String(order.id),
     });
+
+    // Refund / cancellation handling — revoke the attributed revenue
+    // across every channel that previously got credit. Klaviyo fires
+    // a "Refunded Order" event for the same purpose; without this,
+    // cancelled orders inflate every "Sales R$" tile forever.
+    try {
+      const { revokeAttributionAcrossChannels } = await import('@/lib/attribution');
+      await revokeAttributionAcrossChannels({
+        organizationId: store.organization_id,
+        orderId: String(order.id),
+      });
+    } catch (revokeErr) {
+      console.error('[Shopify Webhook] Attribution revoke failed:', revokeErr);
+    }
 
     if (store.default_pipeline_id) {
       // Marcar deal como perdido

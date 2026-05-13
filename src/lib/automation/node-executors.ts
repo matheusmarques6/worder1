@@ -157,15 +157,15 @@ const triggerExecutors: Record<string, NodeExecutor> = {
 const actionExecutors: Record<string, NodeExecutor> = {
   // ========== WHATSAPP ==========
   action_whatsapp: {
-    async execute({ config, context, credentials, isTest }) {
+    async execute({ node, config, context, credentials, isTest, supabase, organizationId }) {
       const phone = context.contact?.phone;
-      
+
       if (isTest) {
         return {
           status: 'success',
-          output: { 
-            sent: true, 
-            test: true, 
+          output: {
+            sent: true,
+            test: true,
             to: phone,
             message: config.message?.substring(0, 50) + '...',
           },
@@ -177,10 +177,68 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
 
       const provider = credentials?.provider || credentials?.type || 'evolution';
-      
+
+      // Pre-create the send row in 'pending' so attribution + the
+      // webhook's delivered/read updates can both find it later by
+      // external_message_id. Same pattern email_sends uses (create
+      // queued row, then patch with provider id after the API call).
+      const workflow = (context as any).workflow || {};
+      const flowId =
+        (context as any).flowId ||
+        (context as any).flow_id ||
+        workflow.flowId ||
+        workflow.flow_id ||
+        null;
+      const runId =
+        (context as any).automation_run_id ||
+        (context as any).runId ||
+        workflow.executionId ||
+        workflow.execution_id ||
+        null;
+      const automationId =
+        (context as any).automation_id ||
+        workflow.automationId ||
+        workflow.id ||
+        null;
+
+      let whatsappSendId: string | null = null;
       try {
+        if (supabase && organizationId && (context.contact as any)?.id) {
+          const { data: row, error: insertErr } = await supabase
+            .from('whatsapp_sends')
+            .insert({
+              organization_id: organizationId,
+              contact_id: (context.contact as any).id,
+              phone_number: phone,
+              campaign_id: null,
+              automation_id: automationId,
+              automation_run_id: runId,
+              flow_id: flowId,
+              node_id: node?.id || null,
+              message_body: config.message || null,
+              template_name: config.templateId || null,
+              template_params: config.templateParams || null,
+              status: 'pending',
+            })
+            .select('id')
+            .single();
+          if (insertErr) {
+            console.warn('[action_whatsapp] whatsapp_sends INSERT failed (proceeding):', insertErr);
+          } else {
+            whatsappSendId = row?.id || null;
+          }
+        }
+      } catch (e) {
+        console.warn('[action_whatsapp] whatsapp_sends prep failed (proceeding):', e);
+      }
+
+      try {
+        let result: any;
+        let externalMessageId: string | null = null;
+        let usedProvider = 'evolution';
+
         if (provider === 'whatsappBusiness' || provider === 'cloud') {
-          // WhatsApp Cloud API
+          usedProvider = 'cloud';
           const response = await fetch(
             `https://graph.facebook.com/v18.0/${credentials?.phoneNumberId}/messages`,
             {
@@ -208,15 +266,21 @@ const actionExecutors: Record<string, NodeExecutor> = {
             }
           );
 
-          const result = await response.json();
-          
+          result = await response.json();
+
           if (!response.ok) {
+            if (supabase && whatsappSendId) {
+              await supabase.from('whatsapp_sends').update({
+                status: 'failed',
+                error_message: result.error?.message || 'Falha no envio',
+              }).eq('id', whatsappSendId);
+            }
             return { status: 'error', output: result, error: result.error?.message || 'Falha no envio' };
           }
 
-          return { status: 'success', output: { ...result, provider: 'cloud' } };
+          // Cloud API returns messages: [{ id: wamid }]
+          externalMessageId = result?.messages?.[0]?.id || null;
         } else {
-          // Evolution API
           const baseUrl = credentials?.evolutionUrl?.replace(/\/$/, '');
           const response = await fetch(
             `${baseUrl}/message/sendText/${credentials?.instanceName}`,
@@ -233,15 +297,44 @@ const actionExecutors: Record<string, NodeExecutor> = {
             }
           );
 
-          const result = await response.json();
-          
+          result = await response.json();
+
           if (!response.ok) {
+            if (supabase && whatsappSendId) {
+              await supabase.from('whatsapp_sends').update({
+                status: 'failed',
+                error_message: result.message || 'Falha no envio',
+              }).eq('id', whatsappSendId);
+            }
             return { status: 'error', output: result, error: result.message || 'Falha no envio' };
           }
 
-          return { status: 'success', output: { ...result, provider: 'evolution' } };
+          // Evolution returns { key: { id: <messageId> } }
+          externalMessageId = result?.key?.id || result?.messageId || null;
         }
+
+        // Stamp the send row as 'sent' + persist the provider message id
+        // so the inbound delivery/read webhook can match it back.
+        if (supabase && whatsappSendId) {
+          await supabase.from('whatsapp_sends').update({
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+            external_message_id: externalMessageId,
+            metadata: { provider: usedProvider, raw: result },
+          }).eq('id', whatsappSendId);
+        }
+
+        return {
+          status: 'success',
+          output: { ...result, provider: usedProvider, whatsappSendId, externalMessageId },
+        };
       } catch (error: any) {
+        if (supabase && whatsappSendId) {
+          await supabase.from('whatsapp_sends').update({
+            status: 'failed',
+            error_message: error.message,
+          }).eq('id', whatsappSendId);
+        }
         return { status: 'error', output: null, error: error.message };
       }
     },
@@ -833,7 +926,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
   // ========== SMS ==========
   action_sms: {
-    async execute({ config, context, credentials, isTest }) {
+    async execute({ node, config, context, credentials, isTest, supabase, organizationId }) {
       const phone = context.contact?.phone;
 
       if (isTest) {
@@ -847,10 +940,132 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Contato sem telefone' };
       }
 
-      // Placeholder - implementar com Twilio ou outro provider
+      // Pre-create the send row so attribution finds it even before
+      // a real SMS provider (Twilio/Zenvia) is wired in. The row is
+      // still useful: flow stats count it, attribution can claim it
+      // if the recipient happens to buy within the window. When the
+      // provider lands, the only change is the actual fetch call +
+      // provider message id captured below.
+      const workflow = (context as any).workflow || {};
+      const flowId =
+        (context as any).flowId ||
+        (context as any).flow_id ||
+        workflow.flowId ||
+        workflow.flow_id ||
+        null;
+      const runId =
+        (context as any).automation_run_id ||
+        (context as any).runId ||
+        workflow.executionId ||
+        workflow.execution_id ||
+        null;
+      const automationId =
+        (context as any).automation_id ||
+        workflow.automationId ||
+        workflow.id ||
+        null;
+
+      let smsSendId: string | null = null;
+      try {
+        if (supabase && organizationId && (context.contact as any)?.id) {
+          const { data: row, error: insertErr } = await supabase
+            .from('sms_sends')
+            .insert({
+              organization_id: organizationId,
+              contact_id: (context.contact as any).id,
+              phone_number: phone,
+              campaign_id: null,
+              automation_id: automationId,
+              automation_run_id: runId,
+              flow_id: flowId,
+              node_id: node?.id || null,
+              message_body: config.message || '',
+              status: 'pending',
+            })
+            .select('id')
+            .single();
+          if (insertErr) {
+            console.warn('[action_sms] sms_sends INSERT failed (proceeding):', insertErr);
+          } else {
+            smsSendId = row?.id || null;
+          }
+        }
+      } catch (e) {
+        console.warn('[action_sms] sms_sends prep failed (proceeding):', e);
+      }
+
+      const provider = credentials?.provider || credentials?.type || null;
+
+      // Twilio integration path. Other providers (Zenvia, Vonage)
+      // can plug in the same way — they all expose a single POST
+      // endpoint that takes (to, from, body) and returns a message id.
+      try {
+        if (provider === 'twilio' && credentials?.accountSid && credentials?.authToken) {
+          const from = credentials.fromNumber || credentials.from;
+          const auth = Buffer.from(`${credentials.accountSid}:${credentials.authToken}`).toString('base64');
+          const body = new URLSearchParams({
+            To: phone.startsWith('+') ? phone : `+${phone.replace(/\D/g, '')}`,
+            From: from,
+            Body: config.message || '',
+          });
+          const response = await fetch(
+            `https://api.twilio.com/2010-04-01/Accounts/${credentials.accountSid}/Messages.json`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Basic ${auth}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: body.toString(),
+            }
+          );
+          const result = await response.json();
+          if (!response.ok) {
+            if (supabase && smsSendId) {
+              await supabase.from('sms_sends').update({
+                status: 'failed',
+                error_message: result.message || 'Twilio error',
+              }).eq('id', smsSendId);
+            }
+            return { status: 'error', output: result, error: result.message || 'Falha no envio' };
+          }
+          if (supabase && smsSendId) {
+            await supabase.from('sms_sends').update({
+              status: 'sent',
+              sent_at: new Date().toISOString(),
+              external_message_id: result.sid || null,
+              metadata: { provider: 'twilio', raw: result },
+            }).eq('id', smsSendId);
+          }
+          return {
+            status: 'success',
+            output: { sent: true, to: phone, provider: 'twilio', smsSendId, externalMessageId: result.sid },
+          };
+        }
+      } catch (error: any) {
+        if (supabase && smsSendId) {
+          await supabase.from('sms_sends').update({
+            status: 'failed',
+            error_message: error.message,
+          }).eq('id', smsSendId);
+        }
+        return { status: 'error', output: null, error: error.message };
+      }
+
+      // No provider configured — log the attempt and treat as a
+      // stub send. The sms_sends row stays in 'pending' so the
+      // History panel still shows "node executed" without claiming
+      // a delivery that didn't happen. Attribution skips pending
+      // rows (engagement is required, not just send).
+      if (supabase && smsSendId) {
+        await supabase.from('sms_sends').update({
+          status: 'failed',
+          error_message: 'SMS provider not configured',
+        }).eq('id', smsSendId);
+      }
       return {
         status: 'success',
-        output: { sent: true, to: phone, message: 'SMS provider not configured' },
+        output: { sent: false, to: phone, smsSendId, message: 'SMS provider not configured' },
       };
     },
   },
