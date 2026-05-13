@@ -689,6 +689,74 @@ export async function POST(
       }
     }
 
+    // 8.4b. Double opt-in. When audience.doubleOptIn=true the form
+    // shouldn't grant marketing consent on submit — that requires a
+    // confirmation click from the subscriber's inbox. Flip the
+    // contact's email_consent to 'pending' and send a transactional
+    // confirmation email with a signed token link. Same shape as
+    // Klaviyo's "double opt-in" toggle on subscription forms.
+    let doubleOptInSent = false
+    if (contactId && contactData.email) {
+      try {
+        const audienceCfg: any = (popupBehavior as any)?.audience || {}
+        if (audienceCfg.doubleOptIn) {
+          // Park the contact in 'pending' so the consent guard in
+          // automations / campaigns short-circuits until confirmation.
+          await supabase
+            .from('contacts')
+            .update({
+              email_consent: 'pending',
+              email_consent_source: `popup_form:${form.id}:awaiting_doi`,
+            })
+            .eq('id', contactId)
+
+          const { signOptInToken } = await import('@/lib/email/optin-token')
+          const token = signOptInToken({
+            contactId,
+            orgId: form.organization_id,
+            formId: form.id,
+          })
+          const { getAppBaseUrl } = await import('@/lib/app-url')
+          const baseUrl = getAppBaseUrl()
+          const confirmUrl = `${baseUrl}/api/public/confirm-opt-in?token=${encodeURIComponent(token)}`
+
+          const { getEmailProviderForOrg } = await import('@/lib/email/providers')
+          const { provider, config } = await getEmailProviderForOrg(form.organization_id)
+          const fromEmail = config.defaultFrom || 'onboarding@resend.dev'
+          const senderName = config.defaultSenderName || 'Worder'
+          const subject = `Confirme sua inscrição`
+          const greeting = contactData.first_name ? `Olá ${contactData.first_name},` : 'Olá,'
+          const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#FAFAFA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+            <div style="max-width:520px;margin:48px auto;padding:32px;background:#FFFFFF;border:1px solid #E5E7EB;border-radius:16px;">
+              <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 16px;letter-spacing:-0.02em;">Confirme sua inscrição</h1>
+              <p style="font-size:15px;color:#6B7280;line-height:1.5;margin:0 0 24px;">${greeting} obrigado por se inscrever. Para confirmar sua inscrição e começar a receber nossos emails, clique no botão abaixo.</p>
+              <a href="${confirmUrl}" style="display:inline-block;background:#F97316;color:#FFFFFF;font-weight:700;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:15px;">Confirmar inscrição</a>
+              <p style="font-size:12px;color:#9CA3AF;margin:24px 0 0;line-height:1.5;">Se você não pediu para se inscrever, pode ignorar este email. O link expira em 14 dias.</p>
+            </div>
+          </body></html>`
+
+          try {
+            await provider.send({
+              to: contactData.email,
+              from: fromEmail,
+              senderName,
+              subject,
+              html,
+              tags: [
+                { name: 'kind', value: 'double_optin' },
+                { name: 'form_id', value: form.id },
+              ],
+            })
+            doubleOptInSent = true
+          } catch (sendErr: any) {
+            console.warn('[Form Submit] doubleOptIn email send failed:', sendErr?.message)
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Form Submit] doubleOptIn block failed:', e?.message)
+      }
+    }
+
     // 8.4. Identity graph stitching: link contact to visitor_identities
     //      and backfill historic anonymous events under all aliases. This
     //      is the popup → CDP bridge that catches every product view /
@@ -831,6 +899,9 @@ export async function POST(
       // Dynamic coupon (null when the form is static-only or generation failed).
       // The popup script splices this into any coupon block on the success step.
       coupon: dynamicCoupon,
+      // True when a double-opt-in confirmation email was just dispatched.
+      // The popup script can swap the success copy to "check your inbox".
+      double_optin_sent: doubleOptInSent,
       // Client-side tracking data
       tracking: {
         facebook_pixel_id: form.facebook_pixel_id,

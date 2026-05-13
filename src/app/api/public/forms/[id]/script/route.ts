@@ -549,6 +549,16 @@ function show(){
         }
         // Default: show-success step, then auto-close after delay (0 = stay open)
         content.innerHTML=renderStep(-1);
+        // Double opt-in: prepend a notice so the visitor knows to check
+        // their inbox. Doesn't replace the success step (merchant might
+        // have a coupon / next-action block there) — just inserts on top.
+        if(res&&res.double_optin_sent){
+          var doi=document.createElement("div");
+          doi.style.cssText="margin:0 0 12px;padding:12px 14px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;font-size:13px;color:#9A3412;line-height:1.45;text-align:center;";
+          doi.innerHTML="<strong>Quase lá!</strong> Enviamos um email para você confirmar sua inscrição. Verifique sua caixa de entrada.";
+          var form=document.getElementById("wf-form-"+FID);
+          if(form&&form.firstChild)form.insertBefore(doi,form.firstChild);
+        }
         var delay=postSubmit.closeDelay!=null?postSubmit.closeDelay:4;
         if(delay>0)setTimeout(close,delay*1000);
       }).catch(function(){});

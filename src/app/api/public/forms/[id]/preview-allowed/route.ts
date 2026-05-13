@@ -92,9 +92,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         .select('email_consent, status')
         .eq('id', contactId)
         .maybeSingle();
-      if (contact?.email_consent === true) {
+      // email_consent is a TEXT column that accumulated several legacy
+      // shapes: 'true'/'false' from the early boolean migration, then
+      // 'subscribed'/'unsubscribed' from later code. Double opt-in adds
+      // 'pending'. Treat everything that isn't an explicit "no" as a
+      // subscriber to avoid showing the popup again to a person we've
+      // already got in some list.
+      const consent = String(contact?.email_consent || '').toLowerCase();
+      const isSubscriber =
+        consent === 'true' || consent === 'subscribed' || consent === 'pending';
+      if (isSubscriber) {
         return NextResponse.json(
-          { allowed: false, reason: 'subscribed' },
+          { allowed: false, reason: consent === 'pending' ? 'awaiting_confirmation' : 'subscribed' },
           { headers }
         );
       }
