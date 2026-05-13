@@ -22,12 +22,25 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 export const dynamic = 'force-dynamic';
 
 function corsHeaders(origin?: string | null) {
-  return {
-    'Access-Control-Allow-Origin': origin || '*',
+  // sendBeacon always carries first-party cookies (credentials=include).
+  // When the request reaches us in that mode, the browser rejects a
+  // bare Allow-Origin:* response — we have to echo the exact origin
+  // AND set Allow-Credentials:true. With wildcard origin (legacy
+  // behavior) the response gets blocked with "Access-Control-Allow-
+  // Credentials must be 'true'", which is exactly what was killing the
+  // ping from doctormelaxintreatment.com.
+  const allowOrigin = origin || '*';
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
   };
+  if (allowOrigin !== '*') {
+    headers['Access-Control-Allow-Credentials'] = 'true';
+  }
+  return headers;
 }
 
 export async function OPTIONS(req: NextRequest) {

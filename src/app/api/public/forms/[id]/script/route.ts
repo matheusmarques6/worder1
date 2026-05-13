@@ -388,7 +388,9 @@ function show(){
   pop.appendChild(content);
   if(hasSide){
     var sideUrl=st.sideImage.src;
-    if(sideUrl&&!/^(https?:|\/)/i.test(sideUrl))sideUrl="";
+    // Double-escape the slash so the template literal output ships
+    // a valid regex (\\/ in source becomes \/ in the emitted script).
+    if(sideUrl&&!/^(https?:|\\/)/i.test(sideUrl))sideUrl="";
     if(sideUrl){
       var side=document.createElement("div");
       side.style.cssText="width:"+(st.sideImage.width||50)+"%;flex-shrink:0;background:url("+encodeURI(sideUrl)+") center/cover no-repeat";
@@ -438,7 +440,11 @@ function show(){
       reqInputs.forEach(function(inp){inp.style.borderColor=""});
       reqInputs.forEach(function(inp){
         if(!inp.value||!inp.value.trim()){valid=false;inp.style.borderColor="#EF4444";inp.focus()}
-        if(inp.type==="email"&&inp.value&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inp.value)){valid=false;inp.style.borderColor="#EF4444";inp.focus()}
+        // Template literal: \\s and \\. survive as \s and \. in the
+        // emitted script. \s alone would have been dropped to "s",
+        // turning the validator into "match the letter s" — silently
+        // accepting every malformed email.
+        if(inp.type==="email"&&inp.value&&!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(inp.value)){valid=false;inp.style.borderColor="#EF4444";inp.focus()}
       });
       if(!valid)return;
       var fd=new FormData(f);
