@@ -92,6 +92,8 @@ class EventProcessorClass {
         'checkout_started': 'trigger_checkout_abandoned',
         'abandoned_cart': 'trigger_abandon',
         'placed_order': 'trigger_order',
+        'first_purchase': 'trigger_first_purchase',
+        'repeat_purchase': 'trigger_repeat_purchase',
         'order_paid': 'trigger_order_paid',
         'fulfilled_order': 'trigger_fulfilled_order',
         'cancelled_order': 'trigger_cancelled_order',

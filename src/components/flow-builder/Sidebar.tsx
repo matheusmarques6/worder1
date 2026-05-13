@@ -78,6 +78,8 @@ const TRIGGER_OPTIONS: NodeItemConfig[] = [
   { type: 'trigger_abandon', label: 'Carrinho Abandonado', description: 'Dispara quando cliente abandona carrinho', icon: ShoppingCart, category: 'trigger', color: '#10b981' },
   { type: 'trigger_checkout_abandoned', label: 'Checkout Abandonado', description: 'Checkout iniciado sem conclusão', icon: CreditCard, category: 'trigger', color: '#10b981' },
   { type: 'trigger_order', label: 'Pedido Realizado', description: 'Dispara quando um novo pedido é criado', icon: Package, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_first_purchase', label: 'Primeira Compra', description: 'Primeiro pedido do contato (welcome buyer)', icon: Trophy, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_repeat_purchase', label: 'Compra Recorrente', description: 'Segundo ou mais pedido do contato (loyalty)', icon: Package, category: 'trigger', color: '#10b981' },
   { type: 'trigger_order_paid', label: 'Pedido Pago', description: 'Dispara quando um pedido é pago', icon: CreditCard, category: 'trigger', color: '#10b981' },
   { type: 'trigger_fulfilled_order', label: 'Pedido Enviado', description: 'Dispara quando pedido é enviado', icon: Truck, category: 'trigger', color: '#10b981' },
   { type: 'trigger_cancelled_order', label: 'Pedido Cancelado', description: 'Dispara quando pedido é cancelado', icon: XCircle, category: 'trigger', color: '#10b981' },

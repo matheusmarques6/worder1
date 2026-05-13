@@ -899,6 +899,44 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
         },
         idempotencyKey: `trigger:placed_order:${order.id}`,
       });
+
+      // Klaviyo-style first / repeat purchase split. Lookup the
+      // contact's order count BEFORE this order; if 0 → first
+      // purchase (welcome to "buyers"); if 1+ → repeat purchase
+      // (loyalty / cross-sell flow). Both run alongside the generic
+      // trigger_order so existing flows keep firing.
+      try {
+        const { count: priorOrders } = await supabase
+          .from('shopify_orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('contact_id', contact.id)
+          .eq('store_id', store.id)
+          .neq('shopify_order_id', String(order.id));
+
+        const purchaseTrigger = (priorOrders || 0) === 0
+          ? 'trigger_first_purchase'
+          : 'trigger_repeat_purchase';
+
+        await dispatchTrigger({
+          organizationId: store.organization_id,
+          triggerType: purchaseTrigger,
+          contactId: contact.id,
+          triggerData: {
+            event_type: purchaseTrigger === 'trigger_first_purchase' ? 'first_purchase' : 'repeat_purchase',
+            OrderId: String(order.id),
+            OrderNumber: String(order.order_number),
+            Value: orderValue,
+            Currency: order.currency,
+            ItemCount: order.line_items?.length || 0,
+            CustomerEmail: order.email || order.customer?.email,
+            CustomerPhone: order.phone || order.customer?.phone,
+            order_count: (priorOrders || 0) + 1,
+          },
+          idempotencyKey: `trigger:${purchaseTrigger}:${order.id}`,
+        });
+      } catch (firstRepeatErr) {
+        console.warn('[Shopify] first/repeat purchase trigger dispatch failed:', firstRepeatErr);
+      }
     } catch (dispatchErr) {
       console.warn('[Shopify] dispatchTrigger for placed_order failed (non-critical):', dispatchErr);
     }

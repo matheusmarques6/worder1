@@ -645,6 +645,9 @@ export const nodeTypes: Record<string, any> = {
   trigger_viewed_page: TriggerNode,
   trigger_browse_abandoned: TriggerNode,
   trigger_added_to_cart: TriggerNode,
+  trigger_first_purchase: TriggerNode,
+  trigger_repeat_purchase: TriggerNode,
+  trigger_birthday: TriggerNode,
   // Triggers - Contato
   trigger_signup: TriggerNode,
   trigger_form_submitted: TriggerNode,

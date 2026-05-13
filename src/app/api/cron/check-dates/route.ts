@@ -12,11 +12,20 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function GET(request: NextRequest) {
-  // Verificar authorization
-  const authHeader = request.headers.get('authorization');
+  // Vercel Cron sends x-vercel-cron: 1 instead of Bearer auth.
+  // Without this branch the daily birthday/anniversary fan-out
+  // never fired in production — Vercel hit 401, the cron silently
+  // dropped, and merchants saw no birthday emails despite the
+  // trigger appearing fully wired.
+  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
+  const isInternal = request.headers.get('X-Internal-Request') === 'true';
+  const isDev = process.env.NODE_ENV === 'development';
   const cronSecret = process.env.CRON_SECRET;
+  const authHeader = request.headers.get('authorization');
+  const isAuthorized = isVercelCron || isInternal || isDev ||
+    (cronSecret && authHeader === `Bearer ${cronSecret}`);
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!isAuthorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
