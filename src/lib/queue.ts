@@ -235,6 +235,48 @@ export async function enqueueAutomationRun(
 }
 
 /**
+ * Enqueue a Shopify historical sync. The HTTP endpoint returns a job
+ * id immediately and this push fires the heavy GraphQL work on the
+ * worker URL, which can run for the full Vercel maxDuration without
+ * the merchant's browser hanging on the response.
+ *
+ * Falls back to null (caller can run inline) when QStash isn't configured.
+ */
+export async function enqueueShopifySync(
+  jobId: string,
+  storeId: string,
+  syncType: 'orders' | 'customers' | 'products' | 'all' | 'orders_bulk_resume',
+  options?: EnqueueOptions & { historical?: boolean; resumeCursor?: string | null }
+): Promise<string | null> {
+  const client = getQStashClient();
+  if (!client) {
+    console.warn('[Queue] QStash not configured — sync will run inline');
+    return null;
+  }
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) return null;
+
+  const response = await client.publishJSON({
+    url: `${baseUrl}/api/workers/shopify-sync`,
+    body: {
+      type: 'shopify_sync',
+      data: {
+        jobId,
+        storeId,
+        syncType,
+        historical: options?.historical === true,
+        resumeCursor: options?.resumeCursor || null,
+      },
+    },
+    delay: options?.delay,
+    retries: options?.retries ?? 2,
+  });
+
+  console.log(`[Queue] Enqueued shopify sync ${jobId} (${syncType}), messageId: ${response.messageId}`);
+  return response.messageId;
+}
+
+/**
  * Enfileira execução de um step específico (para delays)
  */
 export async function enqueueAutomationStep(

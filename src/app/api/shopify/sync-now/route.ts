@@ -6,6 +6,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { shopifyGraphQL, shopifyGraphQLPaginate, extractShopifyId } from '@/lib/shopify/graphql-client';
 import { PRODUCTS_QUERY, CUSTOMERS_QUERY, ORDERS_QUERY } from '@/lib/shopify/graphql-queries';
 import { ensureFreshToken } from '@/lib/shopify/ensure-fresh-token';
+import { enqueueShopifySync, isQStashConfigured } from '@/lib/queue';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -91,6 +92,47 @@ export async function POST(request: NextRequest) {
     store = refreshed.store;
 
     console.log(`[Sync] Store: ${store.shop_name} (${store.shop_domain}), syncType=${syncType}, type=${store.connection_type || 'oauth'}`);
+
+    // Background mode (default): create a job row, push to QStash, and
+    // return the jobId immediately. The /api/workers/shopify-sync worker
+    // picks it up, walks the GraphQL connection with checkpointing,
+    // chains continuations as needed. UI polls /api/shopify/jobs/[id].
+    // Falls back to inline execution if QStash is not configured or the
+    // caller passes background=false (legacy path).
+    const wantBackground = body.background !== false && isQStashConfigured();
+    if (wantBackground) {
+      const { data: job, error: jobErr } = await supabase
+        .from('shopify_import_jobs')
+        .insert({
+          store_id: store.id,
+          organization_id: store.organization_id,
+          status: 'pending',
+          config: {
+            sync_type: historical ? 'orders_historical' : `orders_${syncType}`,
+            historical,
+            since,
+          },
+          started_at: new Date().toISOString(),
+          processed_count: 0,
+        })
+        .select('id')
+        .single();
+      if (jobErr || !job) {
+        console.error('[Sync] Failed to create job row:', jobErr);
+        // Fall through to inline as a safety net.
+      } else {
+        await enqueueShopifySync(job.id, store.id, syncType as any, {
+          historical,
+        });
+        return NextResponse.json({
+          ok: true,
+          mode: 'background',
+          jobId: job.id,
+          storeId: store.id,
+          message: 'Sync started. Poll /api/shopify/jobs/{jobId} for progress.',
+        });
+      }
+    }
 
     const storeConfig = {
       id: store.id,

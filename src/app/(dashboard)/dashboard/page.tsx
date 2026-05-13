@@ -13,6 +13,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { RefreshCw, ChevronDown, TrendingUp, TrendingDown, Info, ExternalLink, Download } from 'lucide-react'
+import { ShopifySyncProgress } from '@/components/shopify/ShopifySyncProgress'
 
 // ──────────────────────────────────────────────────────────────
 // Types
@@ -194,6 +195,10 @@ export default function DashboardPage() {
   useEffect(() => { try { localStorage.setItem('wd:range', range) } catch {} }, [range])
   useEffect(() => { try { localStorage.setItem('wd:granularity', granularity) } catch {} }, [granularity])
   useEffect(() => { try { localStorage.setItem('wd:chartTab', tab) } catch {} }, [tab])
+  // Active Shopify sync job — when set, the progress strip polls
+  // /api/shopify/jobs/[id] every 2s and renders a horizontal bar
+  // above the dashboard until status flips to completed/failed.
+  const [activeJobId, setActiveJobId] = useState<string | null>(null)
   const [data, setData] = useState<Overview>(EMPTY_OVERVIEW)
   const [loading, setLoading] = useState(true)
   const [lastFetch, setLastFetch] = useState<Date>(new Date())
@@ -353,6 +358,20 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* ── Background sync progress (Shopify) ──
+            Polled live while a worker drains GraphQL/Bulk results into
+            shopify_orders. Shows order count + page progress; auto-
+            dismisses once the job completes (we also refresh data). */}
+        {activeJobId && (
+          <div className="mb-6">
+            <ShopifySyncProgress
+              jobId={activeJobId}
+              onComplete={() => { fetchData(); }}
+              onDismiss={() => setActiveJobId(null)}
+            />
+          </div>
+        )}
+
         {/* ── Sync banner: store connected but data not yet synced ──
             The dashboard endpoint detects this and auto-triggers sync-now
             in the background. We surface a banner so the merchant knows
@@ -378,7 +397,7 @@ export default function DashboardPage() {
                 if (!currentStore?.id) return;
                 showToast('Iniciando sync…');
                 try {
-                  await fetch('/api/shopify/sync-now', {
+                  const res = await fetch('/api/shopify/sync-now', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     // historical: true tells the server to skip the 90-day
@@ -386,8 +405,17 @@ export default function DashboardPage() {
                     // backlog — that's what "Sincronizar tudo" implies.
                     body: JSON.stringify({ storeId: currentStore.id, syncType: 'all', historical: true }),
                   });
-                  showToast('Sync iniciado. Atualizando…');
-                  setTimeout(fetchData, 3000);
+                  const data = await res.json().catch(() => ({}));
+                  // Background mode returns { mode: 'background', jobId }
+                  // so the progress strip can poll. Inline mode returns
+                  // the result immediately — same toast either way.
+                  if (data?.mode === 'background' && data?.jobId) {
+                    setActiveJobId(data.jobId);
+                    showToast('Sync rodando em background. Acompanhe abaixo.');
+                  } else {
+                    showToast('Sync iniciado. Atualizando…');
+                    setTimeout(fetchData, 3000);
+                  }
                 } catch {
                   showToast('Falhou — tente em /integrations/shopify');
                 }
