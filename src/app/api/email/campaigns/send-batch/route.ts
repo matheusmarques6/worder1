@@ -144,9 +144,14 @@ export async function POST(req: NextRequest) {
     // ──────────────────────────────────────────
     // Suppression list
     // ──────────────────────────────────────────
-    // Anyone who bounced or filed a spam complaint in the last 90 days
-    // gets skipped. This protects sender reputation — re-sending to
-    // bouncers is the #1 way to kill a Resend account.
+    // Two-layer suppression:
+    //   1. Past sends with status='bounced' or 'complained' in the last
+    //      90 days — covers cases where the contacts row hasn't been
+    //      flipped yet (e.g., the bounce webhook arrived late).
+    //   2. Contacts where email_consent=false or status is one of the
+    //      hard-stop states. The Resend bounce/complaint webhook + the
+    //      action_email guard both write to these columns, so this is
+    //      the durable signal.
     const { data: suppressed } = await supabaseAdmin
       .from('email_sends')
       .select('email')
@@ -160,12 +165,17 @@ export async function POST(req: NextRequest) {
         .filter(Boolean)
     );
 
-    const eligibleContacts = contacts.filter(
-      (c: any) => c.email && !suppressedEmails.has(c.email.toLowerCase())
-    );
+    const eligibleContacts = contacts.filter((c: any) => {
+      if (!c.email) return false;
+      if (suppressedEmails.has(c.email.toLowerCase())) return false;
+      if (c.email_consent === false) return false;
+      const status = String(c.status || '').toLowerCase();
+      if (['bounced', 'complained', 'unsubscribed', 'invalid'].includes(status)) return false;
+      return true;
+    });
     const skipped = contacts.length - eligibleContacts.length;
     if (skipped > 0) {
-      console.log(`[SendBatch] Suppressed ${skipped} contact(s) (bounced/complained in last 90d)`);
+      console.log(`[SendBatch] Suppressed ${skipped} contact(s) (bounced/complained/opt-out)`);
     }
 
     // ──────────────────────────────────────────

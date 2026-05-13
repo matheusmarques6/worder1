@@ -211,6 +211,39 @@ export async function sendCampaignEmail({
         .eq('id', emailSendId);
     }
 
+    // Auto-suppress the contact's email on permanent failures. Without
+    // this every subsequent send retries Resend, eats API quota, and
+    // racks up the bounce rate. Resend's typical permanent rejections:
+    //   "Email is on the suppression list"
+    //   "Email address is invalid"
+    //   "Domain is not verified"
+    //   "Recipient does not exist" / "No such user"
+    const permanentPatterns = [
+      /suppres/i,
+      /invalid/i,
+      /does not exist/i,
+      /no such user/i,
+      /not allowed/i,
+      /not a verified/i,
+      /unable to deliver/i,
+    ];
+    const message = String(error?.message || '');
+    const isPermanent = permanentPatterns.some((p) => p.test(message));
+    if (isPermanent && resolvedContactId) {
+      try {
+        await supabaseAdmin
+          .from('contacts')
+          .update({ email_consent: false, status: 'bounced' })
+          .eq('id', resolvedContactId);
+        console.log('[SendCampaignEmail] flipped email_consent=false for permanent error', {
+          contactId: resolvedContactId,
+          error: message,
+        });
+      } catch (flipErr) {
+        console.warn('[SendCampaignEmail] failed to flip consent:', flipErr);
+      }
+    }
+
     return { success: false, emailSendId, error: error.message || 'Unknown error' };
   }
 }

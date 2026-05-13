@@ -383,6 +383,50 @@ const actionExecutors: Record<string, NodeExecutor> = {
         };
       }
 
+      // Email-consent guard. The Resend bounce/complaint webhook flips
+      // contacts.email_consent=false and writes status='bounced' /
+      // 'complained' / 'unsubscribed'. Re-sending to those addresses
+      // poisons sender reputation on Gmail/Outlook, so we skip the
+      // email node here and let the flow continue to non-email nodes
+      // (WhatsApp, SMS, condition, etc.) — that's the merchant's
+      // explicit ask: "remove the email but keep the WhatsApp branch
+      // running if the phone is valid".
+      if (!isTest && organizationId && email) {
+        try {
+          const { data: consentRow } = await supabase
+            .from('contacts')
+            .select('email_consent, status')
+            .eq('organization_id', organizationId)
+            .ilike('email', String(email))
+            .maybeSingle();
+          const badStatuses = new Set(['bounced', 'complained', 'unsubscribed', 'invalid']);
+          const status = String(consentRow?.status || '').toLowerCase();
+          const isInvalid =
+            consentRow &&
+            (consentRow.email_consent === false || badStatuses.has(status));
+          if (isInvalid) {
+            console.log('[action_email] ⊘ skipped — email marked invalid', {
+              nodeId: node?.id,
+              contactEmail: email,
+              emailConsent: consentRow?.email_consent,
+              contactStatus: consentRow?.status,
+            });
+            return {
+              status: 'success',
+              output: {
+                sent: false,
+                skipped: true,
+                reason: `Email marcado como inválido (status=${consentRow?.status || 'opt-out'}). Flow continua nos próximos nodes.`,
+                contactStatus: consentRow?.status,
+                emailConsent: consentRow?.email_consent,
+              },
+            };
+          }
+        } catch (e) {
+          console.warn('[action_email] consent check failed (proceeding):', e);
+        }
+      }
+
       try {
         // 1. Resolve HTML content - fetch template if specified
         let html: string;
@@ -702,6 +746,28 @@ const actionExecutors: Record<string, NodeExecutor> = {
         });
 
         if (!result.success) {
+          // Permanent failures from Resend (invalid recipient,
+          // suppression list, domain not verified, etc.) shouldn't
+          // halt the whole run — the merchant still wants the WhatsApp
+          // / SMS branch to fire. send-campaign-email already flips
+          // contacts.email_consent=false for these, so the consent
+          // guard above will short-circuit the next email node.
+          // Transient errors (network, rate limits) keep the old
+          // behaviour so the cron retries them.
+          const permanent = /suppress|invalid|does not exist|not allowed|no such user|unable to deliver|not a verified/i.test(
+            String(result.error || '')
+          );
+          if (permanent) {
+            return {
+              status: 'success',
+              output: {
+                sent: false,
+                skipped: true,
+                reason: `Email inválido/suprimido: ${result.error}. Próximos nodes seguem.`,
+                error: result.error,
+              },
+            };
+          }
           return { status: 'error', output: { error: result.error }, error: result.error || 'Falha no envio' };
         }
 

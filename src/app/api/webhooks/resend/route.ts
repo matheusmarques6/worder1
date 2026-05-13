@@ -160,8 +160,39 @@ export async function POST(request: NextRequest) {
           .update({ status: 'bounced', bounced_at: now, error_message: data.bounce?.type || 'bounced' })
           .eq('id', emailSendId);
         await cdpEvent('email_bounced', { bounce_type: data.bounce?.type, bounce_message: data.bounce?.message });
-        // Revogar consent do contato que bounced (hard bounce)
-        if (contactId && data.bounce?.type === 'hard') {
+        // Revogar consent do contato que bounced. Resend reports
+        // bounce.type as 'hard' / 'soft' on the v1 webhook and
+        // 'Permanent' / 'Transient' on the newer schema. We treat any
+        // permanent bounce as a hard suppression so the contact stops
+        // receiving emails — automations + campaigns will skip it via
+        // the consent guard, while WhatsApp/SMS branches keep working.
+        if (contactId) {
+          const bounceType = String(data.bounce?.type || '').toLowerCase();
+          const isPermanent = bounceType === 'hard' || bounceType === 'permanent';
+          if (isPermanent) {
+            await supabaseAdmin.from('contacts')
+              .update({ email_consent: false, status: 'bounced' })
+              .eq('id', contactId);
+          }
+        }
+        break;
+
+      case 'email.failed':
+        // Pre-send rejection: address is on Resend's suppression list,
+        // domain not verified, or the recipient was rejected before
+        // Resend even attempted delivery. Treat as a hard suppression
+        // because it means future sends to this address will fail too.
+        await supabaseAdmin.from('email_sends')
+          .update({
+            status: 'failed',
+            failed_at: now,
+            error_message: data.failed?.reason || data.error || 'failed',
+          })
+          .eq('id', emailSendId);
+        await cdpEvent('email_failed', {
+          failure_reason: data.failed?.reason || data.error,
+        });
+        if (contactId) {
           await supabaseAdmin.from('contacts')
             .update({ email_consent: false, status: 'bounced' })
             .eq('id', contactId);
