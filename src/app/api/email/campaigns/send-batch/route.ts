@@ -346,6 +346,9 @@ export async function POST(req: NextRequest) {
 
         // Create the send row (status queued) to get emailSendId
         // 'queued' matches email_sends_status_check; 'pending' is not allowed.
+        // Mirror email → to_email and stamp from_email/subject for the
+        // dashboards that read the newer column set on the production
+        // schema (legacy `email` column kept in sync).
         const contactIsp = detectISP(contact.email || '')
         const { data: emailSend, error: insertErr } = await supabaseAdmin
           .from('email_sends')
@@ -353,6 +356,11 @@ export async function POST(req: NextRequest) {
             campaign_id: campaign_id,
             contact_id: contact.id,
             email: contact.email,
+            to_email: contact.email,
+            from_email: campaign.sender_email || null,
+            sender_email: campaign.sender_email || null,
+            subject: campaign.subject || null,
+            provider: 'resend',
             status: 'queued',
             organization_id: organizationId,
             isp_domain: contactIsp,
@@ -486,6 +494,7 @@ export async function POST(req: NextRequest) {
               status: 'sent',
               sent_at: nowIso,
               resend_id: resendId,
+              provider_message_id: resendId,
             })
             .eq('id', p.emailSendId);
           sent++;

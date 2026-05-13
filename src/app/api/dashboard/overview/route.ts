@@ -173,12 +173,12 @@ export async function GET(request: NextRequest) {
       // Orders sit in shopify_orders (joined via store). Fall back to `orders` if present.
       safeQuery(async () => {
         if (storeId) {
-          return supabaseAdmin.from('shopify_orders').select('total_price, created_at, financial_status, cancelled_at').eq('store_id', storeId).gte('created_at', since);
+          return supabaseAdmin.from('shopify_orders').select('total_price, created_at, financial_status').eq('store_id', storeId).gte('created_at', since);
         }
         const storesRes = await supabaseAdmin.from('shopify_stores').select('id').eq('organization_id', orgId);
         const storeIds = (storesRes.data || []).map((s: any) => s.id);
         if (!storeIds.length) return { data: [], error: null };
-        return supabaseAdmin.from('shopify_orders').select('total_price, created_at, financial_status, cancelled_at').in('store_id', storeIds).gte('created_at', since);
+        return supabaseAdmin.from('shopify_orders').select('total_price, created_at, financial_status').in('store_id', storeIds).gte('created_at', since);
       }),
       safeQuery(() => supabaseAdmin.from('shopify_stores').select('id').eq('organization_id', orgId)),
     ]);
@@ -199,8 +199,12 @@ export async function GET(request: NextRequest) {
     const worderRevenue = campaignsRevenue + automationsRevenue + whatsappRevenue + smsRevenue;
     const worderOrders = campaignsOrders + automationsOrders + whatsappOrders + smsOrders;
 
-    // Store totals (skip cancelled orders)
-    const validOrders = orders.filter((o: any) => !o.cancelled_at);
+    // Store totals (skip cancelled orders). financial_status='cancelled'
+    // is the production marker — the legacy cancelled_at column was
+    // never added to shopify_orders so .select() including it errored
+    // the whole query, which is why the dashboard sat at R$0 even with
+    // 432 paid rows on file.
+    const validOrders = orders.filter((o: any) => String(o.financial_status || '').toLowerCase() !== 'cancelled');
     const storeRevenue = validOrders.reduce((s: number, o: any) => s + num(o.total_price), 0);
     const storeOrders = validOrders.length;
 

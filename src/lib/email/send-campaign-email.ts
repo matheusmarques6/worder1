@@ -85,12 +85,23 @@ export async function sendCampaignEmail({
     // 1. Create email_sends row with status 'queued'
     // 'queued' is the initial state allowed by email_sends_status_check;
     // 'pending' is NOT in the allowlist and would fail the CHECK constraint.
+    //
+    // The production schema has both `email` and `to_email` (legacy +
+    // current) plus `from_email`/`sender_email`/`subject` that earlier
+    // migrations added. Populate the new columns so dashboards / queries
+    // that read them don't see blanks. `email` stays mirrored for
+    // backwards compatibility.
     const { data: emailSend, error: insertError } = await supabaseAdmin
       .from('email_sends')
       .insert({
         campaign_id: isUuid(campaignId) ? campaignId : null,
         contact_id: resolvedContactId,
         email: contactEmail,
+        to_email: contactEmail,
+        from_email: fromEmail || null,
+        sender_email: fromEmail || null,
+        subject: subject || null,
+        provider: 'resend',
         status: 'queued',
         organization_id: organizationId,
       })
@@ -201,12 +212,16 @@ export async function sendCampaignEmail({
     });
 
     // 6. Update status to 'sent' with resend_id
+    // resend_message_id + provider_message_id mirror resend_id so the
+    // webhook handler can match either column (production schema has all
+    // three from successive migrations).
     await supabaseAdmin
       .from('email_sends')
       .update({
         status: 'sent',
         sent_at: new Date().toISOString(),
         resend_id: result?.id || null,
+        provider_message_id: result?.id || null,
       })
       .eq('id', emailSendId);
 

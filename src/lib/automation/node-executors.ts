@@ -183,23 +183,28 @@ const actionExecutors: Record<string, NodeExecutor> = {
       // external_message_id. Same pattern email_sends uses (create
       // queued row, then patch with provider id after the API call).
       const workflow = (context as any).workflow || {};
-      const flowId =
+      // UUID columns reject the editor's transient client ids
+      // ("flow-1778295108640"). Coerce to null when not a UUID so the
+      // INSERT doesn't blow up the whole node.
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const asUuid = (v: any) => (typeof v === 'string' && uuidRe.test(v) ? v : null);
+      const flowId = asUuid(
         (context as any).flowId ||
         (context as any).flow_id ||
         workflow.flowId ||
-        workflow.flow_id ||
-        null;
-      const runId =
+        workflow.flow_id
+      );
+      const runId = asUuid(
         (context as any).automation_run_id ||
         (context as any).runId ||
         workflow.executionId ||
-        workflow.execution_id ||
-        null;
-      const automationId =
+        workflow.execution_id
+      );
+      const automationId = asUuid(
         (context as any).automation_id ||
         workflow.automationId ||
-        workflow.id ||
-        null;
+        workflow.id
+      );
 
       let whatsappSendId: string | null = null;
       try {
@@ -899,10 +904,25 @@ const actionExecutors: Record<string, NodeExecutor> = {
               (context as any).automation_id ||
               workflow.automationId ||
               workflow.id;
-            if (flowId) updates.flow_id = flowId;
-            if (runId) updates.automation_run_id = runId;
-            if (automationId) updates.automation_id = automationId;
-            if (config.templateId) updates.email_template_id = config.templateId;
+            // flow_id, automation_run_id, automation_id and
+            // email_template_id are all UUID columns. The flow-builder
+            // editor uses transient client ids like "flow-1778295108640"
+            // for unsaved flows, and the legacy automation engine still
+            // passes those through. Writing a non-UUID raises 22P02 in
+            // Postgres ("invalid input syntax for type uuid"), which used
+            // to surface as the run-level error on n3. Guard each column
+            // independently so attribution still gets whatever ids ARE
+            // valid UUIDs.
+            const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            const asUuid = (v: any) => (typeof v === 'string' && uuidRe.test(v) ? v : null);
+            const safeFlowId = asUuid(flowId);
+            const safeRunId = asUuid(runId);
+            const safeAutomationId = asUuid(automationId);
+            const safeTemplateId = asUuid(config.templateId);
+            if (safeFlowId) updates.flow_id = safeFlowId;
+            if (safeRunId) updates.automation_run_id = safeRunId;
+            if (safeAutomationId) updates.automation_id = safeAutomationId;
+            if (safeTemplateId) updates.email_template_id = safeTemplateId;
             // node_id lives in metadata jsonb so we don't need a schema
             // change to attribute the send to a specific canvas node.
             if (node?.id) {
@@ -947,23 +967,27 @@ const actionExecutors: Record<string, NodeExecutor> = {
       // provider lands, the only change is the actual fetch call +
       // provider message id captured below.
       const workflow = (context as any).workflow || {};
-      const flowId =
+      // UUID columns reject the editor's transient client ids
+      // ("flow-1778295108640"). Coerce non-UUIDs to null.
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const asUuid = (v: any) => (typeof v === 'string' && uuidRe.test(v) ? v : null);
+      const flowId = asUuid(
         (context as any).flowId ||
         (context as any).flow_id ||
         workflow.flowId ||
-        workflow.flow_id ||
-        null;
-      const runId =
+        workflow.flow_id
+      );
+      const runId = asUuid(
         (context as any).automation_run_id ||
         (context as any).runId ||
         workflow.executionId ||
-        workflow.execution_id ||
-        null;
-      const automationId =
+        workflow.execution_id
+      );
+      const automationId = asUuid(
         (context as any).automation_id ||
         workflow.automationId ||
-        workflow.id ||
-        null;
+        workflow.id
+      );
 
       let smsSendId: string | null = null;
       try {
