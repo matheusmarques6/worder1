@@ -22,6 +22,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const script = `(function(){
 "use strict";
 var FID="${params.id}",BU="${baseUrl}",D=${JSON.stringify(design)},B=${JSON.stringify(beh)};
+// Guard: when both the Theme App Embed (worder-theme-ext) and the
+// ScriptTag-installed loader.js are active on the same store, we used
+// to inject this popup script twice — two <form id="wf-form-FID">
+// in the DOM, document.getElementById returned the first, and submit
+// dispatched to a form the user couldn't see. Bail out if a previous
+// instance of this exact popup already wired itself.
+if(window["__wf_ran_"+FID])return;
+window["__wf_ran_"+FID]=true;
 var shown=false,ck="_wf_"+FID;
 // Debug mode — append ?wf_debug=1 to any storefront URL to:
 //   - log every gate decision to the console with "[WorderPopup]"
@@ -475,9 +483,12 @@ function show(){
       // requestSubmit() is the spec'd way to trigger validation +
       // dispatch; falls back to .submit() (skips validation) where
       // requestSubmit isn't available (old Safari).
+      // closest('form') instead of getElementById so we always target
+      // the form THIS button lives in — protects us from edge cases
+      // where two popup instances share a form id.
       if(act==="submit"){
         e.preventDefault();
-        var fEl=document.getElementById("wf-form-"+FID);
+        var fEl=btn.closest("form")||document.getElementById("wf-form-"+FID);
         if(fEl){
           if(typeof fEl.requestSubmit==="function"){fEl.requestSubmit();}
           else{
