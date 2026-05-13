@@ -62,16 +62,20 @@ export async function GET(request: NextRequest) {
 
     // Multi-store isolation. When a storeId is provided, ONLY return
     // popups that belong to that store (or are unbound, store_id IS NULL
-    // — those are shared across every storefront in the org). The old
-    // "fallback to all-in-org when filter matches nothing" was meant to
-    // avoid empty lists for new merchants, but it leaked popups across
-    // stores: a merchant on store A with no popups saw popups from
-    // sibling store B in the same org, and "publishing" them risked
-    // rendering them on the wrong storefront. Empty is the correct
-    // signal here — the create button is right above the list.
+    // — those are shared across every storefront in the org).
+    //
+    // When storeId is OMITTED, do NOT return every popup in the org.
+    // That used to happen during a brief window on page load (zustand
+    // not yet rehydrated → frontend fetched without storeId), and the
+    // merchant saw sibling-store popups flash in their list. Instead,
+    // return only "global" popups (store_id IS NULL). If the org has
+    // more than one active store, the page should always supply
+    // storeId — empty + globals is the safe default until it does.
     let result = forms || []
     if (storeId) {
       result = result.filter(f => !f.store_id || f.store_id === storeId)
+    } else {
+      result = result.filter(f => !f.store_id)
     }
 
     return NextResponse.json({ forms: result })

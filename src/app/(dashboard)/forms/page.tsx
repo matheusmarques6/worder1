@@ -69,14 +69,20 @@ export default function FormsPage() {
   const [copiedEmbed, setCopiedEmbed] = useState<string | null>(null)
   const [togglingStatus, setTogglingStatus] = useState<string | null>(null)
 
+  // Zustand persists currentStore in localStorage. On the first render
+  // after a page reload _hasHydrated is still false and currentStore is
+  // null — if we fetch in that window we get every popup in the org
+  // back (sibling stores included) and the merchant sees the wrong
+  // popups flash in the list before being filtered out on the next
+  // render. Gate the fetch on hydration to kill the flash.
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
+
   const fetchForms = useCallback(async () => {
+    // Skip while zustand is rehydrating. The next render will fire
+    // this effect again with the real currentStore.
+    if (!hasHydrated) return
     try {
       setIsLoading(true)
-      // Always fetch — don't gate on currentStore.id. If the merchant has no
-      // store yet (or currentStore is still hydrating), the API returns all
-      // popups in the org and we still display them. Without this guard, a
-      // stale Zustand store with a non-existent store ID would leave the
-      // page stuck at "0 popups" forever.
       const params = new URLSearchParams()
       if (currentStore?.id) params.set('storeId', currentStore.id)
       // Cache buster so a freshly deployed API isn't masked by stale CDN.
@@ -95,11 +101,11 @@ export default function FormsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [currentStore?.id])
+  }, [currentStore?.id, hasHydrated])
 
   useEffect(() => {
     fetchForms()
-  }, [fetchForms, currentStore?.id])
+  }, [fetchForms, currentStore?.id, hasHydrated])
 
   // Pre-fill the form name with the default-selected template's name when the
   // create modal opens. Lets the merchant click "Criar popup" without needing
