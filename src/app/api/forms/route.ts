@@ -60,15 +60,18 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Forms] Found ${forms?.length || 0} forms for org ${user.organization_id}, storeId=${storeId || 'none'}`)
 
-    // If a storeId was passed AND there are forms exactly matching that
-    // store, prefer those (so a merchant who has popups on the current
-    // store doesn't see ones from sibling stores in the same org). If no
-    // form matches, fall back to all-in-org so the merchant never sees an
-    // empty list while popups exist somewhere in their account.
+    // Multi-store isolation. When a storeId is provided, ONLY return
+    // popups that belong to that store (or are unbound, store_id IS NULL
+    // — those are shared across every storefront in the org). The old
+    // "fallback to all-in-org when filter matches nothing" was meant to
+    // avoid empty lists for new merchants, but it leaked popups across
+    // stores: a merchant on store A with no popups saw popups from
+    // sibling store B in the same org, and "publishing" them risked
+    // rendering them on the wrong storefront. Empty is the correct
+    // signal here — the create button is right above the list.
     let result = forms || []
     if (storeId) {
-      const matching = result.filter(f => f.store_id === storeId || !f.store_id)
-      if (matching.length > 0) result = matching
+      result = result.filter(f => !f.store_id || f.store_id === storeId)
     }
 
     return NextResponse.json({ forms: result })

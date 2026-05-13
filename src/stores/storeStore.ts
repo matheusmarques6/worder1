@@ -21,6 +21,10 @@ export interface ShopifyStore {
   embedInstalled?: boolean
   embedInstalledAt?: string | null
   webhooksRegistered?: boolean
+  // 'oauth' = installed via Shopify OAuth (Theme App Embed is available).
+  // 'manual' = Custom App / merchant pasted credentials. No App Embed,
+  // so activation instructions point at the loader.js theme.liquid path.
+  connectionType?: 'oauth' | 'manual' | string
 }
 
 interface StoreState {

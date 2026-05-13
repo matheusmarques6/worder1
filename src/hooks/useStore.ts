@@ -63,6 +63,7 @@ export function useStore(): UseStoreReturn {
           embedInstalled: s.embedInstalled ?? s.embed_installed ?? false,
           embedInstalledAt: s.embedInstalledAt ?? s.embed_installed_at ?? null,
           webhooksRegistered: s.webhooksRegistered ?? s.webhooks_registered ?? false,
+          connectionType: s.connectionType ?? s.connection_type ?? 'oauth',
         }));
         
         setStores(formattedStores);

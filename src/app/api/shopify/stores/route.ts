@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
         total_revenue,
         last_sync_at,
         connection_status,
+        connection_type,
         status_message,
         health_checked_at,
         consecutive_failures,
@@ -93,6 +94,7 @@ export async function GET(request: NextRequest) {
       embedInstalled: s.embed_installed === true,
       embedInstalledAt: s.embed_installed_at,
       webhooksRegistered: s.webhooks_registered === true,
+      connectionType: s.connection_type || 'oauth',
     })) || [];
 
     return NextResponse.json({

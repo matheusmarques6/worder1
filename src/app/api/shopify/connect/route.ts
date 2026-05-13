@@ -200,6 +200,14 @@ export async function GET(request: NextRequest) {
         plan_name: s.plan_name,
         pixel_installed: s.pixel_installed,
         embed_installed: s.embed_installed,
+        embed_installed_at: s.embed_installed_at,
+        webhooks_registered: s.webhooks_registered,
+        // Distinguishes OAuth (Theme App Embed available) from manual
+        // / Custom App (merchant pastes loader.js into theme.liquid).
+        // The forms dashboard renders different activation instructions
+        // for each — without this, manual stores see "ative o app embed"
+        // pointing nowhere.
+        connection_type: s.connection_type || 'oauth',
         initial_sync_completed: s.initial_sync_completed,
         installed_at: s.installed_at,
         settings: s.settings,
