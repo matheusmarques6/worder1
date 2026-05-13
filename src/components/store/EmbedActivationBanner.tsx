@@ -43,10 +43,41 @@ export function EmbedActivationBanner({ storeId, hideWhenInstalled = false }: Pr
   const store = storeId ? stores.find((s) => s.id === storeId) : currentStore
   const [copied, setCopied] = useState(false)
   const [install, setInstall] = useState<InstallState>({ kind: 'idle' })
+  // Truth source: when the banner mounts, query the live store row
+  // ourselves instead of trusting zustand's snapshot. The cached value
+  // kept showing embedInstalled=false even after the install actually
+  // happened on the Shopify side, leaving merchants staring at the
+  // yellow banner forever. We update the zustand store as soon as the
+  // fresh fetch resolves so other consumers (banners, dashboard
+  // widgets) catch up too.
+  const [liveInstalled, setLiveInstalled] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!store?.id) return
+    let cancelled = false
+    fetch('/api/shopify/connect', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.stores) return
+        const fresh = data.stores.find((s: any) => s.id === store.id)
+        if (!fresh) return
+        const installedNow = fresh.embed_installed === true || fresh.embedInstalled === true
+        setLiveInstalled(installedNow)
+        if (installedNow !== store.embedInstalled) {
+          updateStore(store.id, {
+            embedInstalled: installedNow,
+            embedInstalledAt: fresh.embed_installed_at || fresh.embedInstalledAt || null,
+          })
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [store?.id, store?.embedInstalled, updateStore])
 
   if (!store) return null
 
-  const installed = store.embedInstalled === true
+  const installed = (liveInstalled ?? store.embedInstalled) === true
 
   if (installed) {
     if (hideWhenInstalled) return null

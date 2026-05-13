@@ -74,8 +74,19 @@ export async function GET(request: NextRequest) {
 
     const orgMap = new Map(orgs?.map(o => [o.id, o.name]) || []);
 
-    // 4. Formatar resposta
-    const formattedStores = stores?.map((s: any) => ({
+    // 4. Filtrar tombstones (archived / disconnected / manual-stub rows
+    // que ficam no banco para preservar FKs históricas mas não devem
+    // aparecer no switcher).
+    const liveStores = (stores || []).filter((s: any) => {
+      if (s.is_active === false) return false;
+      if (s.connection_status === 'disconnected') return false;
+      const dom: string = s.shop_domain || '';
+      if (dom.endsWith('.worder.local')) return false;
+      return true;
+    });
+
+    // 5. Formatar resposta
+    const formattedStores = liveStores.map((s: any) => ({
       id: s.id,
       organization_id: s.organization_id,
       organization_name: orgMap.get(s.organization_id) || 'Organização',

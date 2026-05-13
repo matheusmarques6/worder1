@@ -464,9 +464,29 @@ function show(){
       var btn=e.target.closest("[data-action]");
       if(!btn)return;
       var act=btn.getAttribute("data-action");
+      dlog("button click action="+act);
       if(act==="next-step"){e.preventDefault();if(curStep<steps.length-1){curStep++;content.innerHTML='<form id="wf-form-'+FID+'">'+renderStep(curStep)+'</form>';bindForm()}}
       if(act==="close"){e.preventDefault();close()}
       if(act==="url"&&btn.dataset.url){e.preventDefault();window.open(btn.dataset.url,"_blank")}
+      // Submit fallback. type="submit" buttons should fire the form's
+      // submit event natively, but on some Shopify themes (looking at
+      // you, Dawn-derived ones with global form interceptors) the
+      // native dispatch never reaches our listener. Force it.
+      // requestSubmit() is the spec'd way to trigger validation +
+      // dispatch; falls back to .submit() (skips validation) where
+      // requestSubmit isn't available (old Safari).
+      if(act==="submit"){
+        e.preventDefault();
+        var fEl=document.getElementById("wf-form-"+FID);
+        if(fEl){
+          if(typeof fEl.requestSubmit==="function"){fEl.requestSubmit();}
+          else{
+            // Manually dispatch a cancelable submit so our listener picks it up.
+            var ev=new Event("submit",{bubbles:true,cancelable:true});
+            fEl.dispatchEvent(ev);
+          }
+        }
+      }
     });
     bindForm();
   }
@@ -475,18 +495,20 @@ function show(){
     if(!f)return;
     f.addEventListener("submit",function(e){
       e.preventDefault();
+      dlog("submit event fired");
       var reqInputs=f.querySelectorAll("[required]");
       var valid=true;
       reqInputs.forEach(function(inp){inp.style.borderColor=""});
       reqInputs.forEach(function(inp){
-        if(!inp.value||!inp.value.trim()){valid=false;inp.style.borderColor="#EF4444";inp.focus()}
+        if(!inp.value||!inp.value.trim()){valid=false;inp.style.borderColor="#EF4444";inp.focus();dlog("required input empty",inp.name)}
         // Template literal: \\s and \\. survive as \s and \. in the
         // emitted script. \s alone would have been dropped to "s",
         // turning the validator into "match the letter s" — silently
         // accepting every malformed email.
-        if(inp.type==="email"&&inp.value&&!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(inp.value)){valid=false;inp.style.borderColor="#EF4444";inp.focus()}
+        if(inp.type==="email"&&inp.value&&!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(inp.value)){valid=false;inp.style.borderColor="#EF4444";inp.focus();dlog("invalid email",inp.value)}
       });
-      if(!valid)return;
+      if(!valid){dlog("validation failed, abort submit");return}
+      dlog("submit posting to backend...");
       var fd=new FormData(f);
       fd.forEach(function(v,k){
         if(allData[k]!==undefined){

@@ -192,14 +192,31 @@ export async function GET(request: NextRequest) {
       orgIds = [...new Set([...orgIds, ...memberOrgIds])]; // Remove duplicados
     }
 
-    // ✅ 2. Buscar lojas de TODAS as organizações (incluindo novos campos)
-    const { data: stores, error } = await supabaseAdmin
+    // ✅ 2. Buscar lojas ATIVAS de TODAS as organizações.
+    // Archived / disconnected / soft-deleted stores keep their row for
+    // audit (so we can re-link orders if the merchant reconnects), but
+    // they have no business showing up in the store switcher — the
+    // dropdown was listing "Based / archived-...", "Based / manual-..."
+    // alongside the live Dr. Melaxin row and the merchant kept getting
+    // dropped onto a dead store.
+    const { data: allStores, error } = await supabaseAdmin
       .from('shopify_stores')
       .select('*')
       .in('organization_id', orgIds)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
+
+    const stores = (allStores || []).filter((s: any) => {
+      if (s.is_active === false) return false;
+      if (s.status === 'disconnected') return false;
+      const dom: string = s.shop_domain || '';
+      // Cleanup tombstones we keep around so old foreign keys still
+      // resolve. They use the .worder.local TLD and either an
+      // "archived-" or "manual-based-" prefix when soft-deleted.
+      if (dom.endsWith('.worder.local')) return false;
+      return true;
+    });
 
     // ✅ 3. Buscar nomes das organizações
     const { data: orgs } = await supabaseAdmin
