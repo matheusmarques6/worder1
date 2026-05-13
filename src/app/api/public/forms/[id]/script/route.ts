@@ -73,13 +73,11 @@ var isReturning=!!gc(firstSeenCk);
 if(vis.visitorType==="new"&&isReturning)return;
 if(vis.visitorType==="returning"&&!isReturning)return;
 sc(firstSeenCk,"1",365);
-// Frequency gate: closed form cookie (skip if custom trigger — manual open always works)
+// Frequency gate: closed form cookie (skip if custom trigger — manual open always works).
+// frequency.stopAfterSubmission (existing UI toggle) extends this cookie
+// to 365 days on successful submit, so "never show again" lands here too.
 var useCustomTrigger=!!B.customTrigger;
 if(gc(ck)&&!useCustomTrigger)return;
-// "Already submitted" gate — if this visitor finished the form before,
-// don't pester them again. Cookie is set on successful submit below.
-var submittedCk="_wf_sub_"+FID;
-if(gc(submittedCk)&&!useCustomTrigger&&vis.hideAfterSubmit!==false)return;
 // URL include/exclude (wildcard: *)
 function matchUrl(pattern,url){
   if(!pattern)return false;
@@ -439,9 +437,6 @@ function show(){
         sc(ck,"1",freq.showAfterDays||30);
         if(freq.stopAfterSubmission)sc(ck,"1",365);
         sc("_wf_sub","1",365);
-        // Permanent per-visitor "already converted" marker for this form,
-        // honored by the hideAfterSubmit gate at script start.
-        sc(submittedCk,"1",365);
         // Bridge captured data to Worder tracking so visitor_id is linked to this
         // contact. All subsequent viewed_product / added_to_cart events from this
         // browser will then be attributed to this identified visitor.

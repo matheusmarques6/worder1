@@ -56,6 +56,10 @@ interface PopupDesign {
     frequency: {
       showAfterDays: number
       stopAfterSubmission: boolean
+      // Per-visitor cap, independent of the per-form cookie. Uses the
+      // __worder_id cookie to identify the same visitor across sessions /
+      // form rotations. Stored as a rolling timestamp list in localStorage.
+      perVisitor?: { enabled: boolean; maxShows: number; windowDays: number }
     }
     targeting: {
       pages: 'all' | 'specific'
@@ -84,6 +88,14 @@ interface PopupDesign {
     }
     clickOutsideClose?: { desktop: boolean; mobile: boolean }
     customTrigger?: boolean
+    // Cart-value gate — hits Shopify's /cart.js. minTotal/maxTotal in
+    // store currency. 0 means no bound. minItems is a separate condition.
+    cart?: {
+      enabled: boolean
+      minTotal?: number
+      maxTotal?: number
+      minItems?: number
+    }
   }
   postSubmit?: {
     action: 'close' | 'redirect' | 'show-success'
@@ -234,7 +246,11 @@ const defaultDesign: PopupDesign = {
       matchAll: false,
     },
     visibility: { devices: 'all', visitorType: 'all', hideFromSubscribers: false },
-    frequency: { showAfterDays: 1, stopAfterSubmission: true },
+    frequency: {
+      showAfterDays: 1,
+      stopAfterSubmission: true,
+      perVisitor: { enabled: false, maxShows: 1, windowDays: 7 },
+    },
     targeting: { pages: 'all', pageUrls: [], excludeUrls: [] },
     scheduling: { enabled: false, startDate: '', endDate: '' },
     audience: { tags: [], listId: '', doubleOptIn: false },
@@ -243,6 +259,7 @@ const defaultDesign: PopupDesign = {
     utm: { storeOnConsent: false, filterEnabled: false, filters: [] },
     clickOutsideClose: { desktop: true, mobile: true },
     customTrigger: false,
+    cart: { enabled: false, minTotal: 0, maxTotal: 0, minItems: 0 },
   },
   postSubmit: { action: 'show-success', redirectUrl: '', closeDelay: 4 },
   successMessage: '',
@@ -1888,6 +1905,26 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 </div>
               </Field>
             </div>
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="Limite por visitante (anti-spam)"
+                hint="Limite por pessoa, independente de qual formulario. Usa o cookie __worder_id para identificar o mesmo visitante entre sessoes."
+                checked={!!freq.perVisitor?.enabled}
+                onChange={v => setG('frequency', { perVisitor: { ...(freq.perVisitor || {}), enabled: v } })} />
+              {freq.perVisitor?.enabled && (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Field label="Maximo de exibicoes">
+                    <input type="number" min={1} max={20} className={inp}
+                      value={freq.perVisitor?.maxShows ?? 1}
+                      onChange={e => setG('frequency', { perVisitor: { ...(freq.perVisitor || {}), maxShows: +e.target.value } })} />
+                  </Field>
+                  <Field label="Janela (dias)">
+                    <input type="number" min={1} max={365} className={inp}
+                      value={freq.perVisitor?.windowDays ?? 7}
+                      onChange={e => setG('frequency', { perVisitor: { ...(freq.perVisitor || {}), windowDays: +e.target.value } })} />
+                  </Field>
+                </div>
+              )}
+            </div>
           </Section>
 
           <Section title="Dispositivos">
@@ -1955,6 +1992,39 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             </Field>
             <ToggleRow label="Nao mostrar a inscritos existentes" hint="Oculta para visitantes ja cadastrados."
               checked={vis.hideFromSubscribers} onChange={v => setG('visibility', { hideFromSubscribers: v })} />
+          </Section>
+
+          <Section title="Carrinho">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">
+              Mostra o formulario somente quando o carrinho do visitante atende os criterios. Le <code className="px-1 bg-gray-100 rounded text-[10px]">/cart.js</code> da Shopify.
+            </p>
+            <ToggleRow label="Filtrar por valor do carrinho"
+              checked={!!(beh.cart && beh.cart.enabled)}
+              onChange={v => setG('cart', { enabled: v })} />
+            {beh.cart?.enabled && (
+              <div className="mt-2 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Valor minimo" hint="Em moeda da loja. 0 = sem minimo.">
+                    <input type="number" min={0} step={0.01} className={inp}
+                      placeholder="0"
+                      value={beh.cart?.minTotal ?? ''}
+                      onChange={e => setG('cart', { minTotal: e.target.value === '' ? 0 : +e.target.value })} />
+                  </Field>
+                  <Field label="Valor maximo" hint="0 = sem maximo.">
+                    <input type="number" min={0} step={0.01} className={inp}
+                      placeholder="0"
+                      value={beh.cart?.maxTotal ?? ''}
+                      onChange={e => setG('cart', { maxTotal: e.target.value === '' ? 0 : +e.target.value })} />
+                  </Field>
+                </div>
+                <Field label="Minimo de itens" hint="Numero minimo de produtos no carrinho. 0 = sem minimo.">
+                  <input type="number" min={0} className={inp + ' w-24'}
+                    placeholder="0"
+                    value={beh.cart?.minItems ?? ''}
+                    onChange={e => setG('cart', { minItems: e.target.value === '' ? 0 : +e.target.value })} />
+                </Field>
+              </div>
+            )}
           </Section>
 
           <Section title="URLs">
@@ -2441,7 +2511,16 @@ export default function PopupEditorPage() {
             ...(saved.behavior || {}),
             display: { ...defaultDesign.behavior.display, ...((saved.behavior || {}).display || {}) },
             visibility: { ...defaultDesign.behavior.visibility, ...((saved.behavior || {}).visibility || {}) },
-            frequency: { ...defaultDesign.behavior.frequency, ...((saved.behavior || {}).frequency || {}) },
+            frequency: {
+              ...defaultDesign.behavior.frequency,
+              ...((saved.behavior || {}).frequency || {}),
+              // Deep-merge perVisitor so disabling it on save doesn't wipe
+              // maxShows/windowDays back to undefined on the next load.
+              perVisitor: {
+                ...defaultDesign.behavior.frequency.perVisitor!,
+                ...((((saved.behavior || {}).frequency || {}).perVisitor) || {}),
+              },
+            },
             targeting: { ...defaultDesign.behavior.targeting, ...((saved.behavior || {}).targeting || {}) },
             scheduling: { ...defaultDesign.behavior.scheduling, ...((saved.behavior || {}).scheduling || {}) },
             audience: { ...defaultDesign.behavior.audience, ...((saved.behavior || {}).audience || {}) },
@@ -2449,6 +2528,7 @@ export default function PopupEditorPage() {
             location: { ...defaultDesign.behavior.location!, ...((saved.behavior || {}).location || {}) },
             utm: { ...defaultDesign.behavior.utm!, ...((saved.behavior || {}).utm || {}) },
             clickOutsideClose: { ...defaultDesign.behavior.clickOutsideClose!, ...((saved.behavior || {}).clickOutsideClose || {}) },
+            cart: { ...defaultDesign.behavior.cart!, ...((saved.behavior || {}).cart || {}) },
           },
           postSubmit: { ...defaultDesign.postSubmit!, ...(saved.postSubmit || {}) },
           successMessage: saved.successMessage || form.success_message || '',
