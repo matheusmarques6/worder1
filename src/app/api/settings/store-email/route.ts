@@ -46,21 +46,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Store not found' }, { status: 404 });
   }
 
-  let settings = (store.settings as any)?.email_settings || null;
+  // Per-store config: read what the store actually has. The previous
+  // version fell back to organizations.email_settings when the row was
+  // empty — convenient for first-load UX, but it leaked the sibling
+  // store's sender across stores in a multi-store org (Dr. Melaxin
+  // kept seeing Based's "Based <based@worder.email>" sender). Now an
+  // unconfigured store returns an empty object; the merchant configures
+  // each store explicitly.
+  const settings = (store.settings as any)?.email_settings || {};
 
-  // Backward compat — first time on a store, surface the legacy
-  // org-scoped settings so the form isn't blank when the merchant
-  // opens it. The next PATCH will copy them into the store row.
-  if (!settings) {
-    const { data: org } = await supabaseAdmin
-      .from('organizations')
-      .select('email_settings')
-      .eq('id', orgId)
-      .maybeSingle();
-    settings = (org?.email_settings as any) || {};
-  }
-
-  return NextResponse.json({ email_settings: settings || {} });
+  return NextResponse.json({ email_settings: settings });
 }
 
 export async function PATCH(request: NextRequest) {

@@ -28,12 +28,19 @@ export default function IntegrationsPage() {
   const router = useRouter()
   const { user } = useAuthStore()
   const { stores, currentStore } = useStoreStore()
+  // Same race we saw on /forms: the first render fires before zustand
+  // rehydrates currentStore from localStorage, so storeParam is empty
+  // and /api/integrations/shopify/status returns the most-recently-
+  // installed store in the org — for a Dr. Melaxin merchant that
+  // surfaced as the Based store flashing in the integration list.
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   const [loading, setLoading] = useState(true)
   const [connectedStores, setConnectedStores] = useState<ConnectedStore[]>([])
   const [syncing, setSyncing] = useState<string | null>(null)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!hasHydrated) return
     async function loadStores() {
       try {
         const storeParam = currentStore?.id ? `?store_id=${currentStore.id}` : ''
@@ -59,6 +66,10 @@ export default function IntegrationsPage() {
             }])
           } else if (data.stores) {
             setConnectedStores(data.stores)
+          } else {
+            // No store match for the active id — clear the stale row
+            // instead of leaving whatever the previous render showed.
+            setConnectedStores([])
           }
         }
       } catch (e) {
@@ -67,7 +78,7 @@ export default function IntegrationsPage() {
       setLoading(false)
     }
     loadStores()
-  }, [currentStore?.id])
+  }, [currentStore?.id, hasHydrated])
 
   const handleSync = async (storeId: string) => {
     setSyncing(storeId)

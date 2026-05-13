@@ -386,8 +386,13 @@ export default function SettingsEmailPage() {
         )}
       </div>
 
-      {/* Configuração do Remetente (per-store) */}
+      {/* Configuração do Remetente (per-store).
+          key={storeId} remounts the component when the active store
+          switches — without that, the internal senderName / replyTo
+          state carries over from the previous store and the merchant
+          briefly sees the wrong sender while the fetch resolves. */}
       <SenderConfig
+        key={storeId || 'no-store'}
         verifiedDomains={domains.filter(d => d.status === 'verified')}
         storeId={storeId || null}
         storeName={currentStore?.name || null}
