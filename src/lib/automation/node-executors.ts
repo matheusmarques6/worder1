@@ -721,7 +721,8 @@ const actionExecutors: Record<string, NodeExecutor> = {
           }
         }
 
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app';
+        const { getAppBaseUrl } = await import('@/lib/app-url');
+        const baseUrl = getAppBaseUrl();
 
         // email_sends.campaign_id is UUID — only pass it through when
         // the flow id actually is a UUID. Flow attribution lives in the

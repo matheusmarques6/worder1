@@ -978,6 +978,20 @@ export function prepareEmailHtml({
 }): string {
   let result = html;
 
+  // Tracking URLs (open pixel, click rewrite, unsubscribe) MUST be
+  // absolute https origins — relative URLs get stripped by Gmail's
+  // image proxy and webmail clients refuse to navigate to them, which
+  // is why an empty baseUrl silently destroys every metric without
+  // any visible error. Refuse to render rather than ship a broken
+  // email; callers should pull from getAppBaseUrl() which has the
+  // production fallback.
+  if (!baseUrl || !/^https?:\/\//i.test(baseUrl)) {
+    console.error('[prepareEmailHtml] invalid baseUrl — tracking will not work', {
+      baseUrl,
+      emailSendId,
+    });
+  }
+
   // 0. Evaluate conditional blocks — remove blocks that fail condition check
   result = result.replace(
     /<!-- WORDER_CONDITION:(.*?) -->([\s\S]*?)<!-- \/WORDER_CONDITION -->/g,

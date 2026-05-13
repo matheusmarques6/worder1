@@ -139,7 +139,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+    const { getAppBaseUrl } = await import('@/lib/app-url');
+    const baseUrl = getAppBaseUrl();
 
     // ──────────────────────────────────────────
     // Suppression list
