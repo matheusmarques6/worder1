@@ -226,8 +226,8 @@ async function syncCustomersGraphQL(
       { sortKey: 'UPDATED_AT' },
       'customers',
       {
-        first: 50,
-        maxPages: 100,
+        first: 250,
+        maxPages: 200,
         onPage: (page, total) => {
           onProgress?.('customers', Math.min(page * 5, 90), `${total} customers fetched...`);
         },
@@ -320,12 +320,13 @@ async function syncOrdersGraphQL(
   store: ShopifyStoreConfig,
   daysBack: number | null,
   onProgress?: (stage: string, progress: number, message: string) => void
-): Promise<{ count: number; eventsCreated: number; totalRevenue: number; errors: string[] }> {
+): Promise<{ count: number; eventsCreated: number; totalRevenue: number; errors: string[]; resumeCursor: string | null }> {
   const supabase = getSupabaseAdmin();
   const errors: string[] = [];
   let count = 0;
   let eventsCreated = 0;
   let totalRevenue = 0;
+  let resumeCursor: string | null = null;
 
   try {
     // Build a date filter only when a window is requested. When daysBack
@@ -338,19 +339,102 @@ async function syncOrdersGraphQL(
       variables.query = `created_at:>=${sinceDateStr}`;
     }
 
-    const { nodes } = await shopifyGraphQLPaginate(
+    // Pick up where we left off if a previous run was interrupted before
+    // walking every page. The job row keeps last_cursor across attempts;
+    // upserting on (store_id, sync_type) keeps things idempotent across
+    // re-runs.
+    const syncType = daysBack === null ? 'orders_historical' : `orders_${daysBack}d`;
+    const { data: existingJob } = await supabase
+      .from('shopify_import_jobs')
+      .select('id, last_cursor, processed_count, status, config')
+      .eq('store_id', store.id)
+      .eq('organization_id', store.organization_id)
+      .contains('config', { sync_type: syncType })
+      .in('status', ['running', 'pending', 'paused'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let jobId = existingJob?.id || null;
+    let startCursor: string | null = existingJob?.last_cursor || null;
+    count = existingJob?.processed_count || 0;
+    if (startCursor) {
+      console.log(`[Sync] Resuming orders sync from cursor=${startCursor.slice(0, 16)}... (${count} already processed)`);
+    }
+
+    if (!jobId) {
+      const { data: newJob } = await supabase
+        .from('shopify_import_jobs')
+        .insert({
+          store_id: store.id,
+          organization_id: store.organization_id,
+          status: 'running',
+          config: { sync_type: syncType, days_back: daysBack },
+          started_at: new Date().toISOString(),
+          processed_count: 0,
+        })
+        .select('id')
+        .single();
+      jobId = newJob?.id || null;
+    } else {
+      await supabase
+        .from('shopify_import_jobs')
+        .update({ status: 'running', last_processed_at: new Date().toISOString() })
+        .eq('id', jobId);
+    }
+
+    // Pagination budget. 270s leaves a ~30s tail for the rest of the
+    // request (DB upserts after the loop, response serialization). If
+    // we don't finish, the cursor is persisted and the next call resumes.
+    const PAGE_BUDGET_MS = 270_000;
+
+    const { nodes, lastCursor, reachedDeadline } = await shopifyGraphQLPaginate(
       storeConfig,
       ORDERS_QUERY,
       variables,
       'orders',
       {
-        first: 50,
+        first: 250,
         maxPages: 500,
-        onPage: (page, total) => {
+        startCursor,
+        deadlineMs: PAGE_BUDGET_MS,
+        onPage: (page, total, cursor) => {
           onProgress?.('orders', Math.min(page * 3, 90), `${total} orders fetched...`);
+          // Persist progress so a crash mid-sync doesn't lose work.
+          // Best-effort: skip if no jobId (couldn't insert).
+          if (jobId) {
+            supabase
+              .from('shopify_import_jobs')
+              .update({
+                last_cursor: cursor,
+                processed_count: count + total,
+                current_page: page,
+                last_processed_at: new Date().toISOString(),
+              })
+              .eq('id', jobId)
+              .then(() => {}, () => {});
+          }
         },
       }
     );
+
+    // Final job state: completed if we reached the end of the connection,
+    // paused if we hit the deadline (resume on next run).
+    if (jobId) {
+      await supabase
+        .from('shopify_import_jobs')
+        .update({
+          status: reachedDeadline ? 'paused' : 'completed',
+          last_cursor: lastCursor,
+          completed_at: reachedDeadline ? null : new Date().toISOString(),
+          processed_count: count + nodes.length,
+        })
+        .eq('id', jobId);
+    }
+    if (reachedDeadline) {
+      console.warn(`[Sync] Orders sync paused at ${nodes.length} pulled, cursor=${lastCursor?.slice(0, 16)}... Next run will resume.`);
+      resumeCursor = lastCursor;
+    }
 
     for (const order of nodes) {
       const orderId = extractShopifyId(order.id);
@@ -455,7 +539,7 @@ async function syncOrdersGraphQL(
     errors.push(`Order sync: ${error.message}`);
   }
 
-  return { count, eventsCreated, totalRevenue, errors };
+  return { count, eventsCreated, totalRevenue, errors, resumeCursor };
 }
 
 // =============================================
@@ -478,8 +562,8 @@ async function syncProductsGraphQL(
       { sortKey: 'UPDATED_AT' },
       'products',
       {
-        first: 50,
-        maxPages: 100,
+        first: 250,
+        maxPages: 200,
         onPage: (page, total) => {
           onProgress?.('products', Math.min(page * 5, 90), `${total} products fetched...`);
         },

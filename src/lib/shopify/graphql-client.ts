@@ -264,7 +264,21 @@ export async function shopifyGraphQL<T = any>(
 export interface PaginationOptions {
   first?: number;
   maxPages?: number;
-  onPage?: (pageNumber: number, itemsCount: number) => void;
+  /** Called after each successful page. Receives 1-based page number,
+   *  cumulative items count, and the cursor that just landed (or null
+   *  on the last page). Callers persist the cursor to a checkpoint
+   *  table so an interrupted sync can resume from `startCursor` on
+   *  the next run instead of starting over from zero. */
+  onPage?: (pageNumber: number, itemsCount: number, cursor: string | null) => void;
+  /** Start from this cursor instead of the beginning. Set to the value
+   *  of `last_cursor` you saved on the previous run. */
+  startCursor?: string | null;
+  /** Hard time budget. When set, the loop exits after the next page
+   *  if Date.now() - startedAt > deadlineMs, returning whatever was
+   *  collected so far. Lets a Vercel function honor maxDuration even
+   *  on a large connection — the caller checkpoints the cursor and
+   *  spawns a continuation. */
+  deadlineMs?: number;
 }
 
 /**
@@ -283,11 +297,13 @@ export async function shopifyGraphQLPaginate<T = any>(
   variables: Record<string, any>,
   connectionPath: string,
   options?: PaginationOptions
-): Promise<{ nodes: T[]; totalPages: number }> {
-  const { first = 50, maxPages = 100, onPage } = options || {};
+): Promise<{ nodes: T[]; totalPages: number; lastCursor: string | null; reachedDeadline: boolean }> {
+  const { first = 250, maxPages = 500, onPage, startCursor = null, deadlineMs } = options || {};
   const allNodes: T[] = [];
-  let cursor: string | null = null;
+  let cursor: string | null = startCursor;
   let page = 0;
+  const startedAt = Date.now();
+  let reachedDeadline = false;
 
   while (page < maxPages) {
     const result = await shopifyGraphQL(store, query, {
@@ -308,20 +324,28 @@ export async function shopifyGraphQLPaginate<T = any>(
     allNodes.push(...nodes);
     page++;
 
+    const pageInfo = connection.pageInfo;
+    const hasNext = !!(pageInfo?.hasNextPage && pageInfo?.endCursor);
+    cursor = hasNext ? pageInfo.endCursor : null;
+
     if (onPage) {
-      onPage(page, allNodes.length);
+      onPage(page, allNodes.length, cursor);
     }
 
-    // Check pagination
-    const pageInfo = connection.pageInfo;
-    if (!pageInfo?.hasNextPage || !pageInfo?.endCursor) {
+    if (!hasNext) {
       break;
     }
 
-    cursor = pageInfo.endCursor;
+    // Stop early if we're about to run past the function's wall-clock
+    // budget. The caller already has a valid cursor at this point — it
+    // persists, returns, and the next invocation continues from here.
+    if (deadlineMs && Date.now() - startedAt > deadlineMs) {
+      reachedDeadline = true;
+      break;
+    }
   }
 
-  return { nodes: allNodes, totalPages: page };
+  return { nodes: allNodes, totalPages: page, lastCursor: cursor, reachedDeadline };
 }
 
 // =============================================
