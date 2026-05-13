@@ -702,8 +702,37 @@ function SenderConfig({
 }
 
 function WebhookResendButton() {
-  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  // The Resend webhook is a SINGLE platform-wide endpoint
+  // (https://app.worder.com.br/api/webhooks/resend) signed with our
+  // RESEND_WEBHOOK_SECRET env var. Once it's registered against our
+  // Resend account, it forwards events for every sender on the account
+  // — there's nothing per-merchant to register. So this UI just shows
+  // "ok, we're listening" most of the time. The merchant can re-run the
+  // POST in case they nuked the webhook on the Resend dashboard.
+  const [status, setStatus] = useState<'checking' | 'idle' | 'loading' | 'done' | 'error'>('checking')
   const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/email/webhooks/register')
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return
+        const list = d?.webhooks?.data || d?.webhooks || []
+        const ourEndpoint = `/api/webhooks/resend`
+        const found = Array.isArray(list)
+          ? list.some((w: any) => typeof w?.url === 'string' && w.url.includes(ourEndpoint))
+          : false
+        if (found) {
+          setStatus('done')
+          setMessage('Já está recebendo eventos do Resend.')
+        } else {
+          setStatus('idle')
+        }
+      })
+      .catch(() => { if (!cancelled) setStatus('idle') })
+    return () => { cancelled = true }
+  }, [])
 
   const handleRegister = async () => {
     setStatus('loading')
@@ -723,6 +752,32 @@ function WebhookResendButton() {
     }
   }
 
+  // Already registered (most common state) — show a confirmation
+  // chip, not a CTA. Avoids the merchant clicking "Registrar" again
+  // and again thinking nothing happened.
+  if (status === 'done') {
+    return (
+      <div className="flex items-center gap-3 px-4 py-2.5 bg-emerald-50 border border-emerald-100 rounded-lg">
+        <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-emerald-900">Webhook ativo</p>
+          <p className="text-xs text-emerald-700/80">
+            {message || 'A Worder já está recebendo eventos do Resend (open / click / bounce).'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'checking') {
+    return (
+      <div className="inline-flex items-center gap-2 text-sm text-gray-500">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        Verificando status do webhook...
+      </div>
+    )
+  }
+
   return (
     <div className="flex items-center gap-4">
       <button
@@ -732,12 +787,10 @@ function WebhookResendButton() {
       >
         {status === 'loading' ? (
           <Loader2 className="w-4 h-4 animate-spin" />
-        ) : status === 'done' ? (
-          <CheckCircle className="w-4 h-4" />
         ) : (
           <Zap className="w-4 h-4" />
         )}
-        {status === 'done' ? 'Registrado' : 'Registrar Webhook'}
+        Registrar Webhook
       </button>
       {message && (
         <span className={`text-sm ${status === 'error' ? 'text-red-600' : 'text-emerald-600'}`}>
