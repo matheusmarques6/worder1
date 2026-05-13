@@ -122,6 +122,10 @@ interface FlowStore {
   showAnalytics: boolean;
   analyticsData: Record<string, { sent: number; opened: number; clicked: number; revenue: number }>;
   analyticsTimeframe: '7d' | '30d' | '90d' | 'all';
+  // Cross-component signal: the canvas 3-dot menu sets this to a node
+  // id when the merchant clicks "Editar email"; PropertiesPanel picks
+  // it up, selects the node, opens the inline editor, and clears it.
+  pendingEditEmailNodeId: string | null;
   
   // Test execution
   testExecution: TestExecution;
@@ -190,6 +194,7 @@ interface FlowStore {
   toggleFullscreen: () => void;
   openPropertiesPanel: () => void;
   closePropertiesPanel: () => void;
+  requestEditEmail: (nodeId: string | null) => void;
   
   // ============================================
   // ACTIONS - Execution
@@ -249,6 +254,7 @@ const initialState = {
   showAnalytics: false,
   analyticsData: {},
   analyticsTimeframe: '30d' as const,
+  pendingEditEmailNodeId: null,
   testExecution: {
     isRunning: false,
     steps: [],
@@ -540,6 +546,7 @@ export const useFlowStore = create<FlowStore>()(
       toggleFullscreen: () => set((state) => ({ isFullscreen: !state.isFullscreen })),
       openPropertiesPanel: () => set({ showPropertiesPanel: true }),
       closePropertiesPanel: () => set({ showPropertiesPanel: false }),
+      requestEditEmail: (nodeId) => set({ pendingEditEmailNodeId: nodeId }),
 
       // ============================================
       // EXECUTION

@@ -17,6 +17,7 @@ import {
   FastForward,
   Trash2,
 } from 'lucide-react';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useFlowStore, useIsValidFlow } from '@/stores/flowStore';
 import { AutomationSwitcher } from './AutomationSwitcher';
@@ -127,13 +128,15 @@ export function Toolbar({ onSave, onTest, onBack, organizationId, automations, c
     <div className="h-[60px] bg-zinc-950 border-b border-zinc-800 flex items-center px-3 sm:px-5 gap-3 sm:gap-4 shrink-0 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
       {/* Left Section - Logo + Name */}
       <div className="flex items-center gap-3 min-w-0 flex-shrink-0">
-        {/* Worder brand mark */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/logo.svg"
-          alt="Worder"
-          className="h-7 flex-shrink-0"
-        />
+        {/* Worder brand mark — clicking goes back to the main dashboard */}
+        <Link href="/dashboard" aria-label="Voltar para o dashboard" className="flex-shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.svg"
+            alt="Worder"
+            className="h-7"
+          />
+        </Link>
         <div className="h-5 w-px bg-zinc-700" />
 
         {/* Name + Switcher */}

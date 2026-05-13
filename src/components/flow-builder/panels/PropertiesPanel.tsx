@@ -778,6 +778,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 onLabelChange={handleLabelChange}
                 triggerType={triggerType}
                 organizationId={organizationId}
+                nodeId={selectedNode.id}
               />
             )}
 
@@ -2191,7 +2192,7 @@ function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionC
 // ============================================
 // EMAIL ACTION CONFIG (template selector, not credentials)
 // ============================================
-function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organizationId }: { config: Record<string, any>; onUpdate: (key: string, value: any) => void; onLabelChange?: (label: string) => void; triggerType: string; organizationId?: string }) {
+function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organizationId, nodeId }: { config: Record<string, any>; onUpdate: (key: string, value: any) => void; onLabelChange?: (label: string) => void; triggerType: string; organizationId?: string; nodeId?: string }) {
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; thumbnail_url?: string }>>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [showSubjectEdit, setShowSubjectEdit] = useState(false)
@@ -2202,6 +2203,25 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
   const storeId = useFlowStore.getState().automationConfig?.storeId;
   const nodes = useFlowStore((state) => state.nodes);
   const automationName = useFlowStore((state) => state.automationName);
+  const pendingEditEmailNodeId = useFlowStore((state) => state.pendingEditEmailNodeId);
+  const requestEditEmail = useFlowStore((state) => state.requestEditEmail);
+  const analyticsData = useFlowStore((state) => state.analyticsData);
+
+  // Pick up the "Editar email" request from the canvas 3-dot menu.
+  // BaseNode dispatches selectNode(id) + requestEditEmail(id); once
+  // PropertiesPanel mounts with the right node selected we see the
+  // pending id, open the inline editor, and clear the flag so the
+  // signal isn't replayed.
+  useEffect(() => {
+    if (pendingEditEmailNodeId && pendingEditEmailNodeId === nodeId) {
+      setEditorTemplateId(null);
+      setShowEmailEditor(true);
+      requestEditEmail(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingEditEmailNodeId, nodeId]);
+
+  const nodeMetrics = nodeId ? analyticsData[nodeId] : undefined;
 
   // Fetch org defaults once and auto-populate sender if empty (Klaviyo-style)
   useEffect(() => {
@@ -2299,18 +2319,47 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
           </div>
         </div>
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Taxa de abertura</span>
-            <span className="text-sm text-gray-400">--</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Taxa de cliques</span>
-            <span className="text-sm text-gray-400">--</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Receita</span>
-            <span className="text-sm text-gray-400">--</span>
-          </div>
+          {(() => {
+            // Re-uses the same nodeStats payload the canvas cards pull
+            // from /api/automations/[id]/stats — populated by the parent
+            // flow-builder via setAnalyticsData. When the node has no
+            // sends yet we fall back to "--" so the merchant doesn't
+            // see a misleading 0%.
+            const sent = nodeMetrics?.sent ?? 0;
+            const opened = nodeMetrics?.opened ?? 0;
+            const clicked = nodeMetrics?.clicked ?? 0;
+            const revenue = nodeMetrics?.revenue ?? 0;
+            const openRate = sent > 0 ? Math.round((opened / sent) * 100) : null;
+            const clickRate = sent > 0 ? Math.round((clicked / sent) * 100) : null;
+            const fmt = (n: number) =>
+              n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Taxa de abertura</span>
+                  <span className={`text-sm ${openRate === null ? 'text-gray-400' : 'text-gray-900 font-medium'}`}>
+                    {openRate === null ? '--' : `${openRate}%`}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Taxa de cliques</span>
+                  <span className={`text-sm ${clickRate === null ? 'text-gray-400' : 'text-gray-900 font-medium'}`}>
+                    {clickRate === null ? '--' : `${clickRate}%`}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Receita</span>
+                  <span className={`text-sm ${revenue === 0 ? 'text-gray-400' : 'text-emerald-600 font-medium'}`}>
+                    {revenue === 0 ? '--' : `R$ ${fmt(revenue)}`}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-gray-100 mt-2">
+                  <span className="text-xs text-gray-400">Enviados</span>
+                  <span className="text-xs text-gray-500">{sent}</span>
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
 
@@ -2495,14 +2544,15 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
             </div>
           )}
 
-          {/* UTM Tracking */}
+          {/* UTM Tracking — always on by default. Toggle unlocks the
+              custom utm_source / utm_medium / utm_campaign fields. */}
           <label className="flex items-start gap-2.5 cursor-pointer">
             <input type="checkbox" checked={config.utmTracking || false} onChange={(e) => onUpdate('utmTracking', e.target.checked)}
               className="w-4 h-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
             <div>
-              <p className="text-sm text-gray-900">Ativar rastreamento UTM</p>
+              <p className="text-sm text-gray-900">Personalizar UTMs</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                Links will include additional tracking information, called <span className="text-blue-600">UTM parameters</span>.
+                Todos os links já saem com <span className="text-blue-600">utm_source=worder</span> + <span className="text-blue-600">utm_medium=email</span>. Ative pra trocar os valores ou adicionar uma <span className="text-blue-600">utm_campaign</span>.
               </p>
             </div>
           </label>

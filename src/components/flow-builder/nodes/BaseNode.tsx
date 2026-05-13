@@ -197,6 +197,7 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
   const typeLabel = nodeTypeLabels[nodeType] || cat.label;
   const removeNode = useFlowStore((s) => s.removeNode);
   const duplicateNode = useFlowStore((s) => s.duplicateNode);
+  const requestEditEmail = useFlowStore((s) => s.requestEditEmail);
   const [showMenu, setShowMenu] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -390,6 +391,24 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >
+            {nodeType === 'action_email' && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Select the node so PropertiesPanel mounts with the
+                  // right config, then signal the inline EmailEditorOverlay
+                  // to open. The overlay lives inside PropertiesPanel, so
+                  // we can't navigate or imperatively open it from here —
+                  // the store flag is the bridge.
+                  selectNode(id);
+                  requestEditEmail(id);
+                  setShowMenu(false);
+                }}
+                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Editar email
+              </button>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();

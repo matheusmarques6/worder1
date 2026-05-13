@@ -569,11 +569,20 @@ const actionExecutors: Record<string, NodeExecutor> = {
           }
         }
 
-        // 2c. UTM Tracking — append UTM params to all links
-        if (config.utmTracking) {
-          const utmSource = config.utmSource || 'worder';
-          const utmMedium = config.utmMedium || 'email';
-          const utmCampaign = config.utmCampaign || '';
+        // 2c. UTM Tracking — append UTM params to every outbound link.
+        //
+        // Always on: the merchant gets attribution out of the box so
+        // automation emails show up under "email" in their analytics
+        // tool without any extra config. The "Ativar Rastreamento UTM"
+        // toggle in the editor just unlocks per-node CUSTOM utm_source /
+        // utm_medium / utm_campaign values; when it's off (or absent
+        // on legacy nodes) we fall through to the worder/email defaults.
+        // Set utmTracking=false explicitly on a node to opt out entirely.
+        const utmEnabled = config.utmTracking !== false; // default true
+        if (utmEnabled) {
+          const utmSource = (config.utmTracking && config.utmSource) || 'worder';
+          const utmMedium = (config.utmTracking && config.utmMedium) || 'email';
+          const utmCampaign = (config.utmTracking && config.utmCampaign) || '';
           const utmParams = `utm_source=${encodeURIComponent(utmSource)}&utm_medium=${encodeURIComponent(utmMedium)}${utmCampaign ? `&utm_campaign=${encodeURIComponent(utmCampaign)}` : ''}`;
 
           html = html.replace(
