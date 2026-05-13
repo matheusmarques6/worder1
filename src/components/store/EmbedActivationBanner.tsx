@@ -248,14 +248,12 @@ export function EmbedActivationBanner({ storeId, hideWhenInstalled = false }: Pr
                     <button
                       type="button"
                       onClick={autoInstall}
-                      disabled={install.kind === 'running'}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-amber-50 bg-amber-900 hover:bg-amber-800 disabled:opacity-50 rounded-md transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-amber-50 bg-amber-900 hover:bg-amber-800 rounded-md transition-colors"
                     >
-                      {install.kind === 'running' ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <Zap className="w-3 h-3" />
-                      )}
+                      {/* No spinner here: clicking transitions install.kind
+                          to 'running' which closes the failed block, so the
+                          primary CTA (with its own spinner) takes over. */}
+                      <Zap className="w-3 h-3" />
                       Tentar instalar de novo
                     </button>
                   </div>
