@@ -40,6 +40,9 @@ export async function sendCampaignEmail({
   eventData,
 }: SendCampaignEmailParams): Promise<{ success: boolean; emailSendId?: string; error?: string }> {
   let emailSendId = '' as string;
+  // Hoisted so the catch block can flip email_consent on the contact
+  // when Resend reports a permanent failure mid-send.
+  let resolvedContactId: string | null = null;
 
   try {
     const isUuid = (v: any) =>
@@ -51,7 +54,7 @@ export async function sendCampaignEmail({
     // brand-new abandoned-cart lead (no Worder contact yet) would fail
     // the INSERT below. Upsert by (org, email) so the FK is satisfied
     // and the same contact is reused across future sends.
-    let resolvedContactId: string | null = isUuid(contactId) ? contactId : null;
+    resolvedContactId = isUuid(contactId) ? contactId : null;
     if (!resolvedContactId && contactEmail && organizationId) {
       const { data: existing } = await supabaseAdmin
         .from('contacts')
