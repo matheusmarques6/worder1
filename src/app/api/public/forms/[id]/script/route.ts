@@ -265,7 +265,15 @@ function renderBlock(b){
       var btnBorder=p.btnBorderWidth?"border:"+p.btnBorderWidth+"px solid "+(p.btnBorderColor||"#E5E7EB"):"border:none";
       var btnId="wb_"+b.id;
       var hoverCss=p.hoverColor?'<style>#'+btnId+':hover{background:'+(p.hoverColor)+'!important}</style>':"";
-      h=hoverCss+'<button id="'+btnId+'" type="'+(act==="submit"?"submit":"button")+'" data-action="'+act+'"'+(p.url?' data-url="'+esc(p.url)+'"':"")+' style="width:'+(p.fullWidth?"100%":"auto")+';padding:'+(p.paddingV||14)+'px '+(p.paddingH||28)+'px;background:'+(p.bgColor||"#F97316")+';color:'+(p.textColor||"#fff")+';font-size:'+(p.fontSize||15)+'px;font-weight:700;border-radius:'+(p.borderRadius||8)+'px;'+btnBorder+';cursor:pointer;margin:0 0 8px;display:block;transition:background 0.2s">'+(p.text||"Enviar")+'</button>';
+      // text-align:center + line-height:1.2 because the Shopify theme's
+      // global button rules (Dawn-derived ones inject text-align:left and
+      // various line-heights) win over our inline style without
+      // !important. font-family pinned to whatever the merchant chose so
+      // the runtime matches the editor preview.
+      var btnFam=p.fontFamily||st.fontFamily||"inherit";
+      var btnLs=p.btnLetterSpacing!=null?(p.btnLetterSpacing+"px"):"normal";
+      var btnFw=p.btnFontWeight||"700";
+      h=hoverCss+'<button id="'+btnId+'" type="'+(act==="submit"?"submit":"button")+'" data-action="'+act+'"'+(p.url?' data-url="'+esc(p.url)+'"':"")+' style="box-sizing:border-box!important;width:'+(p.fullWidth?"100%":"auto")+'!important;padding:'+(p.paddingV||14)+'px '+(p.paddingH||28)+'px!important;background:'+(p.bgColor||"#F97316")+'!important;color:'+(p.textColor||"#fff")+'!important;font-size:'+(p.fontSize||15)+'px!important;font-weight:'+btnFw+'!important;font-family:'+btnFam+'!important;letter-spacing:'+btnLs+'!important;line-height:1.2!important;text-align:center!important;text-transform:none!important;border-radius:'+(p.borderRadius||8)+'px!important;'+btnBorder+'!important;cursor:pointer!important;margin:0 0 8px!important;display:block!important;transition:background 0.2s">'+(p.text||"Enviar")+'</button>';
       break;
     }
     case"spacer":h='<div style="height:'+(p.height||16)+'px"></div>';break;

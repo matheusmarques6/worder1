@@ -143,6 +143,42 @@ export async function middleware(request: NextRequest) {
 
   // Allow public API routes (webhooks, etc)
   if (isPublicApiRoute(pathname)) {
+    // Public popup/storefront endpoints are called cross-origin from the
+    // merchant's Shopify domain. Each route handler is supposed to set
+    // its own Access-Control-Allow-Origin header on every return path,
+    // but the submit endpoint (and a few others) had early returns
+    // missing the header — the browser then blocked the response body
+    // and the popup looked frozen even though the server returned 200.
+    // Stamp CORS at the middleware layer as a safety net so no return
+    // path can leak past us without it.
+    const corsTargets = ['/api/public/forms', '/api/storefront', '/api/track', '/api/pixel', '/api/identity'];
+    const needsCors = corsTargets.some((p) => pathname.startsWith(p));
+    if (needsCors) {
+      // Preflight: short-circuit with a 204 + CORS so the route handler
+      // never has to think about OPTIONS. Honors the requested headers
+      // if the browser advertised them.
+      if (request.method === 'OPTIONS') {
+        const origin = request.headers.get('origin') || '*';
+        const reqHeaders = request.headers.get('access-control-request-headers') || 'Content-Type';
+        return new NextResponse(null, {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': origin,
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': reqHeaders,
+            'Access-Control-Max-Age': '86400',
+            'Vary': 'Origin',
+          },
+        });
+      }
+      const res = NextResponse.next();
+      const origin = request.headers.get('origin') || '*';
+      res.headers.set('Access-Control-Allow-Origin', origin);
+      res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+      res.headers.set('Vary', 'Origin');
+      return res;
+    }
     return NextResponse.next();
   }
 
