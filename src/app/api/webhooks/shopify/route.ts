@@ -603,6 +603,26 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   }
 
   // ======================================
+  // Email revenue attribution. Fired here on orders/create so stores
+  // with instant-capture gateways (which often skip orders/paid)
+  // still get credit. The RPC is idempotent on order_id, so when
+  // orders/paid lands later for the same order it's a safe no-op.
+  // ======================================
+  if (orderValue > 0) {
+    try {
+      const { attributeEmailConversion } = await import('@/lib/email/attribution');
+      await attributeEmailConversion({
+        contactId: contact.id,
+        organizationId: store.organization_id,
+        orderId: String(order.id),
+        orderValue,
+      });
+    } catch (attribErr) {
+      console.error('[Shopify Webhook] Email attribution failed (orders/create):', attribErr);
+    }
+  }
+
+  // ======================================
   // TRACKING: Registrar atividade e enriquecer contato
   // ======================================
   try {
@@ -1000,6 +1020,36 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
       source: 'shopify',
       sourceId: String(order.id),
     });
+
+    // Email revenue attribution. Mirrors Klaviyo/Omnisend semantics
+    // (last-touch, engagement-required, configurable window per org).
+    // attributeEmailConversion reads
+    // organizations.email_settings.attribution.email_window_days
+    // (default 5 days) and calls the attribute_email_conversion RPC,
+    // which atomically:
+    //   - finds the most recent email_sends row for this contact
+    //     where sent_at >= NOW() - window AND (opened_at IS NOT NULL
+    //     OR clicked_at IS NOT NULL) — i.e. engagement required;
+    //   - sets conversion_value / converted_at / order_id on it;
+    //   - bumps email_campaigns.revenue + .conversions.
+    // The webhook-processor.ts copy of this handler already did this,
+    // but the active route dispatched here instead, leaving every
+    // "Sales R$" card sitting at zero in production. Best-effort —
+    // failing attribution must not block automation rules below.
+    const orderValue = parseFloat(order.total_price || '0');
+    if (orderValue > 0) {
+      try {
+        const { attributeEmailConversion } = await import('@/lib/email/attribution');
+        await attributeEmailConversion({
+          contactId: contact.id,
+          organizationId: store.organization_id,
+          orderId: String(order.id),
+          orderValue,
+        });
+      } catch (attribErr) {
+        console.error('[Shopify Webhook] Email attribution failed:', attribErr);
+      }
+    }
     
     // ======================================
     // EXECUTAR REGRAS DE AUTOMAÇÃO
