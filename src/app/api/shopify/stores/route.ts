@@ -38,20 +38,23 @@ export async function GET(request: NextRequest) {
     const { data: stores, error: storesError } = await supabaseAdmin
       .from('shopify_stores')
       .select(`
-        id, 
+        id,
         organization_id,
-        shop_name, 
-        shop_domain, 
-        shop_email, 
-        currency, 
-        is_active, 
-        total_orders, 
-        total_revenue, 
+        shop_name,
+        shop_domain,
+        shop_email,
+        currency,
+        is_active,
+        total_orders,
+        total_revenue,
         last_sync_at,
         connection_status,
         status_message,
         health_checked_at,
         consecutive_failures,
+        embed_installed,
+        embed_installed_at,
+        webhooks_registered,
         created_at
       `)
       .in('organization_id', orgIds)
@@ -71,7 +74,7 @@ export async function GET(request: NextRequest) {
     const orgMap = new Map(orgs?.map(o => [o.id, o.name]) || []);
 
     // 4. Formatar resposta
-    const formattedStores = stores?.map(s => ({
+    const formattedStores = stores?.map((s: any) => ({
       id: s.id,
       organization_id: s.organization_id,
       organization_name: orgMap.get(s.organization_id) || 'Organização',
@@ -87,6 +90,9 @@ export async function GET(request: NextRequest) {
       statusMessage: s.status_message,
       healthCheckedAt: s.health_checked_at,
       consecutiveFailures: s.consecutive_failures || 0,
+      embedInstalled: s.embed_installed === true,
+      embedInstalledAt: s.embed_installed_at,
+      webhooksRegistered: s.webhooks_registered === true,
     })) || [];
 
     return NextResponse.json({

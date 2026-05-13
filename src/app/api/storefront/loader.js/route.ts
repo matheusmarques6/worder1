@@ -66,6 +66,34 @@ export async function GET(_request: NextRequest) {
     }
   } catch (e) {}
 
+  // Activation ping — let the dashboard know the loader is live on this
+  // storefront. Same heuristic the Theme App Embed uses. One per session.
+  (function pingEmbed() {
+    try {
+      var pingedKey = '__worder_embed_ping_v1';
+      if (sessionStorage.getItem(pingedKey)) return;
+      var payload = JSON.stringify({ shopDomain: shopDomain });
+      var sent = false;
+      if (navigator.sendBeacon) {
+        try {
+          sent = navigator.sendBeacon(
+            APP_URL + '/api/storefront/embed-ping',
+            new Blob([payload], { type: 'application/json' })
+          );
+        } catch (e) {}
+      }
+      if (!sent) {
+        try {
+          var x = new XMLHttpRequest();
+          x.open('POST', APP_URL + '/api/storefront/embed-ping', true);
+          x.setRequestHeader('Content-Type', 'application/json');
+          x.send(payload);
+        } catch (e) {}
+      }
+      sessionStorage.setItem(pingedKey, '1');
+    } catch (e) {}
+  })();
+
   // Fetch the list of published popups for this shop and inject each one.
   function loadPopups() {
     try {

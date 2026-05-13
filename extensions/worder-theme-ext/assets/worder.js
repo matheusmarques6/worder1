@@ -535,6 +535,40 @@
   // ============================================
   // AUTO-LOAD PUBLISHED POPUPS
   // ============================================
+  // Ping the server so the dashboard can mark embed_installed=true.
+  // Shopify doesn't fire a webhook when the merchant flips the App
+  // Embed toggle, so this side-effect is our activation signal.
+  // sessionStorage gate keeps it to one ping per tab session
+  // (cheaper than once-per-pageview, more reliable than once-ever).
+  (function pingEmbed() {
+    try {
+      var pingedKey = '__worder_embed_ping_v1';
+      if (sessionStorage.getItem(pingedKey)) return;
+      var endpoint = (config.endpoint || 'https://worder1.vercel.app/api/track').replace('/api/track', '');
+      var payload = JSON.stringify({ shopDomain: config.shopDomain || window.location.host });
+      // navigator.sendBeacon is non-blocking and survives page unloads,
+      // perfect for fire-and-forget activation pings.
+      var sent = false;
+      if (navigator.sendBeacon) {
+        try {
+          sent = navigator.sendBeacon(
+            endpoint + '/api/storefront/embed-ping',
+            new Blob([payload], { type: 'application/json' })
+          );
+        } catch (e) {}
+      }
+      if (!sent) {
+        try {
+          var xhr = new XMLHttpRequest();
+          xhr.open('POST', endpoint + '/api/storefront/embed-ping', true);
+          xhr.setRequestHeader('Content-Type', 'application/json');
+          xhr.send(payload);
+        } catch (e) {}
+      }
+      sessionStorage.setItem(pingedKey, '1');
+    } catch (e) {}
+  })();
+
   // Fetch published popups for this store and inject their scripts
   (function loadPopups() {
     var popupEndpoint = (config.endpoint || 'https://worder1.vercel.app/api/track').replace('/api/track', '');

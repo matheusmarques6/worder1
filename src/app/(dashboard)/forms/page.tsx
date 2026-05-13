@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { useStoreStore } from '@/stores'
+import { EmbedActivationBanner } from '@/components/store/EmbedActivationBanner'
 import {
   Plus, FileText, Eye, Users, BarChart3, Settings,
   Loader2, Search, Trash2, Copy, ExternalLink,
@@ -310,6 +311,13 @@ export default function FormsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Theme App Embed activation gate.
+          Renders a warning when the merchant hasn't toggled "Worder
+          Tracking" in the Shopify theme editor yet — without it the
+          popups never load, even when status=published. Collapses to a
+          slim "tracking ativo" confirmation after first detection. */}
+      <EmbedActivationBanner />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

@@ -56,6 +56,13 @@ export function useStore(): UseStoreReturn {
           // ✅ CRÍTICO: Salvar organization_id
           organization_id: s.organization_id,
           organization_name: s.organization_name,
+          // Surface storefront install state so the forms dashboard can
+          // show a "activate Theme App Embed" prompt when the merchant
+          // hasn't toggled us on yet. Field name differs by route, so
+          // accept both shapes.
+          embedInstalled: s.embedInstalled ?? s.embed_installed ?? false,
+          embedInstalledAt: s.embedInstalledAt ?? s.embed_installed_at ?? null,
+          webhooksRegistered: s.webhooksRegistered ?? s.webhooks_registered ?? false,
         }));
         
         setStores(formattedStores);

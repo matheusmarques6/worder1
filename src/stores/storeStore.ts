@@ -14,6 +14,13 @@ export interface ShopifyStore {
   totalOrders?: number
   totalRevenue?: number
   lastSyncAt?: string
+  // App Embed activation state. embedInstalled goes true the first time
+  // worder.js phones home via /api/storefront/embed-ping; embedInstalledAt
+  // records when. The forms dashboard reads these to nudge merchants
+  // who haven't toggled the Theme App Embed in the Shopify theme editor.
+  embedInstalled?: boolean
+  embedInstalledAt?: string | null
+  webhooksRegistered?: boolean
 }
 
 interface StoreState {
