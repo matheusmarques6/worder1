@@ -30,7 +30,20 @@ const REQUIRED_WEBHOOKS = [
   'refunds/create',
   'fulfillments/create', 'fulfillments/update',
   'app/uninstalled',
+  // Bulk Operations API. Fires when an async export (POST /api/shopify/bulk-sync)
+  // finishes — our handler grabs the JSONL URL and streams the result
+  // into shopify_orders. Different path from the main /api/webhooks/shopify
+  // handler because Shopify expects an HMAC-only endpoint for bulk events.
+  'bulk_operations/finish',
 ];
+
+// Topic → custom path overrides. Most webhooks land on the canonical
+// /api/webhooks/shopify handler with ?store_id=, but a few (like bulk
+// finish) have their own dedicated path so we don't bloat the main
+// router with branchy logic.
+const WEBHOOK_PATH_OVERRIDES: Record<string, string> = {
+  'bulk_operations/finish': '/api/webhooks/shopify/bulk-finish',
+};
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthClient();
@@ -189,6 +202,12 @@ export async function POST(request: NextRequest) {
       webhookExisting++;
       continue;
     }
+    // Bulk-finish and any other topic in WEBHOOK_PATH_OVERRIDES gets a
+    // dedicated handler URL — keeps the main webhook router lean.
+    const override = WEBHOOK_PATH_OVERRIDES[topic];
+    const topicUrl = override
+      ? `${APP_URL}${override}?store_id=${store.id}`
+      : webhookUrl;
     try {
       const res = await fetch(
         `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`,
@@ -198,7 +217,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
             'X-Shopify-Access-Token': accessToken,
           },
-          body: JSON.stringify({ webhook: { topic, address: webhookUrl, format: 'json' } }),
+          body: JSON.stringify({ webhook: { topic, address: topicUrl, format: 'json' } }),
         }
       );
       if (res.ok) {
