@@ -76,6 +76,10 @@ sc(firstSeenCk,"1",365);
 // Frequency gate: closed form cookie (skip if custom trigger — manual open always works)
 var useCustomTrigger=!!B.customTrigger;
 if(gc(ck)&&!useCustomTrigger)return;
+// "Already submitted" gate — if this visitor finished the form before,
+// don't pester them again. Cookie is set on successful submit below.
+var submittedCk="_wf_sub_"+FID;
+if(gc(submittedCk)&&!useCustomTrigger&&vis.hideAfterSubmit!==false)return;
 // URL include/exclude (wildcard: *)
 function matchUrl(pattern,url){
   if(!pattern)return false;
@@ -277,6 +281,18 @@ function renderStep(stepIdx){
 }
 function show(){
   if(shown)return;shown=true;
+  // Stamp per-visitor frequency counter (used by perVisitorBlocked()
+  // on the next page load). Stored as a rolling list of timestamps,
+  // capped to 10 entries so localStorage doesn't grow unbounded.
+  try{
+    if(perVisitorCfg.enabled){
+      var perVisitorCk2="_wf_vt_"+FID;
+      var prev=localStorage.getItem(perVisitorCk2);
+      var d2=prev?JSON.parse(prev):{shows:[]};
+      d2.shows=(d2.shows||[]).concat([Date.now()]).slice(-10);
+      localStorage.setItem(perVisitorCk2,JSON.stringify(d2));
+    }
+  }catch(e){}
   var ov=document.createElement("div");ov.id="wf-ov-"+FID;
   var ovBg=st.overlay||{};
   var ovOn=ovBg.enabled!==false;
@@ -423,6 +439,9 @@ function show(){
         sc(ck,"1",freq.showAfterDays||30);
         if(freq.stopAfterSubmission)sc(ck,"1",365);
         sc("_wf_sub","1",365);
+        // Permanent per-visitor "already converted" marker for this form,
+        // honored by the hideAfterSubmit gate at script start.
+        sc(submittedCk,"1",365);
         // Bridge captured data to Worder tracking so visitor_id is linked to this
         // contact. All subsequent viewed_product / added_to_cart events from this
         // browser will then be attributed to this identified visitor.
@@ -544,9 +563,54 @@ var usePageView=disp.pageViewEnabled===true;
 var matchAll=disp.matchAll===true;
 var anyEnabled=useExit||useTime||useScroll||usePageView;
 
-// Run location gate first (async), then trigger setup
+// Cart-value gate — Shopify exposes /cart.js with the current basket.
+// 'cart.total_price' is in cents (e.g. 4990 = R$49,90). Same shape Shopify
+// uses internally, so the rule applies on every theme without merchant
+// config beyond min/max. Async, fails open.
+var cartCfg=B.cart||{};
+function runCartGate(cb){
+  var minP=Number(cartCfg.minTotal||0);
+  var maxP=Number(cartCfg.maxTotal||0);
+  var minI=Number(cartCfg.minItems||0);
+  if(!cartCfg.enabled||(minP<=0&&maxP<=0&&minI<=0)){cb(true);return}
+  try{
+    fetch("/cart.js",{credentials:"same-origin"}).then(function(r){return r.json()}).then(function(c){
+      var total=Number(c.total_price||0)/100;
+      var items=Number(c.item_count||0);
+      if(minP>0&&total<minP){cb(false);return}
+      if(maxP>0&&total>maxP){cb(false);return}
+      if(minI>0&&items<minI){cb(false);return}
+      cb(true);
+    }).catch(function(){cb(true)});
+  }catch(e){cb(true)}
+}
+// Per-visitor frequency — independent of the per-form cookie ck. Uses
+// the __worder_id cookie set by worder.js so the cap survives even when
+// the merchant rotates form ids. cap value is N popups per N days from
+// this visitor across ALL forms in this org (configured per-form for now).
+var perVisitorCfg=freq.perVisitor||{};
+function perVisitorBlocked(){
+  if(!perVisitorCfg.enabled)return false;
+  var vid=gc("__worder_id");
+  if(!vid)return false;
+  var perVisitorCk="_wf_vt_"+FID;
+  var raw=localStorage.getItem(perVisitorCk);
+  if(!raw)return false;
+  try{
+    var d=JSON.parse(raw);
+    var windowMs=Number(perVisitorCfg.windowDays||7)*86400000;
+    var since=Date.now()-windowMs;
+    var recent=(d.shows||[]).filter(function(t){return t>since});
+    return recent.length>=Number(perVisitorCfg.maxShows||1);
+  }catch(e){return false}
+}
+if(perVisitorBlocked()&&!useCustomTrigger)return;
+
+// Run location + cart gates (both async), then trigger setup
 runLocationGate(function(locOk){
   if(!locOk)return;
+  runCartGate(function(cartOk){
+  if(!cartOk)return;
   if(!anyEnabled&&!useCustomTrigger){
     // No rules enabled at all: default to time delay 5s
     setTimeout(show,5000);
@@ -583,14 +647,39 @@ runLocationGate(function(locOk){
   }
 
   if(useExit){
-    function onLeave(e){if(e.clientY<10){document.removeEventListener("mouseout",onLeave);tryShow("exit")}}
+    // Desktop: cursor leaves through the top of the viewport.
+    function onLeave(e){if(e.clientY<10){cleanupExit();tryShow("exit")}}
     document.addEventListener("mouseout",onLeave);
+    // Mobile heuristic 1: rapid upward scroll (≥250px in <400ms while in
+    // the upper half of the page). Catches users dragging back to the
+    // address bar to bounce. Matches the Privy / Justuno mobile recipe.
+    var lastY=window.scrollY,lastT=Date.now();
+    function onMobScroll(){
+      if(window.innerWidth>=768)return;
+      var y=window.scrollY,t=Date.now();
+      var dy=lastY-y,dt=t-lastT;
+      if(dy>=250&&dt<400&&y<window.innerHeight){cleanupExit();tryShow("exit");return}
+      lastY=y;lastT=t;
+    }
+    window.addEventListener("scroll",onMobScroll,{passive:true});
+    // Mobile heuristic 2: tab hidden (user switched apps or hit "back" on
+    // browser chrome). Fires on pagehide too for iOS Safari which suspends
+    // before sending visibilitychange. Fired once per popup lifecycle.
+    function onHide(){if(document.visibilityState==="hidden"){cleanupExit();tryShow("exit")}}
+    document.addEventListener("visibilitychange",onHide);
+    window.addEventListener("pagehide",onHide,{once:true});
+    function cleanupExit(){
+      document.removeEventListener("mouseout",onLeave);
+      window.removeEventListener("scroll",onMobScroll);
+      document.removeEventListener("visibilitychange",onHide);
+    }
   }
 
   if(usePageView){
     var need=disp.pageViewCount||3;
     if(pvCount>=need)tryShow("pv");
   }
+  });
 });
 var s=document.createElement("style");s.textContent="@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}";document.head.appendChild(s);
 // Inject the most common web fonts so popups using Montserrat / Inter / Poppins
