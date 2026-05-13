@@ -32,9 +32,21 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer())
 
+    // Cache for a year. Gmail's image proxy honours Cache-Control on
+    // its very first fetch and serves every subsequent open from its
+    // own CDN. Without this header Supabase Storage returns a default
+    // of about 3600s, so a recipient who opens the email the next day
+    // forces Gmail to round-trip Supabase again — and on mobile that
+    // round-trip is what shows up as the "broken image" icon when the
+    // proxy times out. The file name is unique per upload so we never
+    // need to bust the cache.
     const { error: uploadError } = await supabaseAdmin.storage
       .from('email-images')
-      .upload(fileName, buffer, { contentType: file.type, upsert: false })
+      .upload(fileName, buffer, {
+        contentType: file.type,
+        upsert: false,
+        cacheControl: '31536000, immutable',
+      })
 
     if (uploadError) {
       console.error('[ImageUpload] Storage error:', uploadError)

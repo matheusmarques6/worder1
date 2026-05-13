@@ -131,12 +131,37 @@ export function renderMergeTags(
   html: string,
   data: Record<string, string>
 ): string {
-  // Inject date tags
+  // Normalize bracket-style placeholders to the Worder canonical syntax.
+  // Merchants routinely import HTML from Klaviyo / Omnisend / Mailchimp,
+  // whose footers ship with [[account.name]] / [[contact.email]] tags.
+  // Without this pass those literals reach the inbox unresolved (the
+  // merchant just had "© 2026 [[account.name]] | The Most Products"
+  // arrive on a customer's phone). Convert to {{...}} so the existing
+  // resolver handles them uniformly. Strict regex avoids touching
+  // legitimate "[[" in copy.
+  html = html.replace(
+    /\[\[\s*([a-zA-Z0-9_.][a-zA-Z0-9_.\s|-]*?)\s*\]\]/g,
+    (_, inner: string) => `{{${inner.trim()}}}`
+  )
+
+  // Inject date tags + cross-platform aliases. Klaviyo and Omnisend use
+  // {{ account.* }} / {{ contact.* }}; Worder's mergeData uses flat
+  // keys (store_name, email, first_name, ...). Map both so a single
+  // template renders the same regardless of source.
   const now = new Date()
   const dateData: Record<string, string> = {
     ...data,
     current_date: now.toLocaleDateString('pt-BR'),
     current_year: String(now.getFullYear()),
+    'account.name': data.store_name || data['account.name'] || '',
+    'account.website': data.store_url || data['account.website'] || '',
+    'account.email': data.store_email || data['account.email'] || '',
+    'contact.first_name': data.first_name || data['contact.first_name'] || '',
+    'contact.last_name': data.last_name || data['contact.last_name'] || '',
+    'contact.full_name': data.full_name || data['contact.full_name'] || '',
+    'contact.email': data.email || data['contact.email'] || '',
+    'contact.email_unsub': data.unsubscribe_url || data['contact.email_unsub'] || '',
+    'contact.phone': data.phone || data['contact.phone'] || '',
   }
 
   const resolve = (tag: string, fallback: string = ''): string => {
