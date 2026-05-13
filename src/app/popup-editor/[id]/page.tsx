@@ -1820,6 +1820,21 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
   const setG = (key: keyof PopupDesign['behavior'], val: any) =>
     onChange({ ...beh, [key]: { ...((beh as any)[key] || {}), ...val } })
 
+  // Fetch the org's contact lists once on mount so the Audience section
+  // can show a select instead of asking the merchant to paste a UUID.
+  // Failure here is non-fatal — we fall back to a free-text input.
+  const [orgLists, setOrgLists] = useState<Array<{ id: string; name: string }>>([])
+  const [listsLoaded, setListsLoaded] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/lists')
+      .then(r => r.ok ? r.json() : { lists: [] })
+      .then(d => { if (!cancelled) setOrgLists(d?.lists || d || []) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setListsLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
+
   const d: any = beh.display || {}
   const freq = beh.frequency
   const vis = beh.visibility
@@ -2156,10 +2171,23 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 value={(beh.audience?.tags || []).join(', ')}
                 onChange={e => setG('audience', { tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })} />
             </Field>
-            <Field label="ID da lista (opcional)" hint="UUID da lista de contatos; o contato sera associado a ela.">
-              <input className={inp} placeholder="uuid da lista"
-                value={beh.audience?.listId || ''}
-                onChange={e => setG('audience', { listId: e.target.value })} />
+            <Field label="Lista de contatos (opcional)" hint="O contato sera adicionado a esta lista quando o formulario for enviado.">
+              {listsLoaded && orgLists.length > 0 ? (
+                <select className={sel}
+                  value={beh.audience?.listId || ''}
+                  onChange={e => setG('audience', { listId: e.target.value })}>
+                  <option value="">Sem lista</option>
+                  {orgLists.map(l => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+              ) : listsLoaded && orgLists.length === 0 ? (
+                <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                  Nenhuma lista criada ainda. <a href="/contacts/lists" target="_blank" className="text-zinc-900 underline underline-offset-2 font-medium">Criar agora</a>.
+                </div>
+              ) : (
+                <input className={inp + ' opacity-60'} placeholder="Carregando..." disabled />
+              )}
             </Field>
             <ToggleRow label="Double opt-in" hint="Envia email de confirmacao antes de marcar como inscrito."
               checked={!!beh.audience?.doubleOptIn}

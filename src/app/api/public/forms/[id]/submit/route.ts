@@ -663,11 +663,26 @@ export async function POST(
         }
 
         if (audienceListId) {
-          await supabase.from('list_contacts').upsert({
-            organization_id: form.organization_id,
-            list_id: audienceListId,
-            contact_id: contactId,
-          }, { onConflict: 'list_id,contact_id', ignoreDuplicates: true })
+          // Verify the list belongs to the same org before linking.
+          // The form's audience.listId comes from design_json, which is
+          // merchant-authored — without this guard, a copy/pasted UUID
+          // from another tenant would silently attach contacts to the
+          // wrong list (cross-org leak).
+          const { data: list } = await supabase
+            .from('contact_lists')
+            .select('id')
+            .eq('id', audienceListId)
+            .eq('organization_id', form.organization_id)
+            .maybeSingle()
+          if (list?.id) {
+            await supabase.from('list_contacts').upsert({
+              organization_id: form.organization_id,
+              list_id: audienceListId,
+              contact_id: contactId,
+            }, { onConflict: 'list_id,contact_id', ignoreDuplicates: true })
+          } else {
+            console.warn('[Form Submit] audience.listId does not belong to this org, skipping:', audienceListId)
+          }
         }
       } catch (e: any) {
         console.warn('[Form Submit] audience apply failed:', e?.message)
