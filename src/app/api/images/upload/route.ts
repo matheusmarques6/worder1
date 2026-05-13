@@ -59,6 +59,13 @@ export async function POST(req: NextRequest) {
     // edge. The raw /object/public URL is too slow for Gmail's image
     // proxy on mobile (broken-image icons). render-html rewriter
     // also catches legacy templates that still reference the raw URL.
+    //
+    // When CDN_IMAGES_DOMAIN is set, the returned URL swaps the
+    // Supabase host for the Cloudflare-proxied CDN host. Same
+    // /render/image path — Cloudflare CNAMEs straight at Supabase
+    // and caches everything for a year, so subsequent fetches
+    // from Gmail proxy hit the Cloudflare edge instead of the
+    // Supabase origin.
     const { data: rawUrlData } = supabaseAdmin.storage.from('email-images').getPublicUrl(fileName)
     const { data: transformUrlData } = supabaseAdmin.storage.from('email-images').getPublicUrl(fileName, {
       transform: {
@@ -67,8 +74,19 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    const cdnDomain = (process.env.CDN_IMAGES_DOMAIN || '')
+      .replace(/^https?:\/\//i, '')
+      .replace(/\/+$/, '')
+      .trim()
+    const primaryUrl = cdnDomain
+      ? (transformUrlData?.publicUrl || rawUrlData.publicUrl).replace(
+          /https:\/\/[a-z0-9-]+\.supabase\.co/i,
+          `https://${cdnDomain}`
+        )
+      : transformUrlData?.publicUrl || rawUrlData.publicUrl
+
     return NextResponse.json({
-      url: transformUrlData?.publicUrl || rawUrlData.publicUrl,
+      url: primaryUrl,
       url_original: rawUrlData.publicUrl,
       fileName: file.name,
       size: file.size,
