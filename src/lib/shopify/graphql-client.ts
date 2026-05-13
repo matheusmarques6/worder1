@@ -298,7 +298,15 @@ export async function shopifyGraphQLPaginate<T = any>(
   connectionPath: string,
   options?: PaginationOptions
 ): Promise<{ nodes: T[]; totalPages: number; lastCursor: string | null; reachedDeadline: boolean }> {
-  const { first = 250, maxPages = 500, onPage, startCursor = null, deadlineMs } = options || {};
+  const { first: initialFirst = 250, maxPages = 500, onPage, startCursor = null, deadlineMs } = options || {};
+  // Adaptive page size — starts at `first`, but if Shopify's cost
+  // budget drops below 30% we halve it; if it stays comfortable (>70%)
+  // for two pages in a row we restore. Lets a sync run hot when the
+  // bucket is full and back off automatically when other API traffic
+  // (webhook deliveries, dashboard reads) eats into the budget without
+  // throwing THROTTLED errors at the merchant.
+  let pageFirst = Math.min(Math.max(initialFirst, 10), 250);
+  let consecutiveHealthyPages = 0;
   const allNodes: T[] = [];
   let cursor: string | null = startCursor;
   let page = 0;
@@ -308,9 +316,27 @@ export async function shopifyGraphQLPaginate<T = any>(
   while (page < maxPages) {
     const result = await shopifyGraphQL(store, query, {
       ...variables,
-      first,
+      first: pageFirst,
       after: cursor,
     });
+
+    // Adaptive throttle. result.extensions.cost gives us the bucket
+    // shape Shopify uses internally. Adjust pageFirst on the fly.
+    const cost = (result as any).extensions?.cost;
+    if (cost?.throttleStatus) {
+      const { currentlyAvailable, maximumAvailable } = cost.throttleStatus;
+      const ratio = maximumAvailable > 0 ? currentlyAvailable / maximumAvailable : 1;
+      if (ratio < 0.3 && pageFirst > 50) {
+        pageFirst = Math.max(50, Math.floor(pageFirst / 2));
+        consecutiveHealthyPages = 0;
+      } else if (ratio > 0.7) {
+        consecutiveHealthyPages++;
+        if (consecutiveHealthyPages >= 2 && pageFirst < 250) {
+          pageFirst = Math.min(250, pageFirst * 2);
+          consecutiveHealthyPages = 0;
+        }
+      }
+    }
 
     // Navigate to the connection in the response
     const connection = getNestedValue(result.data, connectionPath);
