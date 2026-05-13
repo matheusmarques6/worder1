@@ -651,22 +651,34 @@ export default function FormsPage() {
                 </div>
               </div>
 
-              {/* Footer: name input + create */}
-              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/60">
-                <div className="flex items-end gap-3">
-                  <div className="flex-1 min-w-0">
-                    <label className="block text-[11px] font-medium text-gray-700 mb-1">Nome do popup</label>
-                    <input
-                      type="text"
-                      value={newFormName}
-                      onChange={(e) => setNewFormName(e.target.value)}
-                      placeholder="Ex: Popup de boas-vindas"
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-[13px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900/10"
-                    />
-                  </div>
+              {/* Footer: name input + primary CTA.
+                  Klaviyo / Omnisend pattern: dark band that visually
+                  separates the gallery from the action area, name input
+                  takes most of the width, primary button is brand-color
+                  + large enough to be the obvious next step. Submits
+                  the form on Enter so the keyboard flow is natural. */}
+              <div className="px-6 py-4 border-t border-zinc-200 bg-zinc-50">
+                <label className="block text-[11px] font-semibold text-zinc-700 uppercase tracking-wide mb-1.5">
+                  Nome do popup
+                </label>
+                <div className="flex items-stretch gap-2">
+                  <input
+                    type="text"
+                    value={newFormName}
+                    onChange={(e) => setNewFormName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newFormName.trim() && !creating && currentStore?.id) {
+                        e.preventDefault()
+                        createForm()
+                      }
+                    }}
+                    autoFocus
+                    placeholder="Ex: Popup de boas-vindas"
+                    className="flex-1 min-w-0 px-3.5 py-2.5 bg-white border border-zinc-300 rounded-lg text-[14px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10"
+                  />
                   <button
                     onClick={() => setShowCreateModal(false)}
-                    className="px-4 py-2 text-[13px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="px-4 py-2.5 text-[13px] font-medium text-zinc-700 bg-white border border-zinc-300 hover:bg-zinc-50 rounded-lg transition-colors"
                   >
                     Cancelar
                   </button>
@@ -674,9 +686,9 @@ export default function FormsPage() {
                     onClick={createForm}
                     disabled={!newFormName.trim() || creating || !currentStore?.id}
                     title={!currentStore?.id ? 'Aguardando loja carregar...' : ''}
-                    className="flex items-center justify-center gap-1.5 px-5 py-2 bg-zinc-900 hover:bg-zinc-800 disabled:bg-gray-200 disabled:text-gray-400 text-white text-[13px] font-semibold rounded-lg transition-colors whitespace-nowrap"
+                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-zinc-200 disabled:text-zinc-400 text-white text-[13.5px] font-semibold rounded-lg transition-colors whitespace-nowrap shadow-sm"
                   >
-                    {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                     {creating ? 'Criando...' : !currentStore?.id ? 'Aguardando loja...' : 'Criar popup'}
                   </button>
                 </div>

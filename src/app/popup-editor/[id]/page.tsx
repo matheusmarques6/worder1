@@ -2870,7 +2870,7 @@ export default function PopupEditorPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar — all controls (Klaviyo-style hub + drill-down panels) */}
-        <aside className="w-[300px] bg-white border-r border-gray-200 flex flex-col shrink-0">
+        <aside className="w-[340px] bg-white border-r border-gray-200 flex flex-col shrink-0">
           {selectedBlock ? (
             <>
               {/* Block editor header */}
@@ -2925,22 +2925,39 @@ export default function PopupEditorPage() {
                 ))}
               </div>
               {leftTab === 'blocks' ? (
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto px-4 pb-4">
+                  {/* Block palette — same Klaviyo/Omnisend-style cards we
+                      use in the email editor (BlockPalette.tsx): white
+                      tiles with zinc border, drag dots on hover, grouped
+                      by category. Familiar UX, less cognitive load. */}
                   {BLOCK_CATEGORIES.map((cat, idx) => (
-                    <div key={cat.name} className={idx > 0 ? 'mt-1 pt-3 border-t border-gray-100' : 'pt-3'}>
-                      <p className="px-4 mb-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    <div key={cat.name} className={idx > 0 ? 'mt-5' : 'mt-4'}>
+                      <p className="text-[11px] font-semibold text-zinc-900 mb-2.5">
                         {cat.name}
                       </p>
-                      <div className="px-3 pb-3 grid grid-cols-2 gap-1">
+                      <div className="grid grid-cols-3 gap-2">
                         {cat.items.map(bt => (
                           <button
                             key={bt.type}
                             onClick={() => addBlock(bt.type)}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('blockType', bt.type)
+                              e.dataTransfer.effectAllowed = 'copy'
+                            }}
                             title={`Adicionar ${bt.label}`}
-                            className="group flex flex-col items-center gap-1 py-3 px-2 rounded-md hover:bg-gray-100 active:bg-gray-200 transition-colors text-gray-500 hover:text-gray-900 cursor-grab active:cursor-grabbing"
+                            className="group relative flex flex-col items-center justify-center gap-1.5 py-4 px-2 bg-white border border-zinc-200 rounded-xl hover:border-zinc-400 hover:shadow-md transition-all cursor-grab active:cursor-grabbing active:scale-[0.97]"
                           >
-                            <bt.icon className="w-[18px] h-[18px] stroke-[1.75]" />
-                            <span className="text-[11px] font-medium leading-tight text-center">{bt.label}</span>
+                            {/* Drag dots — top-right, visible on hover. Same
+                                grid the email BlockPalette uses for affordance. */}
+                            <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-40 transition-opacity">
+                              <svg width="10" height="10" viewBox="0 0 10 10" className="text-zinc-400">
+                                <circle cx="2" cy="2" r="1" fill="currentColor"/><circle cx="5" cy="2" r="1" fill="currentColor"/><circle cx="8" cy="2" r="1" fill="currentColor"/>
+                                <circle cx="2" cy="5" r="1" fill="currentColor"/><circle cx="5" cy="5" r="1" fill="currentColor"/><circle cx="8" cy="5" r="1" fill="currentColor"/>
+                              </svg>
+                            </div>
+                            <bt.icon className="w-[22px] h-[22px] text-zinc-800" strokeWidth={1.5} />
+                            <span className="text-[10px] font-medium text-zinc-600 leading-tight select-none text-center">{bt.label}</span>
                           </button>
                         ))}
                       </div>
