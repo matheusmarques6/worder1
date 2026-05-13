@@ -705,16 +705,40 @@ const actionExecutors: Record<string, NodeExecutor> = {
           return { status: 'error', output: { error: result.error }, error: result.error || 'Falha no envio' };
         }
 
-        // Tag the email_sends row with flow/automation ids (so we can
-        // tell apart campaign sends from automation sends downstream).
+        // Tag the email_sends row with automation/flow/run/node ids so the
+        // per-node analytics on the canvas can attribute opens, clicks,
+        // and revenue back to the right action_email card. The cron
+        // workers stash run id at context.workflow.executionId — earlier
+        // versions only looked at context.automation_run_id / .runId and
+        // ended up writing NULL, which is why the metrics dashboard sat
+        // at zero even after real deliveries.
         if (result.emailSendId) {
           try {
             const updates: Record<string, any> = {};
-            const flowId = (context as any).flowId || (context as any).flow_id;
-            const runId = (context as any).automation_run_id || (context as any).runId;
+            const workflow = (context as any).workflow || {};
+            const flowId =
+              (context as any).flowId ||
+              (context as any).flow_id ||
+              workflow.flowId ||
+              workflow.flow_id;
+            const runId =
+              (context as any).automation_run_id ||
+              (context as any).runId ||
+              workflow.executionId ||
+              workflow.execution_id;
+            const automationId =
+              (context as any).automation_id ||
+              workflow.automationId ||
+              workflow.id;
             if (flowId) updates.flow_id = flowId;
             if (runId) updates.automation_run_id = runId;
+            if (automationId) updates.automation_id = automationId;
             if (config.templateId) updates.email_template_id = config.templateId;
+            // node_id lives in metadata jsonb so we don't need a schema
+            // change to attribute the send to a specific canvas node.
+            if (node?.id) {
+              updates.metadata = { node_id: node.id, node_type: node.type };
+            }
             if (Object.keys(updates).length > 0) {
               await supabase.from('email_sends').update(updates).eq('id', result.emailSendId);
             }

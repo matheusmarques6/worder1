@@ -3,6 +3,21 @@ import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
+// Per-node analytics for a flow's canvas card (Sent / Opened / Clicked /
+// Sales). The previous implementation queried automation_run_steps with
+// a column ('result' / 'output') that no execution path ever wrote, and
+// then tried to count opens/clicks from the step output blob — which
+// never carries that data either, since opens/clicks land on email_sends
+// minutes or hours after the step completes. The card therefore sat at
+// zero forever.
+//
+// The new engine snapshots its per-node results into
+// automation_runs.metadata.result.nodeResults, where action_email writes
+// { sent: true, emailSendId }. We walk that map, gather every emailSendId
+// per node, then join the live engagement counters from email_sends.
+//
+// Response shape (unchanged so the canvas component keeps working):
+//   { nodeStats: { [nodeId]: { sent, opened, clicked, revenue } }, totalRuns, timeframe }
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -16,7 +31,6 @@ export async function GET(
   const { supabase, user } = auth;
   const organizationId = user.organization_id;
 
-  // Calculate date filter
   let dateFilter: string | null = null;
   const now = new Date();
   if (timeframe === '7d') {
@@ -28,7 +42,6 @@ export async function GET(
   }
 
   try {
-    // Get automation runs for this automation
     const { data: automation } = await supabase
       .from('automations')
       .select('id')
@@ -42,81 +55,90 @@ export async function GET(
 
     let runsQuery = supabase
       .from('automation_runs')
-      .select('id')
+      .select('id, metadata, started_at')
       .eq('automation_id', automationId);
 
     if (dateFilter) {
       runsQuery = runsQuery.gte('started_at', dateFilter);
     }
 
-    const { data: runs, error: runsError } = await runsQuery;
+    const { data: runs, error: runsError } = await runsQuery.limit(5000);
 
     if (runsError) {
       return NextResponse.json({ nodeStats: {}, totalRuns: 0, error: runsError.message });
     }
 
-    const runIds = (runs || []).map((r: any) => r.id);
+    const emailSendsByNode: Record<string, Set<string>> = {};
+    const allEmailSendIds = new Set<string>();
 
-    if (runIds.length === 0) {
-      return NextResponse.json({ nodeStats: {}, totalRuns: 0 });
+    for (const run of runs || []) {
+      const nodeResults = (run as any)?.metadata?.result?.nodeResults || {};
+      if (!nodeResults || typeof nodeResults !== 'object') continue;
+
+      for (const [nodeId, nodeResult] of Object.entries(nodeResults as Record<string, any>)) {
+        const output = nodeResult?.output;
+        const emailSendId = output?.emailSendId;
+        if (!emailSendId || typeof emailSendId !== 'string') continue;
+
+        if (!emailSendsByNode[nodeId]) emailSendsByNode[nodeId] = new Set();
+        emailSendsByNode[nodeId].add(emailSendId);
+        allEmailSendIds.add(emailSendId);
+      }
     }
 
-    // Get step stats - select both 'result' and 'output' columns for compatibility
-    const { data: steps, error: stepsError } = await supabase
-      .from('automation_run_steps')
-      .select('node_id, node_type, status, result, output')
-      .in('run_id', runIds.slice(0, 500)); // Limit to prevent too-large IN clause
+    let sendRows: Array<{
+      id: string;
+      status: string | null;
+      sent_at: string | null;
+      opened_at: string | null;
+      clicked_at: string | null;
+      conversion_value: number | null;
+    }> = [];
 
-    if (stepsError) {
-      // If 'result' column doesn't exist yet, try with just 'output'
-      const { data: fallbackSteps } = await supabase
-        .from('automation_run_steps')
-        .select('node_id, node_type, status, output')
-        .in('run_id', runIds.slice(0, 500));
-
-      return aggregateStats(fallbackSteps || [], runIds.length, timeframe, true);
+    if (allEmailSendIds.size > 0) {
+      const ids = Array.from(allEmailSendIds);
+      // Supabase REST .in() handles up to ~1k values comfortably; chunk
+      // to be safe when an automation has many historical sends.
+      const CHUNK = 500;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK);
+        const { data: rows } = await supabase
+          .from('email_sends')
+          .select('id, status, sent_at, opened_at, clicked_at, conversion_value')
+          .in('id', slice);
+        if (rows) sendRows = sendRows.concat(rows as any);
+      }
     }
 
-    return aggregateStats(steps || [], runIds.length, timeframe, false);
-  } catch (error) {
-    return NextResponse.json({ nodeStats: {}, totalRuns: 0 });
+    const sendById = new Map(sendRows.map(r => [r.id, r]));
+    const nodeStats: Record<
+      string,
+      { sent: number; opened: number; clicked: number; revenue: number }
+    > = {};
+
+    for (const [nodeId, ids] of Object.entries(emailSendsByNode)) {
+      const stats = { sent: 0, opened: 0, clicked: 0, revenue: 0 };
+      for (const id of ids) {
+        const row = sendById.get(id);
+        if (!row) continue;
+        if (row.sent_at) stats.sent++;
+        if (row.opened_at) stats.opened++;
+        if (row.clicked_at) stats.clicked++;
+        if (row.conversion_value) stats.revenue += Number(row.conversion_value) || 0;
+      }
+      nodeStats[nodeId] = stats;
+    }
+
+    return NextResponse.json({
+      nodeStats,
+      totalRuns: (runs || []).length,
+      timeframe,
+    });
+  } catch (error: any) {
+    return NextResponse.json({
+      nodeStats: {},
+      totalRuns: 0,
+      error: error?.message || 'Unknown error',
+    });
   }
-}
-
-function aggregateStats(
-  steps: Array<Record<string, any>>,
-  totalRuns: number,
-  timeframe: string,
-  useOutput: boolean
-) {
-  const nodeStats: Record<string, { sent: number; opened: number; clicked: number; revenue: number }> = {};
-
-  for (const step of steps) {
-    if (!step.node_id) continue;
-
-    if (!nodeStats[step.node_id]) {
-      nodeStats[step.node_id] = { sent: 0, opened: 0, clicked: 0, revenue: 0 };
-    }
-
-    const stats = nodeStats[step.node_id];
-
-    if (step.status === 'completed' || step.status === 'success') {
-      stats.sent++;
-    }
-
-    // Use 'result' column if available, fallback to 'output'
-    const resultData = useOutput ? step.output : (step.result || step.output);
-    if (resultData) {
-      const result = typeof resultData === 'string' ? JSON.parse(resultData) : resultData;
-      if (result.opened) stats.opened++;
-      if (result.clicked) stats.clicked++;
-      if (result.revenue) stats.revenue += Number(result.revenue) || 0;
-    }
-  }
-
-  return NextResponse.json({
-    nodeStats,
-    totalRuns,
-    timeframe,
-  });
 }
