@@ -410,13 +410,113 @@ export async function POST(request: NextRequest) {
   }
 
   // ──────────────────────────────────────────
+  // 4.5. Storefront popup loader via Asset API (theme.liquid edit) —
+  // fallback for when the Custom App was not granted write_script_tags.
+  // We fetch the main theme's layout/theme.liquid, append our <script>
+  // tag right before </body> if not already there, and PUT it back via
+  // the Asset API. Requires write_themes.
+  //
+  // We DON'T touch other parts of the file — diff is a single inserted
+  // line wrapped in a {% comment %} marker we can find again on uninstall.
+  //
+  // Idempotent: detects our marker comment, skips if present.
+  // ──────────────────────────────────────────
+  const hasThemesScope = scopes.includes('write_themes');
+  let themeAssetInstalled = false;
+  let themeAssetError: string | null = null;
+  let themeIdUsed: number | null = null;
+  // Only try Asset API when ScriptTag didn't already land. No point
+  // editing the theme if a global ScriptTag is doing the job.
+  if (!scriptTagInstalled && hasThemesScope) {
+    try {
+      // Pick the published theme (role=main). Shopify returns multiple
+      // themes (drafts, library). We only edit the live one.
+      const themesRes = await fetch(
+        `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/themes.json`,
+        { headers: { 'X-Shopify-Access-Token': accessToken } }
+      );
+      if (!themesRes.ok) {
+        themeAssetError = `themes list ${themesRes.status}`;
+      } else {
+        const themesJson = await themesRes.json();
+        const mainTheme = (themesJson.themes || []).find((t: any) => t.role === 'main');
+        if (!mainTheme?.id) {
+          themeAssetError = 'no_main_theme';
+        } else {
+          themeIdUsed = mainTheme.id;
+          // Pull the current theme.liquid content
+          const getRes = await fetch(
+            `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/themes/${mainTheme.id}/assets.json?asset[key]=layout/theme.liquid`,
+            { headers: { 'X-Shopify-Access-Token': accessToken } }
+          );
+          if (!getRes.ok) {
+            themeAssetError = `theme.liquid GET ${getRes.status}`;
+          } else {
+            const getJson = await getRes.json();
+            const value: string = getJson.asset?.value || '';
+            const marker = '{%- comment -%} Worder popup loader (managed) {%- endcomment -%}';
+            const snippet = `\n${marker}\n<script src="${loaderUrl}" async></script>\n`;
+            if (value.includes(marker)) {
+              themeAssetInstalled = true; // already present
+            } else if (!value) {
+              themeAssetError = 'empty_theme_liquid';
+            } else {
+              // Splice the snippet right before </body>. If </body> is
+              // missing (rare), append at end so we still get on every page.
+              const closeBodyIdx = value.lastIndexOf('</body>');
+              const patched = closeBodyIdx >= 0
+                ? value.slice(0, closeBodyIdx) + snippet + value.slice(closeBodyIdx)
+                : value + snippet;
+              const putRes = await fetch(
+                `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/themes/${mainTheme.id}/assets.json`,
+                {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-Shopify-Access-Token': accessToken,
+                  },
+                  body: JSON.stringify({
+                    asset: { key: 'layout/theme.liquid', value: patched },
+                  }),
+                }
+              );
+              if (putRes.ok) {
+                themeAssetInstalled = true;
+              } else {
+                themeAssetError = `theme.liquid PUT ${putRes.status}: ${(await putRes.text()).slice(0, 160)}`;
+              }
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      themeAssetError = err?.message || 'asset fetch error';
+    }
+  } else if (!scriptTagInstalled && !hasThemesScope) {
+    themeAssetError = 'missing_scope:write_themes';
+  }
+
+  // ──────────────────────────────────────────
   // 5. Mark initial sync done + bump api_version + persist script_tag_id
   // (in settings JSONB so we don't need a schema migration)
   // ──────────────────────────────────────────
+  // Loader is "installed" when EITHER the ScriptTag landed OR we patched
+  // theme.liquid via Asset API. The forms dashboard reads embed_installed
+  // to drop the activation banner — set it here so the merchant sees a
+  // green state immediately after the auto-install, without waiting for
+  // the storefront beacon round-trip.
+  const loaderInstalled = scriptTagInstalled || themeAssetInstalled;
+  const loaderVia = scriptTagInstalled
+    ? 'script_tag'
+    : themeAssetInstalled
+      ? 'theme_asset'
+      : null;
   const updatedSettings = {
     ...(store.settings || {}),
     ...(scriptTagId ? { script_tag_id: scriptTagId, loader_installed_at: new Date().toISOString() } : {}),
     ...(trackerTagId ? { tracker_tag_id: trackerTagId, tracker_installed_at: new Date().toISOString() } : {}),
+    ...(themeAssetInstalled ? { theme_id_patched: themeIdUsed, theme_asset_installed_at: new Date().toISOString() } : {}),
+    ...(loaderVia ? { loader_via: loaderVia } : {}),
   };
   await supabase
     .from('shopify_stores')
@@ -426,6 +526,12 @@ export async function POST(request: NextRequest) {
       api_version: SHOPIFY_API_VERSION,
       last_sync_at: new Date().toISOString(),
       settings: updatedSettings,
+      ...(loaderInstalled
+        ? {
+            embed_installed: true,
+            embed_installed_at: new Date().toISOString(),
+          }
+        : {}),
     })
     .eq('id', store.id);
 
@@ -443,11 +549,24 @@ export async function POST(request: NextRequest) {
     },
     pixel: { installed: pixelInstalled },
     loader: {
-      installed: scriptTagInstalled,
+      installed: loaderInstalled,
+      via: loaderVia,
+      // ScriptTag-specific status (legacy callers still read these).
       scriptTagId,
-      error: scriptTagError,
-      missingScope: !hasScriptTagsScope,
-      manualFallbackSnippet: scriptTagInstalled ? null : `<script src="${loaderUrl}" async></script>`,
+      error: loaderInstalled ? null : (scriptTagError || themeAssetError),
+      missingScope: !hasScriptTagsScope && !hasThemesScope,
+      missingScopes: !loaderInstalled
+        ? [
+            !hasScriptTagsScope && 'write_script_tags',
+            !hasThemesScope && 'write_themes',
+          ].filter(Boolean)
+        : [],
+      themeAsset: {
+        installed: themeAssetInstalled,
+        themeId: themeIdUsed,
+        error: themeAssetError,
+      },
+      manualFallbackSnippet: loaderInstalled ? null : `<script src="${loaderUrl}" async></script>`,
     },
     tracker: {
       installed: trackerInstalled,
