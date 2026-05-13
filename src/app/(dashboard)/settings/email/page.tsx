@@ -10,6 +10,7 @@
 // =============================================
 
 import { useEffect, useState } from 'react'
+import { useStoreStore } from '@/stores'
 import {
   Globe,
   CheckCircle,
@@ -59,6 +60,9 @@ function statusLabel(status: string) {
 }
 
 export default function SettingsEmailPage() {
+  const { currentStore } = useStoreStore()
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
+  const storeId = currentStore?.id
   const [domains, setDomains] = useState<Domain[]>([])
   const [loading, setLoading] = useState(true)
   const [newDomain, setNewDomain] = useState('')
@@ -74,8 +78,13 @@ export default function SettingsEmailPage() {
   }
 
   const loadDomains = async () => {
+    // Wait for zustand to hydrate so the storeId param is real and
+    // we don't briefly fetch all-org domains before re-fetching the
+    // store-scoped list (would flash a sibling store's custom domain).
+    if (!hasHydrated) return
     try {
-      const res = await fetch('/api/email/domains', { cache: 'no-store' })
+      const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
+      const res = await fetch(`/api/email/domains${qs}`, { cache: 'no-store' })
       if (res.ok) {
         const data = await res.json()
         setDomains(data.domains || [])
@@ -84,7 +93,7 @@ export default function SettingsEmailPage() {
     setLoading(false)
   }
 
-  useEffect(() => { loadDomains() }, [])
+  useEffect(() => { loadDomains() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [storeId, hasHydrated])
 
   const handleAdd = async () => {
     const d = newDomain.trim().toLowerCase()
@@ -94,7 +103,9 @@ export default function SettingsEmailPage() {
       const res = await fetch('/api/email/domains', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: d }),
+        // Custom domains belong to a specific store so a multi-store
+        // merchant doesn't see the sibling shop's domain in settings.
+        body: JSON.stringify({ domain: d, storeId: storeId || null }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -375,8 +386,12 @@ export default function SettingsEmailPage() {
         )}
       </div>
 
-      {/* Configuração do Remetente */}
-      <SenderConfig verifiedDomains={domains.filter(d => d.status === 'verified')} />
+      {/* Configuração do Remetente (per-store) */}
+      <SenderConfig
+        verifiedDomains={domains.filter(d => d.status === 'verified')}
+        storeId={storeId || null}
+        storeName={currentStore?.name || null}
+      />
 
       {/* Webhook Resend */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -397,7 +412,15 @@ export default function SettingsEmailPage() {
   )
 }
 
-function SenderConfig({ verifiedDomains }: { verifiedDomains: Domain[] }) {
+function SenderConfig({
+  verifiedDomains,
+  storeId,
+  storeName,
+}: {
+  verifiedDomains: Domain[]
+  storeId: string | null
+  storeName: string | null
+}) {
   const [senderName, setSenderName] = useState('')
   const [senderLocal, setSenderLocal] = useState('') // parte antes do @
   const [selectedDomain, setSelectedDomain] = useState('')
@@ -420,10 +443,15 @@ function SenderConfig({ verifiedDomains }: { verifiedDomains: Domain[] }) {
   const [syncResult, setSyncResult] = useState<any>(null)
 
   useEffect(() => {
-    fetch('/api/settings/organization')
+    // Per-store config: ignore the previous org-scoped endpoint and
+    // pull this store's sender. Skip the fetch until we know which
+    // store is active — otherwise the first render lands on the org's
+    // legacy values and we'd flash the sibling store's sender.
+    if (!storeId) { setLoaded(true); return }
+    fetch(`/api/settings/store-email?storeId=${encodeURIComponent(storeId)}`)
       .then(r => r.json())
       .then(d => {
-        const s = d?.organization?.email_settings || {}
+        const s = d?.email_settings || {}
         const name = s.default_sender_name || ''
         const reply = s.default_reply_to || ''
         const email = s.default_sender_email || ''
@@ -432,6 +460,9 @@ function SenderConfig({ verifiedDomains }: { verifiedDomains: Domain[] }) {
         if (email.includes('@')) {
           setSenderLocal(email.split('@')[0])
           setSelectedDomain(email.split('@')[1])
+        } else {
+          setSenderLocal('')
+          setSelectedDomain('')
         }
         setOriginalSenderName(name)
         setOriginalSenderEmail(email)
@@ -439,7 +470,7 @@ function SenderConfig({ verifiedDomains }: { verifiedDomains: Domain[] }) {
         setLoaded(true)
       })
       .catch(() => setLoaded(true))
-  }, [])
+  }, [storeId])
 
   useEffect(() => {
     if (verifiedDomains.length > 0 && !selectedDomain) {
@@ -451,12 +482,14 @@ function SenderConfig({ verifiedDomains }: { verifiedDomains: Domain[] }) {
 
   const save = async () => {
     if (!fullEmail) return
+    if (!storeId) return
     setSaving(true)
     try {
-      const res = await fetch('/api/settings/organization', {
+      const res = await fetch('/api/settings/store-email', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          storeId,
           email_settings: {
             default_sender_name: senderName,
             default_sender_email: fullEmail,

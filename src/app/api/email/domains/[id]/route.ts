@@ -20,12 +20,15 @@ export async function GET(
 
     const { user } = auth;
 
+    // Allow either an org-scoped row OR a system (worder.email) row.
+    // System rows have organization_id IS NULL and are visible to
+    // every tenant; the single-item GET shouldn't 404 them.
     const { data: domain, error } = await supabaseAdmin
       .from('email_domains')
       .select('*')
       .eq('id', params.id)
-      .eq('organization_id', user.organization_id)
-      .single();
+      .or(`organization_id.eq.${user.organization_id},is_system.eq.true`)
+      .maybeSingle();
 
     if (error || !domain) {
       return NextResponse.json({ error: 'Domain not found' }, { status: 404 });
@@ -51,15 +54,28 @@ export async function DELETE(
 
     const { user } = auth;
 
-    // Tenant isolation: só podemos remover domínio que pertence à org do user
+    // Tenant isolation: só podemos remover domínio que pertence à org do user.
+    // System domains (worder.email) live on a different row shape
+    // (organization_id IS NULL, is_system=true) and are not removable
+    // by tenants — they're managed by the platform.
     const { data: domain, error: fetchError } = await supabaseAdmin
       .from('email_domains')
-      .select('id, resend_domain_id, organization_id')
+      .select('id, resend_domain_id, organization_id, is_system')
       .eq('id', params.id)
-      .eq('organization_id', user.organization_id)
       .single();
 
     if (fetchError || !domain) {
+      return NextResponse.json({ error: 'Domain not found' }, { status: 404 });
+    }
+
+    if (domain.is_system) {
+      return NextResponse.json(
+        { error: 'worder.email é um domínio do sistema e não pode ser removido.' },
+        { status: 403 }
+      );
+    }
+
+    if (domain.organization_id !== user.organization_id) {
       return NextResponse.json({ error: 'Domain not found' }, { status: 404 });
     }
 
