@@ -164,20 +164,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Atualizar status da loja
-    await supabase
-      .from('shopify_stores')
-      .update({
-        connection_status: 'active',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', store.id)
-
     // Resumo
     const created = results.filter(r => r.action === 'created').length
     const deleted = results.filter(r => r.action === 'deleted').length
     const existing = results.filter(r => r.action === 'already_exists').length
     const failed = results.filter(r => r.action.includes('failed')).length
+
+    // 4. Atualizar status da loja. Only flag the store as
+    // webhooks_registered=true when every required topic is in place
+    // (either freshly created or already present and pointed at our
+    // current URL). The dashboard uses this flag to render a "reconnect
+    // your store" prompt when sync goes silent.
+    const fullyRegistered = (created + existing) >= REQUIRED_WEBHOOKS.length
+    await supabase
+      .from('shopify_stores')
+      .update({
+        connection_status: 'active',
+        webhooks_registered: fullyRegistered,
+        webhooks_registered_at: fullyRegistered ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', store.id)
 
     return NextResponse.json({
       success: true,
