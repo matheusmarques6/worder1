@@ -331,7 +331,11 @@ export default function ShopifyConnect() {
     fetch('/api/shopify/sync-now', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storeId, syncType: 'all' }),
+      // First-time connect: pull the whole order backlog, not just the
+      // last 90 days. Without historical=true the merchant would land
+      // with a partial dataset (e.g. 360 of 627 orders) and assume the
+      // integration is broken.
+      body: JSON.stringify({ storeId, syncType: 'all', historical: true }),
       keepalive: true,
     }).then(() => {}, () => {})
   }

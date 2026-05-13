@@ -33,6 +33,17 @@ export async function POST(request: NextRequest) {
     let body: any = {};
     try { body = await request.json(); } catch {}
     const syncType = body.syncType || 'all';
+    // historical=true ignores the 90-day window when fetching orders.
+    // Default sync stays at 90 days because that covers the cases that
+    // matter for marketing (recent activity, abandoned carts), but a
+    // merchant who's just connected the store needs the full backlog
+    // — without this flag we capped the Dr. Melaxin sync at 360 of 627
+    // orders. The full-sync endpoint and the "Sincronizar tudo" button
+    // both flip this to true.
+    // since: optional explicit cutoff ('YYYY-MM-DD'). Overrides historical
+    // when provided so a merchant can run incremental top-ups.
+    const historical: boolean = body.historical === true || body.full === true;
+    const since: string | null = typeof body.since === 'string' ? body.since : null;
 
     // Find store — try ALL active stores, not just user's orgs
     let { data: store } = await supabase
@@ -298,15 +309,24 @@ export async function POST(request: NextRequest) {
     // ========== SYNC ORDERS ==========
     if (syncType === 'all' || syncType === 'orders') {
       try {
-        const sinceDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-        const sinceDateStr = sinceDate.toISOString().split('T')[0]; // YYYY-MM-DD
-        // Shopify search syntax: created_at:>=YYYY-MM-DD (no quotes)
-        console.log(`[Sync] Fetching orders since ${sinceDateStr}...`);
+        // Order-fetch window. `since` wins (manual cutoff), then
+        // historical=true (no date filter — full backlog), then the
+        // default of last 90 days.
+        let orderQuery: string | undefined
+        if (since && /^\d{4}-\d{2}-\d{2}$/.test(since)) {
+          orderQuery = `created_at:>=${since}`
+        } else if (!historical) {
+          const sinceDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+          orderQuery = `created_at:>=${sinceDate.toISOString().split('T')[0]}`
+        }
+        console.log(`[Sync] Fetching orders ${orderQuery ? `with filter: ${orderQuery}` : '(full historical backlog)'}...`)
         const { nodes } = await shopifyGraphQLPaginate(
           storeConfig, ORDERS_QUERY,
-          { query: `created_at:>=${sinceDateStr}`, sortKey: 'CREATED_AT' },
+          orderQuery
+            ? { query: orderQuery, sortKey: 'CREATED_AT' }
+            : { sortKey: 'CREATED_AT' },
           'orders',
-          { first: 250, maxPages: 100 }
+          { first: 250, maxPages: 200 }
         );
         console.log(`[Sync] Fetched ${nodes.length} orders from Shopify`);
 

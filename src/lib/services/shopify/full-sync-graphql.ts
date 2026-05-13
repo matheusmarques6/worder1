@@ -31,6 +31,9 @@ export interface GraphQLSyncOptions {
   syncOrders?: boolean;
   syncProducts?: boolean;
   ordersDaysBack?: number;
+  /** Fetch the entire order history instead of the last ordersDaysBack days.
+   *  Use on first sync so the merchant doesn't end up with 360/627 orders. */
+  ordersHistorical?: boolean;
   onProgress?: (stage: string, progress: number, message: string) => void;
 }
 
@@ -64,6 +67,7 @@ export async function runFullSyncGraphQL(
     syncOrders = true,
     syncProducts = true,
     ordersDaysBack = 90,
+    ordersHistorical = false,
     onProgress,
   } = options;
 
@@ -116,8 +120,12 @@ export async function runFullSyncGraphQL(
 
     // ========== ORDERS ==========
     if (syncOrders) {
-      onProgress?.('orders', 0, 'Syncing orders via GraphQL...');
-      const orderResult = await syncOrdersGraphQL(storeConfig, store, ordersDaysBack, onProgress);
+      onProgress?.('orders', 0, ordersHistorical ? 'Syncing entire order history via GraphQL...' : 'Syncing orders via GraphQL...');
+      const orderResult = await syncOrdersGraphQL(
+        storeConfig, store,
+        ordersHistorical ? null : ordersDaysBack,
+        onProgress
+      );
       result.ordersCount = orderResult.count;
       result.eventsCreated = orderResult.eventsCreated;
       result.totalRevenue = orderResult.totalRevenue;
@@ -303,10 +311,14 @@ async function syncCustomersGraphQL(
 // SYNC ORDERS
 // =============================================
 
+/**
+ * daysBack = null → fetch the entire backlog (no date filter).
+ * daysBack = number → fetch orders created within the last N days.
+ */
 async function syncOrdersGraphQL(
   storeConfig: { id: string; organization_id: string; shop_domain: string; access_token: string },
   store: ShopifyStoreConfig,
-  daysBack: number,
+  daysBack: number | null,
   onProgress?: (stage: string, progress: number, message: string) => void
 ): Promise<{ count: number; eventsCreated: number; totalRevenue: number; errors: string[] }> {
   const supabase = getSupabaseAdmin();
@@ -316,18 +328,24 @@ async function syncOrdersGraphQL(
   let totalRevenue = 0;
 
   try {
-    // Shopify search syntax: created_at:>=YYYY-MM-DD (no quotes, date-only)
-    const sinceDateStr = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000)
-      .toISOString().split('T')[0];
+    // Build a date filter only when a window is requested. When daysBack
+    // is null we ask Shopify for every order ever placed — required on
+    // first sync so the merchant doesn't end up with only 360 of 627.
+    const variables: Record<string, any> = { sortKey: 'CREATED_AT' };
+    if (typeof daysBack === 'number' && daysBack > 0) {
+      const sinceDateStr = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000)
+        .toISOString().split('T')[0];
+      variables.query = `created_at:>=${sinceDateStr}`;
+    }
 
     const { nodes } = await shopifyGraphQLPaginate(
       storeConfig,
       ORDERS_QUERY,
-      { query: `created_at:>=${sinceDateStr}`, sortKey: 'CREATED_AT' },
+      variables,
       'orders',
       {
         first: 50,
-        maxPages: 200,
+        maxPages: 500,
         onPage: (page, total) => {
           onProgress?.('orders', Math.min(page * 3, 90), `${total} orders fetched...`);
         },

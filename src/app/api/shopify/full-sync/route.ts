@@ -116,12 +116,21 @@ export async function POST(request: NextRequest) {
     const useGraphQL = (options as any).useGraphQL === true;
 
     if (useGraphQL) {
-      // New GraphQL-based sync
+      // New GraphQL-based sync. historical=true and full=true are aliases
+      // for "fetch every order ever placed", which is the right default
+      // on a brand-new connection — the 90-day window was leaving stores
+      // with 360 of 627 orders synced and the merchant thinking the
+      // initial import was broken.
+      const wantHistorical =
+        (options as any).historical === true ||
+        (options as any).full === true ||
+        (options as any).ordersHistorical === true;
       result = await runFullSyncGraphQL(store, {
         syncCustomers: options.syncCustomers,
         syncOrders: options.syncOrders,
         syncProducts: options.syncProducts,
         ordersDaysBack: (options as any).ordersDaysBack || 90,
+        ordersHistorical: wantHistorical,
       });
     } else if (options.incremental) {
       const since = new Date();

@@ -381,7 +381,10 @@ export default function DashboardPage() {
                   await fetch('/api/shopify/sync-now', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ storeId: currentStore.id, syncType: 'all' }),
+                    // historical: true tells the server to skip the 90-day
+                    // window for orders so the merchant gets the full
+                    // backlog — that's what "Sincronizar tudo" implies.
+                    body: JSON.stringify({ storeId: currentStore.id, syncType: 'all', historical: true }),
                   });
                   showToast('Sync iniciado. Atualizando…');
                   setTimeout(fetchData, 3000);
