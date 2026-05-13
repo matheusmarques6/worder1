@@ -116,6 +116,18 @@ export default function FormBuilderPage() {
       const res = await fetch(`/api/forms/${formId}`)
       if (res.ok) {
         const data = await res.json()
+        // Visual form types (popup / flyout / banner / fullpage) have
+        // their own drag-and-drop editor at /popup-editor/[id]. This
+        // tabbed page (Campos / Eventos Ads / Configuracoes / Incorporar)
+        // is built for embeddable forms + landing pages where the
+        // merchant manages fields and the embed snippet manually.
+        // A merchant landing here for a popup (deep link, browser
+        // history) gets bounced to the right editor automatically.
+        const visualTypes = ['popup', 'flyout', 'banner', 'fullpage']
+        if (data.form?.form_type && visualTypes.includes(data.form.form_type)) {
+          router.replace(`/popup-editor/${formId}`)
+          return
+        }
         setForm(data.form)
         setFields(data.form.fields || [])
         setEvents(data.form.events || [])
@@ -125,7 +137,7 @@ export default function FormBuilderPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [formId])
+  }, [formId, router])
 
   // Fetch pipelines
   const fetchPipelines = useCallback(async () => {
