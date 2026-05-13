@@ -23,6 +23,27 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 "use strict";
 var FID="${params.id}",BU="${baseUrl}",D=${JSON.stringify(design)},B=${JSON.stringify(beh)};
 var shown=false,ck="_wf_"+FID;
+// Debug mode — append ?wf_debug=1 to any storefront URL to:
+//   - log every gate decision to the console with "[WorderPopup]"
+//   - bypass frequency / submitted / subscriber gates that would
+//     otherwise block a merchant who tested the popup once
+//   - still respect URL / location / device targeting so the merchant
+//     can verify those rules
+// Stays in the URL across navigations via sessionStorage so a SPA
+// transition doesn't drop the flag.
+var DBG=(function(){try{
+  var u=new URL(location.href);
+  var on=u.searchParams.get("wf_debug")==="1"||sessionStorage.getItem("__wf_debug")==="1";
+  if(u.searchParams.get("wf_debug")==="1")sessionStorage.setItem("__wf_debug","1");
+  if(u.searchParams.get("wf_debug")==="0")sessionStorage.removeItem("__wf_debug");
+  return on;
+}catch(e){return false}})();
+function dlog(){if(!DBG)return;try{
+  var args=["[WorderPopup]","["+FID.slice(0,8)+"]"].concat(Array.prototype.slice.call(arguments));
+  console.log.apply(console,args);
+}catch(e){}}
+function blockedBy(reason){dlog("BLOCKED:",reason);}
+dlog("script start",{ design: !!D, behavior: B });
 function gc(n){var m=document.cookie.match("(^|;)\\\\s*"+n+"=([^;]*)");return m?m[2]:null}
 function sc(n,v,d){var e=new Date();e.setDate(e.getDate()+d);document.cookie=n+"="+v+";path=/;expires="+e.toUTCString()+";SameSite=Lax"}
 function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
@@ -63,23 +84,25 @@ var freq=B.frequency||{};
 var vis=B.visibility||{};
 var isMob=window.innerWidth<768;
 // Device gate
-if(vis.devices==="desktop"&&isMob)return;
-if(vis.devices==="mobile"&&!isMob)return;
+if(vis.devices==="desktop"&&isMob){blockedBy("device:desktop-only on mobile");return}
+if(vis.devices==="mobile"&&!isMob){blockedBy("device:mobile-only on desktop");return}
 // Fast subscriber gate — _wf_sub is set on any submit in this browser.
 // Catches the common "already submitted here" case without a round-trip.
 // The async runSubscriberGate below covers cross-device / imported contacts.
-if(vis.hideFromSubscribers&&gc("_wf_sub"))return;
+// Debug mode bypasses every frequency-style gate so the merchant can
+// inspect the popup after testing it once.
+if(!DBG&&vis.hideFromSubscribers&&gc("_wf_sub")){blockedBy("hideFromSubscribers + _wf_sub cookie present");return}
 // Visitor type gate (new vs returning based on first-seen cookie)
 var firstSeenCk="_wf_seen";
 var isReturning=!!gc(firstSeenCk);
-if(vis.visitorType==="new"&&isReturning)return;
-if(vis.visitorType==="returning"&&!isReturning)return;
+if(vis.visitorType==="new"&&isReturning){blockedBy("visitorType=new but visitor is returning");return}
+if(vis.visitorType==="returning"&&!isReturning){blockedBy("visitorType=returning but visitor is new");return}
 sc(firstSeenCk,"1",365);
 // Frequency gate: closed form cookie (skip if custom trigger — manual open always works).
 // frequency.stopAfterSubmission (existing UI toggle) extends this cookie
 // to 365 days on successful submit, so "never show again" lands here too.
 var useCustomTrigger=!!B.customTrigger;
-if(gc(ck)&&!useCustomTrigger)return;
+if(!DBG&&gc(ck)&&!useCustomTrigger){blockedBy("frequency cookie "+ck+" present — wait "+(B.frequency&&B.frequency.showAfterDays||30)+" days or open ?wf_debug=1");return}
 // URL include/exclude (wildcard: *)
 function matchUrl(pattern,url){
   if(!pattern)return false;
@@ -89,10 +112,10 @@ function matchUrl(pattern,url){
 var pagePath=location.pathname;
 var urls=B.urls||{};
 if(urls.includeEnabled&&urls.includeUrls&&urls.includeUrls.length>0){
-  if(!urls.includeUrls.some(function(p){return matchUrl(p,pagePath)||pagePath.indexOf(p)>=0}))return;
+  if(!urls.includeUrls.some(function(p){return matchUrl(p,pagePath)||pagePath.indexOf(p)>=0})){blockedBy("url include filter — current path "+pagePath+" not in "+JSON.stringify(urls.includeUrls));return}
 }
 if(urls.excludeEnabled&&urls.excludeUrls&&urls.excludeUrls.length>0){
-  if(urls.excludeUrls.some(function(p){return matchUrl(p,pagePath)||pagePath.indexOf(p)>=0}))return;
+  if(urls.excludeUrls.some(function(p){return matchUrl(p,pagePath)||pagePath.indexOf(p)>=0})){blockedBy("url exclude filter — current path "+pagePath+" matched");return}
 }
 // Legacy targeting.pageUrls still supported for old popups
 var tgt=B.targeting||{};
@@ -287,7 +310,9 @@ function renderStep(stepIdx){
   return visibleBlocks(step.blocks||[]).map(renderBlock).join("");
 }
 function show(){
-  if(shown)return;shown=true;
+  if(shown){dlog("show() ignored — already shown this pageview");return}
+  shown=true;
+  dlog("show() — popup rendering now");
   // Stamp per-visitor frequency counter (used by perVisitorBlocked()
   // on the next page load). Stored as a rolling list of timestamps,
   // capped to 10 entries so localStorage doesn't grow unbounded.
@@ -633,6 +658,7 @@ if(perVisitorBlocked()&&!useCustomTrigger)return;
 // the "imported contact still sees the popup" gap. 10-minute localStorage
 // cache so the check happens at most once per visitor every 10 minutes.
 function runSubscriberGate(cb){
+  if(DBG){dlog("subscriber gate bypassed (debug mode)");cb(true);return}
   if(!vis.hideFromSubscribers){cb(true);return}
   var vid=gc("__worder_id");
   if(!vid){cb(true);return}
@@ -641,7 +667,10 @@ function runSubscriberGate(cb){
     var raw=localStorage.getItem(ckCache);
     if(raw){
       var c=JSON.parse(raw);
-      if(c&&c.t&&Date.now()-c.t<600000){cb(c.a!==false);return}
+      if(c&&c.t&&Date.now()-c.t<600000){
+        if(c.a===false)blockedBy("subscriber gate (cached)");
+        cb(c.a!==false);return;
+      }
     }
   }catch(e){}
   var url=BU+"/api/public/forms/"+FID+"/preview-allowed?vid="+encodeURIComponent(vid)+
@@ -649,6 +678,7 @@ function runSubscriberGate(cb){
   fetch(url).then(function(r){return r.json()}).then(function(j){
     var allowed=j&&j.allowed!==false;
     try{localStorage.setItem(ckCache,JSON.stringify({t:Date.now(),a:allowed}))}catch(e){}
+    if(!allowed)blockedBy("subscriber gate — server says "+(j&&j.reason||"not allowed"));
     cb(allowed);
   }).catch(function(){cb(true)});
 }
@@ -657,21 +687,25 @@ function runSubscriberGate(cb){
 runSubscriberGate(function(subOk){
   if(!subOk)return;
 runLocationGate(function(locOk){
-  if(!locOk)return;
-  runCartGate(function(cartOk){
-  if(!cartOk)return;
+  if(!locOk){blockedBy("location gate");return}
+runCartGate(function(cartOk){
+  if(!cartOk){blockedBy("cart gate");return}
+  dlog("all gates passed",{ useExit:useExit, useTime:useTime, useScroll:useScroll, usePageView:usePageView, useCustomTrigger:useCustomTrigger, matchAll:matchAll, delay:disp.delay });
   if(!anyEnabled&&!useCustomTrigger){
     // No rules enabled at all: default to time delay 5s
-    setTimeout(show,5000);
+    dlog("no triggers configured, default 5s delay");
+    setTimeout(function(){dlog("default 5s elapsed, showing");show();},5000);
     return;
   }
   if(!anyEnabled&&useCustomTrigger){
     // Only custom trigger — don't auto-show, wait for explicit openForm
+    dlog("custom trigger only — waiting for openForm");
     return;
   }
 
   var satisfied={exit:false,time:false,scroll:false,pv:false};
   function tryShow(which){
+    dlog("tryShow:",which,"satisfied=",JSON.stringify(satisfied),"matchAll=",matchAll);
     satisfied[which]=true;
     if(matchAll){
       // AND: require all ENABLED rules to be satisfied
@@ -682,22 +716,28 @@ runLocationGate(function(locOk){
     }
   }
 
-  if(useTime)setTimeout(function(){tryShow("time")},(disp.delay||5)*1000);
+  if(useTime){
+    var td=(disp.delay||5)*1000;
+    dlog("time trigger armed: "+td+"ms");
+    setTimeout(function(){dlog("time trigger fired");tryShow("time")},td);
+  }
 
   if(useScroll){
     var sp=disp.scrollPercent||30;
+    dlog("scroll trigger armed: "+sp+"%");
     function onScroll(){
       var max=document.body.scrollHeight-window.innerHeight;
       if(max<=0)return;
       var pct=(window.scrollY/max)*100;
-      if(pct>=sp){window.removeEventListener("scroll",onScroll);tryShow("scroll")}
+      if(pct>=sp){window.removeEventListener("scroll",onScroll);dlog("scroll trigger fired at "+Math.round(pct)+"%");tryShow("scroll")}
     }
     window.addEventListener("scroll",onScroll,{passive:true});
   }
 
   if(useExit){
+    dlog("exit-intent armed");
     // Desktop: cursor leaves through the top of the viewport.
-    function onLeave(e){if(e.clientY<10){cleanupExit();tryShow("exit")}}
+    function onLeave(e){if(e.clientY<10){dlog("exit-intent fired (desktop mouseout)");cleanupExit();tryShow("exit")}}
     document.addEventListener("mouseout",onLeave);
     // Mobile heuristic 1: rapid upward scroll (≥250px in <400ms while in
     // the upper half of the page). Catches users dragging back to the
@@ -707,14 +747,14 @@ runLocationGate(function(locOk){
       if(window.innerWidth>=768)return;
       var y=window.scrollY,t=Date.now();
       var dy=lastY-y,dt=t-lastT;
-      if(dy>=250&&dt<400&&y<window.innerHeight){cleanupExit();tryShow("exit");return}
+      if(dy>=250&&dt<400&&y<window.innerHeight){dlog("exit-intent fired (mobile rapid scroll up)");cleanupExit();tryShow("exit");return}
       lastY=y;lastT=t;
     }
     window.addEventListener("scroll",onMobScroll,{passive:true});
     // Mobile heuristic 2: tab hidden (user switched apps or hit "back" on
     // browser chrome). Fires on pagehide too for iOS Safari which suspends
     // before sending visibilitychange. Fired once per popup lifecycle.
-    function onHide(){if(document.visibilityState==="hidden"){cleanupExit();tryShow("exit")}}
+    function onHide(){if(document.visibilityState==="hidden"){dlog("exit-intent fired (visibility hidden)");cleanupExit();tryShow("exit")}}
     document.addEventListener("visibilitychange",onHide);
     window.addEventListener("pagehide",onHide,{once:true});
     function cleanupExit(){
