@@ -16,30 +16,103 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 
     const config = form.config || {}
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app'
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.worder.com.br'
     const submitUrl = `${baseUrl}/api/public/forms/${params.id}/submit`
+    const eventsUrl = `${baseUrl}/api/public/forms/${params.id}/events`
 
     const script = `
 (function(){
   var FORM_ID = ${JSON.stringify(params.id)};
   var CONFIG = ${JSON.stringify(config)};
   var SUBMIT_URL = ${JSON.stringify(submitUrl)};
+  var EVENTS_URL = ${JSON.stringify(eventsUrl)};
   var shown = false;
   var freq = CONFIG.display?.frequency || 'once';
+  var showAfterDays = parseInt(CONFIG.display?.showAfterDays || 0, 10) || 0;
   var storageKey = 'worder_popup_' + FORM_ID;
+  var dismissedKey = 'worder_popup_dismissed_' + FORM_ID;
 
-  // Check frequency
-  if (freq === 'once' && localStorage.getItem(storageKey)) return;
+  // ---- Frequency cap with days threshold ----
+  // Klaviyo/Omnisend pattern: if the user has seen + dismissed this
+  // popup, don't show it again for showAfterDays. 'once' means never
+  // again after first impression; 'session' = once per session; the
+  // days threshold lets the popup come back after a cooldown.
+  function isWithinCooldown(key) {
+    var ts = parseInt(localStorage.getItem(key) || '0', 10);
+    if (!ts) return false;
+    if (showAfterDays <= 0) return true; // legacy 'once' behavior
+    var daysSince = (Date.now() - ts) / (1000 * 60 * 60 * 24);
+    return daysSince < showAfterDays;
+  }
+  if (freq === 'once' && isWithinCooldown(storageKey)) return;
   if (freq === 'session' && sessionStorage.getItem(storageKey)) return;
+  if (isWithinCooldown(dismissedKey)) return;
 
-  // Check device
+  // ---- Page URL targeting ----
+  // CONFIG.targeting.pages controls which URLs the popup shows on:
+  //   'all'      → every page (default)
+  //   'specific' → match patterns in CONFIG.targeting.urlPatterns[]
+  //              with simple glob: '*' matches anything, exact otherwise
+  var targetingPages = CONFIG.targeting?.pages || 'all';
+  if (targetingPages === 'specific') {
+    var patterns = CONFIG.targeting?.urlPatterns || CONFIG.targeting?.includePages || [];
+    if (Array.isArray(patterns) && patterns.length > 0) {
+      var currentUrl = window.location.pathname + window.location.search;
+      var matched = patterns.some(function(p) {
+        if (typeof p !== 'string' || !p) return false;
+        // Build regex from glob: escape regex specials except *
+        var regex = new RegExp(
+          '^' +
+          p.replace(/[.+?^\${}()|[\\]\\\\]/g, '\\\\$&').replace(/\\*/g, '.*') +
+          '$'
+        );
+        return regex.test(currentUrl) || regex.test(window.location.href);
+      });
+      if (!matched) return;
+    }
+  }
+  var excludePatterns = CONFIG.targeting?.excludePages || [];
+  if (Array.isArray(excludePatterns) && excludePatterns.length > 0) {
+    var currentUrl2 = window.location.pathname + window.location.search;
+    var excluded = excludePatterns.some(function(p) {
+      if (typeof p !== 'string' || !p) return false;
+      var regex = new RegExp(
+        '^' +
+        p.replace(/[.+?^\${}()|[\\]\\\\]/g, '\\\\$&').replace(/\\*/g, '.*') +
+        '$'
+      );
+      return regex.test(currentUrl2) || regex.test(window.location.href);
+    });
+    if (excluded) return;
+  }
+
+  // ---- Device targeting ----
   var isMobile = window.innerWidth < 768;
-  if (isMobile && !CONFIG.display?.showOnMobile) return;
-  if (!isMobile && !CONFIG.display?.showOnDesktop) return;
+  if (isMobile && CONFIG.display?.showOnMobile === false) return;
+  if (!isMobile && CONFIG.display?.showOnDesktop === false) return;
+
+  // ---- Beacon helper ----
+  function sendEvent(eventType, payload) {
+    var body = JSON.stringify(Object.assign({ event_type: eventType, form_id: FORM_ID, url: window.location.href }, payload || {}));
+    try {
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(EVENTS_URL, new Blob([body], { type: 'application/json' }));
+      } else {
+        fetch(EVENTS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: true });
+      }
+    } catch (e) { /* swallow */ }
+  }
+
+  function dismissPopup(overlay, reason) {
+    overlay.remove();
+    localStorage.setItem(dismissedKey, String(Date.now()));
+    sendEvent('dismissed', { reason: reason || 'close_button' });
+  }
 
   function showPopup() {
     if (shown) return;
     shown = true;
+    sendEvent('impression');
 
     var overlay = document.createElement('div');
     overlay.id = 'worder-popup-overlay';
@@ -50,7 +123,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     var html = '';
     if (CONFIG.showCloseButton !== false) {
-      html += '<button onclick="document.getElementById(\\'worder-popup-overlay\\').remove()" style="position:absolute;top:12px;right:12px;width:28px;height:28px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:#9ca3af">&times;</button>';
+      html += '<button id="worder-popup-close" style="position:absolute;top:12px;right:12px;width:28px;height:28px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:#9ca3af">&times;</button>';
     }
     if (CONFIG.image?.show && CONFIG.image?.src && CONFIG.image?.position === 'top') {
       html += '<img src="' + CONFIG.image.src + '" style="width:100%;border-radius:' + Math.max(0, (CONFIG.style?.borderRadius || 16) - 4) + 'px;margin-bottom:16px;display:block" />';
@@ -73,8 +146,21 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     overlay.appendChild(popup);
     document.body.appendChild(overlay);
 
+    // Close button (id-based to avoid inline onclick escaping)
+    var closeBtn = document.getElementById('worder-popup-close');
+    if (closeBtn) closeBtn.addEventListener('click', function() { dismissPopup(overlay, 'close_button'); });
+
     // Close on overlay click
-    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) dismissPopup(overlay, 'overlay_click'); });
+
+    // Close on Escape
+    var escHandler = function(e) {
+      if (e.key === 'Escape') {
+        dismissPopup(overlay, 'escape_key');
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
 
     // Form submit
     var form = document.getElementById('worder-popup-form');
@@ -86,9 +172,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       fetch(SUBMIT_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
         .then(function() {
           popup.innerHTML = '<div style="text-align:center;padding:20px"><h2 style="font-size:24px;color:#111827;margin:0 0 8px">' + (CONFIG.successMessage?.headline || 'Pronto!') + '</h2><p style="font-size:15px;color:#6b7280;margin:0">' + (CONFIG.successMessage?.text || 'Obrigado!') + '</p></div>';
-          if (freq === 'once') localStorage.setItem(storageKey, '1');
-          if (freq === 'session') sessionStorage.setItem(storageKey, '1');
-          setTimeout(function() { overlay.remove(); }, 3000);
+          // Persist the submission timestamp so frequency cap kicks
+          // in. Using ms-epoch instead of '1' so showAfterDays works.
+          localStorage.setItem(storageKey, String(Date.now()));
+          if (freq === 'session') sessionStorage.setItem(storageKey, String(Date.now()));
+          sendEvent('submitted');
+          // Optional redirect from success config
+          if (CONFIG.successMessage?.redirectUrl) {
+            setTimeout(function() { window.location.href = CONFIG.successMessage.redirectUrl; }, 2000);
+          } else {
+            setTimeout(function() { overlay.remove(); }, 3000);
+          }
         });
     });
   }
@@ -99,13 +193,25 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     setTimeout(showPopup, (CONFIG.trigger?.delay || 5) * 1000);
   } else if (trigger === 'scroll') {
     var pct = CONFIG.trigger?.scrollPercent || 50;
-    window.addEventListener('scroll', function() {
+    var onScroll = function() {
       var scrolled = (window.scrollY / (document.body.scrollHeight - window.innerHeight)) * 100;
-      if (scrolled >= pct) showPopup();
-    });
+      if (scrolled >= pct) {
+        showPopup();
+        window.removeEventListener('scroll', onScroll);
+      }
+    };
+    window.addEventListener('scroll', onScroll);
   } else if (trigger === 'exit_intent') {
-    document.addEventListener('mouseout', function(e) {
-      if (e.clientY < 5) showPopup();
+    // Improved exit-intent: fires on mouseleave at TOP edge of viewport
+    // (where the URL bar / tab close button is). Old check only looked
+    // at clientY < 5 which misses macOS Magic Trackpad fast-swipes.
+    var exitFired = false;
+    document.documentElement.addEventListener('mouseleave', function(e) {
+      if (exitFired) return;
+      if (e.clientY <= 0 || e.relatedTarget === null) {
+        exitFired = true;
+        showPopup();
+      }
     });
   }
 
