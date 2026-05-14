@@ -31,6 +31,12 @@ export async function GET(
   const limit = parseInt(searchParams.get('limit') || '100');
   const offset = parseInt(searchParams.get('offset') || '0');
   const eventType = searchParams.get('event_type');
+  // Per-store isolation. A multi-store org has the same contact email
+  // appearing in both shops, but the timeline shown on the Dr. Melaxin
+  // detail screen used to mix Based events in. Pass ?storeId=... to
+  // restrict the timeline; omit it to keep the legacy "everything in
+  // the org" behavior (used by analytics dashboards that don't care).
+  const storeId = searchParams.get('storeId') || searchParams.get('store_id');
 
   let query = supabase
     .from('contact_events')
@@ -39,6 +45,13 @@ export async function GET(
     .in('organization_id', orgIds)
     .order('occurred_at', { ascending: false })
     .range(offset, offset + limit - 1);
+
+  if (storeId) {
+    // store-scoped events only. Events that pre-date the per-store
+    // bookkeeping (store_id IS NULL) stay visible so historic data
+    // doesn't vanish on legacy contacts.
+    query = query.or(`store_id.eq.${storeId},store_id.is.null`);
+  }
 
   if (eventType) {
     query = query.eq('event_type', eventType);

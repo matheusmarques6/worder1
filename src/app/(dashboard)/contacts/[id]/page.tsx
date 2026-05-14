@@ -37,6 +37,7 @@ import {
 } from '@phosphor-icons/react'
 import Link from 'next/link'
 import { useInboxContact } from '@/hooks/useInboxContact'
+import { useStoreStore } from '@/stores'
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { InboxContact, InboxActivity, InboxNote, InboxTask, InboxOrder, InboxDeal } from '@/types/inbox'
@@ -319,16 +320,27 @@ export default function ContactDetailPage() {
     deleteTask,
   } = useInboxContact()
 
+  // Wait for zustand to rehydrate so the storeId we send matches the
+  // store the merchant actually has selected. Without this gate the
+  // first fetch goes out with no storeId and the timeline includes
+  // events from sibling stores in the same org (Dr. Melaxin saw Based
+  // line-items in the contact timeline). Re-fires when the merchant
+  // switches stores in the header dropdown.
+  const currentStore = useStoreStore((s) => s.currentStore)
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
+  const storeId = currentStore?.id || null
+
   useEffect(() => {
-    if (contactId) {
-      fetchContact(contactId)
-      // Fetch Shopify CDP events
-      fetch(`/api/contacts/${contactId}/shopify-events`)
-        .then((res) => res.json())
-        .then((data) => setShopifyEvents(data.events || []))
-        .catch((err) => console.error('Error fetching shopify events:', err))
-    }
-  }, [contactId, fetchContact])
+    if (!contactId || !hasHydrated) return
+    fetchContact(contactId)
+    // CDP timeline — scoped to the active store so a multi-store org
+    // doesn't bleed events between shops.
+    const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
+    fetch(`/api/contacts/${contactId}/shopify-events${qs}`)
+      .then((res) => res.json())
+      .then((data) => setShopifyEvents(data.events || []))
+      .catch((err) => console.error('Error fetching shopify events:', err))
+  }, [contactId, fetchContact, storeId, hasHydrated])
 
   // Merge shopify events into timeline activities
   const mergedActivities = [...activities]
