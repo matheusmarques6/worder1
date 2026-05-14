@@ -93,6 +93,7 @@ const TRIGGER_OPTIONS: NodeItemConfig[] = [
   // Contato
   { type: 'trigger_signup', label: 'Contato Criado', description: 'Dispara quando contato é criado', icon: UserPlus, category: 'trigger', color: '#10b981' },
   { type: 'trigger_form_submitted', label: 'Formulário Enviado', description: 'Dispara quando formulário é enviado', icon: FileText, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_popup_subscribed', label: 'Inscrito via Popup', description: 'Dispara quando alguém se inscreve em um popup — ideal para welcome flows', icon: FileText, category: 'trigger', color: '#10b981' },
   { type: 'trigger_segment', label: 'Entrou no Segmento', description: 'Contato entrou em um segmento', icon: Users, category: 'trigger', color: '#10b981' },
   { type: 'trigger_tag', label: 'Tag Adicionada', description: 'Dispara quando tag é adicionada', icon: Tag, category: 'trigger', color: '#10b981' },
   { type: 'trigger_rfm_segment_change', label: 'Mudou Segmento RFM', description: 'Dispara quando contato muda de segmento RFM', icon: Users, category: 'trigger', color: '#10b981' },

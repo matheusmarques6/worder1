@@ -248,6 +248,13 @@ export function getVariablesByTriggerType(triggerType: string): VariableCategory
       eventVariables = SIGNUP_VARIABLES;
       eventLabel = 'Formulario Enviado';
       break;
+    case 'trigger_popup_subscribed':
+      // Same variables as form_submitted — both surface email / phone /
+      // first_name / last_name / utm_* through {{ trigger.* }} in the
+      // welcome email.
+      eventVariables = SIGNUP_VARIABLES;
+      eventLabel = 'Inscrito via Popup';
+      break;
     case 'trigger_custom_event':
       eventVariables = WEBHOOK_VARIABLES;
       eventLabel = 'Evento Custom';

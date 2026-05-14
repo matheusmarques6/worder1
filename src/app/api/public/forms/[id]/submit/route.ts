@@ -200,14 +200,22 @@ export async function POST(
       try {
         const sb = getSupabaseClient()
         if (sb) {
+          // Bump BOTH impressions_count and views_count. The dashboard
+          // card reads views_count; impressions_count is the legacy
+          // name kept around for old analytics queries. Without
+          // mirroring both, the merchant saw views=0 even after the
+          // popup loaded for thousands of visitors.
           const { data: current } = await sb
             .from('crm_forms')
-            .select('impressions_count')
+            .select('impressions_count, views_count')
             .eq('id', formId)
             .maybeSingle()
           await sb
             .from('crm_forms')
-            .update({ impressions_count: (current?.impressions_count || 0) + 1 })
+            .update({
+              impressions_count: (current?.impressions_count || 0) + 1,
+              views_count: (current?.views_count || 0) + 1,
+            })
             .eq('id', formId)
         }
       } catch {}
@@ -552,6 +560,30 @@ export async function POST(
       return NextResponse.json({ error: subError.message }, { status: 500 })
     }
 
+    // Bump the form's submissions_count + views_count so the /forms
+    // dashboard card reflects reality. Fire-and-forget — a failure
+    // here mustn't break the submit response. Mirrors the impression
+    // tracker above (which also writes both columns).
+    supabase
+      .from('crm_forms')
+      .select('submissions_count, views_count')
+      .eq('id', formId)
+      .maybeSingle()
+      .then(({ data: cur }: any) => {
+        supabase
+          .from('crm_forms')
+          .update({
+            submissions_count: ((cur?.submissions_count as number) || 0) + 1,
+            // Some merchants land on the popup AND submit before our
+            // impression beacon makes it through (Beacon API can drop on
+            // slow connections). Guarantee views >= submits by also
+            // bumping views_count here.
+            views_count: ((cur?.views_count as number) || 0) + 1,
+          })
+          .eq('id', formId)
+          .then(() => {}, () => {})
+      }, () => {})
+
     // 7. Processar eventos de ads
     const eventsFired: any[] = []
     const activeEvents = (form.events || []).filter((e: any) => e.is_active)
@@ -834,6 +866,51 @@ export async function POST(
       })
     } catch (e: any) {
       console.warn('[Form Submit] automation dispatch failed:', e?.message)
+    }
+
+    // 8.6b. trigger_popup_subscribed — popup-specific welcome trigger.
+    // Klaviyo/Omnisend distinguish between "any form submit" and
+    // "subscribed via popup" so merchants can run a welcome flow that
+    // ONLY fires for popup signups (and not for the embedded contact
+    // form, landing page, etc.). Mirrors the form_submitted dispatch
+    // but with a different triggerType the editor can match against.
+    const isVisualFormType = ['popup', 'flyout', 'banner', 'fullpage'].includes(form.form_type || 'popup')
+    if (isVisualFormType && contactId) {
+      try {
+        const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
+        await dispatchTrigger({
+          organizationId: form.organization_id,
+          triggerType: 'trigger_popup_subscribed',
+          contactId,
+          triggerData: {
+            form_id: formId,
+            form_name: form.name,
+            form_type: form.form_type,
+            submission_id: submission.id,
+            email: contactData.email || null,
+            phone: contactData.phone || null,
+            first_name: contactData.first_name || null,
+            last_name: contactData.last_name || null,
+            answers,
+            utm_source,
+            utm_medium,
+            utm_campaign,
+            utm_term,
+            utm_content,
+          },
+          matchConfig: (cfg) => {
+            // Editor can scope a flow to one specific popup via form_id.
+            // Unset = match every popup in the org.
+            if (cfg?.form_id && cfg.form_id !== formId) return false
+            return true
+          },
+          // Per-submission so the same lead resubmitting the popup
+          // doesn't kick off the welcome flow twice in a row.
+          idempotencyKey: `popup_subscribed:${submission.id}`,
+        })
+      } catch (e: any) {
+        console.warn('[Form Submit] popup_subscribed dispatch failed:', e?.message)
+      }
     }
 
     // 8.5. Dynamic Shopify coupon. If the design has a coupon block in

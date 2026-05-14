@@ -281,6 +281,14 @@ export const triggerTypes: NodeTypeDefinition[] = [
     color: '#10b981',
   },
   {
+    type: 'trigger_popup_subscribed',
+    label: 'Inscrito via Popup',
+    description: 'Dispara quando alguém se inscreve em um popup — ideal para welcome flows',
+    icon: FileText,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
     type: 'trigger_custom_event',
     label: 'Evento Customizado',
     description: 'Dispara em evento personalizado',
@@ -651,6 +659,7 @@ export const nodeTypes: Record<string, any> = {
   // Triggers - Contato
   trigger_signup: TriggerNode,
   trigger_form_submitted: TriggerNode,
+  trigger_popup_subscribed: TriggerNode,
   trigger_tag: TriggerNode,
   trigger_segment: TriggerNode,
   // Triggers - Especiais

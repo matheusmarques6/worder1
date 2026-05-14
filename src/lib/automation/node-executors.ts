@@ -133,6 +133,15 @@ const triggerExecutors: Record<string, NodeExecutor> = {
       return { status: 'success', output: context.trigger?.data || {} };
     },
   },
+  trigger_popup_subscribed: {
+    // Same shape as form_submitted — the dispatcher sets context.trigger.data
+    // and downstream nodes (welcome email, tag-add, etc.) read it via the
+    // variable engine. Only the trigger type differs so flow authors can
+    // scope a welcome flow to popups specifically.
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
   trigger_custom_event: {
     async execute({ context }) {
       return { status: 'success', output: context.trigger?.data || {} };
