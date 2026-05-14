@@ -107,6 +107,23 @@ interface PopupDesign {
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 
+// Stable IDs for the brand-new-popup defaults. Using uid() (Math.random)
+// here breaks SSR hydration: Next.js evaluates this module on the server
+// AND on the client, each pass produces different random IDs, and React
+// throws #422/#425 ("Text content does not match server-rendered HTML")
+// when the canvas eventually renders block.id-derived attributes that
+// don't line up. Fixed strings hydrate identically and get replaced the
+// moment the merchant adds or saves a block (those use the runtime uid()
+// inside event handlers, which is client-only).
+const DEFAULT_IDS = {
+  step: 'default-step-1',
+  successStep: 'default-success-step',
+  blockText: 'default-block-text',
+  blockEmail: 'default-block-email',
+  blockButton: 'default-block-button',
+  blockSuccessText: 'default-success-text',
+} as const
+
 // Block types grouped by category, Klaviyo/Omnisend-style. Order inside each
 // group is the order they appear in the sidebar grid.
 const BLOCK_CATEGORIES: Array<{ name: string; items: Array<{ type: string; label: string; icon: any }> }> = [
@@ -219,13 +236,13 @@ const defaultProps: Record<string, Record<string, any>> = {
 
 const defaultDesign: PopupDesign = {
   formType: 'popup',
-  steps: [{ id: uid(), name: 'Etapa 1', blocks: [
-    { id: uid(), type: 'text', props: { ...defaultProps.text } },
-    { id: uid(), type: 'email', props: { ...defaultProps.email } },
-    { id: uid(), type: 'button', props: { ...defaultProps.button } },
+  steps: [{ id: DEFAULT_IDS.step, name: 'Etapa 1', blocks: [
+    { id: DEFAULT_IDS.blockText, type: 'text', props: { ...defaultProps.text } },
+    { id: DEFAULT_IDS.blockEmail, type: 'email', props: { ...defaultProps.email } },
+    { id: DEFAULT_IDS.blockButton, type: 'button', props: { ...defaultProps.button } },
   ]}],
-  successStep: { id: uid(), name: 'Sucesso', blocks: [
-    { id: uid(), type: 'text', props: { content: 'Obrigado!', fontSize: 24, color: '#111827', fontWeight: 'bold', align: 'center' } },
+  successStep: { id: DEFAULT_IDS.successStep, name: 'Sucesso', blocks: [
+    { id: DEFAULT_IDS.blockSuccessText, type: 'text', props: { content: 'Obrigado!', fontSize: 24, color: '#111827', fontWeight: 'bold', align: 'center' } },
   ]},
   styles: {
     width: 700, minHeight: 500, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 32, fontFamily: 'Inter, sans-serif',
@@ -2544,6 +2561,10 @@ export default function PopupEditorPage() {
   const formId = params.id as string
   const { currentStore } = useStoreStore()
 
+  // Hydration gate — see the `!mounted` guard before render.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
   const [design, setDesign] = useState<PopupDesign>(defaultDesign)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -2803,7 +2824,15 @@ export default function PopupEditorPage() {
     setShowSuccess(false)
   }
 
-  if (loading) return <div className="flex items-center justify-center h-screen"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+  // SSR/hydration mismatch belt-and-suspenders. Even with stable IDs in
+  // defaultDesign, useState's lazy init runs on the server pass AND on
+  // the client pass. A `mounted` gate guarantees the first commit on
+  // the client matches the server output (just the spinner), eliminating
+  // every React #422/#425 path. Costs one render frame; users never see
+  // a flash because the spinner is the same in both states.
+  if (!mounted || loading) {
+    return <div className="flex items-center justify-center h-screen"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+  }
 
   const s = design.styles
 
@@ -2906,20 +2935,24 @@ export default function PopupEditorPage() {
             </>
           ) : (
             <>
-              {/* Persistent tab bar — always visible, one-click switching.
-                  Replaces the old drill-down hub + back-button pattern. */}
-              <div className="flex border-b border-gray-100 shrink-0 bg-white">
+              {/* Persistent tab bar — Klaviyo/Worder email-editor style.
+                  Removed the inline icons that made "Comportamento" wrap
+                  awkwardly inside the 360px sidebar; text-only tabs
+                  breathe better and match the email editor's pattern
+                  (WorderEmailEditor.tsx). "Regras" is shorter than
+                  "Comportamento" and is what Klaviyo calls this section
+                  internally ("Targeting Rules"). */}
+              <div className="flex border-b border-gray-200 shrink-0 bg-white">
                 {([
-                  { k: 'blocks', label: 'Blocos', Icon: LayoutGrid },
-                  { k: 'styles', label: 'Estilos', Icon: Palette },
-                  { k: 'targeting', label: 'Comportamento', Icon: Target },
-                ] as const).map(({ k, label, Icon }) => (
+                  { k: 'blocks', label: 'Blocos' },
+                  { k: 'styles', label: 'Estilos' },
+                  { k: 'targeting', label: 'Regras' },
+                ] as const).map(({ k, label }) => (
                   <button
                     key={k}
                     onClick={() => setLeftTab(k)}
-                    className={`flex-1 flex items-center justify-center gap-1.5 h-[44px] text-[12px] font-semibold transition-colors ${leftTab === k ? 'text-gray-900 border-b-2 border-gray-900 -mb-px' : 'text-gray-400 hover:text-gray-700'}`}
+                    className={`flex-1 py-3 text-[12px] font-semibold tracking-tight transition-colors ${leftTab === k ? 'text-zinc-900 border-b-2 border-zinc-900 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}
                   >
-                    <Icon className="w-3.5 h-3.5" />
                     {label}
                   </button>
                 ))}
