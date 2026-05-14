@@ -119,8 +119,16 @@ export async function POST(request: NextRequest) {
     // return the jobId immediately. The /api/workers/shopify-sync worker
     // picks it up, walks the GraphQL connection with checkpointing,
     // chains continuations as needed. UI polls /api/shopify/jobs/[id].
-    // Falls back to inline execution if QStash is not configured or the
-    // caller passes background=false (legacy path).
+    // Falls back to inline execution if QStash is not configured, the
+    // caller passes background=false, OR QStash rejects the publish
+    // (e.g. wrong-region endpoint, expired token). Dr. Melaxin's sync
+    // was sticking at 365 because the QStash account is in a different
+    // region than qstash.upstash.io now routes to ("user (...) not
+    // found in this region (eu-central-1)"), the publish threw, and
+    // the error became a bare 500 with no actual sync ever running.
+    // Now we treat any QStash failure the same as "not configured" —
+    // the pending job row stays in place and runFullSyncGraphQL's
+    // resume-by-status lookup picks it up on the inline path.
     const wantBackground = body.background !== false && isQStashConfigured();
     if (wantBackground) {
       const { data: job, error: jobErr } = await supabase
@@ -143,16 +151,28 @@ export async function POST(request: NextRequest) {
         console.error('[Sync] Failed to create job row:', jobErr);
         // Fall through to inline as a safety net.
       } else {
-        await enqueueShopifySync(job.id, store.id, syncType as any, {
-          historical,
-        });
-        return NextResponse.json({
-          ok: true,
-          mode: 'background',
-          jobId: job.id,
-          storeId: store.id,
-          message: 'Sync started. Poll /api/shopify/jobs/{jobId} for progress.',
-        });
+        try {
+          await enqueueShopifySync(job.id, store.id, syncType as any, {
+            historical,
+          });
+          return NextResponse.json({
+            ok: true,
+            mode: 'background',
+            jobId: job.id,
+            storeId: store.id,
+            message: 'Sync started. Poll /api/shopify/jobs/{jobId} for progress.',
+          });
+        } catch (qErr: any) {
+          // QStash publish failed — most commonly wrong-region endpoint
+          // ("user X not found in this region (eu-central-1)"). Don't
+          // surface 500 to the merchant; the pending job is still in
+          // shopify_import_jobs and the inline path below will resume
+          // from its last_cursor on the same request.
+          console.warn(
+            '[Sync] QStash publish failed, falling back to inline:',
+            qErr?.message
+          );
+        }
       }
     }
 
