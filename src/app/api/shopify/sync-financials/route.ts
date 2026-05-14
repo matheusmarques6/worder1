@@ -5,12 +5,20 @@
 // the contacts table (total_orders, total_spent, last_order_at, AOV).
 // Also computes store-level totals into shopify_stores.
 //
-// Use this when:
-//  - You just connected a store and want dashboards populated
-//  - You want to refresh stale aggregates
-//  - You added historical orders that webhooks didn't catch
+// Resumable across calls. The previous version did one SELECT-by-email
+// + (sometimes) SELECT-by-phone + UPDATE/INSERT per customer, serial.
+// On Dr. Melaxin's 22k-customer store that was 50k+ DB roundtrips in
+// one request — Vercel killed it at 300s every single time and the
+// next click started over from page 1 with nothing saved.
 //
-// Manual integration friendly: only requires read_customers + read_orders.
+// Now:
+//  - Pagination has a deadline (180s) so we always leave time for the
+//    upsert phase.
+//  - shopify_import_jobs row tracks last_cursor so a partial run picks
+//    up on the next call. Same pattern runFullSyncGraphQL uses.
+//  - One upsert-in-batch by (organization_id, email) replaces the
+//    per-customer SELECT+UPDATE/INSERT pair. The unique constraint on
+//    contacts (organization_id, email) is what makes this safe.
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -53,6 +61,10 @@ const CUSTOMERS_FINANCIAL_QUERY = `
     }
   }
 `;
+
+const SYNC_TYPE = 'customers_financial';
+const PAGE_BUDGET_MS = 180_000;
+const PROCESS_BATCH_SIZE = 100;
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthClient();
@@ -106,101 +118,142 @@ export async function POST(request: NextRequest) {
     access_token: store.access_token,
   };
 
+  // Resume an interrupted run if there's one. Match the pattern
+  // runFullSyncGraphQL uses so the orders + financials syncs read the
+  // same shopify_import_jobs table.
+  const { data: existingJob } = await supabase
+    .from('shopify_import_jobs')
+    .select('id, last_cursor, processed_count')
+    .eq('store_id', store.id)
+    .eq('organization_id', store.organization_id)
+    .contains('config', { sync_type: SYNC_TYPE })
+    .in('status', ['running', 'pending', 'paused'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let jobId: string | null = existingJob?.id || null;
+  let startCursor: string | null = existingJob?.last_cursor || null;
+  let runningCount = existingJob?.processed_count || 0;
+
+  if (!jobId) {
+    const { data: newJob } = await supabase
+      .from('shopify_import_jobs')
+      .insert({
+        store_id: store.id,
+        organization_id: store.organization_id,
+        status: 'running',
+        config: { sync_type: SYNC_TYPE },
+        started_at: new Date().toISOString(),
+        processed_count: 0,
+      })
+      .select('id')
+      .single();
+    jobId = newJob?.id || null;
+  } else {
+    await supabase
+      .from('shopify_import_jobs')
+      .update({ status: 'running', last_processed_at: new Date().toISOString() })
+      .eq('id', jobId);
+  }
+
+  if (startCursor) {
+    console.log(`[SyncFinancials] Resuming from cursor=${startCursor.slice(0, 16)}... (${runningCount} processed)`);
+  }
+
   const startedAt = Date.now();
   let customersProcessed = 0;
-  let contactsUpdated = 0;
-  let contactsCreated = 0;
+  let contactsUpserted = 0;
   let totalRevenue = 0;
   let totalOrders = 0;
   const errors: string[] = [];
 
   try {
-    const { nodes } = await shopifyGraphQLPaginate(
+    const { nodes, lastCursor, reachedDeadline } = await shopifyGraphQLPaginate(
       storeConfig,
       CUSTOMERS_FINANCIAL_QUERY,
       { sortKey: 'UPDATED_AT' },
       'customers',
-      { first: 100, maxPages: 200 }
+      {
+        first: 100,
+        maxPages: 200,
+        startCursor,
+        deadlineMs: PAGE_BUDGET_MS,
+        onPage: (page, total, cursor) => {
+          // Persist the cursor every page so a hard kill mid-fetch
+          // (network drop, Vercel timeout warning) doesn't lose ground.
+          if (jobId) {
+            supabase
+              .from('shopify_import_jobs')
+              .update({
+                last_cursor: cursor,
+                processed_count: runningCount + total,
+                current_page: page,
+                last_processed_at: new Date().toISOString(),
+              })
+              .eq('id', jobId)
+              .then(() => {}, () => {});
+          }
+        },
+      }
     );
 
     customersProcessed = nodes.length;
 
-    for (const c of nodes) {
-      try {
-        const email = (c.email || '').toLowerCase().trim();
-        const phone = c.phone || null;
-        const numberOfOrders = parseInt(c.numberOfOrders || '0', 10);
-        const totalSpent = parseFloat(c.amountSpent?.amount || '0');
-        const currency = c.amountSpent?.currencyCode || store.currency || 'BRL';
-        const lastOrderAt = c.lastOrder?.createdAt || null;
-        const aov = numberOfOrders > 0 ? totalSpent / numberOfOrders : 0;
+    // Batch upsert. Replaces the previous per-customer SELECT +
+    // UPDATE/INSERT pair which did 2-3 DB roundtrips per row. On Dr.
+    // Melaxin (22k customers) the old pattern was the single biggest
+    // contributor to the 300s timeout — this collapses to one upsert
+    // per 100 customers.
+    for (let i = 0; i < nodes.length; i += PROCESS_BATCH_SIZE) {
+      const batch = nodes.slice(i, i + PROCESS_BATCH_SIZE);
 
-        if (!email && !phone) continue;
+      const rows = batch
+        .map((c: any) => {
+          const email = (c.email || '').toLowerCase().trim();
+          if (!email) return null; // contacts unique key is (org, email)
 
-        // Find existing contact
-        let existingContact: any = null;
-        if (email) {
-          const { data } = await supabase
-            .from('contacts')
-            .select('id, total_orders, total_spent')
-            .eq('organization_id', organizationId)
-            .ilike('email', email)
-            .limit(1)
-            .maybeSingle();
-          existingContact = data;
-        }
-        if (!existingContact && phone) {
-          const { data } = await supabase
-            .from('contacts')
-            .select('id, total_orders, total_spent')
-            .eq('organization_id', organizationId)
-            .eq('phone', phone)
-            .limit(1)
-            .maybeSingle();
-          existingContact = data;
-        }
+          const numberOfOrders = parseInt(c.numberOfOrders || '0', 10);
+          const totalSpent = parseFloat(c.amountSpent?.amount || '0');
+          const aov = numberOfOrders > 0 ? totalSpent / numberOfOrders : 0;
+          const lastOrderAt = c.lastOrder?.createdAt || null;
 
-        const contactPayload: any = {
-          email: email || undefined,
-          phone: phone || undefined,
-          first_name: c.firstName || undefined,
-          last_name: c.lastName || undefined,
-          total_orders: numberOfOrders,
-          total_spent: totalSpent,
-          average_order_value: aov,
-          last_order_at: lastOrderAt,
-          shopify_customer_id: c.legacyResourceId,
-          is_subscribed_email: c.emailMarketingConsent?.marketingState === 'SUBSCRIBED',
-          is_subscribed_sms: c.smsMarketingConsent?.marketingState === 'SUBSCRIBED',
-          city: c.defaultAddress?.city,
-          state: c.defaultAddress?.province,
-          country: c.defaultAddress?.country,
-          updated_at: new Date().toISOString(),
-        };
+          totalRevenue += totalSpent;
+          totalOrders += numberOfOrders;
 
-        if (existingContact) {
-          await supabase
-            .from('contacts')
-            .update(contactPayload)
-            .eq('id', existingContact.id);
-          contactsUpdated++;
-        } else if (email) {
-          await supabase
-            .from('contacts')
-            .insert({
-              ...contactPayload,
-              organization_id: organizationId,
-              store_id: store.id,
-              source: 'shopify_sync_financials',
-              created_at: c.createdAt || new Date().toISOString(),
-            });
-          contactsCreated++;
-        }
+          return {
+            organization_id: organizationId,
+            store_id: store.id,
+            email,
+            phone: c.phone || null,
+            first_name: c.firstName || null,
+            last_name: c.lastName || null,
+            total_orders: numberOfOrders,
+            total_spent: totalSpent,
+            average_order_value: aov,
+            last_order_at: lastOrderAt,
+            shopify_customer_id: c.legacyResourceId || null,
+            is_subscribed_email: c.emailMarketingConsent?.marketingState === 'SUBSCRIBED',
+            is_subscribed_sms: c.smsMarketingConsent?.marketingState === 'SUBSCRIBED',
+            city: c.defaultAddress?.city || null,
+            state: c.defaultAddress?.province || null,
+            country: c.defaultAddress?.country || null,
+            source: 'shopify_sync_financials',
+            updated_at: new Date().toISOString(),
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
 
-        totalRevenue += totalSpent;
-        totalOrders += numberOfOrders;
-      } catch (perCustomerErr: any) {
-        errors.push(`Customer ${c.email || c.id}: ${perCustomerErr?.message || 'unknown'}`);
+      if (rows.length === 0) continue;
+
+      const { error } = await supabase
+        .from('contacts')
+        .upsert(rows, { onConflict: 'organization_id,email' });
+
+      if (error) {
+        errors.push(`Batch ${i}: ${error.message}`);
+      } else {
+        contactsUpserted += rows.length;
       }
     }
 
@@ -210,18 +263,37 @@ export async function POST(request: NextRequest) {
       .update({
         total_revenue: totalRevenue,
         total_orders: totalOrders,
-        total_customers: customersProcessed,
+        total_customers: customersProcessed + runningCount,
         last_sync_at: new Date().toISOString(),
       })
       .eq('id', store.id);
 
+    // Flip the job state. If we hit the deadline mid-walk, leave it
+    // 'pending' with the cursor so the next call resumes. If we made
+    // it through, mark 'completed' so we don't accidentally restart
+    // on a manual re-trigger.
+    if (jobId) {
+      const done = !reachedDeadline;
+      await supabase
+        .from('shopify_import_jobs')
+        .update({
+          status: done ? 'completed' : 'pending',
+          last_cursor: lastCursor,
+          processed_count: runningCount + customersProcessed,
+          completed_at: done ? new Date().toISOString() : null,
+        })
+        .eq('id', jobId);
+    }
+
     return NextResponse.json({
       success: true,
+      mode: reachedDeadline ? 'partial' : 'completed',
+      jobId,
+      resumeFromCursor: reachedDeadline ? lastCursor : null,
       durationMs: Date.now() - startedAt,
       stats: {
         customersProcessed,
-        contactsUpdated,
-        contactsCreated,
+        contactsUpserted,
         totalRevenue,
         totalOrders,
         currency: store.currency || 'BRL',
@@ -230,15 +302,19 @@ export async function POST(request: NextRequest) {
       errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
     });
   } catch (err: any) {
+    // Leave the job in 'pending' on hard error so a manual re-trigger
+    // resumes instead of starting from scratch.
+    if (jobId) {
+      await supabase
+        .from('shopify_import_jobs')
+        .update({ status: 'pending', last_processed_at: new Date().toISOString() })
+        .eq('id', jobId);
+    }
     return NextResponse.json({
       success: false,
       error: err?.message || 'Sync failed',
       durationMs: Date.now() - startedAt,
-      partialStats: {
-        customersProcessed,
-        contactsUpdated,
-        contactsCreated,
-      },
+      partialStats: { customersProcessed, contactsUpserted },
     }, { status: 500 });
   }
 }
