@@ -253,7 +253,29 @@ async function handleOrderCreate(
   }
   
   const savedOrder = await saveOrder(order, store, contact.id);
-  
+
+  // Email conversion attribution — credit the order's revenue to the
+  // most recent email send this contact engaged with inside the
+  // attribution window. Previously this only ran in handleOrderPaid,
+  // which meant stores using instant-capture gateways (the order is
+  // created already paid, orders/paid never fires) lost every
+  // attribution. The RPC is idempotent on (order_id, organization_id)
+  // so when both webhooks DO fire on the same order, the second call
+  // short-circuits and revenue isn't double-counted.
+  if (orderValue > 0) {
+    try {
+      const { attributeEmailConversion } = await import('@/lib/email/attribution');
+      await attributeEmailConversion({
+        contactId: contact.id,
+        organizationId: store.organization_id,
+        orderId: String(order.id),
+        orderValue,
+      });
+    } catch (err) {
+      console.error('[Webhook] Order create attribution error:', err);
+    }
+  }
+
   // Processar regras de automação
   const eventData: EventData = {
     contact_id: contact.id,

@@ -135,6 +135,14 @@ export async function POST(request: NextRequest) {
       // Attribution
       utmParams,
       clickIds,
+      // Email attribution from URL params (worderContactID/SendID/CampaignID)
+      // — set by the email click redirect at /api/t/c/<sendId>. The pixel
+      // captures these on page load, persists 90 days, and echos every
+      // event so cross-device clicks land on the right contact.
+      attribution,
+      // contactId set explicitly by the embed when worderContactID is in
+      // the URL. Lets us bind visitor → contact without any email match.
+      contactId: contactIdFromBody,
       // Context
       source,
       url,
@@ -245,6 +253,24 @@ export async function POST(request: NextRequest) {
 
     // ---- Resolve contact ----
     let contactId: string | null = identityResult?.contactId || null;
+
+    // Direct contactId binding from email-click attribution. Highest
+    // priority because it's the strongest signal we have: the visitor
+    // clicked a tracked email link addressed to this exact contact.
+    // Verifies the contact actually belongs to this org so a tampered
+    // URL can't bind to a foreign contact.
+    const directContactId = contactIdFromBody || attribution?.contactId || null;
+    if (!contactId && directContactId) {
+      const { data: verifyContact } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('id', directContactId)
+        .eq('organization_id', organizationId)
+        .maybeSingle();
+      if (verifyContact?.id) {
+        contactId = verifyContact.id;
+      }
+    }
 
     if (email && !contactId) {
       const { data: contact } = await supabase
@@ -548,17 +574,22 @@ export async function POST(request: NextRequest) {
       clickIds.msclkid || clickIds.li_fat_id || clickIds.twclid ||
       clickIds.sccid || clickIds._kx
     );
-    if (hasUtm || hasClickIds) {
+    // Email attribution counts as a touchpoint even without utm params
+    // — the worderContactID alone (which the click redirect stamps)
+    // means this visit came from a Worder email and should anchor
+    // last-touch attribution to that send/campaign.
+    const hasEmailAttribution = attribution && (attribution.sendId || attribution.campaignId);
+    if (hasUtm || hasClickIds || hasEmailAttribution) {
       const touchpointBase = {
         organization_id: organizationId,
         contact_id: contactId || null,
         visitor_id: visitorId || anonymousId || null,
         session_id: sessionId || null,
-        utm_source: utmParams?.utm_source || null,
-        utm_medium: utmParams?.utm_medium || null,
-        utm_campaign: utmParams?.utm_campaign || null,
+        utm_source: utmParams?.utm_source || (hasEmailAttribution ? 'worder' : null),
+        utm_medium: utmParams?.utm_medium || (hasEmailAttribution ? 'email' : null),
+        utm_campaign: utmParams?.utm_campaign || attribution?.campaignId || null,
         utm_term: utmParams?.utm_term || null,
-        utm_content: utmParams?.utm_content || null,
+        utm_content: utmParams?.utm_content || attribution?.sendId || null,
         gclid: clickIds?.gclid || null,
         fbclid: clickIds?.fbclid || null,
         ttclid: clickIds?.ttclid || null,

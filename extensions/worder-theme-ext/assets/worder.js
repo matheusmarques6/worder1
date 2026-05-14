@@ -233,6 +233,61 @@
   } catch(e) {}
 
   // ============================================
+  // Email Attribution (worderContactID / worderSendID / worderCampaignID)
+  //
+  // When a visitor clicks a link inside a Worder email, the click
+  // redirect (/api/t/c/<sendId>) stamps the destination URL with
+  // these params. We capture them on first pageview, persist for 90
+  // days, and echo on every subsequent event so a) the storefront
+  // pixel identifies the visitor as that exact contact even without
+  // an email/cookie match, and b) any purchase within the window
+  // gets attributed to the right send/campaign.
+  //
+  // 90-day window matches Klaviyo/Omnisend defaults. Cookie is 1st-
+  // party so it survives Safari ITP (unlike the previous-gen pattern
+  // of 3rd-party cookies that broke in 2020).
+  // ============================================
+  var ATTRIB_COOKIE = '__worder_attribution';
+  var ATTRIB_DAYS = 90;
+
+  function captureEmailAttribution() {
+    var contactId = getUrlParam('worderContactID');
+    var sendId = getUrlParam('worderSendID');
+    var campaignId = getUrlParam('worderCampaignID');
+    if (!contactId && !sendId && !campaignId) return null;
+    var attrib = {
+      contactId: contactId,
+      sendId: sendId,
+      campaignId: campaignId,
+      capturedAt: Date.now(),
+      source: 'email_link',
+    };
+    try {
+      setCookie(ATTRIB_COOKIE, JSON.stringify(attrib), ATTRIB_DAYS);
+    } catch (e) {}
+    return attrib;
+  }
+
+  function loadEmailAttribution() {
+    try {
+      var raw = getCookie(ATTRIB_COOKIE);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      // 90-day TTL guard. The cookie's own expires also enforces this,
+      // but Safari sometimes hands back stale cookies post-ITP — check
+      // the timestamp in payload too.
+      if (parsed.capturedAt && Date.now() - parsed.capturedAt > ATTRIB_DAYS * 86400000) {
+        return null;
+      }
+      return parsed;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  var cachedAttribution = captureEmailAttribution() || loadEmailAttribution();
+
+  // ============================================
   // SEND EVENT
   // ============================================
   function sendEvent(eventType, properties) {
@@ -256,6 +311,15 @@
     // Include UTM/click ID params
     if (cachedUtmParams) {
       payload.utm = cachedUtmParams;
+    }
+
+    // Include email attribution (worderContactID etc.). The server
+    // uses payload.attribution.contactId to bind the visitor identity
+    // to this contact even when no email/phone/customer is present —
+    // which is the cross-device case (click email on phone, browse on
+    // desktop). Echoed on every event for the 90-day window.
+    if (cachedAttribution) {
+      payload.attribution = cachedAttribution;
     }
 
     // Include customer/contact identity if available
@@ -321,6 +385,12 @@
       firstName: data.firstName || null,
       lastName: data.lastName || null,
       shopifyCustomerId: data.shopifyCustomerId ? String(data.shopifyCustomerId) : null,
+      // contactId is set when we already know the Worder contact UUID
+      // (e.g. from the email click attribution). The server skips the
+      // email/phone resolution step and binds visitor → contact
+      // directly, which is what makes cross-device attribution work
+      // even before the visitor types anything.
+      contactId: data.contactId || null,
       properties: data.properties || {},
       source: data.source || 'theme_ext',
       timestamp: new Date().toISOString(),
@@ -371,6 +441,23 @@
     sendIdentify({
       email: utmEmail,
       source: 'utm_email',
+    });
+  }
+
+  // 2b. worderContactID from URL — fires a bind-only identify so the
+  // visitor_identities row attaches to this contact even before any
+  // event lands. Crucial for cross-device: user opened email on
+  // mobile, clicked through, browses on desktop → that desktop
+  // visitorId now points to the same contact, every viewed_product /
+  // add_to_cart on the same session is attributed.
+  if (cachedAttribution && cachedAttribution.contactId) {
+    sendIdentify({
+      contactId: cachedAttribution.contactId,
+      source: 'email_link',
+      properties: {
+        worderSendID: cachedAttribution.sendId,
+        worderCampaignID: cachedAttribution.campaignId,
+      },
     });
   }
 

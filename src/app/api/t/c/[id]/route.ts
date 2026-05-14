@@ -1,6 +1,22 @@
 // =============================================
 // WORDER: Click Tracker / Redirect
-// Grava click no CDP (contact_events) + email_sends + attribution.
+//
+// Inbound URL pattern (from email render):
+//   /api/t/c/<emailSendId>?url=<encoded destination>
+//
+// Three jobs:
+//   1. Resolve send → contact/campaign/org (synchronous, ~50ms). We
+//      need this BEFORE the redirect so we can stamp the destination
+//      URL with attribution params for the storefront pixel.
+//   2. Stamp the destination with worderContactID + worderSendID +
+//      worderCampaignID + utm_source/medium/campaign and 302. This is
+//      the cross-device attribution carrier — same pattern Klaviyo
+//      and Omnisend use (the worderContactID in the URL lets the
+//      pixel attach the visitor identity to this exact contact even
+//      if they're on a different device than where the email opened).
+//   3. Fire-and-forget: record click in contact_events +
+//      email_sends.clicked_at + campaign counters +
+//      attribution_touchpoints.
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,60 +30,163 @@ export async function GET(
   if (!url) return NextResponse.json({ error: 'Missing url' }, { status: 400 });
   const decodedUrl = decodeURIComponent(url);
 
-  // Fire-and-forget — não bloqueia redirect
-  recordClick(emailSendId, decodedUrl).catch(() => {});
-  return NextResponse.redirect(decodedUrl, 302);
+  // Synchronous lookup so the redirect URL can carry attribution
+  // params. Cost: one Supabase query (~50ms). Gain: every storefront
+  // pixel boot after this click can identify the visitor as this
+  // exact contact, even on a different device than where they read
+  // the email.
+  const attribution = await resolveAttribution(emailSendId);
+
+  // Fire-and-forget the rest (event row, counters, touchpoint).
+  recordClick(emailSendId, decodedUrl, attribution).catch(() => {});
+
+  const stamped = stampDestination(decodedUrl, emailSendId, attribution);
+  return NextResponse.redirect(stamped, 302);
 }
 
-async function recordClick(emailSendId: string, url: string) {
+interface ClickAttribution {
+  contactId: string | null;
+  campaignId: string | null;
+  organizationId: string | null;
+  abVariant: string | null;
+}
+
+async function resolveAttribution(emailSendId: string): Promise<ClickAttribution> {
+  try {
+    const { supabaseAdmin } = await import('@/lib/supabase-admin');
+    const { data: send } = await supabaseAdmin
+      .from('email_sends')
+      .select('id, campaign_id, contact_id, organization_id, ab_variant')
+      .eq('id', emailSendId)
+      .maybeSingle();
+    if (!send) {
+      return { contactId: null, campaignId: null, organizationId: null, abVariant: null };
+    }
+
+    // email_sends.organization_id is populated on every new send via
+    // send-campaign-email.ts. Fall back to email_campaigns lookup for
+    // older rows that pre-date that column being filled in.
+    let organizationId = send.organization_id || null;
+    if (!organizationId && send.campaign_id) {
+      const { data: campaign } = await supabaseAdmin
+        .from('email_campaigns')
+        .select('organization_id')
+        .eq('id', send.campaign_id)
+        .maybeSingle();
+      organizationId = campaign?.organization_id || null;
+    }
+
+    return {
+      contactId: send.contact_id || null,
+      campaignId: send.campaign_id || null,
+      organizationId,
+      abVariant: send.ab_variant || null,
+    };
+  } catch (err) {
+    console.error('[ClickTracker] resolveAttribution failed:', err);
+    return { contactId: null, campaignId: null, organizationId: null, abVariant: null };
+  }
+}
+
+function stampDestination(
+  destination: string,
+  emailSendId: string,
+  attribution: ClickAttribution
+): string {
+  // Only http(s) destinations can carry query params. mailto:/tel:/#
+  // pass through untouched.
+  if (!/^https?:\/\//i.test(destination)) return destination;
+
+  let target: URL;
+  try {
+    target = new URL(destination);
+  } catch {
+    return destination;
+  }
+
+  const sp = target.searchParams;
+
+  // Worder identifiers — always stamp when present, never duplicate.
+  // These are what the theme app embed reads on page load to attach
+  // the visitor's identity to this exact contact.
+  if (attribution.contactId && !sp.has('worderContactID')) {
+    sp.set('worderContactID', attribution.contactId);
+  }
+  if (emailSendId && !sp.has('worderSendID')) {
+    sp.set('worderSendID', emailSendId);
+  }
+  if (attribution.campaignId && !sp.has('worderCampaignID')) {
+    sp.set('worderCampaignID', attribution.campaignId);
+  }
+
+  // UTM params — respect anything the merchant hand-placed on their
+  // links (e.g. ?utm_source=instagram on a co-promo). Only fill blanks.
+  if (!sp.has('utm_source')) sp.set('utm_source', 'worder');
+  if (!sp.has('utm_medium')) sp.set('utm_medium', 'email');
+  if (attribution.campaignId && !sp.has('utm_campaign')) {
+    sp.set('utm_campaign', attribution.campaignId);
+  }
+
+  target.search = sp.toString();
+  return target.toString();
+}
+
+async function recordClick(
+  emailSendId: string,
+  url: string,
+  attribution: ClickAttribution
+) {
   try {
     const { supabaseAdmin } = await import('@/lib/supabase-admin');
 
-    const { data: send } = await supabaseAdmin
-      .from('email_sends')
-      .select('id, campaign_id, contact_id, ab_variant')
-      .eq('id', emailSendId).maybeSingle();
-    if (!send) return;
-
-    let orgId: string | null = null;
-    if (send.campaign_id) {
-      const { data: c } = await supabaseAdmin.from('email_campaigns')
-        .select('organization_id').eq('id', send.campaign_id).maybeSingle();
-      orgId = c?.organization_id || null;
-    }
-
     const now = new Date().toISOString();
 
-    // email_sends.clicked_at
+    // email_sends.clicked_at — only the first click flips it.
     await supabaseAdmin.from('email_sends')
       .update({ clicked_at: now }).eq('id', emailSendId).is('clicked_at', null);
 
     // CDP: contact_events
-    if (orgId && send.contact_id) {
+    if (attribution.organizationId && attribution.contactId) {
       const day = now.slice(0, 10);
       await supabaseAdmin.from('contact_events').insert({
-        organization_id: orgId, contact_id: send.contact_id,
-        event_type: 'email_clicked', event_source: 'worder_email',
-        properties: { CampaignId: send.campaign_id, SendId: emailSendId, ClickedURL: url, ab_variant: send.ab_variant },
+        organization_id: attribution.organizationId,
+        contact_id: attribution.contactId,
+        event_type: 'email_clicked',
+        event_source: 'worder_email',
+        properties: {
+          CampaignId: attribution.campaignId,
+          SendId: emailSendId,
+          ClickedURL: url,
+          ab_variant: attribution.abVariant,
+        },
         occurred_at: now,
-        idempotency_key: `email_clicked:${send.campaign_id}:${send.contact_id}:${day}:${url.slice(0, 100)}`,
+        idempotency_key: `email_clicked:${attribution.campaignId}:${attribution.contactId}:${day}:${url.slice(0, 100)}`,
       }).select().maybeSingle();
 
       await supabaseAdmin.from('contacts')
         .update({ last_active_at: now, last_event_type: 'email_clicked' })
-        .eq('id', send.contact_id);
+        .eq('id', attribution.contactId);
 
-      // Attribution: email click = last touch
+      // Attribution touchpoint: email click = last touch
       await supabaseAdmin.from('attribution_touchpoints').insert({
-        organization_id: orgId, contact_id: send.contact_id,
-        touchpoint_type: 'last', utm_source: 'email', utm_medium: 'email',
-        utm_campaign: send.campaign_id, occurred_at: now,
+        organization_id: attribution.organizationId,
+        contact_id: attribution.contactId,
+        touchpoint_type: 'last',
+        utm_source: 'email',
+        utm_medium: 'email',
+        utm_campaign: attribution.campaignId,
+        occurred_at: now,
       }).select().maybeSingle();
     }
 
     // Campaign stats
-    if (send.campaign_id) {
-      const { error: rpcErr } = await supabaseAdmin.rpc('increment_campaign_clicks', { campaign_id: send.campaign_id }); if (rpcErr) { /* silent */ }
+    if (attribution.campaignId) {
+      const { error: rpcErr } = await supabaseAdmin.rpc('increment_campaign_clicks', {
+        campaign_id: attribution.campaignId,
+      });
+      if (rpcErr) { /* silent */ }
     }
-  } catch (e) { console.error('[ClickTracker]', e); }
+  } catch (e) {
+    console.error('[ClickTracker]', e);
+  }
 }
