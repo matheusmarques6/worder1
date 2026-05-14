@@ -39,6 +39,16 @@ export async function POST(request: NextRequest) {
     let body: any = {};
     try { body = await request.json(); } catch {}
     const syncType = body.syncType || 'all';
+    // Critical: honor the storeId the merchant clicked on. The previous
+    // version of this handler ignored body.storeId / body.store_id
+    // entirely and always picked the "most-recently-installed store in
+    // the org". On a multi-store org (Dr. Melaxin + Based), the
+    // merchant clicked "Sincronizar tudo" on Dr. Melaxin and the
+    // handler ran a sync on Based — Dr. Melaxin's order count stayed
+    // pegged at 365 forever no matter how many times they clicked.
+    // Accept both casings so older callers (integrations page used
+    // store_id, dashboard used storeId) keep working.
+    const requestedStoreId: string | null = body.storeId || body.store_id || null;
     // historical=true ignores the 90-day window when fetching orders.
     // Default sync stays at 90 days because that covers the cases that
     // matter for marketing (recent activity, abandoned carts), but a
@@ -51,18 +61,25 @@ export async function POST(request: NextRequest) {
     const historical: boolean = body.historical === true || body.full === true;
     const since: string | null = typeof body.since === 'string' ? body.since : null;
 
-    // Find store — try ALL active stores, not just user's orgs
-    let { data: store } = await supabase
+    // Find store — prefer the explicit one the merchant clicked.
+    let storeQuery = supabase
       .from('shopify_stores')
       .select('*')
       .in('organization_id', orgIds)
-      .eq('is_active', true)
-      .order('installed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .eq('is_active', true);
 
-    // Fallback: any active store
-    if (!store) {
+    if (requestedStoreId) {
+      storeQuery = storeQuery.eq('id', requestedStoreId);
+    } else {
+      storeQuery = storeQuery.order('installed_at', { ascending: false }).limit(1);
+    }
+
+    let { data: store } = await storeQuery.maybeSingle();
+
+    // Fallback: any active store. Only triggers when NO storeId was
+    // passed AND the org scope returned nothing (extremely rare —
+    // typically a stale auth session pointing at a deleted org).
+    if (!store && !requestedStoreId) {
       const { data: anyStore } = await supabase
         .from('shopify_stores')
         .select('*')
