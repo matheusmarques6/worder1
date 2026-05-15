@@ -1,33 +1,39 @@
 // =============================================
 // GET /api/cron/resume-stalled-bulk-drains
 //
-// Safety net for the self-chaining bulk-drain worker. The drain
-// fires the next invocation via `fetch(... keepalive: true)` and
-// 99% of the time that succeeds. But cold-start hiccups, DNS
-// blips, or a redeploy mid-chain can drop the continuation —
-// leaving a perfectly resumable shopify_import_jobs row sitting
-// 'paused' forever with no one to wake it up.
+// Two safety nets in one cron:
 //
-// This cron looks for those orphans every 2 minutes and re-fires
-// the drain worker. The drain itself is idempotent on
-// (jobId, lines_processed) so a double-fire never corrupts data.
+// 1. status='pending' bulk jobs that the bulk-finish webhook never
+//    fired for. The merchant clicks Sincronizar Tudo → we submit the
+//    bulk op to Shopify and create a `pending` shopify_import_jobs
+//    row. Shopify is supposed to ping /api/webhooks/shopify/
+//    bulk-finish when done, which saves the JSONL URL and starts the
+//    drain. But: webhook subscription may not be installed, the ping
+//    may have failed HMAC, the redeploy moved the URL, etc. Without
+//    this safety net the bulk job sits 'pending' forever.
+//    Fix: poll Shopify's currentBulkOperation directly when a pending
+//    bulk job is older than 90s. If completed, save the URL and fire
+//    the drain. Same effect as the webhook landing.
 //
-// Picks up:
-//   - status='paused' OR 'running' AND last_processed_at older
-//     than STALL_THRESHOLD_MS (= longer than one drain window)
-//   - sync_type='orders_bulk' (don't touch cursor jobs — those
-//     resume on next merchant click)
-//   - has bulk_jsonl_url on config (otherwise nothing to drain)
+// 2. status='paused' or 'running' jobs whose self-chain keepalive
+//    fetch was dropped. The drain worker self-schedules its own
+//    continuation; if that fetch dies (cold start, DNS, redeploy mid-
+//    chain), the cron picks it up after 5 min and re-fires.
+//
+// Drain is idempotent on (jobId, lines_processed) so duplicate fires
+// from any of these paths are safe.
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getCurrentBulkOperation } from '@/lib/services/shopify/bulk-sync';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const STALL_THRESHOLD_MS = 300_000; // 5 minutes
-const MAX_BATCH = 20; // per cron tick, generous — stalled bulk drains should be rare
+const STALL_THRESHOLD_MS = 300_000; // 5 minutes for paused/running
+const PENDING_THRESHOLD_MS = 90_000; // 1.5 min before we poll a pending bulk
+const MAX_BATCH = 20;
 
 function verifyCron(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
@@ -43,8 +49,108 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const cutoffIso = new Date(Date.now() - STALL_THRESHOLD_MS).toISOString();
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || '';
+  const drainUrl = baseUrl.startsWith('http')
+    ? `${baseUrl}/api/workers/shopify-bulk-drain`
+    : `https://${baseUrl}/api/workers/shopify-bulk-drain`;
 
+  const fireDrain = (jobId: string) => {
+    fetch(drainUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.CRON_SECRET || ''}`,
+      },
+      body: JSON.stringify({ jobId }),
+      keepalive: true,
+    }).catch((err) => {
+      console.warn(`[ResumeStalledBulk] dispatch ${jobId} failed:`, err?.message);
+    });
+  };
+
+  // ====== PATH 1: pending jobs whose webhook never fired ======
+  // For these we have to ASK Shopify for the JSONL URL ourselves.
+  const pendingCutoff = new Date(Date.now() - PENDING_THRESHOLD_MS).toISOString();
+  const { data: pending } = await supabaseAdmin
+    .from('shopify_import_jobs')
+    .select('id, store_id, organization_id, config, started_at')
+    .eq('status', 'pending')
+    .contains('config', { sync_type: 'orders_bulk' })
+    .lt('started_at', pendingCutoff)
+    .order('started_at', { ascending: true })
+    .limit(MAX_BATCH);
+
+  const polledOk: string[] = [];
+  const polledStillRunning: string[] = [];
+  const polledFailed: string[] = [];
+
+  for (const job of pending || []) {
+    const cfg = (job.config as any) || {};
+    // If we already have a JSONL URL, the webhook DID land — just
+    // refire the drain (covered by Path 2 below if it stalled).
+    if (cfg.bulk_jsonl_url) {
+      fireDrain(job.id);
+      polledOk.push(job.id);
+      continue;
+    }
+
+    // Otherwise hit Shopify for the operation status.
+    const { data: store } = await supabaseAdmin
+      .from('shopify_stores')
+      .select('id, organization_id, shop_domain, access_token')
+      .eq('id', job.store_id)
+      .maybeSingle();
+    if (!store?.access_token) continue;
+
+    try {
+      const op = await getCurrentBulkOperation({
+        id: store.id,
+        organization_id: store.organization_id,
+        shop_domain: store.shop_domain,
+        access_token: store.access_token,
+      });
+
+      if (!op) continue;
+
+      if (op.status === 'COMPLETED' && op.url) {
+        // Save the URL onto the job and fire the drain — same shape
+        // the bulk-finish webhook produces.
+        await supabaseAdmin
+          .from('shopify_import_jobs')
+          .update({
+            status: 'pending',
+            config: {
+              ...cfg,
+              bulk_jsonl_url: op.url,
+              lines_processed: cfg.lines_processed || 0,
+            },
+            last_processed_at: new Date().toISOString(),
+          })
+          .eq('id', job.id);
+        fireDrain(job.id);
+        polledOk.push(job.id);
+      } else if (op.status === 'FAILED' || op.status === 'CANCELED' || op.status === 'EXPIRED') {
+        await supabaseAdmin
+          .from('shopify_import_jobs')
+          .update({
+            status: 'failed',
+            last_error: `bulk op ${op.status.toLowerCase()}: ${op.errorCode || 'no error code'}`,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', job.id);
+        polledFailed.push(job.id);
+      } else {
+        // CREATED or RUNNING — Shopify still working on it. Leave
+        // pending; we'll poll again next tick.
+        polledStillRunning.push(job.id);
+      }
+    } catch (err: any) {
+      console.warn(`[ResumeStalledBulk] poll ${job.id} failed:`, err?.message);
+    }
+  }
+
+  // ====== PATH 2: paused/running jobs whose self-chain dropped ======
+  const cutoffIso = new Date(Date.now() - STALL_THRESHOLD_MS).toISOString();
   const { data: stalled, error } = await supabaseAdmin
     .from('shopify_import_jobs')
     .select('id, status, config, last_processed_at, started_at')
@@ -56,39 +162,23 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     console.error('[ResumeStalledBulk] query failed:', error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
   }
-
-  if (!stalled || stalled.length === 0) {
-    return NextResponse.json({ ok: true, resumed: 0 });
-  }
-
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || '';
-  const drainUrl = baseUrl.startsWith('http')
-    ? `${baseUrl}/api/workers/shopify-bulk-drain`
-    : `https://${baseUrl}/api/workers/shopify-bulk-drain`;
 
   const resumed: string[] = [];
-  for (const job of stalled) {
+  for (const job of stalled || []) {
     const cfg = (job.config as any) || {};
     if (!cfg.bulk_jsonl_url) continue;
-
-    // Fire-and-forget. The worker validates secret + idempotency,
-    // so a duplicate fire from cron + a slow recovered keepalive
-    // is safe.
-    fetch(drainUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.CRON_SECRET || ''}`,
-      },
-      body: JSON.stringify({ jobId: job.id }),
-      keepalive: true,
-    }).catch((err) => {
-      console.warn(`[ResumeStalledBulk] dispatch ${job.id} failed:`, err?.message);
-    });
+    fireDrain(job.id);
     resumed.push(job.id);
   }
 
-  return NextResponse.json({ ok: true, resumed: resumed.length, jobs: resumed });
+  return NextResponse.json({
+    ok: true,
+    pendingPolled: pending?.length || 0,
+    polledOk: polledOk.length,
+    polledStillRunning: polledStillRunning.length,
+    polledFailed: polledFailed.length,
+    stalledResumed: resumed.length,
+    resumedJobs: resumed,
+  });
 }
