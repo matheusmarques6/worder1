@@ -80,15 +80,61 @@ export default function IntegrationsPage() {
     loadStores()
   }, [currentStore?.id, hasHydrated])
 
+  // Poll the bulk sync job until it completes or fails. Refreshes the
+  // store row in the UI when progress moves so the merchant sees the
+  // order count climb without staying on this page (polling continues
+  // even after they navigate away — visibility flags don't cancel it).
+  const pollBulkUntilDone = (jobId: string, storeId: string) => {
+    const POLL_MS = 30_000
+    const MAX_POLLS = 80 // ~40 minutes ceiling
+    let attempts = 0
+    const tick = async () => {
+      attempts++
+      try {
+        const res = await fetch(`/api/shopify/jobs/${jobId}`)
+        if (!res.ok) return // job vanished — stop polling
+        const data = await res.json()
+        // Refresh the store row so the merchant sees the running count
+        const statusRes = await fetch(`/api/integrations/shopify/status?store_id=${storeId}`)
+        if (statusRes.ok) {
+          const sData = await statusRes.json()
+          if (sData.connected && sData.store) {
+            const s = sData.store
+            setConnectedStores(prev => prev.map(p => p.id === s.id ? {
+              ...p,
+              orders_count: s.totalOrders ?? p.orders_count,
+              customers_count: s.totalCustomers ?? p.customers_count,
+              products_count: s.totalProducts ?? p.products_count,
+              last_sync_at: s.lastSyncAt ?? p.last_sync_at,
+            } : p))
+          }
+        }
+        if (data.status === 'completed' || data.status === 'failed') {
+          setSyncing(null)
+          return
+        }
+        if (attempts < MAX_POLLS) setTimeout(tick, POLL_MS)
+      } catch {
+        if (attempts < MAX_POLLS) setTimeout(tick, POLL_MS)
+      }
+    }
+    setTimeout(tick, POLL_MS)
+  }
+
   const handleSync = async (storeId: string) => {
     setSyncing(storeId)
     try {
-      // Step 1: Sync products + customers + orders
-      await fetch('/api/shopify/sync-now', {
+      // Step 1: Trigger orders sync. historical=true makes this take
+      // the Shopify Bulk Operations path on the server — async, no
+      // rate-limit budget, handles 100k+ orders. The merchant can
+      // leave this page; the bulk-finish webhook + drain worker
+      // finish the import server-to-server.
+      const syncRes = await fetch('/api/shopify/sync-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ store_id: storeId }),
+        body: JSON.stringify({ store_id: storeId, syncType: 'all', historical: true }),
       })
+      const syncData = await syncRes.json().catch(() => ({}))
       // Step 2: Pull lifetime financial metrics into contacts (revenue, AOV, last_order_at)
       try {
         await fetch(`/api/shopify/sync-financials?store_id=${storeId}`, { method: 'POST' })
@@ -101,6 +147,15 @@ export default function IntegrationsPage() {
           body: JSON.stringify({ storeId }),
         })
       } catch { /* non-blocking */ }
+      // If the sync took the bulk path, kick off background polling
+      // so the merchant sees progress trickle in even after they
+      // navigate away. Otherwise reload the store row now.
+      if (syncData?.mode === 'bulk' && syncData?.jobId) {
+        // Bulk runs server-side; reload after we get something back
+        // (poll every ~30s). The drain webhook + cron safety net
+        // guarantee eventual completion regardless of this poll.
+        pollBulkUntilDone(syncData.jobId, storeId)
+      }
       // Reload after sync with proper mapping
       const storeParam = storeId ? `?store_id=${storeId}` : ''
       const res = await fetch(`/api/integrations/shopify/status${storeParam}`)

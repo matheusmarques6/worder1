@@ -156,13 +156,14 @@ export async function runFullSyncGraphQL(
       })
       .eq('id', store.id);
 
-    // Update contact metrics
-    await updateContactMetrics(store);
-
     result.success = result.errors.length === 0;
     result.durationMs = Date.now() - startTime;
 
-    // Update sync log
+    // Update sync log FIRST so the merchant always sees the sync
+    // finalize, even if the post-sync metric refresh below explodes
+    // or times out. Previously updateContactMetrics ran first and
+    // could hang for tens of minutes — sync_logs stayed 'running'
+    // forever and the merchant thought the sync was stuck.
     if (logId) {
       await supabase
         .from('shopify_sync_logs')
@@ -174,6 +175,16 @@ export async function runFullSyncGraphQL(
           error_message: result.errors.length > 0 ? result.errors.slice(0, 5).join('; ') : null,
         })
         .eq('id', logId);
+    }
+
+    // Best-effort contact aggregate refresh. Now powered by a single
+    // SQL pass (refresh_contact_order_metrics RPC), but still wrapped
+    // in try/catch and run after the log update so it can never block
+    // the sync from being marked done.
+    try {
+      await updateContactMetrics(store);
+    } catch (e) {
+      console.warn('[GraphQLSync] updateContactMetrics post-finalize failed:', e);
     }
 
     onProgress?.('done', 100, 'GraphQL sync completed!');
@@ -627,69 +638,30 @@ async function syncProductsGraphQL(
 async function updateContactMetrics(store: ShopifyStoreConfig): Promise<void> {
   const supabase = getSupabaseAdmin();
 
+  // Original implementation iterated every contact and did one
+  // SELECT + one UPDATE serially. On Dr. Melaxin (22k contacts) that
+  // was 44k round-trips and Vercel killed the function every time —
+  // before reaching the sync_logs completion write, so the merchant
+  // saw "running" forever and the orders sync looked successful
+  // (lines wrote shopify_stores.last_sync_at before this function
+  // ran). Single SQL pass via a Postgres RPC: aggregate
+  // shopify_orders per email, join contacts in the same statement,
+  // update in one query. The RPC fallback path keeps something
+  // running even on projects that haven't applied the migration yet.
   try {
-    // Get all contacts with orders for this org
-    const { data: contacts } = await supabase
-      .from('contacts')
-      .select('id, email')
-      .eq('organization_id', store.organization_id)
-      .not('shopify_customer_id', 'is', null);
-
-    if (!contacts?.length) return;
-
-    for (const contact of contacts) {
-      if (!contact.email) continue;
-
-      // Calculate metrics from orders
-      const { data: orders } = await supabase
-        .from('shopify_orders')
-        .select('total_price, created_at, financial_status')
-        .eq('store_id', store.id)
-        .ilike('email', contact.email);
-
-      if (!orders?.length) continue;
-
-      const paidOrders = orders.filter((o) =>
-        ['paid', 'partially_paid', 'refunded', 'partially_refunded'].includes(o.financial_status || '')
-      );
-
-      const totalOrders = paidOrders.length;
-      const totalSpent = paidOrders.reduce((sum, o) => sum + parseFloat(o.total_price || '0'), 0);
-      const avgOrderValue = totalOrders > 0 ? totalSpent / totalOrders : 0;
-
-      // Sort by date to find first and last order
-      const sortedOrders = orders.sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
-      const firstOrderAt = sortedOrders[0]?.created_at;
-      const lastOrderAt = sortedOrders[sortedOrders.length - 1]?.created_at;
-      const daysSinceLastOrder = lastOrderAt
-        ? Math.floor((Date.now() - new Date(lastOrderAt).getTime()) / (24 * 60 * 60 * 1000))
-        : null;
-
-      // Determine lifecycle stage
-      let lifecycleStage = 'subscriber';
-      if (totalOrders >= 5) lifecycleStage = 'vip';
-      else if (totalOrders >= 2) lifecycleStage = 'repeat_customer';
-      else if (totalOrders >= 1) lifecycleStage = 'customer';
-
-      await supabase
-        .from('contacts')
-        .update({
-          total_orders: totalOrders,
-          total_spent: totalSpent,
-          average_order_value: avgOrderValue,
-          first_order_at: firstOrderAt,
-          last_order_at: lastOrderAt,
-          days_since_last_order: daysSinceLastOrder,
-          lifecycle_stage: lifecycleStage,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', contact.id);
+    const { error: rpcErr } = await supabase.rpc('refresh_contact_order_metrics', {
+      p_store_id: store.id,
+      p_organization_id: store.organization_id,
+    });
+    if (rpcErr) {
+      // RPC not yet deployed → log and skip. The sync itself still
+      // succeeded; only the contact-side aggregates are stale. Next
+      // run of the daily sync-financials cron will fill them.
+      console.warn('[GraphQLSync] refresh_contact_order_metrics RPC unavailable:', rpcErr.message);
+      return;
     }
-
-    console.log(`[GraphQLSync] Updated metrics for ${contacts.length} contacts`);
-  } catch (error) {
-    console.error('[GraphQLSync] Failed to update contact metrics:', error);
+    console.log('[GraphQLSync] Refreshed contact metrics for store', store.id);
+  } catch (error: any) {
+    console.error('[GraphQLSync] Failed to refresh contact metrics:', error?.message);
   }
 }
