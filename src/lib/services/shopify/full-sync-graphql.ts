@@ -329,15 +329,29 @@ async function syncOrdersGraphQL(
   let resumeCursor: string | null = null;
 
   try {
-    // Build a date filter only when a window is requested. When daysBack
-    // is null we ask Shopify for every order ever placed — required on
-    // first sync so the merchant doesn't end up with only 360 of 627.
+    // Build the Shopify search query. Two things matter here:
+    //
+    // 1. `status:any` — by default the orders connection filters to
+    //    status:open (= open + cancelled). Closed and archived orders
+    //    are HIDDEN. Shopify auto-archives fulfilled orders after a
+    //    while, so a healthy store routinely has hundreds of orders
+    //    that disappear from this connection unless we explicitly
+    //    ask for "any" status. That's why Dr. Melaxin stuck at 530 of
+    //    627: the missing 97 are archived. Without this flag every
+    //    "Sincronizar tudo" plateaus the same way regardless of how
+    //    many times the merchant clicks.
+    //
+    // 2. `created_at:>=YYYY-MM-DD` — only applied on incremental
+    //    syncs (daysBack > 0). When daysBack is null we want every
+    //    order ever placed.
     const variables: Record<string, any> = { sortKey: 'CREATED_AT' };
+    const queryParts: string[] = ['status:any'];
     if (typeof daysBack === 'number' && daysBack > 0) {
       const sinceDateStr = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000)
         .toISOString().split('T')[0];
-      variables.query = `created_at:>=${sinceDateStr}`;
+      queryParts.push(`created_at:>=${sinceDateStr}`);
     }
+    variables.query = queryParts.join(' ');
 
     // Pick up where we left off if a previous run was interrupted before
     // walking every page. The job row keeps last_cursor across attempts;
@@ -418,6 +432,17 @@ async function syncOrdersGraphQL(
       }
     );
 
+    // Roll the cumulative count forward BEFORE the per-order upsert
+    // loop. `count` started at the previous run's processed_count
+    // (line above) and never got incremented inside the for-loop —
+    // so the returned `count` used to be the count BEFORE this run's
+    // fresh nodes were upserted, which is what stomped
+    // shopify_stores.total_orders back to a stale value every time a
+    // resumed sync wrote it. Now the value the orchestrator writes to
+    // total_orders reflects everything in shopify_orders for this
+    // store.
+    count = count + nodes.length;
+
     // Final job state: completed if we reached the end of the connection,
     // paused if we hit the deadline (resume on next run).
     if (jobId) {
@@ -427,12 +452,12 @@ async function syncOrdersGraphQL(
           status: reachedDeadline ? 'paused' : 'completed',
           last_cursor: lastCursor,
           completed_at: reachedDeadline ? null : new Date().toISOString(),
-          processed_count: count + nodes.length,
+          processed_count: count,
         })
         .eq('id', jobId);
     }
     if (reachedDeadline) {
-      console.warn(`[Sync] Orders sync paused at ${nodes.length} pulled, cursor=${lastCursor?.slice(0, 16)}... Next run will resume.`);
+      console.warn(`[Sync] Orders sync paused at ${nodes.length} pulled (${count} cumulative), cursor=${lastCursor?.slice(0, 16)}... Next run will resume.`);
       resumeCursor = lastCursor;
     }
 
