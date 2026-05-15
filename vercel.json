@@ -87,6 +87,10 @@
     {
       "path": "/api/cron/compute-recommendations",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/resume-stalled-bulk-drains",
+      "schedule": "*/2 * * * *"
     }
   ]
 }

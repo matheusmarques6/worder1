@@ -21,13 +21,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import {
-  getCurrentBulkOperation,
-  processBulkOrdersJsonl,
-} from '@/lib/services/shopify/bulk-sync';
+import { getCurrentBulkOperation } from '@/lib/services/shopify/bulk-sync';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;
+export const maxDuration = 30;
 
 function verifyHmac(rawBody: string, hmacHeader: string | null): boolean {
   if (!hmacHeader) return false;
@@ -121,34 +118,51 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true, ignored: 'no jsonl url' });
   }
 
-  await supabaseAdmin
-    .from('shopify_import_jobs')
-    .update({ status: 'running', last_processed_at: new Date().toISOString() })
-    .eq('id', job.id);
-
-  // Drain the JSONL — runs to completion within maxDuration. For huge
-  // files (>5min of streaming), spawning a follow-up function via
-  // QStash would be safer. Tier 2b lands that.
-  const result = await processBulkOrdersJsonl({
-    store: { id: store.id, organization_id: store.organization_id },
-    jobId: job.id,
-    fileUrl: op.url,
-  });
-
+  // Persist the URL + reset progress markers, then delegate the
+  // actual drain to /api/workers/shopify-bulk-drain. The webhook
+  // itself has to ack Shopify within 5s (or they retry 19 times) —
+  // and the drain can take 5+ minutes on huge stores. Splitting
+  // keeps us responsive AND makes the drain self-chainable: each
+  // 240s invocation saves lines_processed, fires the next worker
+  // POST via keepalive fetch, and the merchant's 100k / 1M-order
+  // store finishes draining over multiple invocations without any
+  // intervention.
+  const existingCfg = (job.config as any) || {};
   await supabaseAdmin
     .from('shopify_import_jobs')
     .update({
-      status: result.errors.length ? 'failed' : 'completed',
-      processed_count: result.processed,
-      last_error: result.errors[0] || null,
-      error_details: result.errors.length ? { errors: result.errors } : null,
-      completed_at: new Date().toISOString(),
+      status: 'pending',
+      config: {
+        ...existingCfg,
+        bulk_jsonl_url: op.url,
+        lines_processed: existingCfg.lines_processed || 0,
+      },
+      last_processed_at: new Date().toISOString(),
     })
     .eq('id', job.id);
 
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || '';
+  const drainUrl = baseUrl.startsWith('http')
+    ? `${baseUrl}/api/workers/shopify-bulk-drain`
+    : `https://${baseUrl}/api/workers/shopify-bulk-drain`;
+  // Fire-and-forget. The drain endpoint validates CRON_SECRET, so
+  // the same secret has to be set on both sides. keepalive=true
+  // ensures the request survives this function returning.
+  fetch(drainUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.CRON_SECRET || ''}`,
+    },
+    body: JSON.stringify({ jobId: job.id }),
+    keepalive: true,
+  }).catch((err) => {
+    console.warn('[BulkFinish] drain dispatch failed (cron will pick it up):', err?.message);
+  });
+
   return NextResponse.json({
     received: true,
-    processed: result.processed,
-    errors: result.errors.length,
+    jobId: job.id,
+    mode: 'drain-dispatched',
   });
 }

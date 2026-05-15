@@ -165,21 +165,56 @@ export async function getCurrentBulkOperation(store: ShopifyStoreConfig): Promis
 }
 
 /** Download the JSONL result file and upsert orders into shopify_orders.
- *  Streams line-by-line via TextDecoder so a 100k-order file (~50MB)
- *  doesn't bloat memory. */
+ *  Streams line-by-line via TextDecoder so a multi-GB file doesn't bloat
+ *  memory. Resumable: passes deadlineMs to bail before Vercel kills,
+ *  saves how many lines were processed, and the next invocation
+ *  fast-forwards past them.
+ *
+ *  Shopify's bulk JSONL puts each parent's children right after the
+ *  parent (lineItems for Order X arrive between the X line and the next
+ *  Order line). Previous implementation flushed each order immediately
+ *  on its parse and looked up children from a pre-built map — but the
+ *  children hadn't been parsed yet, so every drained order ended up
+ *  with line_items: []. Fixed by buffering the "current order" and
+ *  flushing only when the next parent appears (or EOF).
+ */
 export async function processBulkOrdersJsonl(opts: {
   store: { id: string; organization_id: string };
   jobId: string;
   fileUrl: string;
-}): Promise<{ processed: number; errors: string[] }> {
-  const { store, jobId, fileUrl } = opts;
+  /** Fast-forward past this many lines before processing (resume). */
+  linesAlreadyProcessed?: number;
+  /** Time budget in ms. The drain bails at the next order boundary
+   *  after this elapses, saves linesProcessed, returns complete=false.
+   *  Caller fires a continuation. */
+  deadlineMs?: number;
+}): Promise<{
+  processed: number;
+  errors: string[];
+  linesProcessed: number;
+  complete: boolean;
+}> {
+  const {
+    store,
+    jobId,
+    fileUrl,
+    linesAlreadyProcessed = 0,
+    deadlineMs = 240_000,
+  } = opts;
   const supabase = supabaseAdmin;
   const errors: string[] = [];
   let processed = 0;
+  let linesSeen = 0;
+  const startedAt = Date.now();
 
   const res = await fetch(fileUrl);
   if (!res.ok || !res.body) {
-    return { processed: 0, errors: [`jsonl fetch failed: ${res.status}`] };
+    return {
+      processed: 0,
+      errors: [`jsonl fetch failed: ${res.status}`],
+      linesProcessed: linesAlreadyProcessed,
+      complete: false,
+    };
   }
 
   // Buffer + flush in batches. Postgres upsert is fastest at 200-500
@@ -196,26 +231,30 @@ export async function processBulkOrdersJsonl(opts: {
       errors.push(`upsert batch (${pending.length}): ${error.message}`);
     } else {
       processed += pending.length;
-      await supabase
-        .from('shopify_import_jobs')
-        .update({
-          processed_count: processed,
-          last_processed_at: new Date().toISOString(),
-        })
-        .eq('id', jobId);
     }
     pending = [];
   };
 
-  // Bulk JSONL has parent rows + child rows interleaved. Each line is a
-  // single JSON object; child rows have __parentId pointing at the
-  // parent. We only care about orders themselves for shopify_orders,
-  // and assemble lineItems by parentId for the JSONB column.
-  const lineItemsByOrder = new Map<string, any[]>();
+  // "Current order" buffer + its children. We hold the order in
+  // memory until the NEXT order arrives in the stream — that's when
+  // we know we've seen all the children for the current parent.
+  let currentOrder: any = null;
+  let currentChildren: any[] = [];
+
+  const flushCurrentOrder = () => {
+    if (!currentOrder) return;
+    const tmp = new Map<string, any[]>();
+    tmp.set(currentOrder.id, currentChildren);
+    pending.push(mapOrderForUpsert(store, currentOrder, tmp));
+    currentOrder = null;
+    currentChildren = [];
+  };
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let carry = '';
+  let reachedDeadline = false;
+  let stopAtNextOrder = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -227,39 +266,122 @@ export async function processBulkOrdersJsonl(opts: {
       carry = carry.slice(nl + 1);
       nl = carry.indexOf('\n');
       if (!line) continue;
+      linesSeen++;
+
+      // Resume fast-forward: skip lines we already processed in an
+      // earlier invocation. Parse is cheaper than skipped, but
+      // skipping the JSON.parse + map lookup saves real time on 1M+
+      // line files.
+      if (linesSeen <= linesAlreadyProcessed) continue;
+
       try {
         const row = JSON.parse(line);
-        // Order node: has /Order/ in id
         if (typeof row.id === 'string' && row.id.includes('/Order/')) {
-          pending.push(mapOrderForUpsert(store, row, lineItemsByOrder));
+          // Reached the boundary we promised the deadline at —
+          // flush the just-completed order, save state, return.
+          if (stopAtNextOrder) {
+            flushCurrentOrder();
+            await flush();
+            // -1 because we want to re-read THIS order on resume
+            // (we haven't started processing it yet).
+            await supabase
+              .from('shopify_import_jobs')
+              .update({
+                processed_count: processed,
+                last_processed_at: new Date().toISOString(),
+                config: {
+                  bulk_jsonl_url: fileUrl,
+                  lines_processed: linesSeen - 1,
+                },
+              })
+              .eq('id', jobId);
+            return {
+              processed,
+              errors,
+              linesProcessed: linesSeen - 1,
+              complete: false,
+            };
+          }
+          // Normal flow: finalize previous order, start the new one.
+          flushCurrentOrder();
           if (pending.length >= BATCH) await flush();
-        } else if (typeof row.id === 'string' && row.id.includes('/LineItem/') && row.__parentId) {
-          const arr = lineItemsByOrder.get(row.__parentId) || [];
-          arr.push(row);
-          lineItemsByOrder.set(row.__parentId, arr);
+          currentOrder = row;
+        } else if (
+          typeof row.id === 'string' &&
+          row.id.includes('/LineItem/') &&
+          row.__parentId &&
+          currentOrder &&
+          row.__parentId === currentOrder.id
+        ) {
+          currentChildren.push(row);
         }
       } catch (e: any) {
         errors.push(`jsonl parse: ${e?.message}`);
       }
     }
+
+    // Deadline check happens between chunks (after a full read). We
+    // don't bail immediately — we set a flag and wait for the next
+    // Order boundary so the current order's children are all in.
+    if (!stopAtNextOrder && Date.now() - startedAt > deadlineMs) {
+      stopAtNextOrder = true;
+      reachedDeadline = true;
+    }
   }
-  // Tail line (no trailing newline)
+
+  // Tail line (no trailing newline) — could be the last order or one
+  // of its children.
   if (carry.trim()) {
-    try {
-      const row = JSON.parse(carry.trim());
-      if (typeof row.id === 'string' && row.id.includes('/Order/')) {
-        pending.push(mapOrderForUpsert(store, row, lineItemsByOrder));
+    linesSeen++;
+    if (linesSeen > linesAlreadyProcessed) {
+      try {
+        const row = JSON.parse(carry.trim());
+        if (typeof row.id === 'string' && row.id.includes('/Order/')) {
+          flushCurrentOrder();
+          currentOrder = row;
+          currentChildren = [];
+        } else if (
+          typeof row.id === 'string' &&
+          row.id.includes('/LineItem/') &&
+          row.__parentId &&
+          currentOrder &&
+          row.__parentId === currentOrder.id
+        ) {
+          currentChildren.push(row);
+        }
+      } catch {
+        /* ignore */
       }
-    } catch {/* ignore */}
+    }
   }
+
+  // EOF — finalize the last order and flush any remaining batch.
+  flushCurrentOrder();
   await flush();
 
-  // Backfill line_items for orders that had children parsed AFTER their
-  // parent went into the batch. Most line items arrive before the parent
-  // closes, so this only catches a tail of edge cases.
-  // (Implementation deferred — costs more than it saves in practice.)
+  await supabase
+    .from('shopify_import_jobs')
+    .update({
+      processed_count: processed,
+      last_processed_at: new Date().toISOString(),
+      config: reachedDeadline
+        ? {
+            bulk_jsonl_url: fileUrl,
+            lines_processed: linesSeen,
+          }
+        : {
+            bulk_jsonl_url: fileUrl,
+            lines_processed: linesSeen,
+          },
+    })
+    .eq('id', jobId);
 
-  return { processed, errors };
+  return {
+    processed,
+    errors,
+    linesProcessed: linesSeen,
+    complete: !reachedDeadline,
+  };
 }
 
 function mapOrderForUpsert(
