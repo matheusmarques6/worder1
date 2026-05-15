@@ -56,11 +56,18 @@ export async function syncContactFromShopify(
   }
   
   try {
-    // 2. Buscar contato existente por email, telefone ou shopify_customer_id
+    // 2. Buscar contato existente por email, telefone ou
+    //    shopify_customer_id. Multi-store orgs (Dr. Melaxin + Based
+    //    com o mesmo organization_id) tinham um bug silencioso aqui:
+    //    se foo@bar.com existisse em Dr. Melaxin, qualquer ordem do
+    //    Based com o mesmo email atualizava o contato da loja A em
+    //    vez de criar um novo pra B. Agora a busca prefere a mesma
+    //    store antes de cair pro org-scope.
     let existingContact = await findExistingContact(
       supabase,
-      store.organization_id, 
-      email, 
+      store.organization_id,
+      store.id,
+      email,
       phone,
       customer.id ? String(customer.id) : null
     );
@@ -111,81 +118,91 @@ export async function syncContactFromShopify(
 }
 
 /**
- * Busca contato existente por email, telefone ou shopify_customer_id
- * MELHORADO: Busca mais abrangente e robusta
+ * Busca contato existente por email, telefone ou shopify_customer_id.
+ *
+ * Multi-store aware: cada lookup tenta primeiro com store_id da loja
+ * inbound, depois cai pro org-scope. Isso impede que customer foo@bar
+ * vindo de Based "roube" o contato que já existia pra Dr. Melaxin —
+ * o que fazia eventos, total_orders, e total_spent de Based ficarem
+ * gravados no contato errado da loja irmã.
  */
 async function findExistingContact(
   supabase: SupabaseClient,
   organizationId: string,
+  storeId: string,
   email: string | null,
   phone: string | null,
   shopifyCustomerId: string | null
 ): Promise<any | null> {
-  
-  // Primeiro tentar por shopify_customer_id (mais específico)
-  if (shopifyCustomerId) {
-    const { data } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('shopify_customer_id', shopifyCustomerId)
-      .maybeSingle();
-    
-    if (data) return data;
-  }
-  
-  // Depois tentar por email (case insensitive)
-  if (email) {
-    const { data } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .ilike('email', email)
-      .limit(1)
-      .maybeSingle();
-    
-    if (data) return data;
-  }
-  
-  // Por fim tentar por telefone (com variações)
-  if (phone) {
-    // Tentar telefone exato
-    const { data: exactMatch } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('phone', phone)
-      .limit(1)
-      .maybeSingle();
-    
-    if (exactMatch) return exactMatch;
-    
-    // Tentar sem o prefixo +55
-    const phoneWithout55 = phone.replace(/^\+55/, '');
-    if (phoneWithout55 !== phone) {
-      const { data: without55 } = await supabase
+
+  // Helper: roda uma query no scope same-store primeiro, depois
+  // org-wide. Retorna o primeiro match.
+  const lookupScoped = async (
+    apply: (q: any) => any,
+  ): Promise<any | null> => {
+    // 1. Same-store match (preferido)
+    const sameStoreQuery = apply(
+      supabase
         .from('contacts')
         .select('*')
         .eq('organization_id', organizationId)
-        .or(`phone.eq.${phoneWithout55},phone.eq.+${phoneWithout55}`)
-        .limit(1)
-        .maybeSingle();
-      
-      if (without55) return without55;
+        .eq('store_id', storeId)
+    ).limit(1).maybeSingle();
+    const { data: same } = await sameStoreQuery;
+    if (same) return same;
+    // 2. Same store but NULL store_id (legacy contacts criados antes
+    //    do strict store_id existir). Backfill é feito em update.
+    const nullStoreQuery = apply(
+      supabase
+        .from('contacts')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .is('store_id', null)
+    ).limit(1).maybeSingle();
+    const { data: legacy } = await nullStoreQuery;
+    if (legacy) return legacy;
+    // 3. Org-wide fallback (qualquer store). Última tentativa pra
+    //    não criar duplicata se o merchant migrou um contato manual.
+    const orgQuery = apply(
+      supabase
+        .from('contacts')
+        .select('*')
+        .eq('organization_id', organizationId)
+    ).limit(1).maybeSingle();
+    const { data: anyStore } = await orgQuery;
+    return anyStore || null;
+  };
+
+  // Primeiro tentar por shopify_customer_id (mais específico — IDs
+  // são únicos por store no Shopify, então same-store ganha sempre).
+  if (shopifyCustomerId) {
+    const match = await lookupScoped((q) => q.eq('shopify_customer_id', shopifyCustomerId));
+    if (match) return match;
+  }
+
+  // Depois por email (case insensitive)
+  if (email) {
+    const match = await lookupScoped((q) => q.ilike('email', email));
+    if (match) return match;
+  }
+
+  // Por fim por telefone — telefone exato, sem +55, e no campo whatsapp.
+  if (phone) {
+    const exactMatch = await lookupScoped((q) => q.eq('phone', phone));
+    if (exactMatch) return exactMatch;
+
+    const phoneWithout55 = phone.replace(/^\+55/, '');
+    if (phoneWithout55 !== phone) {
+      const without55Match = await lookupScoped((q) =>
+        q.or(`phone.eq.${phoneWithout55},phone.eq.+${phoneWithout55}`)
+      );
+      if (without55Match) return without55Match;
     }
-    
-    // Tentar também no campo whatsapp
-    const { data: whatsappMatch } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('whatsapp', phone)
-      .limit(1)
-      .maybeSingle();
-    
+
+    const whatsappMatch = await lookupScoped((q) => q.eq('whatsapp', phone));
     if (whatsappMatch) return whatsappMatch;
   }
-  
+
   return null;
 }
 
@@ -265,6 +282,13 @@ async function updateExistingContact(
   // Atualizar shopify_customer_id se não tinha
   if (!existingContact.shopify_customer_id && customer.id) {
     updateData.shopify_customer_id = String(customer.id);
+  }
+
+  // Backfill store_id em contatos legacy (criados antes do strict
+  // multi-store. Sem isso, queries store-scoped continuam excluindo
+  // esses contatos pra sempre.
+  if (!existingContact.store_id) {
+    updateData.store_id = store.id;
   }
   
   // Atualizar tags (merge)

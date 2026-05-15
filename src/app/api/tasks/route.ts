@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
     const assignedTo = searchParams.get('assigned_to');
     const contactId = searchParams.get('contact_id');
     const dealId = searchParams.get('deal_id');
+    const storeId = searchParams.get('storeId') || searchParams.get('store_id');
     const type = searchParams.get('type');
     const priority = searchParams.get('priority');
     const dueDateStart = searchParams.get('due_date_start');
@@ -34,6 +35,29 @@ export async function GET(request: NextRequest) {
     const overdue = searchParams.get('overdue');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
+
+    // Tasks aren't store-scoped at the row level, but they reference
+    // deals + whatsapp_contacts that are. When the caller passes a
+    // storeId, pre-resolve which deal_ids and contact_ids belong to
+    // that store, then narrow tasks via .in() — prevents multi-store
+    // orgs from seeing each other's task board.
+    let storeDealIds: string[] | null = null;
+    let storeContactIds: string[] | null = null;
+    if (storeId && !contactId && !dealId) {
+      const [dealsRes, contactsRes] = await Promise.all([
+        supabaseAdmin
+          .from('deals')
+          .select('id')
+          .eq('store_id', storeId),
+        supabaseAdmin
+          .from('whatsapp_contacts')
+          .select('id')
+          .eq('organization_id', organizationId)
+          .or(`store_id.eq.${storeId},store_id.is.null`),
+      ]);
+      storeDealIds = (dealsRes.data || []).map((d: any) => d.id);
+      storeContactIds = (contactsRes.data || []).map((c: any) => c.id);
+    }
 
     // ⚠️ SEGURANÇA: SEMPRE filtrar por organization_id
     let query = supabaseAdmin
@@ -46,6 +70,22 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organizationId) // ⚠️ OBRIGATÓRIO
       .order('due_date', { ascending: true })
       .range(offset, offset + limit - 1);
+
+    // Tasks anexadas ao store: deal_id IN (store's deals) OR
+    // contact_id IN (store's contacts). Tasks sem nenhum dos dois
+    // ficam visíveis (são tarefas org-wide criadas manualmente).
+    if (storeDealIds && storeContactIds) {
+      const dealClause = storeDealIds.length > 0 ? `deal_id.in.(${storeDealIds.join(',')})` : null;
+      const contactClause = storeContactIds.length > 0 ? `contact_id.in.(${storeContactIds.join(',')})` : null;
+      const clauses = [
+        dealClause,
+        contactClause,
+        'and(deal_id.is.null,contact_id.is.null)',
+      ].filter(Boolean) as string[];
+      if (clauses.length > 0) {
+        query = query.or(clauses.join(','));
+      }
+    }
 
     // Filtros
     if (status) {

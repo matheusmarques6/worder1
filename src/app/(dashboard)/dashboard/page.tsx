@@ -706,7 +706,7 @@ export default function DashboardPage() {
 // ──────────────────────────────────────────────────────────────
 
 function MiniKPI({ label, value, sub, spark }: { label: string; value: number; sub: string; spark?: number[] }) {
-  const currency = (useStoreStore.getState().currentStore?.currency || 'BRL').toUpperCase()
+  const currency = (useStoreStore((s) => s.currentStore?.currency) || "BRL").toUpperCase()
   return (
     <div className="flex-1 rounded-[12px] bg-white px-5 py-[18px] transition-colors hover:bg-[#FAFAFA] relative overflow-hidden" style={{ border: '1px solid #E4E4E7' }}>
       <div className="text-[12px] font-semibold text-[#71717A] mb-2">{label}</div>
@@ -746,7 +746,7 @@ function Sparkline({ values }: { values: number[] }) {
 // the total so it reads like the Klaviyo / Linear tooltip style.
 function RichTooltip({ active, payload, label, isRevenue }: any) {
   if (!active || !payload || !payload.length) return null
-  const currency = (useStoreStore.getState().currentStore?.currency || 'BRL').toUpperCase()
+  const currency = (useStoreStore((s) => s.currentStore?.currency) || "BRL").toUpperCase()
   const rows: Array<{ name: string; value: number; color: string }> = []
   const keyMap: Record<string, { name: string; color: string }> = {
     campanhas: { name: 'Campanhas', color: '#18181B' },
@@ -808,7 +808,7 @@ function LegendDot({ color, label, border }: { color: string; label: string; bor
 }
 
 function ChannelItem({ label, value, pct, color }: { label: string; value: number; pct: number; color: string }) {
-  const currency = (useStoreStore.getState().currentStore?.currency || 'BRL').toUpperCase()
+  const currency = (useStoreStore((s) => s.currentStore?.currency) || "BRL").toUpperCase()
   return (
     <div>
       <div className="flex items-center gap-2 text-[13px] font-semibold text-[#71717A]">
@@ -879,7 +879,7 @@ function RankingCard<T extends { id: string; name: string; status: string; reven
   emptyHref: string
   emptyAction: string
 }) {
-  const currency = (useStoreStore.getState().currentStore?.currency || 'BRL').toUpperCase()
+  const currency = (useStoreStore((s) => s.currentStore?.currency) || "BRL").toUpperCase()
   return (
     <div className="flex-1 min-w-0 rounded-[14px] bg-white px-7 py-6" style={{ border: '1px solid #E4E4E7' }}>
       <div className="flex items-center justify-between mb-1">

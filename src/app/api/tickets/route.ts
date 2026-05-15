@@ -28,9 +28,29 @@ export async function GET(request: NextRequest) {
     const assignedTo = searchParams.get('assigned_to');
     const contactId = searchParams.get('contact_id');
     const orderId = searchParams.get('order_id');
+    const storeId = searchParams.get('storeId') || searchParams.get('store_id');
     const search = searchParams.get('search');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
+
+    // Tickets table has no store_id column — scope by the linked
+    // contact's store. Multi-store orgs (Dr. Melaxin + Based no
+    // mesmo organization_id) viam tickets cruzados antes desse filtro.
+    let storeContactIds: string[] | null = null;
+    if (storeId && !contactId) {
+      const { data: storeContacts } = await supabaseAdmin
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', organizationId)
+        .or(`store_id.eq.${storeId},store_id.is.null`);
+      storeContactIds = (storeContacts || []).map((c: any) => c.id);
+      if (storeContactIds.length === 0) {
+        return NextResponse.json({
+          tickets: [],
+          pagination: { total: 0, limit, offset, hasMore: false },
+        });
+      }
+    }
 
     // ⚠️ SEGURANÇA: SEMPRE filtrar por organization_id
     let query = supabaseAdmin
@@ -39,6 +59,10 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organizationId) // ⚠️ OBRIGATÓRIO
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
+
+    if (storeContactIds) {
+      query = query.in('contact_id', storeContactIds);
+    }
 
     // Filtros
     if (status) {

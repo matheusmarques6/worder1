@@ -65,10 +65,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing email_id' }, { status: 400 });
     }
 
-    // Find the email_send with contact + campaign info
+    // Find the email_send with contact + campaign info. email_sends
+    // has organization_id NOT NULL on the production schema — load it
+    // here directly so we don't lose orgId for flow sends (which have
+    // contact_id but no campaign_id) or for sends whose campaign was
+    // later deleted. Previous code fell back to null silently and the
+    // CDP guard then dropped every event from those sends.
     const { data: emailSend, error: findError } = await supabaseAdmin
       .from('email_sends')
-      .select('id, campaign_id, contact_id, ab_variant')
+      .select('id, campaign_id, contact_id, ab_variant, organization_id')
       .eq('resend_id', resendId)
       .maybeSingle();
 
@@ -82,9 +87,11 @@ export async function POST(request: NextRequest) {
     const contactId = emailSend.contact_id;
     const now = new Date().toISOString();
 
-    // Resolve organization_id
-    let orgId: string | null = null;
-    if (campaignId) {
+    // Resolve organization_id: email_sends column first (authoritative
+    // and present on every row), campaign as fallback for legacy rows
+    // that pre-date that column being populated.
+    let orgId: string | null = emailSend.organization_id || null;
+    if (!orgId && campaignId) {
       const { data: camp } = await supabaseAdmin
         .from('email_campaigns')
         .select('organization_id')

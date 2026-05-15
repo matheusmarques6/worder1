@@ -374,9 +374,21 @@ export async function PUT(request: NextRequest) {
   try {
     const auth = await getAuthClient();
     if (!auth) return authError();
-    
+
     const { supabase, user } = auth;
     const organizationId = user.organization_id;
+
+    // Multi-org write: a user can update deals/pipelines in any org
+    // they actually belong to, not just their primary. Without this,
+    // org-secondary memberships had read-only CRM.
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id);
+    const orgIds = [...new Set([
+      organizationId,
+      ...((memberships || []).map((m: any) => m.organization_id)),
+    ])];
 
     const body = await request.json();
     const { type, id, ...updates } = body;
@@ -403,19 +415,24 @@ export async function PUT(request: NextRequest) {
         .from('pipelines')
         .update(updates)
         .eq('id', id)
-        .eq('organization_id', organizationId)
+        .in('organization_id', orgIds)
         .select()
         .single();
       if (error) throw error;
       return NextResponse.json({ pipeline: data });
     }
 
-    // Atualizar deal
+    // Atualizar deal — confirma ownership por org antes de prosseguir
+    // pra evitar que um id leakado de outra org seja sobrescrito.
     const { data: previousDeal } = await supabase
       .from('deals')
-      .select('stage_id, value, status, contact_id')
+      .select('stage_id, value, status, contact_id, organization_id')
       .eq('id', id)
-      .single();
+      .in('organization_id', orgIds)
+      .maybeSingle();
+    if (!previousDeal) {
+      return NextResponse.json({ error: 'Deal not found' }, { status: 404 });
+    }
 
     // Auto-set timestamps para status changes
     if (updates.status) {
@@ -439,7 +456,7 @@ export async function PUT(request: NextRequest) {
       .from('deals')
       .update(updates)
       .eq('id', id)
-      .eq('organization_id', organizationId)
+      .in('organization_id', orgIds)
       .select(`
         *,
         contact:contacts(*),
@@ -489,9 +506,19 @@ export async function DELETE(request: NextRequest) {
   try {
     const auth = await getAuthClient();
     if (!auth) return authError();
-    
+
     const { supabase, user } = auth;
     const organizationId = user.organization_id;
+
+    // Multi-org: a user can delete from any org they belong to.
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id);
+    const orgIds = [...new Set([
+      organizationId,
+      ...((memberships || []).map((m: any) => m.organization_id)),
+    ])];
 
     const searchParams = request.nextUrl.searchParams;
     const type = searchParams.get('type') || 'deal';
@@ -507,19 +534,19 @@ export async function DELETE(request: NextRequest) {
         .from('deals')
         .select('*', { count: 'exact', head: true })
         .eq('pipeline_id', id);
-      
+
       if (count && count > 0) {
-        return NextResponse.json({ 
-          error: `Cannot delete pipeline with ${count} deals` 
+        return NextResponse.json({
+          error: `Cannot delete pipeline with ${count} deals`
         }, { status: 400 });
       }
-      
+
       await supabase.from('pipeline_stages').delete().eq('pipeline_id', id);
       const { error } = await supabase
         .from('pipelines')
         .delete()
         .eq('id', id)
-        .eq('organization_id', organizationId);
+        .in('organization_id', orgIds);
       if (error) throw error;
       return NextResponse.json({ success: true });
     }
@@ -530,13 +557,13 @@ export async function DELETE(request: NextRequest) {
         .from('deals')
         .select('*', { count: 'exact', head: true })
         .eq('stage_id', id);
-      
+
       if (count && count > 0) {
-        return NextResponse.json({ 
-          error: `Cannot delete stage with ${count} deals` 
+        return NextResponse.json({
+          error: `Cannot delete stage with ${count} deals`
         }, { status: 400 });
       }
-      
+
       const { error } = await supabase
         .from('pipeline_stages')
         .delete()
@@ -550,7 +577,7 @@ export async function DELETE(request: NextRequest) {
       .from('deals')
       .delete()
       .eq('id', id)
-      .eq('organization_id', organizationId);
+      .in('organization_id', orgIds);
     if (error) throw error;
     return NextResponse.json({ success: true });
     

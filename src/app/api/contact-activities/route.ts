@@ -19,9 +19,27 @@ export async function GET(request: NextRequest) {
   }
 
   const contactId = searchParams.get('contactId');
+  const storeId = searchParams.get('storeId') || searchParams.get('store_id');
   const limit = parseInt(searchParams.get('limit') || '50');
 
   try {
+    // Activities don't have store_id directly, so we filter via the
+    // contact's store. Without this, multi-store orgs saw activities
+    // from sibling stores bleed into each other's CRM panels.
+    let storeContactIds: string[] | null = null;
+    if (storeId) {
+      const { data: storeContacts } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', organizationId)
+        .or(`store_id.eq.${storeId},store_id.is.null`);
+      storeContactIds = (storeContacts || []).map((c: any) => c.id);
+      // Empty result → no rows possible. Skip the DB roundtrip below.
+      if (storeContactIds.length === 0) {
+        return NextResponse.json({ activities: [] });
+      }
+    }
+
     let query = supabase
       .from('contact_activities')
       .select('*')
@@ -31,6 +49,8 @@ export async function GET(request: NextRequest) {
 
     if (contactId) {
       query = query.eq('contact_id', contactId);
+    } else if (storeContactIds) {
+      query = query.in('contact_id', storeContactIds);
     }
 
     const { data, error } = await query;
