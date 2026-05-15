@@ -180,7 +180,9 @@ export async function GET(request: NextRequest) {
         if (!storeIds.length) return { data: [], error: null };
         return supabaseAdmin.from('shopify_orders').select('total_price, created_at, financial_status').in('store_id', storeIds).gte('created_at', since);
       }),
-      safeQuery(() => supabaseAdmin.from('shopify_stores').select('id').eq('organization_id', orgId)),
+      // Pull last_sync_at + initial_sync_completed too so the auto-
+      // sync trigger below can decide whether to refresh stale data.
+      safeQuery(() => supabaseAdmin.from('shopify_stores').select('id, last_sync_at, initial_sync_completed').eq('organization_id', orgId)),
     ]);
 
     // ── KPI aggregation ──
@@ -334,30 +336,81 @@ export async function GET(request: NextRequest) {
     // We don't condition on `total_orders` from the row because that
     // field isn't reliably maintained — the actual table count is
     // ground truth.
+    // Two auto-sync triggers from the dashboard:
+    //
+    //   A. Empty store: shopify_orders.count === 0 → first-time
+    //      sync, route to bulk so the merchant gets every order ever
+    //      (bulk is async — they can leave the page).
+    //
+    //   B. Stale store: store has orders, but the newest one is
+    //      more than 60 minutes old AND last_sync_at is also older
+    //      than 60 minutes. New orders happened on Shopify side
+    //      that we don't have yet. Fire an incremental 90-day sync
+    //      so the dashboard catches up without merchant action.
+    //      (No "60 min" arbitrary number — it just needs to be
+    //       longer than typical webhook latency. orders/create
+    //       webhook should land most orders within seconds; this
+    //       cron-style backfill catches the ones that slipped.)
+    //
+    // The check is best-effort and fire-and-forget. Either trigger
+    // sets needsSync=true so the UI can show a "Sincronizando…"
+    // banner.
     let needsSync = false;
     let syncTriggered = false;
-    if (stores.length > 0 && orders.length === 0) {
-      needsSync = true;
-      // Fire-and-forget background sync. Best-effort: we don't await,
-      // we don't surface failures. The next dashboard refresh will see
-      // the data once sync writes complete.
-      try {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
-        const targetStoreId = storeId || stores[0]?.id;
-        if (appUrl && targetStoreId) {
-          fetch(`${appUrl}/api/shopify/sync-now`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Internal-Request': 'true',
-              cookie: request.headers.get('cookie') || '',
-            },
-            body: JSON.stringify({ storeId: targetStoreId, syncType: 'all' }),
-            keepalive: true,
-          }).then(() => {}, () => {});
-          syncTriggered = true;
+    if (stores.length > 0) {
+      const STALE_MS = 60 * 60 * 1000; // 1 hour
+      const targetStoreId = storeId || stores[0]?.id;
+      const targetStore = stores.find((s: any) => s.id === targetStoreId) || stores[0];
+
+      let shouldSync = false;
+      let useHistorical = false;
+
+      if (orders.length === 0) {
+        shouldSync = true;
+        useHistorical = true; // first time, route to bulk
+      } else {
+        // Find newest order date and last_sync_at
+        const newestOrderTs = orders.reduce((max: number, o: any) => {
+          const t = new Date(o.created_at).getTime();
+          return Number.isFinite(t) && t > max ? t : max;
+        }, 0);
+        const lastSyncTs = targetStore?.last_sync_at
+          ? new Date(targetStore.last_sync_at).getTime()
+          : 0;
+        const now = Date.now();
+        if (
+          newestOrderTs > 0 &&
+          now - newestOrderTs > STALE_MS &&
+          (lastSyncTs === 0 || now - lastSyncTs > STALE_MS)
+        ) {
+          shouldSync = true;
+          useHistorical = false; // incremental — 90d enough
         }
-      } catch { /* never throw from dashboard */ }
+      }
+
+      if (shouldSync) {
+        needsSync = true;
+        try {
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+          if (appUrl && targetStoreId) {
+            fetch(`${appUrl}/api/shopify/sync-now`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Internal-Request': 'true',
+                cookie: request.headers.get('cookie') || '',
+              },
+              body: JSON.stringify({
+                storeId: targetStoreId,
+                syncType: 'all',
+                historical: useHistorical,
+              }),
+              keepalive: true,
+            }).then(() => {}, () => {});
+            syncTriggered = true;
+          }
+        } catch { /* never throw from dashboard */ }
+      }
     }
 
     return NextResponse.json({
