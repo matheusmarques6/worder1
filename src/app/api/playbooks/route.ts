@@ -1,36 +1,65 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
-export const dynamic = 'force-dynamic';
-
 // =============================================
 // API: /api/playbooks
 // CRUD de playbooks de automação
+//
+// Tenant rules:
+//  - Every method requires getAuthClient(). No method trusts
+//    organization_id from the request body / query string — the
+//    user's orgs come from auth + organization_members.
+//  - Templates (is_template=true) are global and readable by any
+//    authenticated user; PATCH/DELETE refuse to touch them.
+//  - PATCH/DELETE always scope by organization_id IN [user orgs]
+//    so leaking an id can't grant cross-org write access.
 // =============================================
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { getAuthClient, authError } from '@/lib/api-utils'
+
+export const dynamic = 'force-dynamic';
+
+async function getUserOrgIds(userId: string, primaryOrgId: string): Promise<string[]> {
+  const { data: memberships } = await supabase
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userId)
+  const ids = new Set<string>([primaryOrgId])
+  for (const m of memberships || []) {
+    if (m.organization_id) ids.add(m.organization_id)
+  }
+  return Array.from(ids)
+}
 
 // GET - Listar playbooks
 export async function GET(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const orgIds = await getUserOrgIds(auth.user.id, auth.user.organization_id)
+
     const { searchParams } = new URL(request.url)
-    const organization_id = searchParams.get('organization_id')
     const playbook_id = searchParams.get('id')
     const include_templates = searchParams.get('templates') === 'true'
     const category = searchParams.get('category')
 
-    // Buscar playbook específico
+    // Buscar playbook específico — must belong to user's org OR be a template
     if (playbook_id) {
       const { data, error } = await supabase
         .from('automation_playbooks')
         .select('*')
         .eq('id', playbook_id)
-        .single()
+        .or(`organization_id.in.(${orgIds.join(',')}),is_template.eq.true`)
+        .maybeSingle()
 
       if (error) throw error
+      if (!data) {
+        return NextResponse.json({ error: 'Playbook not found' }, { status: 404 })
+      }
 
-      // Buscar métricas de runs
       const { data: stats } = await supabase
         .from('playbook_runs')
         .select('status, converted, conversion_revenue')
         .eq('playbook_id', playbook_id)
+        .in('organization_id', orgIds)
 
       const metrics = {
         total_runs: stats?.length || 0,
@@ -42,24 +71,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ playbook: { ...data, metrics } })
     }
 
-    // Listar playbooks da organização
-    if (organization_id) {
-      let query = supabase
-        .from('automation_playbooks')
-        .select('*')
-        .or(`organization_id.eq.${organization_id},is_template.eq.true`)
-        .order('is_template', { ascending: false })
-        .order('created_at', { ascending: false })
-
-      if (category) query = query.eq('category', category)
-
-      const { data: playbooks, error } = await query
-      if (error) throw error
-
-      return NextResponse.json({ playbooks })
-    }
-
-    // Listar apenas templates globais
+    // Listar templates apenas
     if (include_templates) {
       const { data: templates, error } = await supabase
         .from('automation_playbooks')
@@ -71,7 +83,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ templates })
     }
 
-    return NextResponse.json({ error: 'organization_id or templates=true required' }, { status: 400 })
+    // Listar playbooks da org do usuário (+ templates globais)
+    let query = supabase
+      .from('automation_playbooks')
+      .select('*')
+      .or(`organization_id.in.(${orgIds.join(',')}),is_template.eq.true`)
+      .order('is_template', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    if (category) query = query.eq('category', category)
+
+    const { data: playbooks, error } = await query
+    if (error) throw error
+
+    return NextResponse.json({ playbooks })
 
   } catch (error: any) {
     console.error('[Playbooks] Error:', error)
@@ -82,10 +107,14 @@ export async function GET(request: NextRequest) {
 // POST - Criar playbook (ou clonar template)
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const orgIds = await getUserOrgIds(auth.user.id, auth.user.organization_id)
+
     const body = await request.json()
     const {
-      organization_id,
-      template_id, // Se clonar de template
+      organization_id: bodyOrgId,
+      template_id,
       name,
       description,
       category,
@@ -95,9 +124,11 @@ export async function POST(request: NextRequest) {
       settings = {},
     } = body
 
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id required' }, { status: 400 })
-    }
+    // Honor an explicit org from the body iff the user belongs to it.
+    // Default to the user's primary org otherwise. Body org is never
+    // trusted blindly.
+    const organization_id =
+      bodyOrgId && orgIds.includes(bodyOrgId) ? bodyOrgId : auth.user.organization_id
 
     // Clonar de template
     if (template_id) {
@@ -120,7 +151,7 @@ export async function POST(request: NextRequest) {
           description: description || template.description,
           category: template.category,
           is_template: false,
-          is_active: false, // Começa desativado
+          is_active: false,
           trigger_type: template.trigger_type,
           trigger_config: { ...template.trigger_config, ...trigger_config },
           steps: template.steps,
@@ -167,28 +198,40 @@ export async function POST(request: NextRequest) {
 // PATCH - Atualizar playbook
 export async function PATCH(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const orgIds = await getUserOrgIds(auth.user.id, auth.user.organization_id)
+
     const body = await request.json()
-    const { id, ...updates } = body
+    const { id, organization_id: _ignored, ...updates } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
 
-    // Não permitir editar templates
+    // Confirm the playbook belongs to a user-owned org AND is not a
+    // template (templates are global, never edited).
     const { data: existing } = await supabase
       .from('automation_playbooks')
-      .select('is_template')
+      .select('id, is_template, organization_id')
       .eq('id', id)
-      .single()
+      .in('organization_id', orgIds)
+      .maybeSingle()
 
-    if (existing?.is_template) {
+    if (!existing) {
+      return NextResponse.json({ error: 'Playbook not found' }, { status: 404 })
+    }
+    if (existing.is_template) {
       return NextResponse.json({ error: 'Cannot edit templates' }, { status: 403 })
     }
 
+    // Strip organization_id from updates so a malicious client can't
+    // move the playbook to another org.
     const { data: playbook, error } = await supabase
       .from('automation_playbooks')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
+      .in('organization_id', orgIds)
       .select()
       .single()
 
@@ -204,6 +247,10 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Remover playbook
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const orgIds = await getUserOrgIds(auth.user.id, auth.user.organization_id)
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -211,28 +258,33 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
 
-    // Não permitir deletar templates
     const { data: existing } = await supabase
       .from('automation_playbooks')
-      .select('is_template')
+      .select('id, is_template, organization_id')
       .eq('id', id)
-      .single()
+      .in('organization_id', orgIds)
+      .maybeSingle()
 
-    if (existing?.is_template) {
+    if (!existing) {
+      return NextResponse.json({ error: 'Playbook not found' }, { status: 404 })
+    }
+    if (existing.is_template) {
       return NextResponse.json({ error: 'Cannot delete templates' }, { status: 403 })
     }
 
-    // Cancelar runs em andamento
+    // Cancelar runs em andamento (escopadas pela mesma org do playbook)
     await supabase
       .from('playbook_runs')
       .update({ status: 'cancelled' })
       .eq('playbook_id', id)
       .eq('status', 'running')
+      .in('organization_id', orgIds)
 
     const { error } = await supabase
       .from('automation_playbooks')
       .delete()
       .eq('id', id)
+      .in('organization_id', orgIds)
 
     if (error) throw error
     return NextResponse.json({ success: true })

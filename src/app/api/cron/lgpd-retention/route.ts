@@ -56,11 +56,17 @@ export async function GET(req: NextRequest) {
           break
         }
         case 'email_sends': {
+          // CRITICAL: email_sends.organization_id IS NOT NULL on the
+          // production schema — the original comment was wrong. The
+          // delete used to fire across EVERY tenant: a single org's
+          // retention policy (say 180 days) would wipe every other
+          // org's email_sends older than that, across the entire
+          // database. Always scope by the policy's organization_id.
           const { count } = await supabaseAdmin
             .from('email_sends')
             .delete({ count: 'exact' })
+            .eq('organization_id', policy.organization_id)
             .lt('created_at', cutoff)
-            // email_sends pode não ter organization_id diretamente
           affected = count || 0
           break
         }

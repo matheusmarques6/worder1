@@ -20,7 +20,10 @@ export async function GET(request: NextRequest) {
     const surveyId = searchParams.get('survey_id')
     const includeResponses = searchParams.get('include_responses') === 'true'
 
-    // If survey_id provided, get single survey with responses
+    // If survey_id provided, get single survey with responses.
+    // CRITICAL: scope by organization_id — without this filter any
+    // authenticated user can fetch any org's NPS survey just by
+    // guessing the UUID.
     if (surveyId) {
       const { data: survey, error: surveyError } = await supabase
         .from('nps_surveys')
@@ -29,14 +32,20 @@ export async function GET(request: NextRequest) {
           profiles:created_by (id, email, full_name)
         `)
         .eq('id', surveyId)
-        .single()
+        .eq('organization_id', organizationId)
+        .maybeSingle()
 
       if (surveyError) {
         return NextResponse.json({ error: surveyError.message }, { status: 500 })
       }
+      if (!survey) {
+        return NextResponse.json({ error: 'Survey not found' }, { status: 404 })
+      }
 
       let responses = []
       if (includeResponses) {
+        // Responses are filtered by survey_id (already verified to
+        // belong to this org above), so they're implicitly scoped.
         const { data: responseData } = await supabase
           .from('nps_responses')
           .select(`

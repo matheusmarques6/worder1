@@ -114,9 +114,22 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const supabase = getSupabaseAdmin()
   try {
+    const auth = await getAuthClient()
+    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // Resolve the user's actual orgs. Body's organization_id is only
+    // honored if it's in this list; otherwise we drop back to the
+    // primary org. Without this, anyone with an auth token could
+    // create segments in any org by setting body.organization_id.
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', auth.user.id)
+    const orgIds = [...new Set([auth.user.organization_id, ...(memberships || []).map((m: any) => m.organization_id)])]
+
     const body = await request.json()
     const {
-      organization_id,
+      organization_id: bodyOrgId,
       name,
       description,
       color,
@@ -129,8 +142,24 @@ export async function POST(request: NextRequest) {
       store_id,
     } = body
 
-    if (!organization_id || !name) {
-      return NextResponse.json({ error: 'organization_id and name required' }, { status: 400 })
+    const organization_id =
+      bodyOrgId && orgIds.includes(bodyOrgId) ? bodyOrgId : auth.user.organization_id
+
+    if (!name) {
+      return NextResponse.json({ error: 'name required' }, { status: 400 })
+    }
+
+    // Validate store_id belongs to this org so a leaked id can't
+    // plant a segment on a foreign store.
+    let validatedStoreId: string | null = null
+    if (store_id) {
+      const { data: storeRow } = await supabase
+        .from('shopify_stores')
+        .select('id')
+        .eq('id', store_id)
+        .eq('organization_id', organization_id)
+        .maybeSingle()
+      validatedStoreId = storeRow?.id || null
     }
 
     // Criar segmento
@@ -146,7 +175,7 @@ export async function POST(request: NextRequest) {
       rfm_segments,
       is_active: true,
     }
-    if (store_id) insertData.store_id = store_id
+    if (validatedStoreId) insertData.store_id = validatedStoreId
 
     const { data: segment, error } = await supabase
       .from('customer_segments')
@@ -156,19 +185,27 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error
 
-    // Se for estático e tiver contatos, adicionar
+    // Se for estático e tiver contatos, validar que pertencem à
+    // mesma org antes de adicionar — caso contrário um id leakado
+    // permitiria plantar contatos estrangeiros num segmento.
     if (segment_type === 'static' && contact_ids.length > 0) {
-      const members = contact_ids.map((contact_id: string) => ({
-        segment_id: segment.id,
-        contact_id,
-      }))
-
-      await supabase.from('segment_members').insert(members)
-      
-      await supabase
-        .from('customer_segments')
-        .update({ contact_count: contact_ids.length, last_count_at: new Date().toISOString() })
-        .eq('id', segment.id)
+      const { data: ownContacts } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', organization_id)
+        .in('id', contact_ids)
+      const validIds = (ownContacts || []).map((c: any) => c.id)
+      if (validIds.length > 0) {
+        const members = validIds.map((contact_id: string) => ({
+          segment_id: segment.id,
+          contact_id,
+        }))
+        await supabase.from('segment_members').insert(members)
+        await supabase
+          .from('customer_segments')
+          .update({ contact_count: validIds.length, last_count_at: new Date().toISOString() })
+          .eq('id', segment.id)
+      }
     }
 
     // Calcular contagem inicial para dinâmicos
@@ -193,17 +230,41 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const supabase = getSupabaseAdmin()
   try {
+    const auth = await getAuthClient()
+    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // Multi-org lookup: PATCH always scopes by user's actual orgs
+    // so a leaked segment id can't be used to modify a foreign org's
+    // segment.
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', auth.user.id)
+    const orgIds = [...new Set([auth.user.organization_id, ...(memberships || []).map((m: any) => m.organization_id)])]
+
     const body = await request.json()
-    const { id, ...updates } = body
+    const { id, organization_id: _ignored, ...updates } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
+    }
+
+    // Confirm ownership before update.
+    const { data: existing } = await supabase
+      .from('customer_segments')
+      .select('id, organization_id')
+      .eq('id', id)
+      .in('organization_id', orgIds)
+      .maybeSingle()
+    if (!existing) {
+      return NextResponse.json({ error: 'Segment not found' }, { status: 404 })
     }
 
     const { data: segment, error } = await supabase
       .from('customer_segments')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
+      .in('organization_id', orgIds)
       .select()
       .single()
 

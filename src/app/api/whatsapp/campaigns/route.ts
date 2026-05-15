@@ -1,17 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils'
 export const dynamic = 'force-dynamic';
+
+// Resolve every org the authenticated user actually belongs to. The
+// caller can request `?organizationId=X` (or pass it in the body for
+// POST), but the value is only honored if it's in this list. Otherwise
+// we fall back to the primary org from the auth profile. This is what
+// blocks the previous "pass any org id you want" auth bypass.
+async function getUserOrgIds(userId: string, primaryOrgId: string): Promise<string[]> {
+  const { data: memberships } = await supabase
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userId)
+  const ids = new Set<string>([primaryOrgId])
+  for (const m of memberships || []) {
+    if (m.organization_id) ids.add(m.organization_id)
+  }
+  return Array.from(ids)
+}
 
 // GET /api/whatsapp/campaigns - Listar campanhas
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    // Aceita tanto organizationId quanto organization_id
-    const organizationId = searchParams.get('organizationId') || searchParams.get('organization_id')
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const orgIds = await getUserOrgIds(auth.user.id, auth.user.organization_id)
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
+    const { searchParams } = new URL(request.url)
+    const requested = searchParams.get('organizationId') || searchParams.get('organization_id')
+    const organizationId =
+      requested && orgIds.includes(requested) ? requested : auth.user.organization_id
 
     const status = searchParams.get('status')
     const type = searchParams.get('type')
@@ -36,11 +55,15 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query
     if (error) throw error
 
-    // Métricas agregadas
-    const { data: metricsData } = await supabase
+    // Métricas agregadas — scoped to the same store when storeId is
+    // provided so a multi-store org sees its own per-store totals
+    // instead of org-wide bleed.
+    let metricsQuery = supabase
       .from('whatsapp_campaigns')
       .select('total_sent, total_delivered, total_read, total_replied')
       .eq('organization_id', organizationId)
+    if (storeId) metricsQuery = metricsQuery.eq('store_id', storeId)
+    const { data: metricsData } = await metricsQuery
 
     const metrics = {
       totalCampaigns: count || 0,
@@ -65,24 +88,43 @@ export async function GET(request: NextRequest) {
 // POST /api/whatsapp/campaigns - Criar campanha
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    // Aceita tanto organizationId quanto organization_id
-    const organizationId = body.organizationId || body.organization_id
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const orgIds = await getUserOrgIds(auth.user.id, auth.user.organization_id)
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
+    const body = await request.json()
+    const requestedOrg = body.organizationId || body.organization_id
+    // Body's org is honored only if it matches user membership.
+    // Otherwise we fall back to the primary org so this can't be
+    // used to plant a campaign into a foreign tenant.
+    const organizationId =
+      requestedOrg && orgIds.includes(requestedOrg) ? requestedOrg : auth.user.organization_id
 
     const {
       name, description, type = 'broadcast',
       template_id, template_name, template_variables, media_url, media_type,
       audience_type = 'all', audience_tags, audience_segment_id, audience_phonebook_id, audience_filters,
       imported_contacts, scheduled_at, timezone = 'America/Sao_Paulo',
-      messages_per_second = 10, created_by, created_by_name
+      messages_per_second = 10, created_by, created_by_name,
+      store_id: requestedStoreId,
     } = body
 
     if (!name) {
       return NextResponse.json({ error: 'Campaign name is required' }, { status: 400 })
+    }
+
+    // Validate the requested store_id (if any) belongs to the
+    // resolved org. Without this, a merchant could set any UUID and
+    // the campaign would later try to send against a foreign store.
+    let storeId: string | null = null
+    if (requestedStoreId) {
+      const { data: storeRow } = await supabase
+        .from('shopify_stores')
+        .select('id')
+        .eq('id', requestedStoreId)
+        .eq('organization_id', organizationId)
+        .maybeSingle()
+      storeId = storeRow?.id || null
     }
 
     // Calcular audiência
@@ -103,6 +145,17 @@ export async function POST(request: NextRequest) {
         .overlaps('tags', audience_tags)
       audienceCount = count || 0
     } else if (audience_type === 'phonebook' && audience_phonebook_id) {
+      // Phonebook must belong to the same org, otherwise we'd count
+      // (and later send to) contacts from a foreign tenant.
+      const { data: pb } = await supabase
+        .from('phonebooks')
+        .select('id')
+        .eq('id', audience_phonebook_id)
+        .eq('organization_id', organizationId)
+        .maybeSingle()
+      if (!pb) {
+        return NextResponse.json({ error: 'Phonebook not found in this organization' }, { status: 404 })
+      }
       const { count } = await supabase
         .from('phonebook_contacts')
         .select('*', { count: 'exact', head: true })
@@ -118,7 +171,9 @@ export async function POST(request: NextRequest) {
     const { data: campaign, error } = await supabase
       .from('whatsapp_campaigns')
       .insert({
-        organization_id: organizationId, name, description, type,
+        organization_id: organizationId,
+        store_id: storeId,
+        name, description, type,
         status: scheduled_at ? 'scheduled' : 'draft',
         template_id, template_name, template_variables: template_variables || {},
         media_url, media_type, audience_type, audience_tags, audience_segment_id,

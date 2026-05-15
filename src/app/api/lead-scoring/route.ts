@@ -102,17 +102,43 @@ export async function GET(request: NextRequest) {
     const supabase = createServerComponentClient({ cookies })
     const { searchParams } = new URL(request.url)
 
-    const organizationId = searchParams.get('organization_id')
+    // Resolve the user from the session cookie so we can validate
+    // the requested organization_id against their actual memberships.
+    // Without this guard, `?organization_id=...&deal_id=...` could
+    // be aimed at a foreign org and (depending on RLS coverage) read
+    // its lead scores.
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .maybeSingle()
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id)
+    const orgIds = new Set<string>(
+      [profile?.organization_id, ...((memberships || []).map((m: any) => m.organization_id))]
+        .filter(Boolean)
+    )
+
+    const requested = searchParams.get('organization_id')
+    const organizationId =
+      requested && orgIds.has(requested) ? requested : profile?.organization_id
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
+    }
+
     const dealId = searchParams.get('deal_id')
     const minScore = searchParams.get('min_score')
     const category = searchParams.get('category') // hot, warm, cold
     const limit = parseInt(searchParams.get('limit') || '50')
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
-
-    // Get single deal score
+    // Get single deal score — already scopes by organization_id, but
+    // organizationId is now provably one the user owns.
     if (dealId) {
       const { data: score, error } = await supabase
         .from('lead_scores')

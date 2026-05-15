@@ -114,15 +114,39 @@ export async function GET(request: NextRequest) {
     const supabase = createServerComponentClient({ cookies })
     const { searchParams } = new URL(request.url)
 
-    const organizationId = searchParams.get('organization_id')
+    // Resolve the authenticated user and the set of orgs they own;
+    // only those can be queried. Before this guard, ?organization_id=...
+    // from the URL was trusted as-is — any session could pull any
+    // org's revenue/conversions/channels by guessing the UUID.
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .maybeSingle()
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id)
+    const ownedOrgs = new Set<string>(
+      [profile?.organization_id, ...((memberships || []).map((m: any) => m.organization_id))]
+        .filter(Boolean)
+    )
+
+    const requested = searchParams.get('organization_id')
+    const organizationId =
+      requested && ownedOrgs.has(requested) ? requested : profile?.organization_id
+    if (!organizationId) {
+      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
+    }
+
     const reportType = searchParams.get('type') || 'all'
     const period = searchParams.get('period') || '30d'
     const pipelineId = searchParams.get('pipeline_id')
     const storeId = searchParams.get('store_id')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
 
     // Calculate date range
     const dateRange = getDateRange(period)
