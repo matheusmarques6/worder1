@@ -244,9 +244,22 @@ export async function PUT(request: NextRequest) {
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()
+    const organizationId = auth.user.organization_id
+
+    // Multi-org PUT: user can edit surveys from any org they belong
+    // to. Without this scope, any leaked survey id could be used to
+    // modify a foreign org's survey just by passing the UUID.
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', auth.user.id)
+    const orgIds = [...new Set([
+      organizationId,
+      ...((memberships || []).map((m: any) => m.organization_id)),
+    ])]
 
     const body = await request.json()
-    const { id, ...updates } = body
+    const { id, organization_id: _ignored, ...updates } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
@@ -256,11 +269,15 @@ export async function PUT(request: NextRequest) {
       .from('nps_surveys')
       .update(updates)
       .eq('id', id)
+      .in('organization_id', orgIds)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    if (!survey) {
+      return NextResponse.json({ error: 'Survey not found' }, { status: 404 })
     }
 
     return NextResponse.json({ survey })
@@ -277,6 +294,16 @@ export async function DELETE(request: NextRequest) {
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()
+    const organizationId = auth.user.organization_id
+
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', auth.user.id)
+    const orgIds = [...new Set([
+      organizationId,
+      ...((memberships || []).map((m: any) => m.organization_id)),
+    ])]
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -285,7 +312,19 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
-    // Delete responses first
+    // Confirm ownership BEFORE deleting child rows so a leaked id
+    // can't cascade-delete responses from a foreign org.
+    const { data: existing } = await supabase
+      .from('nps_surveys')
+      .select('id')
+      .eq('id', id)
+      .in('organization_id', orgIds)
+      .maybeSingle()
+    if (!existing) {
+      return NextResponse.json({ error: 'Survey not found' }, { status: 404 })
+    }
+
+    // Delete responses first (now safe — parent ownership confirmed)
     await supabase
       .from('nps_responses')
       .delete()
@@ -296,6 +335,7 @@ export async function DELETE(request: NextRequest) {
       .from('nps_surveys')
       .delete()
       .eq('id', id)
+      .in('organization_id', orgIds)
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })

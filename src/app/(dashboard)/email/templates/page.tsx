@@ -75,9 +75,11 @@ export default function EmailTemplatesPage() {
     }
   }, [currentStore, search])
 
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
+    if (!hasHydrated) return
     fetchTemplates()
-  }, [fetchTemplates])
+  }, [fetchTemplates, hasHydrated])
 
   const handleDelete = async (id: string) => {
     const ok = await confirm({ title: 'Excluir template?', destructive: true, confirmLabel: 'Excluir' }); if (!ok) return

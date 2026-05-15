@@ -70,9 +70,11 @@ export default function MediaPage() {
     }
   }, [currentStore?.id]);
 
+  const hasHydrated = useStoreStore((s) => s._hasHydrated);
   useEffect(() => {
+    if (!hasHydrated) return;
     fetchFiles();
-  }, [fetchFiles]);
+  }, [fetchFiles, hasHydrated]);
 
   const handleUpload = useCallback(
     async (fileList: FileList | null) => {

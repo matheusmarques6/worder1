@@ -77,9 +77,11 @@ export default function CampaignsPage() {
     }
   }, [currentStore])
 
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
+    if (!hasHydrated) return
     fetchCampaigns()
-  }, [fetchCampaigns])
+  }, [fetchCampaigns, hasHydrated])
 
   const filtered = campaigns.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase())

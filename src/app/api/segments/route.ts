@@ -299,17 +299,30 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
 
-    // Verify ownership before deleting
+    // Verify ownership before deleting. Multi-org members can
+    // delete from any org they actually belong to, not only their
+    // primary — earlier .eq('organization_id', user.organization_id)
+    // silently no-op'd for secondary-org members.
     const auth = await getAuthClient()
     if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', auth.user.id)
+    const orgIds = [...new Set([
+      auth.user.organization_id,
+      ...((memberships || []).map((m: any) => m.organization_id)),
+    ])]
 
     const { data: seg } = await supabase
       .from('customer_segments')
       .select('organization_id')
       .eq('id', id)
-      .single()
+      .in('organization_id', orgIds)
+      .maybeSingle()
 
-    if (!seg || seg.organization_id !== auth.user.organization_id) {
+    if (!seg) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
@@ -319,7 +332,7 @@ export async function DELETE(request: NextRequest) {
       .from('customer_segments')
       .delete()
       .eq('id', id)
-      .eq('organization_id', auth.user.organization_id)
+      .in('organization_id', orgIds)
 
     if (error) throw error
 

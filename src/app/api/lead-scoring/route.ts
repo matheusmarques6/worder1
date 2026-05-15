@@ -238,22 +238,61 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerComponentClient({ cookies })
+
+    // CRITICAL: resolve the authenticated user and the orgs they
+    // belong to BEFORE dispatching to any handler. Previously the
+    // handlers took organization_id straight from body.organization_id
+    // with no validation — same auth-bypass class of bug the
+    // playbooks route had. Now every handler receives a verified
+    // ownedOrgs Set and rejects requests targeting other orgs.
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .maybeSingle()
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id)
+    const ownedOrgs = new Set<string>(
+      [profile?.organization_id, ...((memberships || []).map((m: any) => m.organization_id))]
+        .filter(Boolean)
+    )
+    if (ownedOrgs.size === 0) {
+      return NextResponse.json({ error: 'No organization' }, { status: 403 })
+    }
+
     const body = await request.json()
 
-    const { action } = body
+    // Body-supplied org_id is only honored if the user owns it;
+    // otherwise we drop back to the primary. The downstream handlers
+    // receive the validated org_id via this rewritten body.
+    const requested = body.organization_id
+    const safeOrgId =
+      requested && ownedOrgs.has(requested) ? requested : profile?.organization_id
+    if (!safeOrgId) {
+      return NextResponse.json({ error: 'organization_id required' }, { status: 400 })
+    }
+    const safeBody = { ...body, organization_id: safeOrgId }
+
+    const { action } = safeBody
 
     switch (action) {
       case 'calculate':
-        return await handleCalculateScore(supabase, body)
+        return await handleCalculateScore(supabase, safeBody)
 
       case 'bulk_calculate':
-        return await handleBulkCalculate(supabase, body)
+        return await handleBulkCalculate(supabase, safeBody)
 
       case 'detect_intent':
-        return await handleDetectIntent(supabase, body)
+        return await handleDetectIntent(supabase, safeBody)
 
       case 'add_signal':
-        return await handleAddIntentSignal(supabase, body)
+        return await handleAddIntentSignal(supabase, safeBody)
 
       default:
         return NextResponse.json({ error: 'Acao invalida' }, { status: 400 })
