@@ -25,13 +25,26 @@ async function getUserOrganization(request: NextRequest) {
   const { data: { user }, error } = await supabase.auth.getUser(accessToken);
   if (error || !user) return null;
 
+  // Resolve primary + membership orgs so multi-org users see every
+  // org's products, not just their primary's.
   const { data: profile } = await supabase
     .from('profiles')
     .select('organization_id')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
+  const { data: memberships } = await supabase
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', user.id);
 
-  return profile?.organization_id || null;
+  const orgIds = Array.from(
+    new Set<string>(
+      [profile?.organization_id, ...((memberships || []).map((m: any) => m.organization_id))]
+        .filter(Boolean) as string[]
+    )
+  );
+  if (orgIds.length === 0) return null;
+  return { primary: profile?.organization_id || orgIds[0], all: orgIds };
 }
 
 async function shopifyFetch(shopDomain: string, accessToken: string, endpoint: string) {
@@ -57,8 +70,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
     }
 
-    const organizationId = await getUserOrganization(request);
-    if (!organizationId) {
+    const orgs = await getUserOrganization(request);
+    if (!orgs) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -67,11 +80,11 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const withCosts = searchParams.get('withCosts') === 'true';
 
-    // Buscar lojas
+    // Multi-org safe lookup
     let storesQuery = supabase
       .from('shopify_stores')
       .select('*')
-      .eq('organization_id', organizationId)
+      .in('organization_id', orgs.all)
       .eq('is_active', true);
 
     if (storeId) {
@@ -84,11 +97,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ products: [], total: 0, stores: [] });
     }
 
-    // Buscar custos cadastrados
+    // Custos também escopados a todas as orgs do usuário
     const { data: costs } = await supabase
       .from('product_costs')
       .select('*')
-      .eq('organization_id', organizationId);
+      .in('organization_id', orgs.all);
 
     const costsMap = new Map<string, any>();
     (costs || []).forEach(cost => {

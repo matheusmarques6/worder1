@@ -25,13 +25,27 @@ async function getUserOrganization(request: NextRequest) {
   const { data: { user }, error } = await supabase.auth.getUser(accessToken);
   if (error || !user) return null;
 
+  // Resolve every org the user belongs to — primary + memberships.
+  // Single-org filtering used to silently drop secondary org data
+  // (multi-org users saw partial / missing orders).
   const { data: profile } = await supabase
     .from('profiles')
     .select('organization_id')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
+  const { data: memberships } = await supabase
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', user.id);
 
-  return profile?.organization_id || null;
+  const orgIds = Array.from(
+    new Set<string>(
+      [profile?.organization_id, ...((memberships || []).map((m: any) => m.organization_id))]
+        .filter(Boolean) as string[]
+    )
+  );
+  if (orgIds.length === 0) return null;
+  return { primary: profile?.organization_id || orgIds[0], all: orgIds };
 }
 
 async function shopifyFetch(shopDomain: string, accessToken: string, endpoint: string) {
@@ -57,8 +71,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
     }
 
-    const organizationId = await getUserOrganization(request);
-    if (!organizationId) {
+    const orgs = await getUserOrganization(request);
+    if (!orgs) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -72,11 +86,13 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
-    // Buscar lojas
+    // Buscar lojas — escopa por TODAS as orgs do usuário (primária +
+    // memberships). O filtro single-org anterior silenciosamente
+    // ignorava lojas de orgs secundárias.
     let storesQuery = supabase
       .from('shopify_stores')
       .select('*')
-      .eq('organization_id', organizationId)
+      .in('organization_id', orgs.all)
       .eq('is_active', true);
 
     if (storeId) {

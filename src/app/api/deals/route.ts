@@ -18,15 +18,27 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthClient();
     if (!auth) return authError();
-    
+
     const { supabase, user } = auth;
     const organizationId = user.organization_id;
 
     if (!organizationId) {
-      return NextResponse.json({ 
-        error: 'Organization not found for user' 
+      return NextResponse.json({
+        error: 'Organization not found for user'
       }, { status: 400 });
     }
+
+    // Multi-org lookup so a user in 2+ orgs sees all their deals/
+    // pipelines, not just the primary org's. Without this, secondary
+    // org memberships silently lost their CRM view.
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id);
+    const orgIds = [...new Set([
+      organizationId,
+      ...((memberships || []).map((m: any) => m.organization_id)),
+    ])];
 
     const searchParams = request.nextUrl.searchParams;
     const type = searchParams.get('type') || 'deals';
@@ -44,7 +56,7 @@ export async function GET(request: NextRequest) {
       let query = supabase
         .from('pipelines')
         .select('*')
-        .eq('organization_id', organizationId)
+        .in('organization_id', orgIds)
         .order('position');
 
       // store_id OPCIONAL - se fornecido, filtra; se não, busca todos
@@ -75,7 +87,7 @@ export async function GET(request: NextRequest) {
         let dealsQuery = supabase
           .from('deals')
           .select('stage_id, status')
-          .eq('organization_id', organizationId);
+          .in('organization_id', orgIds);
         
         if (storeId) {
           dealsQuery = dealsQuery.eq('store_id', storeId);
@@ -115,7 +127,7 @@ export async function GET(request: NextRequest) {
         .from('deals')
         .select('*')
         .eq('id', dealId)
-        .eq('organization_id', organizationId) // Segurança
+        .in('organization_id', orgIds) // Segurança multi-org
         .single();
 
       if (dealError) {
@@ -156,7 +168,7 @@ export async function GET(request: NextRequest) {
     let dealsQuery = supabase
       .from('deals')
       .select('*')
-      .eq('organization_id', organizationId)
+      .in('organization_id', orgIds)
       .order('position');
     
     // Filtros OPCIONAIS
