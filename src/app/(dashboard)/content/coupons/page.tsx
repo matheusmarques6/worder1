@@ -75,9 +75,11 @@ export default function CouponsPage() {
     }
   }, [currentStore?.id]);
 
+  const hasHydrated = useStoreStore((s) => s._hasHydrated);
   useEffect(() => {
+    if (!hasHydrated) return;
     fetchCoupons();
-  }, [fetchCoupons]);
+  }, [fetchCoupons, hasHydrated]);
 
   const openCreate = () => {
     setEditingCoupon(null);

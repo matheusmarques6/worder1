@@ -85,9 +85,15 @@ export default function ContactsPage() {
     }
   }, [page, search, currentStore?.id, sort, filterSource, filterSubscribed, filterTags])
 
+  // Hydration gate: zustand currentStore is undefined for ~1 frame
+  // after F5; without this guard the first fetch lands without a
+  // storeId and the server falls back to the org's default store —
+  // which on a multi-store org leaks the wrong contacts in.
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
+    if (!hasHydrated) return
     fetchContacts()
-  }, [fetchContacts])
+  }, [fetchContacts, hasHydrated])
 
   // Debounce search
   const [searchInput, setSearchInput] = useState('')

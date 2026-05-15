@@ -402,13 +402,18 @@ export default function CRMPage() {
     status: 'open' as 'all' | 'open' | 'won' | 'lost', // Default: só deals abertos
   })
 
-  // Refetch when store changes
+  // Hydration gate + store-change refetch. Without the gate the CRM
+  // page renders deals from useDeals' initial state (which may have
+  // pulled with currentStore=undefined → org's default store) until
+  // currentStore.id flips post-rehydration.
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
+    if (!hasHydrated) return
     if (currentStore?.id) {
       refetch()
       refetchPipelines()
     }
-  }, [currentStore?.id])
+  }, [currentStore?.id, hasHydrated])
 
   // Set active pipeline when pipelines load
   useEffect(() => {

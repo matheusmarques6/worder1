@@ -68,6 +68,12 @@ export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
   const { currentStore } = useStoreStore()
+  // Hydration gate. On F5 refresh zustand reads currentStore from
+  // localStorage asynchronously; if the effect fires before that
+  // completes, currentStore.id is undefined and the fetch returns
+  // the org's first store's campaigns — which on a multi-store org
+  // (Dr. Melaxin + Based) is the wrong store. Wait for hydration.
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
 
   const fetchCampaigns = useCallback(async () => {
     if (!currentStore?.id) return
@@ -87,8 +93,9 @@ export default function CampaignsPage() {
   }, [currentStore?.id])
 
   useEffect(() => {
+    if (!hasHydrated) return
     fetchCampaigns()
-  }, [fetchCampaigns])
+  }, [fetchCampaigns, hasHydrated])
 
   const activeCampaigns = campaigns.filter(c => c.status === 'active' || c.status === 'sending').length
   const totalSent = campaigns.reduce((sum, c) => sum + (c.total_sent || 0), 0)

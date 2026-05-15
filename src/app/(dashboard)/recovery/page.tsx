@@ -165,9 +165,14 @@ export default function RecoveryPage() {
     }
   }, [activeTab, currentStore])
 
+  // Hydration gate. F5 + tab switch was firing fetch before zustand
+  // rehydrated currentStore, briefly showing recoveries from the
+  // wrong store.
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
+    if (!hasHydrated) return
     fetchRecovery()
-  }, [fetchRecovery])
+  }, [fetchRecovery, hasHydrated])
 
   const handleSendWhatsApp = (item: RecoveryItem) => {
     // Click-to-chat: open WhatsApp with a prefilled recovery message.

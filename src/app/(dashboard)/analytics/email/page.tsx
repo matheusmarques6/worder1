@@ -161,9 +161,15 @@ export default function EmailAnalyticsPage() {
     }
   }
 
+  // Hydration gate — without it the first F5 fires fetchData with
+  // currentStore=undefined and the analytics endpoint falls back
+  // to the org's first store. On a multi-store org the dashboard
+  // flashes the wrong store's metrics for ~1 frame.
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
+    if (!hasHydrated) return
     fetchData()
-  }, [days, currentStore?.id])
+  }, [days, currentStore?.id, hasHydrated])
 
   const metrics = data.metrics || {
     emailsSent: 0,

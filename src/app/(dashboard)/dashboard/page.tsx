@@ -235,7 +235,17 @@ export default function DashboardPage() {
     }
   }
 
-  useEffect(() => { fetchData() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [range, granularity, currentStore?.id])
+  // Hydration gate. currentStore is undefined for one render after
+  // F5 (zustand reads localStorage async). Without this guard the
+  // first fetch lands without a storeId; the overview endpoint
+  // then picks the org's "first" store and the merchant sees the
+  // wrong store's revenue / pedidos flash for ~1 frame.
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
+  useEffect(() => {
+    if (!hasHydrated) return
+    fetchData()
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [range, granularity, currentStore?.id, hasHydrated])
 
   // Keyboard shortcut: "R" refreshes (ignored while typing in inputs).
   useEffect(() => {

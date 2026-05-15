@@ -103,10 +103,16 @@ export default function SegmentsPage() {
     }
   }, [user?.organization_id, currentStore?.id])
 
+  // Hydration gate: without this guard the first F5 fires fetch
+  // before zustand finishes rehydrating currentStore, the early-
+  // return triggers, and the page never retries because the effect
+  // dependency stays the same after hydration completes.
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
+    if (!hasHydrated) return
     setLoading(true)
     fetchSegments().finally(() => setLoading(false))
-  }, [fetchSegments])
+  }, [fetchSegments, hasHydrated])
 
   const handleRefresh = async () => {
     setRefreshing(true)

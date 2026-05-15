@@ -158,8 +158,15 @@ export default function AutomationsPage() {
     fetchStats();
   }, [currentStore?.id]);
 
+  // Hydration gate — both auth and currentStore need to be done
+  // rehydrating before we fetch, otherwise the first F5 flashes the
+  // wrong store's automations (or no storeId at all, which falls
+  // back to org-wide and mixes Dr. Melaxin flows with Based flows).
+  const hasHydrated = useStoreStore((s) => s._hasHydrated);
+
   // Fetch automations
   useEffect(() => {
+    if (!hasHydrated) return;
     async function fetchAutomations() {
       if (!organizationId) {
         setLoading(false);
@@ -183,7 +190,7 @@ export default function AutomationsPage() {
     }
 
     fetchAutomations();
-  }, [organizationId, currentStore?.id]);
+  }, [organizationId, currentStore?.id, hasHydrated]);
 
   // Fetch orphans — flows in this org that aren't in the active store.
   // Useful when a flow "disappears" because it's actually attached to

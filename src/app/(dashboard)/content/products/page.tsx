@@ -74,9 +74,11 @@ export default function ProductsPage() {
     }
   }, [currentStore?.id])
 
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
+    if (!hasHydrated) return
     fetchProducts()
-  }, [fetchProducts])
+  }, [fetchProducts, hasHydrated])
 
   const handleSync = async () => {
     if (syncing) return
