@@ -406,10 +406,18 @@ export default function DashboardPage() {
                     body: JSON.stringify({ storeId: currentStore.id, syncType: 'all', historical: true }),
                   });
                   const data = await res.json().catch(() => ({}));
-                  // Background mode returns { mode: 'background', jobId }
-                  // so the progress strip can poll. Inline mode returns
-                  // the result immediately — same toast either way.
-                  if (data?.mode === 'background' && data?.jobId) {
+                  // Three response shapes:
+                  //  - { mode: 'bulk', jobId, bulkOperationId } — Shopify
+                  //    Bulk Operations path. Async on Shopify's side,
+                  //    finalized via the bulk-finish webhook. The merchant
+                  //    can navigate away; we'll keep polling the job.
+                  //  - { mode: 'background', jobId } — QStash worker.
+                  //  - inline result — small/incremental syncs that
+                  //    finished within the 300s function budget.
+                  if (data?.mode === 'bulk' && data?.jobId) {
+                    setActiveJobId(data.jobId);
+                    showToast('Exportação completa em andamento na Shopify. Pode demorar alguns minutos.');
+                  } else if (data?.mode === 'background' && data?.jobId) {
                     setActiveJobId(data.jobId);
                     showToast('Sync rodando em background. Acompanhe abaixo.');
                   } else {

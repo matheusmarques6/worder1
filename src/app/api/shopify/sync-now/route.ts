@@ -115,6 +115,89 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Sync] Store: ${store.shop_name} (${store.shop_domain}), syncType=${syncType}, type=${store.connection_type || 'oauth'}`);
 
+    // Historical sync (every order ever) → Shopify Bulk Operations.
+    // This is the only path that scales to 10k+ orders inside a single
+    // merchant click. Bulk has its own budget (no per-query cost), no
+    // 300s Vercel ceiling (Shopify runs the export server-side, async),
+    // and ingests via /api/webhooks/shopify/bulk-finish when the JSONL
+    // is ready. The cursor pager (below) is fine for ≤2k recent orders
+    // but starts losing batches past that and chokes hard at 5k+.
+    //
+    // Only triggered when (a) the caller explicitly asked for
+    // historical, AND (b) the store is OAuth/connected (manual stores
+    // we still pull via the cursor path because they're typically test
+    // shops with low volume). Shopify only allows one bulk op per shop
+    // at a time — if one's already mid-flight we report it instead of
+    // starting a duplicate.
+    if (historical && (syncType === 'all' || syncType === 'orders')) {
+      try {
+        const { startOrdersBulkExport, getCurrentBulkOperation } = await import(
+          '@/lib/services/shopify/bulk-sync'
+        );
+        const storeConfigForBulk = {
+          id: store.id,
+          organization_id: store.organization_id,
+          shop_domain: store.shop_domain,
+          access_token: store.access_token,
+        };
+
+        const current = await getCurrentBulkOperation(storeConfigForBulk);
+        if (current && (current.status === 'RUNNING' || current.status === 'CREATED')) {
+          const { data: existingJob } = await supabase
+            .from('shopify_import_jobs')
+            .select('id')
+            .eq('store_id', store.id)
+            .contains('config', { sync_type: 'orders_bulk', bulk_operation_id: current.id })
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          return NextResponse.json({
+            ok: true,
+            mode: 'bulk',
+            jobId: existingJob?.id || null,
+            bulkOperationId: current.id,
+            bulkStatus: current.status,
+            storeId: store.id,
+            message: 'Bulk export já rodando para esta loja. Aguarde a conclusão.',
+          });
+        }
+
+        const result = await startOrdersBulkExport(storeConfigForBulk);
+        if (result.bulkOperation) {
+          const { data: job } = await supabase
+            .from('shopify_import_jobs')
+            .insert({
+              store_id: store.id,
+              organization_id: store.organization_id,
+              status: 'pending',
+              config: {
+                sync_type: 'orders_bulk',
+                bulk_operation_id: result.bulkOperation.id,
+              },
+              started_at: new Date().toISOString(),
+              processed_count: 0,
+            })
+            .select('id')
+            .single();
+          return NextResponse.json({
+            ok: true,
+            mode: 'bulk',
+            jobId: job?.id || null,
+            bulkOperationId: result.bulkOperation.id,
+            bulkStatus: result.bulkOperation.status,
+            storeId: store.id,
+            message: 'Bulk export iniciado. Shopify vai notificar quando terminar.',
+          });
+        }
+        // Bulk submission failed — fall through to the cursor path
+        // below as a safety net. Logged so we can debug rare cases
+        // (token revoked, scopes missing, shop temporarily blocked).
+        console.warn('[Sync] Bulk submit failed, falling back to cursor:', result.error);
+      } catch (err: any) {
+        console.warn('[Sync] Bulk path threw, falling back to cursor:', err?.message);
+      }
+    }
+
     // Background mode (default): create a job row, push to QStash, and
     // return the jobId immediately. The /api/workers/shopify-sync worker
     // picks it up, walks the GraphQL connection with checkpointing,

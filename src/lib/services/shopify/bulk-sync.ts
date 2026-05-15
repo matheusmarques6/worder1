@@ -67,9 +67,15 @@ export const BULK_OPERATION_STATUS_QUERY = `
 // lean — every nested field costs both bulk-budget AND the parse time
 // downstream. We can always run a second bulk for refunds / fulfillments
 // later if a merchant needs them.
+//
+// `query: "status:any"` is critical. Without it the bulk operation
+// inherits the same default filter as the live API (status:open, which
+// excludes archived/closed orders) and a healthy store with auto-archived
+// fulfilled orders would have hundreds missing from the export. This
+// matches the cursor sync's behavior.
 const ORDERS_BULK_QUERY = `
   {
-    orders {
+    orders(query: "status:any") {
       edges {
         node {
           id
@@ -83,11 +89,15 @@ const ORDERS_BULK_QUERY = `
           displayFinancialStatus
           displayFulfillmentStatus
           confirmed
+          paymentGatewayNames
           totalPriceSet { shopMoney { amount currencyCode } }
           subtotalPriceSet { shopMoney { amount currencyCode } }
+          totalTaxSet { shopMoney { amount currencyCode } }
           totalDiscountsSet { shopMoney { amount currencyCode } }
           totalRefundedSet { shopMoney { amount currencyCode } }
           customer { id firstName lastName email phone }
+          shippingAddress { firstName lastName address1 address2 city province country zip phone }
+          billingAddress { firstName lastName address1 address2 city province country zip phone }
           lineItems {
             edges {
               node {
@@ -260,26 +270,43 @@ function mapOrderForUpsert(
   const idStr = String(order.id || '');
   const shopifyOrderId = idStr.split('/').pop() || idStr;
   const lineItems = (lineItemsByOrder.get(order.id) || []).map((li) => ({
+    id: li.id ? String(li.id).split('/').pop() : null,
     title: li.title,
     quantity: li.quantity,
     sku: li.sku,
-    price: li.originalUnitPriceSet?.shopMoney?.amount,
-    product_id: li.product?.id?.split('/').pop() || null,
+    variant_title: li.variantTitle,
+    price: li.originalUnitPriceSet?.shopMoney?.amount || '0',
+    product_id: li.product?.id ? String(li.product.id).split('/').pop() : null,
+    variant_id: li.variant?.id ? String(li.variant.id).split('/').pop() : null,
   }));
+  // Column names match exactly what the cursor sync writes
+  // (syncOrdersGraphQL). Earlier shape used shopify_order_number /
+  // shopify_created_at — neither column exists on shopify_orders, so
+  // the upsert would have silently dropped those values onto the
+  // table's defaults. Use order_number / created_at like the rest of
+  // the codebase, and include every column the cursor sync writes so
+  // the bulk path and the cursor path produce identical rows.
   return {
     store_id: store.id,
     organization_id: store.organization_id,
     shopify_order_id: shopifyOrderId,
-    shopify_order_number: String(order.name || '').replace('#', '') || shopifyOrderId,
+    order_number: String(order.name || '').replace('#', '') || shopifyOrderId,
     name: order.name,
     email: order.email,
     phone: order.phone,
     total_price: parseFloat(order.totalPriceSet?.shopMoney?.amount || '0'),
+    subtotal_price: parseFloat(order.subtotalPriceSet?.shopMoney?.amount || '0'),
+    total_tax: parseFloat(order.totalTaxSet?.shopMoney?.amount || '0'),
+    total_discounts: parseFloat(order.totalDiscountsSet?.shopMoney?.amount || '0'),
     currency: order.totalPriceSet?.shopMoney?.currencyCode || 'BRL',
     financial_status: (order.displayFinancialStatus || 'pending').toLowerCase(),
     fulfillment_status: order.displayFulfillmentStatus?.toLowerCase() || null,
+    payment_gateway_names: order.paymentGatewayNames || [],
+    customer_id: order.customer?.id ? String(order.customer.id).split('/').pop() : null,
     line_items: lineItems,
-    shopify_created_at: order.createdAt,
+    shipping_address: order.shippingAddress || null,
+    billing_address: order.billingAddress || null,
+    created_at: order.createdAt,
     updated_at: new Date().toISOString(),
   };
 }
