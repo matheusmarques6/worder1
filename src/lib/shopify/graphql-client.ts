@@ -269,7 +269,17 @@ export interface PaginationOptions {
    *  on the last page). Callers persist the cursor to a checkpoint
    *  table so an interrupted sync can resume from `startCursor` on
    *  the next run instead of starting over from zero. */
-  onPage?: (pageNumber: number, itemsCount: number, cursor: string | null) => void;
+  /**
+   * Hook fired AFTER each page is fetched. The 4th arg is just this
+   * page's freshly-fetched nodes (not the cumulative array). Make it
+   * async if you need to persist the page somewhere before the next
+   * fetch — paginate awaits it. The sync routes use this to upsert
+   * per-page so a wall-clock kill mid-walk doesn't drop the orders
+   * we already pulled from Shopify (the old "fetch all then upsert"
+   * pattern lost 439 of 804 orders on Dr. Melaxin when Vercel killed
+   * the function mid-loop).
+   */
+  onPage?: (pageNumber: number, itemsCount: number, cursor: string | null, pageNodes: any[]) => void | Promise<void>;
   /** Start from this cursor instead of the beginning. Set to the value
    *  of `last_cursor` you saved on the previous run. */
   startCursor?: string | null;
@@ -355,7 +365,12 @@ export async function shopifyGraphQLPaginate<T = any>(
     cursor = hasNext ? pageInfo.endCursor : null;
 
     if (onPage) {
-      onPage(page, allNodes.length, cursor);
+      // Awaited so the caller can persist this page before we fetch
+      // the next one. Critical for the orders sync: if the function
+      // is killed mid-walk, every page we already returned from this
+      // hook is durable, and the cursor advances only after the
+      // upsert succeeds.
+      await onPage(page, allNodes.length, cursor, nodes as any[]);
     }
 
     if (!hasNext) {

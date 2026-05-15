@@ -397,12 +397,14 @@ async function syncOrdersGraphQL(
         .eq('id', jobId);
     }
 
-    // Pagination budget. 270s leaves a ~30s tail for the rest of the
-    // request (DB upserts after the loop, response serialization). If
-    // we don't finish, the cursor is persisted and the next call resumes.
+    // Pagination budget. 270s leaves a ~30s tail for the finalize
+    // writes. The hot loop (Shopify fetch + per-page batch upsert)
+    // runs inside onPage, so each page commits before the next
+    // network round-trip — a wall-clock kill mid-walk just leaves
+    // the cursor at the last fully-committed page.
     const PAGE_BUDGET_MS = 270_000;
 
-    const { nodes, lastCursor, reachedDeadline } = await shopifyGraphQLPaginate(
+    const { lastCursor, reachedDeadline } = await shopifyGraphQLPaginate(
       storeConfig,
       ORDERS_QUERY,
       variables,
@@ -412,39 +414,92 @@ async function syncOrdersGraphQL(
         maxPages: 500,
         startCursor,
         deadlineMs: PAGE_BUDGET_MS,
-        onPage: (page, total, cursor) => {
+        onPage: async (page, total, cursor, pageNodes) => {
           onProgress?.('orders', Math.min(page * 3, 90), `${total} orders fetched...`);
-          // Persist progress so a crash mid-sync doesn't lose work.
-          // Best-effort: skip if no jobId (couldn't insert).
+          if (pageNodes.length === 0) return;
+
+          // Batch-build the order rows for this page. The previous
+          // version upserted one row at a time AFTER paginate
+          // returned, so an 804-order sync would do 804 sequential
+          // round-trips — Vercel killed it at ~365 every time, and
+          // because the job was already marked 'completed' the rest
+          // were silently dropped. Now: one upsert per page (≤250
+          // rows), inside onPage, BEFORE we advance the cursor.
+          const ordersRows = pageNodes.map((order: any) => {
+            const orderId = extractShopifyId(order.id);
+            const orderValue = parseFloat(order.totalPriceSet?.shopMoney?.amount || '0');
+            const currency = order.totalPriceSet?.shopMoney?.currencyCode || 'BRL';
+            totalRevenue += orderValue;
+            const lineItems = (order.lineItems?.nodes || []).map((li: any) => ({
+              id: li.id ? extractShopifyId(li.id) : null,
+              title: li.title,
+              quantity: li.quantity,
+              price: li.originalUnitPriceSet?.shopMoney?.amount || '0',
+              sku: li.sku,
+              variant_title: li.variantTitle,
+              product_id: li.product?.id ? extractShopifyId(li.product.id) : null,
+              variant_id: li.variant?.id ? extractShopifyId(li.variant.id) : null,
+            }));
+            return {
+              store_id: store.id,
+              organization_id: store.organization_id,
+              shopify_order_id: orderId,
+              order_number: order.name?.replace('#', '') || orderId,
+              name: order.name,
+              email: order.email,
+              phone: order.phone,
+              total_price: orderValue,
+              subtotal_price: parseFloat(order.subtotalPriceSet?.shopMoney?.amount || '0'),
+              total_tax: parseFloat(order.totalTaxSet?.shopMoney?.amount || '0'),
+              total_discounts: parseFloat(order.totalDiscountsSet?.shopMoney?.amount || '0'),
+              currency,
+              financial_status: (order.displayFinancialStatus || 'pending').toLowerCase(),
+              fulfillment_status: order.displayFulfillmentStatus ? order.displayFulfillmentStatus.toLowerCase() : null,
+              payment_gateway_names: order.paymentGatewayNames || [],
+              customer_id: order.customer?.id ? extractShopifyId(order.customer.id) : null,
+              line_items: lineItems,
+              shipping_address: order.shippingAddress || null,
+              billing_address: order.billingAddress || null,
+              created_at: order.createdAt,
+              updated_at: new Date().toISOString(),
+            };
+          });
+
+          const { error: upErr } = await supabase
+            .from('shopify_orders')
+            .upsert(ordersRows, { onConflict: 'store_id,shopify_order_id' });
+          if (upErr) {
+            errors.push(`Page ${page} upsert: ${upErr.message}`);
+            console.error(`[Sync] Order page ${page} upsert failed:`, upErr.message);
+            return;
+          }
+
+          count += pageNodes.length;
+
+          // Persist cursor + processed_count AFTER the upsert
+          // succeeded. If we crash here, the cursor still points at
+          // the page we just successfully committed, and the next
+          // run picks up from there.
           if (jobId) {
-            supabase
+            await supabase
               .from('shopify_import_jobs')
               .update({
                 last_cursor: cursor,
-                processed_count: count + total,
+                processed_count: count,
                 current_page: page,
                 last_processed_at: new Date().toISOString(),
               })
-              .eq('id', jobId)
-              .then(() => {}, () => {});
+              .eq('id', jobId);
           }
         },
       }
     );
 
-    // Roll the cumulative count forward BEFORE the per-order upsert
-    // loop. `count` started at the previous run's processed_count
-    // (line above) and never got incremented inside the for-loop —
-    // so the returned `count` used to be the count BEFORE this run's
-    // fresh nodes were upserted, which is what stomped
-    // shopify_stores.total_orders back to a stale value every time a
-    // resumed sync wrote it. Now the value the orchestrator writes to
-    // total_orders reflects everything in shopify_orders for this
-    // store.
-    count = count + nodes.length;
-
-    // Final job state: completed if we reached the end of the connection,
-    // paused if we hit the deadline (resume on next run).
+    // Final job state: completed if we reached the end of the
+    // connection, paused if we hit the deadline. By the time we get
+    // here every order pulled from Shopify is already in
+    // shopify_orders — so processed_count and total_orders both
+    // reflect the same number.
     if (jobId) {
       await supabase
         .from('shopify_import_jobs')
@@ -457,109 +512,18 @@ async function syncOrdersGraphQL(
         .eq('id', jobId);
     }
     if (reachedDeadline) {
-      console.warn(`[Sync] Orders sync paused at ${nodes.length} pulled (${count} cumulative), cursor=${lastCursor?.slice(0, 16)}... Next run will resume.`);
+      console.warn(`[Sync] Orders sync paused at ${count} cumulative, cursor=${lastCursor?.slice(0, 16)}... Next run will resume.`);
       resumeCursor = lastCursor;
     }
 
-    for (const order of nodes) {
-      const orderId = extractShopifyId(order.id);
-      const orderValue = parseFloat(order.totalPriceSet?.shopMoney?.amount || '0');
-      const currency = order.totalPriceSet?.shopMoney?.currencyCode || 'BRL';
-      totalRevenue += orderValue;
-
-      // Transform line items
-      const lineItems = (order.lineItems?.nodes || []).map((li: any) => ({
-        id: li.id ? extractShopifyId(li.id) : null,
-        title: li.title,
-        quantity: li.quantity,
-        price: li.originalUnitPriceSet?.shopMoney?.amount || '0',
-        sku: li.sku,
-        variant_title: li.variantTitle,
-        product_id: li.product?.id ? extractShopifyId(li.product.id) : null,
-        variant_id: li.variant?.id ? extractShopifyId(li.variant.id) : null,
-      }));
-
-      // Upsert order
-      const { error } = await supabase
-        .from('shopify_orders')
-        .upsert({
-          store_id: store.id,
-          organization_id: store.organization_id,
-          shopify_order_id: orderId,
-          order_number: order.name?.replace('#', '') || orderId,
-          name: order.name,
-          email: order.email,
-          phone: order.phone,
-          total_price: orderValue,
-          subtotal_price: parseFloat(order.subtotalPriceSet?.shopMoney?.amount || '0'),
-          total_tax: parseFloat(order.totalTaxSet?.shopMoney?.amount || '0'),
-          total_discounts: parseFloat(order.totalDiscountsSet?.shopMoney?.amount || '0'),
-          currency,
-          financial_status: (order.displayFinancialStatus || 'pending').toLowerCase(),
-          fulfillment_status: order.displayFulfillmentStatus ? order.displayFulfillmentStatus.toLowerCase() : null,
-          payment_gateway_names: order.paymentGatewayNames || [],
-          customer_id: order.customer?.id ? extractShopifyId(order.customer.id) : null,
-          line_items: lineItems,
-          shipping_address: order.shippingAddress || null,
-          billing_address: order.billingAddress || null,
-          created_at: order.createdAt,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'store_id,shopify_order_id' });
-
-      if (error) {
-        errors.push(`Order ${orderId}: ${error.message}`);
-      }
-
-      // Find contact for this order
-      let contactId: string | null = null;
-      if (order.email) {
-        const { data: contact } = await supabase
-          .from('contacts')
-          .select('id')
-          .eq('organization_id', store.organization_id)
-          .ilike('email', order.email)
-          .maybeSingle();
-        contactId = contact?.id || null;
-      }
-
-      // Create CDP event for historical order
-      try {
-        await createEvent({
-          organization_id: store.organization_id,
-          contact_id: contactId,
-          store_id: store.id,
-          event_type: WORDER_SHOPIFY_EVENTS.PLACED_ORDER,
-          event_source: EVENT_SOURCES.GRAPHQL_SYNC,
-          properties: {
-            order_id: orderId,
-            order_number: order.name || orderId,
-            total_price: orderValue,
-            currency,
-            financial_status: (order.displayFinancialStatus || 'pending').toLowerCase(),
-            fulfillment_status: order.displayFulfillmentStatus?.toLowerCase() || null,
-            item_count: lineItems.length,
-            items: lineItems.map((li: any) => ({
-              product_id: li.product_id,
-              title: li.title,
-              quantity: li.quantity,
-              price: parseFloat(li.price || '0'),
-              sku: li.sku,
-            })),
-          },
-          monetary_value: orderValue,
-          currency,
-          shopify_resource_id: orderId,
-          shopify_resource_type: 'order',
-          occurred_at: order.createdAt,
-          idempotency_key: `placed_order:${orderId}`,
-        });
-        eventsCreated++;
-      } catch {
-        // Idempotency — event may already exist
-      }
-
-      count++;
-    }
+    // CDP placed_order events are intentionally NOT created during
+    // historical backfill. They added one createEvent() round-trip
+    // per order on top of the upsert — the slow path that made the
+    // function time out before all orders were committed. Live
+    // orders still get the event via the orders/create webhook
+    // (with the same `placed_order:${orderId}` idempotency key, so
+    // there's no duplication if we ever add a historical-events
+    // backfill later).
   } catch (error: any) {
     errors.push(`Order sync: ${error.message}`);
   }
