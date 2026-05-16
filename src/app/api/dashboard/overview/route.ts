@@ -184,12 +184,12 @@ export async function GET(request: NextRequest) {
       // Orders sit in shopify_orders (joined via store). Fall back to `orders` if present.
       safeQuery(async () => {
         if (storeId) {
-          return supabaseAdmin.from('shopify_orders').select('total_price, created_at, financial_status').eq('store_id', storeId).gte('created_at', since);
+          return supabaseAdmin.from('shopify_orders').select('total_price, total_refunded, created_at, financial_status').eq('store_id', storeId).gte('created_at', since);
         }
         const storesRes = await supabaseAdmin.from('shopify_stores').select('id').eq('organization_id', orgId);
         const storeIds = (storesRes.data || []).map((s: any) => s.id);
         if (!storeIds.length) return { data: [], error: null };
-        return supabaseAdmin.from('shopify_orders').select('total_price, created_at, financial_status').in('store_id', storeIds).gte('created_at', since);
+        return supabaseAdmin.from('shopify_orders').select('total_price, total_refunded, created_at, financial_status').in('store_id', storeIds).gte('created_at', since);
       }),
       // Pull last_sync_at + initial_sync_completed too so the auto-
       // sync trigger below can decide whether to refresh stale data.
@@ -218,7 +218,15 @@ export async function GET(request: NextRequest) {
     // the whole query, which is why the dashboard sat at R$0 even with
     // 432 paid rows on file.
     const validOrders = orders.filter((o: any) => String(o.financial_status || '').toLowerCase() !== 'cancelled');
-    const storeRevenue = validOrders.reduce((s: number, o: any) => s + num(o.total_price), 0);
+    // Match Shopify "Total Sales": gross - refunds. We persist
+    // total_refunded from Shopify's totalRefundedSet on every sync,
+    // so subtracting it makes our number match Shopify Admin to the
+    // cent. Earlier pure SUM(total_price) overstated by the refund
+    // amount on stores with even a few returns.
+    const storeRevenue = validOrders.reduce(
+      (s: number, o: any) => s + num(o.total_price) - num(o.total_refunded),
+      0
+    );
     const storeOrders = validOrders.length;
 
     const worderShare = storeRevenue > 0 ? (worderRevenue / storeRevenue) * 100 : 0;
@@ -274,7 +282,9 @@ export async function GET(request: NextRequest) {
       const row = o as any;
       const bi = findBucket(buckets, row.created_at);
       if (bi < 0) continue;
-      sb[bi].fora += num(row.total_price);
+      // Net of refunds — same calculation the headline storeRevenue uses,
+      // so the chart bars and the card stay in sync.
+      sb[bi].fora += num(row.total_price) - num(row.total_refunded);
     }
     for (let i = 0; i < sb.length; i++) {
       const worderBucket = sb[i].campanhas + sb[i].automacoes;

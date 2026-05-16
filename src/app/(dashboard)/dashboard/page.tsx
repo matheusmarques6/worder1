@@ -589,7 +589,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex items-center gap-4 pb-2">
                 <LegendDot color="#F26B2A" label="Campanhas" />
-                <LegendDot color="#FBBF24" label="Automações" />
+                <LegendDot color="#8B5CF6" label="Automações" />
                 <LegendDot color="#E4E4E7" label="Receita total da loja" border="#D4D4D8" />
               </div>
             </div>
@@ -630,7 +630,7 @@ export default function DashboardPage() {
                       wrapperStyle={{ outline: 'none' }}
                     />
                     <Bar dataKey="campanhas" stackId="a" fill="#F26B2A" barSize={34} />
-                    <Bar dataKey="automacoes" stackId="a" fill="#FBBF24" barSize={34} />
+                    <Bar dataKey="automacoes" stackId="a" fill="#8B5CF6" barSize={34} />
                     <Bar dataKey="fora" stackId="a" fill="#E4E4E7" radius={[3, 3, 0, 0]} barSize={34} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -646,14 +646,14 @@ export default function DashboardPage() {
             className="relative w-full h-[5px] rounded-[5px] overflow-hidden flex"
             style={{ background: '#F4F4F5' }}
           >
-            <div style={{ width: `${channelPct.email}%`, background: '#18181B' }} />
-            <div style={{ width: `${channelPct.whatsapp}%`, background: '#71717A' }} />
-            <div style={{ width: `${channelPct.sms}%`, background: '#D4D4D8' }} />
+            <div style={{ width: `${channelPct.email}%`, background: '#F26B2A' }} />
+            <div style={{ width: `${channelPct.whatsapp}%`, background: '#25D366' }} />
+            <div style={{ width: `${channelPct.sms}%`, background: '#6366F1' }} />
           </div>
           <div className="grid grid-cols-3 gap-5 mt-6">
-            <ChannelItem label="Email" value={data.channels.email} pct={channelPct.email} color="#18181B" />
-            <ChannelItem label="WhatsApp" value={data.channels.whatsapp} pct={channelPct.whatsapp} color="#71717A" />
-            <ChannelItem label="SMS" value={data.channels.sms} pct={channelPct.sms} color="#D4D4D8" />
+            <ChannelItem label="Email" value={data.channels.email} pct={channelPct.email} color="#F26B2A" />
+            <ChannelItem label="WhatsApp" value={data.channels.whatsapp} pct={channelPct.whatsapp} color="#25D366" />
+            <ChannelItem label="SMS" value={data.channels.sms} pct={channelPct.sms} color="#6366F1" />
           </div>
         </section>
 
@@ -750,7 +750,7 @@ function RichTooltip({ active, payload, label, isRevenue }: any) {
   const rows: Array<{ name: string; value: number; color: string }> = []
   const keyMap: Record<string, { name: string; color: string }> = {
     campanhas: { name: 'Campanhas', color: '#F26B2A' },
-    automacoes: { name: 'Automações', color: '#FBBF24' },
+    automacoes: { name: 'Automações', color: '#8B5CF6' },
     fora: { name: 'Receita total da loja', color: '#D4D4D8' },
   }
   for (const p of payload) {

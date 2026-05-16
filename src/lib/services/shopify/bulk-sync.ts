@@ -420,6 +420,10 @@ function mapOrderForUpsert(
     subtotal_price: parseFloat(order.subtotalPriceSet?.shopMoney?.amount || '0'),
     total_tax: parseFloat(order.totalTaxSet?.shopMoney?.amount || '0'),
     total_discounts: parseFloat(order.totalDiscountsSet?.shopMoney?.amount || '0'),
+    // total_refunded is what Shopify subtracts from gross to get
+    // "Total Sales". Without persisting it the dashboard always
+    // overstated revenue on stores with even a few refunds.
+    total_refunded: parseFloat(order.totalRefundedSet?.shopMoney?.amount || '0'),
     currency: order.totalPriceSet?.shopMoney?.currencyCode || 'BRL',
     financial_status: (order.displayFinancialStatus || 'pending').toLowerCase(),
     fulfillment_status: order.displayFulfillmentStatus?.toLowerCase() || null,

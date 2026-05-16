@@ -463,6 +463,7 @@ async function syncOrdersGraphQL(
               subtotal_price: parseFloat(order.subtotalPriceSet?.shopMoney?.amount || '0'),
               total_tax: parseFloat(order.totalTaxSet?.shopMoney?.amount || '0'),
               total_discounts: parseFloat(order.totalDiscountsSet?.shopMoney?.amount || '0'),
+              total_refunded: parseFloat(order.totalRefundedSet?.shopMoney?.amount || '0'),
               currency,
               financial_status: (order.displayFinancialStatus || 'pending').toLowerCase(),
               fulfillment_status: order.displayFulfillmentStatus ? order.displayFulfillmentStatus.toLowerCase() : null,
