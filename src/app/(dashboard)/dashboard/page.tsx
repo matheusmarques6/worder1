@@ -19,7 +19,7 @@ import { ShopifySyncProgress } from '@/components/shopify/ShopifySyncProgress'
 // Types
 // ──────────────────────────────────────────────────────────────
 
-type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | '90d' | 'month'
+type RangeKey = 'today' | 'yesterday' | '7d' | '14d' | '30d' | '60d' | '90d' | 'month' | 'last_month' | 'custom'
 type Granularity = 'daily' | 'weekly' | 'monthly'
 type ChartTab = 'revenue' | 'orders'
 
@@ -81,9 +81,13 @@ const RANGE_OPTIONS: Array<{ value: RangeKey; label: string }> = [
   { value: 'today', label: 'Hoje' },
   { value: 'yesterday', label: 'Ontem' },
   { value: '7d', label: 'Últimos 7 dias' },
+  { value: '14d', label: 'Últimos 14 dias' },
   { value: '30d', label: 'Últimos 30 dias' },
+  { value: '60d', label: 'Últimos 60 dias' },
   { value: '90d', label: 'Últimos 90 dias' },
   { value: 'month', label: 'Este mês' },
+  { value: 'last_month', label: 'Mês passado' },
+  { value: 'custom', label: 'Personalizado…' },
 ]
 
 const GRANULARITY_OPTIONS: Array<{ value: Granularity; label: string }> = [
@@ -180,21 +184,30 @@ export default function DashboardPage() {
   const [range, setRange] = useState<RangeKey>('30d')
   const [granularity, setGranularity] = useState<Granularity>('weekly')
   const [tab, setTab] = useState<ChartTab>('revenue')
+  // Custom-range dates (only used when range === 'custom').
+  const [customFrom, setCustomFrom] = useState<string>('') // YYYY-MM-DD
+  const [customTo, setCustomTo] = useState<string>('')
 
   useEffect(() => {
     try {
       const r = localStorage.getItem('wd:range') as RangeKey | null
       const g = localStorage.getItem('wd:granularity') as Granularity | null
       const t = localStorage.getItem('wd:chartTab') as ChartTab | null
+      const cf = localStorage.getItem('wd:customFrom') || ''
+      const ct = localStorage.getItem('wd:customTo') || ''
       if (r && RANGE_OPTIONS.some((o) => o.value === r)) setRange(r)
       if (g && GRANULARITY_OPTIONS.some((o) => o.value === g)) setGranularity(g)
       if (t === 'revenue' || t === 'orders') setTab(t)
+      if (cf) setCustomFrom(cf)
+      if (ct) setCustomTo(ct)
     } catch {}
   }, [])
 
   useEffect(() => { try { localStorage.setItem('wd:range', range) } catch {} }, [range])
   useEffect(() => { try { localStorage.setItem('wd:granularity', granularity) } catch {} }, [granularity])
   useEffect(() => { try { localStorage.setItem('wd:chartTab', tab) } catch {} }, [tab])
+  useEffect(() => { try { localStorage.setItem('wd:customFrom', customFrom) } catch {} }, [customFrom])
+  useEffect(() => { try { localStorage.setItem('wd:customTo', customTo) } catch {} }, [customTo])
   // Active Shopify sync job — when set, the progress strip polls
   // /api/shopify/jobs/[id] every 2s and renders a horizontal bar
   // above the dashboard until status flips to completed/failed.
@@ -219,9 +232,21 @@ export default function DashboardPage() {
 
   const fetchData = async () => {
     if (!currentStore?.id) return
+    // For 'custom' range require both dates; otherwise silently skip
+    // — the user is mid-edit in the date picker.
+    if (range === 'custom' && (!customFrom || !customTo)) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/dashboard/overview?range=${range}&granularity=${granularity}&storeId=${currentStore.id}`, { cache: 'no-store' })
+      const qs = new URLSearchParams({
+        range,
+        granularity,
+        storeId: currentStore.id,
+      })
+      if (range === 'custom') {
+        qs.set('from', customFrom)
+        qs.set('to', customTo)
+      }
+      const res = await fetch(`/api/dashboard/overview?${qs.toString()}`, { cache: 'no-store' })
       if (res.ok) {
         const json = (await res.json()) as Overview
         setData({ ...EMPTY_OVERVIEW, ...json })
@@ -245,7 +270,7 @@ export default function DashboardPage() {
     if (!hasHydrated) return
     fetchData()
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [range, granularity, currentStore?.id, hasHydrated])
+  }, [range, granularity, currentStore?.id, hasHydrated, customFrom, customTo])
 
   // Keyboard shortcut: "R" refreshes (ignored while typing in inputs).
   useEffect(() => {
@@ -470,7 +495,13 @@ export default function DashboardPage() {
               <RefreshCw className={`w-[13px] h-[13px] ${loading ? 'animate-spin' : ''}`} />
               Atualizado {timeAgoShort(lastFetch)}
             </button>
-            <RangeSelect value={range} onChange={setRange} />
+            <RangeSelect
+              value={range}
+              onChange={setRange}
+              customFrom={customFrom}
+              customTo={customTo}
+              onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to); }}
+            />
             <GranularitySelect value={granularity} onChange={setGranularity} />
             <button
               onClick={exportCSV}
@@ -590,7 +621,7 @@ export default function DashboardPage() {
               <div className="flex items-center gap-4 pb-2">
                 <LegendDot color="#F26B2A" label="Campanhas" />
                 <LegendDot color="#8B5CF6" label="Automações" />
-                <LegendDot color="#E4E4E7" label="Receita total da loja" border="#D4D4D8" />
+                <LegendDot color="#94A3B8" label="Receita total da loja" border="#D4D4D8" />
               </div>
             </div>
 
@@ -631,7 +662,7 @@ export default function DashboardPage() {
                     />
                     <Bar dataKey="campanhas" stackId="a" fill="#F26B2A" barSize={34} />
                     <Bar dataKey="automacoes" stackId="a" fill="#8B5CF6" barSize={34} />
-                    <Bar dataKey="fora" stackId="a" fill="#E4E4E7" radius={[3, 3, 0, 0]} barSize={34} />
+                    <Bar dataKey="fora" stackId="a" fill="#94A3B8" radius={[3, 3, 0, 0]} barSize={34} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -751,7 +782,7 @@ function RichTooltip({ active, payload, label, isRevenue }: any) {
   const keyMap: Record<string, { name: string; color: string }> = {
     campanhas: { name: 'Campanhas', color: '#F26B2A' },
     automacoes: { name: 'Automações', color: '#8B5CF6' },
-    fora: { name: 'Receita total da loja', color: '#D4D4D8' },
+    fora: { name: 'Receita total da loja', color: '#94A3B8' },
   }
   for (const p of payload) {
     const k = p?.dataKey as string
@@ -823,20 +854,62 @@ function ChannelItem({ label, value, pct, color }: { label: string; value: numbe
   )
 }
 
-function RangeSelect({ value, onChange }: { value: RangeKey; onChange: (v: RangeKey) => void }) {
+function RangeSelect({
+  value,
+  onChange,
+  customFrom,
+  customTo,
+  onCustomChange,
+}: {
+  value: RangeKey;
+  onChange: (v: RangeKey) => void;
+  customFrom: string;
+  customTo: string;
+  onCustomChange: (from: string, to: string) => void;
+}) {
+  // When the user picks "custom" the select is followed by two
+  // date inputs so the range picker stays inline (no popover or
+  // calendar dependency).
+  const todayIso = new Date().toISOString().slice(0, 10);
   return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value as RangeKey)}
-        className="appearance-none bg-white text-[13.5px] font-medium text-[#18181B] px-4 py-2 pr-8 rounded-[8px] cursor-pointer hover:border-[#D4D4D8] transition-colors focus:outline-none focus:border-[#A1A1AA]"
-        style={{ border: '1px solid #E4E4E7' }}
-      >
-        {RANGE_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A1A1AA] pointer-events-none" />
+    <div className="flex items-center gap-2">
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value as RangeKey)}
+          className="appearance-none bg-white text-[13.5px] font-medium text-[#18181B] px-4 py-2 pr-8 rounded-[8px] cursor-pointer hover:border-[#D4D4D8] transition-colors focus:outline-none focus:border-[#A1A1AA]"
+          style={{ border: '1px solid #E4E4E7' }}
+        >
+          {RANGE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A1A1AA] pointer-events-none" />
+      </div>
+      {value === 'custom' && (
+        <>
+          <input
+            type="date"
+            value={customFrom}
+            max={customTo || todayIso}
+            onChange={(e) => onCustomChange(e.target.value, customTo)}
+            className="bg-white text-[13.5px] text-[#18181B] px-3 py-2 rounded-[8px] focus:outline-none focus:border-[#A1A1AA]"
+            style={{ border: '1px solid #E4E4E7' }}
+            aria-label="Data inicial"
+          />
+          <span className="text-[#71717A] text-[13px]">até</span>
+          <input
+            type="date"
+            value={customTo}
+            min={customFrom || undefined}
+            max={todayIso}
+            onChange={(e) => onCustomChange(customFrom, e.target.value)}
+            className="bg-white text-[13.5px] text-[#18181B] px-3 py-2 rounded-[8px] focus:outline-none focus:border-[#A1A1AA]"
+            style={{ border: '1px solid #E4E4E7' }}
+            aria-label="Data final"
+          />
+        </>
+      )}
     </div>
   )
 }

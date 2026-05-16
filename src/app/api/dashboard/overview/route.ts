@@ -18,7 +18,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
-type Range = 'today' | 'yesterday' | '7d' | '30d' | '90d' | 'month' | 'custom';
+type Range = 'today' | 'yesterday' | '7d' | '14d' | '30d' | '60d' | '90d' | 'month' | 'last_month' | 'custom';
 type Granularity = 'daily' | 'weekly' | 'monthly';
 
 const num = (v: any): number => {
@@ -31,9 +31,12 @@ function daysForRange(range: Range): number {
     case 'today': return 1;
     case 'yesterday': return 2;
     case '7d': return 7;
+    case '14d': return 14;
     case '30d': return 30;
+    case '60d': return 60;
     case '90d': return 90;
     case 'month': return 30;
+    case 'last_month': return 60;
     default: return 30;
   }
 }
@@ -146,20 +149,47 @@ export async function GET(request: NextRequest) {
     const orgId = auth.user.organization_id;
     const storeId = request.nextUrl.searchParams.get('storeId');
 
+    // Compute the [sinceDate, untilDate) window in start-of-day
+    // semantics so the count matches Shopify Admin's "Últimos N dias"
+    // exactly. Three modes:
+    //   - 'custom' → honor ?from=YYYY-MM-DD&to=YYYY-MM-DD (inclusive)
+    //   - 'today' / 'yesterday' → calendar day windows
+    //   - 'last_month' → previous calendar month
+    //   - everything else → "rolling N days ending today"
+    const fromParam = request.nextUrl.searchParams.get('from');
+    const toParam = request.nextUrl.searchParams.get('to');
     const days = daysForRange(range);
-    // Match Shopify's "últimos 30 dias" semantics: include the FULL
-    // start day, not a rolling window from the current hour. Today is
-    // May 16 21:30 → previous behavior gave Apr 16 21:30 onwards (and
-    // missed orders placed Apr 16 00:00–21:30). Snap to start-of-day
-    // and subtract `days` so the window is exactly the same as the
-    // one Shopify Admin shows.
-    const sinceDate = new Date();
+    let sinceDate = new Date();
+    let untilDate = new Date(); // exclusive
     sinceDate.setHours(0, 0, 0, 0);
-    sinceDate.setDate(sinceDate.getDate() - days);
-    const since = sinceDate.toISOString();
+    untilDate.setHours(0, 0, 0, 0);
+    untilDate.setDate(untilDate.getDate() + 1); // include today
 
-    const prevSinceDate = new Date(sinceDate);
-    prevSinceDate.setDate(prevSinceDate.getDate() - days);
+    if (range === 'custom' && fromParam && toParam) {
+      sinceDate = new Date(`${fromParam}T00:00:00`);
+      untilDate = new Date(`${toParam}T00:00:00`);
+      untilDate.setDate(untilDate.getDate() + 1); // inclusive end day
+    } else if (range === 'today') {
+      // sinceDate = today 00:00, untilDate = tomorrow 00:00 (defaults above)
+    } else if (range === 'yesterday') {
+      sinceDate.setDate(sinceDate.getDate() - 1);
+      untilDate.setDate(untilDate.getDate() - 1);
+    } else if (range === 'month') {
+      sinceDate = new Date(sinceDate.getFullYear(), sinceDate.getMonth(), 1);
+    } else if (range === 'last_month') {
+      const firstOfThis = new Date(sinceDate.getFullYear(), sinceDate.getMonth(), 1);
+      sinceDate = new Date(firstOfThis.getFullYear(), firstOfThis.getMonth() - 1, 1);
+      untilDate = firstOfThis;
+    } else {
+      sinceDate.setDate(sinceDate.getDate() - days);
+    }
+    const since = sinceDate.toISOString();
+    const until = untilDate.toISOString();
+
+    // Previous-window starts the same span earlier than `since`.
+    // For custom/today/last_month the span = (until - since) in days.
+    const windowMs = untilDate.getTime() - sinceDate.getTime();
+    const prevSinceDate = new Date(sinceDate.getTime() - windowMs);
     const prevSince = prevSinceDate.toISOString();
 
     const buckets = buildBuckets(days, granularity);
@@ -181,15 +211,25 @@ export async function GET(request: NextRequest) {
       safeQuery(() => supabaseAdmin.from('whatsapp_campaigns').select('*').eq('organization_id', orgId).gte('created_at', since)),
       safeQuery(() => supabaseAdmin.from('sms_campaigns').select('*').eq('organization_id', orgId).gte('created_at', since)),
       safeQuery(() => supabaseAdmin.from('email_sends').select('created_at, campaign_id').eq('organization_id', orgId).gte('created_at', since)),
-      // Orders sit in shopify_orders (joined via store). Fall back to `orders` if present.
+      // Orders sit in shopify_orders (joined via store). Date bounds
+      // are [since, until) — both sides explicit so 'today', 'ontem',
+      // 'mês passado', and custom ranges only pull the right window.
       safeQuery(async () => {
         if (storeId) {
-          return supabaseAdmin.from('shopify_orders').select('total_price, total_refunded, created_at, financial_status').eq('store_id', storeId).gte('created_at', since);
+          return supabaseAdmin.from('shopify_orders')
+            .select('total_price, total_refunded, created_at, financial_status')
+            .eq('store_id', storeId)
+            .gte('created_at', since)
+            .lt('created_at', until);
         }
         const storesRes = await supabaseAdmin.from('shopify_stores').select('id').eq('organization_id', orgId);
         const storeIds = (storesRes.data || []).map((s: any) => s.id);
         if (!storeIds.length) return { data: [], error: null };
-        return supabaseAdmin.from('shopify_orders').select('total_price, total_refunded, created_at, financial_status').in('store_id', storeIds).gte('created_at', since);
+        return supabaseAdmin.from('shopify_orders')
+          .select('total_price, total_refunded, created_at, financial_status')
+          .in('store_id', storeIds)
+          .gte('created_at', since)
+          .lt('created_at', until);
       }),
       // Pull last_sync_at + initial_sync_completed too so the auto-
       // sync trigger below can decide whether to refresh stale data.
