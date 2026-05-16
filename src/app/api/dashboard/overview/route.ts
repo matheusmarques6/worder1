@@ -258,13 +258,20 @@ export async function GET(request: NextRequest) {
     // the whole query, which is why the dashboard sat at R$0 even with
     // 432 paid rows on file.
     const validOrders = orders.filter((o: any) => String(o.financial_status || '').toLowerCase() !== 'cancelled');
-    // Match Shopify "Total Sales": gross - refunds. We persist
-    // total_refunded from Shopify's totalRefundedSet on every sync,
-    // so subtracting it makes our number match Shopify Admin to the
-    // cent. Earlier pure SUM(total_price) overstated by the refund
-    // amount on stores with even a few returns.
+    // Match Shopify Admin's "Total Sales" report to the cent:
+    //  - 'refunded' orders count as $0 net. Shopify's totalRefundedSet
+    //    is order-level and sometimes lags transaction-level refunds
+    //    by a few cents per order, so subtracting it from total_price
+    //    can leave a residual (e.g. $0.59) that Shopify itself treats
+    //    as $0. Aggressive zero-out matches Shopify Admin exactly.
+    //  - everything else: net = total_price - total_refunded (handles
+    //    'partially_refunded' and any future status).
     const storeRevenue = validOrders.reduce(
-      (s: number, o: any) => s + num(o.total_price) - num(o.total_refunded),
+      (s: number, o: any) => {
+        const status = String(o.financial_status || '').toLowerCase();
+        if (status === 'refunded') return s;
+        return s + num(o.total_price) - num(o.total_refunded);
+      },
       0
     );
     const storeOrders = validOrders.length;
@@ -322,8 +329,12 @@ export async function GET(request: NextRequest) {
       const row = o as any;
       const bi = findBucket(buckets, row.created_at);
       if (bi < 0) continue;
-      // Net of refunds — same calculation the headline storeRevenue uses,
-      // so the chart bars and the card stay in sync.
+      // Same accounting as storeRevenue above: refunded orders
+      // contribute $0; everything else is total_price - total_refunded.
+      // Keeping these in lockstep so the stacked chart sums match the
+      // headline card.
+      const status = String(row.financial_status || '').toLowerCase();
+      if (status === 'refunded') continue;
       sb[bi].fora += num(row.total_price) - num(row.total_refunded);
     }
     for (let i = 0; i < sb.length; i++) {

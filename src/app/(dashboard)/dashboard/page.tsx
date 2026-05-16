@@ -108,20 +108,20 @@ function getGreeting() {
 }
 
 function formatBRL(v: number, currency = 'BRL'): string {
-  const rounded = Math.round(v)
-  // Render in the store's actual currency. The label below the hero is
-  // built from the same `currency` so a GBP store doesn't see R$ next to
-  // a £ chart. Falls back to a `CCC 1.234` shape if Intl rejects the
-  // currency code (paranoia: shop_domain.currency is text from Shopify).
+  // Render with 2 decimals so the dashboard total matches the
+  // Shopify Admin total cent-for-cent (e.g. $34,462.99). Earlier we
+  // rounded to whole units which shifted the visible number by up
+  // to a dollar (34463.65 → "34.464") and made the merchant think
+  // our math was off.
   try {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency,
-      maximumFractionDigits: 0,
-    }).format(rounded)
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(v)
   } catch {
-    if (rounded === 0) return `${currency} 0`
-    return `${currency} ${rounded.toLocaleString('pt-BR')}`
+    return `${currency} ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 }
 
