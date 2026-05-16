@@ -248,13 +248,22 @@ export async function POST(request: NextRequest) {
         } catch (qErr: any) {
           // QStash publish failed — most commonly wrong-region endpoint
           // ("user X not found in this region (eu-central-1)"). Don't
-          // surface 500 to the merchant; the pending job is still in
-          // shopify_import_jobs and the inline path below will resume
-          // from its last_cursor on the same request.
+          // surface 500 to the merchant; clean up the dangling job row
+          // we just inserted (otherwise it sits 'pending' forever
+          // since the worker uses a different sync_type for cursor
+          // resume) and fall through to the inline path.
           console.warn(
             '[Sync] QStash publish failed, falling back to inline:',
             qErr?.message
           );
+          await supabase
+            .from('shopify_import_jobs')
+            .update({
+              status: 'failed',
+              last_error: `qstash publish failed: ${qErr?.message || 'unknown'}`,
+              completed_at: new Date().toISOString(),
+            })
+            .eq('id', job.id);
         }
       }
     }
