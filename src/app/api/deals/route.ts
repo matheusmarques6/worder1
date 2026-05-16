@@ -28,9 +28,15 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Multi-org lookup so a user in 2+ orgs sees all their deals/
-    // pipelines, not just the primary org's. Without this, secondary
-    // org memberships silently lost their CRM view.
+    // CRITICAL: `deals` and `pipelines` have NO organization_id
+    // column. They scope by store_id only. My earlier refactor that
+    // filtered .in('organization_id', orgIds) on those tables was
+    // returning 500 on every dashboard load — the column didn't
+    // exist. The right shape is:
+    //   1. resolve user's orgs (primary + memberships)
+    //   2. resolve EVERY store across those orgs
+    //   3. scope queries by .in('store_id', userStoreIds)
+    //   4. if caller passed ?storeId=, validate it's in their set
     const { data: memberships } = await supabase
       .from('organization_members')
       .select('organization_id')
@@ -40,37 +46,52 @@ export async function GET(request: NextRequest) {
       ...((memberships || []).map((m: any) => m.organization_id)),
     ])];
 
+    const { data: userStores } = await supabase
+      .from('shopify_stores')
+      .select('id')
+      .in('organization_id', orgIds);
+    const userStoreIds: string[] = (userStores || []).map((s: any) => s.id);
+
     const searchParams = request.nextUrl.searchParams;
     const type = searchParams.get('type') || 'deals';
     const dealId = searchParams.get('id');
     const pipelineId = searchParams.get('pipelineId') || searchParams.get('pipeline_id');
     const stageId = searchParams.get('stageId') || searchParams.get('stage_id');
     const contactId = searchParams.get('contactId') || searchParams.get('contact_id');
-    const storeId = searchParams.get('storeId') || searchParams.get('store_id');
+    const requestedStoreId = searchParams.get('storeId') || searchParams.get('store_id');
     const status = searchParams.get('status');
+
+    // Only honor a storeId from the caller if it's actually one of
+    // the user's stores. Otherwise drop it (server picks across all
+    // user stores). That's the multi-tenant guard.
+    const storeId = requestedStoreId && userStoreIds.includes(requestedStoreId)
+      ? requestedStoreId
+      : null;
+    // If user has no stores at all → empty results (don't error).
+    if (userStoreIds.length === 0) {
+      if (type === 'pipelines') return NextResponse.json({ pipelines: [], stages: [], stageDealCounts: {} });
+      if (dealId) return NextResponse.json({ error: 'Deal not found' }, { status: 404 });
+      return NextResponse.json({ deals: [], total: 0 });
+    }
 
     // =====================================================
     // PIPELINES
     // =====================================================
     if (type === 'pipelines') {
+      const scopedStores = storeId ? [storeId] : userStoreIds;
       let query = supabase
         .from('pipelines')
         .select('*')
-        .in('organization_id', orgIds)
+        .in('store_id', scopedStores)
         .order('position');
-
-      // store_id OPCIONAL - se fornecido, filtra; se não, busca todos
-      if (storeId) {
-        query = query.eq('store_id', storeId);
-      }
 
       const { data: pipelines, error: pipelineError } = await query;
 
       if (pipelineError) {
         console.error('[Deals] Error fetching pipelines:', pipelineError);
-        return NextResponse.json({ 
+        return NextResponse.json({
           error: pipelineError.message,
-          pipelines: [] 
+          pipelines: []
         }, { status: 500 });
       }
 
@@ -83,17 +104,12 @@ export async function GET(request: NextRequest) {
           .in('pipeline_id', pipelineIds)
           .order('position');
 
-        // Contar deals por stage
-        let dealsQuery = supabase
+        // Contar deals por stage — scope by user's stores
+        const dealScopeStores = storeId ? [storeId] : userStoreIds;
+        const { data: dealCounts } = await supabase
           .from('deals')
           .select('stage_id, status')
-          .in('organization_id', orgIds);
-        
-        if (storeId) {
-          dealsQuery = dealsQuery.eq('store_id', storeId);
-        }
-        
-        const { data: dealCounts } = await dealsQuery;
+          .in('store_id', dealScopeStores);
 
         const stageDealsMap: Record<string, number> = {};
         dealCounts?.forEach(deal => {
@@ -127,8 +143,8 @@ export async function GET(request: NextRequest) {
         .from('deals')
         .select('*')
         .eq('id', dealId)
-        .in('organization_id', orgIds) // Segurança multi-org
-        .single();
+        .in('store_id', userStoreIds) // Segurança: scope por stores do usuário
+        .maybeSingle();
 
       if (dealError) {
         return NextResponse.json({ error: dealError.message }, { status: 500 });
@@ -165,12 +181,13 @@ export async function GET(request: NextRequest) {
     // =====================================================
     // LIST DEALS
     // =====================================================
+    const listScopeStores = storeId ? [storeId] : userStoreIds;
     let dealsQuery = supabase
       .from('deals')
       .select('*')
-      .in('organization_id', orgIds)
+      .in('store_id', listScopeStores)
       .order('position');
-    
+
     // Filtros OPCIONAIS
     if (storeId) {
       dealsQuery = dealsQuery.eq('store_id', storeId);
@@ -378,9 +395,12 @@ export async function PUT(request: NextRequest) {
     const { supabase, user } = auth;
     const organizationId = user.organization_id;
 
-    // Multi-org write: a user can update deals/pipelines in any org
-    // they actually belong to, not just their primary. Without this,
-    // org-secondary memberships had read-only CRM.
+    // PUT scope: deals/pipelines are store-scoped (no
+    // organization_id column). Resolve user's orgs, then their
+    // stores, then guard every write by .in('store_id',
+    // userStoreIds). Previous version filtered by organization_id
+    // on those tables, which is a column that doesn't exist —
+    // every PUT was returning 500.
     const { data: memberships } = await supabase
       .from('organization_members')
       .select('organization_id')
@@ -389,12 +409,20 @@ export async function PUT(request: NextRequest) {
       organizationId,
       ...((memberships || []).map((m: any) => m.organization_id)),
     ])];
+    const { data: userStores } = await supabase
+      .from('shopify_stores')
+      .select('id')
+      .in('organization_id', orgIds);
+    const userStoreIds: string[] = (userStores || []).map((s: any) => s.id);
 
     const body = await request.json();
     const { type, id, ...updates } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 });
+    }
+    if (userStoreIds.length === 0) {
+      return NextResponse.json({ error: 'No accessible stores' }, { status: 403 });
     }
 
     // Atualizar stage
@@ -415,20 +443,21 @@ export async function PUT(request: NextRequest) {
         .from('pipelines')
         .update(updates)
         .eq('id', id)
-        .in('organization_id', orgIds)
+        .in('store_id', userStoreIds)
         .select()
         .single();
       if (error) throw error;
       return NextResponse.json({ pipeline: data });
     }
 
-    // Atualizar deal — confirma ownership por org antes de prosseguir
-    // pra evitar que um id leakado de outra org seja sobrescrito.
+    // Atualizar deal — confirma ownership por store antes de
+    // prosseguir pra evitar que um id leakado de outra org/store
+    // seja sobrescrito.
     const { data: previousDeal } = await supabase
       .from('deals')
-      .select('stage_id, value, status, contact_id, organization_id')
+      .select('stage_id, value, status, contact_id, store_id')
       .eq('id', id)
-      .in('organization_id', orgIds)
+      .in('store_id', userStoreIds)
       .maybeSingle();
     if (!previousDeal) {
       return NextResponse.json({ error: 'Deal not found' }, { status: 404 });
@@ -456,7 +485,7 @@ export async function PUT(request: NextRequest) {
       .from('deals')
       .update(updates)
       .eq('id', id)
-      .in('organization_id', orgIds)
+      .in('store_id', userStoreIds)
       .select(`
         *,
         contact:contacts(*),
@@ -510,7 +539,9 @@ export async function DELETE(request: NextRequest) {
     const { supabase, user } = auth;
     const organizationId = user.organization_id;
 
-    // Multi-org: a user can delete from any org they belong to.
+    // Scope deletes by user's stores (deals/pipelines don't have
+    // organization_id). Multi-org members can delete in any of
+    // their orgs' stores.
     const { data: memberships } = await supabase
       .from('organization_members')
       .select('organization_id')
@@ -519,6 +550,11 @@ export async function DELETE(request: NextRequest) {
       organizationId,
       ...((memberships || []).map((m: any) => m.organization_id)),
     ])];
+    const { data: userStores } = await supabase
+      .from('shopify_stores')
+      .select('id')
+      .in('organization_id', orgIds);
+    const userStoreIds: string[] = (userStores || []).map((s: any) => s.id);
 
     const searchParams = request.nextUrl.searchParams;
     const type = searchParams.get('type') || 'deal';
@@ -526,6 +562,9 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 });
+    }
+    if (userStoreIds.length === 0) {
+      return NextResponse.json({ error: 'No accessible stores' }, { status: 403 });
     }
 
     if (type === 'pipeline') {
@@ -546,7 +585,7 @@ export async function DELETE(request: NextRequest) {
         .from('pipelines')
         .delete()
         .eq('id', id)
-        .in('organization_id', orgIds);
+        .in('store_id', userStoreIds);
       if (error) throw error;
       return NextResponse.json({ success: true });
     }
@@ -577,10 +616,10 @@ export async function DELETE(request: NextRequest) {
       .from('deals')
       .delete()
       .eq('id', id)
-      .in('organization_id', orgIds);
+      .in('store_id', userStoreIds);
     if (error) throw error;
     return NextResponse.json({ success: true });
-    
+
   } catch (error: any) {
     console.error('[Deals] DELETE error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -598,12 +637,17 @@ async function createPipeline(supabase: any, organizationId: string, data: any) 
     return NextResponse.json({ error: 'Name is required' }, { status: 400 });
   }
 
-  const { data: existingPipelines } = await supabase
+  // pipelines.organization_id doesn't exist — scope by store_id
+  // from the caller's data. When store_id is null we just take the
+  // global max position; the field is for UI ordering, not security.
+  const positionQuery = supabase
     .from('pipelines')
     .select('position')
-    .eq('organization_id', organizationId)
     .order('position', { ascending: false })
     .limit(1);
+  const { data: existingPipelines } = data.store_id
+    ? await positionQuery.eq('store_id', data.store_id)
+    : await positionQuery;
 
   const position = (existingPipelines?.[0]?.position || 0) + 1;
 
