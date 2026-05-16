@@ -229,9 +229,11 @@ export default function ShopifyAnalyticsPage() {
   }
 
   // ✅ MODIFICADO: Recarregar quando loja mudar
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
+    if (!hasHydrated) return
     fetchData()
-  }, [selectedPeriod, storeId, currentStore?.id])
+  }, [selectedPeriod, storeId, currentStore?.id, hasHydrated])
 
   const handleRefresh = () => {
     setIsRefreshing(true)

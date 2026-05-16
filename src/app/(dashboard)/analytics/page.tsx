@@ -198,9 +198,11 @@ export default function AnalyticsPage() {
     }
   }, [period, currentStore?.id])
 
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
+    if (!hasHydrated) return
     fetchData()
-  }, [fetchData])
+  }, [fetchData, hasHydrated])
 
   // ── Derive KPI values from real data ──
 

@@ -843,6 +843,10 @@ export async function POST(
       const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
       await dispatchTrigger({
         organizationId: form.organization_id,
+        // Propagar store_id da popup pra que o trigger dispatcher
+        // marque contatos órfãos com a loja correta (era criados com
+        // NULL antes, sumindo de views store-scoped).
+        storeId: (form as any).store_id || null,
         triggerType: 'trigger_form_submitted',
         contactId: contactId || null,
         dealId: dealId || null,
@@ -880,6 +884,7 @@ export async function POST(
         const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
         await dispatchTrigger({
           organizationId: form.organization_id,
+          storeId: (form as any).store_id || null,
           triggerType: 'trigger_popup_subscribed',
           contactId,
           triggerData: {

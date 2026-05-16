@@ -17,10 +17,36 @@ export async function GET(request: NextRequest) {
     const organizationId = searchParams.get('organization_id')
     const pipelineId = searchParams.get('pipeline_id')
     const period = searchParams.get('period') || '30d'
-    const storeId = searchParams.get('store_id')
+    const storeId = searchParams.get('store_id') || searchParams.get('storeId')
 
     if (!organizationId) {
       return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
+    }
+
+    // deals/pipelines têm SÓ store_id (não organization_id), então
+    // resolvo as stores da org pra escopar. Quando storeId é
+    // fornecido, restringe a essa loja. Sem isso o endpoint
+    // - retornava 500 (column organization_id doesn't exist) OU
+    // - mostrava dados de todas as lojas da org num CRM
+    //   store-scoped.
+    let userStoreIds: string[] = []
+    if (storeId) {
+      const { data: ownedStore } = await supabase
+        .from('shopify_stores')
+        .select('id')
+        .eq('id', storeId)
+        .eq('organization_id', organizationId)
+        .maybeSingle()
+      if (ownedStore) userStoreIds = [ownedStore.id]
+    } else {
+      const { data: orgStores } = await supabase
+        .from('shopify_stores')
+        .select('id')
+        .eq('organization_id', organizationId)
+      userStoreIds = (orgStores || []).map((s: any) => s.id)
+    }
+    if (userStoreIds.length === 0) {
+      return NextResponse.json({ deals: [], pipelines: [], summary: { total_deals: 0, total_value: 0, won_deals: 0, lost_deals: 0 } })
     }
 
     // Calculate date range
@@ -93,7 +119,7 @@ export async function GET(request: NextRequest) {
           full_name
         )
       `)
-      .eq('organization_id', organizationId)
+      .in('store_id', userStoreIds)
       .gte('created_at', startDate.toISOString())
 
     if (pipelineId) {
@@ -124,7 +150,7 @@ export async function GET(request: NextRequest) {
           is_lost
         )
       `)
-      .eq('organization_id', organizationId)
+      .in('store_id', userStoreIds)
       .order('position')
 
     const { data: pipelines } = await pipelinesQuery

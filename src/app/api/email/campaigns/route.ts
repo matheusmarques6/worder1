@@ -17,7 +17,11 @@ export async function GET(request: NextRequest) {
     const { user } = auth;
     const { searchParams } = request.nextUrl;
     const status = searchParams.get('status');
-    const storeId = searchParams.get('store_id');
+    // Accept both casings — the campaigns page passes `storeId` but
+    // other paths in the app use `store_id`. Without this fallback,
+    // a multi-store org viewing campaigns of one specific store
+    // saw every campaign in the org because the filter was ignored.
+    const storeId = searchParams.get('storeId') || searchParams.get('store_id');
 
     let query = supabaseAdmin
       .from('email_campaigns')

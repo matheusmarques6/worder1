@@ -854,9 +854,11 @@ export default function AnalyticsPage() {
     }
   }, [organizationId, storeId, period, selectedPipelineIds, currentStore?.id]) // ✅ MODIFICADO
 
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
+    if (!hasHydrated) return
     fetchData()
-  }, [fetchData, currentStore?.id])
+  }, [fetchData, currentStore?.id, hasHydrated])
 
   // ✅ NOVO: Mostrar mensagem se não tiver loja selecionada
   if (!organizationId || !storeId) {

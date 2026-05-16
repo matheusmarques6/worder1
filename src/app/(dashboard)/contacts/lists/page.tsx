@@ -22,7 +22,7 @@ import {
   Copy,
 } from '@phosphor-icons/react'
 import { Loader2 } from 'lucide-react'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useStoreStore } from '@/stores'
 
 interface ContactList {
   id: string
@@ -45,12 +45,22 @@ export default function ContactListsPage() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | 'dynamic' | 'static'>('all')
   const { user } = useAuthStore()
+  const { currentStore } = useStoreStore()
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
 
   const fetchLists = useCallback(async () => {
     if (!user?.organization_id) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/segments?organization_id=${user.organization_id}&include_count=true`)
+      // Filtra por store ativa pra que a tela de listas reflita
+      // só os segmentos daquela loja. Antes pegava todos da org e
+      // o "Total de Contatos" inflava com contatos de lojas irmãs.
+      const params = new URLSearchParams({
+        organization_id: user.organization_id,
+        include_count: 'true',
+      })
+      if (currentStore?.id) params.set('store_id', currentStore.id)
+      const res = await fetch(`/api/segments?${params.toString()}`)
       if (res.ok) {
         const data = await res.json()
         setLists(data.segments || [])
@@ -60,11 +70,12 @@ export default function ContactListsPage() {
     } finally {
       setLoading(false)
     }
-  }, [user?.organization_id])
+  }, [user?.organization_id, currentStore?.id])
 
   useEffect(() => {
+    if (!hasHydrated) return
     fetchLists()
-  }, [fetchLists])
+  }, [fetchLists, hasHydrated, currentStore?.id])
 
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir esta lista?')) return

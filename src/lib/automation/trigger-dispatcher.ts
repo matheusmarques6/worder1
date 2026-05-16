@@ -16,6 +16,11 @@ export interface DispatchOptions {
   triggerData?: Record<string, any>
   /** contato associado (preferido) */
   contactId?: string | null
+  /** loja associada — propagado para contacts orfãos criados pelo
+   *  fallback de late-contact-resolution. Sem isso, um signup vindo
+   *  de uma popup da loja Dr. Melaxin podia criar um contato com
+   *  store_id=NULL, invisível em qualquer query store-scoped. */
+  storeId?: string | null
   /** deal associado */
   dealId?: string | null
   /** filtra automações por config matching (ex: form_id, segment_id) */
@@ -41,6 +46,7 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
     organizationId,
     triggerType,
     triggerData = {},
+    storeId,
     dealId,
     matchConfig,
     idempotencyKey,
@@ -71,13 +77,20 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
       if (existing?.id) {
         contactId = existing.id
       } else {
+        // Set store_id when the caller knows it (form submit, popup
+        // signup, etc.). Without this the contact lands with NULL
+        // store_id and disappears from every store-filtered view —
+        // exact same "orphan in org" pattern that hid 21k WhatsApp/
+        // form contacts behind the 1k real Shopify customers.
+        const insertPayload: Record<string, any> = {
+          organization_id: organizationId,
+          email: candidateEmail,
+          source: `trigger:${triggerType}`,
+        }
+        if (storeId) insertPayload.store_id = storeId
         const { data: created } = await supabaseAdmin
           .from('contacts')
-          .insert({
-            organization_id: organizationId,
-            email: candidateEmail,
-            source: `trigger:${triggerType}`,
-          })
+          .insert(insertPayload)
           .select('id')
           .single()
         if (created?.id) contactId = created.id

@@ -29,15 +29,41 @@ export async function GET(request: NextRequest) {
     }
 
     const orgId = member.organization_id;
+    // Multi-org membership unions (rare but supported). Caller can
+    // pass ?storeId=... to scope every aggregate to a single store.
+    // Without scoping the dashboard cards would mix all stores in
+    // the org — that's the "Automações Ativas mostra org-wide quando
+    // estou no Dr. Melaxin" bug.
+    const storeId = request.nextUrl.searchParams.get('storeId') || request.nextUrl.searchParams.get('store_id');
+    // For deals queries we need user's store_ids since `deals` only
+    // has store_id, no organization_id column.
+    let userStoreIds: string[] = [];
+    if (storeId) {
+      const { data: ownedStore } = await supabase
+        .from('shopify_stores')
+        .select('id')
+        .eq('id', storeId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+      if (ownedStore) userStoreIds = [ownedStore.id];
+    } else {
+      const { data: orgStores } = await supabase
+        .from('shopify_stores')
+        .select('id')
+        .eq('organization_id', orgId);
+      userStoreIds = (orgStores || []).map((s: any) => s.id);
+    }
 
     // =============================================
-    // 1. Automações Ativas
+    // 1. Automações Ativas (filtra por store se fornecido)
     // =============================================
-    const { count: activeAutomations } = await supabase
+    let activeQuery = supabase
       .from('automations')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', orgId)
       .eq('status', 'active');
+    if (storeId) activeQuery = activeQuery.eq('store_id', storeId);
+    const { count: activeAutomations } = await activeQuery;
 
     // =============================================
     // 2. Processados Hoje
@@ -45,26 +71,27 @@ export async function GET(request: NextRequest) {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    // Tentar automation_runs primeiro (tabela do flow builder)
     let processedToday = 0;
-    
-    const { count: runsToday } = await supabase
+
+    let runsTodayQuery = supabase
       .from('automation_runs')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', orgId)
       .gte('created_at', todayStart.toISOString());
+    if (storeId) runsTodayQuery = runsTodayQuery.eq('store_id', storeId);
+    const { count: runsToday } = await runsTodayQuery;
 
     processedToday = runsToday || 0;
 
-    // Se não tiver nada, tentar automation_executions (legado)
     if (processedToday === 0) {
       try {
-        const { count: execsToday } = await supabase
+        let execsQuery = supabase
           .from('automation_executions')
           .select('id', { count: 'exact', head: true })
           .eq('organization_id', orgId)
           .gte('started_at', todayStart.toISOString());
-        
+        if (storeId) execsQuery = execsQuery.eq('store_id', storeId);
+        const { count: execsToday } = await execsQuery;
         processedToday = execsToday || 0;
       } catch (e) {
         // Tabela pode não existir
@@ -72,65 +99,67 @@ export async function GET(request: NextRequest) {
     }
 
     // =============================================
-    // 3. Conversões (últimos 30 dias)
-    // - Deals criados via automação
+    // 3. Conversões (últimos 30 dias) — runs com deal_id, escopadas
     // =============================================
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     let conversions30d = 0;
 
-    // Opção A: Buscar runs que têm deal_id preenchido
-    const { count: dealsFromRuns } = await supabase
+    let dealsRunsQuery = supabase
       .from('automation_runs')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', orgId)
       .not('deal_id', 'is', null)
       .gte('created_at', thirtyDaysAgo.toISOString());
+    if (storeId) dealsRunsQuery = dealsRunsQuery.eq('store_id', storeId);
+    const { count: dealsFromRuns } = await dealsRunsQuery;
 
     conversions30d = dealsFromRuns || 0;
 
-    // Opção B: Também contar deals_created_count das automation_rules
-    const { data: rules } = await supabase
+    // Fallback via automation_rules.deals_created_count
+    let rulesQuery = supabase
       .from('automation_rules')
       .select('deals_created_count')
       .eq('organization_id', orgId);
+    if (storeId) rulesQuery = rulesQuery.eq('store_id', storeId);
+    const { data: rules } = await rulesQuery;
 
     if (rules) {
       const rulesCreated = rules.reduce((sum: number, r: any) => sum + (r.deals_created_count || 0), 0);
-      // Não somar se já tiver dealsFromRuns, para não duplicar
       if (conversions30d === 0) {
         conversions30d = rulesCreated;
       }
     }
 
     // =============================================
-    // 4. Receita (últimos 30 dias)
-    // - Valor dos deals criados via automação
+    // 4. Receita 30d — soma do valor dos deals via automação
     // =============================================
     let revenue30d = 0;
 
-    // Buscar deal_ids das automações
-    const { data: runsWithDeals } = await supabase
+    let runsWithDealsQuery = supabase
       .from('automation_runs')
       .select('deal_id')
       .eq('organization_id', orgId)
       .not('deal_id', 'is', null)
       .gte('created_at', thirtyDaysAgo.toISOString());
+    if (storeId) runsWithDealsQuery = runsWithDealsQuery.eq('store_id', storeId);
+    const { data: runsWithDeals } = await runsWithDealsQuery;
 
     if (runsWithDeals && runsWithDeals.length > 0) {
       const dealIds = runsWithDeals.map((r: any) => r.deal_id).filter(Boolean);
-      
+
       if (dealIds.length > 0) {
-        // Buscar em chunks de 500 para evitar limite do IN
         const chunkSize = 500;
         for (let i = 0; i < dealIds.length; i += chunkSize) {
           const chunk = dealIds.slice(i, i + chunkSize);
-          const { data: deals } = await supabase
-            .from('deals')
-            .select('value')
-            .in('id', chunk);
-          
+          // deals só tem store_id — escope por user stores pra evitar
+          // que id leakado de outra org seja somado
+          const dealsQuery = userStoreIds.length > 0
+            ? supabase.from('deals').select('value').in('id', chunk).in('store_id', userStoreIds)
+            : supabase.from('deals').select('value').in('id', chunk);
+          const { data: deals } = await dealsQuery;
+
           if (deals) {
             revenue30d += deals.reduce((sum: number, d: any) => sum + (d.value || 0), 0);
           }
@@ -138,13 +167,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Se não tiver receita de automações, mostrar total de deals
-    // (para não parecer zerado no dashboard)
-    if (revenue30d === 0) {
+    // Fallback: total de deals criados no período se não tiver
+    // attribuição (escopado por user stores — deals não tem
+    // organization_id, único filtro de tenant é via store_id).
+    if (revenue30d === 0 && userStoreIds.length > 0) {
       const { data: recentDeals } = await supabase
         .from('deals')
         .select('value')
-        .eq('organization_id', orgId)
+        .in('store_id', userStoreIds)
         .gte('created_at', thirtyDaysAgo.toISOString())
         .limit(1000);
 
