@@ -18,6 +18,28 @@ import {
 } from '@phosphor-icons/react'
 import { useStoreStore } from '@/stores'
 
+// Formata preço respeitando a moeda da loja (Dr. Melaxin usa USD;
+// outras lojas podem usar BRL/EUR/MXN/etc). Intl.NumberFormat
+// escolhe o símbolo + locale corretos automaticamente.
+const CURRENCY_LOCALE: Record<string, string> = {
+  BRL: 'pt-BR', USD: 'en-US', EUR: 'de-DE', GBP: 'en-GB',
+  ARS: 'es-AR', MXN: 'es-MX', CLP: 'es-CL', COP: 'es-CO',
+}
+function formatProductPrice(value: number | null | undefined, currency: string | null | undefined): string {
+  const code = (currency || 'BRL').toUpperCase()
+  const locale = CURRENCY_LOCALE[code] || 'en-US'
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: code,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(Number(value || 0))
+  } catch {
+    return `${code} ${(Number(value || 0)).toFixed(2)}`
+  }
+}
+
 interface Product {
   id: string
   shopifyProductId: string
@@ -29,7 +51,9 @@ interface Product {
   price: number
   compareAtPrice: number | null
   sku: string | null
-  totalInventory: number
+  // null means inventory not tracked at the variant level (Shopify
+  // returns -1 for those). The UI shows "—" instead of a fake 0.
+  totalInventory: number | null
   tags: string
   variants: any[]
   images: { url: string; alt: string | null }[]
@@ -112,7 +136,11 @@ export default function ProductsPage() {
   // Compute KPIs from real data
   const totalProducts = products.length
   const activeProducts = products.filter((p) => p.status === 'active').length
-  const outOfStock = products.filter((p) => p.totalInventory === 0).length
+  // "Sem estoque" só conta produtos que realmente rastreiam inventory.
+  // Quando totalInventory é null (Shopify não rastreia), não é "sem
+  // estoque", é "não rastreado" — antes contava todos como zero e
+  // mostrava "Sem estoque: 82" mesmo a loja não rastreando.
+  const outOfStock = products.filter((p) => typeof p.totalInventory === 'number' && p.totalInventory <= 0).length
 
   const kpis = [
     { title: 'Total de Produtos', value: totalProducts.toString(), icon: ShoppingBag, color: 'text-[#F26B2A]' },
@@ -136,7 +164,7 @@ export default function ProductsPage() {
     })
     .sort((a, b) => {
       if (sortBy === 'price') return b.price - a.price
-      if (sortBy === 'totalInventory') return b.totalInventory - a.totalInventory
+      if (sortBy === 'totalInventory') return (b.totalInventory ?? -1) - (a.totalInventory ?? -1)
       if (sortBy === 'updatedAt') return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
       return a.title.localeCompare(b.title)
     })
@@ -303,28 +331,34 @@ export default function ProductsPage() {
                     </td>
                     <td className="p-4 text-right">
                       <p className="text-sm text-gray-900 font-medium">
-                        R$ {product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        {formatProductPrice(product.price, currentStore?.currency)}
                       </p>
                       {product.compareAtPrice && (
                         <p className="text-xs text-gray-400 line-through">
-                          R$ {product.compareAtPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          {formatProductPrice(product.compareAtPrice, currentStore?.currency)}
                         </p>
                       )}
                     </td>
                     <td className="p-4 text-right">
-                      <span
-                        className={`text-sm ${
-                          product.totalInventory === 0
-                            ? 'text-red-600'
-                            : product.totalInventory < 20
-                            ? 'text-yellow-600'
-                            : 'text-gray-600'
-                        }`}
-                      >
-                        {product.totalInventory}
-                      </span>
+                      {product.totalInventory === null ? (
+                        <span className="text-sm text-gray-400">—</span>
+                      ) : (
+                        <span
+                          className={`text-sm ${
+                            product.totalInventory <= 0
+                              ? 'text-red-600'
+                              : product.totalInventory < 20
+                              ? 'text-yellow-600'
+                              : 'text-gray-600'
+                          }`}
+                        >
+                          {product.totalInventory}
+                        </span>
+                      )}
                     </td>
-                    <td className="p-4 text-sm text-gray-600 text-right">{product.productType || '—'}</td>
+                    <td className="p-4 text-sm text-gray-600 text-right">
+                      {product.productType || product.vendor || '—'}
+                    </td>
                     <td className="p-4">
                       <div className="flex items-center gap-1 justify-end">
                         <button className="p-1.5 rounded hover:bg-gray-50 transition-colors">

@@ -64,30 +64,68 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Format products for the frontend
-    const formatted = (products || []).map((p: any) => ({
-      id: p.id,
-      shopifyProductId: p.shopify_product_id,
-      title: p.title,
-      handle: p.handle,
-      vendor: p.vendor,
-      productType: p.product_type,
-      status: p.status,
-      price: p.price,
-      compareAtPrice: p.compare_at_price,
-      sku: p.sku,
-      totalInventory: p.inventory_quantity ?? 0,
-      tags: p.tags || '',
-      variants: p.variants || [],
-      images: p.images || [],
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-    }));
+    // Pull the store's currency so the frontend can render prices
+    // in the right format (Dr. Melaxin sells in USD; the products
+    // page was hardcoding R$).
+    const { data: storeMeta } = await supabase
+      .from('shopify_stores')
+      .select('currency')
+      .eq('id', resolvedStoreId)
+      .maybeSingle();
+    const currency = (storeMeta?.currency || 'USD').toUpperCase();
+
+    // Format products for the frontend. Three fallbacks to surface
+    // data that lives only on variants:
+    //  - sku → top-level or first variant's sku
+    //  - totalInventory → sum of variant inventory_quantity; null
+    //    when none of the variants track inventory (Dr. Melaxin
+    //    doesn't enable Shopify inventory tracking on most SKUs)
+    //  - productType → vendor as a last-resort label
+    const formatted = (products || []).map((p: any) => {
+      const variants = Array.isArray(p.variants) ? p.variants : [];
+      const firstVariant = variants[0] || {};
+      const sku = p.sku || firstVariant.sku || null;
+
+      // Sum inventory across variants. Shopify returns -1 for
+      // "untracked" variants — treat those as null so the UI can
+      // show "—" instead of a meaningless 0/negative.
+      let invSum = 0;
+      let invTracked = false;
+      for (const v of variants) {
+        const q = v?.inventory_quantity;
+        if (q === null || q === undefined || q === -1 || q === '-1') continue;
+        const n = typeof q === 'number' ? q : parseInt(String(q), 10);
+        if (Number.isFinite(n)) { invSum += n; invTracked = true; }
+      }
+      const totalInventory = invTracked
+        ? invSum
+        : (typeof p.inventory_quantity === 'number' && p.inventory_quantity > 0 ? p.inventory_quantity : null);
+
+      return {
+        id: p.id,
+        shopifyProductId: p.shopify_product_id,
+        title: p.title,
+        handle: p.handle,
+        vendor: p.vendor,
+        productType: p.product_type || null,
+        status: p.status,
+        price: Number(p.price ?? firstVariant.price ?? 0),
+        compareAtPrice: p.compare_at_price ? Number(p.compare_at_price) : (firstVariant.compare_at_price ? Number(firstVariant.compare_at_price) : null),
+        sku,
+        totalInventory,
+        tags: p.tags || '',
+        variants,
+        images: p.images || [],
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+      };
+    });
 
     return NextResponse.json({
       products: formatted,
       total: count ?? formatted.length,
       storeId: resolvedStoreId,
+      currency,
     });
   } catch (error: any) {
     console.error('[Products Shopify GET] Error:', error);
