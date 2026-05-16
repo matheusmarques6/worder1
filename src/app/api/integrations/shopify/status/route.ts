@@ -66,54 +66,30 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Count real data from tables
-  let ordersCount = store.total_orders || 0;
-  let customersCount = store.total_customers || 0;
-  let productsCount = store.total_products || 0;
-
-  // Count contacts for THIS store's organization only
-  try {
-    const { count } = await supabase
-      .from('contacts')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', store.organization_id);
-    if (count && count > customersCount) customersCount = count;
-  } catch {}
-
-  // Count orders — try shopify_orders first, fallback to contact_events
-  try {
-    const { count } = await supabase
-      .from('shopify_orders')
-      .select('id', { count: 'exact', head: true })
-      .eq('store_id', store.id);
-    if (count && count > ordersCount) ordersCount = count;
-  } catch {}
-  try {
-    const { count } = await supabase
-      .from('contact_events')
-      .select('id', { count: 'exact', head: true })
-      .eq('store_id', store.id)
-      .eq('event_type', 'placed_order');
-    if (count && count > ordersCount) ordersCount = count;
-  } catch {}
-
-  // Count products — try shopify_products first, fallback to products
-  try {
-    const { count } = await supabase
-      .from('shopify_products')
-      .select('id', { count: 'exact', head: true })
-      .eq('store_id', store.id);
-    if (count && count > productsCount) productsCount = count;
-  } catch {}
-  if (productsCount === 0) {
-    try {
-      const { count } = await supabase
-        .from('shopify_products')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', store.organization_id);
-      if (count) productsCount = count;
-    } catch {}
-  }
+  // Count real data from tables.
+  //
+  // CHANGED: the counts are now the ACTUAL row counts in each
+  // Shopify table — no fallbacks to contact_events or org-wide
+  // contacts. The merchant kept seeing the orders number bounce
+  // between 989 and 800 because:
+  //  - shopify_orders has 800 real rows
+  //  - contact_events.placed_order had 530 leftover events from
+  //    earlier failed syncs, and the MAX() fallback briefly let an
+  //    older orphan value (~989) win until contact_events caught up
+  //  - shopify_stores.total_orders was being written from a sum-of-
+  //    page-sizes counter (with duplicates), not the actual table
+  //    count
+  // Same fix for customers: the previous code took MAX with org-wide
+  // contacts (22.689 — including every WhatsApp lead and form
+  // signup) instead of the Shopify-only customer count (1.266).
+  const [ordersResult, customersResult, productsResult] = await Promise.all([
+    supabase.from('shopify_orders').select('id', { count: 'exact', head: true }).eq('store_id', store.id),
+    supabase.from('shopify_customers').select('id', { count: 'exact', head: true }).eq('store_id', store.id),
+    supabase.from('shopify_products').select('id', { count: 'exact', head: true }).eq('store_id', store.id),
+  ]);
+  const ordersCount = ordersResult.count ?? store.total_orders ?? 0;
+  const customersCount = customersResult.count ?? store.total_customers ?? 0;
+  const productsCount = productsResult.count ?? store.total_products ?? 0;
 
   // Calculate revenue from shopify_orders
   let totalRevenue = store.total_revenue || 0;

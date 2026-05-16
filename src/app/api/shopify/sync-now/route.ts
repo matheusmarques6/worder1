@@ -299,13 +299,21 @@ export async function POST(request: NextRequest) {
           }
         );
 
-        // Update store stats + flip initial_sync_completed when nothing
-        // errored (same shape the legacy inline path produced).
+        // Use the actual row counts from the Shopify tables — not
+        // result.ordersCount which is a sum-of-pages counter that
+        // can include duplicates. Without this the integrations card
+        // flickered between two numbers (989 vs 800) depending on
+        // whether the response came from the in-flight counter or the
+        // stable DB count.
         const syncOk = result.errors.length === 0;
+        const [oRowCount, cRowCount] = await Promise.all([
+          supabase.from('shopify_orders').select('id', { count: 'exact', head: true }).eq('store_id', store.id),
+          supabase.from('shopify_customers').select('id', { count: 'exact', head: true }).eq('store_id', store.id),
+        ]);
         const storeUpdate: Record<string, any> = {
           last_sync_at: new Date().toISOString(),
-          total_orders: result.ordersCount,
-          total_customers: result.customersCount,
+          total_orders: oRowCount.count ?? result.ordersCount,
+          total_customers: cRowCount.count ?? result.customersCount,
         };
         if (syncOk) {
           storeUpdate.initial_sync_completed = true;
