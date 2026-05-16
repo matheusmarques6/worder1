@@ -431,7 +431,13 @@ export default function ContactsPage() {
           </div>
         ) : (
           <>
-            <table className="w-full">
+            {/* Mobile: only Contato + Email visible. Tablet adds
+                Telefone + Pedidos. Desktop shows everything.
+                overflow-x-auto preserves horizontal scroll fallback
+                so power users can still see all columns on cramped
+                viewports. */}
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px]">
               <thead>
                 <tr className="bg-gray-50/80 border-b border-gray-200">
                   <th className="w-10 px-4 py-2.5">
@@ -446,11 +452,11 @@ export default function ContactsPage() {
                     </button>
                   </th>
                   <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Contato</th>
-                  <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">E-mail</th>
-                  <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Telefone</th>
-                  <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Pedidos</th>
-                  <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Gasto Total</th>
-                  <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Fonte</th>
+                  <th className="hidden sm:table-cell text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">E-mail</th>
+                  <th className="hidden md:table-cell text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Telefone</th>
+                  <th className="hidden md:table-cell text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Pedidos</th>
+                  <th className="hidden lg:table-cell text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Gasto Total</th>
+                  <th className="hidden xl:table-cell text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-2.5">Fonte</th>
                   <th className="w-10"></th>
                 </tr>
               </thead>
@@ -476,13 +482,13 @@ export default function ContactsPage() {
                         </span>
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 truncate max-w-[200px]">{c.email || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{c.phone || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 font-medium">{c.total_orders || 0}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                    <td className="hidden sm:table-cell px-4 py-3 text-sm text-gray-600 truncate max-w-[200px]">{c.email || '—'}</td>
+                    <td className="hidden md:table-cell px-4 py-3 text-sm text-gray-600">{c.phone || '—'}</td>
+                    <td className="hidden md:table-cell px-4 py-3 text-sm text-gray-900 font-medium">{c.total_orders || 0}</td>
+                    <td className="hidden lg:table-cell px-4 py-3 text-sm text-gray-900 font-medium">
                       {c.total_spent ? `R$ ${parseFloat(c.total_spent).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="hidden xl:table-cell px-4 py-3">
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">
                         {c.source || 'shopify'}
                       </span>
@@ -496,6 +502,7 @@ export default function ContactsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
 
             {/* Pagination */}
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50/50">

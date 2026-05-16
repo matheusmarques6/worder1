@@ -230,20 +230,24 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — `overflow-x-auto` keeps the layout intact on narrow
+          screens while less-critical columns collapse via `hidden`
+          breakpoint utilities. Below 640px (sm) we show only
+          Campaign + Status; tablet picks up Canal/Envios/Data;
+          desktop shows everything. */}
       {!loading && filteredCampaigns.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <table className="w-full">
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-x-auto">
+          <table className="w-full min-w-[560px]">
             <thead>
               <tr className="bg-gray-50">
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Campanha</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Canal</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Status</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Envios</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Abertura</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Cliques</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Receita</th>
-                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Data</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 sm:px-5 py-3">Campanha</th>
+                <th className="hidden md:table-cell text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Canal</th>
+                <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 sm:px-5 py-3">Status</th>
+                <th className="hidden sm:table-cell text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Envios</th>
+                <th className="hidden lg:table-cell text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Abertura</th>
+                <th className="hidden lg:table-cell text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Cliques</th>
+                <th className="hidden xl:table-cell text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Receita</th>
+                <th className="hidden md:table-cell text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Data</th>
               </tr>
             </thead>
             <tbody>
@@ -262,18 +266,18 @@ export default function CampaignsPage() {
 
                 return (
                   <tr key={campaign.id} onClick={() => window.location.href = `/campaigns/${campaign.id}`} className="border-t border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer">
-                    <td className="px-5 py-4 text-sm font-medium text-gray-900">{campaign.name}</td>
-                    <td className="px-5 py-4">{channelIcons[channel] || channelIcons.email}</td>
-                    <td className="px-5 py-4">
+                    <td className="px-3 sm:px-5 py-4 text-sm font-medium text-gray-900">{campaign.name}</td>
+                    <td className="hidden md:table-cell px-5 py-4">{channelIcons[channel] || channelIcons.email}</td>
+                    <td className="px-3 sm:px-5 py-4">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusColor}`}>
                         {statusLabel}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-sm text-gray-600">{sent > 0 ? sent.toLocaleString('pt-BR') : '-'}</td>
-                    <td className="px-5 py-4 text-sm text-gray-600">{openRatePct}</td>
-                    <td className="px-5 py-4 text-sm text-gray-600">{clickRatePct}</td>
-                    <td className="px-5 py-4 text-sm font-medium text-gray-900">{revenue > 0 ? `R$ ${revenue.toLocaleString('pt-BR')}` : '-'}</td>
-                    <td className="px-5 py-4 text-sm text-gray-500">{formattedDate}</td>
+                    <td className="hidden sm:table-cell px-5 py-4 text-sm text-gray-600">{sent > 0 ? sent.toLocaleString('pt-BR') : '-'}</td>
+                    <td className="hidden lg:table-cell px-5 py-4 text-sm text-gray-600">{openRatePct}</td>
+                    <td className="hidden lg:table-cell px-5 py-4 text-sm text-gray-600">{clickRatePct}</td>
+                    <td className="hidden xl:table-cell px-5 py-4 text-sm font-medium text-gray-900">{revenue > 0 ? `R$ ${revenue.toLocaleString('pt-BR')}` : '-'}</td>
+                    <td className="hidden md:table-cell px-5 py-4 text-sm text-gray-500">{formattedDate}</td>
                   </tr>
                 )
               })}
