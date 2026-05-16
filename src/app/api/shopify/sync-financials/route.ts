@@ -26,6 +26,7 @@ import { getAuthClient, authError } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { shopifyGraphQLPaginate } from '@/lib/shopify/graphql-client';
 import { ensureFreshToken } from '@/lib/shopify/ensure-fresh-token';
+import { recomputeStoreTotals } from '@/lib/services/shopify/store-totals';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -257,16 +258,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update store-level aggregates
-    await supabase
-      .from('shopify_stores')
-      .update({
-        total_revenue: totalRevenue,
-        total_orders: totalOrders,
-        total_customers: customersProcessed + runningCount,
-        last_sync_at: new Date().toISOString(),
-      })
-      .eq('id', store.id);
+    // Recompute store-level cache from real row counts. The Shopify
+    // GraphQL-side totals (totalOrders / totalRevenue / customer
+    // running count) are useful internally but they're sum-of-page
+    // figures that can include duplicates if a page got retried.
+    // count(*) on shopify_orders / shopify_customers / shopify_products
+    // is the canonical source for the integrations card.
+    await recomputeStoreTotals(supabase, store.id);
 
     // Flip the job state. If we hit the deadline mid-walk, leave it
     // 'pending' with the cursor so the next call resumes. If we made

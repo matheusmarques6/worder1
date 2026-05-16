@@ -12,6 +12,7 @@ import { getAuthClient, authError } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { ensureFreshToken } from '@/lib/shopify/ensure-fresh-token';
 import { enqueueShopifySync, isQStashConfigured } from '@/lib/queue';
+import { recomputeStoreTotals } from '@/lib/services/shopify/store-totals';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -299,27 +300,19 @@ export async function POST(request: NextRequest) {
           }
         );
 
-        // Use the actual row counts from the Shopify tables — not
-        // result.ordersCount which is a sum-of-pages counter that
-        // can include duplicates. Without this the integrations card
-        // flickered between two numbers (989 vs 800) depending on
-        // whether the response came from the in-flight counter or the
-        // stable DB count.
+        // Recompute the full store cache (orders/customers/products/
+        // revenue) from actual row counts. The sync-loop counters
+        // can include duplicates from retried pages — DB count(*) is
+        // the only source we trust. Single helper keeps every code
+        // path consistent.
         const syncOk = result.errors.length === 0;
-        const [oRowCount, cRowCount] = await Promise.all([
-          supabase.from('shopify_orders').select('id', { count: 'exact', head: true }).eq('store_id', store.id),
-          supabase.from('shopify_customers').select('id', { count: 'exact', head: true }).eq('store_id', store.id),
-        ]);
-        const storeUpdate: Record<string, any> = {
-          last_sync_at: new Date().toISOString(),
-          total_orders: oRowCount.count ?? result.ordersCount,
-          total_customers: cRowCount.count ?? result.customersCount,
-        };
+        await recomputeStoreTotals(supabase, store.id);
         if (syncOk) {
-          storeUpdate.initial_sync_completed = true;
-          storeUpdate.api_version = '2026-04';
+          await supabase
+            .from('shopify_stores')
+            .update({ initial_sync_completed: true, api_version: '2026-04' })
+            .eq('id', store.id);
         }
-        await supabase.from('shopify_stores').update(storeUpdate).eq('id', store.id);
 
         // Re-converge wiring at the same time (idempotent).
         fireInstallExtrasAfterSync(store.id);

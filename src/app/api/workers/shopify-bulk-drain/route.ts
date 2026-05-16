@@ -24,6 +24,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { processBulkOrdersJsonl } from '@/lib/services/shopify/bulk-sync';
+import { recomputeStoreTotals } from '@/lib/services/shopify/store-totals';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -96,18 +97,10 @@ export async function POST(req: NextRequest) {
       })
       .eq('id', jobId);
 
-    // Roll the store-level total_orders so the dashboard reflects
-    // reality once the drain finishes.
-    const { count } = await supabaseAdmin
-      .from('shopify_orders')
-      .select('id', { count: 'exact', head: true })
-      .eq('store_id', job.store_id);
-    if (typeof count === 'number') {
-      await supabaseAdmin
-        .from('shopify_stores')
-        .update({ total_orders: count, last_sync_at: new Date().toISOString() })
-        .eq('id', job.store_id);
-    }
+    // Roll the store-level cache so every column reflects reality
+    // once the drain finishes — orders, customers, products, and net
+    // revenue all in one pass.
+    await recomputeStoreTotals(supabaseAdmin, job.store_id);
 
     return NextResponse.json({
       ok: true,

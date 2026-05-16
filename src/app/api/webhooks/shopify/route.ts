@@ -22,6 +22,7 @@ import { createEvent } from '@/lib/shopify/event-service';
 import { WORDER_SHOPIFY_EVENTS, EVENT_SOURCES } from '@/lib/shopify/event-types';
 import { markCheckoutRecovered } from '@/lib/services/shopify/jobs/abandoned-cart';
 import { enrichContactAfterOrder } from '@/lib/shopify/profile-enricher';
+import { scheduleRecomputeStoreTotals } from '@/lib/services/shopify/store-totals';
 export const dynamic = 'force-dynamic';
 
 // ============================================
@@ -2649,7 +2650,30 @@ export async function POST(request: NextRequest) {
         default:
           console.log(`[Shopify Webhook] Unhandled topic: ${topic}`);
       }
-      
+
+      // Nudge the store-totals cache after any topic that mutated
+      // orders/customers/products. Klaviyo-style: ingest writes the
+      // row, the aggregator pass rolls up the cache off the critical
+      // path. Fire-and-forget so the webhook returns 200 fast.
+      const totalsTopics = [
+        'orders/create',
+        'orders/paid',
+        'orders/fulfilled',
+        'orders/cancelled',
+        'orders/updated',
+        'orders/delete',
+        'refunds/create',
+        'customers/create',
+        'customers/update',
+        'customers/delete',
+        'products/create',
+        'products/update',
+        'products/delete',
+      ];
+      if (totalsTopics.includes(topic)) {
+        scheduleRecomputeStoreTotals(getSupabase(), store.id);
+      }
+
       // Marcar evento como processado
       if (webhookId) {
         const supabase = getSupabase();

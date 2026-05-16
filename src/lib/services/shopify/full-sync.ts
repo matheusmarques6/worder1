@@ -513,13 +513,14 @@ export async function runFullSync(
     // ========== UPDATE STORE STATS ==========
     onProgress?.('finalizing', 90, 'Atualizando estatísticas da loja...');
 
+    const { recomputeStoreTotals } = await import('@/lib/services/shopify/store-totals');
+    await recomputeStoreTotals(supabase as any, storeId);
+    // Keep the secondary metrics jsonb (AOV, recurring rate, etc.)
+    // separate — those aren't part of the integrations-card cache and
+    // come from the sync loop's aggregations.
     await supabase
       .from('shopify_stores')
       .update({
-        total_orders: result.ordersCount,
-        total_revenue: result.totalRevenue,
-        total_customers: result.customersCount,
-        last_sync_at: new Date().toISOString(),
         metrics: {
           paidOrdersCount: result.paidOrdersCount,
           averageOrderValue: result.averageOrderValue,

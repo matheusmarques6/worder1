@@ -144,29 +144,15 @@ export async function runFullSyncGraphQL(
     }
 
     // ========== FINALIZE ==========
-    // Use the ACTUAL row counts from each table instead of the
-    // sum-of-pages counters that ran in syncOrdersGraphQL etc.
-    // The page counters include duplicates (Shopify's pagination
-    // can emit the same node across pages on cursor restarts), so
-    // total_orders kept getting written as e.g. 989 while
-    // shopify_orders only had 800 unique rows. Then the dashboard
-    // bounced between the two on every refresh. Reading COUNT(*)
-    // here makes total_orders authoritative and stable.
-    const [oCnt, cCnt, pCnt] = await Promise.all([
-      supabase.from('shopify_orders').select('id', { count: 'exact', head: true }).eq('store_id', store.id),
-      supabase.from('shopify_customers').select('id', { count: 'exact', head: true }).eq('store_id', store.id),
-      supabase.from('shopify_products').select('id', { count: 'exact', head: true }).eq('store_id', store.id),
-    ]);
+    // Roll the store cache via the single recompute helper. Reading
+    // COUNT(*) is authoritative — the sum-of-pages counters returned
+    // by syncOrdersGraphQL etc. can include duplicates when Shopify
+    // pagination retries a cursor.
+    const { recomputeStoreTotals } = await import('@/lib/services/shopify/store-totals');
+    await recomputeStoreTotals(supabase as any, store.id);
     await supabase
       .from('shopify_stores')
-      .update({
-        initial_sync_completed: true,
-        total_orders: oCnt.count ?? result.ordersCount,
-        total_revenue: result.totalRevenue,
-        total_customers: cCnt.count ?? result.customersCount,
-        total_products: pCnt.count ?? result.productsCount,
-        last_sync_at: new Date().toISOString(),
-      })
+      .update({ initial_sync_completed: true })
       .eq('id', store.id);
 
     result.success = result.errors.length === 0;
