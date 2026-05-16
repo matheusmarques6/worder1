@@ -19,7 +19,14 @@ export async function POST(
   const auth = await getAuthClient()
   if (!auth) return authError()
 
-  const { scheduled_at } = await req.json()
+  // RBAC: must have campaigns:send to schedule a campaign (this
+  // commits the merchant to actually sending email at a future time).
+  const { requireCapability } = await import('@/lib/auth/require-capability')
+  const denied = await requireCapability(auth, 'campaigns:send')
+  if (denied) return denied
+
+  const body = await req.json()
+  const { scheduled_at, send_time_optimization } = body
   if (!scheduled_at) {
     return NextResponse.json({ error: 'scheduled_at is required (ISO 8601)' }, { status: 400 })
   }
@@ -49,9 +56,20 @@ export async function POST(
     )
   }
 
+  const updatePayload: Record<string, any> = {
+    status: 'scheduled',
+    scheduled_at: when.toISOString(),
+  }
+  // Honor the smart-send-time toggle from the modal. When true, each
+  // contact gets bumped to their personal best_send_hour (see
+  // /api/email/campaigns/send/route.ts).
+  if (typeof send_time_optimization === 'boolean') {
+    updatePayload.send_time_optimization = send_time_optimization
+  }
+
   const { data: updated, error } = await supabaseAdmin
     .from('email_campaigns')
-    .update({ status: 'scheduled', scheduled_at: when.toISOString() })
+    .update(updatePayload)
     .eq('id', params.id)
     .eq('organization_id', auth.user.organization_id)
     .select()

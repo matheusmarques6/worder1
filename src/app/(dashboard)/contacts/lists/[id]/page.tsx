@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import {
   ArrowLeft,
   Search,
@@ -50,6 +51,7 @@ interface Contact {
 export default function ListDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const { confirm } = useConfirm()
   const listId = String(params.id)
 
   const [list, setList] = useState<List | null>(null)
@@ -94,7 +96,12 @@ export default function ListDetailPage() {
   })
 
   const handleRemove = async (contactId: string) => {
-    if (!confirm('Remover este contato da lista?')) return
+    const ok = await confirm({
+      title: 'Remover contato desta lista?',
+      description: 'O contato continua no seu CRM, apenas sai desta lista.',
+      confirmLabel: 'Remover',
+    })
+    if (!ok) return
     const res = await fetch(`/api/lists/${listId}/members?contact_id=${contactId}`, { method: 'DELETE' })
     if (res.ok) {
       setMembers((prev) => prev.filter((m) => m.contact_id !== contactId))
@@ -106,7 +113,13 @@ export default function ListDetailPage() {
   }
 
   const handleDeleteList = async () => {
-    if (!confirm(`Excluir a lista "${list?.name}"? Esta ação não pode ser desfeita.`)) return
+    const ok = await confirm({
+      title: `Excluir a lista "${list?.name}"?`,
+      description: 'Esta ação é definitiva. Os contatos não serão deletados, apenas a lista.',
+      confirmLabel: 'Excluir lista',
+      destructive: true,
+    })
+    if (!ok) return
     const res = await fetch(`/api/lists/${listId}`, { method: 'DELETE' })
     if (res.ok) {
       router.push('/contacts/lists')

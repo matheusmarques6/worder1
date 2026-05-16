@@ -21,6 +21,7 @@ import {
   SpinnerGap,
 } from '@phosphor-icons/react'
 import { useStoreStore } from '@/stores/storeStore'
+import { useToast } from '@/components/ui/Toast'
 
 interface Campaign {
   id: string
@@ -68,29 +69,43 @@ export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
   const { currentStore } = useStoreStore()
+  const toast = useToast()
   // Hydration gate. On F5 refresh zustand reads currentStore from
   // localStorage asynchronously; if the effect fires before that
   // completes, currentStore.id is undefined and the fetch returns
   // the org's first store's campaigns — which on a multi-store org
   // (Dr. Melaxin + Based) is the wrong store. Wait for hydration.
   const hasHydrated = useStoreStore((s) => s._hasHydrated)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const fetchCampaigns = useCallback(async () => {
     if (!currentStore?.id) return
     try {
       setLoading(true)
+      setLoadError(null)
       const url = `/api/email/campaigns?storeId=${currentStore.id}`
       const res = await fetch(url)
-      if (!res.ok) { setCampaigns([]); return }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        const msg = data?.error || `Erro ${res.status} ao carregar campanhas`
+        setCampaigns([])
+        setLoadError(msg)
+        toast.error('Falha ao carregar campanhas', msg)
+        return
+      }
       const data = await res.json()
       setCampaigns(data.campaigns || [])
-    } catch (err) {
+    } catch (err: any) {
+      // Surface a real error instead of just an empty page.
       console.error('Failed to fetch campaigns:', err)
       setCampaigns([])
+      const msg = err?.message || 'Falha de rede ao carregar campanhas'
+      setLoadError(msg)
+      toast.error('Falha ao carregar campanhas', msg)
     } finally {
       setLoading(false)
     }
-  }, [currentStore?.id])
+  }, [currentStore?.id, toast])
 
   useEffect(() => {
     if (!hasHydrated) return
@@ -178,12 +193,40 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* Empty State */}
-      {!loading && filteredCampaigns.length === 0 && (
+      {/* Error State — surfaces fetch failures instead of silently
+          rendering an empty list. Includes a retry that re-fires
+          the same fetch so the merchant doesn't have to F5. */}
+      {!loading && loadError && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mb-4">
+            <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Falha ao carregar campanhas</h3>
+          <p className="text-sm text-gray-500 max-w-sm mb-4">{loadError}</p>
+          <button
+            onClick={() => fetchCampaigns()}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-lg transition-colors"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      {/* Empty State (now distinct from error — only fires when fetch succeeded but returned []). */}
+      {!loading && !loadError && filteredCampaigns.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Megaphone className="w-16 h-16 text-gray-600 mb-4" weight="duotone" />
           <h3 className="text-lg font-semibold text-gray-900 mb-1">Nenhuma campanha encontrada</h3>
-          <p className="text-sm text-gray-500">Crie sua primeira campanha para começar.</p>
+          <p className="text-sm text-gray-500 mb-5">Crie sua primeira campanha para começar.</p>
+          <Link
+            href="/campaigns/new"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white bg-[#F26B2A] hover:bg-[#E55A1A] rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Criar campanha
+          </Link>
         </div>
       )}
 

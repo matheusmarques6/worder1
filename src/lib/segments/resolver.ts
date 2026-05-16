@@ -48,6 +48,11 @@ interface Conditions {
 
 /**
  * Retorna lista de contact_ids que satisfazem o segmento.
+ *
+ * Quando o segmento tem store_id, propaga pro resolveByConditions
+ * pra que a query de contatos exclua qualquer linha de loja irmã
+ * dentro da mesma org. Antes o resolver puxava org-wide e o segment
+ * "VIP Dr. Melaxin" acabava incluindo contatos do Based.
  */
 export async function resolveSegment(
   supabase: SupabaseClient,
@@ -57,23 +62,26 @@ export async function resolveSegment(
   try {
     // Tenta customer_segments primeiro (tabela principal), depois segments (legada/view)
     let segment: any = null
+    let storeId: string | null = null
     const { data: cs } = await supabase
       .from('customer_segments')
-      .select('rules, rules_logic, rfm_segments, segment_type')
+      .select('rules, rules_logic, rfm_segments, segment_type, store_id')
       .eq('id', segmentId)
       .maybeSingle()
     if (cs) {
       segment = { conditions: { logic: (cs.rules_logic || 'AND').toLowerCase(), rules: cs.rules || [] } }
+      storeId = cs.store_id || null
     } else {
       const { data: s } = await supabase
         .from('segments')
-        .select('conditions')
+        .select('conditions, store_id')
         .eq('id', segmentId)
         .maybeSingle()
       segment = s
+      storeId = s?.store_id || null
     }
     if (!segment) return []
-    return resolveByConditions(supabase, segment.conditions, orgId)
+    return resolveByConditions(supabase, segment.conditions, orgId, storeId)
   } catch (err) {
     console.error('[resolveSegment] error:', err)
     return []
@@ -82,11 +90,15 @@ export async function resolveSegment(
 
 /**
  * Retorna contact_ids que satisfazem as conditions.
+ * storeId opcional: quando passado, restringe a contatos daquela
+ * loja (preserva contatos com store_id IS NULL — legacy que será
+ * backfilled pelo próximo touch do customer-sync).
  */
 export async function resolveByConditions(
   supabase: SupabaseClient,
   conditions: any,
-  orgId: string
+  orgId: string,
+  storeId?: string | null
 ): Promise<string[]> {
   // Normaliza legacy: se é array puro, envolve em { logic: 'and', rules: [...] }
   const root: Rule = Array.isArray(conditions)
@@ -95,11 +107,16 @@ export async function resolveByConditions(
         ? { logic: conditions.logic || 'and', rules: conditions.rules || [] }
         : { logic: 'and', rules: [] })
 
-  // Busca superset de contatos da org
-  const { data: allContacts } = await supabase
+  // Busca superset de contatos da org (com escopo store quando aplicável)
+  let q: any = supabase
     .from('contacts')
-    .select('id, email, phone, first_name, last_name, tags, custom_fields, created_at, last_active_at, total_orders, total_revenue, last_order_date, status, lifecycle_stage, is_subscribed_email, shopify_customer_id')
+    .select('id, email, phone, first_name, last_name, tags, custom_fields, created_at, last_active_at, total_orders, total_revenue, last_order_date, status, lifecycle_stage, is_subscribed_email, shopify_customer_id, store_id')
     .eq('organization_id', orgId)
+  if (storeId) {
+    // Aceita contatos da mesma loja OR sem loja (legacy backfill pending)
+    q = q.or(`store_id.eq.${storeId},store_id.is.null`)
+  }
+  const { data: allContacts } = await q
 
   if (!allContacts) return []
 
@@ -121,9 +138,10 @@ export async function resolveByConditions(
 export async function countSegmentByConditions(
   supabase: SupabaseClient,
   conditions: any,
-  orgId: string
+  orgId: string,
+  storeId?: string | null
 ): Promise<number> {
-  const ids = await resolveByConditions(supabase, conditions, orgId)
+  const ids = await resolveByConditions(supabase, conditions, orgId, storeId)
   return ids.length
 }
 

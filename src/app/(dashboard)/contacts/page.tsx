@@ -26,12 +26,14 @@ import {
 } from '@phosphor-icons/react'
 import { Loader2 } from 'lucide-react'
 import { useAuthStore, useStoreStore } from '@/stores'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 const PAGE_SIZE = 50
 
 export default function ContactsPage() {
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore()
+  const { confirm } = useConfirm()
   const [contacts, setContacts] = useState<any[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -161,7 +163,13 @@ export default function ContactsPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return
-    if (!confirm(`Tem certeza que deseja excluir ${selectedIds.size} contato(s)?`)) return
+    const ok = await confirm({
+      title: `Excluir ${selectedIds.size} contato${selectedIds.size > 1 ? 's' : ''}?`,
+      description: 'Esta ação é definitiva. Os contatos serão removidos do seu CRM e de todas as listas.',
+      confirmLabel: 'Excluir',
+      destructive: true,
+    })
+    if (!ok) return
     setBulkLoading(true)
     setBulkMessage('')
     try {

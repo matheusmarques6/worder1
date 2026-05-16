@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     // Busca automações ativas com trigger_inactivity
     const { data: automations } = await supabaseAdmin
       .from('automations')
-      .select('id, organization_id, trigger_config')
+      .select('id, organization_id, store_id, trigger_config')
       .eq('status', 'active')
       .eq('trigger_type', 'trigger_inactivity')
 
@@ -50,26 +50,37 @@ export async function GET(req: NextRequest) {
 
       const threshold = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
 
-      // Busca contatos ativos dessa org cujo last_active_at <= threshold
-      // Batching de 500 por iteração
-      const { data: contacts } = await supabaseAdmin
+      // Busca contatos ativos cujo last_active_at <= threshold.
+      // Quando a automation tem store_id (multi-store org), escope
+      // por loja — sem isso o flow do Dr. Melaxin disparava re-
+      // engagement em contatos do Based também. Inclui contatos com
+      // store_id IS NULL (legacy backfill pending).
+      let contactsQuery = supabaseAdmin
         .from('contacts')
-        .select('id, last_active_at')
+        .select('id, last_active_at, store_id')
         .eq('organization_id', auto.organization_id)
         .lte('last_active_at', threshold)
         .eq('is_active', true)
         .limit(500)
+      if (auto.store_id) {
+        contactsQuery = contactsQuery.or(`store_id.eq.${auto.store_id},store_id.is.null`)
+      }
+      const { data: contacts } = await contactsQuery
 
       for (const c of contacts || []) {
         await dispatchTrigger({
           organizationId: auto.organization_id,
+          // Propaga store da automation (com fallback pro do contato)
+          // pra que runs criados aqui sejam visíveis em views
+          // store-scoped.
+          storeId: auto.store_id || c.store_id || null,
           triggerType: 'trigger_inactivity',
           contactId: c.id,
           triggerData: {
             inactive_days: days,
             last_active_at: c.last_active_at,
           },
-          matchConfig: () => true, // já filtramos por automation_id via trigger_type
+          matchConfig: () => true,
           idempotencyKey: `inactivity:${auto.id}:${c.id}:${dayKey}`,
         })
         dispatched++

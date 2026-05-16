@@ -17,6 +17,7 @@ import {
   Save,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 interface Segment {
   id: string
@@ -47,6 +48,7 @@ export default function SegmentDetailPage() {
   const params = useParams()
   const segmentId = params.id as string
   const { user } = useAuthStore()
+  const { confirm } = useConfirm()
 
   const [segment, setSegment] = useState<Segment | null>(null)
   const [members, setMembers] = useState<Contact[]>([])
@@ -123,7 +125,13 @@ export default function SegmentDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Excluir este segmento permanentemente?')) return
+    const ok = await confirm({
+      title: 'Excluir segmento?',
+      description: 'Esta ação é definitiva. Os contatos não serão deletados, apenas o segmento.',
+      confirmLabel: 'Excluir segmento',
+      destructive: true,
+    })
+    if (!ok) return
     try {
       await fetch(`/api/segments?id=${segmentId}`, { method: 'DELETE' })
       router.push('/segments')

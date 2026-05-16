@@ -23,6 +23,7 @@ import {
 } from '@phosphor-icons/react'
 import { Loader2 } from 'lucide-react'
 import { useAuthStore, useStoreStore } from '@/stores'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 interface ContactList {
   id: string
@@ -47,6 +48,7 @@ export default function ContactListsPage() {
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore()
   const hasHydrated = useStoreStore((s) => s._hasHydrated)
+  const { confirm } = useConfirm()
 
   const fetchLists = useCallback(async () => {
     if (!user?.organization_id) return
@@ -78,7 +80,13 @@ export default function ContactListsPage() {
   }, [fetchLists, hasHydrated, currentStore?.id])
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta lista?')) return
+    const ok = await confirm({
+      title: 'Excluir lista?',
+      description: 'Os contatos não serão deletados, apenas a lista será removida.',
+      confirmLabel: 'Excluir lista',
+      destructive: true,
+    })
+    if (!ok) return
     try {
       await fetch(`/api/segments?id=${id}`, { method: 'DELETE' })
       setLists(prev => prev.filter(l => l.id !== id))

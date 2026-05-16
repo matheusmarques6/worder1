@@ -35,6 +35,11 @@ export default function ScheduleCampaignModal({
 
   const [date, setDate] = useState(defaultDate.toISOString().slice(0, 10))
   const [time, setTime] = useState(defaultDate.toTimeString().slice(0, 5))
+  // STO checkbox: send each contact at their personal best hour
+  // (learned from open history). Klaviyo-style. Backend already
+  // supports this via campaigns.send_time_optimization; this is
+  // just the UX entry-point.
+  const [smartSendTime, setSmartSendTime] = useState(false)
   const [saving, setSaving] = useState(false)
   const [canceling, setCanceling] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,7 +55,10 @@ export default function ScheduleCampaignModal({
       const res = await fetch(`/api/email/campaigns/${campaignId}/schedule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scheduled_at: scheduledDate.toISOString() }),
+        body: JSON.stringify({
+          scheduled_at: scheduledDate.toISOString(),
+          send_time_optimization: smartSendTime,
+        }),
       })
       const json = await res.json()
       if (!res.ok) {
@@ -164,6 +172,30 @@ export default function ScheduleCampaignModal({
             </div>
           </div>
 
+          {/* Smart send time toggle. When checked the scheduled time
+              becomes the *baseline*; each contact gets bumped to their
+              personal best hour (max ±12h drift) based on past opens. */}
+          <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+            <input
+              type="checkbox"
+              checked={smartSendTime}
+              onChange={(e) => setSmartSendTime(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-orange-500"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900">
+                Send-Time Optimization
+                <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 rounded">
+                  Smart
+                </span>
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5 leading-snug">
+                Cada contato recebe no horário que ele costuma abrir emails. Aumenta
+                a taxa de abertura em ~15% segundo benchmarks de Klaviyo.
+              </p>
+            </div>
+          </label>
+
           {/* Preview */}
           <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-sm">
             <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Será enviada em</p>
@@ -176,7 +208,9 @@ export default function ScheduleCampaignModal({
               })}
             </p>
             <p className="text-gray-500 text-xs mt-0.5">
-              às {scheduledDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              {smartSendTime
+                ? `~${scheduledDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (horário otimizado por contato)`
+                : `às ${scheduledDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
             </p>
           </div>
 
