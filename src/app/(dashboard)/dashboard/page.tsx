@@ -214,6 +214,7 @@ export default function DashboardPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
   const [data, setData] = useState<Overview>(EMPTY_OVERVIEW)
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
   const [lastFetch, setLastFetch] = useState<Date>(new Date())
   const [, setNow] = useState<Date>(new Date())
   const [toast, setToast] = useState<string | null>(null)
@@ -407,70 +408,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Sync banner: store connected but data not yet synced ──
-            The dashboard endpoint detects this and auto-triggers sync-now
-            in the background. We surface a banner so the merchant knows
-            why values are R$ 0 and that data is on its way. */}
-        {!loading && data.hasShopify && data.needsSync && (
-          <div
-            className="mb-11 rounded-[14px] px-6 py-5 flex items-center justify-between gap-4 flex-wrap"
-            style={{ border: '1px solid #FDE68A', background: '#FFFBEB' }}
-          >
-            <div className="flex-1 min-w-0">
-              <div className="text-[14px] font-bold text-[#92400E] flex items-center gap-2" style={{ letterSpacing: '-0.01em' }}>
-                <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                {data.syncTriggered ? 'Sincronizando dados da Shopify…' : 'Loja conectada — sem pedidos sincronizados'}
-              </div>
-              <p className="text-[13px] text-[#92400E] opacity-90 mt-1 leading-relaxed">
-                {data.syncTriggered
-                  ? 'Iniciamos uma sincronização automática (pedidos dos últimos 90 dias). Os valores aparecem nesta dashboard em alguns minutos. Pode atualizar a página.'
-                  : 'Conexão ok mas ainda não importamos os pedidos. Clique em sincronizar para começar.'}
-              </p>
-            </div>
-            <button
-              onClick={async () => {
-                if (!currentStore?.id) return;
-                showToast('Iniciando sync…');
-                try {
-                  const res = await fetch('/api/shopify/sync-now', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    // historical: true tells the server to skip the 90-day
-                    // window for orders so the merchant gets the full
-                    // backlog — that's what "Sincronizar tudo" implies.
-                    body: JSON.stringify({ storeId: currentStore.id, syncType: 'all', historical: true }),
-                  });
-                  const data = await res.json().catch(() => ({}));
-                  // Three response shapes:
-                  //  - { mode: 'bulk', jobId, bulkOperationId } — Shopify
-                  //    Bulk Operations path. Async on Shopify's side,
-                  //    finalized via the bulk-finish webhook. The merchant
-                  //    can navigate away; we'll keep polling the job.
-                  //  - { mode: 'background', jobId } — QStash worker.
-                  //  - inline result — small/incremental syncs that
-                  //    finished within the 300s function budget.
-                  if (data?.mode === 'bulk' && data?.jobId) {
-                    setActiveJobId(data.jobId);
-                    showToast('Exportação completa em andamento na Shopify. Pode demorar alguns minutos.');
-                  } else if (data?.mode === 'background' && data?.jobId) {
-                    setActiveJobId(data.jobId);
-                    showToast('Sync rodando em background. Acompanhe abaixo.');
-                  } else {
-                    showToast('Sync iniciado. Atualizando…');
-                    setTimeout(fetchData, 3000);
-                  }
-                } catch {
-                  showToast('Falhou — tente em /integrations/shopify');
-                }
-              }}
-              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-amber-600 hover:bg-amber-700 transition-colors px-4 py-2 rounded-[8px] shrink-0"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Sincronizar agora
-            </button>
-          </div>
-        )}
-
         {/* ── Section header ── */}
         <div className="flex items-start justify-between gap-6 mb-6 flex-wrap">
           <div>
@@ -487,13 +424,41 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Subtle sync button: kicks off a Shopify incremental
+                re-sync (last 90 days, no historical reload) and then
+                refetches the dashboard. The dashboard auto-syncs on
+                first load when the store has no orders, so this is
+                only here for the "I just placed an order, show it
+                now" case. The button doubles as a freshness indicator
+                — clicking returns the merchant to "Atualizado agora". */}
             <button
-              onClick={fetchData}
+              onClick={async () => {
+                if (syncing) return;
+                setSyncing(true);
+                try {
+                  if (currentStore?.id) {
+                    try {
+                      const res = await fetch('/api/shopify/sync-now', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ storeId: currentStore.id, syncType: 'all' }),
+                      });
+                      const data = await res.json().catch(() => ({}));
+                      if ((data?.mode === 'bulk' || data?.mode === 'background') && data?.jobId) {
+                        setActiveJobId(data.jobId);
+                      }
+                    } catch { /* fall through to dashboard refetch */ }
+                  }
+                  await fetchData();
+                } finally {
+                  setSyncing(false);
+                }
+              }}
               className="inline-flex items-center gap-1.5 text-[12.5px] text-[#A1A1AA] hover:text-[#52525B] transition-colors"
-              title="Atualizar"
+              title="Re-sincronizar com Shopify"
             >
-              <RefreshCw className={`w-[13px] h-[13px] ${loading ? 'animate-spin' : ''}`} />
-              Atualizado {timeAgoShort(lastFetch)}
+              <RefreshCw className={`w-[13px] h-[13px] ${(loading || syncing) ? 'animate-spin' : ''}`} />
+              {syncing ? 'Sincronizando…' : `Atualizado ${timeAgoShort(lastFetch)}`}
             </button>
             <RangeSelect
               value={range}
