@@ -18,15 +18,15 @@ const CHANNELS = [
     desc: 'Envie mensagens com templates aprovados pela Meta, botões interativos e mídia.',
     icon: MessageSquare,
     href: '/whatsapp/campaigns/new',
-    available: false,
+    available: true,
   },
   {
     id: 'sms',
     name: 'SMS',
     desc: 'Mensagens curtas com links trackáveis e variáveis dinâmicas para sua base.',
     icon: Smartphone,
-    href: '#',
-    available: false,
+    href: '/sms/create',
+    available: true,
   },
 ]
 

@@ -126,6 +126,7 @@ export default function AutomationsPage() {
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [listStats, setListStats] = useState<Record<string, { sent: number; opened: number; clicked: number; revenue: number }>>({});
   const [mounted, setMounted] = useState(false);
 
   const organizationId = user?.organization_id;
@@ -190,6 +191,27 @@ export default function AutomationsPage() {
     }
 
     fetchAutomations();
+  }, [organizationId, currentStore?.id, hasHydrated]);
+
+  // Batch per-row metrics (Sent / Open rate / Click rate / Revenue).
+  // Separate endpoint from the listing so the table renders fast — the
+  // metrics fetch lights up the columns once it arrives.
+  useEffect(() => {
+    if (!hasHydrated || !organizationId) return;
+    async function fetchListStats() {
+      try {
+        const params = new URLSearchParams();
+        if (currentStore?.id) params.set('storeId', currentStore.id);
+        const res = await fetch(`/api/automations/list-stats?${params}`);
+        if (res.ok) {
+          const data = await res.json();
+          setListStats(data.stats || {});
+        }
+      } catch (e) {
+        // Soft-fail — columns just stay at zeros.
+      }
+    }
+    fetchListStats();
   }, [organizationId, currentStore?.id, hasHydrated]);
 
   // Fetch orphans — flows in this org that aren't in the active store.
@@ -887,22 +909,40 @@ export default function AutomationsPage() {
 
                 {/* Sent */}
                 <div className="col-span-1 text-right text-sm text-gray-700 font-medium tabular-nums">
-                  {automation.total_runs || '--'}
+                  {(() => {
+                    const m = listStats[automation.id];
+                    const sent = m?.sent || automation.total_runs || 0;
+                    return sent > 0 ? sent.toLocaleString('pt-BR') : '--';
+                  })()}
                 </div>
 
                 {/* Open rate */}
                 <div className="col-span-1 text-right text-sm text-gray-700 tabular-nums">
-                  --
+                  {(() => {
+                    const m = listStats[automation.id];
+                    if (!m || m.sent === 0) return '--';
+                    return `${((m.opened / m.sent) * 100).toFixed(1)}%`;
+                  })()}
                 </div>
 
                 {/* Click rate */}
                 <div className="col-span-1 text-right text-sm text-gray-700 tabular-nums">
-                  --
+                  {(() => {
+                    const m = listStats[automation.id];
+                    if (!m || m.sent === 0) return '--';
+                    return `${((m.clicked / m.sent) * 100).toFixed(1)}%`;
+                  })()}
                 </div>
 
                 {/* Revenue */}
                 <div className="col-span-1 text-right text-sm font-medium text-gray-900 tabular-nums">
-                  R$0.00
+                  {(() => {
+                    const m = listStats[automation.id];
+                    const rev = m?.revenue || 0;
+                    return rev > 0
+                      ? rev.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                      : 'R$ 0,00';
+                  })()}
                 </div>
 
                 {/* Actions */}

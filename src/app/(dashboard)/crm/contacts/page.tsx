@@ -565,10 +565,60 @@ export default function ContactsPage() {
     }
   }
 
-  // Export selected contacts
+  // Export selected contacts as CSV. We export from the contacts already
+  // loaded on the page (the bulk-actions toolbar disables itself when
+  // there's no selection, so this is always the visible subset).
   const handleExportSelected = async () => {
-    // TODO: Implementar exportação de contatos selecionados
-    console.log('Export selected:', Array.from(selectedIds))
+    const selected = contacts.filter((c) => selectedIds.has(c.id))
+    if (selected.length === 0) return
+
+    const headers = [
+      'Email',
+      'Telefone',
+      'WhatsApp',
+      'Nome',
+      'Sobrenome',
+      'Empresa',
+      'Tags',
+      'Pedidos',
+      'Total gasto',
+      'LTV',
+      'Inscrito em email',
+      'Inscrito em SMS',
+      'Inscrito em WhatsApp',
+      'Criado em',
+      'Atualizado em',
+    ]
+    const rows = selected.map((c: any) => [
+      c.email || '',
+      c.phone || '',
+      c.whatsapp || '',
+      c.first_name || '',
+      c.last_name || '',
+      c.company || '',
+      Array.isArray(c.tags) ? c.tags.join('; ') : '',
+      String(c.total_orders ?? 0),
+      String(c.total_spent ?? 0),
+      String(c.lifetime_value ?? 0),
+      c.is_subscribed_email ? 'Sim' : 'Não',
+      c.is_subscribed_sms ? 'Sim' : 'Não',
+      c.is_subscribed_whatsapp ? 'Sim' : 'Não',
+      c.created_at || '',
+      c.updated_at || '',
+    ])
+    const csv = [headers, ...rows]
+      .map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+    // UTF-8 BOM so Excel opens with accents correctly.
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `contatos-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
   
   // ✅ NOVO: Hook para obter storeId

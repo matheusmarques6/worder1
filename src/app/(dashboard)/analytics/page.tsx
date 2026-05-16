@@ -286,7 +286,38 @@ export default function AnalyticsPage() {
               </button>
             ))}
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors text-sm">
+          <button
+            onClick={() => {
+              // CSV export do KPI panel + qualquer time-series
+              // disponível. Antes o botão renderizava mas não fazia
+              // nada — todos os relatórios de Klaviyo/Omnisend
+              // exportam, era esquisito a gente não fazer.
+              const rows: string[][] = [
+                ['Indicador', 'Valor'],
+                ...kpis.map((k) => [k.title, String(k.value || '')]),
+              ]
+              if (Array.isArray(overview?.series) && overview.series.length > 0) {
+                rows.push([])
+                rows.push(['Período', 'Campanhas', 'Automações', 'Receita total da loja'])
+                for (const s of overview.series) {
+                  rows.push([s.label, String(s.campanhas || 0), String(s.automacoes || 0), String(s.fora || 0)])
+                }
+              }
+              const csv = rows
+                .map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+                .join('\n')
+              const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `worder-analytics-${period}-${new Date().toISOString().slice(0, 10)}.csv`
+              document.body.appendChild(a)
+              a.click()
+              document.body.removeChild(a)
+              URL.revokeObjectURL(url)
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors text-sm"
+          >
             <Export size={16} />
             Exportar
           </button>
