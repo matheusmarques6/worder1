@@ -40,20 +40,7 @@ export default function SecuritySettingsPage() {
       </div>
 
       {/* 2FA */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-              <Smartphone className="w-5 h-5 text-gray-500" />
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-gray-900">Autenticação de Dois Fatores (2FA)</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Adicione uma camada extra de segurança à sua conta</p>
-            </div>
-          </div>
-          <span className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">Em breve</span>
-        </div>
-      </div>
+      <TwoFactorCard />
 
       {/* Active Sessions */}
       <div className="bg-white border border-gray-200 rounded-xl p-6">
@@ -121,6 +108,180 @@ export default function SecuritySettingsPage() {
           </table>
         )}
       </div>
+    </div>
+  );
+}
+
+// =============================================
+// TwoFactorCard — TOTP enrollment + verify flow
+// Usa Supabase Auth MFA: enroll devolve secret + QR; verify
+// promove o factor pra 'verified', a partir daí o login pede o
+// código de 6 dígitos. Backup codes ficam pra Tier seguinte.
+// =============================================
+function TwoFactorCard() {
+  const [enabled, setEnabled] = useState(false);
+  const [factorId, setFactorId] = useState<string | null>(null);
+  const [verifiedFactorId, setVerifiedFactorId] = useState<string | null>(null);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [secret, setSecret] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [loadingState, setLoadingState] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/settings/2fa');
+        const data = await res.json();
+        const verified = (data.totp || []).find((f: any) => f.status === 'verified');
+        setEnabled(!!verified);
+        setVerifiedFactorId(verified?.id || null);
+      } catch {}
+      setLoadingState(false);
+    })();
+  }, []);
+
+  const startEnroll = async () => {
+    setWorking(true);
+    setErr(null);
+    try {
+      const res = await fetch('/api/settings/2fa/enroll', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setErr(data.error || 'Falha ao iniciar enrollment');
+        return;
+      }
+      setFactorId(data.factorId);
+      setQrCode(data.qrCode);
+      setSecret(data.secret);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const verify = async () => {
+    if (!factorId || code.length < 6) return;
+    setWorking(true);
+    setErr(null);
+    try {
+      const res = await fetch('/api/settings/2fa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ factorId, code }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErr(data.error || 'Código inválido');
+        return;
+      }
+      setEnabled(true);
+      setVerifiedFactorId(factorId);
+      setFactorId(null);
+      setQrCode(null);
+      setSecret(null);
+      setCode('');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const disable = async () => {
+    if (!verifiedFactorId) return;
+    if (!window.confirm('Desativar 2FA? Sua conta ficará menos protegida.')) return;
+    setWorking(true);
+    try {
+      await fetch(`/api/settings/2fa?factorId=${verifiedFactorId}`, { method: 'DELETE' });
+      setEnabled(false);
+      setVerifiedFactorId(null);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+            <Smartphone className="w-5 h-5 text-gray-500" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-gray-900">Autenticação de Dois Fatores (2FA)</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Adicione uma camada extra de segurança usando um app autenticador (Google Authenticator, 1Password, Authy).
+            </p>
+          </div>
+        </div>
+        {loadingState ? null : enabled ? (
+          <span className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-medium">Ativo</span>
+        ) : (
+          <span className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">Desativado</span>
+        )}
+      </div>
+
+      {!loadingState && !enabled && !factorId && (
+        <button
+          onClick={startEnroll}
+          disabled={working}
+          className="text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 px-3 py-1.5 rounded-lg"
+        >
+          {working ? 'Gerando…' : 'Ativar 2FA'}
+        </button>
+      )}
+
+      {factorId && qrCode && (
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs text-gray-700 mb-2">
+              1. Escaneie o QR code no seu app autenticador:
+            </p>
+            <img src={qrCode} alt="QR code 2FA" className="w-44 h-44 border border-gray-200 rounded-lg" />
+            {secret && (
+              <p className="text-[11px] text-gray-400 mt-2">
+                Ou digite manualmente: <code className="bg-gray-50 px-1 py-0.5 rounded">{secret}</code>
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              2. Digite o código de 6 dígitos que aparece no app:
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                maxLength={6}
+                placeholder="000000"
+                className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm w-32 tracking-widest text-center focus:outline-none focus:border-zinc-400"
+              />
+              <button
+                onClick={verify}
+                disabled={code.length < 6 || working}
+                className="text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 px-3 py-1.5 rounded-lg"
+              >
+                {working ? 'Verificando…' : 'Verificar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {enabled && (
+        <button
+          onClick={disable}
+          disabled={working}
+          className="text-xs font-medium text-red-600 hover:text-red-700"
+        >
+          Desativar 2FA
+        </button>
+      )}
+
+      {err && (
+        <p className="mt-3 text-xs text-red-600 flex items-center gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5" /> {err}
+        </p>
+      )}
     </div>
   );
 }

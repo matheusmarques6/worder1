@@ -64,8 +64,13 @@ const statusLabels: Record<string, string> = {
   'sending': 'Enviando',
 }
 
+type ChannelFilter = 'all' | 'email' | 'whatsapp' | 'sms' | 'chat'
+type StatusFilter = 'all' | 'draft' | 'scheduled' | 'sending' | 'sent' | 'active'
+
 export default function CampaignsPage() {
   const [search, setSearch] = useState('')
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
   const { currentStore } = useStoreStore()
@@ -125,9 +130,12 @@ export default function CampaignsPage() {
     { title: 'Receita Atribuída', value: `R$ ${totalRevenue.toLocaleString('pt-BR')}`, icon: CurrencyDollar, color: '#F5A623' },
   ]
 
-  const filteredCampaigns = campaigns.filter(c =>
-    !search || c.name?.toLowerCase().includes(search.toLowerCase())
-  )
+  const filteredCampaigns = campaigns.filter(c => {
+    if (search && !c.name?.toLowerCase().includes(search.toLowerCase())) return false
+    if (channelFilter !== 'all' && (c.channel || 'email') !== channelFilter) return false
+    if (statusFilter !== 'all' && c.status !== statusFilter) return false
+    return true
+  })
 
   return (
     <div className="space-y-6">
@@ -180,10 +188,32 @@ export default function CampaignsPage() {
             className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-brand-500 transition-colors"
           />
         </div>
-        <button className="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-500 hover:text-white hover:border-gray-200 transition-colors">
-          <FunnelSimple className="w-4 h-4" />
-          Filtros
-        </button>
+        {/* Filtros inline — antes era um botão sem onClick. Agora
+            filtra por canal e status diretamente; o input de busca
+            ao lado continua filtrando por nome. */}
+        <select
+          value={channelFilter}
+          onChange={(e) => setChannelFilter(e.target.value as ChannelFilter)}
+          className="appearance-none bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-[#F26B2A] transition-colors cursor-pointer"
+        >
+          <option value="all">Todos os canais</option>
+          <option value="email">Email</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="sms">SMS</option>
+          <option value="chat">Chat</option>
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          className="appearance-none bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-[#F26B2A] transition-colors cursor-pointer"
+        >
+          <option value="all">Todos os status</option>
+          <option value="draft">Rascunho</option>
+          <option value="scheduled">Agendada</option>
+          <option value="sending">Enviando</option>
+          <option value="sent">Enviada</option>
+          <option value="active">Ativa</option>
+        </select>
       </div>
 
       {/* Loading State */}

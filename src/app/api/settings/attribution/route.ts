@@ -54,23 +54,28 @@ export async function POST(request: NextRequest) {
       .single();
 
     const existingSettings = org?.email_settings || {};
+    const newAttribution = {
+      email_window_days: clampWindow(body.email_window_days, 5),
+      whatsapp_window_days: clampWindow(body.whatsapp_window_days, 2),
+      sms_window_days: clampWindow(body.sms_window_days, 2),
+      count_opens: body.count_opens !== false,
+      exclude_mpp_opens: body.exclude_mpp_opens !== false,
+    };
     const { error } = await supabase
       .from('organizations')
       .update({
         email_settings: {
           ...existingSettings,
-          attribution: {
-            email_window_days: clampWindow(body.email_window_days, 5),
-            whatsapp_window_days: clampWindow(body.whatsapp_window_days, 2),
-            sms_window_days: clampWindow(body.sms_window_days, 2),
-            count_opens: body.count_opens !== false,
-            exclude_mpp_opens: body.exclude_mpp_opens !== false,
-          },
+          attribution: newAttribution,
         },
       })
       .eq('id', orgId);
     if (error) throw error;
-    return NextResponse.json({ ok: true });
+    // Echo the saved values back so the form can render from the
+    // response and the merchant SEES that the save actually
+    // persisted (was returning bare {ok:true} which made the UI
+    // feel broken — toggle flipped but no confirmation).
+    return NextResponse.json({ ok: true, saved: newAttribution });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

@@ -21,6 +21,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { Button, Badge } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 
 // =====================================================
@@ -116,6 +117,7 @@ export function ExecutionDetail({
   onClose,
   onRerun,
 }: ExecutionDetailProps) {
+  const toast = useToast();
   const [run, setRun] = useState<RunDetail | null>(null);
   const [steps, setSteps] = useState<RunStep[]>([]);
   const [loading, setLoading] = useState(true);
@@ -183,10 +185,15 @@ export function ExecutionDetail({
     });
   };
 
-  // Copiar para clipboard
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    // TODO: Mostrar toast
+  // Copiar para clipboard + feedback de toast (antes era silencioso
+  // e o usuário não sabia se o copy tinha funcionado).
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copiado para a área de transferência');
+    } catch {
+      toast.error('Falha ao copiar');
+    }
   };
 
   // Status badge do step
