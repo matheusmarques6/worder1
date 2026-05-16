@@ -3,6 +3,14 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['undici'],
   },
+  async rewrites() {
+    return [
+      {
+        source: '/privacy-policy',
+        destination: '/privacy-policy.html',
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {
