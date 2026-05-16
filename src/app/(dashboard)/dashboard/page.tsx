@@ -288,7 +288,7 @@ export default function DashboardPage() {
     rows.push(['WhatsApp', String(data.channels.whatsapp)])
     rows.push(['SMS', String(data.channels.sms)])
     rows.push([])
-    rows.push(['Período', 'Campanhas', 'Automações', 'Fora da Worder'])
+    rows.push(['Período', 'Campanhas', 'Automações', 'Receita total da loja'])
     for (const s of data.series) {
       rows.push([s.label, String(s.campanhas), String(s.automacoes), String(s.fora)])
     }
@@ -588,9 +588,9 @@ export default function DashboardPage() {
                 })}
               </div>
               <div className="flex items-center gap-4 pb-2">
-                <LegendDot color="#18181B" label="Campanhas" />
-                <LegendDot color="#71717A" label="Automações" />
-                <LegendDot color="#E4E4E7" label="Fora da Worder" border="#D4D4D8" />
+                <LegendDot color="#F26B2A" label="Campanhas" />
+                <LegendDot color="#FBBF24" label="Automações" />
+                <LegendDot color="#E4E4E7" label="Receita total da loja" border="#D4D4D8" />
               </div>
             </div>
 
@@ -629,8 +629,8 @@ export default function DashboardPage() {
                       content={<RichTooltip isRevenue={tab === 'revenue'} />}
                       wrapperStyle={{ outline: 'none' }}
                     />
-                    <Bar dataKey="campanhas" stackId="a" fill="#18181B" barSize={34} />
-                    <Bar dataKey="automacoes" stackId="a" fill="#71717A" barSize={34} />
+                    <Bar dataKey="campanhas" stackId="a" fill="#F26B2A" barSize={34} />
+                    <Bar dataKey="automacoes" stackId="a" fill="#FBBF24" barSize={34} />
                     <Bar dataKey="fora" stackId="a" fill="#E4E4E7" radius={[3, 3, 0, 0]} barSize={34} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -749,9 +749,9 @@ function RichTooltip({ active, payload, label, isRevenue }: any) {
   const currency = (useStoreStore((s) => s.currentStore?.currency) || "BRL").toUpperCase()
   const rows: Array<{ name: string; value: number; color: string }> = []
   const keyMap: Record<string, { name: string; color: string }> = {
-    campanhas: { name: 'Campanhas', color: '#18181B' },
-    automacoes: { name: 'Automações', color: '#71717A' },
-    fora: { name: 'Fora da Worder', color: '#D4D4D8' },
+    campanhas: { name: 'Campanhas', color: '#F26B2A' },
+    automacoes: { name: 'Automações', color: '#FBBF24' },
+    fora: { name: 'Receita total da loja', color: '#D4D4D8' },
   }
   for (const p of payload) {
     const k = p?.dataKey as string

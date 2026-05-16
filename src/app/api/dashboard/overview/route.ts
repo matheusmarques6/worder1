@@ -71,8 +71,12 @@ function buildBuckets(days: number, granularity: Granularity): Array<{ label: st
     return buckets;
   }
 
-  // daily (cap at 14 most recent points)
-  const points = Math.min(14, days);
+  // daily — one bucket per day across the whole range. Previous
+  // version capped at 14 points which silently dropped the older
+  // 16 days of a 30d window (and 76 days of a 90d window) — the
+  // chart looked empty because all real orders fell outside the
+  // last-14-day slice. Cap at 92 (3 months) so 90d works.
+  const points = Math.min(92, Math.max(1, days));
   for (let i = points - 1; i >= 0; i--) {
     const start = new Date(now); start.setHours(0, 0, 0, 0);
     start.setDate(start.getDate() - i);
@@ -143,7 +147,14 @@ export async function GET(request: NextRequest) {
     const storeId = request.nextUrl.searchParams.get('storeId');
 
     const days = daysForRange(range);
+    // Match Shopify's "últimos 30 dias" semantics: include the FULL
+    // start day, not a rolling window from the current hour. Today is
+    // May 16 21:30 → previous behavior gave Apr 16 21:30 onwards (and
+    // missed orders placed Apr 16 00:00–21:30). Snap to start-of-day
+    // and subtract `days` so the window is exactly the same as the
+    // one Shopify Admin shows.
     const sinceDate = new Date();
+    sinceDate.setHours(0, 0, 0, 0);
     sinceDate.setDate(sinceDate.getDate() - days);
     const since = sinceDate.toISOString();
 
