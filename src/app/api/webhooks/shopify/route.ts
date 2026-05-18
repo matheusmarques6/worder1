@@ -23,11 +23,93 @@ import { WORDER_SHOPIFY_EVENTS, EVENT_SOURCES } from '@/lib/shopify/event-types'
 import { markCheckoutRecovered } from '@/lib/services/shopify/jobs/abandoned-cart';
 import { enrichContactAfterOrder } from '@/lib/shopify/profile-enricher';
 import { scheduleRecomputeStoreTotals } from '@/lib/services/shopify/store-totals';
+import { scheduleSegmentReeval } from '@/lib/segments/realtime';
 export const dynamic = 'force-dynamic';
 
 // ============================================
 // HELPERS
 // ============================================
+
+// Map a Shopify webhook topic to the canonical event key the segment
+// resolver understands. Returning null skips the reeval enqueue
+// (e.g. 'app/uninstalled' doesn't trigger segment changes).
+function topicToEventKey(topic: string): string | null {
+  switch (topic) {
+    case 'orders/create':
+    case 'orders/paid':
+      return 'placed_order';
+    case 'orders/cancelled':
+    case 'refunds/create':
+      return 'placed_order'; // same dependency — refund flips the contact's segment membership
+    case 'checkouts/create':
+    case 'checkouts/update':
+      return 'started_checkout';
+    case 'customers/create':
+    case 'customers/update':
+    case 'customers/email_marketing_consent/update':
+      return 'subscribed';
+    default:
+      return null;
+  }
+}
+
+// Best-effort lookup of the Worder contact_id from a Shopify webhook
+// payload. We try shopify_customer_id first, then fall back to email.
+// Returns null if no match (e.g. an order from a guest checkout with
+// a brand-new email we haven't ingested yet — that's fine; the next
+// orders/paid or customer/create will create the contact).
+async function resolveContactFromTopic(
+  supabase: any,
+  store: any,
+  topic: string,
+  body: any,
+): Promise<string | null> {
+  const orgId = store.organization_id;
+  // customer-flavored topics
+  if (topic.startsWith('customers/')) {
+    if (body?.id) {
+      const { data } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('shopify_customer_id', String(body.id))
+        .maybeSingle();
+      if (data) return data.id;
+    }
+    if (body?.email) {
+      const { data } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('email', String(body.email).toLowerCase())
+        .maybeSingle();
+      if (data) return data.id;
+    }
+    return null;
+  }
+  // order / checkout topics — payload's `customer.id` or top-level email
+  const customer = body?.customer;
+  if (customer?.id) {
+    const { data } = await supabase
+      .from('contacts')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('shopify_customer_id', String(customer.id))
+      .maybeSingle();
+    if (data) return data.id;
+  }
+  const email = body?.email || customer?.email;
+  if (email) {
+    const { data } = await supabase
+      .from('contacts')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('email', String(email).toLowerCase())
+      .maybeSingle();
+    if (data) return data.id;
+  }
+  return null;
+}
 
 function extractNoteAttributes(noteAttributes: any[]): Record<string, string> {
   const result: Record<string, string> = {};
@@ -2672,6 +2754,24 @@ export async function POST(request: NextRequest) {
       ];
       if (totalsTopics.includes(topic)) {
         scheduleRecomputeStoreTotals(getSupabase(), store.id);
+      }
+
+      // Real-time segment membership: enqueue reevaluations for any
+      // segments whose rule_dependencies match this signal. The drain
+      // worker (cron every minute) picks them up.
+      const eventForReason = topicToEventKey(topic);
+      if (eventForReason) {
+        // For order/customer/product webhooks the body carries the
+        // shopify_customer_id or email. We resolve that to our contact
+        // row inside scheduleSegmentReeval's path.
+        const contactId = await resolveContactFromTopic(getSupabase(), store, topic, body);
+        if (contactId) {
+          scheduleSegmentReeval(getSupabase(), {
+            orgId: store.organization_id,
+            contactId,
+            reason: `event:${eventForReason}`,
+          });
+        }
       }
 
       // Marcar evento como processado

@@ -37,6 +37,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/workers/segment-reeval",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/email-queue-worker",
       "schedule": "* * * * *"
     },

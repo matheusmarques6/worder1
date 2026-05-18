@@ -700,7 +700,19 @@ export async function POST(request: NextRequest) {
           .eq('id', contactId);
       }
     }
-    
+
+    // Real-time segment membership: enqueue reevaluations for any
+    // segments whose rule_dependencies match this event. Fire-and-
+    // forget so we still return 200 fast to the pixel.
+    if (contactId) {
+      const { scheduleSegmentReeval } = await import('@/lib/segments/realtime');
+      scheduleSegmentReeval(supabase, {
+        orgId: store.organization_id,
+        contactId,
+        reason: `event:${event_type}`,
+      });
+    }
+
     return NextResponse.json({ ok: true }, { headers: CORS_HEADERS });
 
   } catch (error: any) {
