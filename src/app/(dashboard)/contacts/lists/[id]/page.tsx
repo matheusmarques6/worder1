@@ -16,6 +16,8 @@ import {
   Mail,
   Phone,
   Check,
+  Upload,
+  Download,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -24,8 +26,12 @@ interface List {
   name: string
   description: string | null
   color: string
-  member_count: number
+  total_contacts: number
+  source: string
+  source_metadata: Record<string, unknown>
+  is_archived: boolean
   created_at: string
+  updated_at: string
 }
 
 interface Member {
@@ -59,6 +65,7 @@ export default function ListDetailPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -105,7 +112,7 @@ export default function ListDetailPage() {
     const res = await fetch(`/api/lists/${listId}/members?contact_id=${contactId}`, { method: 'DELETE' })
     if (res.ok) {
       setMembers((prev) => prev.filter((m) => m.contact_id !== contactId))
-      setList((prev) => (prev ? { ...prev, member_count: prev.member_count - 1 } : prev))
+      setList((prev) => (prev ? { ...prev, total_contacts: prev.total_contacts - 1 } : prev))
       showToast('Contato removido')
     } else {
       showToast('Erro ao remover', 'error')
@@ -114,18 +121,25 @@ export default function ListDetailPage() {
 
   const handleDeleteList = async () => {
     const ok = await confirm({
-      title: `Excluir a lista "${list?.name}"?`,
-      description: 'Esta ação é definitiva. Os contatos não serão deletados, apenas a lista.',
-      confirmLabel: 'Excluir lista',
-      destructive: true,
+      title: `Arquivar a lista "${list?.name}"?`,
+      description: 'A lista some da visualização padrão mas pode ser reativada depois. Os contatos não são removidos.',
+      confirmLabel: 'Arquivar lista',
     })
     if (!ok) return
+    // Soft-delete by default. ?hard=true is available if the merchant
+    // ever needs to permanently nuke the list + its members.
     const res = await fetch(`/api/lists/${listId}`, { method: 'DELETE' })
     if (res.ok) {
       router.push('/contacts/lists')
     } else {
-      showToast('Erro ao excluir lista', 'error')
+      showToast('Erro ao arquivar lista', 'error')
     }
+  }
+
+  function handleExport() {
+    // Streams CSV from the server with content-disposition attachment.
+    // Browser handles the download.
+    window.location.href = `/api/lists/${listId}/export`
   }
 
   if (loading) {
@@ -175,7 +189,7 @@ export default function ListDetailPage() {
           <div>
             <h1 className="text-xl font-bold text-gray-900">{list.name}</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              {list.member_count.toLocaleString('pt-BR')} contatos
+              {list.total_contacts.toLocaleString('pt-BR')} contatos
               {list.description && ` · ${list.description}`}
             </p>
           </div>
@@ -185,7 +199,23 @@ export default function ListDetailPage() {
             onClick={handleDeleteList}
             className="px-3 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
           >
-            Excluir lista
+            Arquivar
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={list.total_contacts === 0}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Exportar como CSV"
+          >
+            <Download size={14} />
+            Exportar
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+          >
+            <Upload size={14} />
+            Importar CSV
           </button>
           <button
             onClick={() => setShowAddModal(true)}
@@ -300,6 +330,153 @@ export default function ListDetailPage() {
           }}
         />
       )}
+
+      {showImportModal && (
+        <ImportCsvModal
+          listId={listId}
+          onClose={() => setShowImportModal(false)}
+          onImported={(stats) => {
+            const { imported, created_contacts } = stats
+            showToast(
+              `${imported} adicionados${created_contacts ? `, ${created_contacts} contatos criados` : ''}`,
+              'success'
+            )
+            load()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ================================================================
+// Import CSV modal — uploads a file then runs /api/lists/:id/import
+// ================================================================
+function ImportCsvModal({
+  listId,
+  onClose,
+  onImported,
+}: {
+  listId: string
+  onClose: () => void
+  onImported: (stats: { imported: number; created_contacts: number; skipped: number }) => void
+}) {
+  const [file, setFile] = useState<File | null>(null)
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<string[][] | null>(null)
+
+  async function onPickFile(f: File | null) {
+    setFile(f)
+    setError(null)
+    setPreview(null)
+    if (!f) return
+    if (f.size > 20 * 1024 * 1024) {
+      setError('Arquivo grande demais (limite 20MB). Divida em pedaços menores.')
+      setFile(null)
+      return
+    }
+    const text = await f.text()
+    // Show the first 4 rows as a sanity check before uploading.
+    const lines = text.split(/\r?\n/).slice(0, 4).map((line) => line.split(','))
+    setPreview(lines)
+  }
+
+  async function submit() {
+    if (!file) return
+    setRunning(true)
+    setError(null)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch(`/api/lists/${listId}/import`, { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'falha no import')
+      onImported({
+        imported: data.imported || 0,
+        created_contacts: data.created_contacts || 0,
+        skipped: data.skipped || 0,
+      })
+      onClose()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">Importar contatos por CSV</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              A primeira linha precisa ter um header com pelo menos a coluna <code>email</code>.
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100">
+            <X size={18} className="text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4 overflow-y-auto">
+          <label className="block">
+            <span className="block text-xs font-medium text-gray-700 mb-1.5">Arquivo CSV</span>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => onPickFile(e.target.files?.[0] || null)}
+              className="block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
+            />
+          </label>
+
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-600">
+            <p className="font-medium mb-1">Colunas reconhecidas:</p>
+            <p><code>email</code>, <code>phone</code>, <code>first_name</code>, <code>last_name</code>, <code>tags</code> (separadas por ;)</p>
+            <p className="mt-1.5 text-gray-500">Linhas duplicadas pelo email são ignoradas. Limite 50 mil linhas por upload.</p>
+          </div>
+
+          {preview && preview.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-gray-700 mb-1.5">Prévia (primeiras linhas):</p>
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-xs">
+                  <tbody>
+                    {preview.map((row, i) => (
+                      <tr key={i} className={i === 0 ? 'bg-gray-50 font-medium' : ''}>
+                        {row.map((cell, j) => (
+                          <td key={j} className="px-3 py-1.5 border-b border-gray-100 last:border-b-0 truncate max-w-[200px]">
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg">
+            Cancelar
+          </button>
+          <button
+            onClick={submit}
+            disabled={!file || running}
+            className="px-4 py-2 text-sm font-semibold bg-orange-500 hover:bg-orange-600 text-white rounded-lg disabled:opacity-50 inline-flex items-center gap-2"
+          >
+            {running && <Loader2 size={14} className="animate-spin" />}
+            {running ? 'Importando…' : 'Importar'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
