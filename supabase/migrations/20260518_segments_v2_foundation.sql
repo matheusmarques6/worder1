@@ -7,6 +7,15 @@
 -- migration that splits static segments → contact_lists runs in a
 -- separate file (20260518_segments_v2_migrate_static.sql) once we've
 -- verified the new tables work.
+--
+-- Schema audit (pre-flight):
+--   - contacts.id           UUID PK ✓
+--   - customer_segments     exists; columns being added are NEW ✓
+--   - organization_members  exists; used by existing RLS policies ✓
+--   - get_user_organization_id() exists in public schema (single-org) ✓
+--   - auth.uid() exists in auth schema (used by org_segments_policy) ✓
+--   - contact_lists, contact_list_members, segment_member_cache,
+--     segment_reeval_queue do NOT exist — clean creates ✓
 
 -- ─────────────────────────────────────────────────────────────────────
 -- contact_lists — static, manually-managed audience sets
