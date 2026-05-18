@@ -36,11 +36,24 @@ export function RuleGroup({ group, onChange, lists, depth = 0 }: Props) {
     onChange({ ...group, children })
   }
 
-  function addLeaf(type: 'profile' | 'event' | 'list_membership' | 'consent' | 'segment_membership') {
+  function addLeaf(type: 'profile' | 'event' | 'list_membership' | 'consent' | 'segment_membership' | 'anniversary' | 'event_funnel') {
     let leaf: RuleLeaf
     switch (type) {
       case 'event':
         leaf = { type: 'event', event: '', frequency: { op: 'at_least', value: 1 }, window: { kind: 'all_time' } }
+        break
+      case 'event_funnel':
+        leaf = {
+          type: 'event_funnel',
+          steps: [
+            { event: '', negate: false },
+            { event: '', negate: false },
+          ],
+          window: { kind: 'last', value: 30, unit: 'day' },
+        }
+        break
+      case 'anniversary':
+        leaf = { type: 'anniversary', field: 'birthday', within_next_days: 7 }
         break
       case 'list_membership':
         leaf = { type: 'list_membership', list_id: '', is_member: true }
@@ -149,12 +162,18 @@ export function RuleGroup({ group, onChange, lists, depth = 0 }: Props) {
         )}
 
         {adding && (
-          <div className="absolute z-20 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+          <div className="absolute z-20 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
             <button onClick={() => addLeaf('profile')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
               📋 Atributo do contato <span className="text-gray-400 text-xs">— nome, total_orders, CLV…</span>
             </button>
             <button onClick={() => addLeaf('event')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
               ⚡ Evento <span className="text-gray-400 text-xs">— fez pedido, abriu email…</span>
+            </button>
+            <button onClick={() => addLeaf('event_funnel')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
+              🪢 Funil de eventos <span className="text-gray-400 text-xs">— A → B → não C</span>
+            </button>
+            <button onClick={() => addLeaf('anniversary')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
+              🎂 Data recorrente <span className="text-gray-400 text-xs">— aniversário, 1º pedido…</span>
             </button>
             <button onClick={() => addLeaf('consent')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
               ✉️ Consentimento <span className="text-gray-400 text-xs">— pode receber email/SMS</span>

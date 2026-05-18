@@ -23,6 +23,8 @@ import type {
   RuleLeaf,
   ProfileRule,
   EventRule,
+  EventFunnelRule,
+  AnniversaryRule,
   ListMembershipRule,
   SegmentMembershipRule,
   ConsentRule,
@@ -237,6 +239,8 @@ function evaluateLeaf(
   switch (leaf.type) {
     case 'profile':       return evalProfile(leaf, contact);
     case 'event':         return evalEvent(leaf, events);
+    case 'event_funnel':  return evalEventFunnel(leaf, events);
+    case 'anniversary':   return evalAnniversary(leaf, contact);
     case 'list_membership':
       return inLists.has(leaf.list_id) === leaf.is_member;
     case 'segment_membership':
@@ -245,6 +249,73 @@ function evaluateLeaf(
     case 'location':      return false; // Phase 5
     default:              return false;
   }
+}
+
+// Event funnel: enforce the steps happened in order. For each step we
+// pick the earliest occurrence whose timestamp is >= the previous
+// step's pick; if any step has no such occurrence the funnel fails.
+// "Negated" steps require the absence of any matching occurrence in
+// the funnel's window AND between the surrounding steps.
+function evalEventFunnel(rule: EventFunnelRule, events: Map<string, EventOccurrence[]>): boolean {
+  let cursor: number = -Infinity;
+  let lastPositive: number | null = null;
+
+  for (const step of rule.steps) {
+    const occs = (events.get(step.event) || [])
+      .filter((o) => isInWindow(o.occurred_at, rule.window))
+      .filter((o) => !step.property_filters?.length || step.property_filters.every((pf) => matchPropertyFilter(o, pf)))
+      .map((o) => new Date(o.occurred_at).getTime())
+      .filter((t) => t >= cursor)
+      .sort((a, b) => a - b);
+
+    if (step.negate) {
+      // For negate steps, fail if ANY occurrence sits between the last
+      // positive step and the next positive step (or the window end).
+      if (occs.length > 0) return false;
+      // Cursor doesn't move on negate steps.
+      continue;
+    }
+
+    if (occs.length === 0) return false;
+    const pick = occs[0];
+
+    // Enforce max gap if specified
+    if (rule.max_step_gap_days && lastPositive !== null) {
+      const gap = pick - lastPositive;
+      if (gap > rule.max_step_gap_days * 86_400_000) return false;
+    }
+
+    cursor = pick + 1; // strict after
+    lastPositive = pick;
+  }
+  return true;
+}
+
+// Anniversary: matches when the (month, day) of the field falls within
+// the next N days from today. Useful for "birthday next 7 days",
+// "first-purchase anniversary this month", etc.
+function evalAnniversary(rule: AnniversaryRule, contact: Record<string, any>): boolean {
+  const def = FIELD_INDEX[rule.field];
+  if (!def) return false;
+  const raw = def.source.kind === 'contact_column' ? contact[def.source.column] : null;
+  if (!raw) return false;
+
+  const date = new Date(raw);
+  if (isNaN(date.getTime())) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const cutoff = new Date(today);
+  cutoff.setDate(cutoff.getDate() + Math.max(0, rule.within_next_days));
+
+  // Build this year's anniversary (month/day from raw, year from today)
+  let annThisYear = new Date(today.getFullYear(), date.getMonth(), date.getDate());
+  // If the date is in the past, roll to next year
+  if (annThisYear < today) {
+    annThisYear = new Date(today.getFullYear() + 1, date.getMonth(), date.getDate());
+  }
+
+  return annThisYear >= today && annThisYear <= cutoff;
 }
 
 function evalProfile(rule: ProfileRule, contact: Record<string, any>): boolean {

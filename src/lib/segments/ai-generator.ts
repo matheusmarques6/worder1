@@ -55,6 +55,8 @@ Output schema (JSON):
 Leaf types:
 - profile: { type:"profile", field:"<key from catalog>", operator:"<op>", value:..., value2?:..., unit?:"day|week|month" }
 - event: { type:"event", event:"<event key>", frequency:{op:"at_least|at_most|exactly|between|zero", value:N, value2?:N}, window:{kind:"all_time"|"last"|"before"|"after"|"between_dates"|"between_relative", value?, unit?, date?, from?, to?}, property_filters?:[{path,type,operator,value,value2?}] }
+- event_funnel: { type:"event_funnel", steps:[{event:"<key>", negate:false}, ...], window:{kind:"last", value:N, unit:"day"}, max_step_gap_days?:N } — strict-order sequence
+- anniversary: { type:"anniversary", field:"<date field>", within_next_days:N } — recurring (month,day) match
 - list_membership: { type:"list_membership", list_id:"<uuid>", is_member:true|false }
 - consent: { type:"consent", channel:"email|sms|whatsapp|push", status:"can_receive|cannot_receive|subscribed|unsubscribed|pending" }
 
@@ -70,7 +72,9 @@ Rules:
 7. VIP → use lifecycle_stage enum equals "vip" OR rfm_segment in ["champions","loyal"]. Default to lifecycle_stage when ambiguous.
 8. "Inscritos no email" → profile is_subscribed_email equals true (NOT a consent rule unless they explicitly say "pode receber email").
 9. "Carrinho abandonado" → event added_to_cart with frequency at_least 1, window last(7-30 days), AND event placed_order with frequency zero same window. Combine with AND logic.
-10. Return ONLY the JSON via the create_segment tool. Never include explanation, markdown, or any text outside the tool call.`;
+10. "Aniversariantes da semana" / "aniversário próximo" → anniversary rule on field birthday with within_next_days=7.
+11. "Viu produto → adicionou ao carrinho → não comprou" (ordered) → event_funnel with three steps in order: viewed_product, added_to_cart, placed_order with negate=true on the last step. Window typically last 30 days.
+12. Return ONLY the JSON via the create_segment tool. Never include explanation, markdown, or any text outside the tool call.`;
 
 const TOOL_DEF = {
   name: 'create_segment',

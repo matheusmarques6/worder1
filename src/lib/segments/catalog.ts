@@ -145,6 +145,11 @@ export const FIELD_CATALOG: FieldDef[] = [
   { key: 'tags',             label: 'Tags',              category: 'custom', type: 'string_array',
     source: { kind: 'contact_column', column: 'tags' } },
 
+  // ────────── DATAS RECORRENTES ──────────
+  { key: 'birthday',         label: 'Aniversário',       category: 'identity', type: 'date',
+    source: { kind: 'contact_column', column: 'birthday' },
+    description: 'Mês e dia. Usado em filtros de aniversário recorrente.' },
+
   // ────────── SOURCE / ATRIBUIÇÃO ──────────
   { key: 'created_at',       label: 'Cadastrado em',     category: 'source', type: 'date',
     source: { kind: 'contact_column', column: 'created_at' } },

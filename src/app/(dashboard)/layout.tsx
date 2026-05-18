@@ -46,6 +46,7 @@ import {
   MessageCircle,
   Bot,
   BookOpen,
+  List as ListIcon,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -123,6 +124,7 @@ const navigation: NavSection[] = [
     label: 'Audiência',
     items: [
       { name: 'Contatos', href: '/contacts', icon: Users },
+      { name: 'Listas', href: '/contacts/lists', icon: ListIcon },
       { name: 'Segmentos', href: '/segments', icon: Target },
       { name: 'Formulários', href: '/forms', icon: FileText },
     ],

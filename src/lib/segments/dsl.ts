@@ -145,9 +145,37 @@ export type LocationRule = {
   radius_km: number;
 };
 
+// EventFunnelRule: Klaviyo "event funnel" — contact did A, THEN did B,
+// THEN did NOT do C, all within a time window. The order is strict
+// (sequence-based), unlike multiple EventRules glued by AND which
+// only checks unordered presence.
+export type EventFunnelRule = {
+  type: 'event_funnel';
+  steps: Array<{
+    event: string;
+    negate: boolean;            // true = "did NOT do this step"
+    property_filters?: PropertyFilter[];
+  }>;
+  window: TimeWindow;             // window applies to the whole funnel
+  // Optional: max gap (in days) between consecutive steps. Tighter
+  // funnels (browse → cart in 24h) tend to convert better.
+  max_step_gap_days?: number;
+};
+
+// AnniversaryRule: Klaviyo / Omnisend "anniversary is in the next N
+// days" — recurring date-of-year checks. Built on top of any contact
+// date column whose month/day matters (birthday, first_order_at, etc.)
+export type AnniversaryRule = {
+  type: 'anniversary';
+  field: string;                  // catalog key, must be a date field
+  within_next_days: number;       // 0 means "today is the anniversary"
+};
+
 export type RuleLeaf =
   | ProfileRule
   | EventRule
+  | EventFunnelRule
+  | AnniversaryRule
   | ListMembershipRule
   | SegmentMembershipRule
   | ConsentRule
@@ -274,6 +302,21 @@ function validateLeaf(leaf: unknown, path: string, errs: string[]): void {
       if (typeof leaf.country !== 'string') errs.push(`${path}.country: required`);
       if (typeof leaf.radius_km !== 'number') errs.push(`${path}.radius_km: required number`);
       break;
+    case 'event_funnel':
+      if (!Array.isArray(leaf.steps) || leaf.steps.length < 2) {
+        errs.push(`${path}.steps: funnel needs at least 2 steps`);
+      } else {
+        leaf.steps.forEach((s: any, i: number) => {
+          if (typeof s?.event !== 'string' || !s.event) errs.push(`${path}.steps[${i}].event: required`);
+          if (typeof s?.negate !== 'boolean') errs.push(`${path}.steps[${i}].negate: required boolean`);
+        });
+      }
+      validateTimeWindow(leaf.window, `${path}.window`, errs);
+      break;
+    case 'anniversary':
+      if (typeof leaf.field !== 'string' || !leaf.field) errs.push(`${path}.field: required`);
+      if (typeof leaf.within_next_days !== 'number') errs.push(`${path}.within_next_days: required number`);
+      break;
     default:
       errs.push(`${path}.type: unknown leaf type "${String(type)}"`);
   }
@@ -334,6 +377,12 @@ export function extractDependencies(rule: SegmentRule): RuleDependencies {
         break;
       case 'consent':
         fields.add(`${leaf.channel}_consent`);
+        break;
+      case 'event_funnel':
+        for (const step of leaf.steps) events.add(step.event);
+        break;
+      case 'anniversary':
+        fields.add(leaf.field);
         break;
     }
   }

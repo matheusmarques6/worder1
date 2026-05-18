@@ -12,7 +12,7 @@
 import { X, Plus } from 'lucide-react'
 import { FIELD_INDEX } from '@/lib/segments/catalog'
 import type { FieldDef } from '@/lib/segments/catalog'
-import type { RuleLeaf, ProfileRule, EventRule, ConsentRule, ListMembershipRule, PropertyFilter, FrequencyOperator } from '@/lib/segments/dsl'
+import type { RuleLeaf, ProfileRule, EventRule, EventFunnelRule, AnniversaryRule, ConsentRule, ListMembershipRule, PropertyFilter, FrequencyOperator } from '@/lib/segments/dsl'
 import { FieldPicker } from './FieldPicker'
 import { OperatorPicker } from './OperatorPicker'
 import { ValueInput } from './ValueInput'
@@ -27,6 +27,12 @@ interface Props {
 export function RuleRow({ rule, onChange, onRemove, lists }: Props) {
   if (rule.type === 'event') {
     return <EventRuleRow rule={rule} onChange={onChange as any} onRemove={onRemove} />
+  }
+  if (rule.type === 'event_funnel') {
+    return <EventFunnelRow rule={rule} onChange={onChange as any} onRemove={onRemove} />
+  }
+  if (rule.type === 'anniversary') {
+    return <AnniversaryRow rule={rule} onChange={onChange as any} onRemove={onRemove} />
   }
   if (rule.type === 'list_membership') {
     return <ListMembershipRow rule={rule} onChange={onChange as any} onRemove={onRemove} lists={lists} />
@@ -440,6 +446,147 @@ function ConsentRow({ rule, onChange, onRemove }: {
           <option value="unsubscribed">Descadastrou</option>
           <option value="pending">Aguardando confirmação</option>
         </select>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+        >
+          <X size={14} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Event funnel — strict-order sequence A → B → not C
+// ────────────────────────────────────────────────────────────────────
+
+function EventFunnelRow({ rule, onChange, onRemove }: {
+  rule: EventFunnelRule
+  onChange: (next: RuleLeaf) => void
+  onRemove: () => void
+}) {
+  function updateStep(i: number, patch: Partial<EventFunnelRule['steps'][number]>) {
+    const steps = [...rule.steps]
+    steps[i] = { ...steps[i], ...patch }
+    onChange({ ...rule, steps })
+  }
+
+  function addStep() {
+    onChange({ ...rule, steps: [...rule.steps, { event: '', negate: false }] })
+  }
+
+  function removeStep(i: number) {
+    if (rule.steps.length <= 2) return
+    onChange({ ...rule, steps: rule.steps.filter((_, idx) => idx !== i) })
+  }
+
+  const eventFields: FieldDef[] = Object.values(FIELD_INDEX).filter((f) => f.source.kind === 'event')
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-3 hover:border-gray-300 transition-colors space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-700">Funil de eventos (sequência)</span>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      <ol className="space-y-2">
+        {rule.steps.map((step, i) => (
+          <li key={i} className="grid grid-cols-[24px_minmax(140px,1fr)_minmax(120px,140px)_auto] gap-2 items-center">
+            <span className="text-xs font-bold text-gray-400 text-center">{i + 1}</span>
+            <FieldPicker
+              value={step.event}
+              onChange={(k) => {
+                const f = FIELD_INDEX[k]
+                if (f?.source.kind === 'event') updateStep(i, { event: f.source.event_type })
+              }}
+              customFields={eventFields}
+              placeholder="Selecione evento"
+              compact
+            />
+            <select
+              value={step.negate ? 'no' : 'yes'}
+              onChange={(e) => updateStep(i, { negate: e.target.value === 'no' })}
+              className="px-2 py-1.5 border border-gray-200 rounded-lg bg-white text-sm"
+            >
+              <option value="yes">aconteceu</option>
+              <option value="no">NÃO aconteceu</option>
+            </select>
+            {rule.steps.length > 2 && (
+              <button
+                type="button"
+                onClick={() => removeStep(i)}
+                className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </li>
+        ))}
+      </ol>
+
+      <div className="flex items-center gap-2 text-sm flex-wrap">
+        <button
+          type="button"
+          onClick={addStep}
+          className="text-xs text-brand-600 hover:text-brand-700 inline-flex items-center gap-1"
+        >
+          <Plus size={12} />
+          Adicionar passo
+        </button>
+        <span className="text-xs text-gray-400">·</span>
+        <span className="text-xs text-gray-600">tudo dentro de</span>
+        <select
+          value={(rule.window as any).value || 30}
+          onChange={(e) => onChange({ ...rule, window: { kind: 'last', value: Number(e.target.value), unit: 'day' } })}
+          className="px-2 py-1 border border-gray-200 rounded-lg bg-white text-xs"
+        >
+          {[1, 3, 7, 14, 30, 60, 90].map((v) => (
+            <option key={v} value={v}>{v} dias</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Anniversary — recurring (month, day) match
+// ────────────────────────────────────────────────────────────────────
+
+function AnniversaryRow({ rule, onChange, onRemove }: {
+  rule: AnniversaryRule
+  onChange: (next: RuleLeaf) => void
+  onRemove: () => void
+}) {
+  const dateFields: FieldDef[] = Object.values(FIELD_INDEX).filter((f) => f.type === 'date' && f.source.kind === 'contact_column')
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-3 hover:border-gray-300 transition-colors">
+      <div className="grid grid-cols-[minmax(140px,1fr)_auto_minmax(80px,100px)_minmax(60px,80px)_auto] gap-2 items-center">
+        <FieldPicker
+          value={rule.field}
+          onChange={(k) => onChange({ ...rule, field: k })}
+          customFields={dateFields}
+          placeholder="Data recorrente"
+          compact
+        />
+        <span className="text-sm text-gray-600 whitespace-nowrap">acontece em</span>
+        <input
+          type="number"
+          min={0}
+          value={rule.within_next_days}
+          onChange={(e) => onChange({ ...rule, within_next_days: Number(e.target.value) })}
+          className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
+        />
+        <span className="text-sm text-gray-600">dias</span>
         <button
           type="button"
           onClick={onRemove}
