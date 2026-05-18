@@ -31,6 +31,12 @@ const TWO_INPUT_OPS = new Set(['between', 'between_dates', 'between_relative'])
 const NO_INPUT_OPS = new Set(['is_set', 'is_not_set', 'is_null', 'is_not_null', 'is_true', 'is_false', 'is_today', 'is_this_month', 'is_empty', 'is_not_empty']);
 const DATE_RELATIVE_OPS = new Set(['in_last', 'not_in_last', 'in_next']);
 const ARRAY_VALUE_OPS = new Set(['in', 'not_in', 'contains_any', 'contains_all', 'not_contains_any']);
+// month_in / day_of_month_in expose a chip multi-select bounded to 1-12 or 1-31.
+// They live in their own shape so we can render localized labels instead of
+// raw numbers.
+const MONTH_PICKER_OPS = new Set(['month_in']);
+const DAY_OF_MONTH_OPS = new Set(['day_of_month_in']);
+const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
 export function ValueInput({ field, operator, value, value2, unit, onChange, compact }: Props) {
   const fieldType: FieldType | null = field?.type ?? null
@@ -40,6 +46,8 @@ export function ValueInput({ field, operator, value, value2, unit, onChange, com
   const shape = useMemo(() => {
     if (!operator || !fieldType) return 'none'
     if (NO_INPUT_OPS.has(operator)) return 'none'
+    if (MONTH_PICKER_OPS.has(operator)) return 'months'
+    if (DAY_OF_MONTH_OPS.has(operator)) return 'days_of_month'
     if (TWO_INPUT_OPS.has(operator)) return 'two'
     if (DATE_RELATIVE_OPS.has(operator)) return 'relative'
     if (ARRAY_VALUE_OPS.has(operator)) return 'array'
@@ -47,6 +55,59 @@ export function ValueInput({ field, operator, value, value2, unit, onChange, com
   }, [operator, fieldType])
 
   if (shape === 'none' || !field) return <div />
+
+  if (shape === 'months') {
+    const arr = (Array.isArray(value) ? value : []).map(Number).filter((n) => Number.isFinite(n))
+    return (
+      <div className="flex flex-wrap gap-1.5 w-full">
+        {MONTH_NAMES.map((label, i) => {
+          const month = i + 1
+          const selected = arr.includes(month)
+          return (
+            <button
+              key={month}
+              type="button"
+              onClick={() => {
+                const next = selected ? arr.filter((m) => m !== month) : [...arr, month]
+                onChange({ value: next.sort((a, b) => a - b) })
+              }}
+              className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                selected ? 'bg-brand-50 border-brand-500 text-brand-700' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              {label}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
+  if (shape === 'days_of_month') {
+    const arr = (Array.isArray(value) ? value : []).map(Number).filter((n) => Number.isFinite(n))
+    return (
+      <div className="grid grid-cols-7 gap-1 w-full max-w-[280px]">
+        {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
+          const selected = arr.includes(day)
+          return (
+            <button
+              key={day}
+              type="button"
+              onClick={() => {
+                const next = selected ? arr.filter((d) => d !== day) : [...arr, day]
+                onChange({ value: next.sort((a, b) => a - b) })
+              }}
+              className={`px-1 py-1 text-xs rounded border transition-colors ${
+                selected ? 'bg-brand-50 border-brand-500 text-brand-700' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              {day}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
 
   // Enum: dropdown
   if (field.enumValues && (operator === 'equals' || operator === 'not_equals')) {

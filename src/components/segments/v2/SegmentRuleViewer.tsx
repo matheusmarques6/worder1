@@ -83,11 +83,22 @@ function LeafView({ leaf, listNames, segmentNames }: {
   }
 }
 
+const MONTH_LABELS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+
 function ProfileLeafView({ leaf }: { leaf: ProfileRule }) {
   const def = FIELD_INDEX[leaf.field]
   const fieldLabel = def?.label || leaf.field
   const opLabel = OPERATOR_LABELS[leaf.operator] || leaf.operator
-  const valueLabel = formatValue(def, leaf.value, leaf.value2, leaf.unit)
+  // Month / day-of-month operators expect arrays of integers; we
+  // localize them so 'month_in [3,5]' reads 'Mar, Mai' instead of 3,5.
+  let valueLabel: string
+  if (leaf.operator === 'month_in' && Array.isArray(leaf.value)) {
+    valueLabel = (leaf.value as any[]).map((m) => MONTH_LABELS_PT[Number(m) - 1] || String(m)).join(', ')
+  } else if (leaf.operator === 'day_of_month_in' && Array.isArray(leaf.value)) {
+    valueLabel = (leaf.value as any[]).map(String).join(', ')
+  } else {
+    valueLabel = formatValue(def, leaf.value, leaf.value2, leaf.unit)
+  }
   return (
     <span>
       • <strong>{fieldLabel}</strong> {opLabel} {valueLabel && <strong>{valueLabel}</strong>}
@@ -199,6 +210,7 @@ function formatWindow(window: TimeWindow): string {
     case 'after':         return `depois de ${window.date}`
     case 'between_dates': return `entre ${window.from} e ${window.to}`
     case 'between_relative': return `entre ${window.from} e ${window.to} dias atrás`
+    case 'on_date':       return `na data ${window.date}`
     default: return ''
   }
 }

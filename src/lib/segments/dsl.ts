@@ -49,7 +49,9 @@ export type DateOperator =
   | 'between_relative'     // e.g. 30-90 days ago (from/to in days)
   | 'is_today'
   | 'is_this_month'
-  | 'on_day';              // Klaviyo "day is in the month of"
+  | 'on_day'               // legacy alias — kept for back-compat with rules that already used this name
+  | 'month_in'             // Klaviyo "day is in the month of" — value is int[] of months 1-12 (Jan = 1)
+  | 'day_of_month_in';     // value is int[] of days 1-31. Pair with month_in for date-of-month targeting.
 
 export type BooleanOperator = 'is_true' | 'is_false';
 
@@ -78,7 +80,11 @@ export type TimeWindow =
   | { kind: 'before';          date: string /* ISO */ }
   | { kind: 'after';           date: string /* ISO */ }
   | { kind: 'between_dates';   from: string;   to: string }
-  | { kind: 'between_relative'; from: number;  to: number; unit: 'day' };
+  | { kind: 'between_relative'; from: number;  to: number; unit: 'day' }
+  // Omnisend-style: event occurred on a specific calendar date.
+  // Matches occurrences whose YYYY-MM-DD (in occurredAt's local timezone)
+  // equals `date`. Useful for "viewed page on 2026-04-13".
+  | { kind: 'on_date';         date: string /* YYYY-MM-DD */ };
 
 // ────────────────────────────────────────────────────────────────────────────
 // RULE LEAVES — the actual conditions
@@ -220,7 +226,7 @@ export type ValidationResult =
 
 const FIELD_TYPES = new Set<FieldType>(['string','number','date','boolean','enum','string_array']);
 const FREQUENCY_OPS = new Set<FrequencyOperator>(['at_least','at_most','exactly','between','zero']);
-const TIME_KINDS = new Set(['all_time','last','not_in_last','before','after','between_dates','between_relative']);
+const TIME_KINDS = new Set(['all_time','last','not_in_last','before','after','between_dates','between_relative','on_date']);
 
 function isObj(x: unknown): x is Record<string, unknown> {
   return x !== null && typeof x === 'object' && !Array.isArray(x);
@@ -243,6 +249,10 @@ function validateTimeWindow(w: unknown, path: string, errs: string[]): void {
   } else if (kind === 'between_relative') {
     if (typeof w.from !== 'number') errs.push(`${path}.from: must be number`);
     if (typeof w.to !== 'number') errs.push(`${path}.to: must be number`);
+  } else if (kind === 'on_date') {
+    if (typeof w.date !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(w.date)) {
+      errs.push(`${path}.date: must be YYYY-MM-DD`);
+    }
   }
 }
 
@@ -260,6 +270,23 @@ function validateLeaf(leaf: unknown, path: string, errs: string[]): void {
     case 'profile':
       if (typeof leaf.field !== 'string' || !leaf.field) errs.push(`${path}.field: required`);
       if (typeof leaf.operator !== 'string') errs.push(`${path}.operator: required`);
+      // Range-validate the month/day-of-month pickers — they expect
+      // arrays of ints in a fixed range. A merchant who pastes [42]
+      // would otherwise save a rule that matches nothing.
+      if (leaf.operator === 'month_in') {
+        if (!Array.isArray(leaf.value) || leaf.value.length === 0) {
+          errs.push(`${path}.value: month_in needs a non-empty array of months 1-12`);
+        } else if (leaf.value.some((m: unknown) => typeof m !== 'number' || m < 1 || m > 12)) {
+          errs.push(`${path}.value: month_in values must be integers 1-12`);
+        }
+      }
+      if (leaf.operator === 'day_of_month_in') {
+        if (!Array.isArray(leaf.value) || leaf.value.length === 0) {
+          errs.push(`${path}.value: day_of_month_in needs a non-empty array of days 1-31`);
+        } else if (leaf.value.some((d: unknown) => typeof d !== 'number' || d < 1 || d > 31)) {
+          errs.push(`${path}.value: day_of_month_in values must be integers 1-31`);
+        }
+      }
       break;
     case 'event':
       if (typeof leaf.event !== 'string' || !leaf.event) errs.push(`${path}.event: required`);
@@ -337,11 +364,41 @@ function validateGroup(g: unknown, path: string, errs: string[], depth = 0): voi
   });
 }
 
+// Max leaf conditions allowed in a single segment. Klaviyo caps at 100;
+// we match that — past ~100 the resolver's universe scan + property
+// pre-fetch becomes unbounded and segments degrade for everyone in the
+// org because the worker is shared. Hard cap, not a warning.
+export const MAX_CONDITIONS_PER_SEGMENT = 100;
+
+// Counts profile/event/anniversary/list_membership/etc. leaves
+// (anything that isn't a group). Groups themselves don't count.
+export function countConditions(rule: SegmentRule): number {
+  let n = 0;
+  function walk(node: RuleGroup | RuleLeaf): void {
+    if ((node as RuleGroup).type === 'group') {
+      (node as RuleGroup).children.forEach(walk);
+      return;
+    }
+    // event_funnel counts as ONE condition even though it has multiple
+    // steps — it's evaluated atomically and the inner steps don't
+    // dispatch separate event queries.
+    n += 1;
+  }
+  walk(rule.root);
+  return n;
+}
+
 export function validateSegmentRule(input: unknown): ValidationResult {
   const errs: string[] = [];
   if (!isObj(input)) return { ok: false, errors: ['root must be object'] };
   if (input.version !== 2) errs.push('version: must be 2');
   validateGroup(input.root, 'root', errs);
+  if (errs.length === 0) {
+    const count = countConditions(input as unknown as SegmentRule);
+    if (count > MAX_CONDITIONS_PER_SEGMENT) {
+      errs.push(`too many conditions (${count}): max is ${MAX_CONDITIONS_PER_SEGMENT}`);
+    }
+  }
   if (errs.length) return { ok: false, errors: errs };
   return { ok: true, rule: input as unknown as SegmentRule };
 }

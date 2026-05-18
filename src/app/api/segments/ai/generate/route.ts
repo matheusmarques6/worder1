@@ -70,7 +70,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const result = await generateSegmentRule(prompt);
+  const result = await generateSegmentRule(prompt, {
+    supabase: supabaseAdmin,
+    orgId,
+  });
   if (!result.ok) {
     return NextResponse.json(
       { error: result.error, attempts: result.attempts },

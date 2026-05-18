@@ -6,9 +6,10 @@
 //
 // Used by /audience/segments/new and /audience/segments/[id]/edit.
 
-import { useEffect, useState } from 'react'
-import { Sparkle, Loader2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Sparkle, Loader2, AlertTriangle } from 'lucide-react'
 import type { SegmentRule, RuleGroup as RuleGroupShape } from '@/lib/segments/dsl'
+import { countConditions, MAX_CONDITIONS_PER_SEGMENT } from '@/lib/segments/dsl'
 import { RuleGroup } from './RuleGroup'
 import { LivePreviewPanel } from './LivePreviewPanel'
 import { AISegmentInput } from './AISegmentInput'
@@ -71,6 +72,12 @@ export function SegmentBuilder({
     setRule({ ...rule, root: g })
   }
 
+  // Live condition counter — surfaces the Klaviyo-equivalent 100-cap
+  // before the user hits a 400 from the validator.
+  const conditionCount = useMemo(() => countConditions(rule), [rule])
+  const overLimit = conditionCount > MAX_CONDITIONS_PER_SEGMENT
+  const nearLimit = !overLimit && conditionCount >= Math.floor(MAX_CONDITIONS_PER_SEGMENT * 0.8)
+
   async function save(activate?: boolean) {
     if (!name.trim()) {
       setError('Dá um nome pro segmento antes de salvar')
@@ -78,6 +85,10 @@ export function SegmentBuilder({
     }
     if (rule.root.children.length === 0) {
       setError('Adicione pelo menos um filtro')
+      return
+    }
+    if (conditionCount > MAX_CONDITIONS_PER_SEGMENT) {
+      setError(`Limite excedido: ${conditionCount} de ${MAX_CONDITIONS_PER_SEGMENT} condições. Quebre em segmentos menores ou use grupos OR.`)
       return
     }
     setError(null)
@@ -100,11 +111,26 @@ export function SegmentBuilder({
         <AISegmentInput onGenerate={(generatedRule) => setRule(generatedRule)} />
 
         <section className="bg-gray-50/50 border border-gray-200 rounded-2xl p-5 space-y-4">
-          <header>
-            <h2 className="text-base font-semibold text-gray-900">Quem entra no segmento?</h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Combine filtros para descrever quem deve fazer parte. O segmento se atualiza automaticamente.
-            </p>
+          <header className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Quem entra no segmento?</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Combine filtros para descrever quem deve fazer parte. O segmento se atualiza automaticamente.
+              </p>
+            </div>
+            <div
+              className={`shrink-0 text-xs px-2 py-1 rounded-lg ${
+                overLimit
+                  ? 'bg-red-50 text-red-700 border border-red-200 inline-flex items-center gap-1'
+                  : nearLimit
+                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+              title={`Limite: ${MAX_CONDITIONS_PER_SEGMENT}`}
+            >
+              {overLimit && <AlertTriangle size={12} />}
+              {conditionCount} / {MAX_CONDITIONS_PER_SEGMENT}
+            </div>
           </header>
           <RuleGroup
             group={rule.root}

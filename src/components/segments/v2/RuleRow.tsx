@@ -9,6 +9,7 @@
 // upward so the parent (RuleGroup → SegmentBuilder) can keep the
 // whole rule tree in one place.
 
+import { useState } from 'react'
 import { X, Plus } from 'lucide-react'
 import { FIELD_INDEX, OPERATORS_BY_TYPE } from '@/lib/segments/catalog'
 import type { FieldDef } from '@/lib/segments/catalog'
@@ -279,20 +280,32 @@ function WindowSelect({ window, onChange }: { window: EventRule['window']; onCha
         value={kind}
         onChange={(e) => {
           const k = e.target.value as EventRule['window']['kind']
+          const today = new Date().toISOString().slice(0, 10)
           if (k === 'all_time') onChange({ kind: 'all_time' })
           else if (k === 'last') onChange({ kind: 'last', value: 30, unit: 'day' })
-          else if (k === 'before') onChange({ kind: 'before', date: new Date().toISOString().slice(0, 10) })
-          else if (k === 'after') onChange({ kind: 'after', date: new Date().toISOString().slice(0, 10) })
+          else if (k === 'before') onChange({ kind: 'before', date: today })
+          else if (k === 'after') onChange({ kind: 'after', date: today })
           else if (k === 'between_dates') onChange({ kind: 'between_dates', from: '', to: '' })
+          else if (k === 'on_date') onChange({ kind: 'on_date', date: today })
         }}
         className="px-2 py-1 border border-gray-200 rounded-lg bg-white text-sm"
       >
         <option value="all_time">desde sempre</option>
         <option value="last">nos últimos</option>
+        <option value="on_date">na data</option>
         <option value="before">antes de</option>
         <option value="after">depois de</option>
         <option value="between_dates">entre datas</option>
       </select>
+
+      {kind === 'on_date' && (
+        <input
+          type="date"
+          value={(window as any).date || ''}
+          onChange={(e) => onChange({ ...window, date: e.target.value } as any)}
+          className="px-2 py-1 border border-gray-200 rounded-lg text-sm"
+        />
+      )}
 
       {kind === 'last' && (
         <>
@@ -356,40 +369,83 @@ function PropertyFilterRow({
   onChange: (next: PropertyFilter) => void
   onRemove: () => void
 }) {
+  // The merchant might be targeting a curated property OR a raw JSON
+  // path with array wildcards (Omnisend-style:
+  // 'raw.line_items.[].title'). We toggle between picker mode and
+  // raw-path mode on demand. Auto-detects raw mode when the filter
+  // path already contains '[]' or doesn't match any curated key.
+  const isCurated = eventProperties.some((p) => p.key === filter.path)
+  const [advanced, setAdvanced] = useState(
+    !isCurated && (filter.path.includes('[]') || !!filter.path)
+  )
   const def = eventProperties.find((p) => p.key === filter.path) || null
+
   return (
-    <div className="grid grid-cols-[minmax(140px,1fr)_minmax(120px,160px)_minmax(140px,2fr)_auto] gap-2 items-start">
-      <FieldPicker
-        value={filter.path}
-        onChange={(k) => {
-          const found = eventProperties.find((p) => p.key === k)
-          onChange({ ...filter, path: k, type: found?.type || 'string' })
-        }}
-        customFields={eventProperties}
-        placeholder="Propriedade"
-        compact
-      />
-      <OperatorPicker
-        fieldType={def?.type || null}
-        value={filter.operator}
-        onChange={(op) => onChange({ ...filter, operator: op as any })}
-        compact
-      />
-      <ValueInput
-        field={def}
-        operator={filter.operator}
-        value={filter.value}
-        value2={filter.value2}
-        onChange={(patch) => onChange({ ...filter, ...patch })}
-        compact
-      />
-      <button
-        type="button"
-        onClick={onRemove}
-        className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-      >
-        <X size={12} />
-      </button>
+    <div className="space-y-1">
+      <div className="grid grid-cols-[minmax(140px,1fr)_minmax(120px,160px)_minmax(140px,2fr)_auto] gap-2 items-start">
+        {advanced ? (
+          <input
+            type="text"
+            value={filter.path}
+            onChange={(e) => onChange({ ...filter, path: e.target.value })}
+            placeholder="ex: raw.line_items.[].title"
+            className="px-3 py-1.5 border border-gray-200 rounded-lg bg-white text-sm font-mono focus:outline-none focus:border-brand-500"
+          />
+        ) : (
+          <FieldPicker
+            value={filter.path}
+            onChange={(k) => {
+              const found = eventProperties.find((p) => p.key === k)
+              onChange({ ...filter, path: k, type: found?.type || 'string' })
+            }}
+            customFields={eventProperties}
+            placeholder="Propriedade"
+            compact
+          />
+        )}
+        <OperatorPicker
+          fieldType={advanced ? filter.type : (def?.type || null)}
+          value={filter.operator}
+          onChange={(op) => onChange({ ...filter, operator: op as any })}
+          compact
+        />
+        <ValueInput
+          field={advanced ? { key: filter.path, label: filter.path, type: filter.type, category: 'custom', source: { kind: 'contact_column', column: filter.path } } : def}
+          operator={filter.operator}
+          value={filter.value}
+          value2={filter.value2}
+          onChange={(patch) => onChange({ ...filter, ...patch })}
+          compact
+        />
+        <button
+          type="button"
+          onClick={onRemove}
+          className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+        >
+          <X size={12} />
+        </button>
+      </div>
+      <div className="flex items-center gap-2 pl-1">
+        <button
+          type="button"
+          onClick={() => setAdvanced((v) => !v)}
+          className="text-[10px] text-gray-500 hover:text-brand-600 underline-offset-2 hover:underline"
+        >
+          {advanced ? '← usar propriedade curada' : 'caminho avançado (com [] wildcards) →'}
+        </button>
+        {advanced && (
+          <select
+            value={filter.type}
+            onChange={(e) => onChange({ ...filter, type: e.target.value as any })}
+            className="text-[10px] px-1.5 py-0.5 border border-gray-200 rounded bg-white"
+          >
+            <option value="string">texto</option>
+            <option value="number">número</option>
+            <option value="boolean">boolean</option>
+            <option value="date">data</option>
+          </select>
+        )}
+      </div>
     </div>
   )
 }

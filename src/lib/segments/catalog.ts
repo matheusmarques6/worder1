@@ -234,7 +234,7 @@ export const CATEGORY_LABELS: Record<FieldCategory, string> = {
 export const OPERATORS_BY_TYPE: Record<FieldType, string[]> = {
   string: ['equals','not_equals','contains','not_contains','starts_with','not_starts_with','ends_with','not_ends_with','is_set','is_not_set'] satisfies StringOperator[],
   number: ['equals','not_equals','gt','gte','lt','lte','between','is_set','is_not_set'] satisfies NumberOperator[],
-  date:   ['before','after','between_dates','in_last','not_in_last','in_next','between_relative','is_today','is_this_month','is_set','is_not_set'] satisfies DateOperator[],
+  date:   ['before','after','between_dates','in_last','not_in_last','in_next','between_relative','is_today','is_this_month','month_in','day_of_month_in','is_set','is_not_set'] satisfies DateOperator[],
   boolean: ['is_true','is_false'] satisfies BooleanOperator[],
   enum:   ['equals','not_equals','in','not_in'] satisfies EnumOperator[],
   string_array: ['contains_any','contains_all','not_contains_any','is_empty','is_not_empty','size_gte','size_lte'] satisfies StringArrayOperator[],
@@ -266,6 +266,8 @@ export const OPERATOR_LABELS: Record<string, string> = {
   between_relative: 'entre (relativo)',
   is_today: 'é hoje',
   is_this_month: 'é este mês',
+  month_in: 'mês está em',           // value = [1..12]
+  day_of_month_in: 'dia do mês está em', // value = [1..31]
   is_true: 'é verdadeiro',
   is_false: 'é falso',
   in: 'é um de',

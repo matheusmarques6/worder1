@@ -434,6 +434,18 @@ function isInWindow(occurredAt: string, w: TimeWindow): boolean {
       const lo = Math.min(fromMs, toMs), hi = Math.max(fromMs, toMs);
       return t >= lo && t <= hi;
     }
+    case 'on_date': {
+      // Compare calendar dates in local time (not UTC) so a merchant
+      // saying "viewed page on 2026-04-13" matches every occurrence
+      // whose local-date string is 2026-04-13.
+      const occLocal = new Date(occurredAt);
+      const target = new Date(w.date + 'T00:00:00');
+      return (
+        occLocal.getFullYear() === target.getFullYear() &&
+        occLocal.getMonth() === target.getMonth() &&
+        occLocal.getDate() === target.getDate()
+      );
+    }
   }
 }
 
@@ -446,15 +458,40 @@ function unitMs(unit: 'day' | 'week' | 'month'): number {
 }
 
 function matchPropertyFilter(occ: EventOccurrence, pf: PropertyFilter): boolean {
-  let cur: any = occ.properties;
-  // Special: monetary_value is a denormalized hot path
+  // Denormalized hot path: surface monetary_value directly when the
+  // merchant types one of its common aliases. Skip the JSONB walk.
   if (pf.path === 'monetary_value' || pf.path === 'value' || pf.path === 'total_price') {
-    if (occ.monetary_value !== null && occ.monetary_value !== undefined) cur = occ.monetary_value;
+    if (occ.monetary_value !== null && occ.monetary_value !== undefined) {
+      return applyOperator(pf.operator as any, occ.monetary_value, pf.value, pf.value2);
+    }
   }
-  if (cur && typeof cur === 'object' && !Array.isArray(cur)) {
-    for (const part of pf.path.split('.')) cur = cur?.[part];
+  // Omnisend-style wildcard support: 'a.b.[].c' means "any element of
+  // the array at a.b has c matching the operator". Wildcards chain:
+  // 'raw.fulfillments.[].line_items.[].title contains "X"' matches
+  // when ANY line item in ANY fulfillment has the title.
+  const parts = pf.path.split('.');
+  return walkPath(occ.properties, parts, 0, pf);
+}
+
+function walkPath(value: any, parts: string[], idx: number, pf: PropertyFilter): boolean {
+  // Terminal: apply the operator on whatever we landed on
+  if (idx >= parts.length) {
+    return applyOperator(pf.operator as any, value, pf.value, pf.value2);
   }
-  return applyOperator(pf.operator as any, cur, pf.value, pf.value2);
+  const part = parts[idx];
+  // Wildcard: ANY-of semantics. A single match short-circuits to true.
+  if (part === '[]') {
+    if (!Array.isArray(value)) return false;
+    return value.some((el) => walkPath(el, parts, idx + 1, pf));
+  }
+  if (value == null || typeof value !== 'object') {
+    // Path goes deeper but the value can't be descended into. For
+    // not-style operators we still want a sensible answer — handing
+    // undefined to applyOperator at the leaf is the right thing
+    // (e.g. is_not_set returns true, not_contains returns true).
+    return walkPath(undefined, parts, parts.length, pf);
+  }
+  return walkPath(value[part], parts, idx + 1, pf);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -553,6 +590,24 @@ function applyOperator(
       const d = new Date(raw);
       const now = new Date();
       return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }
+    case 'month_in': {
+      // value = array of months 1..12 (Jan=1). Birthday Mar 12 matches
+      // value=[3] regardless of year. Uses the same date-string parsing
+      // trick as evalAnniversary to dodge timezone off-by-one.
+      if (raw == null) return false;
+      const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(raw));
+      const month1 = dateOnly ? Number(dateOnly[2]) : new Date(raw as any).getMonth() + 1;
+      const months = Array.isArray(value) ? value.map(Number) : [Number(value)];
+      return months.includes(month1);
+    }
+    case 'day_of_month_in': {
+      // value = array of days 1..31. Same parsing strategy.
+      if (raw == null) return false;
+      const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(raw));
+      const day = dateOnly ? Number(dateOnly[3]) : new Date(raw as any).getDate();
+      const days = Array.isArray(value) ? value.map(Number) : [Number(value)];
+      return days.includes(day);
     }
 
     // Array

@@ -10,6 +10,7 @@
 // it as ephemeral-cacheable to keep cost low across repeat requests
 // from the same merchant session.
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { FIELD_CATALOG, CATEGORY_LABELS, OPERATORS_BY_TYPE, OPERATOR_LABELS } from './catalog';
 import { validateSegmentRule } from './dsl';
 import type { SegmentRule } from './dsl';
@@ -17,6 +18,78 @@ import type { SegmentRule } from './dsl';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-haiku-4-5-20251001';
 const MAX_RETRIES = 2;
+
+// ─────────────────────────────────────────────────────────────────────
+// Per-org custom event catalog
+//
+// The static FIELD_CATALOG only knows about Worder's built-in events
+// (placed_order, viewed_product, etc.). Real stores fire dozens of
+// custom events with their own property keys (e.g. a Shopify store
+// firing `coupon_redeemed` with { code, discount_amount, plan_id }).
+//
+// To stop the AI from inventing field names, we sniff the org's
+// actual contact_events table and pass a compact summary into the
+// system prompt. Cached for 5 minutes per-org to avoid re-querying
+// on every AI call.
+// ─────────────────────────────────────────────────────────────────────
+
+interface CustomEventCatalog {
+  // event_type → list of property keys observed in the last 1k events
+  events: Record<string, string[]>;
+  generatedAt: number;
+}
+
+const CUSTOM_EVENT_CACHE_MS = 5 * 60 * 1000;
+const customEventCache = new Map<string, CustomEventCatalog>();
+
+export async function loadCustomEventCatalog(
+  supabase: SupabaseClient,
+  orgId: string,
+): Promise<CustomEventCatalog> {
+  const cached = customEventCache.get(orgId);
+  if (cached && Date.now() - cached.generatedAt < CUSTOM_EVENT_CACHE_MS) {
+    return cached;
+  }
+
+  // Pull a recent slice of events. We don't need all rows — just the
+  // distinct (event_type, property_key) tuples. 1k recent events
+  // covers anything the merchant is realistically using right now.
+  const { data } = await supabase
+    .from('contact_events')
+    .select('event_type, properties')
+    .eq('organization_id', orgId)
+    .order('occurred_at', { ascending: false })
+    .limit(1000);
+
+  const events: Record<string, Set<string>> = {};
+  for (const row of (data || []) as Array<{ event_type: string; properties: any }>) {
+    const set = events[row.event_type] || new Set<string>();
+    if (row.properties && typeof row.properties === 'object') {
+      for (const key of Object.keys(row.properties).slice(0, 30)) set.add(key);
+    }
+    events[row.event_type] = set;
+  }
+
+  const out: CustomEventCatalog = {
+    events: Object.fromEntries(
+      Object.entries(events).map(([k, v]) => [k, [...v].slice(0, 20)])
+    ),
+    generatedAt: Date.now(),
+  };
+  customEventCache.set(orgId, out);
+  return out;
+}
+
+function buildCustomEventSection(catalog: CustomEventCatalog): string {
+  const entries = Object.entries(catalog.events);
+  if (entries.length === 0) return '';
+  // Compact format: 'event_type: prop1, prop2, prop3'
+  let out = '\n\nCustom events seen in this org (use these names verbatim; property sub-filters may target the listed paths or any nested key under them):';
+  for (const [event, props] of entries) {
+    out += `\n  - ${event}: ${props.join(', ') || '(no properties observed)'}`;
+  }
+  return out;
+}
 
 export type GenerateResult =
   | { ok: true;  rule: SegmentRule; attempts: number }
@@ -74,7 +147,11 @@ Rules:
 9. "Carrinho abandonado" → event added_to_cart with frequency at_least 1, window last(7-30 days), AND event placed_order with frequency zero same window. Combine with AND logic.
 10. "Aniversariantes da semana" / "aniversário próximo" → anniversary rule on field birthday with within_next_days=7.
 11. "Viu produto → adicionou ao carrinho → não comprou" (ordered) → event_funnel with three steps in order: viewed_product, added_to_cart, placed_order with negate=true on the last step. Window typically last 30 days.
-12. Return ONLY the JSON via the create_segment tool. Never include explanation, markdown, or any text outside the tool call.`;
+12. Date month/day pickers: "aniversariantes de Maio" / "born in May" → profile operator=month_in value=[5]. "Day 15 of any month" → operator=day_of_month_in value=[15]. Combine the two for specific date-of-month targeting. Always pass arrays.
+13. Event period "on a specific date": "viewed page on 2026-04-13" → window kind=on_date, date='2026-04-13'.
+14. Event property sub-filters support Omnisend-style array wildcards: 'raw.line_items.[].title' iterates each line item; chain wildcards for nested arrays like 'raw.fulfillments.[].line_items.[].title'. Use [] only when the JSON path crosses an array.
+15. Condition budget: max 100 leaf conditions per segment. Compose with OR groups; avoid generating more.
+16. Return ONLY the JSON via the create_segment tool. Never include explanation, markdown, or any text outside the tool call.`;
 
 const TOOL_DEF = {
   name: 'create_segment',
@@ -175,9 +252,49 @@ const FEW_SHOT_EXAMPLES = [
   },
 ];
 
-export async function generateSegmentRule(userPrompt: string): Promise<GenerateResult> {
+export interface GenerateOptions {
+  // When provided, injects a per-org custom-event catalog into the
+  // prompt. The AI then references actual fired event types + property
+  // keys instead of guessing 'placed_order' for a store that named it
+  // 'order_completed'.
+  supabase?: SupabaseClient;
+  orgId?: string;
+}
+
+export async function generateSegmentRule(
+  userPrompt: string,
+  opts: GenerateOptions = {},
+): Promise<GenerateResult> {
   if (!process.env.ANTHROPIC_API_KEY) {
     return { ok: false, error: 'AI não está configurada (ANTHROPIC_API_KEY ausente).', attempts: 0 };
+  }
+
+  // Per-org custom event sniffing — runs once, cached 5min in-process.
+  let customSection = '';
+  if (opts.supabase && opts.orgId) {
+    try {
+      const catalog = await loadCustomEventCatalog(opts.supabase, opts.orgId);
+      customSection = buildCustomEventSection(catalog);
+    } catch (err) {
+      // Soft-fail: AI still works with the built-in catalog only.
+      console.warn('[ai-generator] custom event catalog load failed:', err);
+    }
+  }
+
+  // System prompt is the static catalog + optional per-org custom
+  // event section. We keep the static portion cacheable (ephemeral)
+  // so repeat requests don't re-pay the ~3k tokens of catalog. The
+  // dynamic custom-event section is appended uncached because it
+  // changes per-org and is small.
+  const systemBlocks: Array<{ type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }> = [
+    {
+      type: 'text',
+      text: SYSTEM_PROMPT,
+      cache_control: { type: 'ephemeral' },
+    },
+  ];
+  if (customSection) {
+    systemBlocks.push({ type: 'text', text: customSection });
   }
 
   let lastError = '';
@@ -193,15 +310,7 @@ export async function generateSegmentRule(userPrompt: string): Promise<GenerateR
         body: JSON.stringify({
           model: MODEL,
           max_tokens: 2000,
-          system: [
-            {
-              type: 'text',
-              text: SYSTEM_PROMPT,
-              // Cache the system prompt — it's static across requests and
-              // saves ~3k tokens per call after the first.
-              cache_control: { type: 'ephemeral' },
-            },
-          ],
+          system: systemBlocks,
           tools: [TOOL_DEF],
           tool_choice: { type: 'tool', name: 'create_segment' },
           messages: [
