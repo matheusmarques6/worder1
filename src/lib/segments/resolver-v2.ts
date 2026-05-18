@@ -41,6 +41,12 @@ export interface ResolveOptions {
   orgId: string;
   storeId?: string | null;
   limit?: number; // null/undefined = no cap; useful for preview to bail at 1k
+  // When set, restricts the contact universe to these IDs. Used by
+  // the real-time worker which already knows which contacts changed
+  // and only needs to (re)evaluate them — pulling the org's entire
+  // contacts table per queue item would be a 500k-row scan repeated
+  // dozens of times per minute on big stores.
+  contactIds?: string[];
 }
 
 export interface ResolveResult {
@@ -68,6 +74,13 @@ export async function resolveSegmentV2(
     .from('contacts')
     .select(selectCols)
     .eq('organization_id', opts.orgId);
+
+  // Targeted resolution: only pull the listed contacts. This is the
+  // hot path for the real-time worker — without it we'd scan the
+  // whole org on every queue tick.
+  if (opts.contactIds && opts.contactIds.length > 0) {
+    q = q.in('id', opts.contactIds);
+  }
 
   if (opts.storeId) {
     q = q.or(`store_id.eq.${opts.storeId},store_id.is.null`);
@@ -294,28 +307,45 @@ function evalEventFunnel(rule: EventFunnelRule, events: Map<string, EventOccurre
 // Anniversary: matches when the (month, day) of the field falls within
 // the next N days from today. Useful for "birthday next 7 days",
 // "first-purchase anniversary this month", etc.
+//
+// Timezone trap: SQL DATE columns return as 'YYYY-MM-DD' strings,
+// which `new Date('2000-01-15')` parses as UTC midnight. Subtracting
+// local now() then produces an off-by-one in most timezones west of
+// UTC (the local date is still Jan 14 when UTC says Jan 15). We parse
+// month/day directly from the string to dodge that entirely.
 function evalAnniversary(rule: AnniversaryRule, contact: Record<string, any>): boolean {
   const def = FIELD_INDEX[rule.field];
-  if (!def) return false;
-  const raw = def.source.kind === 'contact_column' ? contact[def.source.column] : null;
+  if (!def || def.source.kind !== 'contact_column') return false;
+  const raw = contact[def.source.column];
   if (!raw) return false;
 
-  const date = new Date(raw);
-  if (isNaN(date.getTime())) return false;
+  let month: number; // 0-indexed for Date
+  let day: number;
+  const s = String(raw);
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (dateOnly) {
+    month = Number(dateOnly[2]) - 1;
+    day = Number(dateOnly[3]);
+  } else {
+    const parsed = new Date(s);
+    if (isNaN(parsed.getTime())) return false;
+    month = parsed.getMonth();
+    day = parsed.getDate();
+  }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const cutoff = new Date(today);
   cutoff.setDate(cutoff.getDate() + Math.max(0, rule.within_next_days));
 
-  // Build this year's anniversary (month/day from raw, year from today)
-  let annThisYear = new Date(today.getFullYear(), date.getMonth(), date.getDate());
-  // If the date is in the past, roll to next year
-  if (annThisYear < today) {
-    annThisYear = new Date(today.getFullYear() + 1, date.getMonth(), date.getDate());
+  // Build this year's anniversary in local time. If it already passed
+  // this year, roll forward to next year.
+  let ann = new Date(today.getFullYear(), month, day);
+  if (ann < today) {
+    ann = new Date(today.getFullYear() + 1, month, day);
   }
 
-  return annThisYear >= today && annThisYear <= cutoff;
+  return ann >= today && ann <= cutoff;
 }
 
 function evalProfile(rule: ProfileRule, contact: Record<string, any>): boolean {

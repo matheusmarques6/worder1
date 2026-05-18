@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { dispatchTrigger } from '@/lib/automation/trigger-dispatcher'
-import { resolveByConditions } from '@/lib/segments/resolver'
+import { resolveSegment } from '@/lib/segments'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -44,11 +44,12 @@ export async function GET(req: NextRequest) {
 
     for (const seg of segments || []) {
       try {
-        const conditions = {
-          logic: (seg.rules_logic || 'AND').toLowerCase(),
-          rules: seg.rules || [],
-        }
-        const currentMembers = await resolveByConditions(supabaseAdmin, conditions, seg.organization_id)
+        // Dispatcher handles v1→v2 normalization. Without this the v1
+        // resolver was reading v2 JSONB blobs as if they were v1 Rule
+        // arrays, which produced empty member sets and false
+        // "exit" automations for every v2 segment.
+        const resolved = await resolveSegment(supabaseAdmin, seg.id, seg.organization_id)
+        const currentMembers = resolved.contactIds
 
         // Snapshot anterior
         const { data: previousSnapshot } = await supabaseAdmin

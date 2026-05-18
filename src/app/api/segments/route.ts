@@ -367,7 +367,20 @@ async function getSegmentCount(segment: any): Promise<number> {
       return count || 0
     }
 
-    if (segment.segment_type === 'dynamic' && segment.rules?.length) {
+    if (segment.segment_type === 'dynamic' && segment.rules) {
+      // v2 segments live in the same `rules` JSONB but have shape
+      // { version: 2, root: { type: 'group', ... } }. The simple
+      // applyRule() helper only handles v1 ProfileRule shapes, so
+      // for v2 we route through the dispatcher that understands the
+      // full DSL (events, frequencies, sub-filters, anniversaries…).
+      if (segment.rule_version === 2 || (segment.rules && typeof segment.rules === 'object' && segment.rules.version === 2)) {
+        const { resolveSegment } = await import('@/lib/segments')
+        const r = await resolveSegment(supabase, segment.id, segment.organization_id)
+        return r.contactIds.length
+      }
+
+      if (!Array.isArray(segment.rules) || segment.rules.length === 0) return 0
+
       let query: any = supabase
         .from('contacts')
         .select('*', { count: 'exact', head: true })

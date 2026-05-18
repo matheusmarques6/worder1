@@ -10,9 +10,16 @@
 // whole rule tree in one place.
 
 import { X, Plus } from 'lucide-react'
-import { FIELD_INDEX } from '@/lib/segments/catalog'
+import { FIELD_INDEX, OPERATORS_BY_TYPE } from '@/lib/segments/catalog'
 import type { FieldDef } from '@/lib/segments/catalog'
-import type { RuleLeaf, ProfileRule, EventRule, EventFunnelRule, AnniversaryRule, ConsentRule, ListMembershipRule, PropertyFilter, FrequencyOperator } from '@/lib/segments/dsl'
+import type { RuleLeaf, ProfileRule, EventRule, EventFunnelRule, AnniversaryRule, ConsentRule, ListMembershipRule, PropertyFilter, FrequencyOperator, FieldType } from '@/lib/segments/dsl'
+
+// First operator a freshly-picked field of `type` will land on.
+// Keeps the rule in a valid state during the (field, operator)
+// transition so the resolver never sees a mismatched pair.
+function defaultOperatorFor(type: FieldType): ProfileRule['operator'] {
+  return OPERATORS_BY_TYPE[type][0] as ProfileRule['operator']
+}
 import { FieldPicker } from './FieldPicker'
 import { OperatorPicker } from './OperatorPicker'
 import { ValueInput } from './ValueInput'
@@ -57,6 +64,12 @@ function ProfileRuleRow({ rule, onChange, onRemove }: {
   // When the user picks an event field accidentally on the profile row,
   // we silently re-shape the rule into an EventRule. This keeps the UI
   // forgiving — they pick "Placed Order" expecting it to "just work."
+  //
+  // Resetting operator on profile→profile field change: if the new
+  // field has a different type than the old field, the previous
+  // operator may not be valid (e.g. switching from total_orders/number
+  // to email/string and keeping operator='gte' would render an invalid
+  // rule that the resolver silently rejects).
   function pickField(key: string) {
     const f = FIELD_INDEX[key]
     if (!f) return
@@ -68,7 +81,15 @@ function ProfileRuleRow({ rule, onChange, onRemove }: {
         window: { kind: 'all_time' },
       } satisfies EventRule)
     } else {
-      onChange({ type: 'profile', field: key, operator: rule.operator, value: undefined })
+      const prev = def
+      const sameTypeFamily = prev?.type === f.type
+      onChange({
+        type: 'profile',
+        field: key,
+        operator: sameTypeFamily ? rule.operator : defaultOperatorFor(f.type),
+        value: undefined,
+        value2: undefined,
+      })
     }
   }
 

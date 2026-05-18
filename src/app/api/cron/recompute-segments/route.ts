@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { countSegmentByConditions } from '@/lib/segments/resolver';
+import { resolveSegment } from '@/lib/segments';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -46,28 +46,32 @@ export async function GET(request: NextRequest) {
 
     for (const seg of segments || []) {
       try {
-        // Converte rules do schema customer_segments para o formato conditions do resolver
-        const conditions = {
-          logic: (seg.rules_logic || 'AND').toLowerCase(),
-          rules: seg.rules || [],
-        };
-        const count = await countSegmentByConditions(
-          supabase,
-          conditions,
-          seg.organization_id
-        );
+        // Dispatcher path: handles both v1 (via adapter) and v2 rules
+        // uniformly. Drops the wrong-resolver hazard that earlier had
+        // v1 evaluator misreading v2 JSONB.
+        const result = await resolveSegment(supabase, seg.id, seg.organization_id);
 
         await supabase
           .from('customer_segments')
           .update({
-            contact_count: count,
+            contact_count: result.contactIds.length,
             last_count_at: new Date().toISOString(),
+            last_evaluated_at: new Date().toISOString(),
+            evaluation_status: 'idle',
+            evaluation_error: null,
           })
           .eq('id', seg.id);
 
-        results.push({ id: seg.id, count, ok: true });
+        results.push({ id: seg.id, count: result.contactIds.length, ok: true });
       } catch (err: any) {
         console.error(`[RecomputeSegments] segment ${seg.id} error:`, err?.message);
+        await supabase
+          .from('customer_segments')
+          .update({
+            evaluation_status: 'error',
+            evaluation_error: String(err?.message || err),
+          })
+          .eq('id', seg.id);
         results.push({ id: seg.id, count: 0, ok: false });
       }
     }

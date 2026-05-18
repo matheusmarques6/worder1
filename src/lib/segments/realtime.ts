@@ -153,20 +153,20 @@ export async function drainSegmentReevalQueue(
       .update({ evaluation_status: 'running' })
       .eq('id', segmentId);
 
+    let succeeded = false;
     try {
-      // Resolve membership for ONLY these contacts — not the whole org.
-      // We do that by running the v2 resolver over the org and then
-      // intersecting; v2 resolver supports a limit so this stays cheap.
-      // For now we resolve org-wide and intersect — TODO: add an explicit
-      // `contactIds` parameter to resolveSegmentV2 to skip the universe
-      // pull entirely for these targeted runs.
+      // Targeted resolution: pass contactIds so the resolver only
+      // pulls those specific rows, not the whole org. Without this
+      // we were doing a 500k-row scan per queue item on big stores.
       const { contactIds: matched } = await resolveSegmentV2(supabase, rule, {
         orgId: (seg as any).organization_id,
         storeId: (seg as any).store_id || null,
+        contactIds,
       });
       const matchedSet = new Set(matched);
 
-      // Existing membership for the affected contacts
+      // Existing membership for the affected contacts (NOT the whole
+      // segment — we only diff inside the working set).
       const { data: existing } = await supabase
         .from('segment_member_cache')
         .select('contact_id')
@@ -198,24 +198,47 @@ export async function drainSegmentReevalQueue(
         result.removed += toRemove.length;
       }
 
-      await supabase
-        .from('customer_segments')
-        .update({
-          evaluation_status: 'idle',
-          last_evaluated_at: new Date().toISOString(),
-          evaluation_error: null,
-          contact_count: matched.length,
-        })
-        .eq('id', segmentId);
+      // Bump the cached contact_count by net delta. Avoids a separate
+      // full org-scan just to refresh the count — the recompute-segments
+      // cron handles drift on a 15-min cadence.
+      const netDelta = toAdd.length - toRemove.length;
+      if (netDelta !== 0) {
+        const newCount = Math.max(0, ((seg as any).contact_count || 0) + netDelta);
+        await supabase
+          .from('customer_segments')
+          .update({
+            evaluation_status: 'idle',
+            last_evaluated_at: new Date().toISOString(),
+            evaluation_error: null,
+            contact_count: newCount,
+          })
+          .eq('id', segmentId);
+      } else {
+        await supabase
+          .from('customer_segments')
+          .update({
+            evaluation_status: 'idle',
+            last_evaluated_at: new Date().toISOString(),
+            evaluation_error: null,
+          })
+          .eq('id', segmentId);
+      }
 
       result.processed += contactIds.length;
+      succeeded = true;
     } catch (err: any) {
       result.errors.push(`segment ${segmentId}: ${err?.message || 'unknown'}`);
       await supabase
         .from('customer_segments')
         .update({ evaluation_status: 'error', evaluation_error: String(err?.message || err) })
         .eq('id', segmentId);
-    } finally {
+    }
+
+    // Only mark processed when the eval succeeded — failed rows stay
+    // in the queue for the next tick to retry. The cron's safety net
+    // covers permanent failures (a poison row would block the queue,
+    // so we cap retries via scheduled_at age check in a follow-up).
+    if (succeeded) {
       await markProcessed(supabase, segmentId, contactIds);
     }
   }

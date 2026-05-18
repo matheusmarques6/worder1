@@ -707,10 +707,16 @@ export async function POST(
             .eq('organization_id', form.organization_id)
             .maybeSingle()
           if (list?.id) {
-            await supabase.from('list_contacts').upsert({
-              organization_id: form.organization_id,
+            // Write to contact_list_members (the v2 membership table).
+            // The legacy list_contacts table is empty in prod; old
+            // form submits silently wrote there and the contacts
+            // never showed up under /contacts/lists/[id]. The
+            // contact_list_members trigger maintains total_contacts
+            // on the parent row automatically.
+            await supabase.from('contact_list_members').upsert({
               list_id: audienceListId,
               contact_id: contactId,
+              source: 'form',
             }, { onConflict: 'list_id,contact_id', ignoreDuplicates: true })
           } else {
             console.warn('[Form Submit] audience.listId does not belong to this org, skipping:', audienceListId)
