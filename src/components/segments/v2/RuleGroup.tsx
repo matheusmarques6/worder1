@@ -5,8 +5,8 @@
 // surface this as a labeled box with the boolean toggle at the top
 // and the rules indented below.
 
-import { Plus } from 'lucide-react'
-import { useState } from 'react'
+import { Plus, ChevronDown, User, Zap, GitBranch, Cake, Mail, FolderClosed, Target } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
 import type { RuleGroup as RuleGroupShape, RuleLeaf, ProfileRule } from '@/lib/segments/dsl'
 import { RuleRow } from './RuleRow'
 
@@ -24,8 +24,32 @@ function emptyProfile(): ProfileRule {
   return { type: 'profile', field: '', operator: 'equals' as any, value: undefined }
 }
 
+type LeafKind = 'profile' | 'event' | 'list_membership' | 'consent' | 'segment_membership' | 'anniversary' | 'event_funnel'
+
+const LEAF_OPTIONS: Array<{ kind: LeafKind; icon: React.ComponentType<any>; label: string; hint: string }> = [
+  { kind: 'profile',            icon: User,         label: 'Atributo do contato',     hint: 'Nome, total de pedidos, CLV, RFM…' },
+  { kind: 'event',              icon: Zap,          label: 'Evento',                  hint: 'Fez pedido, abriu email, viu produto…' },
+  { kind: 'event_funnel',       icon: GitBranch,    label: 'Funil de eventos',        hint: 'Sequência ordenada A → B → não C' },
+  { kind: 'anniversary',        icon: Cake,         label: 'Data recorrente',         hint: 'Aniversário, mês de primeiro pedido…' },
+  { kind: 'consent',            icon: Mail,         label: 'Consentimento',           hint: 'Pode receber email, SMS, WhatsApp' },
+  { kind: 'list_membership',    icon: FolderClosed, label: 'Está em uma lista',       hint: 'Membro (ou não) de uma lista estática' },
+  { kind: 'segment_membership', icon: Target,       label: 'Está em outro segmento',  hint: 'Composição entre segmentos' },
+]
+
 export function RuleGroup({ group, onChange, lists, segments, currentSegmentId, depth = 0 }: Props) {
   const [adding, setAdding] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Close add-menu on outside click so it doesn't linger when the
+  // merchant clicks elsewhere on the page.
+  useEffect(() => {
+    if (!adding) return
+    function onDoc(e: MouseEvent) {
+      if (!menuRef.current?.contains(e.target as Node)) setAdding(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [adding])
 
   function updateChild(idx: number, next: RuleLeaf | RuleGroupShape) {
     const children = [...group.children]
@@ -38,9 +62,9 @@ export function RuleGroup({ group, onChange, lists, segments, currentSegmentId, 
     onChange({ ...group, children })
   }
 
-  function addLeaf(type: 'profile' | 'event' | 'list_membership' | 'consent' | 'segment_membership' | 'anniversary' | 'event_funnel') {
+  function addLeaf(kind: LeafKind) {
     let leaf: RuleLeaf
-    switch (type) {
+    switch (kind) {
       case 'event':
         leaf = { type: 'event', event: '', frequency: { op: 'at_least', value: 1 }, window: { kind: 'all_time' } }
         break
@@ -81,46 +105,27 @@ export function RuleGroup({ group, onChange, lists, segments, currentSegmentId, 
     })
   }
 
-  const wrapperCls = depth === 0
-    ? 'space-y-2'
-    : 'bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2'
+  const isEmpty = group.children.length === 0
+  const isRoot = depth === 0
+  const wrapperCls = isRoot
+    ? 'space-y-3'
+    : 'bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-3'
 
   return (
     <div className={wrapperCls}>
-      {/* Logic toggle */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
-          {depth === 0 ? 'Combine' : 'Subgrupo:'}
-        </span>
-        <div className="inline-flex items-center border border-gray-200 rounded-lg overflow-hidden">
-          {(['AND', 'OR'] as const).map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => onChange({ ...group, logic: opt })}
-              className={`px-3 py-1 text-xs font-medium transition-colors ${
-                group.logic === opt
-                  ? 'bg-brand-500 text-white'
-                  : 'bg-white text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {opt === 'AND' ? 'TODOS' : 'QUALQUER'}
-            </button>
-          ))}
-        </div>
-        <span className="text-xs text-gray-500">
-          {group.logic === 'AND' ? 'os filtros precisam ser verdadeiros' : 'pelo menos um filtro precisa ser verdadeiro'}
-        </span>
+      {/* Klaviyo-style natural-language header: replaces the cramped
+          'COMBINE [TODOS][QUALQUER] os filtros...' line that read as
+          a form prompt. Reads as a sentence the merchant can scan. */}
+      <div className="flex items-center gap-2 flex-wrap text-sm text-gray-700">
+        <span>{isRoot ? 'Inclui contatos que correspondem a' : 'Subgrupo:'}</span>
+        <LogicSelect value={group.logic} onChange={(logic) => onChange({ ...group, logic })} />
+        <span>{isRoot ? 'dos filtros abaixo' : 'das condições'}</span>
       </div>
 
       {/* Children */}
-      <div className="space-y-2">
-        {group.children.length === 0 ? (
-          <div className="border border-dashed border-gray-200 rounded-xl p-6 text-center">
-            <p className="text-sm text-gray-400">Nenhum filtro ainda. Adicione um abaixo.</p>
-          </div>
-        ) : (
-          group.children.map((child, i) => (
+      {!isEmpty && (
+        <div className="space-y-2">
+          {group.children.map((child, i) => (
             child.type === 'group' ? (
               <RuleGroup
                 key={i}
@@ -142,57 +147,110 @@ export function RuleGroup({ group, onChange, lists, segments, currentSegmentId, 
                 currentSegmentId={currentSegmentId}
               />
             )
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Add row */}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setAdding((v) => !v)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-        >
-          <Plus size={14} />
-          Adicionar filtro
-        </button>
-        {depth < 3 && (
+      {/* Empty state on root: 3 prominent cards instead of a tiny
+          'Adicionar filtro' link under a dashed box. Nested empty
+          groups stay compact — they're transient during editing. */}
+      {isEmpty && isRoot ? (
+        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-5">
+          <p className="text-center text-sm text-gray-500 mb-4">Comece adicionando seu primeiro filtro</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {LEAF_OPTIONS.slice(0, 3).map((opt) => {
+              const Icon = opt.icon
+              return (
+                <button
+                  key={opt.kind}
+                  type="button"
+                  onClick={() => addLeaf(opt.kind)}
+                  className="flex items-start gap-2 p-3 border border-gray-200 rounded-lg hover:border-brand-500 hover:bg-brand-50/40 transition-colors text-left"
+                >
+                  <Icon size={16} className="text-brand-500 mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">{opt.label}</p>
+                    <p className="text-[11px] text-gray-500 line-clamp-1">{opt.hint}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          <div ref={menuRef} className="relative mt-3 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setAdding((v) => !v)}
+              className="text-xs text-gray-500 hover:text-brand-600 inline-flex items-center gap-1"
+            >
+              Mais opções <ChevronDown size={12} />
+            </button>
+            {adding && <AddLeafMenu onPick={addLeaf} alignCenter />}
+          </div>
+        </div>
+      ) : (
+        <div ref={menuRef} className="relative inline-flex items-center gap-1">
           <button
             type="button"
-            onClick={addGroup}
-            className="ml-1 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            onClick={() => setAdding((v) => !v)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
           >
             <Plus size={14} />
-            Adicionar subgrupo
+            Adicionar filtro
           </button>
-        )}
+          {depth < 3 && !isEmpty && (
+            <button
+              type="button"
+              onClick={addGroup}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Plus size={14} />
+              Adicionar subgrupo
+            </button>
+          )}
+          {adding && <AddLeafMenu onPick={addLeaf} />}
+        </div>
+      )}
+    </div>
+  )
+}
 
-        {adding && (
-          <div className="absolute z-20 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-            <button onClick={() => addLeaf('profile')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
-              📋 Atributo do contato <span className="text-gray-400 text-xs">— nome, total_orders, CLV…</span>
-            </button>
-            <button onClick={() => addLeaf('event')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
-              ⚡ Evento <span className="text-gray-400 text-xs">— fez pedido, abriu email…</span>
-            </button>
-            <button onClick={() => addLeaf('event_funnel')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
-              🪢 Funil de eventos <span className="text-gray-400 text-xs">— A → B → não C</span>
-            </button>
-            <button onClick={() => addLeaf('anniversary')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
-              🎂 Data recorrente <span className="text-gray-400 text-xs">— aniversário, 1º pedido…</span>
-            </button>
-            <button onClick={() => addLeaf('consent')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
-              ✉️ Consentimento <span className="text-gray-400 text-xs">— pode receber email/SMS</span>
-            </button>
-            <button onClick={() => addLeaf('list_membership')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
-              📁 Lista <span className="text-gray-400 text-xs">— está numa lista X</span>
-            </button>
-            <button onClick={() => addLeaf('segment_membership')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
-              🎯 Outro segmento <span className="text-gray-400 text-xs">— está num segmento Y</span>
-            </button>
-          </div>
-        )}
-      </div>
+// Inline AND/OR dropdown that reads as part of the sentence.
+function LogicSelect({ value, onChange }: { value: 'AND' | 'OR'; onChange: (v: 'AND' | 'OR') => void }) {
+  return (
+    <div className="relative inline-block">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as 'AND' | 'OR')}
+        className="appearance-none pr-7 pl-2.5 py-1 text-sm font-medium bg-brand-50 text-brand-700 border border-brand-200 rounded-lg cursor-pointer hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+      >
+        <option value="AND">todos</option>
+        <option value="OR">qualquer um</option>
+      </select>
+      <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-brand-600" />
+    </div>
+  )
+}
+
+function AddLeafMenu({ onPick, alignCenter }: { onPick: (k: LeafKind) => void; alignCenter?: boolean }) {
+  return (
+    <div className={`absolute z-20 top-full mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-lg py-1 ${alignCenter ? 'left-1/2 -translate-x-1/2' : 'left-0'}`}>
+      {LEAF_OPTIONS.map((opt) => {
+        const Icon = opt.icon
+        return (
+          <button
+            key={opt.kind}
+            type="button"
+            onClick={() => onPick(opt.kind)}
+            className="w-full flex items-start gap-2 px-3 py-2 hover:bg-gray-50 text-left"
+          >
+            <Icon size={14} className="text-brand-500 mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm text-gray-900">{opt.label}</p>
+              <p className="text-[11px] text-gray-500">{opt.hint}</p>
+            </div>
+          </button>
+        )
+      })}
     </div>
   )
 }

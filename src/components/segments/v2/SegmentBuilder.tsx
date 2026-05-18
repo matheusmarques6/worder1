@@ -122,27 +122,12 @@ export function SegmentBuilder({
       <div className="space-y-5">
         <AISegmentInput onGenerate={(generatedRule) => setRule(generatedRule)} />
 
-        <section className="bg-gray-50/50 border border-gray-200 rounded-2xl p-5 space-y-4">
-          <header className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-gray-900">Quem entra no segmento?</h2>
-              <p className="text-sm text-gray-500 mt-0.5">
-                Combine filtros para descrever quem deve fazer parte. O segmento se atualiza automaticamente.
-              </p>
-            </div>
-            <div
-              className={`shrink-0 text-xs px-2 py-1 rounded-lg ${
-                overLimit
-                  ? 'bg-red-50 text-red-700 border border-red-200 inline-flex items-center gap-1'
-                  : nearLimit
-                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                  : 'bg-gray-100 text-gray-600'
-              }`}
-              title={`Limite: ${MAX_CONDITIONS_PER_SEGMENT}`}
-            >
-              {overLimit && <AlertTriangle size={12} />}
-              {conditionCount} / {MAX_CONDITIONS_PER_SEGMENT}
-            </div>
+        <section className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4">
+          <header>
+            <h2 className="text-base font-semibold text-gray-900">Quem entra no segmento?</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Filtros dinâmicos atualizam o segmento conforme os contatos mudam.
+            </p>
           </header>
           <RuleGroup
             group={rule.root}
@@ -151,6 +136,18 @@ export function SegmentBuilder({
             segments={segments}
             currentSegmentId={currentSegmentId}
           />
+          {conditionCount > 0 && (
+            <footer className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs">
+              <span className={`${overLimit ? 'text-red-600 font-medium' : nearLimit ? 'text-amber-600' : 'text-gray-400'} inline-flex items-center gap-1`}>
+                {overLimit && <AlertTriangle size={12} />}
+                {conditionCount} de {MAX_CONDITIONS_PER_SEGMENT} condições
+                {nearLimit && !overLimit && ' — próximo do limite'}
+              </span>
+              {overLimit && (
+                <span className="text-red-600">Reduza pra salvar</span>
+              )}
+            </footer>
+          )}
         </section>
 
         <section className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4">

@@ -37,12 +37,37 @@ export function AISegmentInput({ onGenerate }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: prompt.trim(), locale: 'pt-BR' }),
       })
+      // Defensive parse: when the route 404s or 500s, Next.js returns
+      // an HTML error page instead of JSON. res.json() then throws
+      // 'Unexpected token < ... is not valid JSON', which is useless
+      // for the merchant. Inspect content-type and status first.
+      const contentType = res.headers.get('content-type') || ''
+      if (!contentType.includes('application/json')) {
+        // Most likely causes: ANTHROPIC_API_KEY not configured server-
+        // side, or this deploy is older than the AI endpoint. Show
+        // something the merchant can act on.
+        if (res.status === 404) {
+          throw new Error('Serviço de IA ainda não disponível nesta instalação. Crie o segmento manualmente.')
+        }
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Sessão expirou. Recarregue a página e tente novamente.')
+        }
+        throw new Error(`Serviço de IA indisponível (HTTP ${res.status}). Tente em alguns minutos ou crie manualmente.`)
+      }
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'falha ao gerar')
+      if (!res.ok) {
+        if (res.status === 429) {
+          throw new Error(data.error || 'Limite diário de gerações de IA atingido. Crie o segmento manualmente.')
+        }
+        throw new Error(data.error || 'A IA não conseguiu gerar uma regra a partir dessa descrição. Tente reformular com mais detalhes.')
+      }
+      if (!data?.rule) {
+        throw new Error('Resposta da IA inválida. Tente reformular o prompt.')
+      }
       onGenerate(data.rule)
       setPrompt('')
     } catch (err: any) {
-      setError(err.message || 'erro inesperado')
+      setError(err.message || 'Erro inesperado ao gerar segmento.')
     } finally {
       setLoading(false)
     }
