@@ -18,6 +18,8 @@ import {
   Check,
   Upload,
   Download,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -64,11 +66,15 @@ export default function ListDetailPage() {
 
   const [list, setList] = useState<List | null>(null)
   const [members, setMembers] = useState<Member[]>([])
+  const [totalMembers, setTotalMembers] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+
+  const PAGE_SIZE = 100
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type })
@@ -77,9 +83,10 @@ export default function ListDetailPage() {
 
   const load = useCallback(async () => {
     try {
+      const offset = (page - 1) * PAGE_SIZE
       const [listRes, membersRes] = await Promise.all([
         fetch(`/api/lists/${listId}`),
-        fetch(`/api/lists/${listId}/members?limit=500`),
+        fetch(`/api/lists/${listId}/members?limit=${PAGE_SIZE}&offset=${offset}`),
       ])
       if (listRes.ok) {
         const d = await listRes.json()
@@ -88,11 +95,12 @@ export default function ListDetailPage() {
       if (membersRes.ok) {
         const d = await membersRes.json()
         setMembers(d.members || [])
+        setTotalMembers(d.total || 0)
       }
     } finally {
       setLoading(false)
     }
-  }, [listId])
+  }, [listId, page])
 
   useEffect(() => { load() }, [load])
 
@@ -114,7 +122,8 @@ export default function ListDetailPage() {
     const res = await fetch(`/api/lists/${listId}/members?contact_id=${contactId}`, { method: 'DELETE' })
     if (res.ok) {
       setMembers((prev) => prev.filter((m) => m.contact_id !== contactId))
-      setList((prev) => (prev ? { ...prev, total_contacts: prev.total_contacts - 1 } : prev))
+      setTotalMembers((n) => Math.max(0, n - 1))
+      setList((prev) => (prev ? { ...prev, total_contacts: Math.max(0, prev.total_contacts - 1) } : prev))
       showToast('Contato removido')
     } else {
       showToast('Erro ao remover', 'error')
@@ -317,6 +326,38 @@ export default function ListDetailPage() {
               })}
             </tbody>
           </table>
+
+          {/* Pagination — server-side limit/offset.
+              Without this lists over 100 members truncated silently. */}
+          {totalMembers > PAGE_SIZE && (
+            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm">
+              <p className="text-gray-500">
+                Mostrando {(page - 1) * PAGE_SIZE + 1}–
+                {Math.min(page * PAGE_SIZE, totalMembers)} de {totalMembers.toLocaleString('pt-BR')}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-1.5 rounded hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                  aria-label="Página anterior"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="text-xs text-gray-600">
+                  Página {page} de {Math.ceil(totalMembers / PAGE_SIZE)}
+                </span>
+                <button
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={page * PAGE_SIZE >= totalMembers}
+                  className="p-1.5 rounded hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                  aria-label="Próxima página"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -370,15 +411,28 @@ function ImportCsvModal({
   const [preview, setPreview] = useState<string[][] | null>(null)
 
   async function onPickFile(f: File | null) {
-    setFile(f)
+    setFile(null)
     setError(null)
     setPreview(null)
     if (!f) return
-    if (f.size > 20 * 1024 * 1024) {
-      setError('Arquivo grande demais (limite 20MB). Divida em pedaços menores.')
-      setFile(null)
+    // The <input accept=".csv,text/csv"> hint isn't enforced by all
+    // browsers, so we also gate here. Excel files (.xlsx) trigger a
+    // parser crash because they're binary zip; reject upfront with a
+    // friendly message.
+    const isLikelyCsv =
+      f.type === 'text/csv' ||
+      f.type === 'application/vnd.ms-excel' ||
+      f.type === '' /* some browsers omit type */ ||
+      /\.csv$/i.test(f.name)
+    if (!isLikelyCsv) {
+      setError(`Tipo de arquivo não suportado (${f.type || 'desconhecido'}). Exporte como CSV antes de importar.`)
       return
     }
+    if (f.size > 20 * 1024 * 1024) {
+      setError('Arquivo grande demais (limite 20MB). Divida em pedaços menores.')
+      return
+    }
+    setFile(f)
     const text = await f.text()
     // Show the first 4 rows as a sanity check before uploading.
     const lines = text.split(/\r?\n/).slice(0, 4).map((line) => line.split(','))
