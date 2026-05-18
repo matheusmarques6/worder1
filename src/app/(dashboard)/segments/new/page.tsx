@@ -10,6 +10,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { useAuthStore, useStoreStore } from '@/stores'
 import { SegmentBuilder } from '@/components/segments/v2/SegmentBuilder'
+import { SegmentTemplateGallery } from '@/components/segments/v2/SegmentTemplateGallery'
 import type { SegmentRule } from '@/lib/segments/dsl'
 import type { SegmentMetadata } from '@/components/segments/v2/SegmentBuilder'
 
@@ -20,6 +21,9 @@ export default function NewSegmentPage() {
   const [totalContacts, setTotalContacts] = useState<number | undefined>(undefined)
   const [lists, setLists] = useState<Array<{ id: string; name: string }>>([])
   const [submitting, setSubmitting] = useState(false)
+  const [initialRule, setInitialRule] = useState<SegmentRule | undefined>(undefined)
+  const [initialName, setInitialName] = useState<string | undefined>(undefined)
+  const [showGallery, setShowGallery] = useState(true)
 
   useEffect(() => {
     if (!user?.organization_id) return
@@ -88,7 +92,28 @@ export default function NewSegmentPage() {
         </div>
       </header>
 
+      {showGallery && (
+        <div className="bg-white border border-gray-200 rounded-2xl p-5">
+          <SegmentTemplateGallery
+            onPick={(t) => {
+              setInitialRule(t.rule)
+              setInitialName(t.name)
+              setShowGallery(false)
+            }}
+          />
+          <button
+            onClick={() => setShowGallery(false)}
+            className="mt-4 text-xs text-gray-500 hover:text-gray-700"
+          >
+            Começar do zero →
+          </button>
+        </div>
+      )}
+
       <SegmentBuilder
+        key={initialRule ? 'with-template' : 'blank'}
+        initialRule={initialRule}
+        initialMetadata={initialName ? { name: initialName } : undefined}
         organizationId={user.organization_id}
         storeId={currentStore?.id || null}
         totalContacts={totalContacts}
