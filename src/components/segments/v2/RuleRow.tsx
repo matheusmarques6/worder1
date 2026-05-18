@@ -12,7 +12,7 @@
 import { X, Plus } from 'lucide-react'
 import { FIELD_INDEX, OPERATORS_BY_TYPE } from '@/lib/segments/catalog'
 import type { FieldDef } from '@/lib/segments/catalog'
-import type { RuleLeaf, ProfileRule, EventRule, EventFunnelRule, AnniversaryRule, ConsentRule, ListMembershipRule, PropertyFilter, FrequencyOperator, FieldType } from '@/lib/segments/dsl'
+import type { RuleLeaf, ProfileRule, EventRule, EventFunnelRule, AnniversaryRule, ConsentRule, ListMembershipRule, SegmentMembershipRule, PropertyFilter, FrequencyOperator, FieldType } from '@/lib/segments/dsl'
 
 // First operator a freshly-picked field of `type` will land on.
 // Keeps the rule in a valid state during the (field, operator)
@@ -29,9 +29,11 @@ interface Props {
   onChange: (next: RuleLeaf) => void
   onRemove: () => void
   lists?: Array<{ id: string; name: string }>
+  segments?: Array<{ id: string; name: string }>
+  currentSegmentId?: string  // exclude self when offering segment_membership options
 }
 
-export function RuleRow({ rule, onChange, onRemove, lists }: Props) {
+export function RuleRow({ rule, onChange, onRemove, lists, segments, currentSegmentId }: Props) {
   if (rule.type === 'event') {
     return <EventRuleRow rule={rule} onChange={onChange as any} onRemove={onRemove} />
   }
@@ -43,6 +45,9 @@ export function RuleRow({ rule, onChange, onRemove, lists }: Props) {
   }
   if (rule.type === 'list_membership') {
     return <ListMembershipRow rule={rule} onChange={onChange as any} onRemove={onRemove} lists={lists} />
+  }
+  if (rule.type === 'segment_membership') {
+    return <SegmentMembershipRow rule={rule} onChange={onChange as any} onRemove={onRemove} segments={segments} currentSegmentId={currentSegmentId} />
   }
   if (rule.type === 'consent') {
     return <ConsentRow rule={rule} onChange={onChange as any} onRemove={onRemove} />
@@ -419,6 +424,58 @@ function ListMembershipRow({ rule, onChange, onRemove, lists }: {
           <option value="">Selecione uma lista…</option>
           {(lists || []).map((l) => (
             <option key={l.id} value={l.id}>{l.name}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+        >
+          <X size={14} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Segment membership — compose segments out of other segments. Useful
+// for "Champions AND not Unsubscribed" without re-typing both rule
+// sets. Self-reference is filtered server-side via cycle detection
+// (not enforced yet at this UI layer — TODO).
+// ────────────────────────────────────────────────────────────────────
+
+function SegmentMembershipRow({ rule, onChange, onRemove, segments, currentSegmentId }: {
+  rule: SegmentMembershipRule
+  onChange: (next: RuleLeaf) => void
+  onRemove: () => void
+  segments?: Array<{ id: string; name: string }>
+  currentSegmentId?: string
+}) {
+  // Hide the current segment from the options to dodge the obvious
+  // self-reference cycle. Deeper cycles (A→B→A) need server checks.
+  const options = (segments || []).filter((s) => s.id !== currentSegmentId)
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-3 hover:border-gray-300 transition-colors">
+      <div className="grid grid-cols-[minmax(140px,1fr)_minmax(160px,1fr)_minmax(220px,2fr)_auto] gap-2 items-center">
+        <span className="text-sm text-gray-700">Está no segmento</span>
+        <select
+          value={rule.is_member ? 'yes' : 'no'}
+          onChange={(e) => onChange({ ...rule, is_member: e.target.value === 'yes' })}
+          className="px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
+        >
+          <option value="yes">sim</option>
+          <option value="no">não</option>
+        </select>
+        <select
+          value={rule.segment_id}
+          onChange={(e) => onChange({ ...rule, segment_id: e.target.value })}
+          className="px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
+        >
+          <option value="">Selecione um segmento…</option>
+          {options.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
         <button

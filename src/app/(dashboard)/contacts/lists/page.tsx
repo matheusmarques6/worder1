@@ -8,6 +8,7 @@
 // counterpart to /segments which targets customer_segments.
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import {
@@ -73,6 +74,7 @@ export default function ContactListsPage() {
   const [sourceFilter, setSourceFilter] = useState<'all' | ContactList['source']>('all')
   const [showArchived, setShowArchived] = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
+  const router = useRouter()
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore()
   const hasHydrated = useStoreStore((s) => s._hasHydrated)
@@ -294,10 +296,9 @@ export default function ContactListsPage() {
         onClose={() => setShowNewModal(false)}
         onCreated={(id) => {
           setShowNewModal(false)
-          fetchLists()
-          // Navigate to the new list so the merchant can immediately
-          // add members / import CSV.
-          window.location.href = `/contacts/lists/${id}`
+          // SPA navigation — full reload was wiping form state and
+          // re-fetching the entire bundle.
+          router.push(`/contacts/lists/${id}`)
         }}
       />
     </div>

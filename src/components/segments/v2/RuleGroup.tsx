@@ -13,8 +13,10 @@ import { RuleRow } from './RuleRow'
 interface Props {
   group: RuleGroupShape
   onChange: (next: RuleGroupShape) => void
-  // Pass-through so RuleRow can show list options in a dropdown
+  // Pass-through so RuleRow can show list / segment options
   lists?: Array<{ id: string; name: string }>
+  segments?: Array<{ id: string; name: string }>
+  currentSegmentId?: string
   depth?: number
 }
 
@@ -22,7 +24,7 @@ function emptyProfile(): ProfileRule {
   return { type: 'profile', field: '', operator: 'equals' as any, value: undefined }
 }
 
-export function RuleGroup({ group, onChange, lists, depth = 0 }: Props) {
+export function RuleGroup({ group, onChange, lists, segments, currentSegmentId, depth = 0 }: Props) {
   const [adding, setAdding] = useState(false)
 
   function updateChild(idx: number, next: RuleLeaf | RuleGroupShape) {
@@ -125,6 +127,8 @@ export function RuleGroup({ group, onChange, lists, depth = 0 }: Props) {
                 group={child}
                 onChange={(g) => updateChild(i, g)}
                 lists={lists}
+                segments={segments}
+                currentSegmentId={currentSegmentId}
                 depth={depth + 1}
               />
             ) : (
@@ -134,6 +138,8 @@ export function RuleGroup({ group, onChange, lists, depth = 0 }: Props) {
                 onChange={(r) => updateChild(i, r)}
                 onRemove={() => removeChild(i)}
                 lists={lists}
+                segments={segments}
+                currentSegmentId={currentSegmentId}
               />
             )
           ))
@@ -180,6 +186,9 @@ export function RuleGroup({ group, onChange, lists, depth = 0 }: Props) {
             </button>
             <button onClick={() => addLeaf('list_membership')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
               📁 Lista <span className="text-gray-400 text-xs">— está numa lista X</span>
+            </button>
+            <button onClick={() => addLeaf('segment_membership')} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
+              🎯 Outro segmento <span className="text-gray-400 text-xs">— está num segmento Y</span>
             </button>
           </div>
         )}

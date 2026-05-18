@@ -30,6 +30,8 @@ interface List {
   source: string
   source_metadata: Record<string, unknown>
   is_archived: boolean
+  store_id: string | null
+  organization_id: string
   created_at: string
   updated_at: string
 }
@@ -323,6 +325,7 @@ export default function ListDetailPage() {
         <AddMembersModal
           listId={listId}
           existingIds={new Set(members.map((m) => m.contact_id))}
+          storeId={list.store_id}
           onClose={() => setShowAddModal(false)}
           onAdded={(count) => {
             showToast(`${count} ${count === 1 ? 'contato adicionado' : 'contatos adicionados'}`)
@@ -487,11 +490,13 @@ function ImportCsvModal({
 function AddMembersModal({
   listId,
   existingIds,
+  storeId,
   onClose,
   onAdded,
 }: {
   listId: string
   existingIds: Set<string>
+  storeId: string | null
   onClose: () => void
   onAdded: (count: number) => void
 }) {
@@ -504,7 +509,12 @@ function AddMembersModal({
   const doSearch = useCallback(async (q: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/contacts?search=${encodeURIComponent(q)}&limit=50`)
+      // Scope contact search to the same store the list lives in
+      // (when applicable) so the merchant doesn't accidentally add
+      // contacts from sibling stores in a multi-store org.
+      const params = new URLSearchParams({ search: q, limit: '50' })
+      if (storeId) params.set('storeId', storeId)
+      const res = await fetch(`/api/contacts?${params.toString()}`)
       if (res.ok) {
         const d = await res.json()
         setContacts(d.contacts || [])
@@ -512,7 +522,7 @@ function AddMembersModal({
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [storeId])
 
   useEffect(() => {
     const t = setTimeout(() => doSearch(search), 300)

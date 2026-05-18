@@ -28,6 +28,10 @@ interface Props {
   storeId: string | null
   totalContacts?: number
   lists?: Array<{ id: string; name: string }>
+  segments?: Array<{ id: string; name: string }>
+  // The id of the segment being edited (used to filter it out of the
+  // segment_membership picker so the user can't self-reference).
+  currentSegmentId?: string
   onSave: (rule: SegmentRule, metadata: SegmentMetadata) => Promise<void>
   onCancel: () => void
   submitting?: boolean
@@ -47,6 +51,8 @@ export function SegmentBuilder({
   storeId,
   totalContacts,
   lists,
+  segments,
+  currentSegmentId,
   onSave,
   onCancel,
   submitting,
@@ -100,7 +106,13 @@ export function SegmentBuilder({
               Combine filtros para descrever quem deve fazer parte. O segmento se atualiza automaticamente.
             </p>
           </header>
-          <RuleGroup group={rule.root} onChange={updateRoot} lists={lists} />
+          <RuleGroup
+            group={rule.root}
+            onChange={updateRoot}
+            lists={lists}
+            segments={segments}
+            currentSegmentId={currentSegmentId}
+          />
         </section>
 
         <section className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4">

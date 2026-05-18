@@ -27,6 +27,7 @@ export default function NewSegmentPage() {
 
   const [totalContacts, setTotalContacts] = useState<number | undefined>(undefined)
   const [lists, setLists] = useState<Array<{ id: string; name: string }>>([])
+  const [segments, setSegments] = useState<Array<{ id: string; name: string }>>([])
   const [submitting, setSubmitting] = useState(false)
   const [initialRule, setInitialRule] = useState<SegmentRule | undefined>(undefined)
   const [initialMeta, setInitialMeta] = useState<Partial<SegmentMetadata> | undefined>(undefined)
@@ -34,11 +35,17 @@ export default function NewSegmentPage() {
   const [showGallery, setShowGallery] = useState(!editId)
 
   // Load lists for the "is in list X" rule type
+  // Plus available segments for the "is in segment Y" composition rule
   useEffect(() => {
     if (!user?.organization_id) return
-    fetch(`/api/lists${currentStore?.id ? `?store_id=${currentStore.id}` : ''}`)
+    const qs = currentStore?.id ? `?store_id=${currentStore.id}` : ''
+    fetch(`/api/lists${qs}`)
       .then((r) => r.json())
       .then((d) => setLists((d.lists || []).map((l: any) => ({ id: l.id, name: l.name }))))
+      .catch(() => {})
+    fetch(`/api/segments${qs}`)
+      .then((r) => r.json())
+      .then((d) => setSegments((d.segments || []).map((s: any) => ({ id: s.id, name: s.name }))))
       .catch(() => {})
   }, [user?.organization_id, currentStore?.id])
 
@@ -175,6 +182,8 @@ export default function NewSegmentPage() {
         storeId={currentStore?.id || null}
         totalContacts={totalContacts}
         lists={lists}
+        segments={segments}
+        currentSegmentId={editId || undefined}
         onSave={handleSave}
         onCancel={() => router.push(editId ? `/segments/${editId}` : '/segments')}
         submitting={submitting}
