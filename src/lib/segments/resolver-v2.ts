@@ -83,6 +83,14 @@ export async function resolveSegmentV2(
   }
 
   if (opts.storeId) {
+    // Include contacts pinned to this store OR not yet assigned to
+    // any store (the customer-sync backfill stamps store_id on every
+    // touch, so the null bucket shrinks over time). The org filter
+    // applied above (line 76) already prevents cross-org leakage —
+    // this OR only controls cross-store visibility within the org.
+    //
+    // If the merchant later wants strict per-store isolation, flip
+    // to a single eq('store_id', opts.storeId) here.
     q = q.or(`store_id.eq.${opts.storeId},store_id.is.null`);
   }
   const { data: contacts, error: contactsErr } = await q;

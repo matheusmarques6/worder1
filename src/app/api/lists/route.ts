@@ -46,7 +46,13 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await q
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ lists: data || [] })
+  // no-store: prevents the browser from showing store A's lists on a
+  // back-button or F5 after the user switched to store B. The query
+  // string already includes ?store_id so cache keys differ, but we
+  // belt-and-suspenders against intermediaries that ignore that.
+  return NextResponse.json({ lists: data || [] }, {
+    headers: { 'Cache-Control': 'no-store, private, max-age=0' },
+  })
 }
 
 // POST /api/lists  →  { name, description?, color?, icon?, source?, store_id?, organization_id? }
@@ -65,11 +71,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid organization_id' }, { status: 403 })
   }
 
+  // Validate store_id ownership. Without this an attacker could POST
+  // { name:'x', store_id:'<victim-store-id>' } and create a list
+  // bound to another org's store. The list itself can't leak data
+  // (org-id is correct), but it would clutter the victim's UI and
+  // potentially get picked up by their pickers.
+  let storeId: string | null = body.store_id || null
+  if (storeId) {
+    const { data: storeRow } = await supabaseAdmin
+      .from('shopify_stores')
+      .select('id')
+      .eq('id', storeId)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+    if (!storeRow) {
+      return NextResponse.json({ error: 'store_id does not belong to this organization' }, { status: 403 })
+    }
+  }
+
   const { data, error } = await supabaseAdmin
     .from('contact_lists')
     .insert({
       organization_id: orgId,
-      store_id: body.store_id || null,
+      store_id: storeId,
       name: body.name.trim(),
       description: body.description || null,
       color: body.color || '#F97316',

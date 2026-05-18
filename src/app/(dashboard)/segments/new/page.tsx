@@ -23,6 +23,12 @@ export default function NewSegmentPage() {
   const search = useSearchParams()
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore()
+  // Gate the lists/segments fetch on zustand hydration. Without this,
+  // the first render fires with currentStore=undefined and pulls
+  // org-wide picker options (leaking other stores' lists). When
+  // hydration completes the deps change and a corrected fetch fires,
+  // but in the meantime the user can already see/click stale options.
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
   const editId = search.get('edit')
 
   const [totalContacts, setTotalContacts] = useState<number | undefined>(undefined)
@@ -34,10 +40,12 @@ export default function NewSegmentPage() {
   const [loadingExisting, setLoadingExisting] = useState(!!editId)
   const [showGallery, setShowGallery] = useState(!editId)
 
-  // Load lists for the "is in list X" rule type
-  // Plus available segments for the "is in segment Y" composition rule
+  // Load lists for the "is in list X" rule type plus available
+  // segments for the "is in segment Y" composition rule. Both gated
+  // on hasHydrated so we don't query during the zustand rehydration
+  // window where currentStore is briefly undefined.
   useEffect(() => {
-    if (!user?.organization_id) return
+    if (!hasHydrated || !user?.organization_id) return
     const qs = currentStore?.id ? `?store_id=${currentStore.id}` : ''
     fetch(`/api/lists${qs}`)
       .then((r) => r.json())
@@ -47,7 +55,7 @@ export default function NewSegmentPage() {
       .then((r) => r.json())
       .then((d) => setSegments((d.segments || []).map((s: any) => ({ id: s.id, name: s.name }))))
       .catch(() => {})
-  }, [user?.organization_id, currentStore?.id])
+  }, [hasHydrated, user?.organization_id, currentStore?.id])
 
   // Edit mode: hydrate the builder from the existing segment row.
   // The /rule-v2 GET endpoint returns the v2 rule (running v1→v2
@@ -130,7 +138,7 @@ export default function NewSegmentPage() {
     }
   }
 
-  if (!user?.organization_id || loadingExisting) {
+  if (!hasHydrated || !user?.organization_id || loadingExisting) {
     return (
       <div className="flex items-center justify-center py-32">
         <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -175,7 +183,11 @@ export default function NewSegmentPage() {
       )}
 
       <SegmentBuilder
-        key={editId || (initialRule ? 'with-template' : 'blank')}
+        // key includes currentStore so switching stores forces a
+        // fresh builder instance. Without this, half-typed rules
+        // for store A would persist when the user switched to
+        // store B and started a different segment.
+        key={`${currentStore?.id || 'org'}-${editId || (initialRule ? 'with-template' : 'blank')}`}
         initialRule={initialRule}
         initialMetadata={initialMeta}
         organizationId={user.organization_id}
