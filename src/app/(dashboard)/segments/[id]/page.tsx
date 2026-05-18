@@ -15,9 +15,11 @@ import {
   Copy,
   Check,
   Save,
+  RefreshCw,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { SegmentRuleViewer } from '@/components/segments/v2/SegmentRuleViewer'
 
 interface Segment {
   id: string
@@ -179,13 +181,16 @@ export default function SegmentDetailPage() {
             Segmentos
           </Link>
         </div>
-        <button
-          onClick={handleDelete}
-          className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm transition-colors"
-        >
-          <Trash2 className="w-4 h-4" />
-          Excluir
-        </button>
+        <div className="flex items-center gap-2">
+          <RefreshSegmentButton segmentId={segmentId} onRefreshed={fetchSegment} />
+          <button
+            onClick={handleDelete}
+            className="flex items-center gap-2 px-3 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            Excluir
+          </button>
+        </div>
       </div>
 
       <div>
@@ -360,6 +365,52 @@ export default function SegmentDetailPage() {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Refresh button — forces a synchronous recompute of the segment.
+// ──────────────────────────────────────────────────────────────────────
+
+function RefreshSegmentButton({ segmentId, onRefreshed }: {
+  segmentId: string
+  onRefreshed: () => void
+}) {
+  const [running, setRunning] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
+
+  async function refresh() {
+    setRunning(true)
+    setFeedback(null)
+    try {
+      const res = await fetch(`/api/segments/${segmentId}/refresh`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'falha ao recalcular')
+      setFeedback(`${data.count.toLocaleString('pt-BR')} contatos · ${data.duration_ms}ms`)
+      onRefreshed()
+      setTimeout(() => setFeedback(null), 4000)
+    } catch (err: any) {
+      setFeedback(err?.message || 'erro inesperado')
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {feedback && (
+        <span className="text-xs text-gray-500">{feedback}</span>
+      )}
+      <button
+        onClick={refresh}
+        disabled={running}
+        className="flex items-center gap-2 px-3 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-sm transition-colors disabled:opacity-50"
+        title="Forçar recompute completo do segmento"
+      >
+        {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+        Recalcular
+      </button>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Definition view — loads the segment via the v2 endpoint so legacy v1
 // rules are normalized through the adapter before rendering. The
 // builder lives on /segments/new?edit=<id>; this view is read-only.
@@ -367,13 +418,24 @@ export default function SegmentDetailPage() {
 
 function SegmentDefinitionView({ segmentId }: { segmentId: string }) {
   const [data, setData] = useState<any>(null)
+  const [listNames, setListNames] = useState<Record<string, string>>({})
+  const [segmentNames, setSegmentNames] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
+  const [showRaw, setShowRaw] = useState(false)
 
   useEffect(() => {
-    fetch(`/api/segments/${segmentId}/rule-v2`)
-      .then((r) => r.ok ? r.json() : null)
-      .then(setData)
-      .finally(() => setLoading(false))
+    let cancelled = false
+    Promise.all([
+      fetch(`/api/segments/${segmentId}/rule-v2`).then((r) => r.ok ? r.json() : null),
+      fetch('/api/lists').then((r) => r.ok ? r.json() : { lists: [] }),
+      fetch('/api/segments?include_count=false').then((r) => r.ok ? r.json() : { segments: [] }),
+    ]).then(([ruleData, listsData, segmentsData]) => {
+      if (cancelled) return
+      setData(ruleData)
+      setListNames(Object.fromEntries((listsData.lists || []).map((l: any) => [l.id, l.name])))
+      setSegmentNames(Object.fromEntries((segmentsData.segments || []).map((s: any) => [s.id, s.name])))
+    }).finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [segmentId])
 
   if (loading) {
@@ -391,17 +453,40 @@ function SegmentDefinitionView({ segmentId }: { segmentId: string }) {
           <h2 className="text-lg font-semibold text-gray-900">Definição</h2>
           <p className="text-sm text-gray-500">Regras que decidem quem entra neste segmento</p>
         </div>
-        <Link
-          href={`/segments/new?edit=${segmentId}`}
-          className="flex items-center gap-2 px-3 py-1.5 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors shrink-0"
-        >
-          <Edit3 className="w-3.5 h-3.5" />
-          Editar
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setShowRaw((v) => !v)}
+            className="text-xs text-gray-500 hover:text-gray-700"
+          >
+            {showRaw ? 'Visualizar' : 'Ver JSON'}
+          </button>
+          <Link
+            href={`/segments/new?edit=${segmentId}`}
+            className="flex items-center gap-2 px-3 py-1.5 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+            Editar
+          </Link>
+        </div>
       </div>
-      <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-700 overflow-x-auto">
-        {data?.rule ? JSON.stringify(data.rule, null, 2) : 'Nenhuma regra definida'}
-      </pre>
+
+      {data?.rule ? (
+        showRaw ? (
+          <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-700 overflow-x-auto">
+            {JSON.stringify(data.rule, null, 2)}
+          </pre>
+        ) : (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <SegmentRuleViewer
+              rule={data.rule}
+              listNames={listNames}
+              segmentNames={segmentNames}
+            />
+          </div>
+        )
+      ) : (
+        <p className="text-sm text-gray-400 py-4">Nenhuma regra definida</p>
+      )}
     </div>
   )
 }

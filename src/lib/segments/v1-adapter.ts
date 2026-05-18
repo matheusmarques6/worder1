@@ -18,6 +18,7 @@
 // still find them via the contact column lookup.
 
 import type { SegmentRule, RuleGroup, RuleLeaf, EventRule, ProfileRule } from './dsl';
+import { FIELD_INDEX } from './catalog';
 
 interface V1Rule {
   field?: string;
@@ -135,17 +136,34 @@ function convertLeaf(r: V1Rule): RuleLeaf | null {
   // ── Profile fall-through ──
   if (!r.field) return null;
   const field = FIELD_ALIAS[r.field] || r.field;
-  // Map legacy operator names to v2 canonical form.
-  const opMap: Record<string, string> = {
-    '=': 'equals',
-    '!=': 'not_equals',
-    '>': 'gt',
-    '>=': 'gte',
-    '<': 'lt',
-    '<=': 'lte',
-    greater_than: 'gt',
-    less_than: 'lt',
-  };
+  // Map legacy operator names to v2 canonical form. For DATE fields
+  // we route gt/lt to after/before instead — v1 stored ISO strings
+  // and used Number() comparisons that silently produced NaN > NaN
+  // (always false), so even though the segment 'Engajados 30d' had a
+  // valid intent, its contact_count was always 0.
+  const def = FIELD_INDEX[field];
+  const isDateField = def?.type === 'date';
+  const opMap: Record<string, string> = isDateField
+    ? {
+        '=': 'equals',
+        '!=': 'not_equals',
+        '>': 'after',
+        '>=': 'after',
+        '<': 'before',
+        '<=': 'before',
+        greater_than: 'after',
+        less_than: 'before',
+      }
+    : {
+        '=': 'equals',
+        '!=': 'not_equals',
+        '>': 'gt',
+        '>=': 'gte',
+        '<': 'lt',
+        '<=': 'lte',
+        greater_than: 'gt',
+        less_than: 'lt',
+      };
   const mappedOp = opMap[op] || op;
 
   const leaf: ProfileRule = {
