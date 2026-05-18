@@ -68,6 +68,18 @@ export function SegmentBuilder({
     if (initialRule) setRule(initialRule)
   }, [initialRule])
 
+  // Sync metadata fields when initialMetadata loads async (edit mode).
+  // Without this, /segments/new?edit=X showed empty name/description
+  // because useState only ran on mount before the fetch returned.
+  // Reference-equality check on initialMetadata gates the sync so a
+  // parent re-render doesn't clobber the user's in-progress edits.
+  useEffect(() => {
+    if (!initialMetadata) return
+    if (initialMetadata.name !== undefined) setName(initialMetadata.name || '')
+    if (initialMetadata.description !== undefined) setDescription(initialMetadata.description || '')
+    if (initialMetadata.color) setColor(initialMetadata.color)
+  }, [initialMetadata])
+
   function updateRoot(g: RuleGroupShape) {
     setRule({ ...rule, root: g })
   }

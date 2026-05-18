@@ -7,7 +7,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { resolveSegment } from '@/lib/segments';
+import { resolveSegment, loadSegmentAsV2 } from '@/lib/segments';
+import { extractDependencies } from '@/lib/segments/dsl';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -51,16 +52,23 @@ export async function GET(request: NextRequest) {
         // v1 evaluator misreading v2 JSONB.
         const result = await resolveSegment(supabase, seg.id, seg.organization_id);
 
-        await supabase
-          .from('customer_segments')
-          .update({
-            contact_count: result.contactIds.length,
-            last_count_at: new Date().toISOString(),
-            last_evaluated_at: new Date().toISOString(),
-            evaluation_status: 'idle',
-            evaluation_error: null,
-          })
-          .eq('id', seg.id);
+        // Backfill rule_dependencies for v1 legacy rows. Without this
+        // the real-time worker's dependency filter never matches them,
+        // and webhooks/pixel events don't re-enqueue these segments.
+        // We compute via the v2 adapter so the dependency set reflects
+        // the same evaluation surface the resolver actually walks.
+        const loaded = await loadSegmentAsV2(supabase, seg.id);
+        const updates: Record<string, any> = {
+          contact_count: result.contactIds.length,
+          last_count_at: new Date().toISOString(),
+          last_evaluated_at: new Date().toISOString(),
+          evaluation_status: 'idle',
+          evaluation_error: null,
+        };
+        if (loaded) {
+          updates.rule_dependencies = extractDependencies(loaded.rule);
+        }
+        await supabase.from('customer_segments').update(updates).eq('id', seg.id);
 
         results.push({ id: seg.id, count: result.contactIds.length, ok: true });
       } catch (err: any) {

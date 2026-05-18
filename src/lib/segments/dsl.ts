@@ -49,7 +49,6 @@ export type DateOperator =
   | 'between_relative'     // e.g. 30-90 days ago (from/to in days)
   | 'is_today'
   | 'is_this_month'
-  | 'on_day'               // legacy alias — kept for back-compat with rules that already used this name
   | 'month_in'             // Klaviyo "day is in the month of" — value is int[] of months 1-12 (Jan = 1)
   | 'day_of_month_in';     // value is int[] of days 1-31. Pair with month_in for date-of-month targeting.
 
@@ -259,6 +258,13 @@ function validateTimeWindow(w: unknown, path: string, errs: string[]): void {
 function validatePropertyFilter(p: unknown, path: string, errs: string[]): void {
   if (!isObj(p)) { errs.push(`${path}: property filter must be object`); return; }
   if (typeof p.path !== 'string' || !p.path) errs.push(`${path}.path: required string`);
+  // Reject a path that is only wildcards (e.g. '[]' or '[].[]'). The
+  // wildcard walker would split into empty/marker segments and match
+  // nothing, but accepting it silently confuses merchants. Require at
+  // least one named segment between/around any wildcards.
+  if (typeof p.path === 'string' && p.path && !/[A-Za-z_]/.test(p.path)) {
+    errs.push(`${path}.path: must reference at least one named property (got "${p.path}")`);
+  }
   if (!FIELD_TYPES.has(p.type as FieldType)) errs.push(`${path}.type: invalid field type`);
   if (typeof p.operator !== 'string') errs.push(`${path}.operator: required`);
 }

@@ -127,7 +127,7 @@ Output schema (JSON):
 
 Leaf types:
 - profile: { type:"profile", field:"<key from catalog>", operator:"<op>", value:..., value2?:..., unit?:"day|week|month" }
-- event: { type:"event", event:"<event key>", frequency:{op:"at_least|at_most|exactly|between|zero", value:N, value2?:N}, window:{kind:"all_time"|"last"|"before"|"after"|"between_dates"|"between_relative", value?, unit?, date?, from?, to?}, property_filters?:[{path,type,operator,value,value2?}] }
+- event: { type:"event", event:"<event key>", frequency:{op:"at_least|at_most|exactly|between|zero", value:N, value2?:N}, window:{kind:"all_time"|"last"|"not_in_last"|"before"|"after"|"between_dates"|"between_relative"|"on_date", value?, unit?, date?, from?, to?}, property_filters?:[{path,type,operator,value,value2?}] }
 - event_funnel: { type:"event_funnel", steps:[{event:"<key>", negate:false}, ...], window:{kind:"last", value:N, unit:"day"}, max_step_gap_days?:N } — strict-order sequence
 - anniversary: { type:"anniversary", field:"<date field>", within_next_days:N } — recurring (month,day) match
 - list_membership: { type:"list_membership", list_id:"<uuid>", is_member:true|false }

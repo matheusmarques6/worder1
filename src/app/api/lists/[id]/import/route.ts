@@ -37,9 +37,12 @@ interface CsvRow {
 }
 
 function parseCsv(input: string): CsvRow[] {
-  // Minimal CSV parser. Handles quoted fields and embedded commas.
-  // Does NOT handle escaped quotes ("") inside quoted fields — that's
-  // a v2 problem; merchants rarely have those.
+  // CSV parser handling: quoted fields with embedded commas/newlines,
+  // escaped quotes ("" inside a quoted field), trailing commas
+  // (preserved as empty cells), and mixed line endings (CR/LF/CRLF).
+  // Tolerates a missing trailing newline. If a quoted field never
+  // closes (malformed CSV), we close it at EOF rather than infinite-
+  // loop or absorb the whole file into one field.
   const rows: string[][] = []
   let cur: string[] = []
   let field = ''
@@ -47,7 +50,12 @@ function parseCsv(input: string): CsvRow[] {
   for (let i = 0; i < input.length; i++) {
     const c = input[i]
     if (inQuotes) {
-      if (c === '"') { inQuotes = false; continue }
+      if (c === '"') {
+        // RFC 4180: "" inside quotes is an escaped quote literal.
+        if (input[i + 1] === '"') { field += '"'; i++; continue }
+        inQuotes = false
+        continue
+      }
       field += c
     } else {
       if (c === '"') { inQuotes = true; continue }
@@ -57,9 +65,12 @@ function parseCsv(input: string): CsvRow[] {
       field += c
     }
   }
+  // Flush whatever is left, even if the quote never closed.
   if (field.length || cur.length) { cur.push(field); rows.push(cur) }
 
   if (rows.length === 0) return []
+  // Drop a trailing empty column from the header if the file had a
+  // trailing comma — keeps the column→cell index alignment honest.
   const header = rows[0].map((h) => h.trim().toLowerCase())
   return rows.slice(1)
     .filter((r) => r.some((v) => v.trim() !== ''))

@@ -33,23 +33,62 @@ export const dynamic = 'force-dynamic';
 // Map a Shopify webhook topic to the canonical event key the segment
 // resolver understands. Returning null skips the reeval enqueue
 // (e.g. 'app/uninstalled' doesn't trigger segment changes).
-function topicToEventKey(topic: string): string | null {
+// What signals a webhook topic produces. The realtime segment worker
+// matches segments by rule_dependencies, so a single order webhook
+// must announce BOTH the placed_order event AND every contact field
+// it touches — otherwise segments that depend on total_orders or
+// lifecycle_stage never get reevaluated when an order is paid.
+function topicToSignals(topic: string): string[] {
+  // Fields recomputed by the totals worker after any order webhook
+  // (orders/create, orders/paid, refunds, cancellations). Mirrors
+  // contacts columns that scheduleRecomputeStoreTotals refreshes.
+  const ORDER_FIELDS = [
+    'field:total_orders',
+    'field:total_spent',
+    'field:average_order_value',
+    'field:lifetime_value',
+    'field:last_order_at',
+    'field:first_order_at',
+    'field:days_since_last_order',
+    'field:order_frequency_days',
+    'field:lifecycle_stage',
+    'field:rfm_recency',
+    'field:rfm_frequency',
+    'field:rfm_monetary',
+  ];
   switch (topic) {
     case 'orders/create':
     case 'orders/paid':
-      return 'placed_order';
     case 'orders/cancelled':
+    case 'orders/fulfilled':
+    case 'orders/updated':
     case 'refunds/create':
-      return 'placed_order'; // same dependency — refund flips the contact's segment membership
+      return ['event:placed_order', ...ORDER_FIELDS];
     case 'checkouts/create':
     case 'checkouts/update':
-      return 'started_checkout';
+      return ['event:started_checkout'];
     case 'customers/create':
     case 'customers/update':
+      return [
+        'event:subscribed',
+        'field:email',
+        'field:phone',
+        'field:first_name',
+        'field:last_name',
+        'field:country',
+        'field:state',
+        'field:city',
+        'field:zip',
+        'field:tags',
+        'field:lifecycle_stage',
+      ];
     case 'customers/email_marketing_consent/update':
-      return 'subscribed';
+      return [
+        'field:is_subscribed_email',
+        'field:email_consent_at',
+      ];
     default:
-      return null;
+      return [];
   }
 }
 
@@ -2757,19 +2796,18 @@ export async function POST(request: NextRequest) {
       }
 
       // Real-time segment membership: enqueue reevaluations for any
-      // segments whose rule_dependencies match this signal. The drain
-      // worker (cron every minute) picks them up.
-      const eventForReason = topicToEventKey(topic);
-      if (eventForReason) {
-        // For order/customer/product webhooks the body carries the
-        // shopify_customer_id or email. We resolve that to our contact
-        // row inside scheduleSegmentReeval's path.
+      // segments whose rule_dependencies match the signals this
+      // webhook produces. A single order webhook fires the event AND
+      // touches ~10 contact fields (totals, lifecycle, RFM), so we
+      // batch all of them — the queue dedupes per (segment, contact).
+      const signals = topicToSignals(topic);
+      if (signals.length) {
         const contactId = await resolveContactFromTopic(getSupabase(), store, topic, body);
         if (contactId) {
           scheduleSegmentReeval(getSupabase(), {
             orgId: store.organization_id,
             contactId,
-            reason: `event:${eventForReason}`,
+            reasons: signals,
           });
         }
       }

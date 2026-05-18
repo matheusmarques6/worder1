@@ -22,10 +22,20 @@ import type { SegmentRule } from './dsl';
 export interface EnqueueOptions {
   orgId: string;
   contactId: string | null;
-  // What changed. 'event:<name>' for a fired event,
-  // 'field:<column>' for a contact column update,
-  // 'list:add'/'list:remove' when membership of a referenced list changes.
-  reason: string;
+  // What changed. Accepts a single reason ('event:placed_order') or
+  // multiple reasons that all reference the same contact mutation.
+  // Why both: a single webhook (orders/paid) fires the event AND
+  // touches several contact fields (total_orders, total_spent,
+  // last_order_at, lifecycle_stage). The realtime worker only
+  // reevaluates segments whose rule_dependencies match a reason, so
+  // we need to dispatch every signal that the mutation produces.
+  //
+  // 'event:<name>' = an event_type fired
+  // 'field:<col>'  = a contact column updated
+  // 'list:<id>'    = membership of a list changed
+  // 'segment:<id>' = membership of a segment changed (cascade)
+  reason?: string;
+  reasons?: string[];
 }
 
 export async function enqueueSegmentReeval(
@@ -33,33 +43,46 @@ export async function enqueueSegmentReeval(
   opts: EnqueueOptions,
 ): Promise<{ enqueued: number }> {
   if (!opts.contactId) return { enqueued: 0 };
+  const reasons = opts.reasons?.length ? opts.reasons : (opts.reason ? [opts.reason] : []);
+  if (reasons.length === 0) return { enqueued: 0 };
 
-  // Identify which segments care about this reason.
-  // rule_dependencies is JSONB shaped { fields: [], events: [], lists: [], segments: [] }
-  const [kind, name] = opts.reason.split(':');
-  const path = kind === 'event' ? 'events' : kind === 'field' ? 'fields' : kind === 'list' ? 'lists' : null;
-  if (!path) return { enqueued: 0 };
+  // Collect every (segment, reason) pair across all signals. The
+  // queue PK is (segment_id, contact_id), so multiple reasons for
+  // the same segment dedupe automatically — we only keep the first
+  // reason hit on insert (ignoreDuplicates). That's intentional:
+  // worker re-evaluates the full rule regardless of which signal
+  // triggered, so the reason string is diagnostic only.
+  const matches = new Map<string, string>(); // segmentId → first-matching reason
+  for (const reason of reasons) {
+    const [kind, name] = reason.split(':');
+    const path =
+      kind === 'event' ? 'events' :
+      kind === 'field' ? 'fields' :
+      kind === 'list' ? 'lists' :
+      kind === 'segment' ? 'segments' : null;
+    if (!path || !name) continue;
 
-  const { data: segments } = await supabase
-    .from('customer_segments')
-    .select('id')
-    .eq('organization_id', opts.orgId)
-    .eq('is_active', true)
-    // PostgREST JSONB filter: rule_dependencies->path contains [name]
-    .contains('rule_dependencies', { [path]: [name] });
+    const { data: segments } = await supabase
+      .from('customer_segments')
+      .select('id')
+      .eq('organization_id', opts.orgId)
+      .eq('is_active', true)
+      .contains('rule_dependencies', { [path]: [name] });
 
-  if (!segments || segments.length === 0) return { enqueued: 0 };
+    for (const s of (segments || []) as Array<{ id: string }>) {
+      if (!matches.has(s.id)) matches.set(s.id, reason);
+    }
+  }
 
-  const rows = segments.map((s: any) => ({
-    segment_id: s.id,
+  if (matches.size === 0) return { enqueued: 0 };
+
+  const rows = [...matches.entries()].map(([segment_id, reason]) => ({
+    segment_id,
     contact_id: opts.contactId,
-    reason: opts.reason,
+    reason,
     scheduled_at: new Date().toISOString(),
   }));
 
-  // Upsert so we don't blow up on duplicate enqueues for the same
-  // (segment, contact) pair. The composite PK handles dedup, but
-  // ON CONFLICT DO NOTHING is the explicit ask for it.
   await supabase
     .from('segment_reeval_queue')
     .upsert(rows, { onConflict: 'segment_id,contact_id', ignoreDuplicates: true });
