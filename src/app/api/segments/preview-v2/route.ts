@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { previewByRule, validateSegmentRule } from '@/lib/segments';
+import { checkRateLimit, LIMITS } from '@/lib/segments/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -37,6 +38,18 @@ export async function POST(req: NextRequest) {
   const orgId = body.organization_id || auth.user.organization_id;
   if (!orgIds.includes(orgId)) {
     return NextResponse.json({ error: 'invalid organization_id' }, { status: 403 });
+  }
+
+  // Rate-limit per org: preview is the heaviest read endpoint we
+  // expose (full resolver run on the contact universe). Cap to 60/
+  // min/org so a runaway client-side debounce or scripted client
+  // can't pin the function and degrade other merchants.
+  const rate = checkRateLimit(LIMITS.preview, orgId);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: rate.message },
+      { status: 429, headers: { 'Retry-After': String(rate.retryAfterSec) } }
+    );
   }
 
   try {

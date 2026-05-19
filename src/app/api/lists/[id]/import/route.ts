@@ -21,6 +21,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { checkRateLimit, LIMITS } from '@/lib/segments/rate-limit'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -106,6 +107,17 @@ export async function POST(
     .in('organization_id', orgIds)
     .maybeSingle()
   if (!list) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Rate-limit per org: CSV import opens a 300s budget and creates
+  // contacts in batches. 6/min/org is generous for a human workflow
+  // and stops automated abuse from blasting 50k-row uploads.
+  const rate = checkRateLimit(LIMITS.import, (list as any).organization_id)
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: rate.message },
+      { status: 429, headers: { 'Retry-After': String(rate.retryAfterSec) } }
+    )
+  }
 
   // Read CSV content from either multipart or JSON body
   let csvText = ''

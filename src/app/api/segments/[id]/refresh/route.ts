@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { resolveSegment } from '@/lib/segments'
+import { checkRateLimit, LIMITS } from '@/lib/segments/rate-limit'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -41,6 +42,18 @@ export async function POST(
     .in('organization_id', orgIds)
     .maybeSingle()
   if (!segment) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Rate-limit per org: refresh is a synchronous full-resolve which
+  // can take 30s on a large segment. 10/min keeps operational use
+  // (debugging a freshly-edited segment) flowing while blocking
+  // accidental loop calls.
+  const rate = checkRateLimit(LIMITS.refresh, (segment as any).organization_id)
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: rate.message },
+      { status: 429, headers: { 'Retry-After': String(rate.retryAfterSec) } }
+    )
+  }
 
   // Mark running so concurrent UI requests show a status
   await supabaseAdmin

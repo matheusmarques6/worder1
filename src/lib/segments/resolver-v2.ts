@@ -32,6 +32,7 @@ import type {
   PropertyFilter,
 } from './dsl';
 import { FIELD_INDEX } from './catalog';
+import { isUuid } from './validate';
 
 // ─────────────────────────────────────────────────────────────────────
 // Top-level entry
@@ -83,14 +84,19 @@ export async function resolveSegmentV2(
   }
 
   if (opts.storeId) {
+    // Defensively re-check UUID shape before interpolating into a
+    // PostgREST filter string — even though callers should pass a
+    // validated UUID, a typo or downstream bug could otherwise let a
+    // value with commas/parens break out of .or(). isUuid rejects
+    // anything that isn't a canonical UUID.
+    if (!isUuid(opts.storeId)) {
+      throw new Error(`invalid storeId: ${opts.storeId}`);
+    }
     // Include contacts pinned to this store OR not yet assigned to
     // any store (the customer-sync backfill stamps store_id on every
     // touch, so the null bucket shrinks over time). The org filter
     // applied above (line 76) already prevents cross-org leakage —
     // this OR only controls cross-store visibility within the org.
-    //
-    // If the merchant later wants strict per-store isolation, flip
-    // to a single eq('store_id', opts.storeId) here.
     q = q.or(`store_id.eq.${opts.storeId},store_id.is.null`);
   }
   const { data: contacts, error: contactsErr } = await q;

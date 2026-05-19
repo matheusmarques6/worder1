@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { asUuid } from '@/lib/segments/validate'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +33,11 @@ export async function GET(req: NextRequest) {
   if (!ctx) return authError()
 
   const { searchParams } = new URL(req.url)
-  const storeId = searchParams.get('store_id')
+  // Validate as UUID before interpolating into a PostgREST filter
+  // string — a value with commas/parens would break out of .or() and
+  // could compose unexpected filter logic. asUuid returns null for
+  // anything that doesn't match the canonical UUID pattern.
+  const storeId = asUuid(searchParams.get('store_id'))
   const includeArchived = searchParams.get('include_archived') === 'true'
 
   let q: any = supabaseAdmin
