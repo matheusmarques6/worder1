@@ -3,9 +3,9 @@
 // src/lib/whatsapp/cloud-api.ts
 // =============================================
 
-// API Version atualizada para v21.0 (Março 2026)
+// API Version v22.0 (Maio 2026)
 // Documentação: https://developers.facebook.com/docs/whatsapp/cloud-api
-const META_API_VERSION = 'v21.0';
+const META_API_VERSION = 'v22.0';
 const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
 // =============================================
@@ -599,34 +599,158 @@ export function getMessageType(message: WebhookMessage): string {
   return 'unknown';
 }
 
+/**
+ * Verify Meta's X-Hub-Signature-256 header against the raw request body.
+ *
+ * - Uses node:crypto.timingSafeEqual on equal-length buffers to avoid
+ *   timing side channels (Sprint 1 / Fase 2 hardening).
+ * - Short-circuits on length mismatch BEFORE buffer compare (length itself
+ *   doesn't leak via timing because hex output is fixed-width: sha256 = 64 hex).
+ * - Accepts both 'sha256=<hex>' and bare '<hex>' inputs.
+ *
+ * IMPORTANT: pass the RAW request body, not the JSON-parsed-then-stringified
+ * version. Meta signs the exact bytes — re-serializing breaks the HMAC.
+ */
 export async function verifyWebhookSignature(
   payload: string,
-  signature: string,
+  signature: string | null | undefined,
   appSecret: string
 ): Promise<boolean> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(appSecret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  
-  const signatureBuffer = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    encoder.encode(payload)
-  );
-  
-  const expectedSignature = Array.from(new Uint8Array(signatureBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-  
-  return `sha256=${expectedSignature}` === signature;
+  if (!signature || !appSecret) return false;
+
+  // Node:crypto path (preferred — runs in API routes & workers)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const nodeCrypto = require('crypto') as typeof import('crypto');
+    const expected = nodeCrypto
+      .createHmac('sha256', appSecret)
+      .update(payload, 'utf8')
+      .digest('hex');
+
+    const received = signature.startsWith('sha256=')
+      ? signature.slice('sha256='.length)
+      : signature;
+
+    if (expected.length !== received.length) return false;
+
+    return nodeCrypto.timingSafeEqual(
+      Buffer.from(expected, 'hex'),
+      Buffer.from(received, 'hex')
+    );
+  } catch {
+    // Web Crypto fallback (Edge runtime). Final compare is byte-by-byte
+    // in constant time over the full hex string.
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(appSecret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const sigBuf = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
+    const expected = Array.from(new Uint8Array(sigBuf))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    const received = signature.startsWith('sha256=')
+      ? signature.slice('sha256='.length)
+      : signature;
+
+    if (expected.length !== received.length) return false;
+
+    let diff = 0;
+    for (let i = 0; i < expected.length; i++) {
+      diff |= expected.charCodeAt(i) ^ received.charCodeAt(i);
+    }
+    return diff === 0;
+  }
 }
 
 // Factory
 export function createWhatsAppCloudClient(config: WhatsAppCloudConfig): WhatsAppCloudAPI {
   return new WhatsAppCloudAPI(config);
+}
+
+// =============================================
+// EMBEDDED SIGNUP HELPERS
+// =============================================
+// Plan: Sprint 1 / Fase 3.
+// Stateless calls — they don't need a per-WABA client. The token returned
+// by exchangeEmbeddedSignupCode is what bootstraps everything else.
+
+/**
+ * Exchange the short-lived code returned by FB.login (Embedded Signup) for a
+ * long-lived Business Integration System User token. The returned token does
+ * not expire (per Meta docs for Tech Provider flow).
+ *
+ * @see https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-customers-as-a-tech-provider#step-1
+ */
+export async function exchangeEmbeddedSignupCode(params: {
+  appId: string;
+  appSecret: string;
+  code: string;
+}): Promise<{ access_token: string; token_type: string }> {
+  const url = new URL(`${META_BASE_URL}/oauth/access_token`);
+  url.searchParams.set('client_id', params.appId);
+  url.searchParams.set('client_secret', params.appSecret);
+  url.searchParams.set('code', params.code);
+
+  const res = await fetch(url.toString(), { method: 'GET' });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new WhatsAppCloudError(data.error || { message: 'oauth code exchange failed', code: res.status });
+  }
+  return data;
+}
+
+/**
+ * Subscribe your app to a WABA's webhook events. Must be called once per
+ * WABA after Embedded Signup completes — without this, no inbound messages.
+ */
+export async function subscribeAppToWABA(params: {
+  wabaId: string;
+  accessToken: string;
+}): Promise<{ success: boolean }> {
+  const res = await fetch(`${META_BASE_URL}/${params.wabaId}/subscribed_apps`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new WhatsAppCloudError(data.error || { message: 'subscribe failed', code: res.status });
+  }
+  return data;
+}
+
+/**
+ * Register a phone number with Meta after Embedded Signup. PIN is required
+ * by Meta API; for accounts without 2FA the value is arbitrary but must be
+ * 6 digits.
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/reference/registration#register
+ */
+export async function registerPhoneNumber(params: {
+  phoneNumberId: string;
+  accessToken: string;
+  pin: string;
+}): Promise<{ success: boolean }> {
+  const res = await fetch(`${META_BASE_URL}/${params.phoneNumberId}/register`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      pin: params.pin,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new WhatsAppCloudError(data.error || { message: 'register failed', code: res.status });
+  }
+  return data;
 }

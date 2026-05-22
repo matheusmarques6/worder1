@@ -1,43 +1,38 @@
-// =============================================
-// API: WhatsApp Cloud - Webhook
-// src/app/api/whatsapp/cloud/webhook/route.ts
-//
-// Atualizado para usar o sistema de automações
-// por pipeline (RuleEngine)
-// =============================================
+/**
+ * WhatsApp Cloud webhook — public ingestor.
+ *
+ * Two modes:
+ *   - ENABLE_ASYNC_WEBHOOK=true  (target): HMAC verify → persist raw payload
+ *     into whatsapp_webhook_events → enqueue via QStash → return 200 in <50ms.
+ *   - ENABLE_ASYNC_WEBHOOK=false (legacy fallback during canary): runs the
+ *     full processor inline. Used to revert without redeploy if a regression
+ *     is detected.
+ *
+ * Plan ref: Sprint 1 / Fase 1 (ingest-fast / process-later).
+ */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
-import { 
-  verifyWebhookSignature, 
-  extractMessageText, 
-  getMessageType,
-  normalizePhone,
-  type WebhookMessage 
-} from '@/lib/whatsapp/cloud-api';
-import { 
-  RuleEngine, 
-  type EventData 
-} from '@/lib/services/automation/rule-engine';
-export const dynamic = 'force-dynamic';
+import { verifyWebhookSignature } from '@/lib/whatsapp/cloud-api';
+import { processWebhookPayload } from '@/lib/whatsapp/webhook-processor';
+import { enqueueWhatsAppWebhook } from '@/lib/queue';
 
-// =============================================
-// GET - Verificação do Webhook (Meta)
-// =============================================
+export const dynamic = 'force-dynamic';
+export const maxDuration = 10;
+
+// ============================================
+// GET — Meta verification challenge
+// ============================================
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  
   const mode = searchParams.get('hub.mode');
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
-
-  console.log('[WhatsApp Cloud Webhook] Verification request:', { mode, token, challenge });
 
   if (mode !== 'subscribe') {
     return new Response('Invalid mode', { status: 403 });
   }
 
-  // Buscar conta pelo verify token
   const { data: account } = await supabase
     .from('whatsapp_business_accounts')
     .select('id, organization_id')
@@ -45,449 +40,90 @@ export async function GET(request: NextRequest) {
     .single();
 
   if (!account) {
-    // Fallback para token global
     const globalToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
     if (token !== globalToken) {
-      console.log('[WhatsApp Cloud Webhook] Invalid verify token');
       return new Response('Invalid verify token', { status: 403 });
     }
   } else {
-    // Marcar webhook como configurado
     await supabase
       .from('whatsapp_business_accounts')
       .update({ webhook_configured: true })
       .eq('id', account.id);
   }
 
-  console.log('[WhatsApp Cloud Webhook] Verification successful');
   return new Response(challenge, { status: 200 });
 }
 
-// =============================================
-// POST - Receber eventos
-// =============================================
+// ============================================
+// POST — Receive events (async ingest)
+// ============================================
 export async function POST(request: NextRequest) {
+  const rawBody = await request.text();
+  const signature = request.headers.get('x-hub-signature-256');
+  const appSecret = process.env.META_APP_SECRET;
+
+  // HMAC verify — timing-safe (cloud-api.ts:verifyWebhookSignature)
+  if (signature && appSecret) {
+    const valid = await verifyWebhookSignature(rawBody, signature, appSecret);
+    if (!valid) {
+      console.warn('[whatsapp-webhook] Invalid signature — rejecting');
+      return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
+    }
+  } else if (process.env.NODE_ENV === 'production') {
+    console.error('[whatsapp-webhook] Missing signature or META_APP_SECRET in production');
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  let payload: any;
   try {
-    const rawBody = await request.text();
-    
-    // Verificar assinatura (opcional mas recomendado)
-    const signature = request.headers.get('x-hub-signature-256');
-    if (signature && process.env.META_APP_SECRET) {
-      const isValid = await verifyWebhookSignature(rawBody, signature, process.env.META_APP_SECRET);
-      if (!isValid) {
-        console.warn('[WhatsApp Cloud Webhook] Invalid signature');
-        // Continuar mesmo assim para não perder mensagens
-      }
+    payload = JSON.parse(rawBody);
+  } catch {
+    return NextResponse.json({ error: 'invalid json' }, { status: 400 });
+  }
+
+  if (payload?.object !== 'whatsapp_business_account') {
+    return NextResponse.json({ received: true, ignored: 'not_whatsapp' });
+  }
+
+  // Legacy synchronous path (disable when async is canary-validated).
+  if (process.env.ENABLE_ASYNC_WEBHOOK !== 'true') {
+    try {
+      await processWebhookPayload(payload);
+    } catch (err) {
+      console.error('[whatsapp-webhook] sync processing error:', err);
     }
-
-    const body = JSON.parse(rawBody);
-    
-    // Verificar se é webhook do WhatsApp
-    if (body.object !== 'whatsapp_business_account') {
-      return NextResponse.json({ received: true });
-    }
-
-    // Processar cada entry
-    for (const entry of body.entry || []) {
-      for (const change of entry.changes || []) {
-        if (change.field !== 'messages') continue;
-
-        const value = change.value;
-        const phoneNumberId = value.metadata?.phone_number_id;
-        const displayPhone = value.metadata?.display_phone_number;
-
-        if (!phoneNumberId) continue;
-
-        // Buscar conta
-        const { data: account } = await supabase
-          .from('whatsapp_business_accounts')
-          .select('*')
-          .eq('phone_number_id', phoneNumberId)
-          .single();
-
-        if (!account) {
-          console.warn('[WhatsApp Cloud Webhook] Unknown phone_number_id:', phoneNumberId);
-          continue;
-        }
-
-        // Processar mensagens
-        for (const message of value.messages || []) {
-          await processMessage(account, message, value.contacts);
-        }
-
-        // Processar status updates
-        for (const status of value.statuses || []) {
-          await processStatus(account, status);
-        }
-
-        // Processar erros
-        for (const error of value.errors || []) {
-          console.error('[WhatsApp Cloud Webhook] Error:', error);
-        }
-      }
-    }
-
-    return NextResponse.json({ received: true });
-  } catch (error) {
-    console.error('[WhatsApp Cloud Webhook] Error:', error);
     return NextResponse.json({ received: true });
   }
-}
 
-// =============================================
-// PROCESSAR MENSAGEM RECEBIDA
-// =============================================
-async function processMessage(
-  account: any, 
-  message: WebhookMessage,
-  contacts: Array<{ wa_id: string; profile: { name: string } }> | undefined
-) {
-  try {
-    const phoneNumber = normalizePhone(message.from);
-    const contactInfo = contacts?.find(c => c.wa_id === message.from);
-    const contactName = contactInfo?.profile?.name || phoneNumber;
+  // Async path — persist raw + enqueue.
+  const phoneNumberId =
+    payload?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id || null;
 
-    console.log('[WhatsApp Cloud] Message from:', phoneNumber, '-', extractMessageText(message));
-
-    // 1. Buscar ou criar contato
-    let contact = await getOrCreateContact(account, phoneNumber, contactName);
-    const isNewContact = contact?.isNew || false;
-
-    // 2. Buscar ou criar conversa
-    let conversation = await getOrCreateConversation(account, contact, phoneNumber);
-    const isNewConversation = conversation?.isNew || false;
-
-    // 3. Verificar duplicata
-    const { data: existingMsg } = await supabase
-      .from('whatsapp_cloud_messages')
-      .select('id')
-      .eq('message_id', message.id)
-      .single();
-
-    if (existingMsg) {
-      console.log('[WhatsApp Cloud] Duplicate message, skipping:', message.id);
-      return;
-    }
-
-    // 4. Extrair conteúdo
-    const messageType = getMessageType(message);
-    const textBody = extractMessageText(message);
-    const content = buildMessageContent(message);
-
-    // 5. Salvar mensagem
-    await supabase.from('whatsapp_cloud_messages').insert({
-      organization_id: account.organization_id,
-      waba_id: account.id,
-      conversation_id: conversation.id,
-      message_id: message.id,
-      direction: 'inbound',
-      from_number: phoneNumber,
-      to_number: account.phone_number,
-      message_type: messageType,
-      content,
-      text_body: textBody,
-      caption: message.image?.caption || message.video?.caption || message.document?.caption,
-      media_id: message.image?.id || message.video?.id || message.audio?.id || message.document?.id || message.sticker?.id,
-      status: 'received',
-      timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-    });
-
-    // 6. Atualizar conversa
-    await supabase
-      .from('whatsapp_cloud_conversations')
-      .update({
-        status: 'open',
-        is_window_open: true,
-        window_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h
-        last_customer_message_at: new Date().toISOString(),
-        last_message_at: new Date().toISOString(),
-        last_message_preview: textBody.substring(0, 100),
-        last_message_direction: 'inbound',
-        unread_count: (conversation.unread_count || 0) + 1,
-      })
-      .eq('id', conversation.id);
-
-    // 7. Atualizar métricas da conta
-    await supabase
-      .from('whatsapp_business_accounts')
-      .update({
-        messages_received_today: account.messages_received_today + 1,
-        total_messages_received: account.total_messages_received + 1,
-        last_message_at: new Date().toISOString(),
-        last_webhook_at: new Date().toISOString(),
-      })
-      .eq('id', account.id);
-
-    // ============================================
-    // NOVO: Processar regras de automação
-    // ============================================
-    
-    // Buscar contact_id do CRM (se existir vínculo)
-    let crmContactId: string | undefined;
-    if (contact?.crm_contact_id) {
-      crmContactId = contact.crm_contact_id;
-    } else {
-      // Tentar encontrar contato no CRM pelo telefone
-      const { data: crmContact } = await supabase
-        .from('contacts')
-        .select('id')
-        .eq('organization_id', account.organization_id)
-        .or(`whatsapp.eq.${phoneNumber},phone.eq.${phoneNumber}`)
-        .limit(1)
-        .maybeSingle();
-      
-      if (crmContact) {
-        crmContactId = crmContact.id;
-        // Atualizar vínculo
-        await supabase
-          .from('whatsapp_contacts')
-          .update({ crm_contact_id: crmContact.id })
-          .eq('id', contact.id);
-      }
-    }
-
-    const eventData: EventData = {
-      contact_id: crmContactId,
-      contact_name: contactName,
-      contact_phone: phoneNumber,
-      conversation_id: conversation.id,
-      message_text: textBody,
-      message_timestamp: message.timestamp,
-      source_id: `whatsapp_${conversation.id}`,
-    };
-
-    // Processar eventos baseado no contexto
-    if (isNewConversation) {
-      // Nova conversa iniciada
-      console.log('[WhatsApp Cloud] Processing automation for conversation_started');
-      
-      const automationResults = await RuleEngine.processCreationRules(
-        account.organization_id,
-        'whatsapp',
-        'conversation_started',
-        eventData
-      );
-      
-      console.log('[WhatsApp Cloud] Automation results (conversation_started):', automationResults);
-    }
-
-    // Sempre processar message_received também
-    console.log('[WhatsApp Cloud] Processing automation for message_received');
-    
-    const messageAutomationResults = await RuleEngine.processCreationRules(
-      account.organization_id,
-      'whatsapp',
-      'message_received',
-      eventData
-    );
-    
-    console.log('[WhatsApp Cloud] Automation results (message_received):', messageAutomationResults);
-
-    // Se contato foi criado agora, processar contact_created
-    if (isNewContact && crmContactId) {
-      console.log('[WhatsApp Cloud] Processing automation for contact_created');
-      
-      const contactAutomationResults = await RuleEngine.processCreationRules(
-        account.organization_id,
-        'whatsapp',
-        'contact_created',
-        eventData
-      );
-      
-      console.log('[WhatsApp Cloud] Automation results (contact_created):', contactAutomationResults);
-    }
-
-    console.log('[WhatsApp Cloud] Message saved successfully');
-  } catch (error) {
-    console.error('[WhatsApp Cloud] Error processing message:', error);
-  }
-}
-
-// =============================================
-// PROCESSAR STATUS UPDATE
-// =============================================
-async function processStatus(account: any, status: any) {
-  try {
-    const { id: messageId, status: newStatus, timestamp, errors } = status;
-
-    // Atualizar status da mensagem
-    const updateData: any = {
-      status: newStatus,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (errors && errors.length > 0) {
-      updateData.error_code = errors[0].code?.toString();
-      updateData.error_message = errors[0].message || errors[0].title;
-    }
-
-    await supabase
-      .from('whatsapp_cloud_messages')
-      .update(updateData)
-      .eq('message_id', messageId);
-
-    console.log('[WhatsApp Cloud] Status updated:', messageId, '->', newStatus);
-  } catch (error) {
-    console.error('[WhatsApp Cloud] Error processing status:', error);
-  }
-}
-
-// =============================================
-// HELPERS
-// =============================================
-
-async function getOrCreateContact(account: any, phoneNumber: string, name: string) {
-  // Buscar contato existente
-  const { data: existingContacts } = await supabase
-    .from('whatsapp_contacts')
-    .select('*')
-    .eq('organization_id', account.organization_id)
-    .eq('phone_number', phoneNumber)
-    .limit(1);
-
-  if (existingContacts && existingContacts.length > 0) {
-    const contact = existingContacts[0];
-    
-    // Atualizar nome se mudou
-    if (name && name !== contact.name && name !== phoneNumber) {
-      await supabase
-        .from('whatsapp_contacts')
-        .update({ name, profile_name: name })
-        .eq('id', contact.id);
-    }
-    
-    return { ...contact, isNew: false };
-  }
-
-  // Criar novo contato
-  const { data: newContact } = await supabase
-    .from('whatsapp_contacts')
+  const { data: inserted, error: insertError } = await supabase
+    .from('whatsapp_webhook_events')
     .insert({
-      organization_id: account.organization_id,
-      phone_number: phoneNumber,
-      name,
-      profile_name: name,
-      source: 'whatsapp_cloud',
+      waba_phone_number_id: phoneNumberId,
+      raw_payload: payload,
+      signature: signature || null,
     })
-    .select()
-    .single();
-
-  // Também criar/vincular no CRM
-  let crmContactId: string | undefined;
-  
-  // Verificar se já existe contato no CRM com este telefone
-  const { data: existingCrmContact } = await supabase
-    .from('contacts')
     .select('id')
-    .eq('organization_id', account.organization_id)
-    .or(`whatsapp.eq.${phoneNumber},phone.eq.${phoneNumber}`)
-    .limit(1)
-    .maybeSingle();
-  
-  if (existingCrmContact) {
-    crmContactId = existingCrmContact.id;
-  } else {
-    // Criar contato no CRM
-    const { data: newCrmContact } = await supabase
-      .from('contacts')
-      .insert({
-        organization_id: account.organization_id,
-        name: name !== phoneNumber ? name : 'Contato WhatsApp',
-        whatsapp: phoneNumber,
-        phone: phoneNumber,
-        source: 'whatsapp',
-        type: 'lead',
-        tags: ['whatsapp'],
-      })
-      .select('id')
-      .single();
-    
-    crmContactId = newCrmContact?.id;
-  }
-  
-  // Vincular ao contato WhatsApp
-  if (crmContactId && newContact) {
-    await supabase
-      .from('whatsapp_contacts')
-      .update({ crm_contact_id: crmContactId })
-      .eq('id', newContact.id);
-  }
-
-  return { ...newContact, isNew: true, crm_contact_id: crmContactId };
-}
-
-async function getOrCreateConversation(account: any, contact: any, phoneNumber: string) {
-  // Buscar conversa existente
-  const { data: existingConvs } = await supabase
-    .from('whatsapp_cloud_conversations')
-    .select('*')
-    .eq('organization_id', account.organization_id)
-    .eq('waba_id', account.id)
-    .eq('wa_id', phoneNumber)
-    .limit(1);
-
-  if (existingConvs && existingConvs.length > 0) {
-    const conv = existingConvs[0];
-    
-    // Atualizar contact_id se necessário
-    if (contact && conv.contact_id !== contact.id) {
-      await supabase
-        .from('whatsapp_cloud_conversations')
-        .update({ contact_id: contact.id })
-        .eq('id', conv.id);
-    }
-    
-    return { ...conv, isNew: false };
-  }
-
-  // Criar nova conversa
-  const { data: newConv } = await supabase
-    .from('whatsapp_cloud_conversations')
-    .insert({
-      organization_id: account.organization_id,
-      waba_id: account.id,
-      contact_id: contact?.id,
-      wa_id: phoneNumber,
-      chat_id: `${account.phone_number}-${phoneNumber}`,
-      contact_name: contact?.name || phoneNumber,
-      contact_phone: phoneNumber,
-      status: 'open',
-      is_window_open: true,
-      window_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    })
-    .select()
     .single();
 
-  return { ...newConv, isNew: true };
-}
-
-function buildMessageContent(message: WebhookMessage): any {
-  const type = getMessageType(message);
-  
-  switch (type) {
-    case 'text':
-      return { text: message.text };
-    case 'image':
-      return { image: message.image };
-    case 'video':
-      return { video: message.video };
-    case 'audio':
-      return { audio: message.audio };
-    case 'document':
-      return { document: message.document };
-    case 'location':
-      return { location: message.location };
-    case 'contacts':
-      return { contacts: message.contacts };
-    case 'sticker':
-      return { sticker: message.sticker };
-    case 'interactive':
-      return { interactive: message.interactive };
-    case 'button':
-      return { button: message.button };
-    case 'reaction':
-      return { reaction: message.reaction };
-    default:
-      return message;
+  if (insertError || !inserted) {
+    console.error('[whatsapp-webhook] insert failed:', insertError);
+    // Return 200 anyway — Meta retries for 7 days, but every 500 here counts
+    // as a delivery error against our phone number quality. Better to swallow
+    // and rely on Meta's retry than to look unstable.
+    return NextResponse.json({ received: true, queued: false });
   }
+
+  // Fire-and-forget enqueue. If QStash fails, the cron at
+  // /api/cron/reprocess-whatsapp-pending picks the event up within 60s.
+  try {
+    await enqueueWhatsAppWebhook(inserted.id);
+  } catch (err) {
+    console.error('[whatsapp-webhook] QStash enqueue failed (cron will retry):', err);
+  }
+
+  return NextResponse.json({ received: true, eventId: inserted.id });
 }

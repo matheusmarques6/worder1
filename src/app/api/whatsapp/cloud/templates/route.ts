@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
+import { getAccessToken } from '@/lib/whatsapp/account-loader';
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
       try {
         const client = createWhatsAppCloudClient({
           phoneNumberId: account.phone_number_id,
-          accessToken: account.access_token,
+          accessToken: getAccessToken(account),
           wabaId: account.waba_id,
         });
 
@@ -197,7 +198,7 @@ export async function POST(request: NextRequest) {
     // Criar na Meta API
     const client = createWhatsAppCloudClient({
       phoneNumberId: account.phone_number_id,
-      accessToken: account.access_token,
+      accessToken: getAccessToken(account),
       wabaId: account.waba_id,
     });
 
@@ -295,7 +296,7 @@ export async function DELETE(request: NextRequest) {
     try {
       const client = createWhatsAppCloudClient({
         phoneNumberId: template.account.phone_number_id,
-        accessToken: template.account.access_token,
+        accessToken: getAccessToken(template.account),
         wabaId: template.account.waba_id,
       });
 

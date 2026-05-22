@@ -339,6 +339,43 @@ export async function enqueueEmailSend(
 }
 
 /**
+ * Enfileira o processamento de um WhatsApp webhook event.
+ *
+ * The lean public ingestor at /api/whatsapp/cloud/webhook persists raw payload
+ * + HMAC and calls this to hand off to the worker — keeping the public POST
+ * under ~50ms. Worker URL: /api/workers/whatsapp-webhook.
+ *
+ * Returns the QStash messageId or null when QStash is not configured (in
+ * which case the cron at /api/cron/reprocess-whatsapp-pending picks the
+ * event up within 1 minute).
+ */
+export async function enqueueWhatsAppWebhook(
+  eventId: string,
+  options?: EnqueueOptions
+): Promise<string | null> {
+  const client = getQStashClient();
+  if (!client) {
+    console.warn('[Queue] QStash not configured — webhook will rely on cron reprocess');
+    return null;
+  }
+
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) {
+    console.warn('[Queue] APP_URL not configured');
+    return null;
+  }
+
+  const response = await client.publishJSON({
+    url: `${baseUrl}/api/workers/whatsapp-webhook`,
+    body: { eventId },
+    delay: options?.delay,
+    retries: options?.retries ?? 3,
+  });
+
+  return response.messageId;
+}
+
+/**
  * Enfileira envio de WhatsApp
  */
 export async function enqueueWhatsAppSend(
