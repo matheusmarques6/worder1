@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient, normalizePhone } from '@/lib/whatsapp/cloud-api';
+import { getAccessToken } from '@/lib/whatsapp/account-loader';
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest) {
     // Criar cliente
     const client = createWhatsAppCloudClient({
       phoneNumberId: account.phone_number_id,
-      accessToken: account.access_token,
+      accessToken: getAccessToken(account),
       wabaId: account.waba_id,
     });
 

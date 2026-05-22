@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
+import { encryptToken } from '@/lib/whatsapp/token-encryption';
 import crypto from 'crypto';
 const nanoid = (size = 21) => crypto.randomBytes(size).toString('hex').slice(0, size);
 export const dynamic = 'force-dynamic';
@@ -149,7 +150,7 @@ export async function POST(request: NextRequest) {
     // Gerar webhook verify token
     const webhookVerifyToken = nanoid(32);
 
-    // Salvar conta
+    // Salvar conta — token encriptado at-rest (Sprint 1 / Fase 2)
     const { data: account, error: insertError } = await supabase
       .from('whatsapp_business_accounts')
       .insert({
@@ -162,7 +163,7 @@ export async function POST(request: NextRequest) {
         display_phone_number: phoneInfo.display_phone_number,
         verified_name: phoneInfo.verified_name,
         quality_rating: phoneInfo.quality_rating || 'UNKNOWN',
-        access_token: accessToken,
+        access_token_encrypted: encryptToken(accessToken),
         webhook_verify_token: webhookVerifyToken,
         status: 'active',
         account_mode: 'LIVE',
@@ -254,11 +255,14 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Atualizar status para desconectado (não deletar para manter histórico)
+    // Zeramos as duas colunas — legacy plaintext e encrypted — para garantir
+    // que nenhum caminho consegue mais autenticar contra a Meta com esse WABA.
     const { error: updateError } = await supabase
       .from('whatsapp_business_accounts')
       .update({
         status: 'disconnected',
         access_token: null,
+        access_token_encrypted: null,
       })
       .eq('id', accountId);
 

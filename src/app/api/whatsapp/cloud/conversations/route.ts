@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
+import { getAccessToken } from '@/lib/whatsapp/account-loader';
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -313,7 +314,7 @@ export async function PATCH(request: NextRequest) {
       updates.unread_count = 0;
 
       // Marcar como lido na API do WhatsApp
-      if (conversation.account?.access_token) {
+      if (conversation.account?.access_token || conversation.account?.access_token_encrypted) {
         try {
           // Buscar última mensagem recebida
           const { data: lastMessage } = await supabase
@@ -328,7 +329,7 @@ export async function PATCH(request: NextRequest) {
           if (lastMessage?.message_id) {
             const client = createWhatsAppCloudClient({
               phoneNumberId: conversation.account.phone_number_id,
-              accessToken: conversation.account.access_token,
+              accessToken: getAccessToken(conversation.account),
             });
             await client.markAsRead(lastMessage.message_id);
           }
