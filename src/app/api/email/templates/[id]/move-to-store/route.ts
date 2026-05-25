@@ -14,9 +14,9 @@ interface MoveRequest {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const templateId = params.id;
+  const { id: templateId } = await params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase, user } = auth;

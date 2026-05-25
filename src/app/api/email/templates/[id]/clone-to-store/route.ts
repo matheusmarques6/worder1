@@ -15,9 +15,9 @@ interface CloneRequest {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const templateId = params.id;
+  const { id: templateId } = await params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase, user } = auth;
@@ -77,7 +77,7 @@ export async function POST(
           store_id: targetStoreId,
           name: `${original.name}${targetStore?.shop_name ? ` (${targetStore.shop_name})` : ''}`,
           subject: original.subject,
-          preheader: original.preheader,
+          preview_text: original.preview_text,
           from_name: original.from_name,
           from_email: original.from_email,
           reply_to: original.reply_to,
@@ -86,6 +86,8 @@ export async function POST(
           design_json: original.design_json,
           category: original.category,
           tags: original.tags,
+          thumbnail_url: original.thumbnail_url,
+          created_by: user.id,
         })
         .select('id')
         .single();

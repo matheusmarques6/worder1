@@ -11,9 +11,10 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: templateId } = await params;
     const auth = await getAuthClient();
     if (!auth) return authError();
 
@@ -23,7 +24,7 @@ export async function GET(
     let query = supabaseAdmin
       .from('email_templates')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', templateId)
       .eq('organization_id', auth.user.organization_id);
 
     if (storeId) {
@@ -44,9 +45,10 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: templateId } = await params;
     const auth = await getAuthClient();
     if (!auth) return authError();
 
@@ -68,22 +70,17 @@ export async function PUT(
     if (body.thumbnail_url !== undefined) updateData.thumbnail_url = body.thumbnail_url;
     if (body.category !== undefined) updateData.category = body.category;
 
-    // Save design in BOTH columns for compatibility
     const designValue = body.design ?? body.design_json;
     if (designValue !== undefined) {
       updateData.design = designValue;
       updateData.design_json = designValue;
     }
 
-    // Auto-assign store_id to orphan templates (NULL store_id) when caller
-    // provides one. This way: editing a legacy template inside an automation
-    // automatically attaches it to the current store, fixing the orphan
-    // problem retroactively without manual SQL.
     if (targetStoreId) {
       const { data: existing } = await supabaseAdmin
         .from('email_templates')
         .select('store_id')
-        .eq('id', params.id)
+        .eq('id', templateId)
         .eq('organization_id', auth.user.organization_id)
         .single();
       if (existing && !existing.store_id) {
@@ -94,7 +91,7 @@ export async function PUT(
     const updateQuery = supabaseAdmin
       .from('email_templates')
       .update(updateData)
-      .eq('id', params.id)
+      .eq('id', templateId)
       .eq('organization_id', auth.user.organization_id);
 
     const { data: template, error } = await updateQuery
@@ -118,9 +115,10 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: templateId } = await params;
     const auth = await getAuthClient();
     if (!auth) return authError();
 
@@ -130,7 +128,7 @@ export async function DELETE(
     let deleteQuery = supabaseAdmin
       .from('email_templates')
       .delete()
-      .eq('id', params.id)
+      .eq('id', templateId)
       .eq('organization_id', auth.user.organization_id);
 
     if (storeId) {
