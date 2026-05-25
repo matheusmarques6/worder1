@@ -205,6 +205,19 @@ export async function PUT(request: NextRequest) {
       updated_at: new Date().toISOString(),
     };
 
+    // Backfill store_id on legacy automations (null → current store)
+    if (data.store_id) {
+      const { data: existing } = await auth.supabase
+        .from('automations')
+        .select('store_id')
+        .eq('id', id)
+        .eq('organization_id', organizationId)
+        .single();
+      if (existing && !existing.store_id) {
+        updateData.store_id = data.store_id;
+      }
+    }
+
     // Campos permitidos para atualização
     if (data.name !== undefined) updateData.name = data.name;
     if (data.description !== undefined) updateData.description = data.description;

@@ -324,6 +324,7 @@ export default function AutomationsPage() {
 
     const payload = {
       organizationId,
+      store_id: (editingAutomation as any).store_id || currentStore?.id || null,
       name: flowData.name,
       trigger_type: triggerType,
       trigger_config: triggerNode?.data.config || {},
