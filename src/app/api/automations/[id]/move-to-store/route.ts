@@ -1,6 +1,8 @@
 // =============================================
 // POST /api/automations/[id]/move-to-store
-// Move (not clone) an automation to a different store.
+// Move an automation to a different store. Also clones
+// referenced email templates to the target store and rewrites
+// node templateId references so emails render correctly.
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,9 +16,9 @@ interface MoveRequest {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const automationId = params.id;
+  const { id: automationId } = await params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase, user } = auth;
@@ -33,7 +35,7 @@ export async function POST(
 
   const { data: automation, error: autoErr } = await supabase
     .from('automations')
-    .select('id, store_id, name')
+    .select('*')
     .eq('id', automationId)
     .eq('organization_id', organizationId)
     .single();
@@ -53,9 +55,82 @@ export async function POST(
     return NextResponse.json({ error: 'Target store invalid or no access' }, { status: 403 });
   }
 
+  // Clone email templates referenced by action_email nodes to the target store
+  const nodes: any[] = Array.isArray(automation.nodes) ? automation.nodes : [];
+  const templateIds = new Set<string>();
+  for (const node of nodes) {
+    const tplId = node?.data?.config?.templateId;
+    if (tplId && tplId !== '__new__' && typeof tplId === 'string') {
+      templateIds.add(tplId);
+    }
+  }
+
+  const templateIdMap = new Map<string, string>();
+  if (templateIds.size > 0) {
+    const { data: tpls } = await supabase
+      .from('email_templates')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .in('id', Array.from(templateIds));
+
+    for (const tpl of (tpls || [])) {
+      // Skip if template already belongs to the target store
+      if (tpl.store_id === targetStoreId) {
+        templateIdMap.set(tpl.id, tpl.id);
+        continue;
+      }
+      const { data: newTpl } = await supabase
+        .from('email_templates')
+        .insert({
+          organization_id: organizationId,
+          store_id: targetStoreId,
+          name: tpl.name,
+          subject: tpl.subject,
+          preview_text: tpl.preview_text,
+          from_name: tpl.from_name,
+          from_email: tpl.from_email,
+          reply_to: tpl.reply_to,
+          html: tpl.html,
+          design: tpl.design,
+          design_json: tpl.design_json,
+          category: tpl.category,
+          tags: tpl.tags,
+          thumbnail_url: tpl.thumbnail_url,
+          created_by: user.id,
+        })
+        .select('id')
+        .single();
+      if (newTpl) templateIdMap.set(tpl.id, newTpl.id);
+    }
+  }
+
+  // Rewrite node templateId references if templates were cloned
+  let updatedNodes = nodes;
+  if (templateIdMap.size > 0) {
+    updatedNodes = nodes.map((node: any) => {
+      const oldTplId = node?.data?.config?.templateId;
+      if (oldTplId && templateIdMap.has(oldTplId) && templateIdMap.get(oldTplId) !== oldTplId) {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            config: {
+              ...(node.data?.config || {}),
+              templateId: templateIdMap.get(oldTplId),
+            },
+          },
+        };
+      }
+      return node;
+    });
+  }
+
   const { error: updErr } = await supabase
     .from('automations')
-    .update({ store_id: targetStoreId })
+    .update({
+      store_id: targetStoreId,
+      nodes: updatedNodes,
+    })
     .eq('id', automationId);
 
   if (updErr) {
@@ -66,5 +141,6 @@ export async function POST(
     success: true,
     automation: { id: automation.id, name: automation.name },
     movedTo: { id: targetStore.id, name: targetStore.shop_name },
+    templatesMigrated: templateIdMap.size,
   });
 }

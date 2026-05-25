@@ -18,8 +18,9 @@ export const maxDuration = 30
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: automationId } = await params
   const auth = await getAuthClient()
   if (!auth) return authError()
 
@@ -31,7 +32,7 @@ export async function POST(
     const { data: automation, error } = await supabaseAdmin
       .from('automations')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', automationId)
       .eq('organization_id', orgId)
       .single()
 

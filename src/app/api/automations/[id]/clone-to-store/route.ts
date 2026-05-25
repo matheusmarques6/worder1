@@ -3,10 +3,12 @@
 // Clone an automation to one or more target stores.
 // Also clones every email template referenced by action_email nodes
 // and rewrites the cloned automation's templateId references.
+// Generates fresh node/edge IDs to avoid execution conflicts.
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
+import { randomUUID } from 'crypto';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -17,9 +19,9 @@ interface CloneRequest {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const automationId = params.id;
+  const { id: automationId } = await params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase, user } = auth;
@@ -87,7 +89,8 @@ export async function POST(
   }
 
   // 5. For each target store, create a fresh clone of the automation + its templates
-  const results: Array<{ storeId: string; storeName?: string; automationId?: string; error?: string }> = [];
+  const results: Array<{ storeId: string; storeName?: string; automationId?: string; templatesCloned?: number; error?: string }> = [];
+  let totalTemplatesCloned = 0;
 
   for (const targetStoreId of targetStoreIds) {
     try {
@@ -103,7 +106,7 @@ export async function POST(
             store_id: targetStoreId,
             name: tpl.name,
             subject: tpl.subject,
-            preheader: tpl.preheader,
+            preview_text: tpl.preview_text,
             from_name: tpl.from_name,
             from_email: tpl.from_email,
             reply_to: tpl.reply_to,
@@ -112,6 +115,8 @@ export async function POST(
             design_json: tpl.design_json,
             category: tpl.category,
             tags: tpl.tags,
+            thumbnail_url: tpl.thumbnail_url,
+            created_by: user.id,
           })
           .select('id')
           .single();
@@ -120,25 +125,38 @@ export async function POST(
           throw new Error(`Failed to clone template ${tpl.id}: ${tplErr?.message || 'unknown'}`);
         }
         templateIdMap.set(tpl.id, newTpl.id);
+        totalTemplatesCloned++;
       }
 
-      // Rewrite node templateId references with the cloned IDs
+      // Generate fresh node IDs and remap edge references
+      const nodeIdMap = new Map<string, string>();
       const clonedNodes = nodes.map((node: any) => {
+        const newNodeId = randomUUID();
+        nodeIdMap.set(node.id, newNodeId);
+
         const oldTplId = node?.data?.config?.templateId;
+        const newConfig = { ...(node.data?.config || {}) };
         if (oldTplId && templateIdMap.has(oldTplId)) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              config: {
-                ...(node.data?.config || {}),
-                templateId: templateIdMap.get(oldTplId),
-              },
-            },
-          };
+          newConfig.templateId = templateIdMap.get(oldTplId);
         }
-        return node;
+
+        return {
+          ...node,
+          id: newNodeId,
+          data: {
+            ...node.data,
+            config: newConfig,
+          },
+        };
       });
+
+      const originalEdges: any[] = Array.isArray(original.edges) ? original.edges : [];
+      const clonedEdges = originalEdges.map((edge: any) => ({
+        ...edge,
+        id: randomUUID(),
+        source: nodeIdMap.get(edge.source) || edge.source,
+        target: nodeIdMap.get(edge.target) || edge.target,
+      }));
 
       // Insert the cloned automation
       const { data: clone, error: cloneErr } = await supabase
@@ -155,8 +173,9 @@ export async function POST(
           exit_conditions: original.exit_conditions || [],
           frequency_config: original.frequency_config || { type: 'once' },
           nodes: clonedNodes,
-          edges: original.edges || [],
-          status: 'draft', // Always draft on clone
+          edges: clonedEdges,
+          status: 'draft',
+          created_by: user.id,
         })
         .select('id')
         .single();
@@ -169,6 +188,7 @@ export async function POST(
         storeId: targetStoreId,
         storeName: targetStore?.shop_name,
         automationId: clone.id,
+        templatesCloned: templateIdMap.size,
       });
     } catch (err: any) {
       results.push({
@@ -185,7 +205,7 @@ export async function POST(
     success: failureCount === 0,
     cloned: successCount,
     failed: failureCount,
-    templatesCloned: templates.length,
+    templatesCloned: totalTemplatesCloned,
     results,
   });
 }

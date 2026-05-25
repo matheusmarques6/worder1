@@ -20,9 +20,9 @@ export const dynamic = 'force-dynamic';
 //   { nodeStats: { [nodeId]: { sent, opened, clicked, revenue } }, totalRuns, timeframe }
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const automationId = params.id;
+  const { id: automationId } = await params;
   const { searchParams } = new URL(request.url);
   const timeframe = searchParams.get('timeframe') || '30d';
 
