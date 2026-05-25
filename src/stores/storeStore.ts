@@ -66,6 +66,14 @@ export const useStoreStore = create<StoreState>()(
           import('./inboxStore').then(({ useInboxStore }) => {
             useInboxStore.getState().reset();
           });
+
+          // Clear cached API responses so stale data from the previous
+          // store never flashes when switching. sessionStorage keys that
+          // carry store-scoped data use a common prefix or are safe to
+          // clear entirely.
+          if (typeof sessionStorage !== 'undefined') {
+            try { sessionStorage.clear(); } catch {}
+          }
         }
 
         set({ currentStore: newStore });

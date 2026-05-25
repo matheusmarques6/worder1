@@ -186,6 +186,7 @@ export default function DashboardLayout({
   const [mobileOpen, setMobileOpen] = useState(false)
   const [storeDropdownOpen, setStoreDropdownOpen] = useState(false)
   const [addStoreModalOpen, setAddStoreModalOpen] = useState(false)
+  const [storeSwitching, setStoreSwitching] = useState(false)
   const pathname = usePathname()
 
   const { stores, currentStore, setStores, setCurrentStore, addStore, _hasHydrated } = useStoreStore()
@@ -393,6 +394,15 @@ export default function DashboardLayout({
 
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
+  const handleSwitchStore = useCallback((store: ShopifyStore) => {
+    if (store.id === currentStore?.id) return
+    setStoreSwitching(true)
+    setCurrentStore(store)
+    // Brief visual transition so the user sees the switch happened,
+    // then all children remount via the key change
+    setTimeout(() => setStoreSwitching(false), 150)
+  }, [currentStore?.id, setCurrentStore])
+
   // Load stores
   useEffect(() => {
     if (!_hasHydrated) return
@@ -559,7 +569,7 @@ export default function DashboardLayout({
                   <p className="px-2 py-1 text-[10px] font-medium text-gray-500 uppercase tracking-wider">Suas Lojas</p>
                   <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
                     {stores.map((store) => (
-                      <button key={store.id} onClick={() => { setCurrentStore(store); setStoreDropdownOpen(false) }}
+                      <button key={store.id} onClick={() => { handleSwitchStore(store); setStoreDropdownOpen(false) }}
                         className={cn('w-full flex items-center gap-3 p-2 rounded-md transition-colors',
                           currentStore?.id === store.id ? 'bg-brand-500/10 text-brand-400' : 'text-gray-300 hover:bg-white/5')}>
                         <div className="w-7 h-7 rounded bg-gray-700 flex items-center justify-center text-[10px] font-bold text-gray-300">
@@ -826,9 +836,13 @@ export default function DashboardLayout({
             firing pixel. */}
         <PixelHealthBanner />
 
-        {/* Page Content */}
-        <div className="p-4 lg:p-6">
-          {children}
+        {/* Page Content — key forces full remount when store changes */}
+        <div className="p-4 lg:p-6" key={currentStore?.id || 'no-store'}>
+          {storeSwitching ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : children}
         </div>
       </main>
 
