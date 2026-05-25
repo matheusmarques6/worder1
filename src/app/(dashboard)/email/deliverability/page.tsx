@@ -249,7 +249,7 @@ function ScoreRing({ score, size = 112 }: { score: number; size?: number }) {
 
 export default function DeliverabilityPage() {
   const { currentStore } = useStoreStore()
-  const hasHydrated = useStoreStore((s) => s._hasHydrated)
+  const hasHydrated = useStoreStore((s: any) => s._hasHydrated)
   const storeId = currentStore?.id
 
   const [loading, setLoading] = useState(true)
@@ -297,7 +297,7 @@ export default function DeliverabilityPage() {
       const res = await fetch(`/api/deliverability/domain-check?domain=${encodeURIComponent(domain)}`)
       if (res.ok) {
         const result = await res.json()
-        setDomainChecks((prev) => ({ ...prev, [domain]: result }))
+        setDomainChecks((prev: any) => ({ ...prev, [domain]: result }))
       }
     } catch { /* silent */ }
     setCheckingDomain(null)
@@ -310,10 +310,10 @@ export default function DeliverabilityPage() {
 
   // Count hard vs soft bounces from bounce data contacts
   const hardBounces = bounceData?.contacts?.filter(
-    (c) => c.bounce_info?.bounce_type === 'bounced' || c.status === 'bounced'
+    (c: any) => c.bounce_info?.bounce_type === 'bounced' || c.status === 'bounced'
   ).length || 0
   const softBounces = bounceData?.contacts?.filter(
-    (c) => c.bounce_info?.bounce_type === 'complained' || c.status === 'complained'
+    (c: any) => c.bounce_info?.bounce_type === 'complained' || c.status === 'complained'
   ).length || 0
   const totalBounceCount = bounceData?.total || 0
 
@@ -464,7 +464,7 @@ export default function DeliverabilityPage() {
           </div>
 
           <div className="space-y-4">
-            {domainHealth.map((dh) => {
+            {domainHealth.map((dh: any) => {
               const check = domainChecks[dh.domain]
               return (
                 <div key={dh.domain} className="border border-gray-100 rounded-lg p-4">
@@ -596,7 +596,7 @@ export default function DeliverabilityPage() {
                 </tr>
               </thead>
               <tbody>
-                {ispBreakdown.map((isp) => (
+                {ispBreakdown.map((isp: any) => (
                   <tr
                     key={isp.name}
                     className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors"
@@ -695,7 +695,7 @@ export default function DeliverabilityPage() {
               <div>
                 <p className="text-xs font-semibold text-gray-700 mb-2">Últimos bounces</p>
                 <div className="space-y-2">
-                  {bounceData.contacts.slice(0, 5).map((contact) => (
+                  {bounceData.contacts.slice(0, 5).map((contact: any) => (
                     <div
                       key={contact.id}
                       className="flex items-center justify-between py-1.5 px-2 rounded bg-gray-50/50"
@@ -760,11 +760,11 @@ export default function DeliverabilityPage() {
               </Link>
             </div>
 
-            {domainHealth.filter((d) => d.warmup).length > 0 ? (
+            {domainHealth.filter((d: any) => d.warmup).length > 0 ? (
               <div className="space-y-4">
                 {domainHealth
-                  .filter((d) => d.warmup)
-                  .map((d) => {
+                  .filter((d: any) => d.warmup)
+                  .map((d: any) => {
                     const warmup = d.warmup!
                     const maxDays = 30
                     const progress = Math.min((warmup.day / maxDays) * 100, 100)
