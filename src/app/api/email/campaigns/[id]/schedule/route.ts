@@ -14,8 +14,9 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: campaignId } = await params
   const auth = await getAuthClient()
   if (!auth) return authError()
 
@@ -44,7 +45,7 @@ export async function POST(
   const { data: camp } = await supabaseAdmin
     .from('email_campaigns')
     .select('id, status')
-    .eq('id', params.id)
+    .eq('id', campaignId)
     .eq('organization_id', auth.user.organization_id)
     .maybeSingle()
 
@@ -70,7 +71,7 @@ export async function POST(
   const { data: updated, error } = await supabaseAdmin
     .from('email_campaigns')
     .update(updatePayload)
-    .eq('id', params.id)
+    .eq('id', campaignId)
     .eq('organization_id', auth.user.organization_id)
     .select()
     .single()
@@ -81,15 +82,16 @@ export async function POST(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: campaignId } = await params
   const auth = await getAuthClient()
   if (!auth) return authError()
 
   const { data, error } = await supabaseAdmin
     .from('email_campaigns')
     .update({ status: 'draft', scheduled_at: null })
-    .eq('id', params.id)
+    .eq('id', campaignId)
     .eq('organization_id', auth.user.organization_id)
     .eq('status', 'scheduled')
     .select()
