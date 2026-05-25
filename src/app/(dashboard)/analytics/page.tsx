@@ -213,20 +213,26 @@ export default function AnalyticsPage() {
   const clickRate = emailData?.metrics ? parseFloat(emailData.metrics.clickRate) : null
   const worderRevenue = overview?.worderRevenue ?? null
 
-  const kpis = [
+  const bounceRate = emailData?.metrics ? parseFloat(emailData.metrics.bounceRate) : null
+  const worderDelta = overview?.worderDelta ?? null
+  const worderShare = overview?.worderShare ?? null
+
+  const kpis: Array<{ title: string; value: string; icon: any; delta?: number | null; deltaLabel?: string }> = [
     {
       title: 'Contatos Totais',
       value: totalContacts !== null ? fmtNumber(totalContacts) : '—',
       icon: UsersThree,
     },
     {
-      title: 'Receita Total da Loja',
-      value: totalRevenue !== null ? fmt(totalRevenue) : '—',
-      icon: CurrencyDollar,
-    },
-    {
       title: 'Receita Atribuída (Worder)',
       value: worderRevenue !== null ? fmt(worderRevenue) : '—',
+      icon: CurrencyDollar,
+      delta: worderDelta,
+      deltaLabel: 'vs período anterior',
+    },
+    {
+      title: 'Participação Worder',
+      value: worderShare !== null ? fmtPercent(worderShare) : '—',
       icon: CurrencyDollar,
     },
     {
@@ -243,6 +249,16 @@ export default function AnalyticsPage() {
       title: 'Taxa de Cliques',
       value: clickRate !== null && !isNaN(clickRate) ? fmtPercent(clickRate) : '—',
       icon: CursorClick,
+    },
+    {
+      title: 'Taxa de Bounce',
+      value: bounceRate !== null && !isNaN(bounceRate) ? fmtPercent(bounceRate) : '—',
+      icon: EnvelopeSimple,
+    },
+    {
+      title: 'Receita Total da Loja',
+      value: totalRevenue !== null ? fmt(totalRevenue) : '—',
+      icon: CurrencyDollar,
     },
   ]
 
@@ -332,11 +348,13 @@ export default function AnalyticsPage() {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {loading
-          ? Array.from({ length: 6 }).map((_, i) => <KpiSkeleton key={i} />)
+          ? Array.from({ length: 8 }).map((_, i) => <KpiSkeleton key={i} />)
           : kpis.map((kpi, i) => {
               const Icon = kpi.icon
+              const delta = kpi.delta
+              const showDelta = delta !== null && delta !== undefined && !isNaN(delta)
               return (
                 <motion.div
                   key={kpi.title}
@@ -350,6 +368,14 @@ export default function AnalyticsPage() {
                     <span className="text-xs text-gray-500">{kpi.title}</span>
                   </div>
                   <p className="text-lg font-bold text-gray-900">{kpi.value}</p>
+                  {showDelta && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className={`text-xs font-medium ${delta > 0 ? 'text-emerald-600' : delta < 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                        {delta > 0 ? '+' : ''}{delta.toFixed(1)}%
+                      </span>
+                      {kpi.deltaLabel && <span className="text-[10px] text-gray-400">{kpi.deltaLabel}</span>}
+                    </div>
+                  )}
                 </motion.div>
               )
             })}
