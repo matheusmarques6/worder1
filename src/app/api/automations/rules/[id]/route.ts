@@ -11,14 +11,14 @@ export const dynamic = 'force-dynamic'
 // GET - Get single rule
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: ruleId } = await params
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
 
   try {
-    // RLS filtra automaticamente por organization_id
     const { data, error } = await supabase
       .from('automation_rules')
       .select(`
@@ -27,7 +27,7 @@ export async function GET(
         initial_stage:pipeline_stages!automation_rules_initial_stage_id_fkey(id, name, color),
         target_stage:pipeline_stages!automation_rules_target_stage_id_fkey(id, name, color)
       `)
-      .eq('id', params.id)
+      .eq('id', ruleId)
       .single()
 
     if (error) throw error
@@ -42,8 +42,9 @@ export async function GET(
 // PUT - Update rule
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: ruleId } = await params
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
@@ -82,11 +83,10 @@ export async function PUT(
     if (mark_as_lost !== undefined) updates.mark_as_lost = mark_as_lost
     if (is_enabled !== undefined) updates.is_enabled = is_enabled
 
-    // RLS filtra automaticamente
     const { data, error } = await supabase
       .from('automation_rules')
       .update(updates)
-      .eq('id', params.id)
+      .eq('id', ruleId)
       .select(`
         *,
         pipeline:pipelines(id, name, color),
@@ -107,8 +107,9 @@ export async function PUT(
 // PATCH - Toggle or partial update
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: ruleId } = await params
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
@@ -123,11 +124,10 @@ export async function PATCH(
 
     if (is_enabled !== undefined) updates.is_enabled = is_enabled
 
-    // RLS filtra automaticamente
     const { data, error } = await supabase
       .from('automation_rules')
       .update(updates)
-      .eq('id', params.id)
+      .eq('id', ruleId)
       .select()
       .single()
 
@@ -143,18 +143,18 @@ export async function PATCH(
 // DELETE - Delete rule
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: ruleId } = await params
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
 
   try {
-    // RLS filtra automaticamente
     const { error } = await supabase
       .from('automation_rules')
       .delete()
-      .eq('id', params.id)
+      .eq('id', ruleId)
 
     if (error) throw error
 
