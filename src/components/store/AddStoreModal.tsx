@@ -1,9 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, ArrowRight, CheckCircle, Loader2, Building2, Store, ArrowLeft, KeyRound, Eye, EyeOff, ExternalLink } from 'lucide-react'
+import {
+  X, ArrowRight, CheckCircle, Loader2, Building2, Store, ArrowLeft,
+  KeyRound, Eye, EyeOff, ExternalLink, Copy, CheckCircle2, ChevronDown,
+  ChevronUp, Shield, Zap, AlertCircle,
+} from 'lucide-react'
 
 interface AddStoreModalProps {
   isOpen: boolean
@@ -11,7 +15,15 @@ interface AddStoreModalProps {
   onSuccess: (store: any) => void
 }
 
-type Step = 'info' | 'integration'
+type Step = 'info' | 'integration' | 'pixel' | 'done'
+
+const REQUIRED_SCOPES = [
+  'read_orders', 'read_customers', 'read_products',
+]
+const RECOMMENDED_SCOPES = [
+  'read_all_orders', 'write_pixels', 'read_customer_events',
+  'read_fulfillments', 'read_discounts', 'write_script_tags',
+]
 
 export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps) {
   const [step, setStep] = useState<Step>('info')
@@ -30,6 +42,18 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
   const [showSecret, setShowSecret] = useState(false)
   const [createdStoreId, setCreatedStoreId] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
+  const [showGuide, setShowGuide] = useState(true)
+
+  // Step 3: Pixel installation
+  const [connectedStoreId, setConnectedStoreId] = useState<string | null>(null)
+  const [connectedDomain, setConnectedDomain] = useState<string | null>(null)
+  const [pixelCode, setPixelCode] = useState<string | null>(null)
+  const [copiedPixel, setCopiedPixel] = useState(false)
+  const [loadingPixel, setLoadingPixel] = useState(false)
+
+  // Step 4: Done
+  const [connectedStoreName, setConnectedStoreName] = useState<string>('')
+  const [webhooksInfo, setWebhooksInfo] = useState<string>('')
 
   const handleClose = () => {
     setStep('info')
@@ -44,6 +68,13 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
     setLoading(false)
     setConnecting(false)
     setCreatedStoreId(null)
+    setConnectedStoreId(null)
+    setConnectedDomain(null)
+    setPixelCode(null)
+    setCopiedPixel(false)
+    setShowGuide(true)
+    setConnectedStoreName('')
+    setWebhooksInfo('')
     onClose()
   }
 
@@ -99,11 +130,12 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
     setError('')
 
     try {
+      const fullDomain = `${domain}.myshopify.com`
       const res = await fetch('/api/integrations/shopify/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          domain: `${domain}.myshopify.com`,
+          domain: fullDomain,
           clientId: clientId.trim(),
           clientSecret: clientSecret.trim(),
         }),
@@ -120,8 +152,7 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
         return
       }
 
-      // Manual integration succeeded — real store was created.
-      // Clean up the placeholder .worder.local row.
+      // Clean up placeholder
       if (createdStoreId) {
         fetch(`/api/stores/${createdStoreId}`, { method: 'DELETE' }).catch(() => {})
       }
@@ -129,7 +160,7 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
       const realStore = data.store
       const storeId = realStore?.id
 
-      // Trigger post-connect cascade (webhooks, pixel, sync)
+      // Trigger post-connect cascade
       if (storeId) {
         fetch('/api/shopify/install-extras', {
           method: 'POST',
@@ -146,16 +177,50 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
         }).catch(() => {})
       }
 
-      onSuccess({
-        id: storeId,
-        name: realStore?.name || storeName,
-        domain: realStore?.domain,
-      })
-      handleClose()
+      setConnectedStoreId(storeId)
+      setConnectedDomain(realStore?.domain || fullDomain)
+      setConnectedStoreName(realStore?.name || storeName)
+      setWebhooksInfo(
+        data.webhooks
+          ? `${data.webhooks.created + data.webhooks.existing}/${data.webhooks.total} webhooks registrados`
+          : ''
+      )
+
+      // Fetch pixel code
+      setLoadingPixel(true)
+      try {
+        const pRes = await fetch(
+          `/api/integrations/shopify/pixel-code?shop=${encodeURIComponent(realStore?.domain || fullDomain)}`
+        )
+        const pJson = await pRes.json()
+        if (pRes.ok && pJson.code) setPixelCode(pJson.code)
+      } catch { /* non-blocking */ }
+      setLoadingPixel(false)
+
+      // Move to pixel step
+      setStep('pixel')
     } catch {
       setError('Erro de conexão. Tente novamente.')
-      setConnecting(false)
     }
+    setConnecting(false)
+  }
+
+  const handleCopyPixel = async () => {
+    if (!pixelCode) return
+    try {
+      await navigator.clipboard.writeText(pixelCode)
+      setCopiedPixel(true)
+      setTimeout(() => setCopiedPixel(false), 2500)
+    } catch {}
+  }
+
+  const handleFinish = () => {
+    onSuccess({
+      id: connectedStoreId,
+      name: connectedStoreName || storeName,
+      domain: connectedDomain,
+    })
+    handleClose()
   }
 
   const handleSkipIntegration = () => {
@@ -163,7 +228,19 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
     handleClose()
   }
 
+  const handleSkipPixel = () => {
+    setStep('done')
+  }
+
   if (!isOpen) return null
+
+  const steps: { key: Step; label: string }[] = [
+    { key: 'info', label: 'Dados' },
+    { key: 'integration', label: 'Integração' },
+    { key: 'pixel', label: 'Pixel' },
+    { key: 'done', label: 'Pronto' },
+  ]
+  const stepIndex = steps.findIndex(s => s.key === step)
 
   return (
     <AnimatePresence>
@@ -179,7 +256,7 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden"
+          className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
         >
           <button onClick={handleClose}
             className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors z-10">
@@ -187,23 +264,34 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
           </button>
 
           {/* Step indicator */}
-          <div className="px-8 pt-6 pb-2">
-            <div className="flex items-center gap-2">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step === 'info' ? 'bg-brand-500 text-white' : 'bg-emerald-500 text-white'}`}>
-                {step === 'info' ? '1' : <CheckCircle className="w-4 h-4" />}
-              </div>
-              <div className={`h-0.5 flex-1 ${step === 'integration' ? 'bg-emerald-500' : 'bg-gray-200'}`} />
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step === 'integration' ? 'bg-brand-500 text-white' : 'bg-gray-200 text-gray-400'}`}>
-                2
-              </div>
+          <div className="px-8 pt-6 pb-2 flex-shrink-0">
+            <div className="flex items-center gap-1">
+              {steps.map((s, i) => (
+                <div key={s.key} className="flex items-center flex-1 last:flex-none">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
+                    i < stepIndex ? 'bg-emerald-500 text-white' :
+                    i === stepIndex ? 'bg-brand-500 text-white' :
+                    'bg-gray-200 text-gray-400'
+                  }`}>
+                    {i < stepIndex ? <CheckCircle className="w-3.5 h-3.5" /> : i + 1}
+                  </div>
+                  {i < steps.length - 1 && (
+                    <div className={`h-0.5 flex-1 mx-1 ${i < stepIndex ? 'bg-emerald-500' : 'bg-gray-200'}`} />
+                  )}
+                </div>
+              ))}
             </div>
             <div className="flex justify-between mt-1">
-              <span className="text-[10px] text-gray-500">Dados da Loja</span>
-              <span className="text-[10px] text-gray-500">Integração</span>
+              {steps.map(s => (
+                <span key={s.key} className="text-[10px] text-gray-500">{s.label}</span>
+              ))}
             </div>
           </div>
 
-          {/* Step 1: Store Info */}
+          {/* Scrollable content */}
+          <div className="overflow-y-auto flex-1">
+
+          {/* ── STEP 1: Store Info ── */}
           {step === 'info' && (
             <div className="px-8 pb-8">
               <div className="text-center mb-6">
@@ -265,36 +353,90 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
             </div>
           )}
 
-          {/* Step 2: Manual Shopify Integration */}
+          {/* ── STEP 2: Integration ── */}
           {step === 'integration' && (
             <div className="px-8 pb-8">
-              <button onClick={() => { setStep('info'); setError('') }} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4">
+              <button onClick={() => { setStep('info'); setError('') }} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-3">
                 <ArrowLeft className="w-4 h-4" /> Voltar
               </button>
 
-              <div className="text-center mb-6">
-                <div className="w-14 h-14 mx-auto mb-3 rounded-xl bg-gray-50 flex items-center justify-center">
-                  <Image src="/integrations/icone shopify .png" alt="Shopify" width={32} height={32} className="object-contain" />
+              <div className="text-center mb-5">
+                <div className="w-12 h-12 mx-auto mb-2 rounded-xl bg-gray-50 flex items-center justify-center">
+                  <Image src="/integrations/icone shopify .png" alt="Shopify" width={28} height={28} className="object-contain" />
                 </div>
                 <h2 className="text-lg font-semibold text-gray-900">Conectar Shopify</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  Loja <span className="font-medium text-gray-700">{storeName}</span> criada com sucesso!
-                  <br />Conecte sua loja Shopify via Custom App.
+                  Conecte via <strong>Custom App</strong> para sincronizar pedidos, clientes e produtos.
                 </p>
               </div>
 
-              {/* Manual integration form */}
-              <div className="border border-gray-200 rounded-xl p-5 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center">
-                    <KeyRound className="w-5 h-5 text-[#95BF47]" />
+              {/* Collapsible guide: How to create Custom App */}
+              <div className="border border-blue-200 bg-blue-50/50 rounded-xl mb-4 overflow-hidden">
+                <button
+                  onClick={() => setShowGuide(!showGuide)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-blue-600" />
+                    <span className="text-[13px] font-semibold text-blue-900">Como criar o Custom App no Shopify</span>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">Integração via Custom App</p>
-                    <p className="text-xs text-gray-500">Use as credenciais do seu app customizado</p>
-                  </div>
-                </div>
+                  {showGuide ? <ChevronUp className="w-4 h-4 text-blue-400" /> : <ChevronDown className="w-4 h-4 text-blue-400" />}
+                </button>
 
+                {showGuide && (
+                  <div className="px-4 pb-4 space-y-3">
+                    <ol className="space-y-2.5 text-[12px] text-blue-900">
+                      <li className="flex gap-2">
+                        <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">1</span>
+                        <span>
+                          No Shopify Admin, vá em <strong>Configurações</strong> {'->'} <strong>Apps e canais de vendas</strong> {'->'} <strong>Desenvolver apps</strong>
+                          {shopifyDomain && (
+                            <a href={`https://${shopifyDomain}.myshopify.com/admin/settings/apps/development`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="ml-1 inline-flex items-center gap-0.5 text-blue-600 hover:underline font-medium">
+                              abrir <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                        </span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">2</span>
+                        <span>Clique <strong>"Criar um app"</strong> e nomeie como <strong>"Worder"</strong></span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">3</span>
+                        <div>
+                          <span>Clique <strong>"Configurar escopos da Admin API"</strong> e ative:</span>
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {REQUIRED_SCOPES.map(s => (
+                              <span key={s} className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-[10px] font-mono">{s}</span>
+                            ))}
+                          </div>
+                          <p className="text-[11px] text-blue-700 mt-1">
+                            Recomendados (tracking completo):
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {RECOMMENDED_SCOPES.map(s => (
+                              <span key={s} className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-mono border border-blue-200">{s}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">4</span>
+                        <span>Clique <strong>"Salvar"</strong> e depois <strong>"Instalar app"</strong></span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">5</span>
+                        <span>Na aba <strong>"Credenciais da API"</strong>, copie o <strong>Client ID</strong> e o <strong>Client Secret</strong> e cole abaixo</span>
+                      </li>
+                    </ol>
+                  </div>
+                )}
+              </div>
+
+              {/* Credential form */}
+              <div className="border border-gray-200 rounded-xl p-4 space-y-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Domínio da loja</label>
                   <div className="flex">
@@ -336,30 +478,22 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
                 <button onClick={handleManualConnect}
                   disabled={connecting || !shopifyDomain.trim() || !clientId.trim() || !clientSecret.trim()}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium bg-[#95BF47] hover:bg-[#7da03a] text-white disabled:opacity-50 transition-colors text-sm">
-                  {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <>
-                    <Store className="w-4 h-4" /> Conectar Shopify <ArrowRight className="w-4 h-4" />
-                  </>}
+                  {connecting ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Conectando...</>
+                  ) : (
+                    <><Store className="w-4 h-4" /> Conectar Shopify <ArrowRight className="w-4 h-4" /></>
+                  )}
                 </button>
-
-                {/* Help link */}
-                <div className="pt-1 border-t border-gray-100">
-                  <a href="https://help.shopify.com/en/manual/apps/app-types/custom-apps"
-                    target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                    <ExternalLink className="w-3 h-3" />
-                    Como criar um Custom App no Shopify
-                  </a>
-                </div>
               </div>
 
-              {/* Other platforms (coming soon) */}
+              {/* Other platforms */}
               <div className="mt-3 grid grid-cols-2 gap-2">
                 {[
                   { name: 'WooCommerce', emoji: '🛒' },
                   { name: 'Nuvemshop', emoji: '☁️' },
                 ].map(p => (
-                  <div key={p.name} className="flex items-center gap-2 p-3 border border-gray-200 rounded-lg opacity-50">
-                    <span className="text-lg">{p.emoji}</span>
+                  <div key={p.name} className="flex items-center gap-2 p-2.5 border border-gray-200 rounded-lg opacity-50">
+                    <span className="text-base">{p.emoji}</span>
                     <div>
                       <p className="text-xs font-medium text-gray-600">{p.name}</p>
                       <p className="text-[10px] text-gray-400">Em breve</p>
@@ -369,20 +503,193 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 p-3 mt-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                <div className="flex items-center gap-2 p-3 mt-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                   {error}
                 </div>
               )}
 
-              {/* Skip integration */}
               <button onClick={handleSkipIntegration}
-                className="w-full text-center text-sm text-gray-500 hover:text-gray-700 mt-4 py-2 transition-colors">
+                className="w-full text-center text-sm text-gray-500 hover:text-gray-700 mt-3 py-2 transition-colors">
                 Pular — configurar integração depois
               </button>
             </div>
           )}
+
+          {/* ── STEP 3: Pixel Installation ── */}
+          {step === 'pixel' && (
+            <div className="px-8 pb-8">
+              <div className="text-center mb-5">
+                <div className="w-12 h-12 mx-auto mb-2 rounded-xl bg-emerald-50 flex items-center justify-center">
+                  <CheckCircle className="w-6 h-6 text-emerald-500" />
+                </div>
+                <h2 className="text-lg font-semibold text-gray-900">Loja conectada!</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  <strong>{connectedStoreName}</strong> sincronizando em segundo plano.
+                  <br />Agora instale o Custom Pixel para tracking completo.
+                </p>
+              </div>
+
+              {/* Why pixel matters */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex gap-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[12px] font-semibold text-amber-900">
+                    Sem o pixel, apenas pedidos e checkouts são rastreados.
+                  </p>
+                  <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                    Visualizações de produto, carrinho, browse abandonment e identidade cross-device dependem do pixel. Leva 30 segundos.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step A: Copy code */}
+              <div className="border border-gray-200 rounded-xl p-4 mb-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-5 h-5 rounded-full bg-brand-500 text-white flex items-center justify-center text-[10px] font-bold">1</span>
+                  <span className="text-[13px] font-semibold text-gray-900">Copie o código do pixel</span>
+                </div>
+                {loadingPixel || !pixelCode ? (
+                  <div className="flex items-center gap-2 text-[12px] text-gray-500 py-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Carregando snippet...
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <pre className="text-[10px] font-mono bg-gray-900 text-emerald-400 p-3 pr-20 rounded-lg overflow-x-auto whitespace-pre-wrap break-all max-h-24 overflow-y-auto leading-relaxed">
+                      {pixelCode}
+                    </pre>
+                    <button onClick={handleCopyPixel}
+                      className="absolute top-2 right-2 px-2.5 py-1 text-[11px] font-semibold bg-white text-gray-700 hover:bg-gray-50 rounded border border-gray-300 shadow-sm flex items-center gap-1">
+                      {copiedPixel ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                      {copiedPixel ? 'Copiado!' : 'Copiar'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Step B: Paste instructions */}
+              <div className="border border-gray-200 rounded-xl p-4 mb-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-5 h-5 rounded-full bg-brand-500 text-white flex items-center justify-center text-[10px] font-bold">2</span>
+                  <span className="text-[13px] font-semibold text-gray-900">Cole no Shopify Admin</span>
+                </div>
+                <ol className="text-[12px] text-gray-700 space-y-1.5">
+                  <li className="flex gap-2">
+                    <span className="text-gray-400 font-mono text-[11px] flex-shrink-0">a.</span>
+                    <span>
+                      Vá em <strong>Configurações</strong> {'>'} <strong>Customer Events</strong>
+                      {connectedDomain && (
+                        <a href={`https://${connectedDomain}/admin/settings/customer_events`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="ml-1 inline-flex items-center gap-0.5 text-blue-600 hover:underline font-medium">
+                          abrir <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-gray-400 font-mono text-[11px] flex-shrink-0">b.</span>
+                    <span>Clique <strong>"Adicionar pixel personalizado"</strong></span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-gray-400 font-mono text-[11px] flex-shrink-0">c.</span>
+                    <span>Nome: <strong>Worder</strong></span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-gray-400 font-mono text-[11px] flex-shrink-0">d.</span>
+                    <span>Cole o código acima no editor</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-gray-400 font-mono text-[11px] flex-shrink-0">e.</span>
+                    <span>Privacidade do cliente: <strong>"Não obrigatório"</strong></span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-gray-400 font-mono text-[11px] flex-shrink-0">f.</span>
+                    <span>Clique <strong>"Salvar"</strong> e depois <strong>"Conectar"</strong></span>
+                  </li>
+                </ol>
+              </div>
+
+              <div className="flex gap-2">
+                <button onClick={() => setStep('done')}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium bg-brand-500 hover:bg-brand-600 text-white transition-colors text-sm">
+                  Já instalei o pixel <ArrowRight className="w-4 h-4" />
+                </button>
+                <button onClick={handleSkipPixel}
+                  className="px-4 py-2.5 rounded-lg font-medium border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors text-sm">
+                  Depois
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── STEP 4: Done ── */}
+          {step === 'done' && (
+            <div className="px-8 pb-8">
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-emerald-50 flex items-center justify-center">
+                  <Zap className="w-8 h-8 text-emerald-500" />
+                </div>
+                <h2 className="text-xl font-semibold text-gray-900">Tudo pronto!</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  <strong>{connectedStoreName}</strong> está configurada e sincronizando.
+                </p>
+              </div>
+
+              <div className="space-y-2 mb-6">
+                <StatusItem label="Loja conectada" done />
+                <StatusItem label={webhooksInfo || 'Webhooks registrados'} done />
+                <StatusItem label="Sincronização inicial em andamento" done />
+                <StatusItem label="Custom Pixel" done={false} hint="Verifique no diagnóstico de tracking" />
+              </div>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-6">
+                <p className="text-[12px] text-gray-600 leading-relaxed">
+                  Os pedidos, clientes e produtos estão sendo importados em segundo plano.
+                  O pixel pode levar alguns minutos para começar a receber eventos após ser instalado no Shopify.
+                  Acompanhe tudo no <strong>diagnóstico de tracking</strong>.
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <button onClick={handleFinish}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium bg-gray-900 hover:bg-gray-800 text-white transition-colors text-sm">
+                  Ir para o painel <ArrowRight className="w-4 h-4" />
+                </button>
+                {connectedStoreId && (
+                  <button
+                    onClick={() => {
+                      handleFinish()
+                      setTimeout(() => {
+                        window.location.href = `/integrations/shopify/tracking-debug?storeId=${connectedStoreId}`
+                      }, 300)
+                    }}
+                    className="px-4 py-3 rounded-lg font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors text-sm flex items-center gap-1.5">
+                    <Eye className="w-4 h-4" /> Diagnóstico
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          </div>
         </motion.div>
       </motion.div>
     </AnimatePresence>
+  )
+}
+
+function StatusItem({ label, done, hint }: { label: string; done: boolean; hint?: string }) {
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 bg-white border border-gray-100 rounded-lg">
+      {done ? (
+        <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+      ) : (
+        <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+      )}
+      <div className="flex-1">
+        <span className={`text-[13px] ${done ? 'text-gray-900' : 'text-amber-700'}`}>{label}</span>
+        {hint && <p className="text-[11px] text-gray-500 mt-0.5">{hint}</p>}
+      </div>
+    </div>
   )
 }
