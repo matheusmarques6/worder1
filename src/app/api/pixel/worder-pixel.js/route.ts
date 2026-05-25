@@ -60,7 +60,9 @@ var init = ctx.init;
 
 var TRACK = '${trackEndpoint}';
 var RESOLVE = '${identityEndpoint}';
-var SHOP = '${shop}' || (init && init.data && init.data.shop && init.data.shop.myshopifyDomain) || '';
+var SHOP = '${shop}';
+if (!SHOP) { try { SHOP = init.data.shop.myshopifyDomain; } catch(_){} }
+if (!SHOP) SHOP = '';
 
 // =============================================
 // Mutable identity state — populated asynchronously after subscribes
@@ -85,8 +87,12 @@ var identityResolved = false;
 
 // =============================================
 // Send event to /api/track/event. Best-effort: never throws, never
-// blocks navigation. Browser uses keepalive so the request survives
-// page unload (e.g. checkout_completed firing on order-thank-you redirect).
+// blocks navigation.
+//
+// IMPORTANT: Do NOT use credentials:'include' — Shopify's Custom Pixel
+// sandbox blocks credentialed cross-origin requests (the preflight
+// fails silently and the POST never reaches the server). keepalive is
+// used only where supported; the sandbox may ignore it harmlessly.
 // =============================================
 function send(eventType, data, ectx) {
   try {
@@ -129,7 +135,6 @@ function send(eventType, data, ectx) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       keepalive: true,
-      credentials: 'include',
     }).catch(function(){});
   } catch(_) { /* never throw from a subscriber */ }
 }
@@ -415,7 +420,6 @@ function resolveIdentity() {
       shopifyCustomerId: customerId,
       source: 'pixel',
     }),
-    credentials: 'include',
     keepalive: true,
   }).then(function(r) {
     return r && r.ok ? r.json() : null;
