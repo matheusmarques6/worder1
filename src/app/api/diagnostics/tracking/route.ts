@@ -212,20 +212,19 @@ export async function GET(request: NextRequest) {
     if (wRes.ok) {
       const json = await wRes.json();
       const all = json.webhooks || [];
-      webhookCount = all.length;
-      webhookList = all.map((w: any) => ({
+      // Only show OUR webhooks (matching our domain prefix), not third-party ones
+      const ours = all.filter((w: any) => typeof w.address === 'string' && w.address.startsWith(legacyWebhookPrefix));
+      webhookCount = ours.length;
+      webhookList = ours.map((w: any) => ({
         topic: w.topic,
         address: w.address,
         matches_expected: w.address === expectedWebhookUrl,
       }));
-      // checkouts/create registered under our endpoint counts as ok —
-      // either the canonical URL OR a legacy URL still works
-      // (handler falls back to shop_domain lookup).
-      webhookCheckoutTopicsRegistered = all.some((w: any) =>
-        (w.topic === 'checkouts/create' || w.topic === 'checkouts/update') &&
-        typeof w.address === 'string' && w.address.startsWith(legacyWebhookPrefix)
+      webhookCheckoutTopicsRegistered = ours.some((w: any) =>
+        (w.topic === 'checkouts/create' || w.topic === 'checkouts/update')
       );
-      webhookUrlMismatchCount = all.filter((w: any) => w.address !== expectedWebhookUrl).length;
+      // Only count OUR webhooks that use the old URL format as mismatches
+      webhookUrlMismatchCount = ours.filter((w: any) => w.address !== expectedWebhookUrl).length;
     }
   } catch { /* best-effort */ }
 

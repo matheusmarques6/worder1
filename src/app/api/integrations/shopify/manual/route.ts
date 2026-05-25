@@ -390,8 +390,12 @@ export async function POST(request: NextRequest) {
 
     // ──────────────────────────────────────────
     // 5. Register 17 webhooks (skip any that already exist for this URL)
+    //    URL includes ?store_id= so the handler resolves the store from
+    //    the URL itself (bulletproof against multi-domain shops). Must
+    //    match the format expected by the diagnostic dashboard.
     // ──────────────────────────────────────────
-    const webhookUrl = `${APP_URL}/api/webhooks/shopify`;
+    const webhookUrl = `${APP_URL}/api/webhooks/shopify?store_id=${storeId}`;
+    const legacyWebhookPrefix = `${APP_URL}/api/webhooks/shopify`;
     let existingTopics: string[] = [];
     try {
       const listRes = await fetch(
@@ -400,8 +404,9 @@ export async function POST(request: NextRequest) {
       );
       if (listRes.ok) {
         const json = await listRes.json();
+        // Accept both new (?store_id=) and legacy (no param) URLs as "existing"
         existingTopics = (json.webhooks || [])
-          .filter((w: any) => w.address === webhookUrl)
+          .filter((w: any) => w.address === webhookUrl || (w.address === legacyWebhookPrefix && w.address.startsWith(legacyWebhookPrefix)))
           .map((w: any) => w.topic);
       }
     } catch { /* best-effort */ }
@@ -514,7 +519,27 @@ export async function POST(request: NextRequest) {
     }
 
     // ──────────────────────────────────────────
-    // 6. Trigger initial sync (fire-and-forget)
+    // 6. Clean up placeholder stores (.worder.local) in this org.
+    //    These are created by AddStoreModal Step 1 and should be removed
+    //    once a real Shopify connection succeeds.
+    // ──────────────────────────────────────────
+    try {
+      const { data: placeholders } = await supabase
+        .from('shopify_stores')
+        .select('id, shop_domain')
+        .eq('organization_id', organizationId)
+        .like('shop_domain', '%.worder.local')
+        .neq('id', storeId);
+      for (const p of (placeholders || []) as any[]) {
+        await supabase.from('shopify_stores').delete().eq('id', p.id);
+      }
+      if ((placeholders || []).length > 0) {
+        console.log(`[Shopify Manual] Cleaned up ${placeholders!.length} placeholder store(s)`);
+      }
+    } catch { /* best-effort */ }
+
+    // ──────────────────────────────────────────
+    // 7. Trigger initial sync (fire-and-forget)
     // ──────────────────────────────────────────
     let syncTriggered = false;
     try {
