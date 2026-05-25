@@ -298,7 +298,7 @@ export class ExecutionEngine {
               error: `Node type "${nodeType}" não tem handler registrado. Verifique se o tipo de nó é válido.`,
               duration: Date.now() - nodeStartTime,
             };
-            if (options.errorHandling === 'stop') break;
+            if (workflow.settings?.errorHandling === 'stop') break;
             continue;
           }
 
