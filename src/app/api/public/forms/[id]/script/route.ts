@@ -191,14 +191,43 @@ var formType=D.formType||"popup";
 var postSubmit=D.postSubmit||{action:"show-success",redirectUrl:"",closeDelay:4};
 var curStep=0;
 var allData={};
+// Progressive profiling: known fields fetched from server for returning visitors
+var _knownFields={};
+var _ppEnabled=!!(B.progressiveProfiling&&B.progressiveProfiling.enabled);
+var _ppHide=_ppEnabled&&B.progressiveProfiling.hideKnownFields!==false;
+var _ppPrefill=_ppEnabled&&!!B.progressiveProfiling.prefillKnownFields;
+function loadKnownFields(cb){
+  if(!_ppEnabled){cb();return}
+  var em=gc("__worder_id_email")||"";
+  var vid=gc("__worder_id")||"";
+  if(!em&&!vid){cb();return}
+  var u=BU+"/api/public/forms/"+FID+"/known-fields?";
+  if(em)u+="email="+encodeURIComponent(decodeURIComponent(em));
+  if(vid)u+=(em?"&":"")+"visitor_id="+encodeURIComponent(vid);
+  fetch(u).then(function(r){return r.json()}).then(function(j){
+    _knownFields=j.fields||{};
+    dlog("Progressive profiling: known fields",_knownFields);
+    cb();
+  }).catch(function(){cb()});
+}
 function visibleBlocks(bs){
   return (bs||[]).filter(function(b){
     var pp=b.props||{};
     if(isMob&&pp.hideOnMobile){dlog("hide block "+b.type+"#"+b.id+" (hideOnMobile)");return false;}
     if(!isMob&&pp.hideOnDesktop){dlog("hide block "+b.type+"#"+b.id+" (hideOnDesktop)");return false;}
+    // Progressive profiling: hide input fields whose data we already have
+    if(_ppHide&&isInputBlock(b.type)){
+      var mapTo=pp.mapTo||(b.type==="email"?"email":b.type==="phone"?"phone":b.type==="name-input"?"first_name":"");
+      if(mapTo&&_knownFields[mapTo]){
+        dlog("progressive: hiding "+b.type+" ("+mapTo+" already known)");
+        allData[mapTo]=_knownFields[mapTo];
+        return false;
+      }
+    }
     return true;
   });
 }
+function isInputBlock(t){return t==="email"||t==="phone"||t==="name-input"||t==="text-input"||t==="date-input"||t==="dropdown"}
 function renderBlock(b){
   var p=b.props||{},h="";
   switch(b.type){
@@ -435,7 +464,18 @@ function show(){
     cb.style.cssText="position:absolute;top:12px;right:12px;z-index:2;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,0.06);border:none;font-size:20px;color:"+(st.closeButton.color||"#6B7280")+";cursor:pointer;display:flex;align-items:center;justify-content:center";
     pop.appendChild(cb);
   }
-  content.innerHTML='<form id="wf-form-'+FID+'">'+renderStep(0)+'</form>';
+  // Progressive profiling: load known fields before rendering so we can hide/prefill
+  loadKnownFields(function(){
+    content.innerHTML='<form id="wf-form-'+FID+'">'+renderStep(0)+'</form>';
+    // Prefill known values into visible input fields
+    if(_ppPrefill){
+      Object.keys(_knownFields).forEach(function(k){
+        var inp=content.querySelector('[name="'+k+'"]');
+        if(inp)inp.value=_knownFields[k];
+      });
+    }
+    bindForm();
+  });
   pop.appendChild(content);
   if(hasSide){
     var sideUrl=st.sideImage.src;

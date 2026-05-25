@@ -96,6 +96,11 @@ interface PopupDesign {
       maxTotal?: number
       minItems?: number
     }
+    progressiveProfiling?: {
+      enabled: boolean
+      hideKnownFields: boolean
+      prefillKnownFields: boolean
+    }
   }
   postSubmit?: {
     action: 'close' | 'redirect' | 'show-success'
@@ -2070,6 +2075,26 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 <Field label="Fim">
                   <input type="datetime-local" className={inp} value={sched.endDate} onChange={e => setG('scheduling', { endDate: e.target.value })} />
                 </Field>
+              </div>
+            )}
+          </Section>
+
+          <Section title="Perfil progressivo">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1 mb-3">
+              Esconde campos que o visitante ja preencheu em visitas anteriores.
+              Mostra apenas campos novos, coletando dados incrementalmente.
+            </p>
+            <ToggleRow label="Ativar perfil progressivo" hint="Visitantes identificados veem menos campos."
+              checked={!!(beh as any).progressiveProfiling?.enabled}
+              onChange={v => onChange({ ...beh, progressiveProfiling: { ...(beh as any).progressiveProfiling, enabled: v } })} />
+            {(beh as any).progressiveProfiling?.enabled && (
+              <div className="space-y-2 mt-2">
+                <ToggleRow label="Esconder campos ja conhecidos" hint="Ex: se ja temos o email, nao mostra o campo email."
+                  checked={(beh as any).progressiveProfiling?.hideKnownFields !== false}
+                  onChange={v => onChange({ ...beh, progressiveProfiling: { ...(beh as any).progressiveProfiling, hideKnownFields: v } })} />
+                <ToggleRow label="Pre-preencher campos conhecidos" hint="Mostra o campo com o valor existente preenchido."
+                  checked={!!(beh as any).progressiveProfiling?.prefillKnownFields}
+                  onChange={v => onChange({ ...beh, progressiveProfiling: { ...(beh as any).progressiveProfiling, prefillKnownFields: v } })} />
               </div>
             )}
           </Section>

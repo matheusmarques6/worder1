@@ -11,7 +11,9 @@ import {
   UsersThree,
   CalendarBlank,
   Export,
+  GearSix,
 } from '@phosphor-icons/react'
+import Link from 'next/link'
 import { useStoreStore } from '@/stores'
 
 // ── Types ──
@@ -69,6 +71,13 @@ interface EmailDashboardData {
     clickRate: string
     bounceRate: string
   } | null
+}
+
+interface AttributionConfig {
+  email_window_days: number
+  whatsapp_window_days: number
+  sms_window_days: number
+  model: 'last_touch' | 'first_touch'
 }
 
 // ── Helpers ──
@@ -164,6 +173,7 @@ export default function AnalyticsPage() {
   const [overview, setOverview] = useState<OverviewData | null>(null)
   const [base, setBase] = useState<AnalyticsBaseData | null>(null)
   const [emailData, setEmailData] = useState<EmailDashboardData | null>(null)
+  const [attrConfig, setAttrConfig] = useState<AttributionConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
@@ -176,7 +186,7 @@ export default function AnalyticsPage() {
     const days = daysMap[period]
 
     try {
-      const [overviewRes, baseRes, emailRes] = await Promise.all([
+      const [overviewRes, baseRes, emailRes, attrRes] = await Promise.all([
         fetch(`/api/dashboard/overview?range=${range}${storeParam}`).then((r) =>
           r.ok ? r.json() : null
         ).catch(() => null),
@@ -186,11 +196,15 @@ export default function AnalyticsPage() {
         fetch(`/api/analytics/email-dashboard?days=${days}`).then((r) =>
           r.ok ? r.json() : null
         ).catch(() => null),
+        fetch(`/api/settings/attribution`).then((r) =>
+          r.ok ? r.json() : null
+        ).catch(() => null),
       ])
 
       setOverview(overviewRes)
       setBase(baseRes)
       setEmailData(emailRes)
+      setAttrConfig(attrRes)
     } catch {
       setError('Erro ao carregar dados de analytics.')
     } finally {
@@ -217,7 +231,7 @@ export default function AnalyticsPage() {
   const worderDelta = overview?.worderDelta ?? null
   const worderShare = overview?.worderShare ?? null
 
-  const kpis: Array<{ title: string; value: string; icon: any; delta?: number | null; deltaLabel?: string }> = [
+  const kpis: Array<{ title: string; value: string; icon: any; delta?: number | null; deltaLabel?: string; badge?: string; badgeHref?: string }> = [
     {
       title: 'Contatos Totais',
       value: totalContacts !== null ? fmtNumber(totalContacts) : '—',
@@ -229,6 +243,8 @@ export default function AnalyticsPage() {
       icon: CurrencyDollar,
       delta: worderDelta,
       deltaLabel: 'vs período anterior',
+      badge: attrConfig ? `Janela: ${attrConfig.email_window_days} ${attrConfig.email_window_days === 1 ? 'dia' : 'dias'}` : undefined,
+      badgeHref: '/settings/attribution',
     },
     {
       title: 'Participação Worder',
@@ -374,6 +390,23 @@ export default function AnalyticsPage() {
                         {delta > 0 ? '+' : ''}{delta.toFixed(1)}%
                       </span>
                       {kpi.deltaLabel && <span className="text-[10px] text-gray-400">{kpi.deltaLabel}</span>}
+                    </div>
+                  )}
+                  {kpi.badge && (
+                    <div className="mt-2">
+                      {kpi.badgeHref ? (
+                        <Link
+                          href={kpi.badgeHref}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-600 rounded-full text-[10px] font-medium hover:bg-orange-100 transition-colors"
+                        >
+                          <GearSix size={10} />
+                          {kpi.badge}
+                        </Link>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-600 rounded-full text-[10px] font-medium">
+                          {kpi.badge}
+                        </span>
+                      )}
                     </div>
                   )}
                 </motion.div>

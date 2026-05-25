@@ -15,6 +15,10 @@ interface AttributionSettings {
   // Klaviyo's default.
   count_opens: boolean;
   exclude_mpp_opens: boolean;
+  // Attribution model: last_touch = credits the most recent engagement
+  // before the conversion; first_touch = credits the first engagement
+  // within the window.
+  model: 'last_touch' | 'first_touch';
 }
 
 const DEFAULTS: AttributionSettings = {
@@ -23,12 +27,11 @@ const DEFAULTS: AttributionSettings = {
   sms_window_days: 2,
   count_opens: true,
   exclude_mpp_opens: true,
+  model: 'last_touch',
 };
 
-// Aligned with Klaviyo (31 days max) and Omnisend (30 days max). We
-// cap at 30 across all channels so the per-channel logic stays
-// symmetric.
-const WINDOW_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 10, 14, 21, 30];
+// Extended window options: up to 90 days to support longer B2B cycles.
+const WINDOW_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 10, 14, 21, 30, 60, 90];
 
 export default function AttributionSettingsPage() {
   const [settings, setSettings] = useState<AttributionSettings>(DEFAULTS);
@@ -176,6 +179,56 @@ export default function AttributionSettingsPage() {
                 ))}
               </select>
             </div>
+          </div>
+        </div>
+
+        {/* Attribution model */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 bg-orange-50 rounded-lg">
+              <Link2 className="w-5 h-5 text-orange-500" />
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900">Modelo de Atribuição</h2>
+          </div>
+
+          <div className="space-y-4">
+            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:border-orange-200 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50/30">
+              <input
+                type="radio"
+                name="attribution_model"
+                value="last_touch"
+                checked={settings.model === 'last_touch'}
+                onChange={() => setSettings(s => ({ ...s, model: 'last_touch' }))}
+                className="w-4 h-4 mt-0.5 border-gray-300 text-orange-500 focus:ring-orange-500"
+              />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Último toque (last touch)</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Credita a conversão à <strong>última</strong> interação (clique ou abertura) antes da
+                  compra. Modelo padrão do Klaviyo e Omnisend — ideal para e-commerce onde a
+                  mensagem mais recente costuma ser o gatilho direto da compra.
+                </p>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:border-orange-200 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50/30">
+              <input
+                type="radio"
+                name="attribution_model"
+                value="first_touch"
+                checked={settings.model === 'first_touch'}
+                onChange={() => setSettings(s => ({ ...s, model: 'first_touch' }))}
+                className="w-4 h-4 mt-0.5 border-gray-300 text-orange-500 focus:ring-orange-500"
+              />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Primeiro toque (first touch)</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Credita a conversão à <strong>primeira</strong> interação dentro da janela de
+                  atribuição. Útil para medir qual campanha original trouxe o cliente de volta ao
+                  funil, independente de lembretes posteriores.
+                </p>
+              </div>
+            </label>
           </div>
         </div>
 

@@ -89,6 +89,11 @@ export async function GET(req: NextRequest) {
       .slice(0, 8)
       .map(([name, s]) => ({
         name,
+        total: s.total,
+        deliveredCount: s.delivered,
+        openedCount: s.opened,
+        bouncedCount: s.bounced,
+        complainedCount: s.complained,
         delivered: s.total > 0 ? Number(((s.delivered / s.total) * 100).toFixed(1)) : 0,
         opens: s.delivered > 0 ? Number(((s.opened / s.delivered) * 100).toFixed(1)) : 0,
         inbox: s.total > 0 ? Number((((s.total - s.bounced - s.complained) / s.total) * 100).toFixed(1)) : 0,

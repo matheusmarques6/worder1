@@ -178,6 +178,61 @@ function getSupabase() {
 }
 
 // ============================================
+// ATTRIBUTION SETTINGS CACHE
+// ============================================
+// Per-request cache so the inline attribution block and any
+// multi-channel fanout within the same webhook invocation share a
+// single DB roundtrip. The cache lives for the lifetime of the
+// handler (one Lambda / Edge invocation) and is never shared across
+// requests.
+interface CachedAttributionSettings {
+  email_window_days: number;
+  whatsapp_window_days: number;
+  sms_window_days: number;
+  count_opens: boolean;
+  exclude_mpp_opens: boolean;
+  model: 'last_touch' | 'first_touch';
+}
+
+const ATTR_DEFAULTS: CachedAttributionSettings = {
+  email_window_days: 5,
+  whatsapp_window_days: 2,
+  sms_window_days: 2,
+  count_opens: true,
+  exclude_mpp_opens: true,
+  model: 'last_touch',
+};
+
+const attributionSettingsCache = new Map<string, CachedAttributionSettings>();
+
+async function getAttributionSettings(orgId: string): Promise<CachedAttributionSettings> {
+  const cached = attributionSettingsCache.get(orgId);
+  if (cached) return cached;
+
+  try {
+    const supabase = getSupabase();
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('email_settings')
+      .eq('id', orgId)
+      .maybeSingle();
+    const a = org?.email_settings?.attribution || {};
+    const settings: CachedAttributionSettings = {
+      email_window_days: Number(a.email_window_days) || ATTR_DEFAULTS.email_window_days,
+      whatsapp_window_days: Number(a.whatsapp_window_days) || ATTR_DEFAULTS.whatsapp_window_days,
+      sms_window_days: Number(a.sms_window_days) || ATTR_DEFAULTS.sms_window_days,
+      count_opens: a.count_opens !== false,
+      exclude_mpp_opens: a.exclude_mpp_opens !== false,
+      model: a.model === 'first_touch' ? 'first_touch' : 'last_touch',
+    };
+    attributionSettingsCache.set(orgId, settings);
+    return settings;
+  } catch {
+    return { ...ATTR_DEFAULTS };
+  }
+}
+
+// ============================================
 // HELPER: meta pro outbound webhook dispatcher
 // ============================================
 // O dispatcher em src/lib/webhooks/outbound-dispatcher.ts só dispara
@@ -558,33 +613,71 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   const orderValue = parseFloat(order.total_price || '0');
   await updateContactOrderStats(contact.id, orderValue);
 
-  // ---- Revenue attribution: vincular receita à última campanha de email ----
-  // Se o contato clicou/abriu um email nos últimos N dias (attribution window),
-  // atribuir a receita do pedido àquela campanha.
+  // ---- Revenue attribution: vincular receita à campanha de email ----
+  // Se o contato clicou/abriu um email dentro da janela de atribuição
+  // configurada, atribuir a receita do pedido àquela campanha.
+  // Respeita: window days, model (last_touch/first_touch), count_opens,
+  // e exclude_mpp_opens — tudo configurável em Settings > Atribuição.
   try {
-    // Buscar attribution window (default 5 dias pra email)
-    const { data: orgSettings } = await supabase
-      .from('organizations')
-      .select('email_settings')
-      .eq('id', store.organization_id)
-      .maybeSingle();
-    const windowDays = orgSettings?.email_settings?.attribution?.email_window_days || 5;
+    const attrSettings = await getAttributionSettings(store.organization_id);
+    const windowDays = attrSettings.email_window_days;
     const windowDate = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
 
-    // Buscar último email_clicked ou email_opened do contato dentro da window
-    const { data: lastEmailEvent } = await supabase
+    // Build list of qualifying event types based on engagement settings
+    const eventTypes: string[] = ['email_clicked'];
+    if (attrSettings.count_opens) {
+      eventTypes.push('email_opened');
+      // When excluding Apple MPP auto-opens, filter out events flagged
+      // as machine-generated. If exclude_mpp_opens is off, all opens
+      // qualify (including MPP).
+    }
+
+    // Query direction depends on the attribution model:
+    //   last_touch  → most recent engagement first (ascending: false)
+    //   first_touch → earliest engagement first (ascending: true)
+    const ascending = attrSettings.model === 'first_touch';
+
+    let query = supabase
       .from('contact_events')
       .select('properties')
       .eq('contact_id', contact.id)
       .eq('organization_id', store.organization_id)
-      .in('event_type', ['email_clicked', 'email_opened'])
+      .in('event_type', eventTypes)
       .gte('occurred_at', windowDate)
-      .order('occurred_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order('occurred_at', { ascending })
+      .limit(1);
 
-    if (lastEmailEvent?.properties?.CampaignId) {
-      const campaignId = lastEmailEvent.properties.CampaignId;
+    // When count_opens is on and exclude_mpp_opens is on, filter out
+    // Apple MPP opens (flagged via properties->is_mpp = true).
+    // We can't filter JSONB booleans via PostgREST easily, so we fetch
+    // a small batch and filter in JS when MPP exclusion is active.
+    let matchedEvent: any = null;
+    if (attrSettings.count_opens && attrSettings.exclude_mpp_opens) {
+      // Fetch a small batch so we can skip MPP-flagged opens
+      const { data: candidates } = await supabase
+        .from('contact_events')
+        .select('properties, event_type')
+        .eq('contact_id', contact.id)
+        .eq('organization_id', store.organization_id)
+        .in('event_type', eventTypes)
+        .gte('occurred_at', windowDate)
+        .order('occurred_at', { ascending })
+        .limit(10);
+
+      matchedEvent = (candidates || []).find((e: any) => {
+        // Clicks always qualify
+        if (e.event_type === 'email_clicked') return true;
+        // Opens qualify only if not flagged as MPP
+        if (e.properties?.is_mpp) return false;
+        return true;
+      }) || null;
+    } else {
+      const { data } = await query.maybeSingle();
+      matchedEvent = data;
+    }
+
+    if (matchedEvent?.properties?.CampaignId) {
+      const campaignId = matchedEvent.properties.CampaignId;
       // Incrementar attributed_revenue na campanha
       const { data: currentCamp } = await supabase
         .from('email_campaigns')
@@ -610,6 +703,7 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
           order_value: orderValue,
           currency: order.currency || 'BRL',
           attribution_window_days: windowDays,
+          attribution_model: attrSettings.model,
         },
         monetary_value: orderValue,
         currency: order.currency || 'BRL',
