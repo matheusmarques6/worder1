@@ -71,12 +71,46 @@ export async function GET(req: NextRequest) {
         if (s.contact_id) alreadySentContactIds.add(s.contact_id)
       }
 
+      // For conversion_rate, query actual orders attributed to each variant
+      // instead of using clicks (clicks != conversions).
+      let conversionsByVariant = { a: 0, b: 0 }
+      if (camp.ab_winner_metric === 'conversion_rate') {
+        try {
+          const contactsByVariant = { a: [] as string[], b: [] as string[] }
+          for (const s of sends) {
+            if (s.contact_id && s.ab_variant) {
+              contactsByVariant[s.ab_variant as 'a' | 'b']?.push(s.contact_id)
+            }
+          }
+          for (const v of ['a', 'b'] as const) {
+            if (contactsByVariant[v].length === 0) continue
+            const { count } = await supabaseAdmin
+              .from('contact_events')
+              .select('id', { count: 'exact', head: true })
+              .in('contact_id', contactsByVariant[v])
+              .in('event_type', ['placed_order', 'order_paid', 'checkout_completed'])
+              .gte('occurred_at', camp.sent_at || camp.created_at)
+            conversionsByVariant[v] = count || 0
+          }
+        } catch { /* fall back to clicks if query fails */ }
+      }
+
       const rate = (variant: 'a' | 'b') => {
         const s = stats[variant]
         if (s.sent === 0) return 0
         if (camp.ab_winner_metric === 'click_rate') return s.clicked / s.sent
-        if (camp.ab_winner_metric === 'conversion_rate') return s.clicked / s.sent
+        if (camp.ab_winner_metric === 'conversion_rate') {
+          return conversionsByVariant[variant] / s.sent
+        }
         return s.opened / s.sent
+      }
+
+      // Require minimum sample size for statistical relevance
+      const minSample = 30
+      const hasEnoughData = stats.a.sent >= minSample && stats.b.sent >= minSample
+      if (!hasEnoughData) {
+        console.warn(`[AB] Campaign ${camp.id} — insufficient sample (a=${stats.a.sent}, b=${stats.b.sent}), skipping`)
+        continue
       }
 
       const winner: 'a' | 'b' = rate('b') > rate('a') ? 'b' : 'a'

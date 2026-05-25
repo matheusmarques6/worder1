@@ -291,12 +291,14 @@ export class ExecutionEngine {
           const executor = nodeExecutors[nodeType];
           
           if (!executor) {
-            console.warn(`No executor found for node type: ${nodeType}, using passthrough`);
+            console.error(`[ExecutionEngine] No executor for node type: ${nodeType} — marking as error`);
             nodeResults[node.id] = {
-              status: 'success',
-              output: node.data.config,
+              status: 'error',
+              output: null,
+              error: `Node type "${nodeType}" não tem handler registrado. Verifique se o tipo de nó é válido.`,
               duration: Date.now() - nodeStartTime,
             };
+            if (options.errorHandling === 'stop') break;
             continue;
           }
 
@@ -631,17 +633,20 @@ export class ExecutionEngine {
         .single();
 
       if (error || !data) {
-        console.warn(`Credentials not found: ${credentialId}`);
-        return {};
+        console.error(`[Credentials] Not found: ${credentialId} — node will fail`);
+        return { _error: `Credencial "${credentialId}" não encontrada` };
       }
 
-      // Import dynamically to avoid circular dependencies
       const { decryptCredential } = await import('./credential-encryption');
       const decrypted = decryptCredential((data as any).encrypted_data);
+      if (!decrypted || Object.keys(decrypted).length === 0) {
+        console.error(`[Credentials] Decryption returned empty for ${credentialId}`);
+        return { _error: 'Falha ao descriptografar credencial — chave pode ter sido rotacionada' };
+      }
       return { ...decrypted, type: (data as any).type };
     } catch (err) {
-      console.error('Error getting credentials:', err);
-      return {};
+      console.error('[Credentials] Decryption error:', err);
+      return { _error: `Erro ao descriptografar credencial: ${(err as any)?.message || 'unknown'}` };
     }
   }
 
@@ -737,17 +742,27 @@ export async function resumeExecution(
   const resumeData = (execution as any).resume_data;
   const waitingNodeId = resumeData?.waitingAt?.nodeId;
 
-  // Find the next node after the waiting node
+  // Find ALL next nodes after the waiting node (supports branching after delay).
+  // Previously used .find() which only returned the first edge, silently
+  // dropping parallel branches in patterns like delay → condition → two paths.
   let startFromNodeId: string | undefined;
+  let resumeAfterNodeId: string | undefined;
   if (waitingNodeId) {
-    const edge = (workflow.edges || []).find((e: any) => e.source === waitingNodeId);
-    startFromNodeId = edge?.target;
+    const outEdges = (workflow.edges || []).filter((e: any) => e.source === waitingNodeId);
+    if (outEdges.length === 1) {
+      startFromNodeId = outEdges[0].target;
+    } else if (outEdges.length > 1) {
+      // Multiple outgoing edges = branching. Use resumeAfterNodeId so the
+      // engine's reachability logic processes ALL downstream branches.
+      resumeAfterNodeId = waitingNodeId;
+    }
   }
 
   return engine.execute(workflow, {
     context: resumeData?.context,
     executionId,
     startFromNodeId,
+    resumeAfterNodeId,
   });
 }
 

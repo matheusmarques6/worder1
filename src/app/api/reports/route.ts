@@ -156,32 +156,32 @@ export async function GET(request: NextRequest) {
 
     switch (reportType) {
       case 'revenue':
-        report.revenue = await generateRevenueReport(supabase, organizationId, dateRange, pipelineId)
+        report.revenue = await generateRevenueReport(supabase, organizationId, dateRange, pipelineId, storeId)
         break
       case 'conversions':
-        report.conversions = await generateConversionReport(supabase, organizationId, dateRange, pipelineId)
+        report.conversions = await generateConversionReport(supabase, organizationId, dateRange, pipelineId, storeId)
         break
       case 'channels':
-        report.channels = await generateChannelReport(supabase, organizationId, dateRange)
+        report.channels = await generateChannelReport(supabase, organizationId, dateRange, storeId)
         break
       case 'roi':
-        report.roi = await generateROIReport(supabase, organizationId, dateRange)
+        report.roi = await generateROIReport(supabase, organizationId, dateRange, storeId)
         break
       case 'sales':
-        report.sales = await generateSalesReport(supabase, organizationId, dateRange, pipelineId)
+        report.sales = await generateSalesReport(supabase, organizationId, dateRange, pipelineId, storeId)
         break
       case 'trends':
-        report.trends = await generateTrendData(supabase, organizationId, dateRange)
+        report.trends = await generateTrendData(supabase, organizationId, dateRange, storeId)
         break
       case 'all':
       default:
         const [revenue, conversions, channels, roi, sales, trends] = await Promise.all([
-          generateRevenueReport(supabase, organizationId, dateRange, pipelineId),
-          generateConversionReport(supabase, organizationId, dateRange, pipelineId),
-          generateChannelReport(supabase, organizationId, dateRange),
-          generateROIReport(supabase, organizationId, dateRange),
-          generateSalesReport(supabase, organizationId, dateRange, pipelineId),
-          generateTrendData(supabase, organizationId, dateRange),
+          generateRevenueReport(supabase, organizationId, dateRange, pipelineId, storeId),
+          generateConversionReport(supabase, organizationId, dateRange, pipelineId, storeId),
+          generateChannelReport(supabase, organizationId, dateRange, storeId),
+          generateROIReport(supabase, organizationId, dateRange, storeId),
+          generateSalesReport(supabase, organizationId, dateRange, pipelineId, storeId),
+          generateTrendData(supabase, organizationId, dateRange, storeId),
         ])
         report = { revenue, conversions, channels, roi, sales, trends }
     }
@@ -243,9 +243,9 @@ async function generateRevenueReport(
   supabase: any,
   organizationId: string,
   dateRange: DateRange,
-  pipelineId?: string | null
+  pipelineId?: string | null,
+  storeId?: string | null
 ): Promise<RevenueReport> {
-  // Get won deals in period
   let query = supabase
     .from('deals')
     .select('value, closed_at')
@@ -256,6 +256,9 @@ async function generateRevenueReport(
 
   if (pipelineId) {
     query = query.eq('pipeline_id', pipelineId)
+  }
+  if (storeId) {
+    query = query.eq('store_id', storeId)
   }
 
   const { data: wonDeals, error } = await query
@@ -321,9 +324,9 @@ async function generateConversionReport(
   supabase: any,
   organizationId: string,
   dateRange: DateRange,
-  pipelineId?: string | null
+  pipelineId?: string | null,
+  storeId?: string | null
 ): Promise<ConversionReport> {
-  // Get all deals in period
   let query = supabase
     .from('deals')
     .select('status, created_at, closed_at, pipeline_stages(name)')
@@ -333,6 +336,9 @@ async function generateConversionReport(
 
   if (pipelineId) {
     query = query.eq('pipeline_id', pipelineId)
+  }
+  if (storeId) {
+    query = query.eq('store_id', storeId)
   }
 
   const { data: deals, error } = await query
@@ -390,15 +396,17 @@ async function generateConversionReport(
 async function generateChannelReport(
   supabase: any,
   organizationId: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  storeId?: string | null
 ): Promise<ChannelReport> {
-  // Get deals by source
-  const { data: deals, error } = await supabase
+  let query = supabase
     .from('deals')
     .select('source, status, value')
     .eq('organization_id', organizationId)
     .gte('created_at', dateRange.start)
     .lte('created_at', dateRange.end)
+  if (storeId) query = query.eq('store_id', storeId)
+  const { data: deals, error } = await query
 
   if (error) {
     console.error('[Reports] Channel query error:', error)
@@ -439,15 +447,17 @@ async function generateChannelReport(
 async function generateROIReport(
   supabase: any,
   organizationId: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  storeId?: string | null
 ): Promise<ROIReport> {
-  // Get campaigns and their results
-  const { data: campaigns } = await supabase
+  let query = supabase
     .from('marketing_campaigns')
     .select('*')
     .eq('organization_id', organizationId)
     .gte('created_at', dateRange.start)
     .lte('created_at', dateRange.end)
+  if (storeId) query = query.eq('store_id', storeId)
+  const { data: campaigns } = await query
 
   // Get total revenue from won deals
   const { data: wonDeals } = await supabase
@@ -511,9 +521,9 @@ async function generateSalesReport(
   supabase: any,
   organizationId: string,
   dateRange: DateRange,
-  pipelineId?: string | null
+  pipelineId?: string | null,
+  storeId?: string | null
 ): Promise<SalesReport> {
-  // Get deals with agent info
   let query = supabase
     .from('deals')
     .select(`
@@ -527,6 +537,9 @@ async function generateSalesReport(
 
   if (pipelineId) {
     query = query.eq('pipeline_id', pipelineId)
+  }
+  if (storeId) {
+    query = query.eq('store_id', storeId)
   }
 
   const { data: deals, error } = await query
@@ -608,16 +621,18 @@ async function generateSalesReport(
 async function generateTrendData(
   supabase: any,
   organizationId: string,
-  dateRange: DateRange
+  dateRange: DateRange,
+  storeId?: string | null
 ): Promise<TrendData[]> {
-  // Get daily aggregated data
-  const { data: deals, error } = await supabase
+  let query = supabase
     .from('deals')
     .select('created_at, status, value, closed_at')
     .eq('organization_id', organizationId)
     .gte('created_at', dateRange.start)
     .lte('created_at', dateRange.end)
     .order('created_at', { ascending: true })
+  if (storeId) query = query.eq('store_id', storeId)
+  const { data: deals, error } = await query
 
   if (error || !deals) {
     return []

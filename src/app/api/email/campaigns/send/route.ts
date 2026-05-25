@@ -72,7 +72,8 @@ export async function POST(request: NextRequest) {
     if (!skipPreflight) {
       const { runPreflight, hasBlockingErrors } = await import('@/lib/email/preflight')
       const fromEmail = (campaign.from_email || '').trim()
-      let domainVerified = true
+      // Bug fix: default to false — only trust explicitly verified domains
+      let domainVerified = false
       if (fromEmail && fromEmail.includes('@')) {
         const domainPart = fromEmail.split('@')[1].toLowerCase()
         const { data: dom } = await supabaseAdmin
@@ -81,7 +82,17 @@ export async function POST(request: NextRequest) {
           .eq('organization_id', organizationId)
           .eq('domain', domainPart)
           .maybeSingle()
-        if (dom) domainVerified = dom.verification_status === 'verified'
+        if (dom && dom.verification_status === 'verified') {
+          domainVerified = true
+        }
+      }
+      // Block sends from unverified domains (unless this is a test send)
+      const isTestSend = request.headers.get('x-test-send') === 'true'
+      if (!domainVerified && !isTestSend) {
+        return NextResponse.json({
+          error: 'Domain not verified. Verify your sending domain before sending campaigns.',
+          code: 'DOMAIN_NOT_VERIFIED',
+        }, { status: 422 })
       }
       const issues = runPreflight({
         subject: campaign.subject || template.subject,
@@ -103,11 +114,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update campaign status to 'sending'
-    await supabaseAdmin
+    // Bug fix: Atomic status transition to prevent race conditions.
+    // Instead of SELECT then UPDATE, do a single UPDATE with WHERE on the
+    // current status. If no rows are returned, another process already claimed it.
+    const { data: claimed, error: claimError } = await supabaseAdmin
       .from('email_campaigns')
       .update({ status: 'sending', sent_at: new Date().toISOString() })
-      .eq('id', campaign_id);
+      .eq('id', campaign_id)
+      .in('status', ['draft', 'scheduled'])
+      .select('id')
+
+    if (claimError) {
+      console.error('[SendCampaign] Failed to claim campaign:', claimError);
+      return NextResponse.json({ error: 'Failed to update campaign status' }, { status: 500 });
+    }
+
+    if (!claimed || claimed.length === 0) {
+      // Another process already moved the campaign out of draft/scheduled
+      return NextResponse.json(
+        { error: 'Campaign was already claimed by another process' },
+        { status: 409 }
+      );
+    }
 
     // Resolve contacts
     const contactFields = 'id, email, first_name, last_name, phone, last_email_sent_at, engagement_score, best_send_hour'
@@ -335,60 +363,79 @@ export async function POST(request: NextRequest) {
     const useQueue = isQueueAvailable();
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
 
-    if (useQueue) {
-      for (let i = 0; i < scheduledBatches.length; i++) {
-        const { contacts: batch, delayMs } = scheduledBatches[i]
-        await enqueue(
-          QUEUE_NAME,
-          {
-            campaign_id,
-            contact_ids: batch.map((c: any) => c.id),
-            contact_variants: abEnabled
-              ? batch.map((c: any) => ({ id: c.id, variant: c.ab_variant || 'a' }))
-              : undefined,
-            batch_number: i + 1,
-            total_batches: scheduledBatches.length,
-            organizationId: organizationId,
-          },
-          {
-            jobId: `campaign:${campaign_id}:batch:${i + 1}`,
-            delayMs,
-            maxAttempts: 5,
-          }
-        );
-      }
-      console.log(
-        `[SendCampaign] Campaign ${campaign_id} enqueued: ${contacts.length} contacts in ${scheduledBatches.length} batches${sendTimeOptimization ? ` across ${hourBuckets.length} send-time buckets` : ''} (durable queue)`
-      );
-    } else {
-      // Fallback sem Redis: dispara em paralelo com pequeno delay entre batches
-      // Nota: setTimeout em serverless não sobrevive ao request, então send-time optimization
-      // pode degradar sem Redis — warn se o delay for > 60s.
-      console.warn('[SendCampaign] Redis not configured, using fire-and-forget fallback');
-      for (let i = 0; i < scheduledBatches.length; i++) {
-        const { contacts: batch, delayMs } = scheduledBatches[i]
-        if (delayMs > 60_000) {
-          console.warn(`[SendCampaign] Batch ${i + 1} delayMs=${delayMs} exceeds serverless timeout; send-time optimization requires Redis`)
-        }
-        setTimeout(() => {
-          fetch(`${baseUrl}/api/email/campaigns/send-batch`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Internal': 'true',
-            },
-            body: JSON.stringify({
+    // Bug fix: Wrap batch dispatching in try-catch so that if enqueuing fails,
+    // the campaign status is reset to 'failed' instead of being stuck in 'sending' forever.
+    try {
+      if (useQueue) {
+        for (let i = 0; i < scheduledBatches.length; i++) {
+          const { contacts: batch, delayMs } = scheduledBatches[i]
+          await enqueue(
+            QUEUE_NAME,
+            {
               campaign_id,
               contact_ids: batch.map((c: any) => c.id),
+              contact_variants: abEnabled
+                ? batch.map((c: any) => ({ id: c.id, variant: c.ab_variant || 'a' }))
+                : undefined,
               batch_number: i + 1,
               total_batches: scheduledBatches.length,
               organizationId: organizationId,
-            }),
-          }).catch((err) =>
-            console.error(`[SendCampaign] Batch ${i + 1} failed to queue:`, err)
+            },
+            {
+              jobId: `campaign:${campaign_id}:batch:${i + 1}`,
+              delayMs,
+              maxAttempts: 5,
+            }
           );
-        }, Math.min(delayMs, 60_000));
+        }
+        console.log(
+          `[SendCampaign] Campaign ${campaign_id} enqueued: ${contacts.length} contacts in ${scheduledBatches.length} batches${sendTimeOptimization ? ` across ${hourBuckets.length} send-time buckets` : ''} (durable queue)`
+        );
+      } else {
+        // Fallback sem Redis: dispara em paralelo com pequeno delay entre batches
+        // Nota: setTimeout em serverless não sobrevive ao request, então send-time optimization
+        // pode degradar sem Redis — warn se o delay for > 60s.
+        console.warn('[SendCampaign] Redis not configured, using fire-and-forget fallback');
+        for (let i = 0; i < scheduledBatches.length; i++) {
+          const { contacts: batch, delayMs } = scheduledBatches[i]
+          if (delayMs > 60_000) {
+            console.warn(`[SendCampaign] Batch ${i + 1} delayMs=${delayMs} exceeds serverless timeout; send-time optimization requires Redis`)
+          }
+          setTimeout(() => {
+            fetch(`${baseUrl}/api/email/campaigns/send-batch`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Internal': 'true',
+              },
+              body: JSON.stringify({
+                campaign_id,
+                contact_ids: batch.map((c: any) => c.id),
+                batch_number: i + 1,
+                total_batches: scheduledBatches.length,
+                organizationId: organizationId,
+              }),
+            }).catch((err) =>
+              console.error(`[SendCampaign] Batch ${i + 1} failed to queue:`, err)
+            );
+          }, Math.min(delayMs, 60_000));
+        }
       }
+    } catch (batchError) {
+      // All or partial batch dispatch failed — mark campaign as 'failed' to avoid
+      // it being stuck in 'sending' forever with no workers processing it.
+      console.error(`[SendCampaign] Batch dispatch failed for campaign ${campaign_id}:`, batchError);
+      await supabaseAdmin
+        .from('email_campaigns')
+        .update({
+          status: 'failed',
+          error_message: `Batch dispatch error: ${batchError instanceof Error ? batchError.message : String(batchError)}`,
+        })
+        .eq('id', campaign_id);
+      return NextResponse.json(
+        { error: 'Failed to dispatch email batches', campaign_status: 'failed' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
@@ -402,7 +449,26 @@ export async function POST(request: NextRequest) {
       durable: useQueue,
     });
   } catch (error) {
+    // Outer catch: if campaign_id is available and status was already set to 'sending',
+    // reset it to 'failed' so the campaign doesn't get stuck.
     console.error('[SendCampaign] Error:', error);
+    try {
+      const body = await request.clone().json().catch(() => ({}));
+      const cid = body?.campaign_id;
+      if (cid) {
+        // Only reset if still in 'sending' — avoids overwriting a 'failed' already set above
+        await supabaseAdmin
+          .from('email_campaigns')
+          .update({
+            status: 'failed',
+            error_message: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
+          })
+          .eq('id', cid)
+          .eq('status', 'sending');
+      }
+    } catch (_) {
+      // Best-effort recovery — don't mask the original error
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

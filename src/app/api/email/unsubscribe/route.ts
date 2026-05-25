@@ -16,13 +16,6 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(req: NextRequest) {
   try {
-    // Rate-limit para evitar unsubscribe em massa por atacante
-    const ip = getClientIp(req)
-    const rl = await checkRateLimit(`unsub:${ip}`, { limit: 20, windowSec: 60 })
-    if (!rl.allowed) {
-      return NextResponse.json({ error: 'Rate limited' }, { status: 429 })
-    }
-
     const body = await req.json().catch(() => ({}))
     const { token, contactId: rawContactId, orgId: rawOrgId, reason } = body as any
 
@@ -31,15 +24,30 @@ export async function POST(req: NextRequest) {
     let campaignId: string | undefined
 
     if (token) {
+      // Verify token BEFORE rate limiting. A valid signed token proves
+      // the request is a legitimate unsubscribe — it must never be blocked.
+      // Applying rate limits first lets an attacker exhaust the quota with
+      // fake tokens, preventing real users from unsubscribing.
       const verified = verifyUnsubscribeToken(String(token))
       if (!verified) {
+        // Invalid token — apply rate limit to deter brute-force probing
+        const ip = getClientIp(req)
+        const rl = await checkRateLimit(`unsub:${ip}`, { limit: 20, windowSec: 60 })
+        if (!rl.allowed) {
+          return NextResponse.json({ error: 'Rate limited' }, { status: 429 })
+        }
         return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 })
       }
       contactId = verified.contactId
       orgId = verified.orgId
       campaignId = verified.campaignId
     } else if (rawContactId && rawOrgId) {
-      // Legacy fallback (rate-limited). Loga uso para migração.
+      // Legacy fallback — rate-limit unsigned requests to prevent abuse.
+      const ip = getClientIp(req)
+      const rl = await checkRateLimit(`unsub:${ip}`, { limit: 20, windowSec: 60 })
+      if (!rl.allowed) {
+        return NextResponse.json({ error: 'Rate limited' }, { status: 429 })
+      }
       console.warn('[Unsubscribe] LEGACY unsigned request from', ip)
       contactId = String(rawContactId)
       orgId = String(rawOrgId)

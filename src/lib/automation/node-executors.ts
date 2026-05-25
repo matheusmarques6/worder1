@@ -746,8 +746,13 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
         // Resolve order-products blocks using enriched event data
         if (html.includes('WORDER_ORDER_BLOCK')) {
-          const { resolveOrderBlocks } = await import('@/lib/email/render');
-          html = resolveOrderBlocks(html, eventData);
+          try {
+            const { resolveOrderBlocks } = await import('@/lib/email/render');
+            html = resolveOrderBlocks(html, eventData);
+          } catch (blockErr) {
+            console.error('[action_email] Order block rendering failed:', blockErr);
+            return { status: 'error', output: null, error: `Falha ao renderizar bloco de produtos do pedido: ${(blockErr as any)?.message}` };
+          }
         }
 
         // Build merge data from the same context we already resolved

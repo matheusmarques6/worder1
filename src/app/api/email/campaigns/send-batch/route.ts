@@ -406,7 +406,7 @@ export async function POST(req: NextRequest) {
         htmlResolved = await resolveCartBlocks(htmlResolved, organizationId, contact.id);
 
         // Prep final HTML (merge tags + tracking pixel + click tracking + unsubscribe)
-        const finalHtml = prepareEmailHtml({
+        let finalHtml = prepareEmailHtml({
           html: htmlResolved,
           mergeData,
           emailSendId: emailSend.id,
@@ -415,7 +415,25 @@ export async function POST(req: NextRequest) {
           orgId: organizationId,
           campaignId: campaign_id,
         });
-        const finalSubject = renderMergeTags(subjectSource, mergeData);
+        let finalSubject = renderMergeTags(subjectSource, mergeData);
+
+        // Strip any unresolved merge tags so customers never see raw
+        // {{template_syntax}} in their inbox. Log a warning so the
+        // team can fix the template or missing merge data.
+        const unresolvedPattern = /\{\{[^}]+\}\}/g;
+        const unresolvedInHtml = finalHtml.match(unresolvedPattern);
+        const unresolvedInSubject = finalSubject.match(unresolvedPattern);
+        if (unresolvedInHtml?.length || unresolvedInSubject?.length) {
+          console.warn(
+            `[SendBatch] Unresolved merge tags for contact=${contact.id} campaign=${campaign_id}:`,
+            {
+              html: unresolvedInHtml || [],
+              subject: unresolvedInSubject || [],
+            }
+          );
+          finalHtml = finalHtml.replace(unresolvedPattern, '');
+          finalSubject = finalSubject.replace(unresolvedPattern, '');
+        }
 
         // ---- Resolver remetente (com fallback org sender) ----
         let fromAddress = campaign.from_email
@@ -539,15 +557,15 @@ export async function POST(req: NextRequest) {
     });
 
     if (rpcError) {
-      // Fallback: direct update (less safe under concurrency but functional)
-      console.warn('[SendBatch] RPC fallback, using direct update:', rpcError.message);
-      await supabaseAdmin
-        .from('email_campaigns')
-        .update({
-          total_sent: (campaign.total_sent || 0) + sent,
-          total_failed: (campaign.total_failed || 0) + failed,
-        })
-        .eq('id', campaign_id);
+      // CRITICAL: Do NOT fall back to read-then-write. Under parallel batches,
+      // each batch reads the stale campaign.total_sent before other batches have
+      // written, causing undercounts (data corruption). The RPC uses atomic
+      // SQL increment and is the only safe path.
+      console.error(
+        '[SendBatch] CRITICAL: increment_campaign_stats RPC failed — stats for this batch are LOST. ' +
+        'Ensure the RPC exists in the database. ' +
+        `campaign=${campaign_id} batch=${batch_number} sent=${sent} failed=${failed} error=${rpcError.message}`
+      );
     }
 
     // If last batch, mark campaign as 'sent'

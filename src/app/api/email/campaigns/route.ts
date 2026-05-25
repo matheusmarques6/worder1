@@ -44,38 +44,53 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 });
     }
 
-    // Fetch stats for each campaign
-    const campaignsWithStats = await Promise.all(
-      (campaigns || []).map(async (campaign) => {
-        try {
-          const { data: sends } = await supabaseAdmin
-            .from('email_sends')
-            .select('status, opened_at, clicked_at')
-            .eq('campaign_id', campaign.id);
+    // Use pre-computed stats from the campaign row (total_sent, total_failed
+    // are updated atomically by send-batch via increment_campaign_stats RPC).
+    // Falls back to a single batch query for opens/clicks if campaigns exist,
+    // instead of N+1 individual queries per campaign.
+    const campaignIds = (campaigns || []).map((c: any) => c.id);
+    let statsMap: Record<string, { total: number; delivered: number; opened: number; clicked: number; bounced: number }> = {};
 
-          const total = sends?.length || 0;
-          const delivered = sends?.filter((s) => s.status === 'delivered').length || 0;
-          const opened = sends?.filter((s) => s.opened_at).length || 0;
-          const clicked = sends?.filter((s) => s.clicked_at).length || 0;
-          const bounced = sends?.filter((s) => s.status === 'bounced').length || 0;
+    if (campaignIds.length > 0) {
+      try {
+        const { data: statsRows } = await supabaseAdmin
+          .from('email_sends')
+          .select('campaign_id, status, opened_at, clicked_at')
+          .in('campaign_id', campaignIds);
 
-          return {
-            ...campaign,
-            stats: {
-              total,
-              delivered,
-              opened,
-              clicked,
-              bounced,
-              open_rate: total > 0 ? ((opened / total) * 100).toFixed(1) : '0.0',
-              click_rate: total > 0 ? ((clicked / total) * 100).toFixed(1) : '0.0',
-            },
-          };
-        } catch {
-          return { ...campaign, stats: null };
+        for (const row of (statsRows || []) as any[]) {
+          if (!statsMap[row.campaign_id]) {
+            statsMap[row.campaign_id] = { total: 0, delivered: 0, opened: 0, clicked: 0, bounced: 0 };
+          }
+          const s = statsMap[row.campaign_id];
+          s.total++;
+          if (row.status === 'delivered') s.delivered++;
+          if (row.status === 'bounced') s.bounced++;
+          if (row.opened_at) s.opened++;
+          if (row.clicked_at) s.clicked++;
         }
-      })
-    );
+      } catch {
+        console.warn('[EmailCampaigns] Stats batch query failed, using pre-computed');
+      }
+    }
+
+    const campaignsWithStats = (campaigns || []).map((campaign: any) => {
+      const s = statsMap[campaign.id] || {
+        total: campaign.total_sent || 0,
+        delivered: campaign.total_sent || 0,
+        opened: 0,
+        clicked: 0,
+        bounced: campaign.total_failed || 0,
+      };
+      return {
+        ...campaign,
+        stats: {
+          ...s,
+          open_rate: s.total > 0 ? ((s.opened / s.total) * 100).toFixed(1) : '0.0',
+          click_rate: s.total > 0 ? ((s.clicked / s.total) * 100).toFixed(1) : '0.0',
+        },
+      };
+    });
 
     return NextResponse.json({ campaigns: campaignsWithStats });
   } catch (error) {
