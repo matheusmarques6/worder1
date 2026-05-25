@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   try {
     const { data: campaigns } = await supabaseAdmin
       .from('email_campaigns')
-      .select('id, organization_id, segment_id, store_id, sent_at, ab_test_enabled, ab_test_percent, ab_duration_hours, ab_winner_metric, ab_variant_b')
+      .select('id, organization_id, segment_id, store_id, sent_at, created_at, ab_test_enabled, ab_test_percent, ab_duration_hours, ab_winner_metric, ab_variant_b')
       .eq('ab_test_enabled', true)
       .is('ab_winner', null)
       .not('sent_at', 'is', null)
