@@ -355,12 +355,40 @@ export default function DashboardLayout({
   const getInitials = (name: string) =>
     name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)
 
-  const handleAddStore = (store: { name: string; domain: string; accessToken: string }) => {
-    const newStore: ShopifyStore = {
-      id: `store-${Date.now()}`, name: store.name, domain: store.domain, isActive: true,
-    }
-    addStore(newStore)
+  const handleAddStore = async (store: any) => {
     setAddStoreModalOpen(false)
+    // Reload stores from API to pick up the real store row
+    try {
+      const response = await fetch('/api/stores')
+      const result = await response.json()
+      if (result.success && result.stores?.length > 0) {
+        const formattedStores = result.stores.map((s: any) => ({
+          id: s.id,
+          name: s.shop_name || s.shop_domain,
+          domain: s.shop_domain,
+          email: s.shop_email,
+          currency: s.currency,
+          isActive: s.is_active !== false,
+          totalOrders: s.total_orders || 0,
+          totalRevenue: s.total_revenue || 0,
+          lastSyncAt: s.last_sync_at,
+        }))
+        setStores(formattedStores)
+        // Select the newly added store if we have its ID
+        const newStore = store.id
+          ? formattedStores.find((s: any) => s.id === store.id)
+          : null
+        setCurrentStore(newStore || formattedStores[0])
+      }
+    } catch {
+      // Fallback: add with provided data so the UI updates immediately
+      addStore({
+        id: store.id || `store-${Date.now()}`,
+        name: store.name,
+        domain: store.domain,
+        isActive: true,
+      })
+    }
   }
 
   useEffect(() => { setMobileOpen(false) }, [pathname])
