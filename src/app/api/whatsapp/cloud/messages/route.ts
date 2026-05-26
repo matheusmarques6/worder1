@@ -256,7 +256,26 @@ export async function POST(request: NextRequest) {
       }
     } catch (apiError: any) {
       console.error('WhatsApp API Error:', apiError);
-      return NextResponse.json({ 
+
+      if (apiError.code === 132015 || apiError.code === 132016) {
+        const newStatus = apiError.code === 132015 ? 'PAUSED' : 'DISABLED';
+        if (templateName) {
+          await supabase
+            .from('whatsapp_templates')
+            .update({ status: newStatus, updated_at: new Date().toISOString() })
+            .eq('waba_id', account.id)
+            .eq('name', templateName);
+        }
+      }
+
+      if ([190, 102, 200].includes(apiError.code)) {
+        await supabase
+          .from('whatsapp_business_accounts')
+          .update({ status: 'auth_error', updated_at: new Date().toISOString() })
+          .eq('id', account.id);
+      }
+
+      return NextResponse.json({
         error: apiError.message || 'Failed to send message',
         code: apiError.code,
         details: apiError.error_data
@@ -284,17 +303,17 @@ export async function POST(request: NextRequest) {
           chat_id: `${account.phone_number}-${recipientWaId}`,
           contact_phone: recipientWaId,
           status: 'open',
-          is_window_open: type === 'template',
+          is_window_open: false,
+          window_expires_at: null,
         })
         .select('id')
         .single();
       conversation = newConv;
     }
 
-    // Salvar mensagem
     const { data: savedMessage } = await supabase
       .from('whatsapp_cloud_messages')
-      .insert({
+      .upsert({
         organization_id: profile.organization_id,
         waba_id: account.id,
         conversation_id: conversation?.id,
@@ -309,7 +328,7 @@ export async function POST(request: NextRequest) {
         template_name: templateName,
         status: 'sent',
         timestamp: new Date().toISOString(),
-      })
+      }, { onConflict: 'message_id' })
       .select()
       .single();
 

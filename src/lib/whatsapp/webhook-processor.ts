@@ -8,6 +8,8 @@
  *   - Persist inbound messages (dedup by message_id)
  *   - Update conversation / contact / account counters
  *   - Update outbound message status from delivery receipts
+ *   - Handle template status + category webhooks
+ *   - Handle phone quality rating changes
  *   - Fire RuleEngine for conversation_started / message_received / contact_created
  *
  * Called from the QStash-triggered worker at /api/workers/whatsapp-webhook.
@@ -42,68 +44,112 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
 
   for (const entry of payload.entry || []) {
     for (const change of entry.changes || []) {
-      if (change.field !== 'messages') {
-        // Future fields (template_category_update etc.) handled in Sprint 2 Fase 4.
-        result.skipped++;
-        result.details.push({ type: change.field || 'unknown', status: 'skipped', reason: 'not_messages_field' });
-        continue;
-      }
-
+      const field = change.field;
       const value = change.value;
-      const phoneNumberId = value?.metadata?.phone_number_id;
-      if (!phoneNumberId) {
-        result.skipped++;
-        result.details.push({ type: 'change', status: 'skipped', reason: 'no_phone_number_id' });
-        continue;
-      }
 
-      const { data: account } = await supabase
-        .from('whatsapp_business_accounts')
-        .select('*')
-        .eq('phone_number_id', phoneNumberId)
-        .single();
+      switch (field) {
+        case 'messages': {
+          const phoneNumberId = value?.metadata?.phone_number_id;
+          if (!phoneNumberId) {
+            result.skipped++;
+            result.details.push({ type: 'change', status: 'skipped', reason: 'no_phone_number_id' });
+            continue;
+          }
 
-      if (!account) {
-        result.skipped++;
-        result.details.push({
-          type: 'change',
-          status: 'skipped',
-          reason: `unknown_phone_number_id:${phoneNumberId}`,
-        });
-        continue;
-      }
+          const { data: account } = await supabase
+            .from('whatsapp_business_accounts')
+            .select('*')
+            .eq('phone_number_id', phoneNumberId)
+            .single();
 
-      for (const message of value.messages || []) {
-        try {
-          await processMessage(account, message, value.contacts);
-          result.processed++;
-          result.details.push({ type: 'message', status: 'ok' });
-        } catch (err: any) {
-          result.errors++;
-          result.details.push({ type: 'message', status: 'error', reason: err?.message });
-          console.error('[whatsapp-webhook-processor] processMessage error:', err);
+          if (!account) {
+            result.skipped++;
+            result.details.push({
+              type: 'change',
+              status: 'skipped',
+              reason: `unknown_phone_number_id:${phoneNumberId}`,
+            });
+            continue;
+          }
+
+          for (const message of value.messages || []) {
+            try {
+              await processMessage(account, message, value.contacts);
+              result.processed++;
+              result.details.push({ type: 'message', status: 'ok' });
+            } catch (err: any) {
+              result.errors++;
+              result.details.push({ type: 'message', status: 'error', reason: err?.message });
+              console.error('[whatsapp-webhook-processor] processMessage error:', err);
+            }
+          }
+
+          for (const status of value.statuses || []) {
+            try {
+              await processStatus(account, status);
+              result.processed++;
+              result.details.push({ type: 'status', status: 'ok' });
+            } catch (err: any) {
+              result.errors++;
+              result.details.push({ type: 'status', status: 'error', reason: err?.message });
+              console.error('[whatsapp-webhook-processor] processStatus error:', err);
+            }
+          }
+
+          for (const errorEntry of value.errors || []) {
+            result.details.push({
+              type: 'error',
+              status: 'logged',
+              reason: `code:${errorEntry?.code}`,
+            });
+            console.error('[whatsapp-webhook-processor] Meta error:', errorEntry);
+          }
+          break;
         }
-      }
 
-      for (const status of value.statuses || []) {
-        try {
-          await processStatus(account, status);
-          result.processed++;
-          result.details.push({ type: 'status', status: 'ok' });
-        } catch (err: any) {
-          result.errors++;
-          result.details.push({ type: 'status', status: 'error', reason: err?.message });
-          console.error('[whatsapp-webhook-processor] processStatus error:', err);
+        case 'message_template_status_update': {
+          try {
+            await processTemplateStatusUpdate(value);
+            result.processed++;
+            result.details.push({ type: 'template_status', status: 'ok' });
+          } catch (err: any) {
+            result.errors++;
+            result.details.push({ type: 'template_status', status: 'error', reason: err?.message });
+            console.error('[whatsapp-webhook-processor] template status error:', err);
+          }
+          break;
         }
-      }
 
-      for (const errorEntry of value.errors || []) {
-        result.details.push({
-          type: 'error',
-          status: 'logged',
-          reason: `code:${errorEntry?.code}`,
-        });
-        console.error('[whatsapp-webhook-processor] Meta error:', errorEntry);
+        case 'template_category_update': {
+          try {
+            await processTemplateCategoryUpdate(value);
+            result.processed++;
+            result.details.push({ type: 'template_category', status: 'ok' });
+          } catch (err: any) {
+            result.errors++;
+            result.details.push({ type: 'template_category', status: 'error', reason: err?.message });
+            console.error('[whatsapp-webhook-processor] template category error:', err);
+          }
+          break;
+        }
+
+        case 'phone_number_quality_update': {
+          try {
+            await processPhoneQualityUpdate(value);
+            result.processed++;
+            result.details.push({ type: 'phone_quality', status: 'ok' });
+          } catch (err: any) {
+            result.errors++;
+            result.details.push({ type: 'phone_quality', status: 'error', reason: err?.message });
+            console.error('[whatsapp-webhook-processor] phone quality error:', err);
+          }
+          break;
+        }
+
+        default:
+          result.skipped++;
+          result.details.push({ type: field || 'unknown', status: 'skipped', reason: 'unhandled_field' });
+          break;
       }
     }
   }
@@ -130,7 +176,6 @@ async function processMessage(
   const conversation = await getOrCreateConversation(account, contact, phoneNumber);
   const isNewConversation = conversation?.isNew || false;
 
-  // Dedup by message_id — Meta retries deliver duplicates.
   const { data: existingMsg } = await supabase
     .from('whatsapp_cloud_messages')
     .select('id')
@@ -193,7 +238,6 @@ async function processMessage(
     })
     .eq('id', account.id);
 
-  // RuleEngine triggers — try to find CRM contact link
   let crmContactId: string | undefined = contact?.crm_contact_id;
   if (!crmContactId) {
     const { data: crmContact } = await supabase
@@ -253,8 +297,8 @@ async function processMessage(
 // PROCESS STATUS UPDATE
 // ============================================================
 
-async function processStatus(_account: any, status: any) {
-  const { id: messageId, status: newStatus, errors } = status;
+async function processStatus(account: any, status: any) {
+  const { id: messageId, status: newStatus, errors, conversation, pricing } = status;
 
   const updateData: any = {
     status: newStatus,
@@ -266,10 +310,167 @@ async function processStatus(_account: any, status: any) {
     updateData.error_message = errors[0].message || errors[0].title;
   }
 
+  if (conversation) {
+    updateData.conversation_id_meta = conversation.id;
+    updateData.conversation_category = conversation.origin?.type;
+  }
+
+  if (pricing) {
+    updateData.pricing_billable = pricing.billable;
+    updateData.pricing_category = pricing.category;
+    updateData.pricing_model = pricing.pricing_model;
+  }
+
   await supabase
     .from('whatsapp_cloud_messages')
     .update(updateData)
     .eq('message_id', messageId);
+}
+
+// ============================================================
+// PROCESS TEMPLATE STATUS UPDATE
+// ============================================================
+
+async function processTemplateStatusUpdate(value: any) {
+  const templateName = value?.message_template_name;
+  const templateId = value?.message_template_id;
+  const newStatus = value?.event?.toUpperCase();
+  const rejectionReason = value?.reason || value?.rejection_reason;
+
+  if (!templateName || !newStatus) {
+    console.warn('[webhook-processor] template status update missing name or event:', value);
+    return;
+  }
+
+  const updateData: any = {
+    status: newStatus,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (rejectionReason) {
+    updateData.rejection_reason = rejectionReason;
+  }
+
+  if (templateId) {
+    updateData.template_id = templateId.toString();
+  }
+
+  const { error } = await supabase
+    .from('whatsapp_templates')
+    .update(updateData)
+    .eq('name', templateName);
+
+  if (error) {
+    console.error('[webhook-processor] failed to update template status:', error);
+  } else {
+    console.log(`[webhook-processor] template "${templateName}" status → ${newStatus}`);
+  }
+}
+
+// ============================================================
+// PROCESS TEMPLATE CATEGORY UPDATE
+// ============================================================
+
+async function processTemplateCategoryUpdate(value: any) {
+  const templateName = value?.message_template_name;
+  const templateId = value?.message_template_id;
+  const previousCategory = value?.previous_category;
+  const newCategory = value?.new_category;
+
+  if (!templateName || !newCategory) {
+    console.warn('[webhook-processor] template category update missing data:', value);
+    return;
+  }
+
+  const { data: existing } = await supabase
+    .from('whatsapp_templates')
+    .select('category_change_history')
+    .eq('name', templateName)
+    .maybeSingle();
+
+  const history = Array.isArray(existing?.category_change_history)
+    ? existing.category_change_history
+    : [];
+
+  history.push({
+    from: previousCategory,
+    to: newCategory,
+    at: new Date().toISOString(),
+  });
+
+  const updateData: any = {
+    category: newCategory,
+    category_change_history: history,
+    last_category_change_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (templateId) {
+    updateData.template_id = templateId.toString();
+  }
+
+  const { error } = await supabase
+    .from('whatsapp_templates')
+    .update(updateData)
+    .eq('name', templateName);
+
+  if (error) {
+    console.error('[webhook-processor] failed to update template category:', error);
+  } else {
+    console.log(`[webhook-processor] template "${templateName}" category ${previousCategory} → ${newCategory}`);
+  }
+}
+
+// ============================================================
+// PROCESS PHONE QUALITY UPDATE
+// ============================================================
+
+async function processPhoneQualityUpdate(value: any) {
+  const phoneNumberId = value?.display_phone_number
+    ? undefined
+    : value?.current_limit;
+  const currentLimit = value?.current_limit;
+  const event = value?.event;
+
+  const displayPhone = value?.display_phone_number;
+  if (!displayPhone && !phoneNumberId) {
+    console.warn('[webhook-processor] phone quality update missing phone:', value);
+    return;
+  }
+
+  const updateData: any = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (currentLimit) {
+    updateData.messaging_limit = currentLimit;
+  }
+
+  if (event) {
+    const qualityMap: Record<string, string> = {
+      FLAGGED: 'YELLOW',
+      RESTRICTED: 'RED',
+      UNFLAGGED: 'GREEN',
+    };
+    if (qualityMap[event]) {
+      updateData.quality_rating = qualityMap[event];
+    }
+  }
+
+  let query = supabase.from('whatsapp_business_accounts').update(updateData);
+
+  if (displayPhone) {
+    const cleaned = displayPhone.replace(/\D/g, '');
+    query = query.eq('phone_number', cleaned);
+  }
+
+  const { error } = await query;
+
+  if (error) {
+    console.error('[webhook-processor] failed to update phone quality:', error);
+  } else {
+    console.log(`[webhook-processor] phone quality update: event=${event}, limit=${currentLimit}`);
+  }
 }
 
 // ============================================================

@@ -67,7 +67,6 @@ export async function GET(request: NextRequest) {
 
         const metaTemplates = await client.listTemplates(account.waba_id);
 
-        // Upsert templates no banco
         for (const template of metaTemplates) {
           await supabase
             .from('whatsapp_templates')
@@ -75,11 +74,14 @@ export async function GET(request: NextRequest) {
               organization_id: profile.organization_id,
               waba_id: account.id,
               template_id: template.id,
+              meta_template_id: template.id,
               name: template.name,
               language: template.language,
-              category: template.category,
-              status: template.status,
+              category: (template.category || '').toUpperCase(),
+              status: (template.status || '').toUpperCase(),
               components: template.components,
+              quality_score: (template as any).quality_score || null,
+              rejection_reason: (template as any).rejected_reason || (template as any).rejection_reason || null,
               synced_at: new Date().toISOString(),
             }, {
               onConflict: 'waba_id,name,language',
@@ -122,10 +124,12 @@ export async function GET(request: NextRequest) {
       variables: extractTemplateVariables(t.components),
     }));
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       templates: formattedTemplates,
       total: formattedTemplates.length,
-      approved: formattedTemplates.filter(t => t.status === 'APPROVED').length,
+      approved: formattedTemplates.filter((t: any) => t.status === 'APPROVED').length,
+      pending: formattedTemplates.filter((t: any) => t.status === 'PENDING').length,
+      rejected: formattedTemplates.filter((t: any) => t.status === 'REJECTED').length,
     });
   } catch (error) {
     console.error('Error:', error);
@@ -169,18 +173,41 @@ export async function POST(request: NextRequest) {
       components,
     } = body;
 
-    // Validar
     if (!accountId || !name || !category || !components) {
-      return NextResponse.json({ 
-        error: 'Missing required fields: accountId, name, category, components' 
+      return NextResponse.json({
+        error: 'Missing required fields: accountId, name, category, components'
       }, { status: 400 });
     }
 
-    // Validar nome (apenas letras minúsculas e underscore)
-    if (!/^[a-z_]+$/.test(name)) {
-      return NextResponse.json({ 
-        error: 'Template name must contain only lowercase letters and underscores' 
+    if (!/^[a-z][a-z0-9_]*$/.test(name)) {
+      return NextResponse.json({
+        error: 'Template name must start with a letter and contain only lowercase letters, numbers, and underscores'
       }, { status: 400 });
+    }
+
+    const validCategories = ['MARKETING', 'UTILITY', 'AUTHENTICATION'];
+    const upperCategory = (category as string).toUpperCase();
+    if (!validCategories.includes(upperCategory)) {
+      return NextResponse.json({
+        error: `Invalid category. Must be one of: ${validCategories.join(', ')}`
+      }, { status: 400 });
+    }
+
+    const bodyComponent = (components as any[]).find((c: any) => c.type === 'BODY');
+    if (!bodyComponent?.text) {
+      return NextResponse.json({
+        error: 'Template must include a BODY component with text'
+      }, { status: 400 });
+    }
+
+    const varMatches = bodyComponent.text.match(/\{\{(\d+)\}\}/g) || [];
+    const varNums = varMatches.map((v: string) => parseInt(v.replace(/[{}]/g, ''))).sort((a: number, b: number) => a - b);
+    for (let i = 0; i < varNums.length; i++) {
+      if (varNums[i] !== i + 1) {
+        return NextResponse.json({
+          error: `Variables must be contiguous starting from {{1}}. Found gap at {{${i + 1}}}`
+        }, { status: 400 });
+      }
     }
 
     // Buscar conta
@@ -207,26 +234,28 @@ export async function POST(request: NextRequest) {
       result = await client.createTemplate(account.waba_id, {
         name,
         language,
-        category,
+        category: upperCategory as 'MARKETING' | 'UTILITY' | 'AUTHENTICATION',
         components,
+        allow_category_change: true,
       });
     } catch (apiError: any) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: apiError.message || 'Failed to create template',
+        code: apiError.code,
         details: apiError.error_data
       }, { status: 400 });
     }
 
-    // Salvar no banco
     const { data: template } = await supabase
       .from('whatsapp_templates')
       .insert({
         organization_id: profile.organization_id,
         waba_id: account.id,
         template_id: result.id,
+        meta_template_id: result.id,
         name,
         language,
-        category,
+        category: upperCategory,
         status: 'PENDING',
         components,
         synced_at: new Date().toISOString(),

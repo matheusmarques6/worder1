@@ -17,52 +17,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
     }
 
-    // ✅ CRÍTICO: Exigir store_id para isolamento
-    if (!storeId) {
-      console.warn('[Conversations] ⚠️ No storeId provided - returning empty')
-      return NextResponse.json({ conversations: [] })
-    }
-
-    // Buscar conversas com contato UNIFICADO
     let query = supabase
-      .from('whatsapp_conversations')
-      .select(`
-        *,
-        unified_contact:contacts!unified_contact_id(
-          id,
-          full_name,
-          first_name,
-          last_name,
-          whatsapp,
-          phone,
-          email,
-          profile_picture_url,
-          avatar_url,
-          tags,
-          total_orders,
-          total_spent,
-          is_blocked,
-          company,
-          position,
-          created_at
-        ),
-        legacy_contact:whatsapp_contacts(
-          id,
-          name,
-          profile_name,
-          phone_number,
-          email,
-          profile_picture_url,
-          tags,
-          total_orders,
-          total_spent,
-          is_blocked,
-          created_at
-        )
-      `)
+      .from('whatsapp_inbox_conversations')
+      .select('*')
       .eq('organization_id', organizationId)
-      .eq('store_id', storeId) // ✅ CRÍTICO: Filtrar por loja
-      .order('last_message_at', { ascending: false })
+      .order('last_message_at', { ascending: false, nullsFirst: false })
 
     if (status && status !== 'all') {
       query = query.eq('status', status)
@@ -73,17 +32,15 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Conversations query error:', error)
       
-      // Fallback: query simples sem joins
       const { data: simpleData, error: simpleError } = await supabase
-        .from('whatsapp_conversations')
+        .from('whatsapp_inbox_conversations')
         .select('*')
         .eq('organization_id', organizationId)
-        .eq('store_id', storeId) // ✅ CRÍTICO: Filtrar por loja
-        .order('last_message_at', { ascending: false })
+        .order('last_message_at', { ascending: false, nullsFirst: false })
 
       if (simpleError) throw simpleError
 
-      const conversations = (simpleData || []).map(conv => formatConversation(conv, null, null))
+      const conversations = (simpleData || []).map((conv: any) => formatConversation(conv, null, null))
       return NextResponse.json(
         { conversations },
         { headers: { 'Cache-Control': 'no-store, max-age=0' } }
@@ -91,7 +48,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Formatar para o frontend
-    const conversations = (data || []).map(conv => {
+    const conversations = (data || []).map((conv: any) => {
       return formatConversation(conv, conv.unified_contact, conv.legacy_contact)
     })
 
@@ -99,7 +56,7 @@ export async function GET(request: NextRequest) {
     let filteredConversations = conversations
     if (search) {
       const searchLower = search.toLowerCase()
-      filteredConversations = conversations.filter(conv => 
+      filteredConversations = conversations.filter((conv: any) =>
         conv.contact_name?.toLowerCase().includes(searchLower) ||
         conv.phone_number?.includes(search)
       )

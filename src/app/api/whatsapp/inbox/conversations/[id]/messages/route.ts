@@ -30,7 +30,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const before = searchParams.get('before')
     const after = searchParams.get('after')
 
-    let query = supabase.from('whatsapp_messages').select('*').eq('conversation_id', conversationId)
+    let query = supabase
+      .from('whatsapp_inbox_messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
     if (before) query = query.lt('created_at', before)
     if (after) query = query.gt('created_at', after)
     query = query.order('created_at', { ascending: true }).limit(limit + 1)
@@ -41,8 +44,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const hasMore = (data?.length || 0) > limit
     const messages = hasMore ? data?.slice(0, limit) : data
 
-    // Marcar como lida no fetch inicial
     if (!before && !after) {
+      await supabase.from('whatsapp_cloud_conversations').update({ unread_count: 0 }).eq('id', conversationId)
       await supabase.from('whatsapp_conversations').update({ unread_count: 0 }).eq('id', conversationId)
     }
 
@@ -88,177 +91,175 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       )
     }
 
-    // ✅ FASE 3: Buscar conversa COM instance_id e store_id
+    // Detect provider: try Cloud first, fall back to Evolution
+    const { data: cloudConv } = await supabase
+      .from('whatsapp_cloud_conversations')
+      .select('*, account:whatsapp_business_accounts(*)')
+      .eq('id', conversationId)
+      .maybeSingle()
+
+    if (cloudConv && cloudConv.account) {
+      // Cloud API path
+      const { createWhatsAppCloudClient } = await import('@/lib/whatsapp/cloud-api')
+      const { getAccessToken } = await import('@/lib/whatsapp/account-loader')
+
+      const client = createWhatsAppCloudClient({
+        phoneNumberId: cloudConv.account.phone_number_id,
+        accessToken: getAccessToken(cloudConv.account),
+      })
+
+      const phoneNumber = cloudConv.contact_phone || cloudConv.wa_id
+      let result
+      try {
+        result = await client.sendText(phoneNumber, content)
+      } catch (apiError: any) {
+        console.error('[Messages POST] Cloud API error:', apiError)
+        return NextResponse.json(
+          { error: apiError.message || 'Failed to send message', code: apiError.code },
+          { status: 400, headers: NO_CACHE_HEADERS }
+        )
+      }
+
+      const messageId = result.messages?.[0]?.id
+      const { data: saved } = await supabase
+        .from('whatsapp_cloud_messages')
+        .upsert({
+          organization_id: cloudConv.organization_id,
+          waba_id: cloudConv.account.id,
+          conversation_id: conversationId,
+          message_id: messageId,
+          direction: 'outbound',
+          from_number: cloudConv.account.phone_number,
+          to_number: phoneNumber,
+          message_type,
+          content: { text: { body: content } },
+          text_body: content,
+          status: 'sent',
+          timestamp: new Date().toISOString(),
+        }, { onConflict: 'message_id' })
+        .select()
+        .maybeSingle()
+
+      await supabase.from('whatsapp_cloud_conversations').update({
+        last_message_at: new Date().toISOString(),
+        last_message_preview: content.substring(0, 100),
+        last_message_direction: 'outbound',
+      }).eq('id', conversationId)
+
+      return NextResponse.json({
+        message: {
+          id: saved?.id,
+          conversation_id: conversationId,
+          direction: 'outbound',
+          message_type,
+          content,
+          status: 'sent',
+          sent_by_bot: false,
+          created_at: saved?.created_at,
+        },
+        provider: 'cloud',
+        success: true,
+      }, { headers: NO_CACHE_HEADERS })
+    }
+
+    // Evolution path (legacy)
     const { data: conversation, error: convError } = await supabase
       .from('whatsapp_conversations')
       .select('*, instance_id, store_id, contact_phone, phone_number, organization_id')
       .eq('id', conversationId)
       .single()
-    
+
     if (convError || !conversation) {
-      console.error('[Messages POST] Conversation not found:', conversationId)
       return NextResponse.json(
         { error: 'Conversation not found' },
         { status: 404, headers: NO_CACHE_HEADERS }
       )
     }
 
-    // ✅ FASE 3: Verificar se conversa tem instance_id
     if (!conversation.instance_id) {
-      console.error('[Messages POST] Conversa sem instance_id:', {
-        conversation_id: conversationId,
-        store_id: conversation.store_id
-      })
       return NextResponse.json(
         { error: 'Conversa não tem instância associada. Reabra a conversa.' },
         { status: 400, headers: NO_CACHE_HEADERS }
       )
     }
 
-    // ✅ FASE 3: Buscar instância ESPECÍFICA da conversa (não qualquer uma!)
     const { data: instance, error: instError } = await supabase
       .from('whatsapp_instances')
       .select('*')
       .eq('id', conversation.instance_id)
       .single()
-    
+
     if (instError || !instance) {
-      console.error('[Messages POST] Instância não encontrada:', {
-        instance_id: conversation.instance_id,
-        conversation_id: conversationId
-      })
       return NextResponse.json(
         { error: 'Instância WhatsApp não encontrada' },
         { status: 404, headers: NO_CACHE_HEADERS }
       )
     }
 
-    // ✅ FASE 3: Validar que store_id bate entre conversa e instância
-    if (conversation.store_id && instance.store_id && conversation.store_id !== instance.store_id) {
-      console.error('[Messages POST] Store mismatch:', {
-        conversation_store: conversation.store_id,
-        instance_store: instance.store_id,
-        conversation_id: conversationId
-      })
-      return NextResponse.json(
-        { error: 'Instância não pertence à mesma loja da conversa' },
-        { status: 403, headers: NO_CACHE_HEADERS }
-      )
-    }
-
-    // ✅ FASE 3: Validar que instância está conectada
-    const connectedStatuses = ['connected', 'ACTIVE', 'open']
-    if (!connectedStatuses.includes(instance.status?.toLowerCase())) {
-      console.error('[Messages POST] Instância desconectada:', {
-        instance_id: instance.id,
-        instance_name: instance.instance_name,
-        status: instance.status
-      })
-      return NextResponse.json(
-        { error: `Instância WhatsApp não está conectada (status: ${instance.status})` },
-        { status: 400, headers: NO_CACHE_HEADERS }
-      )
-    }
-
-    // ✅ FASE 3: Verificar config sem fallback hardcoded
     const config = getEvolutionConfig(instance)
     if (!config) {
-      return NextResponse.json({ 
-        error: 'Evolution API not configured. Set EVOLUTION_API_URL and EVOLUTION_API_KEY.' 
+      return NextResponse.json({
+        error: 'Evolution API not configured. Set EVOLUTION_API_URL and EVOLUTION_API_KEY.'
       }, { status: 503, headers: NO_CACHE_HEADERS })
     }
 
     const instanceName = instance.instance_name || instance.instance_id || instance.unique_id
     const phoneNumber = conversation.contact_phone || conversation.phone_number
 
-    // ✅ FASE 3: Logar detalhes para debug
-    console.log('[Messages POST] Enviando mensagem:', {
-      conversation_id: conversationId,
-      store_id: conversation.store_id,
-      instance_id: instance.id,
-      instance_name: instanceName,
-      instance_status: instance.status,
-      to: phoneNumber,
-      content_length: content?.length
-    })
-    
     const sendResponse = await fetch(`${config.apiUrl}/message/sendText/${instanceName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': config.apiKey },
-      body: JSON.stringify({ 
-        number: phoneNumber, 
-        text: content 
-      }),
+      body: JSON.stringify({ number: phoneNumber, text: content }),
     })
-    
     const sendData = await sendResponse.json()
 
-    // ✅ FASE 3: Logar resposta da Evolution
-    if (!sendResponse.ok) {
-      console.error('[Messages POST] Evolution API error:', {
-        status: sendResponse.status,
-        response: sendData,
-        instance: instanceName
-      })
-    } else {
-      console.log('[Messages POST] ✅ Enviado com sucesso:', sendData?.key?.id)
+    const payload: any = {
+      organization_id: conversation.organization_id,
+      store_id: conversation.store_id,
+      instance_id: conversation.instance_id,
+      conversation_id: conversationId,
+      message_id: sendData?.key?.id || `out-${Date.now()}`,
+      direction: 'outbound',
+      message_type,
+      content: { text: content },
+      text_body: content,
+      to_number: phoneNumber,
+      status: sendResponse.ok ? 'sent' : 'failed',
+      timestamp: new Date().toISOString(),
     }
 
-    const payload = {
-  organization_id: conversation.organization_id,
-  store_id: conversation.store_id,
-  instance_id: conversation.instance_id,
-  conversation_id: conversationId,
-  message_id: sendData?.key?.id || `out-${Date.now()}`,
-  direction: 'outbound',
-  message_type,
-  content: { text: content },
-  text_body: content,
-  to_number: phoneNumber,
-  status: sendResponse.ok ? 'sent' : 'failed',
-  timestamp: new Date().toISOString(),
-};
+    const { data: saved, error: msgError } = await supabase
+      .from('whatsapp_messages')
+      .upsert(payload, { onConflict: 'instance_id,message_id', ignoreDuplicates: true })
+      .select('*')
+      .maybeSingle()
 
-// ✅ Idempotente: se a Evolution fizer retry e vier o mesmo key.id, não quebra com 23505.
-const { data: savedUpsert, error: msgError } = await supabase
-  .from('whatsapp_messages')
-  .upsert(payload, {
-    onConflict: 'instance_id,message_id',
-    ignoreDuplicates: true,
-  })
-  .select('*')
-  .maybeSingle();
-
-if (msgError) {
-  console.error('[Messages POST] ❌ Error saving outbound message:', msgError);
-  // ✅ CORREÇÃO: Retornar erro se não conseguiu salvar
-  return NextResponse.json(
-    { error: 'Erro ao salvar mensagem', details: msgError.message },
-    { status: 500, headers: NO_CACHE_HEADERS }
-  );
-}
-
-const saved = savedUpsert || null;
-
+    if (msgError) {
+      return NextResponse.json(
+        { error: 'Erro ao salvar mensagem', details: msgError.message },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      )
+    }
 
     await supabase.from('whatsapp_conversations').update({
-      last_message_at: new Date().toISOString(), 
+      last_message_at: new Date().toISOString(),
       last_message_preview: content.substring(0, 100),
-      last_message_direction: 'outbound', 
+      last_message_direction: 'outbound',
       updated_at: new Date().toISOString(),
     }).eq('id', conversationId)
 
     return NextResponse.json({
       message: {
         id: saved?.id,
-        conversation_id: saved?.conversation_id,
-        direction: saved?.direction,
-        message_type: saved?.message_type,
+        conversation_id: conversationId,
+        direction: 'outbound',
+        message_type,
         content: saved?.content?.text || content,
         status: saved?.status,
         sent_by_bot: false,
         created_at: saved?.created_at,
       },
+      provider: 'evolution',
       success: sendResponse.ok,
     }, { headers: NO_CACHE_HEADERS })
   } catch (error: any) {

@@ -72,10 +72,11 @@ export class WhatsAppCloudAPI {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retryCount = 0
   ): Promise<T> {
-    const url = endpoint.startsWith('http') 
-      ? endpoint 
+    const url = endpoint.startsWith('http')
+      ? endpoint
       : `${META_BASE_URL}${endpoint}`;
 
     const response = await fetch(url, {
@@ -90,7 +91,15 @@ export class WhatsAppCloudAPI {
     const data = await response.json();
 
     if (!response.ok || data.error) {
-      throw new WhatsAppCloudError(data.error || { message: 'Request failed', code: response.status });
+      const err = new WhatsAppCloudError(data.error || { message: 'Request failed', code: response.status });
+
+      if (err.isRateLimited() && retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000;
+        await new Promise((r) => setTimeout(r, delay));
+        return this.request<T>(endpoint, options, retryCount + 1);
+      }
+
+      throw err;
     }
 
     return data;
@@ -100,7 +109,7 @@ export class WhatsAppCloudAPI {
   // MENSAGENS DE TEXTO
   // =============================================
 
-  async sendText(to: string, text: string, previewUrl = true): Promise<SendMessageResult> {
+  async sendText(to: string, text: string, previewUrl = false): Promise<SendMessageResult> {
     return this.request(`/${this.config.phoneNumberId}/messages`, {
       method: 'POST',
       body: JSON.stringify({
@@ -270,14 +279,31 @@ export class WhatsAppCloudAPI {
     const id = wabaId || this.config.wabaId;
     if (!id) throw new Error('WABA ID required');
 
-    const data = await this.request<{ data: Template[] }>(
-      `/${id}/message_templates?limit=1000`
-    );
-    return data.data || [];
+    interface TemplateListResponse {
+      data: Template[];
+      paging?: { cursors?: { after?: string }; next?: string };
+    }
+
+    const allTemplates: Template[] = [];
+    let nextUrl: string | null = `/${id}/message_templates?limit=250`;
+
+    while (nextUrl) {
+      const page: TemplateListResponse = await this.request<TemplateListResponse>(nextUrl);
+      allTemplates.push(...(page.data || []));
+      nextUrl = page.paging?.next || null;
+    }
+
+    return allTemplates;
   }
 
   async getTemplate(templateId: string): Promise<Template> {
     return this.request(`/${templateId}`);
+  }
+
+  async getTemplateById(wabaId: string, templateId: string): Promise<Template> {
+    const id = wabaId || this.config.wabaId;
+    if (!id) throw new Error('WABA ID required');
+    return this.request(`/${id}/message_templates?name=&limit=1&id=${templateId}`);
   }
 
   async createTemplate(
@@ -287,11 +313,16 @@ export class WhatsAppCloudAPI {
       language: string;
       category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
       components: any[];
+      allow_category_change?: boolean;
     }
   ): Promise<{ id: string }> {
+    const payload = {
+      ...template,
+      allow_category_change: template.allow_category_change ?? true,
+    };
     return this.request(`/${wabaId}/message_templates`, {
       method: 'POST',
-      body: JSON.stringify(template),
+      body: JSON.stringify(payload),
     });
   }
 
@@ -432,7 +463,11 @@ export class WhatsAppCloudAPI {
       body: formData,
     });
 
-    return response.json();
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      throw new WhatsAppCloudError(data.error || { message: 'Media upload failed', code: response.status });
+    }
+    return data;
   }
 
   async getMediaUrl(mediaId: string): Promise<{ url: string; mime_type: string; sha256: string; file_size: number }> {
@@ -515,6 +550,17 @@ export class WhatsAppCloudAPI {
       }),
     });
   }
+
+  async uploadFlowEncryptionKey(flowId: string, publicKey: string): Promise<{ success: boolean }> {
+    return this.request(`/${flowId}/whatsapp_business_encryption`, {
+      method: 'POST',
+      body: JSON.stringify({ public_key: publicKey }),
+    });
+  }
+
+  async getFlowEncryptionKey(flowId: string): Promise<{ public_key: string }> {
+    return this.request(`/${flowId}/whatsapp_business_encryption`);
+  }
 }
 
 // =============================================
@@ -542,6 +588,10 @@ export class WhatsAppCloudError extends Error {
     return this.code === 4 || this.code === 80007;
   }
 
+  isFrequencyCapped(): boolean {
+    return this.code === 131048;
+  }
+
   isWindowExpired(): boolean {
     return this.code === 131047;
   }
@@ -552,6 +602,18 @@ export class WhatsAppCloudError extends Error {
 
   isTemplateNotApproved(): boolean {
     return this.code === 132012;
+  }
+
+  isTemplatePaused(): boolean {
+    return this.code === 132015;
+  }
+
+  isTemplateDisabled(): boolean {
+    return this.code === 132016;
+  }
+
+  isAuthError(): boolean {
+    return [190, 102, 200].includes(this.code);
   }
 }
 
