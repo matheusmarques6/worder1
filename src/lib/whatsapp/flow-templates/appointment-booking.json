@@ -1,151 +1,110 @@
 {
-  "version": "5.0",
+  "version": "3.0",
   "data_api_version": "3.0",
   "routing_model": {
-    "SELECT_SERVICE": ["SELECT_DATE"],
-    "SELECT_DATE": ["SELECT_TIME"],
-    "SELECT_TIME": ["CONFIRM"],
-    "CONFIRM": ["BOOKED"],
-    "BOOKED": []
+    "DATE_PICKER": ["TIME_SLOT"],
+    "TIME_SLOT": ["CONFIRMATION"],
+    "CONFIRMATION": []
   },
   "screens": [
     {
-      "id": "SELECT_SERVICE",
-      "title": "Agendamento",
+      "id": "DATE_PICKER",
+      "title": "Agendar Horario",
       "terminal": false,
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Escolha a data"
+          },
+          {
+            "type": "TextBody",
+            "text": "Selecione a data desejada para seu agendamento em ${data.business_name}."
+          },
+          {
+            "type": "DatePicker",
+            "name": "appointment_date",
+            "label": "Data do agendamento",
+            "required": true,
+            "min-date": "${data.min_date}",
+            "max-date": "${data.max_date}",
+            "helper-text": "Disponivel de segunda a sabado"
+          },
+          {
+            "type": "Footer",
+            "label": "Escolher horario",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "appointment_date": "${form.appointment_date}",
+                "screen_source": "DATE_PICKER"
+              }
+            }
+          }
+        ]
+      },
       "data": {
         "business_name": {
           "type": "string",
-          "__example__": "Studio Beauty"
+          "__example__": "Clinica Saude"
         },
-        "services": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": { "type": "string" },
-              "title": { "type": "string" }
-            }
-          },
-          "__example__": [
-            { "id": "haircut", "title": "Corte de Cabelo — R$ 60" },
-            { "id": "color", "title": "Coloração — R$ 150" },
-            { "id": "manicure", "title": "Manicure — R$ 45" },
-            { "id": "pedicure", "title": "Pedicure — R$ 50" }
-          ]
+        "min_date": {
+          "type": "string",
+          "__example__": "1717200000000"
+        },
+        "max_date": {
+          "type": "string",
+          "__example__": "1719792000000"
         }
-      },
+      }
+    },
+    {
+      "id": "TIME_SLOT",
+      "title": "Escolha o Horario",
+      "terminal": false,
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
           {
             "type": "TextHeading",
-            "text": "${data.business_name}"
+            "text": "Horarios disponiveis"
           },
           {
             "type": "TextBody",
-            "text": "Escolha o serviço que deseja agendar:"
+            "text": "Data selecionada: ${data.formatted_date}"
           },
           {
-            "type": "RadioButtonsGroup",
-            "name": "service_id",
-            "label": "Serviço",
+            "type": "Dropdown",
+            "name": "time_slot",
+            "label": "Horario",
             "required": true,
-            "data-source": "${data.services}"
-          },
-          {
-            "type": "TextInput",
-            "name": "customer_name",
-            "label": "Seu nome",
-            "required": true,
-            "input-type": "text",
-            "helper-text": "Como devemos te chamar?"
+            "data-source": "${data.available_slots}"
           },
           {
             "type": "Footer",
-            "label": "Escolher Data",
+            "label": "Confirmar",
             "on-click-action": {
               "name": "data_exchange",
               "payload": {
-                "action": "select_service",
-                "service_id": "${form.service_id}",
-                "customer_name": "${form.customer_name}",
-                "screen": "SELECT_SERVICE"
+                "appointment_date": "${data.appointment_date}",
+                "time_slot": "${form.time_slot}",
+                "screen_source": "TIME_SLOT"
               }
             }
           }
         ]
-      }
-    },
-    {
-      "id": "SELECT_DATE",
-      "title": "Escolha a Data",
-      "terminal": false,
-      "data": {
-        "service_name": {
-          "type": "string",
-          "__example__": "Corte de Cabelo"
-        },
-        "available_dates": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": { "type": "string" },
-              "title": { "type": "string" }
-            }
-          },
-          "__example__": [
-            { "id": "2026-05-27", "title": "Terça, 27 de Maio" },
-            { "id": "2026-05-28", "title": "Quarta, 28 de Maio" },
-            { "id": "2026-05-29", "title": "Quinta, 29 de Maio" },
-            { "id": "2026-05-30", "title": "Sexta, 30 de Maio" }
-          ]
-        }
       },
-      "layout": {
-        "type": "SingleColumnLayout",
-        "children": [
-          {
-            "type": "TextHeading",
-            "text": "${data.service_name}"
-          },
-          {
-            "type": "TextBody",
-            "text": "Escolha uma data disponível:"
-          },
-          {
-            "type": "RadioButtonsGroup",
-            "name": "date",
-            "label": "Data",
-            "required": true,
-            "data-source": "${data.available_dates}"
-          },
-          {
-            "type": "Footer",
-            "label": "Escolher Horário",
-            "on-click-action": {
-              "name": "data_exchange",
-              "payload": {
-                "action": "select_date",
-                "date": "${form.date}",
-                "screen": "SELECT_DATE"
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "SELECT_TIME",
-      "title": "Escolha o Horário",
-      "terminal": false,
       "data": {
-        "date_label": {
+        "appointment_date": {
           "type": "string",
-          "__example__": "Terça, 27 de Maio"
+          "__example__": "2026-06-15"
         },
-        "available_times": {
+        "formatted_date": {
+          "type": "string",
+          "__example__": "15 de junho de 2026"
+        },
+        "available_slots": {
           "type": "array",
           "items": {
             "type": "object",
@@ -163,117 +122,74 @@
             { "id": "16:00", "title": "16:00" }
           ]
         }
-      },
-      "layout": {
-        "type": "SingleColumnLayout",
-        "children": [
-          {
-            "type": "TextHeading",
-            "text": "${data.date_label}"
-          },
-          {
-            "type": "TextBody",
-            "text": "Escolha um horário disponível:"
-          },
-          {
-            "type": "RadioButtonsGroup",
-            "name": "time",
-            "label": "Horário",
-            "required": true,
-            "data-source": "${data.available_times}"
-          },
-          {
-            "type": "Footer",
-            "label": "Confirmar",
-            "on-click-action": {
-              "name": "data_exchange",
-              "payload": {
-                "action": "select_time",
-                "time": "${form.time}",
-                "screen": "SELECT_TIME"
-              }
-            }
-          }
-        ]
       }
     },
     {
-      "id": "CONFIRM",
-      "title": "Confirmação",
-      "terminal": false,
-      "data": {
-        "service_name": {
-          "type": "string",
-          "__example__": "Corte de Cabelo"
-        },
-        "date_label": {
-          "type": "string",
-          "__example__": "Terça, 27 de Maio"
-        },
-        "time": {
-          "type": "string",
-          "__example__": "10:00"
-        },
-        "price": {
-          "type": "string",
-          "__example__": "R$ 60,00"
-        },
-        "customer_name": {
-          "type": "string",
-          "__example__": "João"
-        }
-      },
-      "layout": {
-        "type": "SingleColumnLayout",
-        "children": [
-          {
-            "type": "TextHeading",
-            "text": "Confirme seu agendamento"
-          },
-          {
-            "type": "TextBody",
-            "text": "📋 Serviço: ${data.service_name}\n📅 Data: ${data.date_label}\n⏰ Horário: ${data.time}\n💰 Valor: ${data.price}\n👤 Nome: ${data.customer_name}"
-          },
-          {
-            "type": "Footer",
-            "label": "Confirmar Agendamento",
-            "on-click-action": {
-              "name": "data_exchange",
-              "payload": {
-                "action": "confirm_booking",
-                "screen": "CONFIRM"
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "BOOKED",
-      "title": "Agendado!",
+      "id": "CONFIRMATION",
+      "title": "Confirmacao",
       "terminal": true,
-      "data": {
-        "confirmation_code": {
-          "type": "string",
-          "__example__": "AG-2026-0527-1000"
-        },
-        "summary": {
-          "type": "string",
-          "__example__": "Corte de Cabelo — Terça, 27 de Maio às 10:00"
-        }
-      },
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
           {
             "type": "TextHeading",
-            "text": "Agendamento Confirmado! ✅"
+            "text": "Agendamento Confirmado!"
           },
           {
             "type": "TextBody",
-            "text": "${data.summary}\n\nCódigo: ${data.confirmation_code}\n\nVocê receberá um lembrete 24h antes."
+            "text": "Seu agendamento foi realizado com sucesso."
+          },
+          {
+            "type": "TextSubheading",
+            "text": "Resumo"
+          },
+          {
+            "type": "TextBody",
+            "text": "Data: ${data.formatted_date}"
+          },
+          {
+            "type": "TextBody",
+            "text": "Horario: ${data.time_slot}"
+          },
+          {
+            "type": "TextBody",
+            "text": "Local: ${data.business_name}"
+          },
+          {
+            "type": "TextCaption",
+            "text": "Voce recebera uma mensagem de lembrete 24h antes do agendamento."
+          },
+          {
+            "type": "Footer",
+            "label": "Fechar",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {
+                "appointment_date": "${data.appointment_date}",
+                "time_slot": "${data.time_slot}",
+                "flow_completed": true
+              }
+            }
           }
         ]
+      },
+      "data": {
+        "appointment_date": {
+          "type": "string",
+          "__example__": "2026-06-15"
+        },
+        "formatted_date": {
+          "type": "string",
+          "__example__": "15 de junho de 2026"
+        },
+        "time_slot": {
+          "type": "string",
+          "__example__": "14:00"
+        },
+        "business_name": {
+          "type": "string",
+          "__example__": "Clinica Saude"
+        }
       }
     }
   ]
