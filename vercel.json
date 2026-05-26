@@ -99,6 +99,18 @@
     {
       "path": "/api/cron/reprocess-whatsapp-pending",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/close-expired-whatsapp-windows",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/reset-daily-whatsapp-counters",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/prune-whatsapp-webhook-events",
+      "schedule": "0 3 * * *"
     }
   ]
 }
