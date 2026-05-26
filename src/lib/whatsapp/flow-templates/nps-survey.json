@@ -1,36 +1,26 @@
 {
-  "version": "5.0",
+  "version": "3.0",
   "data_api_version": "3.0",
   "routing_model": {
-    "NPS_SCORE": ["COMMENT", "THANK_YOU"],
+    "NPS_SCORE": ["COMMENT"],
     "COMMENT": ["THANK_YOU"],
     "THANK_YOU": []
   },
   "screens": [
     {
       "id": "NPS_SCORE",
-      "title": "Avaliação",
+      "title": "Pesquisa de Satisfacao",
       "terminal": false,
-      "data": {
-        "customer_name": {
-          "type": "string",
-          "__example__": "Maria"
-        },
-        "order_id": {
-          "type": "string",
-          "__example__": "#12345"
-        }
-      },
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
           {
             "type": "TextHeading",
-            "text": "Olá, ${data.customer_name}! 👋"
+            "text": "Como foi sua experiencia?"
           },
           {
             "type": "TextBody",
-            "text": "Referente ao pedido ${data.order_id}, em uma escala de 0 a 10, o quanto você recomendaria nossa loja para um amigo?"
+            "text": "De 0 a 10, qual a probabilidade de voce recomendar a ${data.company_name} para um amigo?"
           },
           {
             "type": "RadioButtonsGroup",
@@ -38,22 +28,22 @@
             "label": "Sua nota",
             "required": true,
             "data-source": [
-              { "id": "10", "title": "10 — Com certeza recomendaria!" },
-              { "id": "9", "title": "9 — Muito provável" },
-              { "id": "8", "title": "8 — Provável" },
-              { "id": "7", "title": "7 — Talvez" },
-              { "id": "6", "title": "6 — Pouco provável" },
+              { "id": "0", "title": "0 — Nada provavel" },
+              { "id": "1", "title": "1" },
+              { "id": "2", "title": "2" },
+              { "id": "3", "title": "3" },
+              { "id": "4", "title": "4" },
               { "id": "5", "title": "5 — Neutro" },
-              { "id": "4", "title": "4 — Improvável" },
-              { "id": "3", "title": "3 — Muito improvável" },
-              { "id": "2", "title": "2 — Quase impossível" },
-              { "id": "1", "title": "1 — Não recomendaria" },
-              { "id": "0", "title": "0 — Jamais recomendaria" }
+              { "id": "6", "title": "6" },
+              { "id": "7", "title": "7" },
+              { "id": "8", "title": "8" },
+              { "id": "9", "title": "9" },
+              { "id": "10", "title": "10 — Com certeza!" }
             ]
           },
           {
             "type": "Footer",
-            "label": "Próximo",
+            "label": "Proximo",
             "on-click-action": {
               "name": "navigate",
               "next": {
@@ -61,83 +51,105 @@
                 "name": "COMMENT"
               },
               "payload": {
-                "nps_score": "${form.nps_score}"
+                "nps_score": "${form.nps_score}",
+                "screen_source": "NPS_SCORE"
               }
             }
           }
         ]
+      },
+      "data": {
+        "company_name": {
+          "type": "string",
+          "__example__": "Loja Exemplo"
+        }
       }
     },
     {
       "id": "COMMENT",
-      "title": "Comentário",
+      "title": "Comentario",
       "terminal": false,
-      "data": {
-        "nps_score": {
-          "type": "string",
-          "__example__": "8"
-        },
-        "prompt_text": {
-          "type": "string",
-          "__example__": "O que mais te agradou na sua experiência?"
-        }
-      },
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
           {
             "type": "TextHeading",
-            "text": "Obrigado pela nota!"
+            "text": "Quer deixar um comentario?"
           },
           {
             "type": "TextBody",
-            "text": "${data.prompt_text}"
+            "text": "Opcional — conte-nos o que podemos melhorar ou o que voce mais gostou."
           },
           {
             "type": "TextArea",
             "name": "comment",
-            "label": "Seu comentário",
+            "label": "Seu comentario (opcional)",
             "required": false,
-            "helper-text": "Compartilhe o que gostou ou o que podemos melhorar"
+            "helper-text": "Maximo 500 caracteres"
           },
           {
             "type": "Footer",
-            "label": "Enviar Avaliação",
+            "label": "Enviar",
             "on-click-action": {
               "name": "data_exchange",
               "payload": {
-                "action": "submit_nps",
                 "nps_score": "${data.nps_score}",
                 "comment": "${form.comment}",
-                "screen": "COMMENT"
+                "screen_source": "COMMENT"
               }
             }
           }
         ]
+      },
+      "data": {
+        "nps_score": {
+          "type": "string",
+          "__example__": "8"
+        }
       }
     },
     {
       "id": "THANK_YOU",
       "title": "Obrigado!",
       "terminal": true,
-      "data": {
-        "thank_you_message": {
-          "type": "string",
-          "__example__": "Sua avaliação é muito importante para nós!"
-        }
-      },
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
           {
             "type": "TextHeading",
-            "text": "Obrigado! 🎉"
+            "text": "Obrigado pela sua avaliacao!"
           },
           {
             "type": "TextBody",
-            "text": "${data.thank_you_message}"
+            "text": "Sua opiniao e muito importante para nos. ${data.follow_up_message}"
+          },
+          {
+            "type": "Footer",
+            "label": "Fechar",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {
+                "nps_score": "${data.nps_score}",
+                "comment": "${data.comment}",
+                "flow_completed": true
+              }
+            }
           }
         ]
+      },
+      "data": {
+        "nps_score": {
+          "type": "string",
+          "__example__": "8"
+        },
+        "comment": {
+          "type": "string",
+          "__example__": "Otimo atendimento!"
+        },
+        "follow_up_message": {
+          "type": "string",
+          "__example__": "Ficamos felizes com sua nota!"
+        }
       }
     }
   ]

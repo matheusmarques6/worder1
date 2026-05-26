@@ -1,149 +1,108 @@
 {
-  "version": "5.0",
+  "version": "3.0",
   "data_api_version": "3.0",
   "routing_model": {
-    "CART_REVIEW": ["FEEDBACK", "COMPLETE"],
-    "FEEDBACK": ["COMPLETE"],
-    "COMPLETE": []
+    "CART_REMINDER": ["FEEDBACK"],
+    "FEEDBACK": ["THANK_YOU"],
+    "THANK_YOU": []
   },
   "screens": [
     {
-      "id": "CART_REVIEW",
-      "title": "Seu Carrinho",
+      "id": "CART_REMINDER",
+      "title": "Carrinho Abandonado",
       "terminal": false,
-      "data": {
-        "items": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": { "type": "string" },
-              "title": { "type": "string" },
-              "subtitle": { "type": "string" },
-              "image": { "type": "string" },
-              "price": { "type": "string" }
-            }
-          },
-          "__example__": [
-            {
-              "id": "prod_1",
-              "title": "Camiseta Premium",
-              "subtitle": "Tamanho M - Azul",
-              "image": "https://example.com/product.jpg",
-              "price": "R$ 89,90"
-            }
-          ]
-        },
-        "total": {
-          "type": "string",
-          "__example__": "R$ 89,90"
-        },
-        "coupon_available": {
-          "type": "boolean",
-          "__example__": true
-        },
-        "coupon_code": {
-          "type": "string",
-          "__example__": "VOLTA10"
-        },
-        "coupon_discount": {
-          "type": "string",
-          "__example__": "10% OFF"
-        }
-      },
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
           {
             "type": "TextHeading",
-            "text": "Itens no seu carrinho"
+            "text": "Voce esqueceu itens no carrinho!"
           },
           {
             "type": "TextSubheading",
-            "text": "${data.total}"
+            "text": "Seus produtos ainda estao esperando por voce."
+          },
+          {
+            "type": "Image",
+            "src": "${data.product_image_url}",
+            "width": 300,
+            "height": 200,
+            "alt-text": "Produto no carrinho"
           },
           {
             "type": "TextBody",
-            "text": "Esses itens estão esperando por você! Complete sua compra agora.",
-            "visible": true
+            "text": "${data.product_name} — R$ ${data.product_price}"
           },
           {
             "type": "TextCaption",
-            "text": "🎉 Use o cupom ${data.coupon_code} e ganhe ${data.coupon_discount}!",
-            "visible": "${data.coupon_available}"
+            "text": "Finalize sua compra e receba frete gratis!"
           },
           {
             "type": "Footer",
-            "label": "Finalizar Compra",
-            "on-click-action": {
-              "name": "data_exchange",
-              "payload": {
-                "action": "checkout",
-                "screen": "CART_REVIEW"
-              }
-            }
-          },
-          {
-            "type": "Footer",
-            "label": "Não quero comprar agora",
+            "label": "Ver motivos",
             "on-click-action": {
               "name": "navigate",
               "next": {
                 "type": "screen",
                 "name": "FEEDBACK"
               },
-              "payload": {}
+              "payload": {
+                "screen_source": "CART_REMINDER"
+              }
             }
           }
         ]
+      },
+      "data": {
+        "product_image_url": {
+          "type": "string",
+          "__example__": "https://example.com/product.jpg"
+        },
+        "product_name": {
+          "type": "string",
+          "__example__": "Camiseta Premium"
+        },
+        "product_price": {
+          "type": "string",
+          "__example__": "89,90"
+        }
       }
     },
     {
       "id": "FEEDBACK",
-      "title": "Nos ajude a melhorar",
+      "title": "Nos conte o motivo",
       "terminal": false,
-      "data": {},
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
           {
             "type": "TextHeading",
-            "text": "O que aconteceu?"
+            "text": "Por que nao finalizou a compra?"
           },
           {
             "type": "TextBody",
-            "text": "Nos conte o motivo de não finalizar a compra para que possamos melhorar sua experiência."
+            "text": "Sua resposta nos ajuda a melhorar sua experiencia."
           },
           {
             "type": "RadioButtonsGroup",
-            "name": "cancel_reason",
-            "label": "Motivo",
+            "name": "abandonment_reason",
+            "label": "Selecione o motivo",
             "required": true,
             "data-source": [
-              { "id": "price", "title": "Preço alto" },
-              { "id": "shipping", "title": "Frete caro" },
-              { "id": "later", "title": "Vou comprar depois" },
-              { "id": "found_elsewhere", "title": "Encontrei em outro lugar" },
+              { "id": "price", "title": "Preco muito alto" },
+              { "id": "shipping", "title": "Frete caro ou demorado" },
+              { "id": "changed_mind", "title": "Mudei de ideia" },
               { "id": "other", "title": "Outro motivo" }
             ]
           },
           {
-            "type": "TextArea",
-            "name": "feedback_text",
-            "label": "Comentário (opcional)",
-            "required": false,
-            "helper-text": "Conte mais sobre sua experiência"
-          },
-          {
             "type": "Footer",
-            "label": "Enviar Feedback",
+            "label": "Enviar",
             "on-click-action": {
               "name": "data_exchange",
               "payload": {
-                "action": "submit_feedback",
-                "cancel_reason": "${form.cancel_reason}",
-                "feedback_text": "${form.feedback_text}",
-                "screen": "FEEDBACK"
+                "abandonment_reason": "${form.abandonment_reason}",
+                "screen_source": "FEEDBACK"
               }
             }
           }
@@ -151,27 +110,46 @@
       }
     },
     {
-      "id": "COMPLETE",
+      "id": "THANK_YOU",
       "title": "Obrigado!",
       "terminal": true,
-      "data": {
-        "message": {
-          "type": "string",
-          "__example__": "Obrigado pelo seu feedback!"
-        }
-      },
       "layout": {
         "type": "SingleColumnLayout",
         "children": [
           {
             "type": "TextHeading",
-            "text": "Tudo certo! ✅"
+            "text": "Obrigado pelo feedback!"
           },
           {
             "type": "TextBody",
-            "text": "${data.message}"
+            "text": "Agradecemos por compartilhar sua opiniao. Estamos sempre trabalhando para melhorar."
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.coupon_message}"
+          },
+          {
+            "type": "Footer",
+            "label": "Voltar a loja",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {
+                "abandonment_reason": "${data.abandonment_reason}",
+                "flow_completed": true
+              }
+            }
           }
         ]
+      },
+      "data": {
+        "abandonment_reason": {
+          "type": "string",
+          "__example__": "price"
+        },
+        "coupon_message": {
+          "type": "string",
+          "__example__": "Use o cupom VOLTA10 para 10% de desconto!"
+        }
       }
     }
   ]
