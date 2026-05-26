@@ -111,6 +111,14 @@
     {
       "path": "/api/cron/prune-whatsapp-webhook-events",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/whatsapp-resync-templates",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/whatsapp-dead-alert",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
