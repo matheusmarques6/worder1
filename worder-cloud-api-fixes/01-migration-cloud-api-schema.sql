@@ -703,22 +703,60 @@ END;
 $$;
 
 -- ============================================================
--- 13. GRANTS for RPCs created in webhook events migration
+-- 13. Webhook event RPCs (self-contained — OR REPLACE is safe
+--     if 20260522_whatsapp_webhook_events.sql already ran)
 -- ============================================================
--- Ensure claim + reprocess RPCs are grantable even if created
--- earlier by the standalone webhook migration.
 
-DO $$ BEGIN
-  GRANT EXECUTE ON FUNCTION claim_whatsapp_webhook_event(UUID) TO service_role;
-EXCEPTION WHEN undefined_function THEN NULL;
-END $$;
+-- Atomic claim with 30-second lease. Worker calls this to
+-- grab an event for processing; prevents double-processing.
+CREATE OR REPLACE FUNCTION claim_whatsapp_webhook_event(p_id UUID)
+RETURNS SETOF whatsapp_webhook_events LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE whatsapp_webhook_events
+  SET
+    status          = 'processing',
+    attempts        = attempts + 1,
+    in_flight_until = now() + interval '30 seconds',
+    updated_at      = now()
+  WHERE id = p_id
+    AND status IN ('pending', 'failed')
+    AND (in_flight_until IS NULL OR in_flight_until < now())
+    AND attempts < max_attempts
+  RETURNING *;
+END;
+$$;
 
-DO $$ BEGIN
-  GRANT EXECUTE ON FUNCTION pending_whatsapp_webhook_events_for_reprocess(INT, INT) TO service_role;
-EXCEPTION WHEN undefined_function THEN NULL;
-END $$;
+GRANT EXECUTE ON FUNCTION claim_whatsapp_webhook_event(UUID) TO service_role;
+
+-- Cron picks events older than threshold still in pending/failed,
+-- ignoring those currently leased. Returns rows the cron should
+-- re-publish to QStash (worker will then claim atomically).
+CREATE OR REPLACE FUNCTION pending_whatsapp_webhook_events_for_reprocess(
+  p_older_than_seconds INT DEFAULT 60,
+  p_limit INT DEFAULT 100
+)
+RETURNS SETOF whatsapp_webhook_events LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN QUERY
+  SELECT *
+  FROM whatsapp_webhook_events
+  WHERE status IN ('pending', 'failed')
+    AND attempts < max_attempts
+    AND (in_flight_until IS NULL OR in_flight_until < now())
+    AND received_at < now() - (p_older_than_seconds || ' seconds')::interval
+  ORDER BY received_at ASC
+  LIMIT p_limit;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION pending_whatsapp_webhook_events_for_reprocess(INT, INT) TO service_role;
 
 -- ============================================================
 -- DONE
 -- ============================================================
+-- NOTE (Fase 2 fix needed): automations/templates/route.ts:128
+-- calls increment_template_usage with { template_id } but the
+-- SQL parameter is p_template_id. template-manager.ts:444 uses
+-- the correct name. Fix the automations route in Fase 2.
 SELECT 'Cloud API schema migration complete' AS resultado;

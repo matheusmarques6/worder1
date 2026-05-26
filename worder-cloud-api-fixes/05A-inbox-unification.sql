@@ -105,6 +105,9 @@ FROM whatsapp_conversations lc;
 -- ============================================================
 -- 3. VIEW: whatsapp_inbox_messages
 -- ============================================================
+-- NOTE: Legacy whatsapp_messages does NOT have organization_id.
+-- We JOIN through whatsapp_conversations to obtain it.
+-- Legacy content is plain TEXT, not JSONB — we wrap it safely.
 
 CREATE OR REPLACE VIEW whatsapp_inbox_messages AS
 
@@ -131,16 +134,20 @@ FROM whatsapp_cloud_messages m
 
 UNION ALL
 
--- Legacy Evolution messages
+-- Legacy Evolution messages (JOIN to get organization_id)
 SELECT
   lm.id,
-  lm.organization_id,
+  lc.organization_id,
   'evolution'::TEXT                       AS provider,
   lm.conversation_id,
   lm.wa_message_id,
   lm.direction,
   lm.message_type,
-  lm.content::JSONB                      AS content,
+  CASE
+    WHEN lm.content IS NOT NULL AND lm.content ~ '^\s*[\[{]'
+    THEN lm.content::JSONB
+    ELSE jsonb_build_object('text', jsonb_build_object('body', COALESCE(lm.content, '')))
+  END                                    AS content,
   lm.content                             AS text_body,
   NULL::TEXT                              AS caption,
   NULL::TEXT                              AS media_id,
@@ -150,7 +157,8 @@ SELECT
   lm.error_message,
   COALESCE(lm.sent_at, lm.created_at)   AS sent_at,
   lm.created_at
-FROM whatsapp_messages lm;
+FROM whatsapp_messages lm
+JOIN whatsapp_conversations lc ON lc.id = lm.conversation_id;
 
 -- ============================================================
 -- 4. RPC: resolve_inbox_conversation
