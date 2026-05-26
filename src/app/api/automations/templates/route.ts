@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
     if (createError) throw createError;
 
     // Increment template usage count
-    await supabase.rpc('increment_template_usage', { template_id: templateId });
+    await supabase.rpc('increment_template_usage', { p_template_id: templateId });
 
     return NextResponse.json({ 
       automation,

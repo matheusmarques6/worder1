@@ -286,11 +286,14 @@ export class WhatsAppCloudAPI {
 
     const allTemplates: Template[] = [];
     let nextUrl: string | null = `/${id}/message_templates?limit=250`;
+    let pages = 0;
+    const maxPages = 20;
 
-    while (nextUrl) {
+    while (nextUrl && pages < maxPages) {
       const page: TemplateListResponse = await this.request<TemplateListResponse>(nextUrl);
       allTemplates.push(...(page.data || []));
       nextUrl = page.paging?.next || null;
+      pages++;
     }
 
     return allTemplates;
@@ -300,10 +303,8 @@ export class WhatsAppCloudAPI {
     return this.request(`/${templateId}`);
   }
 
-  async getTemplateById(wabaId: string, templateId: string): Promise<Template> {
-    const id = wabaId || this.config.wabaId;
-    if (!id) throw new Error('WABA ID required');
-    return this.request(`/${id}/message_templates?name=&limit=1&id=${templateId}`);
+  async getTemplateById(templateId: string): Promise<Template> {
+    return this.request(`/${templateId}?fields=id,name,language,status,category,components`);
   }
 
   async createTemplate(

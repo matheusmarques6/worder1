@@ -426,15 +426,12 @@ async function processTemplateCategoryUpdate(value: any) {
 // ============================================================
 
 async function processPhoneQualityUpdate(value: any) {
-  const phoneNumberId = value?.display_phone_number
-    ? undefined
-    : value?.current_limit;
+  const displayPhone = value?.display_phone_number;
   const currentLimit = value?.current_limit;
   const event = value?.event;
 
-  const displayPhone = value?.display_phone_number;
-  if (!displayPhone && !phoneNumberId) {
-    console.warn('[webhook-processor] phone quality update missing phone:', value);
+  if (!displayPhone) {
+    console.warn('[webhook-processor] phone quality update missing display_phone_number:', value);
     return;
   }
 
@@ -457,14 +454,11 @@ async function processPhoneQualityUpdate(value: any) {
     }
   }
 
-  let query = supabase.from('whatsapp_business_accounts').update(updateData);
-
-  if (displayPhone) {
-    const cleaned = displayPhone.replace(/\D/g, '');
-    query = query.eq('phone_number', cleaned);
-  }
-
-  const { error } = await query;
+  const cleaned = displayPhone.replace(/\D/g, '');
+  const { error } = await supabase
+    .from('whatsapp_business_accounts')
+    .update(updateData)
+    .eq('phone_number', cleaned);
 
   if (error) {
     console.error('[webhook-processor] failed to update phone quality:', error);

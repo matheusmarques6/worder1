@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api'
+import { getAccessToken } from '@/lib/whatsapp/account-loader'
 
 // ✅ FASE 3: Force dynamic para evitar cache
 export const dynamic = 'force-dynamic'
@@ -45,8 +47,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const messages = hasMore ? data?.slice(0, limit) : data
 
     if (!before && !after) {
-      await supabase.from('whatsapp_cloud_conversations').update({ unread_count: 0 }).eq('id', conversationId)
-      await supabase.from('whatsapp_conversations').update({ unread_count: 0 }).eq('id', conversationId)
+      const firstMsg = messages?.[0]
+      const provider = firstMsg?.provider
+      if (provider === 'cloud') {
+        await supabase.from('whatsapp_cloud_conversations').update({ unread_count: 0 }).eq('id', conversationId)
+      } else {
+        await supabase.from('whatsapp_conversations').update({ unread_count: 0 }).eq('id', conversationId)
+      }
     }
 
     const getContent = (c: any, fb?: string): string => {
@@ -99,10 +106,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .maybeSingle()
 
     if (cloudConv && cloudConv.account) {
-      // Cloud API path
-      const { createWhatsAppCloudClient } = await import('@/lib/whatsapp/cloud-api')
-      const { getAccessToken } = await import('@/lib/whatsapp/account-loader')
-
       const client = createWhatsAppCloudClient({
         phoneNumberId: cloudConv.account.phone_number_id,
         accessToken: getAccessToken(cloudConv.account),
