@@ -13,7 +13,7 @@ import {
 
 interface WabaHealthData {
   quality_rating: 'GREEN' | 'YELLOW' | 'RED' | 'UNKNOWN'
-  messaging_limit_tier: string
+  messaging_limit: string
   throughput_level: string
   phone_number: string
   instance_name: string
@@ -140,7 +140,7 @@ export function WabaHealthWidget({
   const ratingKey = data.quality_rating as keyof typeof QUALITY_MAP
   const quality = QUALITY_MAP[ratingKey] || QUALITY_MAP.UNKNOWN
   const QualityIcon = quality.icon
-  const tier = TIER_MAP[data.messaging_limit_tier] || { label: data.messaging_limit_tier, max: 4, current: 0 }
+  const tier = TIER_MAP[data.messaging_limit] || { label: data.messaging_limit, max: 4, current: 0 }
   const tierProgress = tier.current > 0 ? (tier.current / 4) * 100 : 0
   const throughputLabel = THROUGHPUT_MAP[data.throughput_level] || data.throughput_level || 'N/A'
 

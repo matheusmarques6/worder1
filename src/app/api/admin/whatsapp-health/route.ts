@@ -51,7 +51,7 @@ async function getOverview() {
       display_phone_number,
       verified_name,
       quality_rating,
-      messaging_limit_tier,
+      messaging_limit,
       status,
       organization_id,
       created_at
@@ -125,7 +125,7 @@ async function getOverview() {
     display_phone_number: a.display_phone_number,
     verified_name: a.verified_name,
     quality_rating: a.quality_rating || 'UNKNOWN',
-    messaging_limit_tier: a.messaging_limit_tier || 'UNKNOWN',
+    messaging_limit: a.messaging_limit || 'UNKNOWN',
     status: a.status,
     organization_id: a.organization_id,
     organization_name: orgMap.get(a.organization_id) || null,

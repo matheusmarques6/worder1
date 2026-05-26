@@ -99,7 +99,7 @@ export async function checkAndAlertQualityIssues(): Promise<{
   // Fetch all WABA accounts
   const { data: accounts, error } = await supabaseAdmin
     .from('whatsapp_business_accounts')
-    .select('id, waba_id, phone_number_id, display_phone_number, verified_name, quality_rating, messaging_limit_tier, organization_id, status');
+    .select('id, waba_id, phone_number_id, display_phone_number, verified_name, quality_rating, messaging_limit, organization_id, status');
 
   if (error) {
     errors.push(`Failed to fetch accounts: ${error.message}`);
@@ -122,7 +122,7 @@ export async function checkAndAlertQualityIssues(): Promise<{
         metadata: {
           waba_id: account.waba_id,
           phone_number_id: account.phone_number_id,
-          messaging_limit: account.messaging_limit_tier,
+          messaging_limit: account.messaging_limit,
         },
         organizationId: account.organization_id,
       });
@@ -138,7 +138,7 @@ export async function checkAndAlertQualityIssues(): Promise<{
         metadata: {
           waba_id: account.waba_id,
           phone_number_id: account.phone_number_id,
-          messaging_limit: account.messaging_limit_tier,
+          messaging_limit: account.messaging_limit,
         },
         organizationId: account.organization_id,
       });
@@ -148,7 +148,7 @@ export async function checkAndAlertQualityIssues(): Promise<{
 
   // Check for accounts with very low messaging limits
   const limitedAccounts = accounts.filter(
-    (a: any) => a.messaging_limit_tier === 'TIER_250' || a.messaging_limit_tier === 'TIER_1K'
+    (a: any) => a.messaging_limit === 'TIER_250' || a.messaging_limit === 'TIER_1K'
   );
 
   if (limitedAccounts.length > 0) {

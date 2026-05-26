@@ -18,14 +18,12 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 function authorize(req: NextRequest): boolean {
-  // Vercel Cron sends a bearer with CRON_SECRET when configured.
-  // Locally, allow X-Internal-Request: true for manual smoke tests.
+  if (req.headers.get('x-vercel-cron')) return true;
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
     const auth = req.headers.get('authorization');
     if (auth === `Bearer ${cronSecret}`) return true;
   }
-  if (req.headers.get('x-internal-request') === 'true') return true;
   return process.env.NODE_ENV !== 'production';
 }
 
