@@ -1,65 +1,63 @@
-# RFC: Fase 6 — Bloco D: Marketing Messages API (Optional)
+# RFC: Fase 6 — Bloco D: Marketing Messages API
 
-**Status:** Proposed (Optional)  
-**Author:** Worder Engineering  
-**Date:** 2026-05-26
+**Status:** Proposto  
+**Autor:** Worder Engineering  
+**Data:** 2026-05-26
 
-## Problem
+## Problema
 
-Worder's campaign system (`campaign-processor.ts`) sends marketing messages but lacks:
-- Audience segmentation based on purchase history / engagement
-- Scheduled sends with timezone awareness
-- A/B testing for template variants
-- Compliance guardrails (opt-out handling, frequency caps)
+As campanhas de marketing da Worder utilizam a API de mensagens padrao do WhatsApp Cloud API. A Meta oferece uma API dedicada para mensagens de marketing (`/messages` com `messaging_product: "whatsapp"` + `marketing` category) que melhora a taxa de entrega em ate 9% ao sinalizar corretamente a intencao da mensagem. Sem essa integracao, campanhas de alto volume sofrem com filtros anti-spam mais agressivos.
 
-## Solution (MVP)
+Alem disso, a API de Marketing permite opt-out granular por campanha, o que reduz reclamacoes e melhora o quality_rating da conta.
 
-### API Endpoints
-- `POST /api/marketing/campaigns` — create campaign with audience filter + schedule
-- `GET /api/marketing/campaigns/[id]/stats` — delivery, read, click-through rates
-- `POST /api/marketing/audiences` — create saved audience segment
-- `GET /api/marketing/audiences` — list segments with estimated reach
+## Solucao (MVP)
 
-### Audience Segmentation
-Build segments from existing data:
-- Last purchase date (e.g., "bought in last 30 days")
-- Message engagement (e.g., "read last 3 campaigns")
-- Tag-based (CRM tags from contacts)
-- Cart abandonment (contacts with abandoned carts in last 7 days)
+### Deteccao automatica de tipo de mensagem
+- Identificar templates com categoria `MARKETING` no momento do envio
+- Rotear automaticamente para o endpoint de marketing quando aplicavel
+- Manter fallback para API padrao em caso de erro
 
-### Compliance
-- Automatic opt-out processing (respond to "STOP" / "SAIR")
-- Per-contact frequency cap (max 1 marketing message per 24h by default)
-- Template pre-validation against Meta policies
-- Consent tracking per contact
+### Integracao com Marketing API
+- Usar header `messaging_product: "whatsapp"` com flag de marketing
+- Suportar `message_template` com parametros dinamicos (nome, produto, preco)
+- Respeitar frequency capping da Meta (max 2 marketing/dia por destinatario)
 
-### Database Changes
-- `marketing_campaigns` table with schedule, audience_filter, status, stats
-- `marketing_audiences` table with filter JSON + cached count
-- `contact_preferences` table for opt-out and frequency tracking
+### Metricas de entrega
+- Coletar dados de `marketing_message_status` via webhook
+- Dashboard de comparacao: taxa de entrega marketing API vs padrao
+- Alertas quando quality_rating cai abaixo de GREEN
 
-## Non-scope
-- Visual campaign builder (use template builder from Fase 5)
-- Multi-channel campaigns (WhatsApp only for MVP)
-- Advanced analytics (cohort analysis, LTV attribution)
-- WhatsApp Business API marketing message pricing optimization
+### Opt-out por campanha
+- Endpoint para registrar opt-out recebido via botao "Parar promos"
+- Tabela `marketing_opt_outs` com phone + campaign_id
+- Filtrar destinatarios no momento do envio
 
-## Success Metrics
-- Campaign creation to first delivery in <5 minutes
-- Opt-out compliance: 100% of STOP requests processed within 1 minute
-- Template rejection rate <10% (pre-validation catches issues)
+## Fora de escopo
+- Editor visual de campanhas (ja existe no modulo de campanhas)
+- Integracao com Meta Ads Manager
+- Segmentacao avancada de audiencia (futuro Bloco D-2)
+- A/B testing de templates de marketing
 
-## Dependencies
-- Template builder (Fase 5) for creating marketing templates
-- Cloud API connection (Fase 1-4)
-- Contact/CRM data populated
+## Metricas de Sucesso
+- Aumento de 7-9% na taxa de entrega de mensagens de marketing
+- Reducao de 30% em reclamacoes de spam
+- Quality rating mantido em GREEN para 95%+ das contas
+- Opt-out processado em <5 segundos
 
-## Risks
-- **Meta policy enforcement**: Aggressive marketing can get numbers blocked. Frequency caps essential.
-- **Scale**: Large audience campaigns (10k+) need queue-based processing. Existing `campaign-processor.ts` may need scaling.
+## Dependencias
+- Cloud API v22.0 (suporta marketing messages)
+- Templates aprovados com categoria MARKETING no Meta Business Manager
+- Webhook configurado para receber `marketing_message_status`
+- Fase 2 concluida (token encryption, cloud-api client)
 
-## Estimate
-- API endpoints + segmentation: 5 days
-- Compliance layer: 3 days
-- Campaign stats: 2 days
-- **Total: ~10 working days**
+## Riscos
+- **Mudancas na API da Meta**: endpoint de marketing pode mudar sem aviso. Mitigado por versionamento e feature flag.
+- **Frequency capping**: Meta pode alterar limites sem documentar. Monitorar via alertas de bounce rate.
+- **Custo por mensagem**: mensagens de marketing tem custo maior que utility. Precificar corretamente no billing.
+
+## Estimativa
+- Deteccao e roteamento automatico: 2 dias
+- Integracao Marketing API + webhooks: 3 dias
+- Dashboard de metricas: 2 dias
+- Opt-out por campanha: 2 dias
+- **Total: ~9 dias uteis**
