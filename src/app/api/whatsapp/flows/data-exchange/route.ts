@@ -160,7 +160,7 @@ async function handleInit(
 
   // Try to load flow-specific init data from the database
   const { data: flow } = await supabaseAdmin
-    .from('whatsapp_flows')
+    .from('whatsapp_cloud_flows')
     .select('flow_json, name')
     .eq('organization_id', organizationId)
     .eq('meta_flow_id', flowToken)
@@ -206,6 +206,7 @@ async function handleDataExchange(
     account_id: accountId,
     organization_id: organizationId,
     flow_token: action.flow_token,
+    event_type: 'screen_completed',
     action: 'data_exchange',
     screen,
     request_data: data,
@@ -237,7 +238,10 @@ async function logFlowEvent(
   await supabaseAdmin.from('whatsapp_flow_events').insert({
     account_id: accountId,
     organization_id: organizationId,
+    event_type: 'started',
     action: action || 'unknown',
     screen: screen || null,
+    flow_token: '',
+    contact_phone: '',
   });
 }

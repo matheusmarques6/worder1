@@ -111,7 +111,7 @@ export function PricingDashboard({
             <span className="text-sm">{error}</span>
           </div>
           <button
-            onClick={fetchConversations}
+            onClick={() => setError(null)}
             className="p-2 rounded-lg hover:bg-gray-50 text-gray-400 transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
