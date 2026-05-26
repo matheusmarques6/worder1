@@ -1,0 +1,178 @@
+{
+  "version": "5.0",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "CART_REVIEW": ["FEEDBACK", "COMPLETE"],
+    "FEEDBACK": ["COMPLETE"],
+    "COMPLETE": []
+  },
+  "screens": [
+    {
+      "id": "CART_REVIEW",
+      "title": "Seu Carrinho",
+      "terminal": false,
+      "data": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "subtitle": { "type": "string" },
+              "image": { "type": "string" },
+              "price": { "type": "string" }
+            }
+          },
+          "__example__": [
+            {
+              "id": "prod_1",
+              "title": "Camiseta Premium",
+              "subtitle": "Tamanho M - Azul",
+              "image": "https://example.com/product.jpg",
+              "price": "R$ 89,90"
+            }
+          ]
+        },
+        "total": {
+          "type": "string",
+          "__example__": "R$ 89,90"
+        },
+        "coupon_available": {
+          "type": "boolean",
+          "__example__": true
+        },
+        "coupon_code": {
+          "type": "string",
+          "__example__": "VOLTA10"
+        },
+        "coupon_discount": {
+          "type": "string",
+          "__example__": "10% OFF"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Itens no seu carrinho"
+          },
+          {
+            "type": "TextSubheading",
+            "text": "${data.total}"
+          },
+          {
+            "type": "TextBody",
+            "text": "Esses itens estão esperando por você! Complete sua compra agora.",
+            "visible": true
+          },
+          {
+            "type": "TextCaption",
+            "text": "🎉 Use o cupom ${data.coupon_code} e ganhe ${data.coupon_discount}!",
+            "visible": "${data.coupon_available}"
+          },
+          {
+            "type": "Footer",
+            "label": "Finalizar Compra",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "action": "checkout",
+                "screen": "CART_REVIEW"
+              }
+            }
+          },
+          {
+            "type": "Footer",
+            "label": "Não quero comprar agora",
+            "on-click-action": {
+              "name": "navigate",
+              "next": {
+                "type": "screen",
+                "name": "FEEDBACK"
+              },
+              "payload": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "FEEDBACK",
+      "title": "Nos ajude a melhorar",
+      "terminal": false,
+      "data": {},
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "O que aconteceu?"
+          },
+          {
+            "type": "TextBody",
+            "text": "Nos conte o motivo de não finalizar a compra para que possamos melhorar sua experiência."
+          },
+          {
+            "type": "RadioButtonsGroup",
+            "name": "cancel_reason",
+            "label": "Motivo",
+            "required": true,
+            "data-source": [
+              { "id": "price", "title": "Preço alto" },
+              { "id": "shipping", "title": "Frete caro" },
+              { "id": "later", "title": "Vou comprar depois" },
+              { "id": "found_elsewhere", "title": "Encontrei em outro lugar" },
+              { "id": "other", "title": "Outro motivo" }
+            ]
+          },
+          {
+            "type": "TextArea",
+            "name": "feedback_text",
+            "label": "Comentário (opcional)",
+            "required": false,
+            "helper-text": "Conte mais sobre sua experiência"
+          },
+          {
+            "type": "Footer",
+            "label": "Enviar Feedback",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "action": "submit_feedback",
+                "cancel_reason": "${form.cancel_reason}",
+                "feedback_text": "${form.feedback_text}",
+                "screen": "FEEDBACK"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "COMPLETE",
+      "title": "Obrigado!",
+      "terminal": true,
+      "data": {
+        "message": {
+          "type": "string",
+          "__example__": "Obrigado pelo seu feedback!"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Tudo certo! ✅"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.message}"
+          }
+        ]
+      }
+    }
+  ]
+}

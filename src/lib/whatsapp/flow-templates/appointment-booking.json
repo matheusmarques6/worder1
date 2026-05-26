@@ -1,0 +1,280 @@
+{
+  "version": "5.0",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "SELECT_SERVICE": ["SELECT_DATE"],
+    "SELECT_DATE": ["SELECT_TIME"],
+    "SELECT_TIME": ["CONFIRM"],
+    "CONFIRM": ["BOOKED"],
+    "BOOKED": []
+  },
+  "screens": [
+    {
+      "id": "SELECT_SERVICE",
+      "title": "Agendamento",
+      "terminal": false,
+      "data": {
+        "business_name": {
+          "type": "string",
+          "__example__": "Studio Beauty"
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [
+            { "id": "haircut", "title": "Corte de Cabelo — R$ 60" },
+            { "id": "color", "title": "Coloração — R$ 150" },
+            { "id": "manicure", "title": "Manicure — R$ 45" },
+            { "id": "pedicure", "title": "Pedicure — R$ 50" }
+          ]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "${data.business_name}"
+          },
+          {
+            "type": "TextBody",
+            "text": "Escolha o serviço que deseja agendar:"
+          },
+          {
+            "type": "RadioButtonsGroup",
+            "name": "service_id",
+            "label": "Serviço",
+            "required": true,
+            "data-source": "${data.services}"
+          },
+          {
+            "type": "TextInput",
+            "name": "customer_name",
+            "label": "Seu nome",
+            "required": true,
+            "input-type": "text",
+            "helper-text": "Como devemos te chamar?"
+          },
+          {
+            "type": "Footer",
+            "label": "Escolher Data",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "action": "select_service",
+                "service_id": "${form.service_id}",
+                "customer_name": "${form.customer_name}",
+                "screen": "SELECT_SERVICE"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "SELECT_DATE",
+      "title": "Escolha a Data",
+      "terminal": false,
+      "data": {
+        "service_name": {
+          "type": "string",
+          "__example__": "Corte de Cabelo"
+        },
+        "available_dates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [
+            { "id": "2026-05-27", "title": "Terça, 27 de Maio" },
+            { "id": "2026-05-28", "title": "Quarta, 28 de Maio" },
+            { "id": "2026-05-29", "title": "Quinta, 29 de Maio" },
+            { "id": "2026-05-30", "title": "Sexta, 30 de Maio" }
+          ]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "${data.service_name}"
+          },
+          {
+            "type": "TextBody",
+            "text": "Escolha uma data disponível:"
+          },
+          {
+            "type": "RadioButtonsGroup",
+            "name": "date",
+            "label": "Data",
+            "required": true,
+            "data-source": "${data.available_dates}"
+          },
+          {
+            "type": "Footer",
+            "label": "Escolher Horário",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "action": "select_date",
+                "date": "${form.date}",
+                "screen": "SELECT_DATE"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "SELECT_TIME",
+      "title": "Escolha o Horário",
+      "terminal": false,
+      "data": {
+        "date_label": {
+          "type": "string",
+          "__example__": "Terça, 27 de Maio"
+        },
+        "available_times": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [
+            { "id": "09:00", "title": "09:00" },
+            { "id": "10:00", "title": "10:00" },
+            { "id": "11:00", "title": "11:00" },
+            { "id": "14:00", "title": "14:00" },
+            { "id": "15:00", "title": "15:00" },
+            { "id": "16:00", "title": "16:00" }
+          ]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "${data.date_label}"
+          },
+          {
+            "type": "TextBody",
+            "text": "Escolha um horário disponível:"
+          },
+          {
+            "type": "RadioButtonsGroup",
+            "name": "time",
+            "label": "Horário",
+            "required": true,
+            "data-source": "${data.available_times}"
+          },
+          {
+            "type": "Footer",
+            "label": "Confirmar",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "action": "select_time",
+                "time": "${form.time}",
+                "screen": "SELECT_TIME"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CONFIRM",
+      "title": "Confirmação",
+      "terminal": false,
+      "data": {
+        "service_name": {
+          "type": "string",
+          "__example__": "Corte de Cabelo"
+        },
+        "date_label": {
+          "type": "string",
+          "__example__": "Terça, 27 de Maio"
+        },
+        "time": {
+          "type": "string",
+          "__example__": "10:00"
+        },
+        "price": {
+          "type": "string",
+          "__example__": "R$ 60,00"
+        },
+        "customer_name": {
+          "type": "string",
+          "__example__": "João"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Confirme seu agendamento"
+          },
+          {
+            "type": "TextBody",
+            "text": "📋 Serviço: ${data.service_name}\n📅 Data: ${data.date_label}\n⏰ Horário: ${data.time}\n💰 Valor: ${data.price}\n👤 Nome: ${data.customer_name}"
+          },
+          {
+            "type": "Footer",
+            "label": "Confirmar Agendamento",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "action": "confirm_booking",
+                "screen": "CONFIRM"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "BOOKED",
+      "title": "Agendado!",
+      "terminal": true,
+      "data": {
+        "confirmation_code": {
+          "type": "string",
+          "__example__": "AG-2026-0527-1000"
+        },
+        "summary": {
+          "type": "string",
+          "__example__": "Corte de Cabelo — Terça, 27 de Maio às 10:00"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Agendamento Confirmado! ✅"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.summary}\n\nCódigo: ${data.confirmation_code}\n\nVocê receberá um lembrete 24h antes."
+          }
+        ]
+      }
+    }
+  ]
+}
