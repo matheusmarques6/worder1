@@ -36,7 +36,7 @@ const NAME_REGEX = /^[a-z][a-z0-9_]*$/;
 const VARIABLE_REGEX = /\{\{(\d+)\}\}/g;
 const WA_ME_REGEX = /wa\.me\//i;
 
-const LIMITS = {
+export const LIMITS = {
   name: { min: 1, max: 512 },
   header_text: { max: 60 },
   body_text: { max: 1024 },

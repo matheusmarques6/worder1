@@ -95,17 +95,16 @@ async function getOverview() {
 
   // 4. Count messages in last 7 days per account
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const phoneIds = accounts.map((a: any) => a.phone_number_id).filter(Boolean);
+  const accountIds = accounts.map((a: any) => a.id).filter(Boolean);
 
-  let messageCountMap = new Map<string, number>();
   let totalMessages7d = 0;
 
-  if (phoneIds.length > 0) {
+  if (accountIds.length > 0) {
     const { count } = await supabaseAdmin
-      .from('whatsapp_messages')
+      .from('whatsapp_cloud_messages')
       .select('*', { count: 'exact', head: true })
-      .in('phone_number_id', phoneIds)
-      .gte('created_at', sevenDaysAgo);
+      .in('waba_id', accountIds)
+      .gte('timestamp', sevenDaysAgo);
 
     totalMessages7d = count || 0;
   }
