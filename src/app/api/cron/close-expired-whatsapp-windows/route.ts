@@ -5,12 +5,12 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 function authorize(req: NextRequest): boolean {
+  if (req.headers.get('x-vercel-cron')) return true;
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
     const auth = req.headers.get('authorization');
     if (auth === `Bearer ${cronSecret}`) return true;
   }
-  if (req.headers.get('x-internal-request') === 'true') return true;
   return process.env.NODE_ENV !== 'production';
 }
 

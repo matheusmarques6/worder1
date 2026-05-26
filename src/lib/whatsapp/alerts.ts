@@ -176,21 +176,20 @@ export async function checkFrequencyCapRate(organizationId: string): Promise<{
 
   // Count total outbound messages in the last 24h
   const { count: totalCount } = await supabaseAdmin
-    .from('whatsapp_messages')
+    .from('whatsapp_cloud_messages')
     .select('*', { count: 'exact', head: true })
     .eq('organization_id', organizationId)
     .eq('direction', 'outbound')
-    .gte('created_at', oneDayAgo);
+    .gte('timestamp', oneDayAgo);
 
-  // Count messages that hit frequency cap (status = 'frequency_capped' or error code 131049)
   const { count: cappedCount } = await supabaseAdmin
-    .from('whatsapp_messages')
+    .from('whatsapp_cloud_messages')
     .select('*', { count: 'exact', head: true })
     .eq('organization_id', organizationId)
     .eq('direction', 'outbound')
     .eq('status', 'failed')
-    .gte('created_at', oneDayAgo)
-    .contains('error_data', { code: 131049 });
+    .eq('error_code', '131049')
+    .gte('timestamp', oneDayAgo);
 
   const total = totalCount || 0;
   const capped = cappedCount || 0;

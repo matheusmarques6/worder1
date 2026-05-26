@@ -174,6 +174,7 @@ async function getAccountDetails() {
       ...a,
       access_token: undefined,
       access_token_encrypted: undefined,
+      webhook_verify_token: undefined,
       recent_quality_history: historyByPhone.get(a.phone_number_id) || [],
     })),
   });

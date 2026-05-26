@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 async function requireAdmin() {
   const auth = await getAuthClient();
