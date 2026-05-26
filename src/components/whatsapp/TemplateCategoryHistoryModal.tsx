@@ -10,9 +10,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 // =============================================
 
 export interface CategoryChange {
-  previous_category: string
-  new_category: string
-  changed_at: string
+  from?: string
+  to?: string
+  at?: string
+  previous_category?: string
+  new_category?: string
+  changed_at?: string
 }
 
 interface TemplateCategoryHistoryModalProps {
@@ -48,14 +51,12 @@ export function TemplateCategoryHistoryModal({
   templateName,
   history,
 }: TemplateCategoryHistoryModalProps) {
-  if (!open) return null
-
   return (
+    <AnimatePresence>
+      {!open ? null : (
     <div className="fixed inset-0 z-[10001] flex items-center justify-center">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
-      {/* Modal */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -97,7 +98,8 @@ export function TemplateCategoryHistoryModal({
 
               <div className="space-y-4">
                 {history.map((change, index) => {
-                  const date = new Date(change.changed_at)
+                  const timestamp = change.at || change.changed_at || ''
+                  const date = new Date(timestamp)
                   const formattedDate = date.toLocaleDateString('pt-BR', {
                     day: '2-digit',
                     month: 'short',
@@ -108,10 +110,12 @@ export function TemplateCategoryHistoryModal({
                     minute: '2-digit',
                   })
 
-                  const fromLabel = CATEGORY_LABELS[change.previous_category] || change.previous_category
-                  const toLabel = CATEGORY_LABELS[change.new_category] || change.new_category
-                  const fromColor = CATEGORY_COLORS[change.previous_category] || 'bg-gray-100 text-gray-500'
-                  const toColor = CATEGORY_COLORS[change.new_category] || 'bg-gray-100 text-gray-500'
+                  const prevCat = change.from || change.previous_category || ''
+                  const nextCat = change.to || change.new_category || ''
+                  const fromLabel = CATEGORY_LABELS[prevCat] || prevCat
+                  const toLabel = CATEGORY_LABELS[nextCat] || nextCat
+                  const fromColor = CATEGORY_COLORS[prevCat] || 'bg-gray-100 text-gray-500'
+                  const toColor = CATEGORY_COLORS[nextCat] || 'bg-gray-100 text-gray-500'
 
                   return (
                     <div key={index} className="relative flex gap-4 pl-2">
@@ -166,6 +170,8 @@ export function TemplateCategoryHistoryModal({
         </div>
       </motion.div>
     </div>
+      )}
+    </AnimatePresence>
   )
 }
 

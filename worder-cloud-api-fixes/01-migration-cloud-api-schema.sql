@@ -571,10 +571,12 @@ CREATE TRIGGER trg_wt_extract_components
   EXECUTE FUNCTION whatsapp_templates_extract_components();
 
 -- ============================================================
--- 9. RPC: increment_template_usage
+-- 9. RPC: increment_whatsapp_template_usage
 -- ============================================================
+-- Named differently from the automation_templates version to avoid
+-- CREATE OR REPLACE overwriting the existing increment_template_usage.
 
-CREATE OR REPLACE FUNCTION increment_template_usage(p_template_id UUID)
+CREATE OR REPLACE FUNCTION increment_whatsapp_template_usage(p_template_id UUID)
 RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   UPDATE whatsapp_templates
@@ -587,8 +589,8 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION increment_template_usage(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION increment_template_usage(UUID) TO service_role;
+GRANT EXECUTE ON FUNCTION increment_whatsapp_template_usage(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION increment_whatsapp_template_usage(UUID) TO service_role;
 
 -- ============================================================
 -- 10. RPC: reset_daily_whatsapp_counters

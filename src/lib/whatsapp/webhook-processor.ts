@@ -514,15 +514,15 @@ async function getOrCreateContact(account: any, phoneNumber: string, name: strin
   if (existingCrmContact) {
     crmContactId = existingCrmContact.id;
   } else {
+    const displayName = name !== phoneNumber ? name : 'Contato WhatsApp';
     const { data: newCrmContact } = await supabase
       .from('contacts')
       .insert({
         organization_id: account.organization_id,
-        name: name !== phoneNumber ? name : 'Contato WhatsApp',
+        first_name: displayName,
         whatsapp: phoneNumber,
         phone: phoneNumber,
         source: 'whatsapp',
-        type: 'lead',
         tags: ['whatsapp'],
       })
       .select('id')

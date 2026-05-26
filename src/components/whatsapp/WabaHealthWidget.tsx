@@ -58,6 +58,8 @@ const QUALITY_MAP = {
 }
 
 const TIER_MAP: Record<string, { label: string; max: number; current: number }> = {
+  TIER_NOT_SET: { label: '250 / dia', max: 250, current: 0 },
+  TIER_250:  { label: '250 / dia', max: 250, current: 0 },
   TIER_1K:   { label: '1K / dia', max: 1000, current: 1 },
   TIER_10K:  { label: '10K / dia', max: 10000, current: 2 },
   TIER_100K: { label: '100K / dia', max: 100000, current: 3 },
@@ -86,12 +88,19 @@ export function WabaHealthWidget({
     try {
       setLoading(true)
       setError(null)
-      const res = await fetch(
-        `/api/admin/whatsapp-health?organization_id=${organizationId}`
-      )
+      const res = await fetch(`/api/whatsapp/cloud/accounts`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Falha ao carregar')
-      setData(json.data || json)
+      const account = (json.accounts || [])[0]
+      if (account) {
+        setData({
+          quality_rating: account.quality_rating || 'UNKNOWN',
+          messaging_limit: account.messaging_limit || 'TIER_NOT_SET',
+          throughput_level: account.throughput_level || 'STANDARD',
+          phone_number: account.display_phone_number || account.phone_number || '',
+          instance_name: account.verified_name || '',
+        })
+      }
     } catch (e: any) {
       setError(e.message)
     } finally {

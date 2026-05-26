@@ -441,7 +441,7 @@ export class TemplateManager {
    */
   async recordUsage(templateId: string): Promise<void> {
     try {
-      await supabase.rpc('increment_template_usage', {
+      await supabase.rpc('increment_whatsapp_template_usage', {
         p_template_id: templateId
       })
 

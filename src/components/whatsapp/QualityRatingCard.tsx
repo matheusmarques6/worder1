@@ -70,6 +70,8 @@ const RATING_CONFIG: Record<QualityRating, {
 }
 
 const TIER_INFO: Record<string, { label: string; step: number }> = {
+  TIER_NOT_SET: { label: '250 msg/dia', step: 0 },
+  TIER_250:  { label: '250 msg/dia', step: 0 },
   TIER_1K:   { label: '1.000 msg/dia', step: 1 },
   TIER_10K:  { label: '10.000 msg/dia', step: 2 },
   TIER_100K: { label: '100.000 msg/dia', step: 3 },

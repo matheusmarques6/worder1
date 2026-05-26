@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -56,26 +56,11 @@ export function PricingDashboard({
   const [loading, setLoading] = useState(!externalConversations)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchConversations = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const res = await fetch(
-        `/api/whatsapp/cloud/messages?organization_id=${organizationId}&action=pricing_summary`
-      )
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Falha ao carregar dados')
-      setConversations(json.conversations || json.data || [])
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
+  useEffect(() => {
+    if (!externalConversations) {
       setLoading(false)
     }
-  }, [organizationId])
-
-  useEffect(() => {
-    if (!externalConversations) fetchConversations()
-  }, [externalConversations, fetchConversations])
+  }, [externalConversations])
 
   useEffect(() => {
     if (externalConversations) setConversations(externalConversations)
