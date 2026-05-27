@@ -90,9 +90,12 @@ export function WabaHealthWidget({
       setLoading(true)
       setError(null)
       const { data: { session } } = await getSupabaseClient().auth.getSession()
-      const token = session?.access_token || ''
-      const res = await fetch(`/api/whatsapp/cloud/accounts`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const token = session?.access_token
+      if (!token) {
+        throw new Error('Sessão expirada. Faça login novamente.')
+      }
+      const res = await fetch('/api/whatsapp/cloud/accounts', {
+        headers: { Authorization: `Bearer ${token}` },
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Falha ao carregar')
@@ -105,6 +108,8 @@ export function WabaHealthWidget({
           phone_number: account.display_phone_number || account.phone_number || '',
           instance_name: account.verified_name || '',
         })
+      } else {
+        setData(null)
       }
     } catch (e: any) {
       setError(e.message)
