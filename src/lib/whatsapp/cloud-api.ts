@@ -593,6 +593,10 @@ export class WhatsAppCloudError extends Error {
     return this.code === 131049;
   }
 
+  isSpamRateLimited(): boolean {
+    return this.code === 131048;
+  }
+
   isWindowExpired(): boolean {
     return this.code === 131047;
   }

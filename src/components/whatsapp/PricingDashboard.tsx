@@ -9,6 +9,7 @@ import {
   estimateMonthlySpend,
   formatCurrency as formatPricingCurrency,
   BRAZIL_PRICING,
+  BRAZIL_PRICING_BRL,
   type PricingCategory,
   type MessageWithCategory,
   type MonthlyEstimate,
@@ -68,7 +69,7 @@ export function PricingDashboard({
 
   // Calculate monthly estimate
   const estimate: MonthlyEstimate = useMemo(
-    () => estimateMonthlySpend(conversations),
+    () => estimateMonthlySpend(conversations, 'BRL'),
     [conversations]
   )
 
@@ -130,14 +131,14 @@ export function PricingDashboard({
         <SummaryCard
           icon={DollarSign}
           label="Gasto Atual"
-          value={formatPricingCurrency(estimate.total)}
+          value={formatPricingCurrency(estimate.total, 'BRL')}
           iconBg="bg-emerald-50"
           iconColor="text-emerald-500"
         />
         <SummaryCard
           icon={TrendingUp}
           label="Projecao Mensal"
-          value={formatPricingCurrency(projection)}
+          value={formatPricingCurrency(projection, 'BRL')}
           iconBg="bg-blue-50"
           iconColor="text-blue-500"
         />
@@ -180,7 +181,7 @@ export function PricingDashboard({
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number) => formatPricingCurrency(value)}
+                    formatter={(value: number) => formatPricingCurrency(value, 'BRL')}
                     contentStyle={{
                       background: '#fff',
                       border: '1px solid #e5e7eb',
@@ -234,10 +235,10 @@ export function PricingDashboard({
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-semibold text-gray-800">
-                        {formatPricingCurrency(data.cost)}
+                        {formatPricingCurrency(data.cost, 'BRL')}
                       </p>
                       <p className="text-xs text-gray-400">
-                        {formatPricingCurrency(BRAZIL_PRICING[cat])}/conv
+                        {formatPricingCurrency(BRAZIL_PRICING_BRL[cat], 'BRL')}/msg
                       </p>
                     </div>
                   </div>
