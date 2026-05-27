@@ -236,6 +236,28 @@ CREATE TABLE IF NOT EXISTS whatsapp_cloud_conversations (
   updated_at                TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Ensure columns exist if table was created by a prior migration without them
+DO $$ BEGIN
+  ALTER TABLE whatsapp_cloud_conversations ADD COLUMN IF NOT EXISTS profile_picture TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE whatsapp_cloud_conversations ADD COLUMN IF NOT EXISTS labels TEXT[];
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE whatsapp_cloud_conversations ADD COLUMN IF NOT EXISTS last_customer_message_at TIMESTAMPTZ;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE whatsapp_cloud_conversations ADD COLUMN IF NOT EXISTS last_message_preview TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE whatsapp_cloud_conversations ADD COLUMN IF NOT EXISTS last_message_direction TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_wcc_waba_waid
   ON whatsapp_cloud_conversations (waba_id, wa_id);
 
