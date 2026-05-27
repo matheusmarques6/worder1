@@ -2,23 +2,27 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export interface AlertParams {
   severity: 'info' | 'warning' | 'critical';
+  type: 'quality_drop' | 'frequency_cap' | 'template_rejected' | 'template_paused' | 'template_disabled' | 'account_restricted' | 'webhook_dead' | 'window_expiry_bulk';
   title: string;
   message: string;
   metadata?: Record<string, any>;
   organizationId?: string;
+  wabaId?: string;
 }
 
 export async function sendAlert(params: AlertParams): Promise<void> {
-  const { severity, title, message, metadata, organizationId } = params;
+  const { severity, type, title, message, metadata, organizationId, wabaId } = params;
 
   // 1. Always log to structured console output
   const logPayload = {
     type: 'whatsapp_alert',
+    alert_type: type,
     severity,
     title,
     message,
     metadata,
     organization_id: organizationId,
+    waba_id: wabaId,
     timestamp: new Date().toISOString(),
   };
 
@@ -30,22 +34,48 @@ export async function sendAlert(params: AlertParams): Promise<void> {
     console.log('[ALERT]', JSON.stringify(logPayload));
   }
 
-  // 2. Try inserting into notifications table (graceful if missing)
+  // 2. Dedup: skip if an alert of the same type + waba_id exists in the last hour
   try {
-    await supabaseAdmin.from('notifications').insert({
-      type: 'whatsapp_quality_alert',
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    let dedupQuery = supabaseAdmin
+      .from('whatsapp_alerts')
+      .select('id', { count: 'exact', head: true })
+      .eq('type', type)
+      .gte('created_at', oneHourAgo);
+
+    if (wabaId) {
+      dedupQuery = dedupQuery.eq('waba_id', wabaId);
+    }
+    if (organizationId) {
+      dedupQuery = dedupQuery.eq('organization_id', organizationId);
+    }
+
+    const { count } = await dedupQuery;
+    if (count && count > 0) {
+      // Duplicate within the last hour — skip insert
+      return;
+    }
+  } catch {
+    // Dedup check failed — proceed with insert anyway
+  }
+
+  // 3. Insert into whatsapp_alerts table
+  try {
+    await supabaseAdmin.from('whatsapp_alerts').insert({
+      type,
       title,
-      message,
+      body: message,
       severity,
       metadata: metadata || {},
       organization_id: organizationId || null,
+      waba_id: wabaId || null,
       created_at: new Date().toISOString(),
     });
   } catch {
     // Table may not exist yet
   }
 
-  // 3. Slack webhook (if configured)
+  // 4. Slack webhook (if configured)
   const slackUrl = process.env.SLACK_WEBHOOK_URL;
   if (slackUrl) {
     try {
@@ -117,6 +147,7 @@ export async function checkAndAlertQualityIssues(): Promise<{
     if (account.quality_rating === 'RED') {
       await sendAlert({
         severity: 'critical',
+        type: 'quality_drop',
         title: 'WhatsApp Quality Rating RED',
         message: `Account ${account.verified_name || account.display_phone_number} (${account.phone_number_id}) has RED quality rating. Immediate action required to avoid restrictions.`,
         metadata: {
@@ -125,6 +156,7 @@ export async function checkAndAlertQualityIssues(): Promise<{
           messaging_limit: account.messaging_limit,
         },
         organizationId: account.organization_id,
+        wabaId: account.id,
       });
       alertsSent++;
     }
@@ -133,6 +165,7 @@ export async function checkAndAlertQualityIssues(): Promise<{
     if (account.quality_rating === 'YELLOW') {
       await sendAlert({
         severity: 'warning',
+        type: 'quality_drop',
         title: 'WhatsApp Quality Rating YELLOW',
         message: `Account ${account.verified_name || account.display_phone_number} (${account.phone_number_id}) has YELLOW quality rating. Review message content and frequency.`,
         metadata: {
@@ -141,6 +174,7 @@ export async function checkAndAlertQualityIssues(): Promise<{
           messaging_limit: account.messaging_limit,
         },
         organizationId: account.organization_id,
+        wabaId: account.id,
       });
       alertsSent++;
     }
@@ -154,6 +188,7 @@ export async function checkAndAlertQualityIssues(): Promise<{
   if (limitedAccounts.length > 0) {
     await sendAlert({
       severity: 'info',
+      type: 'account_restricted',
       title: 'Low Messaging Limits Detected',
       message: `${limitedAccounts.length} account(s) have messaging limits at TIER_250 or TIER_1K. Consider warming up these numbers.`,
       metadata: {
@@ -201,6 +236,7 @@ export async function checkFrequencyCapRate(organizationId: string): Promise<{
   if (rate > 0.05 && total >= 100) {
     await sendAlert({
       severity: 'warning',
+      type: 'frequency_cap',
       title: 'High Frequency Cap Rate',
       message: `Organization has ${(rate * 100).toFixed(1)}% frequency cap rate (${capped}/${total} messages in 24h). Consider reducing send frequency.`,
       metadata: {
