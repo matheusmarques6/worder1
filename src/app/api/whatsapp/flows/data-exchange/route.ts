@@ -33,6 +33,7 @@ interface FlowResponse {
   screen?: string;
   data?: Record<string, unknown>;
   version?: string;
+  [key: string]: unknown;
 }
 
 // =============================================
