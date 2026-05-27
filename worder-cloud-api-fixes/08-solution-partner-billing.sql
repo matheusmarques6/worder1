@@ -98,6 +98,41 @@ CREATE TABLE IF NOT EXISTS billing_invoices (
   metadata        JSONB DEFAULT '{}'::JSONB
 );
 
+-- Ensure critical columns exist if table was from a partial prior run
+DO $$ BEGIN
+  ALTER TABLE billing_invoices ADD COLUMN IF NOT EXISTS period_start DATE;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE billing_invoices ADD COLUMN IF NOT EXISTS period_end DATE;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE billing_invoices ADD COLUMN IF NOT EXISTS invoice_number TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE billing_invoices ADD COLUMN IF NOT EXISTS subtotal_usd NUMERIC(12,2) DEFAULT 0;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE billing_invoices ADD COLUMN IF NOT EXISTS total_usd NUMERIC(12,2) DEFAULT 0;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE billing_invoices ADD COLUMN IF NOT EXISTS credit_applied NUMERIC(12,2) DEFAULT 0;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE billing_invoices ADD COLUMN IF NOT EXISTS amount_due_usd NUMERIC(12,2) DEFAULT 0;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE billing_invoices ADD COLUMN IF NOT EXISTS exchange_rate NUMERIC(10,4);
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE billing_invoices ADD COLUMN IF NOT EXISTS total_local NUMERIC(12,2);
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE billing_invoices ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE billing_invoices ADD COLUMN IF NOT EXISTS due_date DATE;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_billing_invoices_org
   ON billing_invoices(organization_id);
