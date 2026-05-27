@@ -57,9 +57,9 @@ BEGIN
       FOR SELECT
       TO authenticated
       USING (organization_id IN (
-        SELECT om.organization_id
-        FROM organization_members om
-        WHERE om.user_id = auth.uid()
+        SELECT organization_id
+        FROM public.profiles
+        WHERE id = auth.uid()
       ));
   END IF;
 END

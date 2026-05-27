@@ -1485,14 +1485,20 @@ CREATE INDEX IF NOT EXISTS idx_wcf_waba ON whatsapp_cloud_flows(waba_id);
 CREATE INDEX IF NOT EXISTS idx_wcfe_flow ON whatsapp_flow_events(flow_id);
 CREATE INDEX IF NOT EXISTS idx_wcfe_token ON whatsapp_flow_events(flow_token);
 
--- Legacy whatsapp_flows indexes
-CREATE INDEX IF NOT EXISTS idx_wf_meta_flow_id
-  ON whatsapp_flows (meta_flow_id)
-  WHERE meta_flow_id IS NOT NULL;
+-- Legacy whatsapp_flows indexes (table may not exist)
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_wf_meta_flow_id
+    ON whatsapp_flows (meta_flow_id)
+    WHERE meta_flow_id IS NOT NULL;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
 
-CREATE INDEX IF NOT EXISTS idx_wf_account_id
-  ON whatsapp_flows (account_id)
-  WHERE account_id IS NOT NULL;
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_wf_account_id
+    ON whatsapp_flows (account_id)
+    WHERE account_id IS NOT NULL;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
 
 -- whatsapp_flow_events compat indexes
 CREATE INDEX IF NOT EXISTS idx_wfe_org_created
@@ -2152,8 +2158,8 @@ BEGIN
       FOR SELECT
       USING (
         organization_id IN (
-          SELECT om.organization_id FROM organization_members om
-          WHERE om.user_id = auth.uid()
+          SELECT organization_id FROM public.profiles
+          WHERE id = auth.uid()
         )
       );
   END IF;
@@ -2167,7 +2173,7 @@ BEGIN
   ) THEN
     CREATE POLICY billing_invoices_service ON billing_invoices
       FOR ALL
-      USING (auth.role() = 'service_role');
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
   END IF;
 END $$;
 
@@ -2183,8 +2189,8 @@ BEGIN
       FOR SELECT
       USING (
         organization_id IN (
-          SELECT om.organization_id FROM organization_members om
-          WHERE om.user_id = auth.uid()
+          SELECT organization_id FROM public.profiles
+          WHERE id = auth.uid()
         )
       );
   END IF;
@@ -2197,7 +2203,7 @@ BEGIN
   ) THEN
     CREATE POLICY billing_line_items_service ON billing_line_items
       FOR ALL
-      USING (auth.role() = 'service_role');
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
   END IF;
 END $$;
 
@@ -2213,8 +2219,8 @@ BEGIN
       FOR SELECT
       USING (
         organization_id IN (
-          SELECT om.organization_id FROM organization_members om
-          WHERE om.user_id = auth.uid()
+          SELECT organization_id FROM public.profiles
+          WHERE id = auth.uid()
         )
       );
   END IF;
@@ -2227,7 +2233,7 @@ BEGIN
   ) THEN
     CREATE POLICY billing_credits_service ON billing_credits
       FOR ALL
-      USING (auth.role() = 'service_role');
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
   END IF;
 END $$;
 
@@ -2301,9 +2307,9 @@ BEGIN
       FOR SELECT
       TO authenticated
       USING (organization_id IN (
-        SELECT om.organization_id
-        FROM organization_members om
-        WHERE om.user_id = auth.uid()
+        SELECT organization_id
+        FROM public.profiles
+        WHERE id = auth.uid()
       ));
   END IF;
 END

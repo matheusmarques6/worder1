@@ -524,8 +524,8 @@ BEGIN
       FOR SELECT
       USING (
         organization_id IN (
-          SELECT om.organization_id FROM organization_members om
-          WHERE om.user_id = auth.uid()
+          SELECT organization_id FROM public.profiles
+          WHERE id = auth.uid()
         )
       );
   END IF;
@@ -539,7 +539,7 @@ BEGIN
   ) THEN
     CREATE POLICY billing_invoices_service ON billing_invoices
       FOR ALL
-      USING (auth.role() = 'service_role');
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
   END IF;
 END $$;
 
@@ -555,8 +555,8 @@ BEGIN
       FOR SELECT
       USING (
         organization_id IN (
-          SELECT om.organization_id FROM organization_members om
-          WHERE om.user_id = auth.uid()
+          SELECT organization_id FROM public.profiles
+          WHERE id = auth.uid()
         )
       );
   END IF;
@@ -569,7 +569,7 @@ BEGIN
   ) THEN
     CREATE POLICY billing_line_items_service ON billing_line_items
       FOR ALL
-      USING (auth.role() = 'service_role');
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
   END IF;
 END $$;
 
@@ -585,8 +585,8 @@ BEGIN
       FOR SELECT
       USING (
         organization_id IN (
-          SELECT om.organization_id FROM organization_members om
-          WHERE om.user_id = auth.uid()
+          SELECT organization_id FROM public.profiles
+          WHERE id = auth.uid()
         )
       );
   END IF;
@@ -599,7 +599,7 @@ BEGIN
   ) THEN
     CREATE POLICY billing_credits_service ON billing_credits
       FOR ALL
-      USING (auth.role() = 'service_role');
+      FOR ALL TO service_role USING (true) WITH CHECK (true);
   END IF;
 END $$;
 

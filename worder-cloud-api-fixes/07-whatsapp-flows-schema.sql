@@ -185,14 +185,20 @@ CREATE INDEX IF NOT EXISTS idx_wcf_waba ON whatsapp_cloud_flows(waba_id);
 CREATE INDEX IF NOT EXISTS idx_wcfe_flow ON whatsapp_flow_events(flow_id);
 CREATE INDEX IF NOT EXISTS idx_wcfe_token ON whatsapp_flow_events(flow_token);
 
--- Legacy whatsapp_flows indexes
-CREATE INDEX IF NOT EXISTS idx_wf_meta_flow_id
-  ON whatsapp_flows (meta_flow_id)
-  WHERE meta_flow_id IS NOT NULL;
+-- Legacy whatsapp_flows indexes (table may not exist)
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_wf_meta_flow_id
+    ON whatsapp_flows (meta_flow_id)
+    WHERE meta_flow_id IS NOT NULL;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
 
-CREATE INDEX IF NOT EXISTS idx_wf_account_id
-  ON whatsapp_flows (account_id)
-  WHERE account_id IS NOT NULL;
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_wf_account_id
+    ON whatsapp_flows (account_id)
+    WHERE account_id IS NOT NULL;
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
 
 -- whatsapp_flow_events compat indexes
 CREATE INDEX IF NOT EXISTS idx_wfe_org_created
