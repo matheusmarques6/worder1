@@ -627,9 +627,11 @@ ALTER TABLE whatsapp_cloud_messages       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_templates            ENABLE ROW LEVEL SECURITY;
 
 -- Helper: apply standard org-scoped + service_role policies
+-- Uses profiles subquery instead of auth.organization_id() for Supabase compatibility
 DO $$
 DECLARE
   t TEXT;
+  org_check TEXT := '(SELECT organization_id FROM public.profiles WHERE id = auth.uid())';
 BEGIN
   FOR t IN SELECT unnest(ARRAY[
     'whatsapp_business_accounts',
@@ -639,30 +641,28 @@ BEGIN
     'whatsapp_templates'
   ])
   LOOP
-    -- Org-scoped CRUD for authenticated users
     EXECUTE format('DROP POLICY IF EXISTS "%s_org_select" ON %I', t, t);
     EXECUTE format('
       CREATE POLICY "%s_org_select" ON %I
-      FOR SELECT USING (organization_id = auth.organization_id())', t, t);
+      FOR SELECT USING (organization_id = %s)', t, t, org_check);
 
     EXECUTE format('DROP POLICY IF EXISTS "%s_org_insert" ON %I', t, t);
     EXECUTE format('
       CREATE POLICY "%s_org_insert" ON %I
-      FOR INSERT WITH CHECK (organization_id = auth.organization_id())', t, t);
+      FOR INSERT WITH CHECK (organization_id = %s)', t, t, org_check);
 
     EXECUTE format('DROP POLICY IF EXISTS "%s_org_update" ON %I', t, t);
     EXECUTE format('
       CREATE POLICY "%s_org_update" ON %I
       FOR UPDATE
-      USING (organization_id = auth.organization_id())
-      WITH CHECK (organization_id = auth.organization_id())', t, t);
+      USING (organization_id = %s)
+      WITH CHECK (organization_id = %s)', t, t, org_check, org_check);
 
     EXECUTE format('DROP POLICY IF EXISTS "%s_org_delete" ON %I', t, t);
     EXECUTE format('
       CREATE POLICY "%s_org_delete" ON %I
-      FOR DELETE USING (organization_id = auth.organization_id())', t, t);
+      FOR DELETE USING (organization_id = %s)', t, t, org_check);
 
-    -- Service role bypass (webhooks, crons, workers)
     EXECUTE format('DROP POLICY IF EXISTS "%s_service_role" ON %I', t, t);
     EXECUTE format('
       CREATE POLICY "%s_service_role" ON %I
