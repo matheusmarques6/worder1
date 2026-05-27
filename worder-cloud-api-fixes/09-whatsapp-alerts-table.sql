@@ -17,15 +17,18 @@ CREATE TABLE IF NOT EXISTS whatsapp_alerts (
                     'template_disabled',
                     'account_restricted',
                     'webhook_dead',
-                    'window_expiry_bulk'
+                    'window_expiry_bulk',
+                    'low_messaging_limit'
                   )),
   severity        TEXT NOT NULL CHECK (severity IN ('info', 'warning', 'critical')),
   title           TEXT NOT NULL,
   body            TEXT,
   metadata        JSONB DEFAULT '{}',
+  dedup_key       TEXT,
   acknowledged    BOOLEAN NOT NULL DEFAULT FALSE,
   acknowledged_at TIMESTAMPTZ,
   acknowledged_by UUID,
+  resolved_at     TIMESTAMPTZ,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -35,6 +38,10 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_alerts_org_ack_created
 
 CREATE INDEX IF NOT EXISTS idx_whatsapp_alerts_type_created
   ON whatsapp_alerts (type, created_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_alerts_dedup
+  ON whatsapp_alerts (organization_id, dedup_key)
+  WHERE dedup_key IS NOT NULL AND acknowledged = FALSE;
 
 -- 3. RLS
 ALTER TABLE whatsapp_alerts ENABLE ROW LEVEL SECURITY;

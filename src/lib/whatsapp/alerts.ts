@@ -34,34 +34,11 @@ export async function sendAlert(params: AlertParams): Promise<void> {
     console.log('[ALERT]', JSON.stringify(logPayload));
   }
 
-  // 2. Dedup: skip if an alert of the same type + waba_id exists in the last hour
+  // 2. Insert into whatsapp_alerts with dedup_key (UNIQUE partial index suppresses duplicates)
+  const dedupKey = wabaId ? `${type}:${wabaId}` : organizationId ? `${type}:${organizationId}` : null;
+
   try {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    let dedupQuery = supabaseAdmin
-      .from('whatsapp_alerts')
-      .select('id', { count: 'exact', head: true })
-      .eq('type', type)
-      .gte('created_at', oneHourAgo);
-
-    if (wabaId) {
-      dedupQuery = dedupQuery.eq('waba_id', wabaId);
-    }
-    if (organizationId) {
-      dedupQuery = dedupQuery.eq('organization_id', organizationId);
-    }
-
-    const { count } = await dedupQuery;
-    if (count && count > 0) {
-      // Duplicate within the last hour — skip insert
-      return;
-    }
-  } catch {
-    // Dedup check failed — proceed with insert anyway
-  }
-
-  // 3. Insert into whatsapp_alerts table
-  try {
-    await supabaseAdmin.from('whatsapp_alerts').insert({
+    const result = await supabaseAdmin.from('whatsapp_alerts').insert({
       type,
       title,
       body: message,
@@ -69,10 +46,17 @@ export async function sendAlert(params: AlertParams): Promise<void> {
       metadata: metadata || {},
       organization_id: organizationId || null,
       waba_id: wabaId || null,
-      created_at: new Date().toISOString(),
+      dedup_key: dedupKey,
     });
-  } catch {
-    // Table may not exist yet
+
+    if (result.error && result.error.code === '23505') {
+      return;
+    }
+    if (result.error) {
+      console.warn('[alerts] insert failed:', result.error.message);
+    }
+  } catch (e: any) {
+    console.warn('[alerts] persist failed:', e.message);
   }
 
   // 4. Slack webhook (if configured)
@@ -180,22 +164,23 @@ export async function checkAndAlertQualityIssues(): Promise<{
     }
   }
 
-  // Check for accounts with very low messaging limits
-  const limitedAccounts = accounts.filter(
-    (a: any) => a.messaging_limit === 'TIER_250' || a.messaging_limit === 'TIER_1K'
-  );
-
-  if (limitedAccounts.length > 0) {
-    await sendAlert({
-      severity: 'info',
-      type: 'account_restricted',
-      title: 'Low Messaging Limits Detected',
-      message: `${limitedAccounts.length} account(s) have messaging limits at TIER_250 or TIER_1K. Consider warming up these numbers.`,
-      metadata: {
-        accounts: limitedAccounts.map((a: any) => a.phone_number_id).join(', '),
-      },
-    });
-    alertsSent++;
+  for (const account of accounts) {
+    if (account.messaging_limit === 'TIER_250' || account.messaging_limit === 'TIER_1K') {
+      await sendAlert({
+        severity: 'info',
+        type: 'low_messaging_limit',
+        title: 'Low Messaging Limit',
+        message: `Account ${account.verified_name || account.display_phone_number} is at ${account.messaging_limit}. Consider warming up to TIER_10K+.`,
+        metadata: {
+          waba_id: account.waba_id,
+          phone_number_id: account.phone_number_id,
+          messaging_limit: account.messaging_limit,
+        },
+        organizationId: account.organization_id,
+        wabaId: account.id,
+      });
+      alertsSent++;
+    }
   }
 
   return { checked, alerts_sent: alertsSent, errors };
