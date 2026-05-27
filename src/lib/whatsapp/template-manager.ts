@@ -35,7 +35,7 @@ export interface WhatsAppTemplate {
   name: string
   language: string
   category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
-  status: 'approved' | 'pending' | 'rejected'
+  status: 'APPROVED' | 'PENDING' | 'REJECTED' | 'PAUSED' | 'DISABLED' | 'IN_APPEAL' | 'PENDING_DELETION' | 'DELETED'
   rejection_reason?: string
   header_type?: 'none' | 'text' | 'image' | 'video' | 'document'
   header_text?: string
@@ -110,7 +110,7 @@ export class TemplateManager {
     status?: string
     forceRefresh?: boolean
   } = {}): Promise<WhatsAppTemplate[]> {
-    const { category, status = 'approved', forceRefresh = false } = options
+    const { category, status = 'APPROVED', forceRefresh = false } = options
     const cacheKey = `${CACHE_CONFIG.PREFIX}:${this.organizationId}:${status}:${category || 'all'}`
 
     // Tentar cache primeiro (se não forçar refresh)
@@ -135,7 +135,7 @@ export class TemplateManager {
       .order('use_count', { ascending: false })
 
     if (category) query = query.eq('category', category)
-    if (status) query = query.eq('status', status)
+    if (status) query = query.eq('status', status.toUpperCase())
 
     const { data, error } = await query
 
@@ -250,7 +250,7 @@ export class TemplateManager {
     }
 
     // Extrair do header (se for texto)
-    if (template.header_type === 'text' && template.header_text) {
+    if (template.header_type?.toUpperCase() === 'TEXT' && template.header_text) {
       regex.lastIndex = 0
       while ((match = regex.exec(template.header_text)) !== null) {
         const index = parseInt(match[1])
@@ -306,7 +306,7 @@ export class TemplateManager {
     }
 
     // Verificar se status é approved
-    if (template.status !== 'approved') {
+    if (template.status !== 'APPROVED') {
       errors.push(`Template não está aprovado (status: ${template.status})`)
     }
 
@@ -339,7 +339,7 @@ export class TemplateManager {
     }
 
     return {
-      header: template.header_type === 'text' && template.header_text
+      header: template.header_type?.toUpperCase() === 'TEXT' && template.header_text
         ? replaceVars(template.header_text)
         : undefined,
       body: replaceVars(template.body_text),
@@ -383,10 +383,14 @@ export class TemplateManager {
     }
 
     // 2. Verificar status
-    if (template.status === 'rejected') {
+    if (template.status === 'REJECTED') {
       errors.push(`Template foi rejeitado: ${template.rejection_reason || 'Motivo não informado'}`)
-    } else if (template.status === 'pending') {
+    } else if (template.status === 'PENDING') {
       errors.push('Template ainda está pendente de aprovação da Meta')
+    } else if (template.status === 'PAUSED') {
+      errors.push('Template está pausado pela Meta devido a problemas de qualidade')
+    } else if (template.status === 'DISABLED') {
+      errors.push('Template está desabilitado e não pode ser usado para envio')
     }
 
     // 3. Validar variáveis
