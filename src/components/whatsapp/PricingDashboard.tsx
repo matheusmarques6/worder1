@@ -150,9 +150,9 @@ export function PricingDashboard({
         />
         <SummaryCard
           icon={Gift}
-          label="Gratuitas (Servico)"
-          value={estimate.free_tier_conversations.toLocaleString('pt-BR')}
-          subtext="de 1.000/mes"
+          label="Mensagens Cobradas"
+          value={estimate.billable_messages.toLocaleString('pt-BR')}
+          subtext="modelo PMP"
           iconBg="bg-purple-50"
           iconColor="text-purple-500"
         />
@@ -249,7 +249,7 @@ export function PricingDashboard({
           {/* Pricing reference */}
           <div className="mt-4 pt-3 border-t border-gray-200">
             <p className="text-[11px] text-gray-400">
-              Precos por conversa (24h) para o Brasil. Servico: 1.000 conversas gratuitas/mes por WABA.
+              Precos por mensagem (PMP) para o Brasil. Servico dentro da janela de 24h e gratuito.
             </p>
           </div>
         </Card>

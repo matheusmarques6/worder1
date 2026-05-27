@@ -590,7 +590,7 @@ export class WhatsAppCloudError extends Error {
   }
 
   isFrequencyCapped(): boolean {
-    return this.code === 131048;
+    return this.code === 131049;
   }
 
   isWindowExpired(): boolean {

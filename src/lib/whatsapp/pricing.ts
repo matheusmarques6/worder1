@@ -1,18 +1,11 @@
-// Meta WhatsApp Business Platform pricing for Brazil (BRL)
+// Meta WhatsApp Business Platform pricing for Brazil (USD per message)
 // Updated: May 2026 — https://developers.facebook.com/docs/whatsapp/pricing
-// Prices are per conversation (24h window), not per message.
+// PMP (Per-Message Pricing) model — effective since 2025.
 
 export type PricingCategory = 'marketing' | 'utility' | 'authentication' | 'service';
 
+/** Per-message prices in USD for the Brazil market. */
 export const BRAZIL_PRICING: Record<PricingCategory, number> = {
-  marketing: 0.0625,
-  utility: 0.008,
-  authentication: 0.0315,
-  service: 0.0,
-};
-
-// For reference: USD equivalents (approximate)
-export const BRAZIL_PRICING_USD: Record<PricingCategory, number> = {
   marketing: 0.0625,
   utility: 0.008,
   authentication: 0.0315,
@@ -35,12 +28,8 @@ export interface MessageWithCategory {
 export interface MonthlyEstimate {
   total: number;
   breakdown: Record<PricingCategory, { count: number; cost: number }>;
-  free_tier_conversations: number;
-  billable_conversations: number;
+  billable_messages: number;
 }
-
-// Meta gives 1,000 free service conversations per month per WABA
-const FREE_SERVICE_CONVERSATIONS = 1000;
 
 export function estimateMonthlySpend(messages: MessageWithCategory[]): MonthlyEstimate {
   const breakdown: Record<PricingCategory, { count: number; cost: number }> = {
@@ -62,24 +51,27 @@ export function estimateMonthlySpend(messages: MessageWithCategory[]): MonthlyEs
     breakdown[cat].cost += calculateMessageCost(cat, count);
   }
 
-  // Apply free tier to service conversations
-  const serviceConversations = breakdown.service.count;
-  const freeApplied = Math.min(serviceConversations, FREE_SERVICE_CONVERSATIONS);
-  const billableService = Math.max(0, serviceConversations - FREE_SERVICE_CONVERSATIONS);
-  breakdown.service.cost = calculateMessageCost('service', billableService);
-
-  const totalConversations = Object.values(breakdown).reduce((sum, b) => sum + b.count, 0);
+  // PMP: no free tier — all messages are charged per-message
+  const billableMessages = Object.values(breakdown).reduce((sum, b) => sum + b.count, 0);
   const total = Object.values(breakdown).reduce((sum, b) => sum + b.cost, 0);
 
   return {
     total: Math.round(total * 10000) / 10000,
     breakdown,
-    free_tier_conversations: freeApplied,
-    billable_conversations: totalConversations - freeApplied,
+    billable_messages: billableMessages,
   };
 }
 
-export function formatCurrency(amount: number, currency: string = 'USD'): string {
+export function formatCurrency(amount: number, currency: string = 'BRL'): string {
+  if (currency === 'BRL') {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    }).format(amount);
+  }
+
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
