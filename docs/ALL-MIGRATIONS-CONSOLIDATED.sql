@@ -2234,7 +2234,6 @@ BEGIN
     SELECT 1 FROM pg_policies WHERE policyname = 'billing_invoices_service'
   ) THEN
     CREATE POLICY billing_invoices_service ON billing_invoices
-      FOR ALL
       FOR ALL TO service_role USING (true) WITH CHECK (true);
   END IF;
 END $$;
@@ -2264,7 +2263,6 @@ BEGIN
     SELECT 1 FROM pg_policies WHERE policyname = 'billing_line_items_service'
   ) THEN
     CREATE POLICY billing_line_items_service ON billing_line_items
-      FOR ALL
       FOR ALL TO service_role USING (true) WITH CHECK (true);
   END IF;
 END $$;
@@ -2294,7 +2292,6 @@ BEGIN
     SELECT 1 FROM pg_policies WHERE policyname = 'billing_credits_service'
   ) THEN
     CREATE POLICY billing_credits_service ON billing_credits
-      FOR ALL
       FOR ALL TO service_role USING (true) WITH CHECK (true);
   END IF;
 END $$;
