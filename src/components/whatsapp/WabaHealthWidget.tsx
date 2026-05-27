@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
+import { getSupabaseClient } from '@/lib/supabase-client'
 import {
   ShieldCheck, ShieldAlert, ShieldX, Shield,
   RefreshCw, Loader2, ExternalLink, Zap
@@ -88,7 +89,11 @@ export function WabaHealthWidget({
     try {
       setLoading(true)
       setError(null)
-      const res = await fetch(`/api/whatsapp/cloud/accounts`)
+      const { data: { session } } = await getSupabaseClient().auth.getSession()
+      const token = session?.access_token || ''
+      const res = await fetch(`/api/whatsapp/cloud/accounts`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Falha ao carregar')
       const account = (json.accounts || [])[0]
