@@ -98,6 +98,14 @@ CREATE TABLE IF NOT EXISTS whatsapp_flow_events (
 
 DO $$
 BEGIN
+  -- Skip entirely if whatsapp_flows table does not exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'whatsapp_flows'
+  ) THEN
+    RETURN;
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_name = 'whatsapp_flows'
