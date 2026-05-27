@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export interface AlertParams {
   severity: 'info' | 'warning' | 'critical';
-  type: 'quality_drop' | 'frequency_cap' | 'template_rejected' | 'template_paused' | 'template_disabled' | 'account_restricted' | 'webhook_dead' | 'window_expiry_bulk';
+  type: 'quality_drop' | 'frequency_cap' | 'template_rejected' | 'template_paused' | 'template_disabled' | 'account_restricted' | 'webhook_dead' | 'window_expiry_bulk' | 'low_messaging_limit';
   title: string;
   message: string;
   metadata?: Record<string, any>;
