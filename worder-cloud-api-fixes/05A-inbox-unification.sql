@@ -149,12 +149,11 @@ SELECT
   lm.id::TEXT                            AS wa_message_id,
   'inbound'::TEXT                        AS direction,
   'text'::TEXT                           AS message_type,
+  lm.content::JSONB                      AS content,
   CASE
-    WHEN lm.content IS NOT NULL AND lm.content ~ '^\s*[\[{]'
-    THEN lm.content::JSONB
-    ELSE jsonb_build_object('text', jsonb_build_object('body', COALESCE(lm.content, '')))
-  END                                    AS content,
-  lm.content                             AS text_body,
+    WHEN lm.content IS NOT NULL THEN lm.content::TEXT
+    ELSE ''
+  END                                    AS text_body,
   NULL::TEXT                              AS caption,
   NULL::TEXT                              AS media_id,
   NULL::TEXT                              AS media_url,
