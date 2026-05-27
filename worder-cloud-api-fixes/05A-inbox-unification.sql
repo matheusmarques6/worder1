@@ -74,30 +74,27 @@ FROM whatsapp_cloud_conversations c
 
 UNION ALL
 
--- Legacy Evolution conversations (only if table exists)
+-- Legacy Evolution conversations
 SELECT
   lc.id,
   lc.organization_id,
   'evolution'::TEXT                      AS provider,
-  lc.whatsapp_account_id::UUID          AS account_id,
+  NULL::UUID                             AS account_id,
   lc.contact_id,
   lc.phone_number,
-  lc.wa_conversation_id                 AS chat_id,
+  NULL::TEXT                             AS chat_id,
   lc.contact_name,
   lc.phone_number                       AS contact_phone,
   NULL::TEXT                             AS profile_picture,
   lc.status,
-  CASE
-    WHEN lc.window_expires_at IS NOT NULL AND lc.window_expires_at > now()
-    THEN TRUE ELSE FALSE
-  END                                   AS is_window_open,
-  lc.window_expires_at,
+  FALSE                                  AS is_window_open,
+  NULL::TIMESTAMPTZ                      AS window_expires_at,
   lc.assigned_to,
-  lc.unread_count,
+  COALESCE(lc.unread_count, 0)           AS unread_count,
   lc.last_message_at,
   NULL::TIMESTAMPTZ                     AS last_customer_message_at,
   lc.last_message_preview,
-  lc.last_message_direction,
+  NULL::TEXT                             AS last_message_direction,
   lc.created_at,
   lc.updated_at
 FROM whatsapp_conversations lc;
@@ -142,15 +139,16 @@ FROM whatsapp_cloud_messages m
 UNION ALL
 
 -- Legacy Evolution messages (JOIN to get organization_id)
+-- Uses only columns guaranteed to exist in the base whatsapp_messages table
 SELECT
   lm.id,
   lc.organization_id,
   'evolution'::TEXT                       AS provider,
   lm.conversation_id,
-  lm.wa_message_id                       AS message_id,
-  lm.wa_message_id,
-  lm.direction,
-  lm.message_type,
+  lm.id::TEXT                            AS message_id,
+  lm.id::TEXT                            AS wa_message_id,
+  'inbound'::TEXT                        AS direction,
+  'text'::TEXT                           AS message_type,
   CASE
     WHEN lm.content IS NOT NULL AND lm.content ~ '^\s*[\[{]'
     THEN lm.content::JSONB
@@ -159,17 +157,17 @@ SELECT
   lm.content                             AS text_body,
   NULL::TEXT                              AS caption,
   NULL::TEXT                              AS media_id,
-  lm.media_url,
-  lm.media_filename,
-  lm.media_mime_type,
-  lm.template_name,
-  lm.status,
-  lm.error_code,
-  lm.error_message,
-  COALESCE(lm.sent_by_bot, FALSE)        AS sent_by_bot,
-  lm.delivered_at,
-  lm.read_at,
-  COALESCE(lm.sent_at, lm.created_at)   AS sent_at,
+  NULL::TEXT                              AS media_url,
+  NULL::TEXT                              AS media_filename,
+  NULL::TEXT                              AS media_mime_type,
+  NULL::TEXT                              AS template_name,
+  'sent'::TEXT                           AS status,
+  NULL::TEXT                              AS error_code,
+  NULL::TEXT                              AS error_message,
+  FALSE                                   AS sent_by_bot,
+  NULL::TIMESTAMPTZ                       AS delivered_at,
+  NULL::TIMESTAMPTZ                       AS read_at,
+  lm.created_at                          AS sent_at,
   lm.created_at
 FROM whatsapp_messages lm
 JOIN whatsapp_conversations lc ON lc.id = lm.conversation_id;
