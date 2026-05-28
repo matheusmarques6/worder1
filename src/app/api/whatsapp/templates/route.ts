@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
     const category = searchParams.get('category')
-    const status = searchParams.get('status') || 'approved'
+    const status = searchParams.get('status')
     const search = searchParams.get('search')
 
     let query = supabase
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       .from('whatsapp_templates')
       .insert({
         organization_id: organizationId || '00000000-0000-0000-0000-000000000000',
-        name, category, language, status: 'pending',
+        name, category, language, status: 'PENDING',
         header_type, header_text, header_media_url, body_text, body_variables, footer_text, buttons
       })
       .select('*')

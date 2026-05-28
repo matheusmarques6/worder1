@@ -26,8 +26,20 @@ export default function WhatsAppSettingsPage() {
   const { currentStore } = useStoreStore()
   const [activeTab, setActiveTab] = useState<TabId>('instances')
 
-  const organizationId = user?.organization_id || 'default-org'
+  const organizationId = user?.organization_id
   const storeId = currentStore?.id
+
+  if (!organizationId) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white rounded-2xl p-8 shadow-sm text-center text-gray-500">
+            Carregando configurações...
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
