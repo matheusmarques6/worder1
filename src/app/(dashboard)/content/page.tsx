@@ -27,7 +27,7 @@ interface Template {
 
 const tabs = [
   { id: 'email-templates', label: 'Templates E-mail', icon: EnvelopeSimple, href: '/content/templates' },
-  { id: 'whatsapp-templates', label: 'Templates WhatsApp', icon: WhatsappLogo, href: '/content/templates/whatsapp' },
+  { id: 'whatsapp-templates', label: 'Templates WhatsApp', icon: WhatsappLogo, href: '/whatsapp/templates' },
   { id: 'products', label: 'Produtos', icon: ShoppingBag, href: '/content/products' },
   { id: 'media', label: 'Mídia', icon: Image, href: '/content/media' },
   { id: 'coupons', label: 'Cupons', icon: Tag, href: '/content/coupons' },
