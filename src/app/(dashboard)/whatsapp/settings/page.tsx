@@ -1,477 +1,76 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useStoreStore } from '@/stores'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Settings, Smartphone, Key, QrCode, Check, X, Loader2, Eye, EyeOff,
-  Plus, Trash2, RefreshCw, Globe, MessageSquare, ChevronDown, Copy,
-  Wifi, WifiOff, AlertCircle
-} from 'lucide-react'
+import { useState } from 'react'
+import { Settings, Smartphone, Users, MessageSquare, Clock, ShieldCheck, Globe } from 'lucide-react'
+import { useAuthStore, useStoreStore } from '@/stores'
+import { InstancesTab } from '@/components/whatsapp/settings/InstancesTab'
+import { QueuesTab } from '@/components/whatsapp/settings/QueuesTab'
+import { QuickRepliesTab } from '@/components/whatsapp/settings/QuickRepliesTab'
+import { BusinessHoursTab } from '@/components/whatsapp/settings/BusinessHoursTab'
+import { OptStatusTab } from '@/components/whatsapp/settings/OptStatusTab'
+import { WidgetTab } from '@/components/whatsapp/settings/WidgetTab'
 
-// Tipos
-interface MetaConfig {
-  id?: string
-  phone_number_id: string
-  waba_id: string
-  access_token: string
-  business_name?: string
-  phone_number?: string
-  is_active: boolean
-}
+type TabId = 'instances' | 'queues' | 'quick-replies' | 'business-hours' | 'opt-status' | 'widget'
 
-interface Instance {
-  id: string
-  title: string
-  unique_id: string
-  phone_number?: string
-  status: 'GENERATING' | 'ACTIVE' | 'INACTIVE' | 'BANNED'
-  online_status: 'available' | 'unavailable'
-  api_type: 'META' | 'EVOLUTION'
-  qr_code?: string
-  api_url?: string
-}
+const TABS: { id: TabId; label: string; icon: typeof Settings }[] = [
+  { id: 'instances', label: 'Numeros', icon: Smartphone },
+  { id: 'queues', label: 'Filas', icon: Users },
+  { id: 'quick-replies', label: 'Respostas Rapidas', icon: MessageSquare },
+  { id: 'business-hours', label: 'Horario', icon: Clock },
+  { id: 'opt-status', label: 'Opt-in/Out', icon: ShieldCheck },
+  { id: 'widget', label: 'Widget', icon: Globe },
+]
 
 export default function WhatsAppSettingsPage() {
+  const { user } = useAuthStore()
   const { currentStore } = useStoreStore()
-  const [activeTab, setActiveTab] = useState<'meta' | 'instances'>('meta')
-  
-  // Meta API State
-  const [metaConfig, setMetaConfig] = useState<MetaConfig>({
-    phone_number_id: '',
-    waba_id: '',
-    access_token: '',
-    is_active: true
-  })
-  const [showToken, setShowToken] = useState(false)
-  const [metaLoading, setMetaLoading] = useState(false)
-  const [metaSaved, setMetaSaved] = useState(false)
+  const [activeTab, setActiveTab] = useState<TabId>('instances')
 
-  // Instances State
-  const [instances, setInstances] = useState<Instance[]>([])
-  const [instancesLoading, setInstancesLoading] = useState(true)
-  const [showNewInstance, setShowNewInstance] = useState(false)
-  const [newInstanceTitle, setNewInstanceTitle] = useState('')
-  const [evolutionUrl, setEvolutionUrl] = useState('')
-  const [evolutionKey, setEvolutionKey] = useState('')
-  const [qrLoading, setQrLoading] = useState<string | null>(null)
-
-  // Load data
-  useEffect(() => {
-    loadMetaConfig()
-    loadInstances()
-  }, [currentStore?.id])
-
-  // =============================================
-  // META API
-  // =============================================
-  const loadMetaConfig = async () => {
-    try {
-      const res = await fetch('/api/whatsapp/templates?action=config')
-      const data = await res.json()
-      if (data.config) {
-        setMetaConfig(data.config)
-      }
-    } catch (e) {
-      console.error('Error loading meta config:', e)
-    }
-  }
-
-  const saveMetaConfig = async () => {
-    setMetaLoading(true)
-    try {
-      const res = await fetch('/api/whatsapp/templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save_config', ...metaConfig })
-      })
-      const data = await res.json()
-      if (data.success) {
-        setMetaSaved(true)
-        setTimeout(() => setMetaSaved(false), 3000)
-      }
-    } catch (e) {
-      console.error('Error saving meta config:', e)
-    } finally {
-      setMetaLoading(false)
-    }
-  }
-
-  // =============================================
-  // INSTANCES
-  // =============================================
-  const loadInstances = async () => {
-    try {
-      const res = await fetch('/api/whatsapp/instances?organization_id=default')
-      const data = await res.json()
-      setInstances(data.instances || [])
-    } catch (e) {
-      console.error('Error loading instances:', e)
-    } finally {
-      setInstancesLoading(false)
-    }
-  }
-
-  const createInstance = async () => {
-    if (!newInstanceTitle) return
-
-    try {
-      const res = await fetch('/api/whatsapp/instances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create',
-          organization_id: 'default',
-          store_id: currentStore?.id,
-          title: newInstanceTitle,
-          api_type: 'EVOLUTION',
-          api_url: evolutionUrl,
-          api_key: evolutionKey
-        })
-      })
-      const data = await res.json()
-      
-      if (data.instance) {
-        setInstances([data.instance, ...instances])
-        setShowNewInstance(false)
-        setNewInstanceTitle('')
-      }
-    } catch (e) {
-      console.error('Error creating instance:', e)
-    }
-  }
-
-  const generateQR = async (instanceId: string) => {
-    setQrLoading(instanceId)
-    try {
-      const res = await fetch('/api/whatsapp/instances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'qr', instance_id: instanceId })
-      })
-      const data = await res.json()
-      
-      if (data.qr_code) {
-        setInstances(instances.map(i => 
-          i.id === instanceId ? { ...i, qr_code: data.qr_code, status: 'GENERATING' } : i
-        ))
-      } else if (data.status === 'ACTIVE') {
-        setInstances(instances.map(i => 
-          i.id === instanceId ? { ...i, status: 'ACTIVE', phone_number: data.phone_number } : i
-        ))
-      }
-    } catch (e) {
-      console.error('Error generating QR:', e)
-    } finally {
-      setQrLoading(null)
-    }
-  }
-
-  const deleteInstance = async (instanceId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta instância?')) return
-
-    try {
-      await fetch(`/api/whatsapp/instances?id=${instanceId}&organization_id=default`, { method: 'DELETE' })
-      setInstances(instances.filter(i => i.id !== instanceId))
-    } catch (e) {
-      console.error('Error deleting instance:', e)
-    }
-  }
-
-  // Webhook URL
-  const webhookUrl = typeof window !== 'undefined' 
-    ? `${window.location.origin}/api/whatsapp/webhook?org=default`
-    : ''
+  const organizationId = user?.organization_id || 'default-org'
+  const storeId = currentStore?.id
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-            <Settings className="w-7 h-7 text-violet-400" />
-            Configurações WhatsApp
+            <Settings className="w-7 h-7 text-primary-500" />
+            Configuracoes WhatsApp
           </h1>
-          <p className="text-gray-500 mt-1">Configure suas integrações e automações</p>
+          <p className="text-gray-500 mt-1">Configure numeros, filas, horarios e integracoes</p>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
-          {[
-            { id: 'meta', label: 'Meta API', icon: Globe },
-            { id: 'instances', label: 'QR Code', icon: QrCode },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-                activeTab === tab.id
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-gray-50 text-gray-500 hover:text-white hover:bg-gray-100'
-              }`}
-            >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-1 mb-6 border-b border-gray-200">
+          {TABS.map(tab => {
+            const Icon = tab.icon
+            const isActive = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-all -mb-px ${
+                  isActive
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            )
+          })}
         </div>
 
         {/* Content */}
-        <AnimatePresence mode="wait">
-          {/* META API TAB */}
-          {activeTab === 'meta' && (
-            <motion.div
-              key="meta"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="bg-white rounded-2xl border border-slate-800/50 p-6"
-            >
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-3 bg-green-500/20 rounded-xl">
-                  <Globe className="w-6 h-6 text-green-400" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Meta WhatsApp Business API</h2>
-                  <p className="text-sm text-gray-500">Conexão oficial via Meta Business Suite</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Phone Number ID</label>
-                  <input
-                    type="text"
-                    value={metaConfig.phone_number_id}
-                    onChange={e => setMetaConfig({ ...metaConfig, phone_number_id: e.target.value })}
-                    placeholder="Ex: 123456789012345"
-                    className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">WABA ID (Business Account)</label>
-                  <input
-                    type="text"
-                    value={metaConfig.waba_id}
-                    onChange={e => setMetaConfig({ ...metaConfig, waba_id: e.target.value })}
-                    placeholder="Ex: 123456789012345"
-                    className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Access Token</label>
-                  <div className="relative">
-                    <input
-                      type={showToken ? 'text' : 'password'}
-                      value={metaConfig.access_token}
-                      onChange={e => setMetaConfig({ ...metaConfig, access_token: e.target.value })}
-                      placeholder="EAAxxxxxxxx..."
-                      className="w-full px-4 py-3 pr-12 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
-                    />
-                    <button
-                      onClick={() => setShowToken(!showToken)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
-                    >
-                      {showToken ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Webhook URL</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={webhookUrl}
-                      readOnly
-                      className="flex-1 px-4 py-3 bg-gray-100/30 border border-slate-700/50 rounded-xl text-gray-500"
-                    />
-                    <button
-                      onClick={() => navigator.clipboard.writeText(webhookUrl)}
-                      className="px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-500 hover:text-white"
-                    >
-                      <Copy className="w-5 h-5" />
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1">Configure este URL no Meta Business Suite</p>
-                </div>
-
-                <button
-                  onClick={saveMetaConfig}
-                  disabled={metaLoading}
-                  className="w-full py-3 bg-green-600 text-gray-900 font-medium rounded-xl hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {metaLoading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : metaSaved ? (
-                    <>
-                      <Check className="w-5 h-5" />
-                      Salvo!
-                    </>
-                  ) : (
-                    'Salvar Configuração'
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          )}
-
-          {/* INSTANCES TAB */}
-          {activeTab === 'instances' && (
-            <motion.div
-              key="instances"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-4"
-            >
-              {/* Add New Instance */}
-              {!showNewInstance ? (
-                <button
-                  onClick={() => setShowNewInstance(true)}
-                  className="w-full p-4 border-2 border-dashed border-slate-700/50 rounded-2xl text-gray-500 hover:text-white hover:border-violet-500/50 flex items-center justify-center gap-2 transition-colors"
-                >
-                  <Plus className="w-5 h-5" />
-                  Adicionar Conexão QR Code
-                </button>
-              ) : (
-                <div className="bg-white rounded-2xl border border-slate-800/50 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Nova Conexão</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-2">Nome da Instância</label>
-                      <input
-                        type="text"
-                        value={newInstanceTitle}
-                        onChange={e => setNewInstanceTitle(e.target.value)}
-                        placeholder="Ex: WhatsApp Principal"
-                        className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-2">Evolution API URL</label>
-                      <input
-                        type="text"
-                        value={evolutionUrl}
-                        onChange={e => setEvolutionUrl(e.target.value)}
-                        placeholder="Ex: https://evolution.seudominio.com"
-                        className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-2">Evolution API Key</label>
-                      <input
-                        type="password"
-                        value={evolutionKey}
-                        onChange={e => setEvolutionKey(e.target.value)}
-                        placeholder="Sua API Key"
-                        className="w-full px-4 py-3 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-500 focus:outline-none focus:border-violet-500/50"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setShowNewInstance(false)}
-                        className="flex-1 py-3 bg-gray-50 text-gray-600 font-medium rounded-xl hover:bg-gray-100"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        onClick={createInstance}
-                        className="flex-1 py-3 bg-violet-600 text-gray-900 font-medium rounded-xl hover:bg-violet-700"
-                      >
-                        Criar Instância
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Instances List */}
-              {instancesLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
-                </div>
-              ) : instances.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
-                  <QrCode className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>Nenhuma instância configurada</p>
-                </div>
-              ) : (
-                instances.map(instance => (
-                  <div key={instance.id} className="bg-white rounded-2xl border border-slate-800/50 p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-3 rounded-xl ${instance.status === 'ACTIVE' ? 'bg-green-500/20' : 'bg-gray-50'}`}>
-                          {instance.status === 'ACTIVE' ? (
-                            <Wifi className="w-6 h-6 text-green-400" />
-                          ) : (
-                            <WifiOff className="w-6 h-6 text-gray-500" />
-                          )}
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-900">{instance.title}</h3>
-                          <p className="text-sm text-gray-500">
-                            {instance.phone_number || instance.unique_id}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          instance.status === 'ACTIVE' 
-                            ? 'bg-green-500/20 text-green-400' 
-                            : instance.status === 'GENERATING'
-                              ? 'bg-yellow-500/20 text-yellow-400'
-                              : 'bg-gray-200/50 text-gray-500'
-                        }`}>
-                          {instance.status}
-                        </span>
-                        <button
-                          onClick={() => deleteInstance(instance.id)}
-                          className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* QR Code */}
-                    {instance.status !== 'ACTIVE' && (
-                      <div className="mt-4">
-                        {instance.qr_code ? (
-                          <div className="flex flex-col items-center p-4 bg-white rounded-xl">
-                            <img 
-                              src={instance.qr_code.startsWith('data:') ? instance.qr_code : `data:image/png;base64,${instance.qr_code}`} 
-                              alt="QR Code" 
-                              className="w-64 h-64"
-                            />
-                            <p className="mt-2 text-sm text-slate-600">Escaneie com o WhatsApp</p>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => generateQR(instance.id)}
-                            disabled={qrLoading === instance.id}
-                            className="w-full py-3 bg-violet-600 text-gray-900 font-medium rounded-xl hover:bg-violet-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                          >
-                            {qrLoading === instance.id ? (
-                              <Loader2 className="w-5 h-5 animate-spin" />
-                            ) : (
-                              <>
-                                <QrCode className="w-5 h-5" />
-                                Gerar QR Code
-                              </>
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="bg-white rounded-2xl p-6 border border-gray-200">
+          {activeTab === 'instances' && <InstancesTab organizationId={organizationId} />}
+          {activeTab === 'queues' && <QueuesTab organizationId={organizationId} />}
+          {activeTab === 'quick-replies' && <QuickRepliesTab organizationId={organizationId} />}
+          {activeTab === 'business-hours' && <BusinessHoursTab organizationId={organizationId} storeId={storeId} />}
+          {activeTab === 'opt-status' && <OptStatusTab organizationId={organizationId} />}
+          {activeTab === 'widget' && <WidgetTab organizationId={organizationId} storeId={storeId} />}
+        </div>
       </div>
     </div>
   )

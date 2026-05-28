@@ -38,6 +38,11 @@ import {
   User,
   Building2,
   Menu,
+  Send,
+  Bot,
+  GitBranch,
+  ListChecks,
+  Inbox,
 } from 'lucide-react'
 import { Avatar, Tooltip } from '@/components/ui'
 import { AddStoreModal } from '@/components/store/AddStoreModal'
@@ -53,6 +58,7 @@ interface NavItem {
   href: string
   icon: React.ComponentType<{ className?: string }>
   badge?: number
+  children?: NavItem[]
 }
 
 interface NotificationData {
@@ -83,7 +89,20 @@ const mainNavItems: NavItem[] = [
   { title: 'Pedidos', href: '/orders', icon: ShoppingCart },
   { title: 'Produtos', href: '/products', icon: Package },
   { title: 'CRM', href: '/crm', icon: Users },
-  { title: 'WhatsApp', href: '/whatsapp', icon: MessageSquare, badge: 3 },
+  {
+    title: 'WhatsApp',
+    href: '/whatsapp',
+    icon: MessageSquare,
+    children: [
+      { title: 'Inbox', href: '/whatsapp/inbox', icon: Inbox },
+      { title: 'Campanhas', href: '/whatsapp/campaigns', icon: Send },
+      { title: 'Templates', href: '/whatsapp/templates', icon: FileText },
+      { title: 'Agentes IA', href: '/whatsapp/ai-agents', icon: Bot },
+      { title: 'Fluxos', href: '/whatsapp/flows', icon: GitBranch },
+      { title: 'Listas', href: '/whatsapp/phonebooks', icon: ListChecks },
+      { title: 'Configuracoes', href: '/whatsapp/settings', icon: Settings },
+    ],
+  },
 ]
 
 const toolsNavItems: NavItem[] = [
@@ -154,18 +173,56 @@ export function Sidebar() {
 
   const NavLink = ({ item }: { item: NavItem }) => {
     const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+    const hasChildren = !!item.children && item.children.length > 0
     const Icon = item.icon
 
-    const content = (
-      <Link
-        href={item.href}
-        className={cn(
-          'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200',
-          'hover:bg-sidebar-hover',
-          isActive && 'bg-sidebar-active text-white border-l-[3px] border-brand-500',
-          !isActive && 'text-gray-400 hover:text-gray-200'
-        )}
+    // Sub-menu state: open if route is active or user toggled
+    const [subOpen, setSubOpen] = useState(isActive && hasChildren)
+    useEffect(() => {
+      if (isActive && hasChildren) setSubOpen(true)
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pathname])
+
+    const rowClasses = cn(
+      'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200',
+      'hover:bg-sidebar-hover',
+      isActive && 'bg-sidebar-active text-white border-l-[3px] border-brand-500',
+      !isActive && 'text-gray-400 hover:text-gray-200',
+    )
+
+    const Row = hasChildren ? (
+      <button
+        type="button"
+        onClick={() => {
+          if (sidebarCollapsed) return
+          setSubOpen(o => !o)
+        }}
+        className={cn(rowClasses, 'w-full text-left')}
       >
+        <Icon className={cn('w-5 h-5 flex-shrink-0', isActive && 'text-brand-400')} />
+        <AnimatePresence>
+          {!sidebarCollapsed && (
+            <motion.span
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: 'auto' }}
+              exit={{ opacity: 0, width: 0 }}
+              className="font-medium whitespace-nowrap overflow-hidden"
+            >
+              {item.title}
+            </motion.span>
+          )}
+        </AnimatePresence>
+        {!sidebarCollapsed && (
+          <ChevronDown
+            className={cn(
+              'ml-auto w-4 h-4 text-gray-500 transition-transform',
+              subOpen && 'rotate-180',
+            )}
+          />
+        )}
+      </button>
+    ) : (
+      <Link href={item.href} className={rowClasses}>
         <Icon className={cn('w-5 h-5 flex-shrink-0', isActive && 'text-brand-400')} />
         <AnimatePresence>
           {!sidebarCollapsed && (
@@ -190,15 +247,54 @@ export function Sidebar() {
       </Link>
     )
 
-    if (sidebarCollapsed) {
-      return (
-        <Tooltip content={item.title} side="right">
-          <div className="relative">{content}</div>
-        </Tooltip>
-      )
-    }
+    const wrapped = sidebarCollapsed ? (
+      <Tooltip content={item.title} side="right">
+        <div className="relative">{Row}</div>
+      </Tooltip>
+    ) : (
+      Row
+    )
 
-    return content
+    return (
+      <div>
+        {wrapped}
+        {hasChildren && !sidebarCollapsed && (
+          <AnimatePresence initial={false}>
+            {subOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="overflow-hidden"
+              >
+                <div className="ml-4 mt-1 mb-1 pl-3 border-l border-gray-700/30 space-y-1">
+                  {item.children!.map(child => {
+                    const ChildIcon = child.icon
+                    const childActive = pathname === child.href || pathname.startsWith(child.href + '/')
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className={cn(
+                          'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                          childActive
+                            ? 'bg-sidebar-active text-white'
+                            : 'text-gray-400 hover:text-gray-200 hover:bg-sidebar-hover',
+                        )}
+                      >
+                        <ChildIcon className={cn('w-4 h-4 flex-shrink-0', childActive && 'text-brand-400')} />
+                        <span className="font-medium truncate">{child.title}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
+      </div>
+    )
   }
 
   return (
