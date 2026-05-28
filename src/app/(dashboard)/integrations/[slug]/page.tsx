@@ -15,11 +15,7 @@ import {
 import { useAuthStore } from '@/stores'
 
 // Importar componentes de integração específicos
-import WhatsAppCloudConnect from '@/components/integrations/whatsapp/WhatsAppCloudConnect'
-import WhatsAppEmbeddedSignup from '@/components/integrations/whatsapp/WhatsAppEmbeddedSignup'
-import EvolutionConnect from '@/components/integrations/whatsapp/EvolutionConnect'
 import ShopifyConnect from '@/components/integrations/shopify/ShopifyConnect'
-import { getSupabaseClient } from '@/lib/supabase-client'
 
 interface Integration {
   id: string
@@ -50,39 +46,20 @@ export default function IntegrationConfigPage() {
   const [installed, setInstalled] = useState<InstalledIntegration | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState<'cloud' | 'evolution'>('cloud')
   const [copied, setCopied] = useState(false)
-  const [embeddedSignupEnabled, setEmbeddedSignupEnabled] = useState(false)
-  const [showManualConnect, setShowManualConnect] = useState(false)
+
+  // WhatsApp now has a dedicated settings hub — redirect any legacy /integrations/whatsapp link.
+  useEffect(() => {
+    if (slug === 'whatsapp') {
+      router.replace('/whatsapp/settings')
+    }
+  }, [slug, router])
 
   useEffect(() => {
-    if (slug) {
+    if (slug && slug !== 'whatsapp') {
       loadIntegration()
     }
   }, [slug, user])
-
-  // Per-org feature flag for the FB.login Embedded Signup CTA.
-  // Falls back to the legacy manual form if disabled.
-  useEffect(() => {
-    let cancelled = false
-    const loadFlag = async () => {
-      if (!user?.organization_id || slug !== 'whatsapp') return
-      try {
-        const { data: { session } } = await getSupabaseClient().auth.getSession()
-        const res = await fetch(
-          `/api/feature-flags?key=whatsapp_embedded_signup`,
-          { headers: { Authorization: `Bearer ${session?.access_token || ''}` } }
-        )
-        if (!res.ok) return
-        const data = await res.json()
-        if (!cancelled) setEmbeddedSignupEnabled(!!data.enabled)
-      } catch {
-        // Silent fail — defaults to manual flow.
-      }
-    }
-    loadFlag()
-    return () => { cancelled = true }
-  }, [user?.organization_id, slug])
 
   const loadIntegration = async () => {
     try {
@@ -173,63 +150,6 @@ export default function IntegrationConfigPage() {
   // Renderizar componente específico baseado no slug
   const renderIntegrationContent = () => {
     switch (slug) {
-      case 'whatsapp':
-        return (
-          <div className="space-y-6">
-            {/* Tabs */}
-            <div className="flex gap-2 p-1 bg-white rounded-xl w-fit">
-              <button
-                onClick={() => setActiveTab('cloud')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'cloud'
-                    ? 'bg-primary-500 text-white'
-                    : 'text-gray-500 hover:text-white'
-                }`}
-              >
-                API Oficial (Cloud)
-              </button>
-              <button
-                onClick={() => setActiveTab('evolution')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'evolution'
-                    ? 'bg-primary-500 text-white'
-                    : 'text-gray-500 hover:text-white'
-                }`}
-              >
-                QR Code (Evolution)
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
-              {activeTab === 'cloud' ? (
-                <div className="space-y-4">
-                  {embeddedSignupEnabled && (
-                    <WhatsAppEmbeddedSignup onSuccess={() => loadIntegration()} />
-                  )}
-
-                  {embeddedSignupEnabled ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowManualConnect((v) => !v)}
-                      className="text-sm text-gray-500 hover:text-gray-700 underline underline-offset-4"
-                    >
-                      {showManualConnect
-                        ? 'Esconder conexão avançada (manual)'
-                        : 'Conexão avançada (colar token manualmente)'}
-                    </button>
-                  ) : null}
-
-                  {(!embeddedSignupEnabled || showManualConnect) && <WhatsAppCloudConnect />}
-                </div>
-              ) : (
-                <EvolutionConnect />
-              )}
-            </div>
-          </div>
-        )
-
-      // Adicione outros casos conforme necessário
       case 'shopify':
         return (
           <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">

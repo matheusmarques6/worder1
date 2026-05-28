@@ -1238,7 +1238,7 @@ function NodeProperties({ node, onUpdate, onDelete, onClose, organizationId }: N
         {/* Action: Enviar WhatsApp */}
         {node.type === 'action_whatsapp' && (
           <div className="space-y-3">
-            <CredentialAlert service="WhatsApp Business API" configPath="/settings?tab=integrations" integrationId="whatsapp" />
+            <CredentialAlert service="WhatsApp Business API" configPath="/whatsapp/settings" integrationId="whatsapp" />
             <StyledSelect
               label="Tipo de mensagem"
               value={node.data.config?.messageType}

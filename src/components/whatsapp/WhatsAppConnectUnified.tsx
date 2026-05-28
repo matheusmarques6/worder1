@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useStoreStore } from '@/stores'
+import { getSupabaseClient } from '@/lib/supabase-client'
+import { useFacebookEmbeddedSignup } from '@/hooks/useFacebookEmbeddedSignup'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -24,14 +26,16 @@ import {
   Wifi,
   WifiOff,
   Settings2,
-  Zap
+  Zap,
+  Facebook,
+  Sparkles
 } from 'lucide-react'
 
 // =============================================
 // TYPES
 // =============================================
 
-type ConnectionMethod = 'official' | 'qrcode'
+type ConnectionMethod = 'embedded' | 'official' | 'qrcode'
 type ConnectionStatus = 'idle' | 'generating' | 'connecting' | 'connected' | 'error' | 'timeout'
 
 interface WhatsAppConnectUnifiedProps {
@@ -65,7 +69,9 @@ export default function WhatsAppConnectUnified({
   const effectiveStoreId = storeId || currentStore?.id
 
   // State
-  const [method, setMethod] = useState<ConnectionMethod>('qrcode')
+  const [method, setMethod] = useState<ConnectionMethod>('official')
+  const [embeddedEnabled, setEmbeddedEnabled] = useState(false)
+  const [embeddedFlagLoaded, setEmbeddedFlagLoaded] = useState(false)
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -114,6 +120,49 @@ export default function WhatsAppConnectUnified({
       if (qrTimeoutRef.current) clearTimeout(qrTimeoutRef.current)
     }
   }, [])
+
+  // Resolve embedded-signup feature flag and default to the embedded tab when enabled.
+  useEffect(() => {
+    if (!isOpen) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data: { session } } = await getSupabaseClient().auth.getSession()
+        const token = session?.access_token || ''
+        const res = await fetch('/api/feature-flags?key=whatsapp_embedded_signup', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        const enabled = !!data.enabled
+        setEmbeddedEnabled(enabled)
+        if (enabled) setMethod('embedded')
+      } catch {
+        // silent — falls back to official/qrcode
+      } finally {
+        if (!cancelled) setEmbeddedFlagLoaded(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [isOpen])
+
+  // Embedded Signup hook (FB.login + postMessage + backend exchange).
+  const embedded = useFacebookEmbeddedSignup({
+    storeId: effectiveStoreId || null,
+    onSuccess: (account: any) => {
+      setResult({
+        config: {
+          phone_number: account?.phoneNumber || account?.phone_number,
+          business_name: account?.verifiedName || account?.verified_name,
+          phone_number_id: account?.phoneNumberId || account?.phone_number_id,
+          waba_id: account?.wabaId || account?.waba_id,
+        },
+        account,
+      })
+      setStep(3)
+    },
+  })
 
   // =============================================
   // QR CODE METHODS
@@ -313,14 +362,15 @@ export default function WhatsAppConnectUnified({
     setQrStatus('idle')
     setInstanceId(null)
     setError('')
+    embedded.reset()
     onClose()
   }
 
   const handleFinish = () => {
-    const instanceData = method === 'qrcode' 
+    const instanceData = method === 'qrcode'
       ? { id: instanceId, phone_number: connectedNumber, type: 'EVOLUTION' }
       : { ...result?.config, type: 'META_CLOUD' }
-    
+
     onSuccess(instanceData)
     handleClose()
   }
@@ -356,7 +406,11 @@ export default function WhatsAppConnectUnified({
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Conectar WhatsApp</h2>
                 <p className="text-sm text-gray-500">
-                  {method === 'qrcode' ? 'Via QR Code' : 'API Oficial Meta'}
+                  {method === 'embedded'
+                    ? 'Login com Facebook (recomendado)'
+                    : method === 'official'
+                      ? 'API Oficial Meta (manual)'
+                      : 'Via QR Code'}
                 </p>
               </div>
             </div>
@@ -371,28 +425,46 @@ export default function WhatsAppConnectUnified({
           {/* Method Selector - Step 1 Only */}
           {step === 1 && (
             <div className="px-6 py-4 border-b border-gray-200">
-              <div className="flex gap-2 p-1 bg-white rounded-xl">
+              <div className="flex gap-2 p-1 bg-gray-50 rounded-xl">
+                {embeddedEnabled && (
+                  <button
+                    onClick={() => setMethod('embedded')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg font-medium text-sm transition-all relative ${
+                      method === 'embedded'
+                        ? 'bg-[#1877F2] text-white'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-white'
+                    }`}
+                  >
+                    <Facebook className="w-4 h-4" />
+                    Facebook
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                      method === 'embedded' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                      RECOMENDADO
+                    </span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setMethod('official')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg font-medium text-sm transition-all ${
+                    method === 'official'
+                      ? 'bg-blue-500 text-white'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-white'
+                  }`}
+                >
+                  <Cloud className="w-4 h-4" />
+                  Manual
+                </button>
                 <button
                   onClick={() => setMethod('qrcode')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all ${
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg font-medium text-sm transition-all ${
                     method === 'qrcode'
                       ? 'bg-green-500 text-white'
-                      : 'text-gray-500 hover:text-white hover:bg-gray-100'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-white'
                   }`}
                 >
                   <QrCode className="w-4 h-4" />
                   QR Code
-                </button>
-                <button
-                  onClick={() => setMethod('official')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium transition-all ${
-                    method === 'official'
-                      ? 'bg-blue-500 text-white'
-                      : 'text-gray-500 hover:text-white hover:bg-gray-100'
-                  }`}
-                >
-                  <Cloud className="w-4 h-4" />
-                  API Oficial
                 </button>
               </div>
             </div>
@@ -406,32 +478,107 @@ export default function WhatsAppConnectUnified({
                   { num: 1, label: method === 'qrcode' ? 'QR Code' : 'Credenciais' },
                   { num: 2, label: 'Conectando' },
                   { num: 3, label: 'Concluído' }
-                ].map((s, i) => (
-                  <div key={s.num} className="flex items-center">
-                    <div className={`
-                      w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors
-                      ${step >= s.num 
-                        ? method === 'qrcode' ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
-                        : 'bg-gray-100 text-gray-500'
-                      }
-                    `}>
-                      {step > s.num ? <Check className="w-4 h-4" /> : s.num}
+                ].map((s, i) => {
+                  const activeColor = method === 'qrcode'
+                    ? 'bg-green-500'
+                    : method === 'embedded'
+                      ? 'bg-[#1877F2]'
+                      : 'bg-blue-500'
+                  return (
+                    <div key={s.num} className="flex items-center">
+                      <div className={`
+                        w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors
+                        ${step >= s.num ? `${activeColor} text-white` : 'bg-gray-100 text-gray-500'}
+                      `}>
+                        {step > s.num ? <Check className="w-4 h-4" /> : s.num}
+                      </div>
+                      {i < 2 && (
+                        <div className={`w-12 h-0.5 mx-2 ${
+                          step > s.num ? activeColor : 'bg-gray-100'
+                        }`} />
+                      )}
                     </div>
-                    {i < 2 && (
-                      <div className={`w-12 h-0.5 mx-2 ${
-                        step > s.num 
-                          ? method === 'qrcode' ? 'bg-green-500' : 'bg-blue-500'
-                          : 'bg-gray-100'
-                      }`} />
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
+            {/* =============================================
+                STEP 1 - EMBEDDED SIGNUP (FACEBOOK LOGIN)
+            ============================================= */}
+            {step === 1 && method === 'embedded' && (
+              <div className="space-y-6">
+                <div className="p-4 bg-[#1877F2]/5 border border-[#1877F2]/20 rounded-xl">
+                  <div className="flex gap-3">
+                    <Sparkles className="w-5 h-5 text-[#1877F2] flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Login com Facebook — Conexão Oficial</p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Autentique-se no Facebook, selecione ou crie sua WhatsApp Business Account e o Worder cuida do resto. Sem precisar colar tokens.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                    <Cloud className="w-5 h-5 text-[#1877F2] mb-2" />
+                    <h4 className="font-medium text-gray-900 text-sm">API Oficial</h4>
+                    <p className="text-xs text-gray-500 mt-1">Estável, sem risco de ban, ideal para produção</p>
+                  </div>
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                    <Zap className="w-5 h-5 text-yellow-500 mb-2" />
+                    <h4 className="font-medium text-gray-900 text-sm">Setup em 2 minutos</h4>
+                    <p className="text-xs text-gray-500 mt-1">Sem precisar gerar tokens manualmente</p>
+                  </div>
+                </div>
+
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={embedded.start}
+                    disabled={embedded.running || !embedded.sdkReady || !embedded.configured}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#1877F2] px-6 py-3 text-sm font-medium text-white shadow-sm hover:bg-[#166FE5] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {embedded.running ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Aguardando Facebook…
+                      </>
+                    ) : (
+                      <>
+                        <Facebook className="h-4 w-4" />
+                        Continuar com Facebook
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {!embedded.configured && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                    <div className="flex gap-3">
+                      <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-amber-700">
+                        <p className="font-medium">Embedded Signup não configurado</p>
+                        <p className="mt-1">
+                          Defina <code className="px-1 bg-amber-100 rounded">NEXT_PUBLIC_META_APP_ID</code> e <code className="px-1 bg-amber-100 rounded">NEXT_PUBLIC_META_WA_EMBEDDED_SIGNUP_CONFIG_ID</code> ou use o método Manual.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {embedded.error && (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                    <p className="text-sm text-red-700">{embedded.error}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* =============================================
                 STEP 1 - QR CODE METHOD
             ============================================= */}
@@ -754,17 +901,25 @@ export default function WhatsAppConnectUnified({
               <div className="space-y-6">
                 <div className="text-center py-6">
                   <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                    method === 'qrcode' ? 'bg-green-500/20' : 'bg-blue-500/20'
+                    method === 'qrcode'
+                      ? 'bg-green-500/20'
+                      : method === 'embedded'
+                        ? 'bg-[#1877F2]/15'
+                        : 'bg-blue-500/20'
                   }`}>
                     <CheckCircle2 className={`w-8 h-8 ${
-                      method === 'qrcode' ? 'text-green-400' : 'text-blue-400'
+                      method === 'qrcode'
+                        ? 'text-green-500'
+                        : method === 'embedded'
+                          ? 'text-[#1877F2]'
+                          : 'text-blue-500'
                     }`} />
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-2">Conectado com Sucesso!</h3>
                   <p className="text-gray-500">
-                    {method === 'qrcode' 
+                    {method === 'qrcode'
                       ? `WhatsApp: ${connectedNumber || 'Número conectado'}`
-                      : `${result?.config?.business_name || 'WhatsApp Business'} • ${result?.config?.phone_number}`
+                      : `${result?.config?.business_name || 'WhatsApp Business'} • ${result?.config?.phone_number || ''}`
                     }
                   </p>
                 </div>
@@ -848,31 +1003,37 @@ export default function WhatsAppConnectUnified({
               <>
                 <button
                   onClick={handleClose}
-                  className="px-4 py-2.5 text-gray-500 hover:text-white transition-colors"
+                  className="px-4 py-2.5 text-gray-500 hover:text-gray-700 transition-colors"
                 >
                   Cancelar
                 </button>
-                <button
-                  onClick={method === 'qrcode' ? () => { generateQRCode(); setStep(2); } : () => setStep(2)}
-                  disabled={loading || (method === 'official' && (!phoneNumberId || !accessToken))}
-                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-gray-900 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                    method === 'qrcode' 
-                      ? 'bg-green-500 hover:bg-green-600' 
-                      : 'bg-blue-500 hover:bg-blue-600'
-                  }`}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Iniciando...
-                    </>
-                  ) : (
-                    <>
-                      {method === 'qrcode' ? 'Gerar QR Code' : 'Continuar'}
-                      <ChevronRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
+                {method === 'embedded' ? (
+                  <span className="text-xs text-gray-400">
+                    {embeddedFlagLoaded ? 'Use o botão acima para autenticar' : 'Carregando…'}
+                  </span>
+                ) : (
+                  <button
+                    onClick={method === 'qrcode' ? () => { generateQRCode(); setStep(2); } : () => setStep(2)}
+                    disabled={loading || (method === 'official' && (!phoneNumberId || !accessToken))}
+                    className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                      method === 'qrcode'
+                        ? 'bg-green-500 hover:bg-green-600'
+                        : 'bg-blue-500 hover:bg-blue-600'
+                    }`}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Iniciando...
+                      </>
+                    ) : (
+                      <>
+                        {method === 'qrcode' ? 'Gerar QR Code' : 'Continuar'}
+                        <ChevronRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                )}
               </>
             )}
 
@@ -929,8 +1090,12 @@ export default function WhatsAppConnectUnified({
                 <div />
                 <button
                   onClick={handleFinish}
-                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-gray-900 font-medium transition-colors ${
-                    method === 'qrcode' ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-500 hover:bg-blue-600'
+                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-medium transition-colors ${
+                    method === 'qrcode'
+                      ? 'bg-green-500 hover:bg-green-600'
+                      : method === 'embedded'
+                        ? 'bg-[#1877F2] hover:bg-[#166FE5]'
+                        : 'bg-blue-500 hover:bg-blue-600'
                   }`}
                 >
                   <Check className="w-4 h-4" />

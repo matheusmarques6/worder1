@@ -5,6 +5,7 @@ import {
   Smartphone, QrCode, Plus, Trash2, Loader2, Wifi, WifiOff, Copy, Check,
 } from 'lucide-react'
 import { useStoreStore } from '@/stores'
+import WhatsAppConnectUnified from '@/components/whatsapp/WhatsAppConnectUnified'
 
 interface Instance {
   id: string
@@ -23,19 +24,17 @@ interface InstancesTabProps {
 }
 
 /**
- * InstancesTab — Lista numeros conectados (Cloud + Evolution) e permite gerenciar.
- * Suporta multi-numero: cada WABA / instancia eh listada e administrada aqui.
+ * InstancesTab — Lista os numeros WhatsApp conectados (Cloud + Evolution)
+ * e expoe um unico botao "Adicionar Numero" que abre o modal unificado
+ * (Embedded Signup / Manual Cloud API / Evolution QR).
  */
 export function InstancesTab({ organizationId }: InstancesTabProps) {
   const { currentStore } = useStoreStore()
   const [instances, setInstances] = useState<Instance[]>([])
   const [loading, setLoading] = useState(true)
-  const [showNewInstance, setShowNewInstance] = useState(false)
-  const [newInstanceTitle, setNewInstanceTitle] = useState('')
-  const [evolutionUrl, setEvolutionUrl] = useState('')
-  const [evolutionKey, setEvolutionKey] = useState('')
   const [qrLoading, setQrLoading] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [showConnectModal, setShowConnectModal] = useState(false)
 
   const webhookUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/whatsapp/meta/webhook`
@@ -56,35 +55,6 @@ export function InstancesTab({ organizationId }: InstancesTabProps) {
       console.error('Error loading instances:', e)
     } finally {
       setLoading(false)
-    }
-  }
-
-  async function createInstance() {
-    if (!newInstanceTitle) return
-    try {
-      const res = await fetch('/api/whatsapp/instances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create',
-          organization_id: organizationId,
-          store_id: currentStore?.id,
-          title: newInstanceTitle,
-          api_type: 'EVOLUTION',
-          api_url: evolutionUrl,
-          api_key: evolutionKey,
-        }),
-      })
-      const data = await res.json()
-      if (data.instance) {
-        setInstances([data.instance, ...instances])
-        setShowNewInstance(false)
-        setNewInstanceTitle('')
-        setEvolutionUrl('')
-        setEvolutionKey('')
-      }
-    } catch (e) {
-      console.error('Error creating instance:', e)
     }
   }
 
@@ -138,9 +108,16 @@ export function InstancesTab({ organizationId }: InstancesTabProps) {
           <Smartphone className="w-5 h-5 text-primary-500" />
           Numeros WhatsApp
         </h3>
+        <button
+          onClick={() => setShowConnectModal(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-xl text-sm font-medium transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Adicionar Numero
+        </button>
       </div>
 
-      {/* Webhook URL */}
+      {/* Webhook URL (configurar na Meta Business Suite quando usar API Manual) */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h4 className="font-medium text-blue-900 mb-2">URL do Webhook (Meta Business Suite)</h4>
         <div className="flex items-center gap-2">
@@ -154,70 +131,9 @@ export function InstancesTab({ organizationId }: InstancesTabProps) {
           </button>
         </div>
         <p className="text-xs text-blue-700 mt-2">
-          Configure este URL no Meta Business Suite ao conectar um novo numero WhatsApp.
+          Usado pelo metodo Manual. Embedded Signup (Login com Facebook) configura o webhook automaticamente.
         </p>
       </div>
-
-      {/* Adicionar Nova Instancia (Evolution / QR) */}
-      {!showNewInstance ? (
-        <button
-          onClick={() => setShowNewInstance(true)}
-          className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:text-gray-700 hover:border-primary-500 flex items-center justify-center gap-2 transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-          Adicionar Conexao QR Code (Evolution)
-        </button>
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Nova Conexao</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">Nome da Instancia</label>
-              <input
-                type="text"
-                value={newInstanceTitle}
-                onChange={e => setNewInstanceTitle(e.target.value)}
-                placeholder="Ex: WhatsApp Principal"
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-primary-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">Evolution API URL</label>
-              <input
-                type="text"
-                value={evolutionUrl}
-                onChange={e => setEvolutionUrl(e.target.value)}
-                placeholder="Ex: https://evolution.seudominio.com"
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-primary-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-2">Evolution API Key</label>
-              <input
-                type="password"
-                value={evolutionKey}
-                onChange={e => setEvolutionKey(e.target.value)}
-                placeholder="Sua API Key"
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-primary-500"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowNewInstance(false)}
-                className="flex-1 py-3 bg-gray-100 text-gray-600 font-medium rounded-xl hover:bg-gray-200"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={createInstance}
-                className="flex-1 py-3 bg-primary-500 text-white font-medium rounded-xl hover:bg-primary-600"
-              >
-                Criar Instancia
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Lista de Instancias */}
       {loading ? (
@@ -225,10 +141,10 @@ export function InstancesTab({ organizationId }: InstancesTabProps) {
           <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
         </div>
       ) : instances.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
           <QrCode className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>Nenhum numero conectado</p>
-          <p className="text-xs mt-1">Adicione uma conexao Cloud (Meta API) ou Evolution (QR Code) acima.</p>
+          <p className="font-medium text-gray-600">Nenhum numero conectado</p>
+          <p className="text-xs mt-1">Clique em &quot;Adicionar Numero&quot; para conectar via Facebook, API Manual ou QR Code.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -306,6 +222,17 @@ export function InstancesTab({ organizationId }: InstancesTabProps) {
           ))}
         </div>
       )}
+
+      <WhatsAppConnectUnified
+        isOpen={showConnectModal}
+        onClose={() => setShowConnectModal(false)}
+        onSuccess={() => {
+          setShowConnectModal(false)
+          loadInstances()
+        }}
+        organizationId={organizationId}
+        storeId={currentStore?.id}
+      />
     </div>
   )
 }

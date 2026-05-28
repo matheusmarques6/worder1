@@ -44,7 +44,7 @@ export function WhatsAppConnectionBanner({
           </div>
         </div>
         <button
-          onClick={() => router.push('/settings?tab=integrations')}
+          onClick={() => router.push('/whatsapp/settings')}
           className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium text-sm transition-colors whitespace-nowrap"
         >
           <Plug className="w-4 h-4" />
@@ -77,7 +77,7 @@ export function WhatsAppConnectionCard({
         <p className="text-sm text-gray-500 mb-6 max-w-sm">{description}</p>
         
         <button
-          onClick={() => router.push('/settings?tab=integrations')}
+          onClick={() => router.push('/whatsapp/settings')}
           className="flex items-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium transition-colors"
         >
           <Settings className="w-4 h-4" />
@@ -154,7 +154,7 @@ export function WhatsAppConnectionRequired({
         {/* Actions */}
         <div className="flex flex-col gap-3">
           <button
-            onClick={() => router.push('/settings?tab=integrations')}
+            onClick={() => router.push('/whatsapp/settings')}
             className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium transition-colors"
           >
             <Settings className="w-5 h-5" />

@@ -80,12 +80,12 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
 
   const handleConnect = () => {
     // Redirecionar para página de configuração do WhatsApp
-    router.push('/integrations/whatsapp')
+    router.push('/whatsapp/settings')
   }
 
   const handleConfigure = () => {
     // Redirecionar para página de configuração do WhatsApp
-    router.push('/integrations/whatsapp')
+    router.push('/whatsapp/settings')
   }
 
   const handleDisconnect = async () => {
