@@ -58,7 +58,6 @@ export async function POST(
       conversation_id,
       note_type = 'note',
       attachments = [], // NOVO: suporte a anexos
-      created_by_name = 'Usuário'
     } = body
 
     if (!content && attachments.length === 0) {
@@ -86,6 +85,19 @@ export async function POST(
     }
 
     const created_by = authUserId
+
+    // Resolver nome do autor a partir do profile (não confiar em body — frontend
+    // não envia mais user.id/name após a migração pra Bearer token).
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name, first_name, email')
+      .eq('id', authUserId)
+      .single()
+    const created_by_name =
+      profile?.full_name ||
+      profile?.first_name ||
+      profile?.email?.split('@')[0] ||
+      'Usuário'
 
     // Criar nota
     const { data: note, error } = await supabase
