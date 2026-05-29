@@ -335,8 +335,21 @@ export default function WhatsAppConnectUnified({
 
       const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro ao conectar')
+      if (!response.ok || data.success === false) {
+        const parts: string[] = []
+        if (data.error) parts.push(data.error)
+        if (data.instructions) parts.push(data.instructions)
+        if (data.details) {
+          const d = data.details
+          const flags: string[] = []
+          if (d.subscribed === false) flags.push(`subscribe falhou${d.subscription_error ? ': ' + d.subscription_error : ''}`)
+          if (d.registered === false) flags.push(`register falhou${d.register_error ? ': ' + d.register_error : ''}`)
+          if (d.waba_id_detected === false) flags.push('WABA ID não detectado')
+          if (flags.length) parts.push(`Diagnóstico: ${flags.join(' | ')}`)
+        }
+        const msg = parts.join('\n\n') || 'Erro ao conectar'
+        setError(msg)
+        return
       }
 
       setResult(data)
@@ -784,7 +797,7 @@ export default function WhatsAppConnectUnified({
 
                 {error && (
                   <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-                    <p className="text-sm text-red-400">{error}</p>
+                    <p className="text-sm text-red-600 whitespace-pre-line">{error}</p>
                   </div>
                 )}
               </div>

@@ -5,8 +5,8 @@
 
 // API Version v22.0 (Maio 2026)
 // Documentação: https://developers.facebook.com/docs/whatsapp/cloud-api
-const META_API_VERSION = 'v22.0';
-const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
+export const META_API_VERSION = 'v22.0';
+export const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
 // =============================================
 // TIPOS

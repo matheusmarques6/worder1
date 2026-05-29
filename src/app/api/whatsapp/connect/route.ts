@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
-import { subscribeAppToWABA } from '@/lib/whatsapp/cloud-api';
+import {
+  subscribeAppToWABA,
+  registerPhoneNumber,
+  META_BASE_URL,
+} from '@/lib/whatsapp/cloud-api';
+import { encryptToken } from '@/lib/whatsapp/token-encryption';
+import { getAccessToken } from '@/lib/whatsapp/account-loader';
 export const dynamic = 'force-dynamic';
 
 // GET - Buscar status da conexão WhatsApp
@@ -13,32 +19,41 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
     }
 
-    // Buscar configuração existente
-    const { data: config, error } = await supabase
-      .from('whatsapp_configs')
+    // Buscar conta canônica em whatsapp_business_accounts
+    const { data: account, error } = await supabase
+      .from('whatsapp_business_accounts')
       .select('*')
       .eq('organization_id', organizationId)
-      .single()
+      .eq('status', 'active')
+      .maybeSingle()
 
     if (error && error.code !== 'PGRST116') {
       throw error
     }
 
-    // Se tem config, verificar se token ainda é válido
-    if (config) {
-      const isValid = await validateAccessToken(config.access_token, config.phone_number_id)
-      
+    // Se tem conta, verificar se token ainda é válido
+    if (account) {
+      let token: string | null = null
+      try {
+        token = getAccessToken(account)
+      } catch {
+        token = null
+      }
+      const isValid = token
+        ? await validateAccessToken(token, account.phone_number_id)
+        : false
+
       return NextResponse.json({
         connected: isValid,
         config: {
-          id: config.id,
-          phone_number_id: config.phone_number_id,
-          waba_id: config.waba_id,
-          business_name: config.business_name,
-          phone_number: config.phone_number,
-          is_active: config.is_active,
-          webhook_verified: config.webhook_verified,
-          created_at: config.created_at
+          id: account.id,
+          phone_number_id: account.phone_number_id,
+          waba_id: account.waba_id,
+          business_name: account.verified_name,
+          phone_number: account.display_phone_number || account.phone_number,
+          is_active: account.status === 'active',
+          webhook_verified: !!account.webhook_configured,
+          created_at: account.created_at
         }
       })
     }
@@ -60,7 +75,8 @@ export async function POST(request: NextRequest) {
       phoneNumberId,
       wabaId,
       accessToken,
-      webhookVerifyToken
+      webhookVerifyToken,
+      twoFactorPin,
     } = body
 
     // Validações
@@ -83,13 +99,13 @@ export async function POST(request: NextRequest) {
 
     // 2. Gerar verify token se não fornecido
     const verifyToken = webhookVerifyToken || generateVerifyToken()
+    const effectiveWabaId = wabaId || validation.wabaId
 
     // 2.1. Inscrever o app no WABA. Sem este passo, validar o webhook na Meta
     // apenas comprova que a URL responde — a Meta NAO comeca a enviar eventos
     // ate que o app esteja subscribed_apps do WABA.
     let appSubscribed = false
     let subscriptionError: string | null = null
-    const effectiveWabaId = wabaId || validation.wabaId
     if (effectiveWabaId) {
       try {
         await subscribeAppToWABA({ wabaId: effectiveWabaId, accessToken })
@@ -97,64 +113,72 @@ export async function POST(request: NextRequest) {
         console.log('✅ App inscrito no WABA:', effectiveWabaId)
       } catch (err: any) {
         subscriptionError = err?.message || 'Falha ao inscrever app no WABA'
-        console.warn('⚠️  Subscription falhou (conexao segue, mas mensagens nao chegarao):', subscriptionError)
+        console.warn('⚠️  Subscription falhou:', subscriptionError)
       }
     } else {
       subscriptionError = 'WABA ID nao fornecido nem detectado — informe o WABA ID para receber mensagens.'
       console.warn('⚠️ ', subscriptionError)
     }
 
-    // 3. Salvar configuração
-    const { data: existingConfig } = await supabase
-      .from('whatsapp_configs')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .single()
-
-    let config
-    if (existingConfig) {
-      // Atualizar existente
-      const { data, error } = await supabase
-        .from('whatsapp_configs')
-        .update({
-          phone_number_id: phoneNumberId,
-          waba_id: effectiveWabaId || null,
-          access_token: accessToken,
-          business_name: validation.businessName,
-          phone_number: validation.phoneNumber,
-          webhook_verify_token: verifyToken,
-          is_active: true,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existingConfig.id)
-        .select()
-        .single()
-
-      if (error) throw error
-      config = data
-    } else {
-      // Criar novo
-      const { data, error } = await supabase
-        .from('whatsapp_configs')
-        .insert({
-          organization_id: organizationId,
-          phone_number_id: phoneNumberId,
-          waba_id: effectiveWabaId || null,
-          access_token: accessToken,
-          business_name: validation.businessName,
-          phone_number: validation.phoneNumber,
-          webhook_verify_token: verifyToken,
-          is_active: true
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-      config = data
+    // 2.2. Registrar o phone number na Meta. Sem este passo a Meta retorna
+    // erro 132000 ao tentar enviar a primeira mensagem.
+    let phoneRegistered = false
+    let registerError: string | null = null
+    try {
+      const pin = (typeof twoFactorPin === 'string' && /^\d{6}$/.test(twoFactorPin))
+        ? twoFactorPin
+        : Math.floor(100000 + Math.random() * 900000).toString()
+      await registerPhoneNumber({ phoneNumberId, accessToken, pin })
+      phoneRegistered = true
+      console.log('✅ Phone registrado:', phoneNumberId)
+    } catch (err: any) {
+      const code = err?.code
+      if (code === 133006) {
+        // Já registrado — tratar como sucesso
+        phoneRegistered = true
+        console.log('ℹ️ Phone já registrado (133006), seguindo')
+      } else if (code === 133005) {
+        registerError = 'Conta tem 2FA habilitado. Forneça o PIN de 6 dígitos no campo twoFactorPin.'
+      } else {
+        registerError = err?.message || 'Falha ao registrar phone number'
+      }
+      if (registerError) console.warn('⚠️  Register falhou:', registerError)
     }
 
-    // 4. Também criar/atualizar na tabela whatsapp_instances para compatibilidade
-    await syncToInstances(organizationId, storeId || null, config, accessToken, verifyToken)
+    // 3. Fail-loud: se qualquer passo crítico falhou, NÃO grava no DB.
+    if (!appSubscribed || !phoneRegistered || !effectiveWabaId) {
+      const instructions = !effectiveWabaId
+        ? 'Seu token precisa da permissão whatsapp_business_management para detectar a WABA. Gere um novo System User Token no Business Manager com as duas permissões: whatsapp_business_messaging E whatsapp_business_management.'
+        : !appSubscribed
+          ? 'A inscrição do app no WABA falhou. Verifique se o token tem permissão whatsapp_business_management. Detalhe: ' + (subscriptionError || 'erro desconhecido')
+          : 'O registro do phone number falhou. ' + (registerError || 'Erro desconhecido. Se a conta tem 2FA habilitado, forneça o PIN.')
+
+      return NextResponse.json({
+        success: false,
+        error: 'Conexão incompleta',
+        details: {
+          validated: true,
+          subscribed: appSubscribed,
+          subscription_error: subscriptionError,
+          registered: phoneRegistered,
+          register_error: registerError,
+          waba_id_detected: !!effectiveWabaId,
+        },
+        instructions,
+      }, { status: 400 })
+    }
+
+    // 4. Salvar em whatsapp_business_accounts (tabela canônica Cloud).
+    const account = await upsertBusinessAccount({
+      organizationId,
+      storeId: storeId || null,
+      phoneNumberId,
+      wabaId: effectiveWabaId,
+      accessToken,
+      verifyToken,
+      businessName: validation.businessName,
+      phoneNumber: validation.phoneNumber,
+    })
 
     console.log('✅ WhatsApp conectado:', validation.phoneNumber)
 
@@ -162,13 +186,14 @@ export async function POST(request: NextRequest) {
       success: true,
       message: 'WhatsApp Business conectado com sucesso!',
       app_subscribed: appSubscribed,
+      phone_registered: phoneRegistered,
       subscription_error: subscriptionError,
       config: {
-        id: config.id,
-        phone_number_id: config.phone_number_id,
-        waba_id: config.waba_id,
-        business_name: config.business_name,
-        phone_number: config.phone_number,
+        id: account.id,
+        phone_number_id: account.phone_number_id,
+        waba_id: account.waba_id,
+        business_name: account.verified_name,
+        phone_number: account.display_phone_number || account.phone_number,
         webhook_verify_token: verifyToken,
         webhook_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.worder.com.br'}/api/whatsapp/meta/webhook`
       }
@@ -189,16 +214,10 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
     }
 
-    // Desativar config
+    // Desativar conta canônica
     await supabase
-      .from('whatsapp_configs')
-      .update({ is_active: false })
-      .eq('organization_id', organizationId)
-
-    // Desativar instance
-    await supabase
-      .from('whatsapp_instances')
-      .update({ status: 'disconnected' })
+      .from('whatsapp_business_accounts')
+      .update({ status: 'inactive', updated_at: new Date().toISOString() })
       .eq('organization_id', organizationId)
 
     return NextResponse.json({ success: true, message: 'WhatsApp desconectado' })
@@ -229,7 +248,7 @@ async function validateCredentials(
     // NAO incluir whatsapp_business_account aqui, esse campo precisa de
     // whatsapp_business_management e quebra com code 100 se o token nao tiver.
     const phoneResponse = await fetch(
-      `https://graph.facebook.com/v18.0/${phoneNumberId}?fields=verified_name,display_phone_number,quality_rating,messaging_limit_tier`,
+      `${META_BASE_URL}/${phoneNumberId}?fields=verified_name,display_phone_number,quality_rating,messaging_limit_tier`,
       {
         headers: { Authorization: `Bearer ${accessToken}` }
       }
@@ -245,12 +264,53 @@ async function validateCredentials(
       }
     }
 
+    // B.5 — Token quality check via debug_token. Só roda se o app tem credenciais.
+    const appId = process.env.META_APP_ID
+    const appSecret = process.env.META_APP_SECRET
+    if (appId && appSecret) {
+      try {
+        const dbgRes = await fetch(
+          `${META_BASE_URL}/debug_token?input_token=${encodeURIComponent(accessToken)}` +
+          `&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`
+        )
+        const dbg = await dbgRes.json()
+
+        if (dbg?.data) {
+          // Token expirando?
+          if (typeof dbg.data.expires_at === 'number' && dbg.data.expires_at > 0) {
+            const hoursLeft = (dbg.data.expires_at * 1000 - Date.now()) / 3600000
+            if (hoursLeft < 168) {
+              return {
+                valid: false,
+                error:
+                  `Token expira em ${Math.round(hoursLeft)}h. Use um System User Access Token (não expira) gerado em Business Manager → Usuários do Sistema → Gerar novo token.`
+              }
+            }
+          }
+
+          const scopes: string[] = Array.isArray(dbg.data.scopes) ? dbg.data.scopes : []
+          const required = ['whatsapp_business_messaging', 'whatsapp_business_management']
+          const missing = required.filter((s) => !scopes.includes(s))
+          if (scopes.length > 0 && missing.length > 0) {
+            return {
+              valid: false,
+              error:
+                `Token sem permissões obrigatórias: ${missing.join(', ')}. Edite o System User no Business Manager e adicione esses escopos.`
+            }
+          }
+        }
+      } catch (e) {
+        // debug_token é best-effort — se a Meta falha, segue.
+        console.warn('debug_token check falhou (seguindo):', (e as any)?.message)
+      }
+    }
+
     // Tentativa best-effort de detectar o WABA — falha silenciosa se o token
     // nao tiver whatsapp_business_management.
     let detectedWabaId: string | undefined
     try {
       const wabaDiscovery = await fetch(
-        `https://graph.facebook.com/v18.0/${phoneNumberId}?fields=whatsapp_business_account`,
+        `${META_BASE_URL}/${phoneNumberId}?fields=whatsapp_business_account`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       )
       const wabaDiscoveryData = await wabaDiscovery.json()
@@ -264,7 +324,7 @@ async function validateCredentials(
     // Se o usuario passou um wabaId, valida que confere com o detectado
     if (wabaId) {
       const wabaResponse = await fetch(
-        `https://graph.facebook.com/v18.0/${wabaId}?fields=name,currency,timezone_id`,
+        `${META_BASE_URL}/${wabaId}?fields=name,currency,timezone_id`,
         {
           headers: { Authorization: `Bearer ${accessToken}` }
         }
@@ -299,7 +359,7 @@ async function validateCredentials(
 async function validateAccessToken(accessToken: string, phoneNumberId: string): Promise<boolean> {
   try {
     const response = await fetch(
-      `https://graph.facebook.com/v18.0/${phoneNumberId}?fields=id`,
+      `${META_BASE_URL}/${phoneNumberId}?fields=id`,
       {
         headers: { Authorization: `Bearer ${accessToken}` }
       }
@@ -311,48 +371,51 @@ async function validateAccessToken(accessToken: string, phoneNumberId: string): 
   }
 }
 
-async function syncToInstances(
-  organizationId: string,
-  storeId: string | null,
-  config: any,
-  accessToken: string,
-  verifyToken: string,
-) {
-  // Lookup por org + phone_number_id (Meta phone_number_id eh unico globalmente,
-  // entao um mesmo numero nao pode estar em duas lojas da mesma org). Isso permite
-  // migrar instancias antigas com store_id=NULL para a loja atual.
-  const { data: existing } = await supabase
-    .from('whatsapp_instances')
-    .select('id')
-    .eq('organization_id', organizationId)
-    .eq('phone_number_id', config.phone_number_id)
-    .maybeSingle()
+async function upsertBusinessAccount(params: {
+  organizationId: string
+  storeId: string | null
+  phoneNumberId: string
+  wabaId: string
+  accessToken: string
+  verifyToken: string
+  businessName?: string
+  phoneNumber?: string
+}) {
+  const {
+    organizationId,
+    storeId,
+    phoneNumberId,
+    wabaId,
+    accessToken,
+    verifyToken,
+    businessName,
+    phoneNumber,
+  } = params
 
-  const instanceData = {
+  const row = {
     organization_id: organizationId,
     store_id: storeId,
-    title: config.business_name || 'WhatsApp Business',
-    phone_number: config.phone_number,
-    phone_number_id: config.phone_number_id,
-    access_token: accessToken,
+    phone_number_id: phoneNumberId,
+    waba_id: wabaId,
+    phone_number: phoneNumber || null,
+    display_phone_number: phoneNumber || null,
+    verified_name: businessName || 'WhatsApp Business',
+    access_token_encrypted: encryptToken(accessToken),
     webhook_verify_token: verifyToken,
-    status: 'connected',
-    online_status: 'available',
-    api_type: 'META_CLOUD',
-    unique_id: `meta_${config.phone_number_id}`,
-    updated_at: new Date().toISOString()
+    webhook_configured: true,
+    status: 'active',
+    connection_method: 'manual',
+    updated_at: new Date().toISOString(),
   }
 
-  if (existing) {
-    await supabase
-      .from('whatsapp_instances')
-      .update(instanceData)
-      .eq('id', existing.id)
-  } else {
-    await supabase
-      .from('whatsapp_instances')
-      .insert(instanceData)
-  }
+  const { data, error } = await supabase
+    .from('whatsapp_business_accounts')
+    .upsert(row, { onConflict: 'phone_number_id' })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
 }
 
 function generateVerifyToken(): string {

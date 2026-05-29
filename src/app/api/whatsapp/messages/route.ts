@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import { getAccessToken } from '@/lib/whatsapp/account-loader';
+import { META_BASE_URL } from '@/lib/whatsapp/cloud-api';
 export const dynamic = 'force-dynamic';
 
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0';
+const WHATSAPP_API_URL = META_BASE_URL;
 
 // Helper
 async function getOrgId(supabase: any) {
@@ -102,17 +104,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
     }
 
-    // Buscar configuração WhatsApp
+    // Buscar configuração WhatsApp na tabela canônica
     const { data: waConfig } = await supabase
-      .from('whatsapp_accounts')
+      .from('whatsapp_business_accounts')
       .select('*')
       .eq('organization_id', orgId)
-      .eq('is_active', true)
+      .eq('status', 'active')
       .single();
 
     if (!waConfig) {
       return NextResponse.json({ error: 'WhatsApp not configured' }, { status: 400 });
     }
+
+    const waAccessToken = getAccessToken(waConfig);
 
     // Preparar payload
     let payload: any = {
@@ -144,7 +148,7 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${waConfig.access_token}`,
+          Authorization: `Bearer ${waAccessToken}`,
         },
         body: JSON.stringify(payload),
       }

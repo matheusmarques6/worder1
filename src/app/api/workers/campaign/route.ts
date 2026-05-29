@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { getAccessToken } from '@/lib/whatsapp/account-loader';
+import { META_BASE_URL } from '@/lib/whatsapp/cloud-api';
 export const dynamic = 'force-dynamic';
 
 // Usar service role para bypassa RLS
 
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0';
+const WHATSAPP_API_URL = META_BASE_URL;
 
 // POST - Processar campanhas (chamado por cron job)
 export async function POST(request: NextRequest) {
@@ -63,12 +65,12 @@ async function processCampaign(campaign: any) {
   const interval = campaign.send_interval_ms || 1000;
 
   try {
-    // Buscar config WhatsApp da organização
+    // Buscar config WhatsApp da organização (tabela canônica)
     const { data: waConfig } = await supabase
-      .from('whatsapp_accounts')
+      .from('whatsapp_business_accounts')
       .select('*')
       .eq('organization_id', campaign.organization_id)
-      .eq('is_active', true)
+      .eq('status', 'active')
       .single();
 
     if (!waConfig) {
@@ -76,9 +78,11 @@ async function processCampaign(campaign: any) {
         .from('whatsapp_campaigns')
         .update({ status: 'FAILED', updated_at: new Date().toISOString() })
         .eq('id', campaign.id);
-      
+
       return { campaign_id: campaign.id, error: 'WhatsApp not configured' };
     }
+
+    const waAccessToken = getAccessToken(waConfig);
 
     // Buscar logs pendentes
     const { data: pendingLogs } = await supabase
@@ -147,7 +151,7 @@ async function processCampaign(campaign: any) {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${waConfig.access_token}`,
+              Authorization: `Bearer ${waAccessToken}`,
             },
             body: JSON.stringify(payload),
           }
