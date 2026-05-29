@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { verifyWebhookToken } from '@/lib/services/whatsapp/webhook-processor';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
@@ -480,19 +481,21 @@ if (msgError) {
   }
 }
 
-// GET para verificação do webhook
+// GET — Meta hub.mode=subscribe verification.
+// Delegates to the shared verifier so per-instance, per-org and global tokens all work.
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const mode = searchParams.get('hub.mode');
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'worder_webhook_token';
+  const result = await verifyWebhookToken(mode, token, challenge);
 
-  if (mode === 'subscribe' && token === verifyToken) {
-    console.log('[Webhook] ✅ Webhook verified');
-    return new NextResponse(challenge, { status: 200 });
+  if (result.valid) {
+    console.log('[Webhook] ✅ Verification passed');
+    return new NextResponse(result.challenge || challenge || '', { status: 200 });
   }
 
-  return NextResponse.json({ status: 'Webhook endpoint active' });
+  console.warn('[Webhook] ❌ Verification failed — token did not match instance/config/env');
+  return new NextResponse('Forbidden', { status: 403 });
 }

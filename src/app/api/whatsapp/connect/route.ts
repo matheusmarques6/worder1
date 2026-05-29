@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Também criar/atualizar na tabela whatsapp_instances para compatibilidade
-    await syncToInstances(organizationId, config, accessToken)
+    await syncToInstances(organizationId, config, accessToken, verifyToken)
 
     console.log('✅ WhatsApp conectado:', validation.phoneNumber)
 
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
         business_name: config.business_name,
         phone_number: config.phone_number,
         webhook_verify_token: verifyToken,
-        webhook_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://seu-dominio.com'}/api/whatsapp/webhook`
+        webhook_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.worder.com.br'}/api/whatsapp/meta/webhook`
       }
     })
   } catch (error: any) {
@@ -267,7 +267,7 @@ async function validateAccessToken(accessToken: string, phoneNumberId: string): 
   }
 }
 
-async function syncToInstances(organizationId: string, config: any, accessToken: string) {
+async function syncToInstances(organizationId: string, config: any, accessToken: string, verifyToken: string) {
   // Verificar se já existe uma instance
   const { data: existing } = await supabase
     .from('whatsapp_instances')
@@ -281,6 +281,7 @@ async function syncToInstances(organizationId: string, config: any, accessToken:
     phone_number: config.phone_number,
     phone_number_id: config.phone_number_id,
     access_token: accessToken,
+    webhook_verify_token: verifyToken,
     status: 'connected',
     online_status: 'available',
     api_type: 'META_CLOUD',

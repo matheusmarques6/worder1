@@ -50,8 +50,9 @@ export async function verifyWebhookToken(
   challenge: string | null
 ): Promise<{ valid: boolean; challenge?: string }> {
   if (mode !== 'subscribe') return { valid: false }
+  if (!token) return { valid: false }
 
-  // Check against instance verify tokens
+  // 1. Per-instance verify tokens (Cloud + Evolution)
   const { data: instance } = await supabaseAdmin
     .from('whatsapp_instances')
     .select('id, organization_id')
@@ -67,9 +68,25 @@ export async function verifyWebhookToken(
     return { valid: true, challenge: challenge || '' }
   }
 
-  // Check global verify token
-  const globalToken = process.env.META_WEBHOOK_VERIFY_TOKEN
-  if (token === globalToken) {
+  // 2. Per-org verify tokens (legacy whatsapp_configs row created by /api/whatsapp/connect)
+  const { data: config } = await supabaseAdmin
+    .from('whatsapp_configs')
+    .select('id, organization_id')
+    .eq('webhook_verify_token', token)
+    .limit(1)
+    .maybeSingle()
+
+  if (config) {
+    await supabaseAdmin
+      .from('whatsapp_configs')
+      .update({ webhook_verified: true })
+      .eq('id', config.id)
+    return { valid: true, challenge: challenge || '' }
+  }
+
+  // 3. Global fallback (single tenant / dev)
+  const globalToken = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN
+  if (globalToken && token === globalToken) {
     return { valid: true, challenge: challenge || '' }
   }
 
