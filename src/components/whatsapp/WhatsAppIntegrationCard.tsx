@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import {
   MessageSquare,
   Settings,
@@ -57,7 +58,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
       setLoading(true)
       
       // Buscar configuração da API oficial
-      const configRes = await fetch(`/api/whatsapp/connect?organizationId=${organizationId}`)
+      const configRes = await authedFetch(`/api/whatsapp/connect?organizationId=${organizationId}`)
       const configData = await configRes.json()
       
       // Buscar instâncias (QR Code)
@@ -92,7 +93,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
 
     setDisconnecting(true)
     try {
-      await fetch(`/api/whatsapp/connect?organizationId=${organizationId}`, {
+      await authedFetch(`/api/whatsapp/connect?organizationId=${organizationId}`, {
         method: 'DELETE'
       })
       setConnected(false)

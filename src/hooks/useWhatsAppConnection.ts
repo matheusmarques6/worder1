@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 
 interface WhatsAppConnectionStatus {
   connected: boolean
@@ -34,7 +35,7 @@ export function useWhatsAppConnection(organizationId: string | null | undefined)
       setLoading(true)
       setError(null)
       
-      const response = await fetch(`/api/whatsapp/connect?organizationId=${organizationId}`)
+      const response = await authedFetch(`/api/whatsapp/connect?organizationId=${organizationId}`)
       const data = await response.json()
       
       if (response.ok) {
