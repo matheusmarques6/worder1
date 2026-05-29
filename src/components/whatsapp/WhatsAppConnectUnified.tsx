@@ -1013,7 +1013,11 @@ export default function WhatsAppConnectUnified({
                   </span>
                 ) : (
                   <button
-                    onClick={method === 'qrcode' ? () => { generateQRCode(); setStep(2); } : () => setStep(2)}
+                    onClick={
+                      method === 'qrcode'
+                        ? () => { generateQRCode(); setStep(2); }
+                        : handleOfficialConnect
+                    }
                     disabled={loading || (method === 'official' && (!phoneNumberId || !accessToken))}
                     className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                       method === 'qrcode'
@@ -1024,44 +1028,19 @@ export default function WhatsAppConnectUnified({
                     {loading ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Iniciando...
+                        {method === 'qrcode' ? 'Iniciando...' : 'Conectando...'}
                       </>
                     ) : (
                       <>
-                        {method === 'qrcode' ? 'Gerar QR Code' : 'Continuar'}
-                        <ChevronRight className="w-4 h-4" />
+                        {method === 'qrcode' ? (
+                          <>Gerar QR Code <ChevronRight className="w-4 h-4" /></>
+                        ) : (
+                          <><Check className="w-4 h-4" /> Conectar</>
+                        )}
                       </>
                     )}
                   </button>
                 )}
-              </>
-            )}
-
-            {step === 2 && method === 'official' && (
-              <>
-                <button
-                  onClick={() => setStep(1)}
-                  className="px-4 py-2.5 text-gray-500 hover:text-white transition-colors"
-                >
-                  Voltar
-                </button>
-                <button
-                  onClick={handleOfficialConnect}
-                  disabled={loading || !phoneNumberId || !accessToken}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-gray-900 font-medium transition-colors"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Conectando...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      Conectar
-                    </>
-                  )}
-                </button>
               </>
             )}
 
