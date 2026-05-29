@@ -326,6 +326,7 @@ export default function WhatsAppConnectUnified({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organizationId,
+          storeId: effectiveStoreId,
           phoneNumberId: phoneNumberId.trim(),
           wabaId: wabaId.trim() || undefined,
           accessToken: accessToken.trim()

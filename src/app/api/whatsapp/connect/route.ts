@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       organizationId,
+      storeId,
       phoneNumberId,
       wabaId,
       accessToken,
@@ -132,7 +133,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Também criar/atualizar na tabela whatsapp_instances para compatibilidade
-    await syncToInstances(organizationId, config, accessToken, verifyToken)
+    await syncToInstances(organizationId, storeId || null, config, accessToken, verifyToken)
 
     console.log('✅ WhatsApp conectado:', validation.phoneNumber)
 
@@ -267,16 +268,26 @@ async function validateAccessToken(accessToken: string, phoneNumberId: string): 
   }
 }
 
-async function syncToInstances(organizationId: string, config: any, accessToken: string, verifyToken: string) {
-  // Verificar se já existe uma instance
+async function syncToInstances(
+  organizationId: string,
+  storeId: string | null,
+  config: any,
+  accessToken: string,
+  verifyToken: string,
+) {
+  // Lookup por org + phone_number_id (Meta phone_number_id eh unico globalmente,
+  // entao um mesmo numero nao pode estar em duas lojas da mesma org). Isso permite
+  // migrar instancias antigas com store_id=NULL para a loja atual.
   const { data: existing } = await supabase
     .from('whatsapp_instances')
     .select('id')
     .eq('organization_id', organizationId)
-    .single()
+    .eq('phone_number_id', config.phone_number_id)
+    .maybeSingle()
 
   const instanceData = {
     organization_id: organizationId,
+    store_id: storeId,
     title: config.business_name || 'WhatsApp Business',
     phone_number: config.phone_number,
     phone_number_id: config.phone_number_id,
