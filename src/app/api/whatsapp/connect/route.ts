@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { subscribeAppToWABA } from '@/lib/whatsapp/cloud-api';
 export const dynamic = 'force-dynamic';
 
 // GET - Buscar status da conexão WhatsApp
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
     // 1. Validar credenciais com a Meta API
     console.log('🔍 Validando credenciais...')
     const validation = await validateCredentials(accessToken, phoneNumberId, wabaId)
-    
+
     if (!validation.valid) {
       return NextResponse.json({
         error: validation.error || 'Credenciais inválidas',
@@ -82,6 +83,26 @@ export async function POST(request: NextRequest) {
 
     // 2. Gerar verify token se não fornecido
     const verifyToken = webhookVerifyToken || generateVerifyToken()
+
+    // 2.1. Inscrever o app no WABA. Sem este passo, validar o webhook na Meta
+    // apenas comprova que a URL responde — a Meta NAO comeca a enviar eventos
+    // ate que o app esteja subscribed_apps do WABA.
+    let appSubscribed = false
+    let subscriptionError: string | null = null
+    const effectiveWabaId = wabaId || validation.wabaId
+    if (effectiveWabaId) {
+      try {
+        await subscribeAppToWABA({ wabaId: effectiveWabaId, accessToken })
+        appSubscribed = true
+        console.log('✅ App inscrito no WABA:', effectiveWabaId)
+      } catch (err: any) {
+        subscriptionError = err?.message || 'Falha ao inscrever app no WABA'
+        console.warn('⚠️  Subscription falhou (conexao segue, mas mensagens nao chegarao):', subscriptionError)
+      }
+    } else {
+      subscriptionError = 'WABA ID nao fornecido nem detectado — informe o WABA ID para receber mensagens.'
+      console.warn('⚠️ ', subscriptionError)
+    }
 
     // 3. Salvar configuração
     const { data: existingConfig } = await supabase
@@ -97,7 +118,7 @@ export async function POST(request: NextRequest) {
         .from('whatsapp_configs')
         .update({
           phone_number_id: phoneNumberId,
-          waba_id: wabaId || null,
+          waba_id: effectiveWabaId || null,
           access_token: accessToken,
           business_name: validation.businessName,
           phone_number: validation.phoneNumber,
@@ -118,7 +139,7 @@ export async function POST(request: NextRequest) {
         .insert({
           organization_id: organizationId,
           phone_number_id: phoneNumberId,
-          waba_id: wabaId || null,
+          waba_id: effectiveWabaId || null,
           access_token: accessToken,
           business_name: validation.businessName,
           phone_number: validation.phoneNumber,
@@ -140,6 +161,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'WhatsApp Business conectado com sucesso!',
+      app_subscribed: appSubscribed,
+      subscription_error: subscriptionError,
       config: {
         id: config.id,
         phone_number_id: config.phone_number_id,
@@ -199,11 +222,13 @@ async function validateCredentials(
   details?: any
   businessName?: string
   phoneNumber?: string
+  wabaId?: string
 }> {
   try {
-    // Buscar informações do número
+    // Buscar info do numero — pedimos tambem whatsapp_business_account pra detectar
+    // o WABA automaticamente quando o usuario nao preencheu o campo opcional.
     const phoneResponse = await fetch(
-      `https://graph.facebook.com/v18.0/${phoneNumberId}?fields=verified_name,display_phone_number,quality_rating,messaging_limit_tier`,
+      `https://graph.facebook.com/v18.0/${phoneNumberId}?fields=verified_name,display_phone_number,quality_rating,messaging_limit_tier,whatsapp_business_account`,
       {
         headers: { Authorization: `Bearer ${accessToken}` }
       }
@@ -219,7 +244,9 @@ async function validateCredentials(
       }
     }
 
-    // Verificar WABA se fornecido
+    const detectedWabaId = phoneData.whatsapp_business_account?.id
+
+    // Se o usuario passou um wabaId, valida que confere com o detectado
     if (wabaId) {
       const wabaResponse = await fetch(
         `https://graph.facebook.com/v18.0/${wabaId}?fields=name,currency,timezone_id`,
@@ -242,7 +269,8 @@ async function validateCredentials(
     return {
       valid: true,
       businessName: phoneData.verified_name || 'WhatsApp Business',
-      phoneNumber: phoneData.display_phone_number || phoneNumberId
+      phoneNumber: phoneData.display_phone_number || phoneNumberId,
+      wabaId: wabaId || detectedWabaId,
     }
   } catch (error: any) {
     return {

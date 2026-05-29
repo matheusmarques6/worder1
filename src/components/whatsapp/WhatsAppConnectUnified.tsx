@@ -925,6 +925,24 @@ export default function WhatsAppConnectUnified({
                   </p>
                 </div>
 
+                {/* Subscription status (Manual Cloud only) */}
+                {method === 'official' && result && (
+                  result.app_subscribed ? (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                      <p className="text-sm text-emerald-700 font-medium">
+                        ✅ App inscrito no WABA — a Meta vai enviar mensagens recebidas para o seu webhook.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                      <p className="text-sm text-amber-800 font-medium">⚠️  App ainda não inscrito no WABA</p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        {result.subscription_error || 'Sem subscription, a Meta valida o webhook mas não envia mensagens.'} Volte ao Meta Business Suite → WhatsApp → Configuração → Webhooks → seção <strong>Campos do webhook</strong> e clique em <strong>Assinar</strong> nos campos <code>messages</code> e <code>message_status</code>.
+                      </p>
+                    </div>
+                  )
+                )}
+
                 {/* Webhook Config - Only for Official API */}
                 {method === 'official' && result?.config && (
                   <div className="p-4 bg-white rounded-xl space-y-4">
