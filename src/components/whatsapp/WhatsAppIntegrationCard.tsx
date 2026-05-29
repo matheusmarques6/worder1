@@ -37,7 +37,6 @@ interface WhatsAppInstance {
   title: string
   phone_number: string
   status: string
-  api_type: string
   created_at: string
 }
 

@@ -15,7 +15,8 @@ export interface WhatsAppInstance {
   phone_number_id: string | null
   status: 'ACTIVE' | 'INACTIVE' | 'GENERATING' | 'connected' | 'disconnected' | 'qr_pending'
   online_status: 'available' | 'unavailable' | null
-  api_type: 'EVOLUTION' | 'META_CLOUD'
+  // Onda 3 E.3 — Evolution removed from UX. Cloud-only.
+  api_type: 'META_CLOUD'
   api_url?: string
   api_key?: string
   access_token?: string
@@ -63,7 +64,7 @@ interface CreateInstanceParams {
   organizationId: string
   storeId: string // ✅ NOVO: Obrigatório
   title: string
-  apiType?: 'EVOLUTION' | 'META_CLOUD'
+  apiType?: 'META_CLOUD'
   apiUrl?: string
   apiKey?: string
 }
@@ -257,7 +258,7 @@ export function useWhatsAppConnection(organizationId: string | null, storeId?: s
           organization_id: params.organizationId,
           store_id: params.storeId, // ✅ CRÍTICO
           title: params.title,
-          api_type: params.apiType || 'EVOLUTION',
+          api_type: params.apiType || 'META_CLOUD',
           api_url: params.apiUrl,
           api_key: params.apiKey,
         }),

@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
         business_name: account.verified_name,
         phone_number: account.display_phone_number || account.phone_number,
         webhook_verify_token: verifyToken,
-        webhook_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.worder.com.br'}/api/whatsapp/meta/webhook`
+        webhook_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.worder.com.br'}/api/whatsapp/cloud/webhook`
       }
     })
   } catch (error: any) {

@@ -90,8 +90,10 @@ export async function verifyWebhookToken(
     return { valid: true, challenge: challenge || '' }
   }
 
-  // 3. Global fallback (single tenant / dev)
-  const globalToken = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN
+  // 3. Global fallback (single tenant / dev).
+  // Onda 3 D.4 — env var canonicalized to WHATSAPP_WEBHOOK_VERIFY_TOKEN.
+  // (Was: META_WEBHOOK_VERIFY_TOKEN || WHATSAPP_VERIFY_TOKEN.)
+  const globalToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN
   if (globalToken && token === globalToken) {
     return { valid: true, challenge: challenge || '' }
   }

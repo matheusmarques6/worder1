@@ -5,13 +5,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
-import { verifyWebhookToken } from '@/lib/services/whatsapp/webhook-processor';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    // Onda 3 D.2 — Evolution clients still POST here with Evolution payload
+    // shape (different from Meta). Cloud webhook would fail to parse it,
+    // so we keep the inline Evolution processing alive and just log
+    // a deprecation warning per request.
+    console.warn('[DEPRECATED] /api/whatsapp/webhook POST hit — Evolution payload (Cloud-only migration pending)');
+
     const body = await request.json();
-    
+
     console.log('[Webhook] =====================================');
     console.log('[Webhook] Received event');
     
@@ -481,21 +486,25 @@ if (msgError) {
   }
 }
 
-// GET — Meta hub.mode=subscribe verification.
-// Delegates to the shared verifier so per-instance, per-org and global tokens all work.
+// GET — Onda 3 D.2: forward Meta verification challenge to
+// /api/whatsapp/cloud/webhook so a single route owns Meta verify-token
+// lookup (against whatsapp_business_accounts.webhook_verify_token).
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const mode = searchParams.get('hub.mode');
-  const token = searchParams.get('hub.verify_token');
-  const challenge = searchParams.get('hub.challenge');
+  console.warn('[DEPRECATED] /api/whatsapp/webhook GET hit — forwarding to /cloud/webhook');
 
-  const result = await verifyWebhookToken(mode, token, challenge);
+  const target = new URL('/api/whatsapp/cloud/webhook', request.url);
+  request.nextUrl.searchParams.forEach((value, key) => {
+    target.searchParams.set(key, value);
+  });
 
-  if (result.valid) {
-    console.log('[Webhook] ✅ Verification passed');
-    return new NextResponse(result.challenge || challenge || '', { status: 200 });
-  }
+  const upstream = await fetch(target, {
+    method: 'GET',
+    headers: request.headers,
+  });
 
-  console.warn('[Webhook] ❌ Verification failed — token did not match instance/config/env');
-  return new NextResponse('Forbidden', { status: 403 });
+  const body = await upstream.text();
+  return new NextResponse(body, {
+    status: upstream.status,
+    headers: { 'content-type': upstream.headers.get('content-type') || 'text/plain' },
+  });
 }

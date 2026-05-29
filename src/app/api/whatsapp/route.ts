@@ -29,7 +29,8 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+  // Onda 3 D.4 — env var canonicalized to WHATSAPP_WEBHOOK_VERIFY_TOKEN.
+  if (mode === 'subscribe' && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
     console.log('WhatsApp webhook verified');
     return new NextResponse(challenge, { status: 200 });
   }

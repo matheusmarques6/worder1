@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Settings, Smartphone, Users, MessageSquare, Clock, ShieldCheck, Globe } from 'lucide-react'
 import { useAuthStore, useStoreStore } from '@/stores'
-import { InstancesTab } from '@/components/whatsapp/settings/InstancesTab'
+import { AccountsTab } from '@/components/whatsapp/settings/AccountsTab'
 import { QueuesTab } from '@/components/whatsapp/settings/QueuesTab'
 import { QuickRepliesTab } from '@/components/whatsapp/settings/QuickRepliesTab'
 import { BusinessHoursTab } from '@/components/whatsapp/settings/BusinessHoursTab'
@@ -76,7 +76,7 @@ export default function WhatsAppSettingsPage() {
 
         {/* Content */}
         <div className="bg-white rounded-2xl p-6 border border-gray-200">
-          {activeTab === 'instances' && <InstancesTab organizationId={organizationId} />}
+          {activeTab === 'instances' && <AccountsTab organizationId={organizationId} />}
           {activeTab === 'queues' && <QueuesTab organizationId={organizationId} />}
           {activeTab === 'quick-replies' && <QuickRepliesTab organizationId={organizationId} />}
           {activeTab === 'business-hours' && <BusinessHoursTab organizationId={organizationId} storeId={storeId} />}
