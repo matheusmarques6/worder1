@@ -741,7 +741,7 @@ export default function WhatsAppConnectUnified({
                       value={phoneNumberId}
                       onChange={(e) => setPhoneNumberId(e.target.value)}
                       placeholder="Ex: 123456789012345"
-                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
 
@@ -754,7 +754,7 @@ export default function WhatsAppConnectUnified({
                       value={wabaId}
                       onChange={(e) => setWabaId(e.target.value)}
                       placeholder="Ex: 987654321098765"
-                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
 
@@ -768,12 +768,12 @@ export default function WhatsAppConnectUnified({
                         value={accessToken}
                         onChange={(e) => setAccessToken(e.target.value)}
                         placeholder="EAAG..."
-                        className="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-white placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                        className="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 transition-colors"
                       />
                       <button
                         type="button"
                         onClick={() => setShowToken(!showToken)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-white"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
                       >
                         {showToken ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                       </button>
@@ -1048,7 +1048,7 @@ export default function WhatsAppConnectUnified({
               <>
                 <button
                   onClick={() => { stopPolling(); setStep(1); }}
-                  className="px-4 py-2.5 text-gray-500 hover:text-white transition-colors"
+                  className="px-4 py-2.5 text-gray-500 hover:text-gray-700 transition-colors"
                 >
                   Voltar
                 </button>
