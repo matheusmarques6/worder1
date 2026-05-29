@@ -225,10 +225,11 @@ async function validateCredentials(
   wabaId?: string
 }> {
   try {
-    // Buscar info do numero — pedimos tambem whatsapp_business_account pra detectar
-    // o WABA automaticamente quando o usuario nao preencheu o campo opcional.
+    // Buscar info do numero — campos que so exigem whatsapp_business_messaging.
+    // NAO incluir whatsapp_business_account aqui, esse campo precisa de
+    // whatsapp_business_management e quebra com code 100 se o token nao tiver.
     const phoneResponse = await fetch(
-      `https://graph.facebook.com/v18.0/${phoneNumberId}?fields=verified_name,display_phone_number,quality_rating,messaging_limit_tier,whatsapp_business_account`,
+      `https://graph.facebook.com/v18.0/${phoneNumberId}?fields=verified_name,display_phone_number,quality_rating,messaging_limit_tier`,
       {
         headers: { Authorization: `Bearer ${accessToken}` }
       }
@@ -244,7 +245,21 @@ async function validateCredentials(
       }
     }
 
-    const detectedWabaId = phoneData.whatsapp_business_account?.id
+    // Tentativa best-effort de detectar o WABA — falha silenciosa se o token
+    // nao tiver whatsapp_business_management.
+    let detectedWabaId: string | undefined
+    try {
+      const wabaDiscovery = await fetch(
+        `https://graph.facebook.com/v18.0/${phoneNumberId}?fields=whatsapp_business_account`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      )
+      const wabaDiscoveryData = await wabaDiscovery.json()
+      if (!wabaDiscoveryData.error) {
+        detectedWabaId = wabaDiscoveryData.whatsapp_business_account?.id
+      }
+    } catch {
+      // ignora — usuario pode passar wabaId manualmente
+    }
 
     // Se o usuario passou um wabaId, valida que confere com o detectado
     if (wabaId) {
