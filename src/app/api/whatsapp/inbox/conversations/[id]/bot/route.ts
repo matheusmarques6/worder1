@@ -2,6 +2,7 @@
 // CORRIGIDO: Usa coluna ai_enabled correta
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 // GET - Buscar status do bot
@@ -10,6 +11,10 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const conversationId = params.id
 
     const { data: conversation, error } = await supabase
@@ -22,6 +27,7 @@ export async function GET(
         ai_disabled_reason
       `)
       .eq('id', conversationId)
+      .eq('organization_id', orgId)
       .single()
 
     if (error || !conversation) {
@@ -51,6 +57,10 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const conversationId = params.id
     const body = await request.json()
     const { 
@@ -94,6 +104,7 @@ export async function POST(
       .from('whatsapp_conversations')
       .update(updateData)
       .eq('id', conversationId)
+      .eq('organization_id', orgId)
       .select('id, ai_enabled, ai_agent_id, ai_disabled_at, ai_disabled_reason')
       .single()
 

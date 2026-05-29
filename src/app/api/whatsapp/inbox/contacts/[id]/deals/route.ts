@@ -2,15 +2,17 @@
 // CORRIGIDO: Usa tabela CONTACTS unificada
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
-// Helper para buscar contato unificado
-async function getContact(contactId: string) {
+// Helper para buscar contato unificado (escopado por org)
+async function getContact(contactId: string, orgId: string) {
   // Tentar tabela contacts primeiro
   const { data: contact } = await supabase
     .from('contacts')
     .select('id, organization_id, whatsapp, phone, full_name, first_name, email')
     .eq('id', contactId)
+    .eq('organization_id', orgId)
     .single()
 
   if (contact) {
@@ -27,6 +29,7 @@ async function getContact(contactId: string) {
     .from('whatsapp_contacts')
     .select('id, organization_id, phone_number, name, email')
     .eq('id', contactId)
+    .eq('organization_id', orgId)
     .single()
 
   if (waContact) {
@@ -42,9 +45,13 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
 
-    const contact = await getContact(contactId)
+    const contact = await getContact(contactId, orgId)
 
     if (!contact) {
       return NextResponse.json({ deals: [], activeDeal: null })
@@ -86,11 +93,15 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
     const body = await request.json()
     const { pipelineId, stageId, title, value } = body
 
-    const contact = await getContact(contactId)
+    const contact = await getContact(contactId, orgId)
 
     if (!contact) {
       return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 })

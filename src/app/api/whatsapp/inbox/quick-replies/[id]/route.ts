@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // PUT /api/whatsapp/inbox/quick-replies/[id]
@@ -8,6 +9,10 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const { id } = params
     const body = await request.json()
     const { shortcut, title, content, category, mediaUrl, mediaType, isActive } = body
@@ -30,6 +35,7 @@ export async function PUT(
       .from('whatsapp_quick_replies')
       .update(updates)
       .eq('id', id)
+      .eq('organization_id', orgId)
       .select('*')
       .single()
 
@@ -49,12 +55,17 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const { id } = params
 
     const { error } = await supabase
       .from('whatsapp_quick_replies')
       .delete()
       .eq('id', id)
+      .eq('organization_id', orgId)
 
     if (error) throw error
 
@@ -72,6 +83,10 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const { id } = params
 
     const { data, error } = await supabase
@@ -81,6 +96,7 @@ export async function POST(
         last_used_at: new Date().toISOString()
       })
       .eq('id', id)
+      .eq('organization_id', orgId)
       .select('*')
       .single()
 
@@ -92,6 +108,7 @@ export async function POST(
           last_used_at: new Date().toISOString()
         })
         .eq('id', id)
+        .eq('organization_id', orgId)
     }
 
     return NextResponse.json({ success: true })

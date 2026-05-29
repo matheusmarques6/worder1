@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { sendInternalNote } from '@/lib/services/whatsapp/message-service'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,18 +15,15 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
 
     const { data, error } = await supabaseAdmin
       .from('whatsapp_notes')
       .select('*')
       .eq('conversation_id', params.id)
-      .eq('organization_id', organizationId)
+      .eq('organization_id', orgId)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -44,27 +42,24 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId, userId: authUserId } = auth
 
     const body = await request.json()
-    const { content, agentId, agentName } = body
+    const { content, agentName } = body
 
-    if (!content || !agentId) {
+    if (!content) {
       return NextResponse.json(
-        { error: 'content and agentId required' },
+        { error: 'content required' },
         { status: 400 }
       )
     }
 
     const result = await sendInternalNote(
       params.id,
-      organizationId,
-      agentId,
+      orgId,
+      authUserId,
       agentName || 'Agent',
       content
     )

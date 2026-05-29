@@ -2,6 +2,7 @@
 // CORRIGIDO: Com suporte a anexos (attachments)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 // GET - Buscar notas do contato
@@ -10,6 +11,10 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '50')
@@ -19,6 +24,7 @@ export async function GET(
       .from('whatsapp_contact_notes')
       .select('*')
       .eq('contact_id', contactId)
+      .eq('organization_id', orgId)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(limit)
@@ -41,47 +47,45 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId: organizationId, userId: authUserId } = auth
+
     const contactId = params.id
     const body = await request.json()
-    const { 
-      content, 
-      conversation_id, 
+    const {
+      content,
+      conversation_id,
       note_type = 'note',
       attachments = [], // NOVO: suporte a anexos
-      created_by,
-      created_by_name = 'Usuário' 
+      created_by_name = 'Usuário'
     } = body
 
     if (!content && attachments.length === 0) {
       return NextResponse.json({ error: 'content or attachments required' }, { status: 400 })
     }
 
-    // Buscar organization_id do contato
-    let organizationId: string | null = null
-
-    // Tentar tabela contacts primeiro
+    // Confirmar que o contato pertence à org
     const { data: contact } = await supabase
       .from('contacts')
-      .select('organization_id')
+      .select('id')
       .eq('id', contactId)
+      .eq('organization_id', organizationId)
       .single()
 
-    if (contact) {
-      organizationId = contact.organization_id
-    } else {
-      // Fallback para whatsapp_contacts
+    if (!contact) {
       const { data: waContact } = await supabase
         .from('whatsapp_contacts')
-        .select('organization_id')
+        .select('id')
         .eq('id', contactId)
+        .eq('organization_id', organizationId)
         .single()
-      
-      organizationId = waContact?.organization_id
+      if (!waContact) {
+        return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 })
+      }
     }
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 })
-    }
+    const created_by = authUserId
 
     // Criar nota
     const { data: note, error } = await supabase
@@ -136,6 +140,10 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
     const { searchParams } = new URL(request.url)
     const noteId = searchParams.get('note_id')
@@ -149,6 +157,7 @@ export async function DELETE(
       .delete()
       .eq('id', noteId)
       .eq('contact_id', contactId)
+      .eq('organization_id', orgId)
 
     if (error) {
       console.error('Error deleting note:', error)
@@ -168,6 +177,10 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
     const body = await request.json()
     const { note_id, is_pinned, content } = body
@@ -193,6 +206,7 @@ export async function PATCH(
       .update(updates)
       .eq('id', note_id)
       .eq('contact_id', contactId)
+      .eq('organization_id', orgId)
       .select()
       .single()
 

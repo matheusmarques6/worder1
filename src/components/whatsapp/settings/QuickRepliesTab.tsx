@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { MessageSquare, Plus, Trash2, Loader2 } from 'lucide-react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 
 interface QuickReply {
   id: string
@@ -24,8 +25,8 @@ export function QuickRepliesTab({ organizationId }: { organizationId: string }) 
   async function load() {
     setLoading(true)
     try {
-      const res = await fetch(`/api/whatsapp/inbox/quick-replies?organizationId=${organizationId}`)
-      if (res.ok) { const d = await res.json(); setItems(d.data || []) }
+      const res = await authedFetch(`/api/whatsapp/inbox/quick-replies`)
+      if (res.ok) { const d = await res.json(); setItems(d.quickReplies || d.data || []) }
     } catch { /* */ }
     setLoading(false)
   }
@@ -34,7 +35,7 @@ export function QuickRepliesTab({ organizationId }: { organizationId: string }) 
     if (!form.shortcut || !form.title || !form.content) return
     setSaving(true)
     try {
-      const res = await fetch(`/api/whatsapp/inbox/quick-replies?organizationId=${organizationId}`, {
+      const res = await authedFetch(`/api/whatsapp/inbox/quick-replies`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, shortcut: form.shortcut.startsWith('/') ? form.shortcut : '/' + form.shortcut }),
       })
@@ -45,7 +46,7 @@ export function QuickRepliesTab({ organizationId }: { organizationId: string }) 
 
   async function remove(id: string) {
     if (!confirm('Excluir esta resposta?')) return
-    await fetch(`/api/whatsapp/inbox/quick-replies/${id}?organizationId=${organizationId}`, { method: 'DELETE' })
+    await authedFetch(`/api/whatsapp/inbox/quick-replies/${id}`, { method: 'DELETE' })
     setItems(items.filter(i => i.id !== id))
   }
 

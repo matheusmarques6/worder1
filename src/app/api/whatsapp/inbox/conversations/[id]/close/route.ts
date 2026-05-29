@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // POST /api/whatsapp/inbox/conversations/[id]/close
@@ -8,19 +9,24 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId, userId: authUserId } = auth
+
     const { id } = params
     const body = await request.json()
-    const { userId, resolution } = body
+    const { resolution } = body
 
     const { data, error } = await supabase
       .from('whatsapp_conversations')
       .update({
         status: 'closed',
         resolved_at: new Date().toISOString(),
-        resolved_by: userId,
+        resolved_by: authUserId,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
+      .eq('organization_id', orgId)
       .select('*, contact:whatsapp_contacts(id, organization_id)')
       .single()
 
@@ -35,7 +41,7 @@ export async function POST(
         activity_type: 'conversation_closed',
         title: 'Conversa fechada',
         description: resolution || null,
-        created_by: userId
+        created_by: authUserId
       })
     }
 

@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef } from 'react'
-import type { 
-  InboxConversation, 
-  ConversationFilters, 
-  Pagination 
+import type {
+  InboxConversation,
+  ConversationFilters,
+  Pagination
 } from '@/types/inbox'
+import { authedFetch } from '@/lib/api/authed-fetch'
 
 interface UseInboxConversationsReturn {
   conversations: InboxConversation[]
@@ -83,7 +84,7 @@ export function useInboxConversations(organizationId: string | null, storeId?: s
 
       console.log('📡 Fetching conversations:', `/api/whatsapp/inbox/conversations?${params}`)
       
-      const response = await fetch(`/api/whatsapp/inbox/conversations?${params}`)
+      const response = await authedFetch(`/api/whatsapp/inbox/conversations?${params}`)
       const data = await response.json()
 
       console.log('📥 API Response:', { 
@@ -122,7 +123,7 @@ export function useInboxConversations(organizationId: string | null, storeId?: s
 
   const updateConversation = useCallback(async (id: string, updates: Partial<InboxConversation>) => {
     try {
-      const response = await fetch(`/api/whatsapp/inbox/conversations/${id}`, {
+      const response = await authedFetch(`/api/whatsapp/inbox/conversations/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
@@ -160,12 +161,12 @@ export function useInboxConversations(organizationId: string | null, storeId?: s
 
   const toggleBot = useCallback(async (id: string, isActive: boolean, reason?: string) => {
     try {
-      const response = await fetch(`/api/whatsapp/inbox/conversations/${id}/bot`, {
+      const response = await authedFetch(`/api/whatsapp/inbox/conversations/${id}/bot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           ai_enabled: isActive,
-          reason 
+          reason
         })
       })
 
@@ -185,7 +186,7 @@ export function useInboxConversations(organizationId: string | null, storeId?: s
 
   const markAsRead = useCallback(async (id: string) => {
     try {
-      await fetch(`/api/whatsapp/inbox/conversations/${id}/read`, {
+      await authedFetch(`/api/whatsapp/inbox/conversations/${id}/read`, {
         method: 'POST'
       })
       

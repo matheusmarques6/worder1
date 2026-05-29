@@ -2,6 +2,7 @@
 // VERSÃO CORRIGIDA - Limpa dados ao mudar de contato
 import { useState, useCallback, useRef } from 'react'
 import { useAuthStore } from '@/stores'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import type { 
   InboxContact, 
   InboxNote, 
@@ -110,7 +111,7 @@ export function useInboxContact(): UseInboxContactReturn {
 
     try {
       // Buscar contato
-      const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}`)
+      const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}`)
       const data = await response.json()
 
       // CORREÇÃO: Verificar se ainda é o contato que queremos (evita race condition)
@@ -134,7 +135,7 @@ export function useInboxContact(): UseInboxContactReturn {
 
       // Buscar conversa se tiver conversationId
       if (conversationId) {
-        const convResponse = await fetch(`/api/whatsapp/inbox/conversations/${conversationId}`)
+        const convResponse = await authedFetch(`/api/whatsapp/inbox/conversations/${conversationId}`)
         if (convResponse.ok && currentContactIdRef.current === contactId) {
           const convData = await convResponse.json()
           setConversation(convData.conversation || convData)
@@ -163,7 +164,7 @@ export function useInboxContact(): UseInboxContactReturn {
     }
 
     try {
-      const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}`)
+      const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}`)
       const data = await response.json()
 
       if (response.ok && currentContactIdRef.current === contactId) {
@@ -180,7 +181,7 @@ export function useInboxContact(): UseInboxContactReturn {
       }
 
       if (conversationId && currentContactIdRef.current === contactId) {
-        const convResponse = await fetch(`/api/whatsapp/inbox/conversations/${conversationId}`)
+        const convResponse = await authedFetch(`/api/whatsapp/inbox/conversations/${conversationId}`)
         if (convResponse.ok) {
           const convData = await convResponse.json()
           setConversation(convData.conversation || convData)
@@ -192,7 +193,7 @@ export function useInboxContact(): UseInboxContactReturn {
   }, [fetchContact])
 
   const updateContact = useCallback(async (contactId: string, updates: Partial<InboxContact>) => {
-    const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}`, {
+    const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -209,7 +210,7 @@ export function useInboxContact(): UseInboxContactReturn {
   }, [])
 
   const addTag = useCallback(async (contactId: string, tag: string) => {
-    const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/tags`, {
+    const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/tags`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tag, action: 'add' })
@@ -225,7 +226,7 @@ export function useInboxContact(): UseInboxContactReturn {
   }, [])
 
   const removeTag = useCallback(async (contactId: string, tag: string) => {
-    const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/tags`, {
+    const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/tags`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tag, action: 'remove' })
@@ -246,7 +247,7 @@ export function useInboxContact(): UseInboxContactReturn {
     conversationId?: string,
     attachments?: any[]
   ) => {
-    const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/notes`, {
+    const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/notes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -267,7 +268,7 @@ export function useInboxContact(): UseInboxContactReturn {
   }, [])
 
   const deleteNote = useCallback(async (contactId: string, noteId: string) => {
-    const response = await fetch(
+    const response = await authedFetch(
       `/api/whatsapp/inbox/contacts/${contactId}/notes?note_id=${noteId}`,
       { method: 'DELETE' }
     )
@@ -281,7 +282,7 @@ export function useInboxContact(): UseInboxContactReturn {
   }, [])
 
   const blockContact = useCallback(async (contactId: string, reason?: string) => {
-    const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/block`, {
+    const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/block`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ block: true, reason })
@@ -295,7 +296,7 @@ export function useInboxContact(): UseInboxContactReturn {
   }, [])
 
   const unblockContact = useCallback(async (contactId: string) => {
-    const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/block`, {
+    const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/block`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ block: false })
@@ -309,7 +310,7 @@ export function useInboxContact(): UseInboxContactReturn {
   }, [])
 
   const assignConversation = useCallback(async (conversationId: string, userId: string | null) => {
-    const response = await fetch(`/api/whatsapp/inbox/conversations/${conversationId}/assign`, {
+    const response = await authedFetch(`/api/whatsapp/inbox/conversations/${conversationId}/assign`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId })
@@ -322,7 +323,7 @@ export function useInboxContact(): UseInboxContactReturn {
   }, [])
 
   const toggleBot = useCallback(async (conversationId: string, active: boolean) => {
-    const response = await fetch(`/api/whatsapp/inbox/conversations/${conversationId}/bot`, {
+    const response = await authedFetch(`/api/whatsapp/inbox/conversations/${conversationId}/bot`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_bot_active: active })
@@ -335,7 +336,7 @@ export function useInboxContact(): UseInboxContactReturn {
 
   const fetchOrders = useCallback(async (contactId: string) => {
     try {
-      const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/orders`)
+      const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/orders`)
       const data = await response.json()
 
       if (response.ok && currentContactIdRef.current === contactId) {
@@ -349,7 +350,7 @@ export function useInboxContact(): UseInboxContactReturn {
 
   const fetchDeals = useCallback(async (contactId: string) => {
     try {
-      const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/deals`)
+      const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/deals`)
       const data = await response.json()
 
       if (response.ok && currentContactIdRef.current === contactId) {
@@ -362,7 +363,7 @@ export function useInboxContact(): UseInboxContactReturn {
   }, [])
 
   const createDeal = useCallback(async (contactId: string, params: CreateDealParams): Promise<InboxDeal | null> => {
-    const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/deals`, {
+    const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/deals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
@@ -382,7 +383,7 @@ export function useInboxContact(): UseInboxContactReturn {
 
   const fetchTasks = useCallback(async (contactId: string) => {
     try {
-      const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/tasks`)
+      const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/tasks`)
       const data = await response.json()
 
       if (response.ok && currentContactIdRef.current === contactId) {
@@ -394,7 +395,7 @@ export function useInboxContact(): UseInboxContactReturn {
   }, [])
 
   const createTask = useCallback(async (contactId: string, task: Partial<InboxTask>): Promise<InboxTask | null> => {
-    const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/tasks`, {
+    const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(task)
@@ -443,7 +444,7 @@ export function useInboxContact(): UseInboxContactReturn {
 
   const fetchInvoices = useCallback(async (contactId: string) => {
     try {
-      const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/invoices`)
+      const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/invoices`)
       const data = await response.json()
 
       if (response.ok && currentContactIdRef.current === contactId) {
@@ -460,7 +461,7 @@ export function useInboxContact(): UseInboxContactReturn {
       data[key] = value
     })
 
-    const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/invoices`, {
+    const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/invoices`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -479,7 +480,7 @@ export function useInboxContact(): UseInboxContactReturn {
     const contactId = currentContactIdRef.current
     if (!contactId) return
 
-    const response = await fetch(
+    const response = await authedFetch(
       `/api/whatsapp/inbox/contacts/${contactId}/invoices?invoice_id=${invoiceId}`,
       { method: 'DELETE' }
     )
@@ -490,7 +491,7 @@ export function useInboxContact(): UseInboxContactReturn {
   }, [])
 
   const addComment = useCallback(async (contactId: string, content: string, type?: string, mentions?: string[]) => {
-    const response = await fetch(`/api/whatsapp/inbox/contacts/${contactId}/comments`, {
+    const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 

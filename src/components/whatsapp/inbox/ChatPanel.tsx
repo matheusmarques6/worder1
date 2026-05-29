@@ -14,6 +14,7 @@ import { TransferModal } from './modals/TransferModal'
 import { PaymentLinkModal } from './modals/PaymentLinkModal'
 import { CreditCard, ShoppingBag } from 'lucide-react'
 import type { InboxConversation, InboxMessage } from '@/types/inbox'
+import { authedFetch } from '@/lib/api/authed-fetch'
 
 interface ChatPanelProps {
   conversation: InboxConversation
@@ -356,18 +357,18 @@ export function ChatPanel({
     if (!organizationId) return
     try {
       // Save CSAT rating
-      await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/csat?organizationId=${organizationId}`, {
+      await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/csat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rating, comment, agentId: currentAgentId }),
+        body: JSON.stringify({ rating, comment }),
       })
     } catch { /* */ }
     try {
       // Mark as resolved via close endpoint (existing)
-      await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/close?organizationId=${organizationId}`, {
+      await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/close`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: currentAgentId, resolution: comment, rating }),
+        body: JSON.stringify({ resolution: comment, rating }),
       })
     } catch { /* */ }
     if (onResolved) onResolved()
@@ -375,12 +376,11 @@ export function ChatPanel({
 
   async function handleTransferSubmit(params: { toAgentId?: string; toQueueId?: string; reason?: string }) {
     if (!organizationId) return
-    await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/transfer?organizationId=${organizationId}`, {
+    await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/transfer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...params,
-        fromAgentId: currentAgentId,
         fromAgentName: currentAgentName,
       }),
     })
@@ -394,7 +394,7 @@ export function ChatPanel({
 
   async function handleSendPaymentLink(data: { amount: number; description: string; paymentUrl?: string }) {
     if (!organizationId) return
-    await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/payment-link?organizationId=${organizationId}`, {
+    await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/payment-link`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -407,7 +407,7 @@ export function ChatPanel({
     const ids = prompt('IDs dos produtos Shopify separados por virgula:')
     if (!ids) return
     const productIds = ids.split(',').map(s => s.trim()).filter(Boolean)
-    await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/catalog?organizationId=${organizationId}`, {
+    await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/catalog`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ productIds, bodyText: 'Confira nossos produtos' }),
@@ -528,9 +528,8 @@ export function ChatPanel({
                   <button
                     onClick={async () => {
                       setShowMoreMenu(false)
-                      if (!organizationId) return
-                      await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}?organizationId=${organizationId}`, {
-                        method: 'PATCH',
+                      await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}`, {
+                        method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ status: 'pending' }),
                       })
@@ -542,9 +541,8 @@ export function ChatPanel({
                   <button
                     onClick={async () => {
                       setShowMoreMenu(false)
-                      if (!organizationId) return
-                      await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}?organizationId=${organizationId}`, {
-                        method: 'PATCH',
+                      await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}`, {
+                        method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ status: 'archived' }),
                       })
@@ -557,8 +555,8 @@ export function ChatPanel({
                     onClick={async () => {
                       setShowMoreMenu(false)
                       const tagName = prompt('Nome da tag:')
-                      if (!tagName || !organizationId) return
-                      await fetch(`/api/whatsapp/inbox/conversations/${conversation.id}/tags?organizationId=${organizationId}`, {
+                      if (!tagName) return
+                      await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/tags`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ name: tagName }),

@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://n8n-evolution-api.1fpac5.easypanel.host'
@@ -31,6 +32,10 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
 
     // Buscar contato
@@ -38,6 +43,7 @@ export async function GET(
       .from('whatsapp_contacts')
       .select('id, phone_number, profile_picture_url, organization_id')
       .eq('id', contactId)
+      .eq('organization_id', orgId)
       .single()
 
     if (contactError || !contact) {
@@ -48,7 +54,7 @@ export async function GET(
     const { data: instance } = await supabase
       .from('whatsapp_instances')
       .select('unique_id, api_url, api_key')
-      .eq('organization_id', contact.organization_id)
+      .eq('organization_id', orgId)
       .eq('status', 'connected')
       .limit(1)
       .single()
@@ -82,11 +88,12 @@ export async function GET(
           // Atualizar foto no banco
           await supabase
             .from('whatsapp_contacts')
-            .update({ 
+            .update({
               profile_picture_url: profilePictureUrl,
               updated_at: new Date().toISOString()
             })
             .eq('id', contactId)
+            .eq('organization_id', orgId)
 
           return NextResponse.json({ 
             profile_picture_url: profilePictureUrl,

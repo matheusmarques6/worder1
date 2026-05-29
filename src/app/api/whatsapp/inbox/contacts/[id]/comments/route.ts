@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 // =====================================================
@@ -16,6 +17,10 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const authCtx = await requireOrgFromAuth(request)
+    if (authCtx instanceof NextResponse) return authCtx
+    const { orgId } = authCtx
+
     const contactId = params.id
 
     // Tentar autenticação primeiro
@@ -31,6 +36,7 @@ export async function GET(
       .from('contact_comments')
       .select('*')
       .eq('contact_id', contactId)
+      .eq('organization_id', orgId)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(limit)
@@ -51,6 +57,7 @@ export async function GET(
         .from('whatsapp_contact_notes')
         .select('*')
         .eq('contact_id', contactId)
+        .eq('organization_id', orgId)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(limit)

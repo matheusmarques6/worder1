@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Bot, ChevronDown, Power, Loader2 } from 'lucide-react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 
 interface AIAgent {
   id: string
@@ -62,7 +63,7 @@ export default function BotSelector({
   const handleSelectAgent = async (agent: AIAgent | null) => {
     setChanging(true)
     try {
-      const res = await fetch(`/api/whatsapp/inbox/conversations/${conversationId}/bot`, {
+      const res = await authedFetch(`/api/whatsapp/inbox/conversations/${conversationId}/bot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { transferConversation } from '@/lib/services/whatsapp/conversation-service'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,15 +15,12 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId, userId: authUserId } = auth
 
     const body = await request.json()
-    const { toAgentId, toQueueId, reason, fromAgentId, fromAgentName } = body
+    const { toAgentId, toQueueId, reason, fromAgentName } = body
 
     if (!toAgentId && !toQueueId) {
       return NextResponse.json(
@@ -33,8 +31,8 @@ export async function POST(
 
     const result = await transferConversation({
       conversationId: params.id,
-      organizationId,
-      fromAgentId,
+      organizationId: orgId,
+      fromAgentId: authUserId,
       fromAgentName,
       toAgentId,
       toQueueId,

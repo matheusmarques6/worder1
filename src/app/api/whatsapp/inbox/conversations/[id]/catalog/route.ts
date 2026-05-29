@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { WhatsAppCloudAPI } from '@/lib/whatsapp/cloud-api'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,12 +15,9 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
 
     const body = await request.json()
     const { productIds, headerText, bodyText, catalogId } = body
@@ -33,7 +31,7 @@ export async function POST(
       .from('whatsapp_conversations')
       .select('instance_id, contact_phone')
       .eq('id', params.id)
-      .eq('organization_id', organizationId)
+      .eq('organization_id', orgId)
       .single()
 
     if (!conv || !conv.instance_id) {
@@ -105,7 +103,7 @@ export async function POST(
     // Save message record
     const wamid = result.messages?.[0]?.id
     await supabaseAdmin.from('whatsapp_messages').insert({
-      organization_id: organizationId,
+      organization_id: orgId,
       conversation_id: params.id,
       wamid,
       direction: 'outbound',

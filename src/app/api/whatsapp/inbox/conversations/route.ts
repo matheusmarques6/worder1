@@ -3,22 +3,22 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
     const status = searchParams.get('status')
     const search = searchParams.get('search')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
 
     let query = supabase
       .from('whatsapp_inbox_conversations')
       .select('*')
-      .eq('organization_id', organizationId)
+      .eq('organization_id', orgId)
       .order('last_message_at', { ascending: false, nullsFirst: false })
 
     if (status && status !== 'all') {

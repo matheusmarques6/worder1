@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { createClient } from '@supabase/supabase-js'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 // GET - Buscar tarefas do contato
@@ -9,6 +10,10 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') // 'all', 'pending', 'completed'
@@ -21,6 +26,7 @@ export async function GET(
         deal:deals(id, title, value, status),
         assigned_user:profiles!tasks_assigned_to_fkey(id, first_name, last_name, avatar_url)
       `)
+      .eq('organization_id', orgId)
       .or(`contact_id.eq.${contactId},unified_contact_id.eq.${contactId}`)
       .order('due_date', { ascending: true })
       .limit(limit)
@@ -102,14 +108,19 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
     const body = await request.json()
 
-    // Buscar dados do contato para pegar organization_id
+    // Buscar dados do contato para confirmar pertence à org
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
       .select('id, organization_id, first_name, whatsapp, phone')
       .eq('id', contactId)
+      .eq('organization_id', orgId)
       .single()
 
     if (contactError) {
@@ -118,11 +129,11 @@ export async function POST(
         .from('whatsapp_contacts')
         .select('id, organization_id, name, phone_number')
         .eq('id', contactId)
+        .eq('organization_id', orgId)
         .single()
-      
+
       if (legacyError) throw contactError
-      
-      // Usar dados do legacyContact
+
       return await createTaskForContact(legacyContact, body, true)
     }
 
@@ -231,6 +242,10 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
     const body = await request.json()
     const { task_id, ...updates } = body
@@ -267,6 +282,7 @@ export async function PATCH(
         updated_at: new Date().toISOString(),
       })
       .eq('id', task_id)
+      .eq('organization_id', orgId)
       .or(`contact_id.eq.${contactId},unified_contact_id.eq.${contactId}`)
       .select()
       .single()

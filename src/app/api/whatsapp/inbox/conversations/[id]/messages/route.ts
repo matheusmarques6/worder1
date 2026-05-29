@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api'
 import { getAccessToken } from '@/lib/whatsapp/account-loader'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 // ✅ FASE 3: Force dynamic para evitar cache
 export const dynamic = 'force-dynamic'
@@ -26,6 +27,10 @@ function getEvolutionConfig(instance?: any) {
 // GET - Buscar mensagens (paginação real)
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const conversationId = params.id
     const { searchParams } = new URL(request.url)
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100)
@@ -36,6 +41,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       .from('whatsapp_inbox_messages')
       .select('*')
       .eq('conversation_id', conversationId)
+      .eq('organization_id', orgId)
     if (before) query = query.lt('created_at', before)
     if (after) query = query.gt('created_at', after)
     query = query.order('created_at', { ascending: true }).limit(limit + 1)
@@ -88,9 +94,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 // POST - Enviar mensagem
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const conversationId = params.id
     const { content, message_type = 'text' } = await request.json()
-    
+
     if (!content) {
       return NextResponse.json(
         { error: 'content required' },
@@ -103,6 +113,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .from('whatsapp_cloud_conversations')
       .select('*, account:whatsapp_business_accounts(*)')
       .eq('id', conversationId)
+      .eq('organization_id', orgId)
       .maybeSingle()
 
     if (cloudConv && cloudConv.account) {
@@ -170,6 +181,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .from('whatsapp_conversations')
       .select('*, instance_id, store_id, contact_phone, phone_number, organization_id')
       .eq('id', conversationId)
+      .eq('organization_id', orgId)
       .single()
 
     if (convError || !conversation) {

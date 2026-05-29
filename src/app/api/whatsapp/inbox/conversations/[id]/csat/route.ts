@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,15 +14,12 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId, userId: authUserId } = auth
 
     const body = await request.json()
-    const { rating, comment, contactId, agentId } = body
+    const { rating, comment, contactId } = body
 
     if (!rating || rating < 1 || rating > 5) {
       return NextResponse.json({ error: 'Rating must be between 1 and 5' }, { status: 400 })
@@ -30,10 +28,10 @@ export async function POST(
     const { data, error } = await supabaseAdmin
       .from('whatsapp_csat_ratings')
       .insert({
-        organization_id: organizationId,
+        organization_id: orgId,
         conversation_id: params.id,
         contact_id: contactId,
-        agent_id: agentId,
+        agent_id: authUserId,
         rating,
         comment,
       })
@@ -56,18 +54,15 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
 
     const { data, error } = await supabaseAdmin
       .from('whatsapp_csat_ratings')
       .select('*')
       .eq('conversation_id', params.id)
-      .eq('organization_id', organizationId)
+      .eq('organization_id', orgId)
       .order('created_at', { ascending: false })
 
     if (error) {

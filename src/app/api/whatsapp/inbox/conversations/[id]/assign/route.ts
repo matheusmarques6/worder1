@@ -2,6 +2,7 @@
 // CORRIGIDO: Usa coluna assigned_to correta
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 // POST - Atribuir ou remover atribuição de conversa
@@ -10,6 +11,10 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const conversationId = params.id
     const body = await request.json()
     const { userId } = body // null para remover atribuição
@@ -26,6 +31,7 @@ export async function POST(
       .from('whatsapp_conversations')
       .update(updateData)
       .eq('id', conversationId)
+      .eq('organization_id', orgId)
       .select('id, assigned_to, status')
       .single()
 

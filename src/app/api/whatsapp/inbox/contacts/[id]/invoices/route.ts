@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 // GET - Buscar notas fiscais do contato
@@ -8,6 +9,10 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
@@ -17,6 +22,7 @@ export async function GET(
       .from('contact_invoices')
       .select('*')
       .eq('contact_id', contactId)
+      .eq('organization_id', orgId)
       .order('issue_date', { ascending: false })
       .limit(limit)
 
@@ -57,6 +63,10 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId, userId: authUserId } = auth
+
     const contactId = params.id
     const body = await request.json()
 
@@ -65,6 +75,7 @@ export async function POST(
       .from('contacts')
       .select('id, organization_id')
       .eq('id', contactId)
+      .eq('organization_id', orgId)
       .single()
 
     if (contactError) throw contactError
@@ -167,6 +178,10 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
     const { searchParams } = new URL(request.url)
     const invoiceId = searchParams.get('invoice_id')
@@ -180,6 +195,7 @@ export async function DELETE(
       .delete()
       .eq('id', invoiceId)
       .eq('contact_id', contactId)
+      .eq('organization_id', orgId)
 
     if (error) throw error
 

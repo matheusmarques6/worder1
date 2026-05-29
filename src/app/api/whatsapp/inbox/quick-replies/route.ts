@@ -1,23 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // GET /api/whatsapp/inbox/quick-replies
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
     const category = searchParams.get('category')
     const search = searchParams.get('search')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
-    }
 
     let query = supabase
       .from('whatsapp_quick_replies')
       .select('*')
-      .eq('organization_id', organizationId)
+      .eq('organization_id', orgId)
       .eq('is_active', true)
       .order('use_count', { ascending: false })
 
@@ -44,22 +44,24 @@ export async function GET(request: NextRequest) {
 // POST /api/whatsapp/inbox/quick-replies
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId, userId: authUserId } = auth
+
     const body = await request.json()
-    const { 
-      organizationId, 
-      shortcut, 
-      title, 
-      content, 
+    const {
+      shortcut,
+      title,
+      content,
       category,
       mediaUrl,
       mediaType,
       mediaFilename,
-      userId 
     } = body
 
-    if (!organizationId || !shortcut || !title || !content) {
-      return NextResponse.json({ 
-        error: 'Organization ID, shortcut, title and content required' 
+    if (!shortcut || !title || !content) {
+      return NextResponse.json({
+        error: 'shortcut, title and content required'
       }, { status: 400 })
     }
 
@@ -69,7 +71,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('whatsapp_quick_replies')
       .insert({
-        organization_id: organizationId,
+        organization_id: orgId,
         shortcut: normalizedShortcut,
         title,
         content,
@@ -77,7 +79,7 @@ export async function POST(request: NextRequest) {
         media_url: mediaUrl,
         media_type: mediaType,
         media_filename: mediaFilename,
-        created_by: userId,
+        created_by: authUserId,
         created_at: new Date().toISOString()
       })
       .select('*')

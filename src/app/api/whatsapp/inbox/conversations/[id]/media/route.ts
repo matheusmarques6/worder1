@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 // ✅ FASE 3: Force dynamic para evitar cache
 export const dynamic = 'force-dynamic'
@@ -63,6 +64,10 @@ function validateFile(file: File, mediaType: string): { valid: boolean; error?: 
 // POST - Enviar mídia
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const conversationId = params.id
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -97,6 +102,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .from('whatsapp_conversations')
       .select('*, instance_id, store_id, contact_phone, phone_number, organization_id')
       .eq('id', conversationId)
+      .eq('organization_id', orgId)
       .single()
 
     if (convError || !conversation) {
@@ -350,9 +356,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 // GET - Refresh de Signed URL
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const { searchParams } = new URL(request.url)
     const messageId = searchParams.get('messageId')
-    
+
     if (!messageId) {
       return NextResponse.json(
         { error: 'messageId required' },
@@ -365,6 +375,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       .select('media_storage_path, media_url')
       .eq('id', messageId)
       .eq('conversation_id', params.id)
+      .eq('organization_id', orgId)
       .single()
 
     if (error || !message) {

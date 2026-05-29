@@ -2,6 +2,7 @@
 // CORRIGIDO: Usa tabela CONTACTS unificada
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 // POST - Bloquear ou desbloquear contato
@@ -10,17 +11,22 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
     const body = await request.json()
     const { block, reason } = body
 
-    // Verificar qual tabela tem o contato
+    // Verificar qual tabela tem o contato (escopado por org)
     let tableName = 'contacts'
-    
+
     const { data: contact } = await supabase
       .from('contacts')
       .select('id')
       .eq('id', contactId)
+      .eq('organization_id', orgId)
       .single()
 
     if (!contact) {
@@ -28,6 +34,7 @@ export async function POST(
         .from('whatsapp_contacts')
         .select('id')
         .eq('id', contactId)
+        .eq('organization_id', orgId)
         .single()
 
       if (!waContact) {
@@ -54,6 +61,7 @@ export async function POST(
       .from(tableName)
       .update(updateData)
       .eq('id', contactId)
+      .eq('organization_id', orgId)
       .select('id, is_blocked, blocked_reason, blocked_at')
       .single()
 

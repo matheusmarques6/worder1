@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import type { InboxMessage } from '@/types/inbox'
+import { authedFetch } from '@/lib/api/authed-fetch'
 
 interface UseInboxMessagesReturn {
   messages: InboxMessage[]
@@ -74,7 +75,7 @@ export function useInboxMessages(): UseInboxMessagesReturn {
         params.set('before', oldestCursorRef.current)
       }
 
-      const response = await fetch(
+      const response = await authedFetch(
         `/api/whatsapp/inbox/conversations/${conversationId}/messages?${params}`
       )
       const data = await response.json()
@@ -133,7 +134,7 @@ export function useInboxMessages(): UseInboxMessagesReturn {
         params.set('after', newestCursorRef.current)
       }
 
-      const response = await fetch(
+      const response = await authedFetch(
         `/api/whatsapp/inbox/conversations/${currentConversationId}/messages?${params}`
       )
       const data = await response.json()
@@ -212,7 +213,7 @@ export function useInboxMessages(): UseInboxMessagesReturn {
     setMessages(prev => [...prev, optimisticMessage])
 
     try {
-      const response = await fetch(
+      const response = await authedFetch(
         `/api/whatsapp/inbox/conversations/${params.conversationId}/messages`,
         {
           method: 'POST',
@@ -289,7 +290,7 @@ export function useInboxMessages(): UseInboxMessagesReturn {
       formData.append('mediaType', params.mediaType)
       if (params.caption) formData.append('caption', params.caption)
 
-      const response = await fetch(
+      const response = await authedFetch(
         `/api/whatsapp/inbox/conversations/${params.conversationId}/media`,
         { method: 'POST', body: formData }
       )

@@ -2,6 +2,7 @@
 // CORRIGIDO: Prioriza tabela CONTACTS unificada
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 // ✅ FASE 4: Garantir que não há cache
 export const dynamic = 'force-dynamic'
@@ -16,6 +17,10 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
 
     // 1. Tentar buscar da tabela UNIFICADA (contacts) primeiro
@@ -23,6 +28,7 @@ export async function GET(
       .from('contacts')
       .select('*')
       .eq('id', contactId)
+      .eq('organization_id', orgId)
       .single()
 
     if (error) {
@@ -31,6 +37,7 @@ export async function GET(
         .from('whatsapp_contacts')
         .select('*')
         .eq('id', contactId)
+        .eq('organization_id', orgId)
         .single()
       
       if (waError) {
@@ -228,6 +235,10 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const contactId = params.id
     const body = await request.json()
 
@@ -262,6 +273,7 @@ export async function PATCH(
       .from('contacts')
       .update(updates)
       .eq('id', contactId)
+      .eq('organization_id', orgId)
       .select()
       .single()
 
@@ -289,6 +301,7 @@ export async function PATCH(
         .from('whatsapp_contacts')
         .update(waUpdates)
         .eq('id', contactId)
+        .eq('organization_id', orgId)
         .select()
         .single()
 

@@ -8,6 +8,7 @@ import {
   addTagToConversation,
   removeTagFromConversation,
 } from '@/lib/services/whatsapp/conversation-service'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,12 +17,9 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
 
     const body = await request.json()
     const { name, color } = body
@@ -32,7 +30,7 @@ export async function POST(
 
     const result = await addTagToConversation(
       params.id,
-      organizationId,
+      orgId,
       name,
       color
     )
@@ -53,20 +51,23 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
     const tagName = searchParams.get('tag')
 
-    if (!organizationId || !tagName) {
+    if (!tagName) {
       return NextResponse.json(
-        { error: 'organizationId and tag required' },
+        { error: 'tag required' },
         { status: 400 }
       )
     }
 
     const result = await removeTagFromConversation(
       params.id,
-      organizationId,
+      orgId,
       tagName
     )
 

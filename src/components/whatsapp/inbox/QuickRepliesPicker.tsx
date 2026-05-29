@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { MessageSquare, Loader2 } from 'lucide-react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 
 interface QuickReply {
   id: string
@@ -30,8 +31,8 @@ export function QuickRepliesPicker({ query, organizationId, onSelect, onClose }:
 
   async function load() {
     try {
-      const res = await fetch(`/api/whatsapp/inbox/quick-replies?organizationId=${organizationId}`)
-      if (res.ok) { const d = await res.json(); setItems(d.data || []) }
+      const res = await authedFetch(`/api/whatsapp/inbox/quick-replies`)
+      if (res.ok) { const d = await res.json(); setItems(d.quickReplies || d.data || []) }
     } catch { /* */ }
     setLoading(false)
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // GET /api/whatsapp/inbox/conversations/[id]
@@ -8,6 +9,10 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const { id } = params
 
     // Validar UUID
@@ -21,6 +26,7 @@ export async function GET(
       .from('whatsapp_conversations')
       .select('*')
       .eq('id', id)
+      .eq('organization_id', orgId)
       .single()
 
     if (error) {
@@ -82,6 +88,10 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const { id } = params
     const body = await request.json()
     const { 
@@ -120,6 +130,7 @@ export async function PUT(
       .from('whatsapp_conversations')
       .update(updates)
       .eq('id', id)
+      .eq('organization_id', orgId)
       .select('*')
       .single()
 
@@ -139,12 +150,17 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const { id } = params
 
     const { error } = await supabase
       .from('whatsapp_conversations')
       .delete()
       .eq('id', id)
+      .eq('organization_id', orgId)
 
     if (error) throw error
 

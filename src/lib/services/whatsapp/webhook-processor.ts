@@ -34,8 +34,14 @@ export async function verifySignature(
   if (!signature) return false
   const appSecret = process.env.META_APP_SECRET
   if (!appSecret) {
-    logger.warn(LOG_PREFIX, 'META_APP_SECRET not configured, skipping verification')
-    return true
+    // Fail closed em produção. Sem APP_SECRET configurado é erro fatal —
+    // qualquer um pode POSTAR webhook forjado e a gente processa.
+    if (process.env.NODE_ENV === 'production') {
+      logger.error(LOG_PREFIX, 'META_APP_SECRET not configured in production — refusing webhook')
+      return false
+    }
+    logger.warn(LOG_PREFIX, 'META_APP_SECRET not configured (non-prod), skipping verification')
+    return false
   }
   return verifyWebhookSignature(rawBody, signature, appSecret)
 }
