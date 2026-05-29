@@ -13,6 +13,7 @@ import {
 import { upsertConversation } from './conversation-service'
 import { updateMessageStatus } from './message-service'
 import { logger } from './logger'
+import { wlog } from '@/lib/observability/whatsapp-logger'
 import type {
   MetaWebhookEntry,
   MetaWebhookMessage,
@@ -122,6 +123,7 @@ export async function processWebhookPayload(
       const instance = await findInstanceByPhoneNumberId(phoneNumberId)
       if (!instance) {
         logger.warn(LOG_PREFIX, `Unknown phone_number_id: ${phoneNumberId}`)
+        wlog.warn('whatsapp.webhook.unknown_phone_number_id', { phone_number_id: phoneNumberId })
         continue
       }
 
@@ -155,6 +157,12 @@ async function processIncomingMessage(
     const messageType = getMessageType(message as any) as MessageType
 
     logger.info(LOG_PREFIX, `Incoming ${messageType} from ${contactPhone}`)
+    wlog.info('whatsapp.message.incoming', {
+      organization_id: instance.organization_id,
+      phone_number_id: instance.phone_number_id,
+      message_type: messageType,
+      wamid: message.id,
+    })
 
     // 1. Upsert contact in CRM
     const contactId = await upsertContact(
@@ -178,6 +186,11 @@ async function processIncomingMessage(
 
     if (!convResult.data) {
       logger.error(LOG_PREFIX, 'Failed to upsert conversation', convResult.error)
+      wlog.error('whatsapp.conversation.upsert_failed', {
+        organization_id: instance.organization_id,
+        phone_number_id: instance.phone_number_id,
+        error: (convResult.error as any)?.message,
+      })
       return
     }
 
@@ -217,6 +230,12 @@ async function processIncomingMessage(
 
     if (msgError) {
       logger.error(LOG_PREFIX, 'Failed to save message', msgError)
+      wlog.error('whatsapp.message.persist_failed', {
+        organization_id: instance.organization_id,
+        phone_number_id: instance.phone_number_id,
+        wamid: message.id,
+        error: msgError.message,
+      })
       return
     }
 
@@ -251,6 +270,11 @@ async function processIncomingMessage(
         )
       } catch (aiErr) {
         logger.error(LOG_PREFIX, 'AI response failed', aiErr)
+        wlog.error('whatsapp.ai.response_failed', {
+          organization_id: instance.organization_id,
+          conversation_id: conversation.id,
+          error: (aiErr as Error)?.message,
+        })
       }
     }
 
@@ -283,11 +307,27 @@ async function processIncomingMessage(
       })
     } catch (emitErr) {
       logger.error(LOG_PREFIX, 'Failed to emit automation events', emitErr)
+      wlog.error('whatsapp.automation.emit_failed', {
+        organization_id: instance.organization_id,
+        conversation_id: conversation.id,
+        error: (emitErr as Error)?.message,
+      })
     }
 
     logger.info(LOG_PREFIX, `Message processed: ${message.id}`)
+    wlog.info('whatsapp.message.processed', {
+      organization_id: instance.organization_id,
+      phone_number_id: instance.phone_number_id,
+      wamid: message.id,
+    })
   } catch (err) {
     logger.error(LOG_PREFIX, 'Error processing message', err)
+    wlog.error('whatsapp.message.processing_error', {
+      organization_id: instance.organization_id,
+      phone_number_id: instance.phone_number_id,
+      wamid: message.id,
+      error: (err as Error)?.message,
+    })
   }
 }
 

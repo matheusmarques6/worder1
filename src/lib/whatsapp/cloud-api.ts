@@ -3,10 +3,11 @@
 // src/lib/whatsapp/cloud-api.ts
 // =============================================
 
-// API Version v22.0 (Maio 2026)
+// API Version centralizada em api-version.ts.
+// Reexport mantém compatibilidade com consumidores existentes (Onda 2).
 // Documentação: https://developers.facebook.com/docs/whatsapp/cloud-api
-export const META_API_VERSION = 'v22.0';
-export const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
+export { META_API_VERSION, META_BASE_URL } from './api-version';
+import { META_BASE_URL } from './api-version';
 
 // =============================================
 // TIPOS
@@ -626,18 +627,17 @@ export class WhatsAppCloudError extends Error {
 // HELPERS
 // =============================================
 
-export function normalizePhone(phone: string): string {
-  let cleaned = phone.replace(/\D/g, '');
-  
-  if (cleaned.startsWith('0')) {
-    cleaned = cleaned.substring(1);
+// F.2 — i18n via libphonenumber-js. Mantém default 'BR' p/ preservar
+// comportamento dos callers existentes; quem souber o país pode passar.
+import { parsePhoneNumber, type CountryCode } from 'libphonenumber-js';
+
+export function normalizePhone(phone: string, country: string = 'BR'): string {
+  try {
+    const parsed = parsePhoneNumber(phone, country as CountryCode);
+    return parsed?.number?.replace('+', '') || phone.replace(/\D/g, '');
+  } catch {
+    return phone.replace(/\D/g, '');
   }
-  
-  if (cleaned.length === 10 || cleaned.length === 11) {
-    cleaned = '55' + cleaned;
-  }
-  
-  return cleaned;
 }
 
 export function extractMessageText(message: WebhookMessage): string {

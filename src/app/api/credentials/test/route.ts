@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { decryptCredential } from '@/lib/automation/credential-encryption';
+import { META_BASE_URL } from '@/lib/whatsapp/api-version';
 export const dynamic = 'force-dynamic';
 
 // ============================================
@@ -14,7 +15,7 @@ const credentialTesters: Record<string, TestFunction> = {
   whatsappBusiness: async (data) => {
     try {
       const response = await fetch(
-        `https://graph.facebook.com/v18.0/${data.phoneNumberId}`,
+        `${META_BASE_URL}/${data.phoneNumberId}`,
         {
           headers: {
             Authorization: `Bearer ${data.accessToken}`,

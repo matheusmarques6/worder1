@@ -48,6 +48,7 @@
     "date-fns": "^2.30.0",
     "exceljs": "^4.4.0",
     "framer-motion": "^10.16.16",
+    "libphonenumber-js": "^1.13.4",
     "lucide-react": "^0.294.0",
     "nanoid": "^5.1.7",
     "next": "14.0.4",

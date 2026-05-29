@@ -5,6 +5,7 @@
 
 import { VariableContext } from './variable-engine';
 import { WorkflowNode } from './execution-engine';
+import { META_BASE_URL } from '@/lib/whatsapp/api-version';
 
 // ============================================
 // TYPES
@@ -254,7 +255,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
         if (provider === 'whatsappBusiness' || provider === 'cloud') {
           usedProvider = 'cloud';
           const response = await fetch(
-            `https://graph.facebook.com/v18.0/${credentials?.phoneNumberId}/messages`,
+            `${META_BASE_URL}/${credentials?.phoneNumberId}/messages`,
             {
               method: 'POST',
               headers: {
@@ -1683,7 +1684,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
       if (!phone) return { status: 'error', output: null, error: 'Contato sem telefone' };
       try {
         const response = await fetch(
-          `https://graph.facebook.com/v21.0/${credentials?.phoneNumberId}/messages`,
+          `${META_BASE_URL}/${credentials?.phoneNumberId}/messages`,
           {
             method: 'POST',
             headers: {

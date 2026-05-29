@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { WhatsAppCloudAPI } from '@/lib/whatsapp/cloud-api'
+import { META_BASE_URL } from '@/lib/whatsapp/api-version'
 import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 export const dynamic = 'force-dynamic'
@@ -59,7 +60,7 @@ export async function POST(
 
     // Send via Meta API directly (interactive product_list)
     const response = await fetch(
-      `https://graph.facebook.com/v21.0/${instance.phone_number_id}/messages`,
+      `${META_BASE_URL}/${instance.phone_number_id}/messages`,
       {
         method: 'POST',
         headers: {

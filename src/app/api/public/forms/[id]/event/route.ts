@@ -3,6 +3,7 @@
 // =============================================
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
+import { META_BASE_URL } from '@/lib/whatsapp/api-version'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,7 +86,7 @@ export async function POST(
 
           try {
             const response = await fetch(
-              `https://graph.facebook.com/v19.0/${form.facebook_pixel_id}/events`,
+              `${META_BASE_URL}/${form.facebook_pixel_id}/events`,
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

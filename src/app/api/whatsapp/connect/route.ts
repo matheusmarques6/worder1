@@ -7,23 +7,34 @@ import {
 } from '@/lib/whatsapp/cloud-api';
 import { encryptToken } from '@/lib/whatsapp/token-encryption';
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
+import { wlog } from '@/lib/observability/whatsapp-logger';
 export const dynamic = 'force-dynamic';
 
 // GET - Buscar status da conexão WhatsApp
 export async function GET(request: NextRequest) {
   try {
+    // Onda 3.5 P0 — exige Bearer token e escopa para a org do caller.
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
+    // Se vier organizationId, tem que bater com o orgId do token.
+    if (organizationId && organizationId !== orgId) {
+      return NextResponse.json(
+        { error: 'organizationId does not match authenticated user' },
+        { status: 403 },
+      )
     }
 
     // Buscar conta canônica em whatsapp_business_accounts
     const { data: account, error } = await supabase
       .from('whatsapp_business_accounts')
       .select('*')
-      .eq('organization_id', organizationId)
+      .eq('organization_id', orgId)
       .eq('status', 'active')
       .maybeSingle()
 
@@ -68,6 +79,11 @@ export async function GET(request: NextRequest) {
 // POST - Conectar WhatsApp Business
 export async function POST(request: NextRequest) {
   try {
+    // Onda 3.5 P0 — exige Bearer token. O orgId vem do token, não do body.
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const body = await request.json()
     const {
       organizationId,
@@ -79,10 +95,18 @@ export async function POST(request: NextRequest) {
       twoFactorPin,
     } = body
 
-    // Validações
-    if (!organizationId || !phoneNumberId || !accessToken) {
+    // Se o body trouxe organizationId, tem que bater com o do token.
+    if (organizationId && organizationId !== orgId) {
+      return NextResponse.json(
+        { error: 'organizationId does not match authenticated user' },
+        { status: 403 },
+      )
+    }
+
+    // Validações — orgId vem do token (autoritativo).
+    if (!phoneNumberId || !accessToken) {
       return NextResponse.json({
-        error: 'Campos obrigatórios: organizationId, phoneNumberId, accessToken'
+        error: 'Campos obrigatórios: phoneNumberId, accessToken'
       }, { status: 400 })
     }
 
@@ -169,8 +193,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Salvar em whatsapp_business_accounts (tabela canônica Cloud).
+    //    organizationId vem do token (autoritativo), não do body.
     const account = await upsertBusinessAccount({
-      organizationId,
+      organizationId: orgId,
       storeId: storeId || null,
       phoneNumberId,
       wabaId: effectiveWabaId,
@@ -181,6 +206,11 @@ export async function POST(request: NextRequest) {
     })
 
     console.log('✅ WhatsApp conectado:', validation.phoneNumber)
+    wlog.info('whatsapp.connect.success', {
+      organization_id: orgId,
+      phone_number_id: phoneNumberId,
+      waba_id: effectiveWabaId,
+    })
 
     return NextResponse.json({
       success: true,
@@ -207,18 +237,28 @@ export async function POST(request: NextRequest) {
 // DELETE - Desconectar WhatsApp
 export async function DELETE(request: NextRequest) {
   try {
+    // Onda 3.5 P0 — exige Bearer token e escopa pelo orgId do caller.
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { orgId } = auth
+
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
+    if (organizationId && organizationId !== orgId) {
+      return NextResponse.json(
+        { error: 'organizationId does not match authenticated user' },
+        { status: 403 },
+      )
     }
 
-    // Desativar conta canônica
+    // Desativar conta canônica — orgId vem do token.
     await supabase
       .from('whatsapp_business_accounts')
       .update({ status: 'inactive', updated_at: new Date().toISOString() })
-      .eq('organization_id', organizationId)
+      .eq('organization_id', orgId)
+
+    wlog.info('whatsapp.connect.disconnect', { organization_id: orgId })
 
     return NextResponse.json({ success: true, message: 'WhatsApp desconectado' })
   } catch (error: any) {

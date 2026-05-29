@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { META_BASE_URL } from '@/lib/whatsapp/api-version';
 export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
@@ -20,7 +21,7 @@ const supabase = new Proxy({} as SupabaseClient, {
   }
 });
 
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0';
+const WHATSAPP_API_URL = META_BASE_URL;
 
 // Verify webhook (GET request from Meta)
 export async function GET(request: NextRequest) {

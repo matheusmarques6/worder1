@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 import { encryptCredential, decryptCredential, maskSensitive } from '@/lib/automation/credential-encryption';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { META_BASE_URL } from '@/lib/whatsapp/api-version';
 export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
@@ -389,7 +390,7 @@ async function testCredential(
     switch (type) {
       case 'whatsappBusiness': {
         const response = await fetch(
-          `https://graph.facebook.com/v18.0/${data.phoneNumberId}`,
+          `${META_BASE_URL}/${data.phoneNumberId}`,
           {
             headers: { 'Authorization': `Bearer ${data.accessToken}` },
           }

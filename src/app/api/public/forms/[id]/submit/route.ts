@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+import { META_BASE_URL } from '@/lib/whatsapp/api-version'
 
 export const dynamic = 'force-dynamic'
 
@@ -168,7 +169,7 @@ async function sendFacebookEvent(
 ) {
   try {
     const response = await fetch(
-      `https://graph.facebook.com/v19.0/${pixelId}/events`,
+      `${META_BASE_URL}/${pixelId}/events`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

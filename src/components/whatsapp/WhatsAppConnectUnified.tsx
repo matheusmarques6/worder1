@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useStoreStore } from '@/stores'
 import { getSupabaseClient } from '@/lib/supabase-client'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import { useFacebookEmbeddedSignup } from '@/hooks/useFacebookEmbeddedSignup'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -135,7 +136,7 @@ export default function WhatsAppConnectUnified({
     setError('')
 
     try {
-      const response = await fetch('/api/whatsapp/connect', {
+      const response = await authedFetch('/api/whatsapp/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

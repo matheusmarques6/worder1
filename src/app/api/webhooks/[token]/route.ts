@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
-import { 
-  normalizeWebhookPayload, 
-  normalizeEmail, 
+import {
+  normalizeWebhookPayload,
+  normalizeEmail,
   normalizePhone,
-  type PlatformType 
+  type PlatformType
 } from '@/lib/integrations/normalizers'
+import { META_BASE_URL } from '@/lib/whatsapp/api-version'
 export const dynamic = 'force-dynamic';
 
 // POST - Receive webhook from integrations
@@ -276,7 +277,7 @@ async function processFacebookLeadAdsWebhook(supabase: any, installation: any, p
 
   try {
     const response = await fetch(
-      `https://graph.facebook.com/v18.0/${leadgenId}?access_token=${accessToken}`
+      `${META_BASE_URL}/${leadgenId}?access_token=${accessToken}`
     )
     
     if (!response.ok) {

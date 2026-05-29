@@ -16,6 +16,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { verifyWebhookSignature } from '@/lib/whatsapp/cloud-api';
 import { processWebhookPayload } from '@/lib/whatsapp/webhook-processor';
 import { enqueueWhatsAppWebhook } from '@/lib/queue';
+import { wlog } from '@/lib/observability/whatsapp-logger';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 10;
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
   const challenge = searchParams.get('hub.challenge');
 
   if (mode !== 'subscribe') {
+    wlog.warn('whatsapp.webhook.verify_invalid_mode', { mode });
     return new Response('Invalid mode', { status: 403 });
   }
 
@@ -42,6 +44,7 @@ export async function GET(request: NextRequest) {
   if (!account) {
     const globalToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
     if (token !== globalToken) {
+      wlog.warn('whatsapp.webhook.verify_token_mismatch', {});
       return new Response('Invalid verify token', { status: 403 });
     }
   } else {
@@ -49,6 +52,10 @@ export async function GET(request: NextRequest) {
       .from('whatsapp_business_accounts')
       .update({ webhook_configured: true })
       .eq('id', account.id);
+    wlog.info('whatsapp.webhook.verified', {
+      organization_id: account.organization_id,
+      account_id: account.id,
+    });
   }
 
   return new Response(challenge, { status: 200 });
@@ -66,11 +73,11 @@ export async function POST(request: NextRequest) {
   if (signature && appSecret) {
     const valid = await verifyWebhookSignature(rawBody, signature, appSecret);
     if (!valid) {
-      console.warn('[whatsapp-webhook] Invalid signature — rejecting');
+      wlog.warn('whatsapp.webhook.invalid_signature', {});
       return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
     }
   } else if (process.env.NODE_ENV === 'production') {
-    console.error('[whatsapp-webhook] Missing signature or META_APP_SECRET in production');
+    wlog.error('whatsapp.webhook.missing_signature_or_secret', {});
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
@@ -78,10 +85,12 @@ export async function POST(request: NextRequest) {
   try {
     payload = JSON.parse(rawBody);
   } catch {
+    wlog.warn('whatsapp.webhook.invalid_json', {});
     return NextResponse.json({ error: 'invalid json' }, { status: 400 });
   }
 
   if (payload?.object !== 'whatsapp_business_account') {
+    wlog.info('whatsapp.webhook.ignored_non_whatsapp', { object: payload?.object });
     return NextResponse.json({ received: true, ignored: 'not_whatsapp' });
   }
 
@@ -90,7 +99,9 @@ export async function POST(request: NextRequest) {
     try {
       await processWebhookPayload(payload);
     } catch (err) {
-      console.error('[whatsapp-webhook] sync processing error:', err);
+      wlog.error('whatsapp.webhook.sync_processing_error', {
+        error: (err as Error)?.message,
+      });
     }
     return NextResponse.json({ received: true });
   }
@@ -110,19 +121,31 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (insertError || !inserted) {
-    console.error('[whatsapp-webhook] insert failed:', insertError);
+    wlog.error('whatsapp.webhook.insert_failed', {
+      phone_number_id: phoneNumberId,
+      error: insertError?.message,
+    });
     // Return 200 anyway — Meta retries for 7 days, but every 500 here counts
     // as a delivery error against our phone number quality. Better to swallow
     // and rely on Meta's retry than to look unstable.
     return NextResponse.json({ received: true, queued: false });
   }
 
+  wlog.info('whatsapp.webhook.received', {
+    event_id: inserted.id,
+    phone_number_id: phoneNumberId,
+  });
+
   // Fire-and-forget enqueue. If QStash fails, the cron at
   // /api/cron/reprocess-whatsapp-pending picks the event up within 60s.
   try {
     await enqueueWhatsAppWebhook(inserted.id);
   } catch (err) {
-    console.error('[whatsapp-webhook] QStash enqueue failed (cron will retry):', err);
+    wlog.error('whatsapp.webhook.enqueue_failed', {
+      event_id: inserted.id,
+      phone_number_id: phoneNumberId,
+      error: (err as Error)?.message,
+    });
   }
 
   return NextResponse.json({ received: true, eventId: inserted.id });
