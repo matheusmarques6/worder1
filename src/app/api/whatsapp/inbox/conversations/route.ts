@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
+import { resolveStoreContext, applyStoreFilter } from '@/lib/api/store-filter';
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +15,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const search = searchParams.get('search')
-    const storeId = searchParams.get('storeId') || searchParams.get('store_id')
+    const rawStoreId = searchParams.get('storeId') || searchParams.get('store_id')
+
+    // Onda 5 — multi-store filter via helper compartilhado.
+    // Conversas são 'store-or-org': aparecem na loja escolhida E também as
+    // órfãs (store_id NULL) ficam visíveis pra não perder dado legacy.
+    const storeCtx = await resolveStoreContext(rawStoreId, orgId, supabase)
 
     let query = supabase
       .from('whatsapp_inbox_conversations')
@@ -22,24 +28,7 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', orgId)
       .order('last_message_at', { ascending: false, nullsFirst: false })
 
-    // Multi-store filtering. View expõe store_id após Caminho B.
-    //
-    // Quando o cliente passa storeId, filtramos pela loja. Mas se o org não
-    // tem nenhuma loja em `stores` (single-tenant comum), o storeId do front
-    // é provavelmente cache/legacy de uma sessão antiga apontando pra UUID
-    // órfã. Nesse caso ignoramos o filtro pra não esconder TODAS as conversas.
-    if (storeId) {
-      const { count: storeCount } = await supabase
-        .from('stores')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', orgId)
-
-      if ((storeCount || 0) > 0) {
-        // Org tem lojas reais — aplica filtro (mantendo conversas órfãs visíveis)
-        query = query.or(`store_id.eq.${storeId},store_id.is.null`)
-      }
-      // Senão: nenhum filtro de store, devolve todas as conversas da org
-    }
+    query = applyStoreFilter(query, storeCtx, 'store-or-org')
 
     if (status && status !== 'all') {
       query = query.eq('status', status)
