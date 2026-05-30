@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   let query = supabaseAdmin
     .from('whatsapp_business_accounts')
     .select(
-      'id, organization_id, store_id, phone_number_id, waba_id, phone_number, display_phone_number, verified_name, status, connection_method, webhook_configured, created_at, updated_at'
+      'id, organization_id, store_id, phone_number_id, waba_id, phone_number, display_phone_number, verified_name, status, connection_method, webhook_configured, created_at, updated_at, last_health_check_at, last_health_status, last_health_error_code, last_health_expires_at'
     )
     .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
@@ -55,6 +55,10 @@ export async function GET(request: NextRequest) {
     store_id: row.store_id,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    last_health_check_at: row.last_health_check_at ?? null,
+    last_health_status: row.last_health_status ?? null,
+    last_health_error_code: row.last_health_error_code ?? null,
+    last_health_expires_at: row.last_health_expires_at ?? null,
   }))
 
   return NextResponse.json({ accounts })
