@@ -109,13 +109,19 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  async function safeJson(res: Response): Promise<any> {
+    const text = await res.text()
+    if (!text) return {}
+    try { return JSON.parse(text) } catch { return { error: text.slice(0, 200) } }
+  }
+
   async function checkHealth(accountId: string) {
     setCheckingId(accountId)
     try {
       const res = await authedFetch(`/api/whatsapp/cloud/accounts/${accountId}/health`)
-      const data = await res.json()
+      const data = await safeJson(res)
       if (!res.ok) {
-        toast.error('Falha ao verificar', data.error || 'Erro desconhecido')
+        toast.error('Falha ao verificar', data.error || `HTTP ${res.status}`)
         return
       }
       const h: HealthCheckResult = data.health
@@ -147,10 +153,10 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
       const res = await authedFetch(`/api/whatsapp/cloud/accounts/${accountId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ access_token: newToken }),
+        body: JSON.stringify({ access_token: newToken.trim() }),
       })
-      const data = await res.json()
-      if (!res.ok) return { ok: false, error: data.error || data.details || 'Erro desconhecido' }
+      const data = await safeJson(res)
+      if (!res.ok) return { ok: false, error: data.error || data.details || `HTTP ${res.status}` }
 
       const h: HealthCheckResult = data.health
       setAccounts(prev => prev.map(a =>
