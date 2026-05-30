@@ -4,10 +4,14 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MessageSquare, Plus, Search, RefreshCw, History, X, FileText } from 'lucide-react'
 import { useAuthStore } from '@/stores'
-import { TemplateBuilder } from '@/components/whatsapp/TemplateBuilder'
+import {
+  TemplateBuilder,
+  type TemplateAccountOption,
+  type TemplateSubmitPayload,
+} from '@/components/whatsapp/TemplateBuilder'
 import { TemplateStatusBadge, type TemplateStatus } from '@/components/whatsapp/TemplateStatusBadge'
 import { TemplateCategoryHistoryModal, type CategoryChange } from '@/components/whatsapp/TemplateCategoryHistoryModal'
-import type { TemplateInput } from '@/lib/whatsapp/template-validation'
+import { authedFetch } from '@/lib/api/authed-fetch'
 
 interface Template {
   id: string
@@ -33,6 +37,26 @@ export default function WhatsAppTemplatesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [historyTemplate, setHistoryTemplate] = useState<Template | null>(null)
   const [historyData, setHistoryData] = useState<CategoryChange[]>([])
+  const [accounts, setAccounts] = useState<TemplateAccountOption[]>([])
+
+  async function fetchAccounts() {
+    try {
+      const res = await authedFetch(`/api/whatsapp/business-accounts`)
+      if (!res.ok) return
+      const text = await res.text()
+      const data = text ? JSON.parse(text) : {}
+      const list = data.accounts || data.data || []
+      setAccounts(
+        list.map((a: any) => ({
+          id: a.id,
+          phone_number: a.phone_number,
+          phone_display_name: a.phone_display_name,
+        })),
+      )
+    } catch (e) {
+      console.error('Error fetching accounts:', e)
+    }
+  }
 
   async function fetchTemplates() {
     setLoading(true)
@@ -52,23 +76,31 @@ export default function WhatsAppTemplatesPage() {
 
   useEffect(() => {
     fetchTemplates()
+    fetchAccounts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId])
 
-  async function handleCreateTemplate(input: TemplateInput) {
+  async function handleCreateTemplate(input: TemplateSubmitPayload) {
     setSubmitting(true)
     try {
-      const res = await fetch('/api/whatsapp/templates', {
+      const res = await authedFetch('/api/whatsapp/cloud/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, organizationId }),
+        body: JSON.stringify({
+          accountId: input.accountId,
+          name: input.name,
+          language: input.language,
+          category: input.category,
+          components: input.components,
+        }),
       })
+      const text = await res.text()
+      const data = text ? (() => { try { return JSON.parse(text) } catch { return { error: text.slice(0, 200) } } })() : {}
       if (res.ok) {
         setShowBuilder(false)
         fetchTemplates()
       } else {
-        const err = await res.json()
-        alert(`Erro ao criar template: ${err.error || res.statusText}`)
+        alert(`Erro ao criar template: ${data.error || data.details || `HTTP ${res.status}`}`)
       }
     } catch (e: any) {
       alert(`Erro ao criar template: ${e.message}`)
@@ -233,7 +265,7 @@ export default function WhatsAppTemplatesPage() {
                 </button>
               </div>
               <div className="overflow-y-auto p-5">
-                <TemplateBuilder onSubmit={handleCreateTemplate} isSubmitting={submitting} />
+                <TemplateBuilder accounts={accounts} onSubmit={handleCreateTemplate} isSubmitting={submitting} />
               </div>
             </motion.div>
           </motion.div>

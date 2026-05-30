@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
@@ -19,6 +19,16 @@ import {
   Type, FileText, Link2, Phone, Hash, MessageSquare
 } from 'lucide-react'
 
+export interface TemplateAccountOption {
+  id: string
+  phone_number: string
+  phone_display_name?: string | null
+}
+
+export interface TemplateSubmitPayload extends TemplateInput {
+  accountId: string
+}
+
 // =============================================
 // Types
 // =============================================
@@ -27,19 +37,30 @@ type Category = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
 type ButtonType = 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER'
 
 interface TemplateBuilderProps {
-  onSubmit?: (template: TemplateInput) => void | Promise<void>
+  accounts: TemplateAccountOption[]
+  onSubmit?: (template: TemplateSubmitPayload) => void | Promise<void>
   isSubmitting?: boolean
   className?: string
 }
 
 interface FormState {
+  accountId: string
   name: string
   language: string
   category: Category
   headerText: string
+  headerExamples: string[]
   bodyText: string
+  bodyExamples: string[]
   footerText: string
   buttons: TemplateButton[]
+}
+
+const VAR_REGEX = /\{\{(\d+)\}\}/g
+
+function countVars(text: string): number {
+  const matches = text.match(VAR_REGEX)
+  return matches ? matches.length : 0
 }
 
 // =============================================
@@ -59,11 +80,14 @@ const CATEGORIES: { value: Category; label: string; description: string }[] = [
 ]
 
 const INITIAL_STATE: FormState = {
+  accountId: '',
   name: '',
   language: 'pt_BR',
   category: 'MARKETING',
   headerText: '',
+  headerExamples: [],
   bodyText: '',
+  bodyExamples: [],
   footerText: '',
   buttons: [],
 }
@@ -73,21 +97,56 @@ const INITIAL_STATE: FormState = {
 // =============================================
 
 export function TemplateBuilder({
+  accounts,
   onSubmit,
   isSubmitting = false,
   className,
 }: TemplateBuilderProps) {
-  const [form, setForm] = useState<FormState>(INITIAL_STATE)
+  const [form, setForm] = useState<FormState>(() => ({
+    ...INITIAL_STATE,
+    accountId: accounts.length === 1 ? accounts[0].id : '',
+  }))
+
+  // Sync example arrays whenever variables appear/disappear in the
+  // body or header. Truncates extras; pads with '' when new vars appear.
+  const bodyVarCount = countVars(form.bodyText)
+  const headerVarCount = countVars(form.headerText)
+
+  useEffect(() => {
+    setForm(prev => {
+      if (prev.bodyExamples.length === bodyVarCount) return prev
+      const next = prev.bodyExamples.slice(0, bodyVarCount)
+      while (next.length < bodyVarCount) next.push('')
+      return { ...prev, bodyExamples: next }
+    })
+  }, [bodyVarCount])
+
+  useEffect(() => {
+    setForm(prev => {
+      if (prev.headerExamples.length === headerVarCount) return prev
+      const next = prev.headerExamples.slice(0, headerVarCount)
+      while (next.length < headerVarCount) next.push('')
+      return { ...prev, headerExamples: next }
+    })
+  }, [headerVarCount])
 
   // Build the TemplateInput for validation
   const templateInput = useMemo((): TemplateInput => {
     const components: TemplateComponent[] = []
 
     if (form.headerText.trim()) {
-      components.push({ type: 'HEADER', format: 'TEXT', text: form.headerText })
+      const headerComp: TemplateComponent = { type: 'HEADER', format: 'TEXT', text: form.headerText }
+      if (form.headerExamples.length > 0) {
+        headerComp.example = { header_text: form.headerExamples }
+      }
+      components.push(headerComp)
     }
 
-    components.push({ type: 'BODY', text: form.bodyText })
+    const bodyComp: TemplateComponent = { type: 'BODY', text: form.bodyText }
+    if (form.bodyExamples.length > 0) {
+      bodyComp.example = { body_text: [form.bodyExamples] }
+    }
+    components.push(bodyComp)
 
     if (form.footerText.trim()) {
       components.push({ type: 'FOOTER', text: form.footerText })
@@ -144,9 +203,25 @@ export function TemplateBuilder({
   }, [form.bodyText, updateField])
 
   const handleSubmit = useCallback(async () => {
-    if (!validation.valid || !onSubmit) return
-    await onSubmit(templateInput)
-  }, [validation.valid, onSubmit, templateInput])
+    if (!validation.valid || !onSubmit || !form.accountId) return
+    await onSubmit({ ...templateInput, accountId: form.accountId })
+  }, [validation.valid, onSubmit, templateInput, form.accountId])
+
+  const updateBodyExample = useCallback((idx: number, value: string) => {
+    setForm(prev => {
+      const next = prev.bodyExamples.slice()
+      next[idx] = value
+      return { ...prev, bodyExamples: next }
+    })
+  }, [])
+
+  const updateHeaderExample = useCallback((idx: number, value: string) => {
+    setForm(prev => {
+      const next = prev.headerExamples.slice()
+      next[idx] = value
+      return { ...prev, headerExamples: next }
+    })
+  }, [])
 
   // Errors organized by field
   const errorsByField = useMemo(() => {
@@ -166,6 +241,39 @@ export function TemplateBuilder({
     <div className={cn('grid grid-cols-1 lg:grid-cols-2 gap-6', className)}>
       {/* =================== FORM PANEL =================== */}
       <div className="space-y-5">
+        {/* Account selector */}
+        <div className="w-full">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Criar para conta WhatsApp
+          </label>
+          {accounts.length === 0 ? (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+              Nenhuma conta WhatsApp Cloud configurada. Conecte uma em
+              WhatsApp &gt; Configuracoes.
+            </p>
+          ) : (
+            <select
+              value={form.accountId}
+              disabled={accounts.length === 1}
+              onChange={e => updateField('accountId', e.target.value)}
+              className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all disabled:bg-gray-50 disabled:text-gray-700"
+            >
+              {accounts.length > 1 && <option value="">Selecione uma conta...</option>}
+              {accounts.map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.phone_display_name ? `${a.phone_display_name} - ` : ''}
+                  {a.phone_number}
+                </option>
+              ))}
+            </select>
+          )}
+          {!form.accountId && accounts.length > 1 && (
+            <p className="mt-1.5 text-xs text-gray-500">
+              Templates sao criados por conta WhatsApp.
+            </p>
+          )}
+        </div>
+
         {/* Name */}
         <Input
           label="Nome do Template"
@@ -228,16 +336,43 @@ export function TemplateBuilder({
         </div>
 
         {/* Header (optional) */}
-        <Input
-          label="Cabecalho (opcional)"
-          placeholder="Texto do cabecalho"
-          value={form.headerText}
-          onChange={e => updateField('headerText', e.target.value)}
-          error={fieldError('header.text')}
-          rightIcon={
-            <span className="text-[10px] text-gray-400">{form.headerText.length}/60</span>
-          }
-        />
+        <div>
+          <Input
+            label="Cabecalho (opcional)"
+            placeholder="Texto do cabecalho"
+            value={form.headerText}
+            onChange={e => updateField('headerText', e.target.value)}
+            error={fieldError('header.text') || fieldError('header')}
+            rightIcon={
+              <span className="text-[10px] text-gray-400">{form.headerText.length}/60</span>
+            }
+          />
+          {headerVarCount > 0 && (
+            <div className="mt-2 space-y-2 pl-3 border-l-2 border-amber-200">
+              <p className="text-xs font-medium text-amber-700">
+                Exemplos das variaveis do cabecalho
+              </p>
+              {form.headerExamples.map((value, idx) => (
+                <input
+                  key={idx}
+                  type="text"
+                  value={value}
+                  onChange={e => updateHeaderExample(idx, e.target.value)}
+                  placeholder={`Exemplo para {{${idx + 1}}}`}
+                  className={cn(
+                    'w-full bg-white border rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none transition-all',
+                    !value.trim()
+                      ? 'border-red-300 focus:border-red-500'
+                      : 'border-gray-200 focus:border-brand-500',
+                  )}
+                />
+              ))}
+              <p className="text-[11px] text-gray-500">
+                Obrigatorio para aprovacao Meta.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Body */}
         <div>
@@ -260,6 +395,31 @@ export function TemplateBuilder({
             </button>
             <span className="text-xs text-gray-400">{form.bodyText.length}/1024</span>
           </div>
+          {bodyVarCount > 0 && (
+            <div className="mt-3 space-y-2 pl-3 border-l-2 border-amber-200">
+              <p className="text-xs font-medium text-amber-700">
+                Exemplos das variaveis do corpo
+              </p>
+              {form.bodyExamples.map((value, idx) => (
+                <input
+                  key={idx}
+                  type="text"
+                  value={value}
+                  onChange={e => updateBodyExample(idx, e.target.value)}
+                  placeholder={`Exemplo para {{${idx + 1}}} (ex: ${idx === 0 ? 'Joao' : idx === 1 ? '#12345' : 'valor'})`}
+                  className={cn(
+                    'w-full bg-white border rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none transition-all',
+                    !value.trim()
+                      ? 'border-red-300 focus:border-red-500'
+                      : 'border-gray-200 focus:border-brand-500',
+                  )}
+                />
+              ))}
+              <p className="text-[11px] text-gray-500">
+                Obrigatorio para aprovacao Meta — o preview ao lado usa estes valores.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Footer (optional) */}
@@ -405,12 +565,16 @@ export function TemplateBuilder({
         {/* Submit */}
         <Button
           onClick={handleSubmit}
-          disabled={!validation.valid || isSubmitting}
+          disabled={!validation.valid || isSubmitting || !form.accountId}
           isLoading={isSubmitting}
           className="w-full"
-          leftIcon={validation.valid ? <CheckCircle className="w-4 h-4" /> : undefined}
+          leftIcon={validation.valid && form.accountId ? <CheckCircle className="w-4 h-4" /> : undefined}
         >
-          {validation.valid ? 'Enviar para Aprovacao' : 'Corrija os erros acima'}
+          {!form.accountId
+            ? 'Selecione uma conta WhatsApp'
+            : validation.valid
+              ? 'Enviar para Aprovacao'
+              : 'Corrija os erros acima'}
         </Button>
       </div>
 
@@ -432,17 +596,11 @@ export function TemplateBuilder({
 // =============================================
 
 function TemplatePreview({ form }: { form: FormState }) {
-  // Replace {{n}} with example values
-  const exampleValues: Record<string, string> = {
-    '1': 'Joao',
-    '2': '#12345',
-    '3': 'R$ 99,90',
-    '4': '15/01',
-    '5': 'Worder',
-  }
-
-  const replaceVars = (text: string): string => {
-    return text.replace(/\{\{(\d+)\}\}/g, (_, num) => exampleValues[num] || `[var ${num}]`)
+  const replaceVars = (text: string, examples: string[]): string => {
+    return text.replace(/\{\{(\d+)\}\}/g, (_, num) => {
+      const idx = parseInt(num, 10) - 1
+      return examples[idx]?.trim() || `{{${num}}}`
+    })
   }
 
   return (
@@ -466,7 +624,7 @@ function TemplatePreview({ form }: { form: FormState }) {
           {form.headerText.trim() && (
             <div className="px-3 pt-2">
               <p className="text-sm font-semibold text-gray-900">
-                {replaceVars(form.headerText)}
+                {replaceVars(form.headerText, form.headerExamples)}
               </p>
             </div>
           )}
@@ -475,7 +633,7 @@ function TemplatePreview({ form }: { form: FormState }) {
           <div className="px-3 py-2">
             {form.bodyText.trim() ? (
               <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                {replaceVars(form.bodyText)}
+                {replaceVars(form.bodyText, form.bodyExamples)}
               </p>
             ) : (
               <p className="text-sm text-gray-300 italic">
