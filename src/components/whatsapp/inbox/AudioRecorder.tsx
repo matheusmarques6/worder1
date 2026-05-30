@@ -61,6 +61,10 @@ export function AudioRecorder({ onSend, onCancel, isUploading = false }: AudioRe
   const fileRef = useRef<File | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startedAtRef = useRef<number>(0)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const rafRef = useRef<number | null>(null)
 
   // Cleanup helper — MUST be idempotent because it runs on unmount AND on
   // user actions (cancel, send).
@@ -68,6 +72,10 @@ export function AudioRecorder({ onSend, onCancel, isUploading = false }: AudioRe
     if (timerRef.current) {
       clearInterval(timerRef.current)
       timerRef.current = null
+    }
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
     }
     if (recorderRef.current && recorderRef.current.state !== 'inactive') {
       try { recorderRef.current.stop() } catch { /* ignore */ }
@@ -77,6 +85,61 @@ export function AudioRecorder({ onSend, onCancel, isUploading = false }: AudioRe
       streamRef.current.getTracks().forEach(t => t.stop())
       streamRef.current = null
     }
+    if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+      audioCtxRef.current.close().catch(() => { /* ignore */ })
+    }
+    audioCtxRef.current = null
+    analyserRef.current = null
+  }
+
+  function startWaveform(stream: MediaStream) {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    audioCtxRef.current = ctx
+    const source = ctx.createMediaStreamSource(stream)
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 256
+    analyser.smoothingTimeConstant = 0.7
+    source.connect(analyser)
+    analyserRef.current = analyser
+
+    const buffer = new Uint8Array(analyser.frequencyBinCount)
+
+    const draw = () => {
+      const canvas = canvasRef.current
+      const analyserNode = analyserRef.current
+      if (!canvas || !analyserNode) {
+        rafRef.current = requestAnimationFrame(draw)
+        return
+      }
+      const cssWidth = canvas.clientWidth
+      const cssHeight = canvas.clientHeight
+      const dpr = window.devicePixelRatio || 1
+      if (canvas.width !== cssWidth * dpr) canvas.width = cssWidth * dpr
+      if (canvas.height !== cssHeight * dpr) canvas.height = cssHeight * dpr
+      const c2d = canvas.getContext('2d')
+      if (!c2d) return
+
+      analyserNode.getByteFrequencyData(buffer)
+      c2d.setTransform(dpr, 0, 0, dpr, 0, 0)
+      c2d.clearRect(0, 0, cssWidth, cssHeight)
+
+      const bars = 48
+      const gap = 2
+      const barWidth = Math.max(1, (cssWidth - gap * (bars - 1)) / bars)
+      const step = Math.floor(buffer.length / bars)
+      c2d.fillStyle = '#f97316'
+      for (let i = 0; i < bars; i++) {
+        const v = buffer[i * step] / 255
+        const h = Math.max(2, v * cssHeight)
+        const x = i * (barWidth + gap)
+        const y = (cssHeight - h) / 2
+        c2d.fillRect(x, y, barWidth, h)
+      }
+      rafRef.current = requestAnimationFrame(draw)
+    }
+    rafRef.current = requestAnimationFrame(draw)
   }
 
   useEffect(() => {
@@ -126,6 +189,7 @@ export function AudioRecorder({ onSend, onCancel, isUploading = false }: AudioRe
         startedAtRef.current = Date.now()
         setSeconds(0)
         setPhase('recording')
+        startWaveform(stream)
         timerRef.current = setInterval(() => {
           setSeconds(Math.floor((Date.now() - startedAtRef.current) / 1000))
         }, 250)
@@ -212,19 +276,24 @@ export function AudioRecorder({ onSend, onCancel, isUploading = false }: AudioRe
           <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
         </span>
         <Mic className="w-5 h-5 text-red-600 flex-shrink-0" />
-        <span className="text-sm font-mono text-red-700 flex-1">
-          Gravando {formatDuration(seconds)}
+        <span className="text-sm font-mono text-red-700 flex-shrink-0 tabular-nums">
+          {formatDuration(seconds)}
         </span>
+        <canvas
+          ref={canvasRef}
+          className="flex-1 h-8 min-w-0"
+          aria-hidden="true"
+        />
         <button
           onClick={handleCancel}
-          className="p-2 rounded-lg hover:bg-red-100 text-red-600"
+          className="p-2 rounded-lg hover:bg-red-100 text-red-600 flex-shrink-0"
           title="Cancelar"
         >
           <Trash2 className="w-4 h-4" />
         </button>
         <button
           onClick={handleStop}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium flex-shrink-0"
         >
           <Square className="w-3.5 h-3.5" />
           Parar
