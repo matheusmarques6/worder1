@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { requireOrgFromAuth } from '@/lib/auth/require-org'
+import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api'
+import { getAccessToken } from '@/lib/whatsapp/account-loader'
 
 // ✅ FASE 3: Force dynamic para evitar cache
 export const dynamic = 'force-dynamic'
@@ -95,6 +97,150 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         { error: validation.error, success: false },
         { status: 400, headers: NO_CACHE_HEADERS }
       )
+    }
+
+    // Cloud API first — conversas vindas do webhook Meta vivem em
+    // whatsapp_cloud_conversations (sem instance_id). Se for Cloud,
+    // upload pro Meta + sendImage/Video/Audio/Document e retorna.
+    const { data: cloudConv } = await supabase
+      .from('whatsapp_cloud_conversations')
+      .select('*, account:whatsapp_business_accounts(*)')
+      .eq('id', conversationId)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+
+    if (cloudConv && cloudConv.account) {
+      const client = createWhatsAppCloudClient({
+        phoneNumberId: cloudConv.account.phone_number_id,
+        accessToken: getAccessToken(cloudConv.account),
+      })
+
+      const phoneNumber = cloudConv.contact_phone || cloudConv.wa_id
+
+      // Upload to Supabase Storage in parallel — gives us a stable URL
+      // for the chat bubble's player (Meta-hosted media id is opaque).
+      const buffer = Buffer.from(await file.arrayBuffer())
+      let cloudMediaUrl: string | null = null
+      let cloudStoragePath: string | null = null
+      try {
+        const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
+        const ext = sanitizedName.split('.').pop() || file.type.split('/')[1] || 'bin'
+        const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+        cloudStoragePath = `${cloudConv.organization_id}/${conversationId}/${uniqueId}.${ext}`
+        const { error: upErr } = await supabase.storage
+          .from('whatsapp-media')
+          .upload(cloudStoragePath, buffer, {
+            contentType: file.type || 'application/octet-stream',
+            upsert: false,
+            cacheControl: '3600',
+          })
+        if (!upErr) {
+          const { data: signed } = await supabase.storage
+            .from('whatsapp-media')
+            .createSignedUrl(cloudStoragePath, SIGNED_URL_EXPIRY)
+          if (signed?.signedUrl) cloudMediaUrl = signed.signedUrl
+          else {
+            const { data: pub } = supabase.storage.from('whatsapp-media').getPublicUrl(cloudStoragePath)
+            cloudMediaUrl = pub?.publicUrl ?? null
+          }
+        }
+      } catch (storageErr) {
+        console.error('[Media POST/Cloud] storage error:', storageErr)
+      }
+
+      // Upload to Meta and dispatch the message.
+      let metaMediaId: string | undefined
+      try {
+        const uploaded = await client.uploadMedia(
+          buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
+          file.type || 'application/octet-stream',
+          file.name,
+        )
+        metaMediaId = uploaded.id
+      } catch (e: any) {
+        console.error('[Media POST/Cloud] uploadMedia error:', e)
+        return NextResponse.json(
+          { error: e?.message || 'Failed to upload media to Meta', code: e?.code, success: false },
+          { status: 400, headers: NO_CACHE_HEADERS },
+        )
+      }
+
+      let result
+      try {
+        if (mediaType === 'image') {
+          result = await client.sendImage(phoneNumber, { id: metaMediaId }, caption || undefined)
+        } else if (mediaType === 'video') {
+          result = await client.sendVideo(phoneNumber, { id: metaMediaId }, caption || undefined)
+        } else if (mediaType === 'audio') {
+          result = await client.sendAudio(phoneNumber, { id: metaMediaId })
+        } else {
+          result = await client.sendDocument(
+            phoneNumber,
+            { id: metaMediaId, filename: file.name },
+            caption || undefined,
+          )
+        }
+      } catch (e: any) {
+        console.error('[Media POST/Cloud] send error:', e)
+        return NextResponse.json(
+          { error: e?.message || 'Failed to send media', code: e?.code, success: false },
+          { status: 400, headers: NO_CACHE_HEADERS },
+        )
+      }
+
+      const messageId = result.messages?.[0]?.id
+      const { data: saved } = await supabase
+        .from('whatsapp_cloud_messages')
+        .upsert({
+          organization_id: cloudConv.organization_id,
+          store_id: cloudConv.store_id || cloudConv.account?.store_id || null,
+          waba_id: cloudConv.account.id,
+          conversation_id: conversationId,
+          message_id: messageId,
+          direction: 'outbound',
+          from_number: cloudConv.account.phone_number,
+          to_number: phoneNumber,
+          message_type: mediaType,
+          content: { [mediaType]: { id: metaMediaId, caption } },
+          text_body: caption || '',
+          status: 'sent',
+          media_url: cloudMediaUrl,
+          media_filename: file.name,
+          media_mime_type: file.type,
+          media_storage_path: cloudStoragePath,
+          timestamp: new Date().toISOString(),
+        }, { onConflict: 'message_id' })
+        .select()
+        .maybeSingle()
+
+      const preview = caption?.substring(0, 50) ||
+        (mediaType === 'image' ? '📷 Imagem' :
+         mediaType === 'video' ? '🎬 Vídeo' :
+         mediaType === 'audio' ? '🎵 Áudio' : `📎 ${file.name}`)
+
+      await supabase.from('whatsapp_cloud_conversations').update({
+        last_message_at: new Date().toISOString(),
+        last_message_preview: preview,
+        last_message_direction: 'outbound',
+      }).eq('id', conversationId)
+
+      return NextResponse.json({
+        message: saved ? {
+          id: saved.id,
+          conversation_id: saved.conversation_id,
+          direction: saved.direction,
+          message_type: saved.message_type,
+          content: saved.text_body || caption,
+          media_url: saved.media_url,
+          media_filename: saved.media_filename,
+          media_mime_type: saved.media_mime_type,
+          status: saved.status,
+          sent_by_bot: false,
+          created_at: saved.created_at,
+        } : null,
+        provider: 'cloud',
+        success: true,
+      }, { headers: NO_CACHE_HEADERS })
     }
 
     // ✅ FASE 3: Buscar conversa COM instance_id e store_id
