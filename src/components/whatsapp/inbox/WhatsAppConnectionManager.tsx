@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import {
   Plus,
   Check,
@@ -66,7 +67,7 @@ export default function WhatsAppConnectionManager({
 
     try {
       // ✅ CRÍTICO: Passar store_id na requisição
-      const response = await fetch(`/api/whatsapp/instances?organization_id=${organizationId}&store_id=${storeId}`)
+      const response = await authedFetch(`/api/whatsapp/instances?organization_id=${organizationId}&store_id=${storeId}`)
       const data = await response.json()
       
       if (data.instances) {
@@ -124,7 +125,7 @@ export default function WhatsAppConnectionManager({
   const handleDisconnect = async (instanceId: string) => {
     setActionLoading(instanceId)
     try {
-      await fetch('/api/whatsapp/instances', {
+      await authedFetch('/api/whatsapp/instances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'disconnect', instance_id: instanceId })
@@ -143,7 +144,7 @@ export default function WhatsAppConnectionManager({
     
     setActionLoading(instanceId)
     try {
-      await fetch(`/api/whatsapp/instances?id=${instanceId}`, { method: 'DELETE' })
+      await authedFetch(`/api/whatsapp/instances?id=${instanceId}`, { method: 'DELETE' })
       if (selectedInstance?.id === instanceId) {
         onSelectInstance(null)
       }

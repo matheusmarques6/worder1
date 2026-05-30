@@ -44,9 +44,9 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore()
   
-  const organizationId = user?.organization_id || 'default-org'
+  const organizationId = user?.organization_id || null
   const storeId = currentStore?.id || null // ✅ CRÍTICO: ID da loja atual
-  
+
   // ✅ CORREÇÃO: Passar storeId para filtrar instâncias por loja
   const { 
     instances, 
@@ -190,7 +190,7 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
       // Fetch contact se tiver contact_id ou unified_contact_id
       const contactId = selectedConversation.unified_contact_id || selectedConversation.contact_id
       if (contactId) {
-        fetchContact(contactId, organizationId)
+        fetchContact(contactId, organizationId || undefined)
       }
     } else {
       clearMessages()
@@ -302,13 +302,19 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
   // =============================================
   
   // ✅ NOVO: Mensagem se não tiver loja selecionada
-  if (!storeId) {
+  if (!organizationId || !storeId) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Selecione uma loja</h2>
-          <p className="text-gray-500">Escolha uma loja no menu para ver as conversas do WhatsApp.</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            {!organizationId ? 'Carregando…' : 'Selecione uma loja'}
+          </h2>
+          <p className="text-gray-500">
+            {!organizationId
+              ? 'Aguardando dados da organização.'
+              : 'Escolha uma loja no menu para ver as conversas do WhatsApp.'}
+          </p>
         </div>
       </div>
     )

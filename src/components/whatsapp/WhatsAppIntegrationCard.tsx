@@ -62,7 +62,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
       const configData = await configRes.json()
       
       // Buscar instâncias (QR Code)
-      const instancesRes = await fetch(`/api/whatsapp/instances?organizationId=${organizationId}`)
+      const instancesRes = await authedFetch(`/api/whatsapp/instances?organizationId=${organizationId}`)
       const instancesData = await instancesRes.json()
       
       const hasConfig = configData.connected

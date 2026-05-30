@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { authedFetch } from '@/lib/api/authed-fetch'
 
 // =============================================
 // TYPES
@@ -136,7 +137,7 @@ export function useWhatsAppConnection(organizationId: string | null, storeId?: s
       setError(null)
 
       // ✅ CRÍTICO: Passar store_id na query
-      const response = await fetch(`/api/whatsapp/instances?organization_id=${organizationId}&store_id=${storeId}`)
+      const response = await authedFetch(`/api/whatsapp/instances?organization_id=${organizationId}&store_id=${storeId}`)
       const data = await response.json()
 
       if (!response.ok) {
@@ -250,7 +251,7 @@ export function useWhatsAppConnection(organizationId: string | null, storeId?: s
       setError(null)
       setConnectionStatus('generating')
 
-      const response = await fetch('/api/whatsapp/instances', {
+      const response = await authedFetch('/api/whatsapp/instances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -291,7 +292,7 @@ export function useWhatsAppConnection(organizationId: string | null, storeId?: s
       setConnectionStatus('generating')
       setError(null)
 
-      const response = await fetch('/api/whatsapp/instances', {
+      const response = await authedFetch('/api/whatsapp/instances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -366,7 +367,7 @@ export function useWhatsAppConnection(organizationId: string | null, storeId?: s
 
   const checkStatus = useCallback(async (instanceId: string): Promise<ConnectionStatusResult> => {
     try {
-      const response = await fetch('/api/whatsapp/instances', {
+      const response = await authedFetch('/api/whatsapp/instances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -388,7 +389,7 @@ export function useWhatsAppConnection(organizationId: string | null, storeId?: s
 
   const disconnectInstance = useCallback(async (instanceId: string): Promise<boolean> => {
     try {
-      const response = await fetch('/api/whatsapp/instances', {
+      const response = await authedFetch('/api/whatsapp/instances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -414,7 +415,7 @@ export function useWhatsAppConnection(organizationId: string | null, storeId?: s
 
   const deleteInstance = useCallback(async (instanceId: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/whatsapp/instances?id=${instanceId}&organization_id=${organizationId}`, {
+      const response = await authedFetch(`/api/whatsapp/instances?id=${instanceId}&organization_id=${organizationId}`, {
         method: 'DELETE',
       })
 
@@ -437,7 +438,7 @@ export function useWhatsAppConnection(organizationId: string | null, storeId?: s
 
   const connectOfficial = useCallback(async (params: ConnectOfficialParams): Promise<ConnectOfficialResult> => {
     try {
-      const response = await fetch('/api/whatsapp/cloud/connect', {
+      const response = await authedFetch('/api/whatsapp/cloud/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
