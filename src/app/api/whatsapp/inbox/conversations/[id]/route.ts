@@ -23,7 +23,6 @@ export async function GET(
 
     // Buscar conversa via view unificada (agrega Evolution + Cloud).
     // Sem isso, conversas Cloud (InnovaBay etc) retornam 404.
-    console.log('[Conversation GET] querying view', { id, orgId })
     const { data: conversation, error } = await supabase
       .from('whatsapp_inbox_conversations')
       .select('*')
@@ -32,15 +31,8 @@ export async function GET(
       .single()
 
     if (error) {
-      console.error('[Conversation GET] Error:', error, { id, orgId })
+      console.error('[Conversation GET] Error:', error)
       if (error.code === 'PGRST116') {
-        // Diagnóstico: a row existe SEM filtro de org? (pode ser org mismatch)
-        const { data: anyConv } = await supabase
-          .from('whatsapp_inbox_conversations')
-          .select('id, organization_id, provider')
-          .eq('id', id)
-          .maybeSingle()
-        console.error('[Conversation GET] diagnostic (no org filter):', anyConv)
         return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
       }
       throw error

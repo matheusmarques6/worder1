@@ -190,7 +190,7 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
       // Fetch contact se tiver contact_id ou unified_contact_id
       const contactId = selectedConversation.unified_contact_id || selectedConversation.contact_id
       if (contactId) {
-        fetchContact(contactId, organizationId || undefined)
+        fetchContact(contactId, selectedConversation.id)
       }
     } else {
       clearMessages()
