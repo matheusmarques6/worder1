@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -14,27 +15,9 @@ export const dynamic = 'force-dynamic';
 // =============================================
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!profile?.organization_id) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
-    }
+    const auth = await requireOrgFromAuth(request);
+    if (auth instanceof NextResponse) return auth;
+    const profile = { organization_id: auth.orgId };
 
     const { searchParams } = new URL(request.url);
     const accountId = searchParams.get('accountId');
@@ -142,27 +125,9 @@ export async function GET(request: NextRequest) {
 // =============================================
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!profile?.organization_id) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
-    }
+    const auth = await requireOrgFromAuth(request);
+    if (auth instanceof NextResponse) return auth;
+    const profile = { organization_id: auth.orgId };
 
     const body = await request.json();
     const { 
@@ -207,6 +172,33 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           error: `Variables must be contiguous starting from {{1}}. Found gap at {{${i + 1}}}`
         }, { status: 400 });
+      }
+    }
+
+    // Meta requires example.body_text / example.header_text for every
+    // variable. Reject early with a clear message instead of letting
+    // Meta reject the template downstream.
+    if (varMatches.length > 0) {
+      const examples = bodyComponent.example?.body_text?.[0];
+      if (!Array.isArray(examples) || examples.length !== varMatches.length ||
+          examples.some((e: unknown) => typeof e !== 'string' || !e || (e as string).trim() === '')) {
+        return NextResponse.json({
+          error: `Body has ${varMatches.length} variable(s); provide a non-empty example for each (components[BODY].example.body_text)`
+        }, { status: 400 });
+      }
+    }
+
+    const headerComponent = (components as any[]).find((c: any) => c.type === 'HEADER');
+    if (headerComponent?.format === 'TEXT' && headerComponent.text) {
+      const headerVars = (headerComponent.text.match(/\{\{(\d+)\}\}/g) || []) as string[];
+      if (headerVars.length > 0) {
+        const headerExamples = headerComponent.example?.header_text;
+        if (!Array.isArray(headerExamples) || headerExamples.length !== headerVars.length ||
+            headerExamples.some((e: unknown) => typeof e !== 'string' || !e || (e as string).trim() === '')) {
+          return NextResponse.json({
+            error: `Header has ${headerVars.length} variable(s); provide a non-empty example for each (components[HEADER].example.header_text)`
+          }, { status: 400 });
+        }
       }
     }
 

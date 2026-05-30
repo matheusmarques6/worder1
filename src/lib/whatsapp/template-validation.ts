@@ -140,6 +140,7 @@ function validateHeader(component: TemplateComponent, errors: ValidationIssue[],
       });
     }
     validateVariables(component.text, 'header', errors, 1);
+    validateExamples(component, 'header', errors);
   }
 }
 
@@ -176,6 +177,7 @@ function validateBody(
   }
 
   validateVariables(component.text, 'body', errors);
+  validateExamples(component, 'body', errors);
 }
 
 function validateFooter(component: TemplateComponent, errors: ValidationIssue[], warnings: ValidationIssue[]) {
@@ -247,6 +249,39 @@ function validateButtons(component: TemplateComponent, errors: ValidationIssue[]
       if (!btn.url.startsWith('https://')) {
         errors.push({ field: `buttons[${i}].url`, message: 'URL must start with https://', code: 'BUTTON_URL_NOT_HTTPS' });
       }
+    }
+  }
+}
+
+// Meta API requires example.body_text / example.header_text for every
+// variable in a template body/header. Without these, Meta rejects the
+// template during review even if the rest of the payload is valid.
+function validateExamples(component: TemplateComponent, kind: 'body' | 'header', errors: ValidationIssue[]) {
+  const text = component.text || '';
+  const matches = [...text.matchAll(VARIABLE_REGEX)];
+  if (matches.length === 0) return;
+
+  const examples: unknown =
+    kind === 'body'
+      ? component.example?.body_text?.[0]
+      : component.example?.header_text;
+
+  if (!Array.isArray(examples) || examples.length !== matches.length) {
+    errors.push({
+      field: `${kind}.example`,
+      message: `${kind === 'body' ? 'Body' : 'Header'} has ${matches.length} variable(s); please fill an example for each.`,
+      code: kind === 'body' ? 'BODY_EXAMPLES_MISSING' : 'HEADER_EXAMPLES_MISSING',
+    });
+    return;
+  }
+
+  for (let i = 0; i < examples.length; i++) {
+    if (typeof examples[i] !== 'string' || !examples[i] || (examples[i] as string).trim().length === 0) {
+      errors.push({
+        field: `${kind}.example[${i}]`,
+        message: `Example for {{${i + 1}}} cannot be empty`,
+        code: kind === 'body' ? 'BODY_EXAMPLE_EMPTY' : 'HEADER_EXAMPLE_EMPTY',
+      });
     }
   }
 }
