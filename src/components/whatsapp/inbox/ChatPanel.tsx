@@ -1,11 +1,14 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Bot, MoreVertical, UserPlus, PanelRightClose, PanelRightOpen,
   Send, Smile, Paperclip, Image as ImageIcon, FileText, Film, X,
   Check, CheckCheck, Clock, AlertCircle, Loader2, RefreshCw, CheckCircle,
+  KeyRound, Mic,
 } from 'lucide-react'
+import { AudioRecorder } from './AudioRecorder'
 import { AIToggleButton } from './AIToggleButton'
 import { ServiceWindowBar } from './ServiceWindowBar'
 import { QuickRepliesPicker } from './QuickRepliesPicker'
@@ -76,10 +79,20 @@ function MessageStatus({ status }: { status: InboxMessage['status'] }) {
 
 // Message Bubble
 function MessageBubble({ message, contactName, onRetry }: { message: InboxMessage, contactName?: string, onRetry?: (msg: InboxMessage) => void }) {
+  const router = useRouter()
   const isOutbound = message.direction === 'outbound'
   const isBot = message.sent_by_bot
   const isFailed = message.status === 'failed'
   const isPending = message.status === 'pending'
+
+  // Detect Meta auth error (code 190) so we can show a CTA that takes the
+  // user to the settings page to refresh the token, instead of a useless
+  // "Tentar novamente" that will hit the same dead token.
+  const errMsg = (message as any).error || message.error_message || ''
+  const errCode = (message as any).error_code
+  const isAuthError =
+    String(errCode) === '190' ||
+    /Authentication Error/i.test(errMsg)
 
   return (
     <div className={`flex gap-3 ${isOutbound ? 'justify-end' : 'justify-start'}`}>
@@ -141,15 +154,24 @@ function MessageBubble({ message, contactName, onRetry }: { message: InboxMessag
           {isFailed && (
             <div className="mt-2 pt-2 border-t border-red-500/30">
               <p className="text-xs text-red-300 mb-1">
-                {(message as any).error || message.error_message || 'Falha ao enviar'}
+                {isAuthError ? 'Conexao WhatsApp expirou' : (errMsg || 'Falha ao enviar')}
               </p>
-              {onRetry && (
-                <button 
-                  onClick={() => onRetry(message)}
+              {isAuthError ? (
+                <button
+                  onClick={() => router.push('/whatsapp/settings')}
                   className="text-xs text-red-300 hover:text-white flex items-center gap-1"
                 >
-                  <RefreshCw className="w-3 h-3" /> Tentar novamente
+                  <KeyRound className="w-3 h-3" /> Atualizar conexao
                 </button>
+              ) : (
+                onRetry && (
+                  <button
+                    onClick={() => onRetry(message)}
+                    className="text-xs text-red-300 hover:text-white flex items-center gap-1"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Tentar novamente
+                  </button>
+                )
               )}
             </div>
           )}
@@ -286,6 +308,7 @@ export function ChatPanel({
   const [showAttachMenu, setShowAttachMenu] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedMediaType, setSelectedMediaType] = useState<'image' | 'video' | 'document'>('document')
+  const [recordingMode, setRecordingMode] = useState(false)
   // Module A: Modals and pickers
   const [showCSATModal, setShowCSATModal] = useState(false)
   const [showTransferModal, setShowTransferModal] = useState(false)
@@ -718,25 +741,49 @@ export function ChatPanel({
             )}
           </div>
 
-          <div className="flex-1 relative">
-            <textarea ref={inputRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown}
-              placeholder="Digite uma mensagem ou /atalho..." disabled={isSending} rows={1}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-400 resize-none disabled:opacity-50"
-              style={{ maxHeight: '120px' }} />
-            {showQuickReplies && organizationId && (
-              <QuickRepliesPicker
-                query={slashQuery}
-                organizationId={organizationId}
-                onSelect={handleSelectQuickReply}
-                onClose={() => setShowQuickReplies(false)}
-              />
-            )}
-          </div>
+          {recordingMode ? (
+            <AudioRecorder
+              isUploading={isUploading}
+              onCancel={() => setRecordingMode(false)}
+              onSend={async (file) => {
+                await onSendMedia(file, 'audio')
+                setRecordingMode(false)
+              }}
+            />
+          ) : (
+            <>
+              <div className="flex-1 relative">
+                <textarea ref={inputRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown}
+                  placeholder="Digite uma mensagem ou /atalho..." disabled={isSending} rows={1}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-400 resize-none disabled:opacity-50"
+                  style={{ maxHeight: '120px' }} />
+                {showQuickReplies && organizationId && (
+                  <QuickRepliesPicker
+                    query={slashQuery}
+                    organizationId={organizationId}
+                    onSelect={handleSelectQuickReply}
+                    onClose={() => setShowQuickReplies(false)}
+                  />
+                )}
+              </div>
 
-          <button onClick={handleSend} disabled={!input.trim() || isSending}
-            className="p-3 rounded-xl bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed">
-            {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-          </button>
+              {input.trim() ? (
+                <button onClick={handleSend} disabled={!input.trim() || isSending}
+                  className="p-3 rounded-xl bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                </button>
+              ) : (
+                <button
+                  onClick={() => setRecordingMode(true)}
+                  disabled={isSending || isUploading}
+                  title="Gravar audio"
+                  className="p-3 rounded-xl hover:bg-gray-100 text-gray-500 hover:text-primary-600 disabled:opacity-50"
+                >
+                  <Mic className="w-5 h-5" />
+                </button>
+              )}
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2 mt-2">
