@@ -12,12 +12,13 @@ import { AudioRecorder } from './AudioRecorder'
 import { AIToggleButton } from './AIToggleButton'
 import { ServiceWindowBar } from './ServiceWindowBar'
 import { QuickRepliesPicker } from './QuickRepliesPicker'
+import { TemplatePickerModal, type SendTemplatePayload } from './TemplatePickerModal'
 import { CSATModal } from './modals/CSATModal'
 import { TransferModal } from './modals/TransferModal'
 import { PaymentLinkModal } from './modals/PaymentLinkModal'
+import { authedFetch } from '@/lib/api/authed-fetch'
 import { CreditCard, ShoppingBag } from 'lucide-react'
 import type { InboxConversation, InboxMessage } from '@/types/inbox'
-import { authedFetch } from '@/lib/api/authed-fetch'
 
 interface ChatPanelProps {
   conversation: InboxConversation
@@ -354,6 +355,27 @@ export function ChatPanel({
     }
   }
 
+  const handleSendTemplate = async (payload: SendTemplatePayload) => {
+    setIsSendingTemplate(true)
+    try {
+      const res = await authedFetch(
+        `/api/whatsapp/inbox/conversations/${conversation.id}/send-template`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      )
+      const text = await res.text()
+      const data = text ? (() => { try { return JSON.parse(text) } catch { return {} } })() : {}
+      if (!res.ok) {
+        throw new Error(data.error || data.details || `HTTP ${res.status}`)
+      }
+    } finally {
+      setIsSendingTemplate(false)
+    }
+  }
+
   const handleSelectQuickReply = (reply: { content: string; title: string }) => {
     // Replace variables with placeholder; caller can handle real substitution
     const content = reply.content
@@ -479,8 +501,25 @@ export function ChatPanel({
       <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} />
 
       {selectedFile && (
-        <MediaPreviewModal file={selectedFile} onClose={() => setSelectedFile(null)} 
+        <MediaPreviewModal file={selectedFile} onClose={() => setSelectedFile(null)}
           onSend={handleSendMedia} isSending={isUploading} />
+      )}
+
+      {organizationId && (
+        <TemplatePickerModal
+          open={showTemplatePicker}
+          organizationId={organizationId}
+          onClose={() => setShowTemplatePicker(false)}
+          onSendTemplate={handleSendTemplate}
+          onSelectQuickReply={(content) => {
+            const expanded = content
+              .replace(/\{nome\}/g, conversation.contact_name || '')
+              .replace(/\{telefone\}/g, conversation.phone_number || '')
+            setInput(expanded)
+            setTimeout(() => inputRef.current?.focus(), 10)
+          }}
+          isSending={isSendingTemplate}
+        />
       )}
 
       {/* Header */}
