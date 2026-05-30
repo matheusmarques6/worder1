@@ -3,6 +3,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api'
 import { getAccessToken } from '@/lib/whatsapp/account-loader'
 import { requireOrgFromAuth } from '@/lib/auth/require-org'
+import { extractMessageText } from '@/lib/whatsapp/message-content'
 
 // ✅ FASE 3: Force dynamic para evitar cache
 export const dynamic = 'force-dynamic'
@@ -62,16 +63,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       }
     }
 
-    const getContent = (c: any, fb?: string): string => {
-      if (!c && !fb) return ''
-      if (typeof c === 'string') return c
-      if (c?.text) return c.text
-      return fb || JSON.stringify(c || '')
-    }
-
     const formatted = (messages || []).map(m => ({
       id: m.id, conversation_id: m.conversation_id, direction: m.direction,
-      message_type: m.message_type || 'text', content: getContent(m.content, m.text_body),
+      message_type: m.message_type || 'text', content: extractMessageText(m.content, m.text_body),
       media_url: m.media_url, media_filename: m.media_filename, media_mime_type: m.media_mime_type,
       status: m.status || 'sent', sent_by_bot: m.sent_by_bot || false,
       created_at: m.created_at || m.timestamp, delivered_at: m.delivered_at, read_at: m.read_at,
