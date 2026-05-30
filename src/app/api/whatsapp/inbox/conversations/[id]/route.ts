@@ -21,9 +21,10 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid conversation ID format' }, { status: 400 })
     }
 
-    // Buscar conversa SEM joins problemáticos
+    // Buscar conversa via view unificada (agrega Evolution + Cloud).
+    // Sem isso, conversas Cloud (InnovaBay etc) retornam 404.
     const { data: conversation, error } = await supabase
-      .from('whatsapp_conversations')
+      .from('whatsapp_inbox_conversations')
       .select('*')
       .eq('id', id)
       .eq('organization_id', orgId)
