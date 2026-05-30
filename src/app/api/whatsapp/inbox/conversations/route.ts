@@ -23,10 +23,22 @@ export async function GET(request: NextRequest) {
       .order('last_message_at', { ascending: false, nullsFirst: false })
 
     // Multi-store filtering. View expõe store_id após Caminho B.
-    // Quando o cliente passa storeId, listamos só conversas dessa loja
-    // E também as órfãs (store_id NULL — conexões legacy ainda não backfilladas).
+    //
+    // Quando o cliente passa storeId, filtramos pela loja. Mas se o org não
+    // tem nenhuma loja em `stores` (single-tenant comum), o storeId do front
+    // é provavelmente cache/legacy de uma sessão antiga apontando pra UUID
+    // órfã. Nesse caso ignoramos o filtro pra não esconder TODAS as conversas.
     if (storeId) {
-      query = query.or(`store_id.eq.${storeId},store_id.is.null`)
+      const { count: storeCount } = await supabase
+        .from('stores')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+
+      if ((storeCount || 0) > 0) {
+        // Org tem lojas reais — aplica filtro (mantendo conversas órfãs visíveis)
+        query = query.or(`store_id.eq.${storeId},store_id.is.null`)
+      }
+      // Senão: nenhum filtro de store, devolve todas as conversas da org
     }
 
     if (status && status !== 'all') {
