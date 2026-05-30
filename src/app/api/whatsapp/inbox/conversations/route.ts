@@ -14,12 +14,20 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const search = searchParams.get('search')
+    const storeId = searchParams.get('storeId') || searchParams.get('store_id')
 
     let query = supabase
       .from('whatsapp_inbox_conversations')
       .select('*')
       .eq('organization_id', orgId)
       .order('last_message_at', { ascending: false, nullsFirst: false })
+
+    // Multi-store filtering. View expõe store_id após Caminho B.
+    // Quando o cliente passa storeId, listamos só conversas dessa loja
+    // E também as órfãs (store_id NULL — conexões legacy ainda não backfilladas).
+    if (storeId) {
+      query = query.or(`store_id.eq.${storeId},store_id.is.null`)
+    }
 
     if (status && status !== 'all') {
       query = query.eq('status', status)
@@ -63,6 +71,7 @@ function formatConversation(conv: any) {
   return {
     id: conv.id,
     organization_id: conv.organization_id,
+    store_id: conv.store_id,
     provider: conv.provider,
     account_id: conv.account_id,
     contact_id: conv.contact_id,

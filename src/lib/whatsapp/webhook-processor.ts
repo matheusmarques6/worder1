@@ -192,6 +192,7 @@ async function processMessage(
 
   await supabase.from('whatsapp_cloud_messages').insert({
     organization_id: account.organization_id,
+    store_id: account.store_id || conversation.store_id || null,
     waba_id: account.id,
     conversation_id: conversation.id,
     message_id: message.id,
@@ -564,6 +565,7 @@ async function getOrCreateConversation(account: any, contact: any, phoneNumber: 
     .from('whatsapp_cloud_conversations')
     .insert({
       organization_id: account.organization_id,
+      store_id: account.store_id || null,
       waba_id: account.id,
       contact_id: contact?.id,
       wa_id: phoneNumber,

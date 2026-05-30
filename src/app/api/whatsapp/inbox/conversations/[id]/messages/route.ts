@@ -139,6 +139,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         .from('whatsapp_cloud_messages')
         .upsert({
           organization_id: cloudConv.organization_id,
+          store_id: cloudConv.store_id || cloudConv.account?.store_id || null,
           waba_id: cloudConv.account.id,
           conversation_id: conversationId,
           message_id: messageId,
