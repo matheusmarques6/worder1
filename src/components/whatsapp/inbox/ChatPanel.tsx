@@ -276,12 +276,12 @@ function MediaPreviewModal({ file, onClose, onSend, isSending }: {
           <div className="px-4 pb-4">
             <input type="text" value={caption} onChange={(e) => setCaption(e.target.value)}
               placeholder="Adicionar legenda (opcional)"
-              className="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500" />
+              className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500" />
           </div>
         )}
 
         <div className="flex gap-3 p-4 border-t border-gray-200">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-gray-100 text-white rounded-xl hover:bg-gray-200">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200">
             Cancelar
           </button>
           <button onClick={() => !error && onSend(caption)} disabled={isSending || !!error}
@@ -316,6 +316,8 @@ export function ChatPanel({
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
+  const [isSendingTemplate, setIsSendingTemplate] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -509,7 +511,7 @@ export function ChatPanel({
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               conversation.is_bot_active
                 ? 'bg-brand-50 text-brand-600 border border-brand-300'
-                : 'bg-gray-100 text-gray-500 hover:text-white'
+                : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700'
             }`}>
             <Bot className="w-4 h-4" />
             <span className="hidden sm:inline">{conversation.is_bot_active ? 'Bot Ativo' : 'Bot Off'}</span>
@@ -787,8 +789,20 @@ export function ChatPanel({
         </div>
 
         <div className="flex items-center gap-2 mt-2">
-          <button className="px-3 py-1.5 text-xs bg-gray-100 text-gray-500 rounded-lg hover:text-white hover:bg-gray-100">/atalhos</button>
-          <button className="px-3 py-1.5 text-xs bg-gray-100 text-gray-500 rounded-lg hover:text-white hover:bg-gray-100">📋 Templates</button>
+          <button
+            type="button"
+            onClick={() => { setSlashQuery(''); setShowQuickReplies(true) }}
+            className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+          >
+            /atalhos
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowTemplatePicker(true)}
+            className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+          >
+            📋 Templates
+          </button>
         </div>
       </div>
     </div>
