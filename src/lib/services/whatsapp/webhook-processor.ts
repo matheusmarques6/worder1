@@ -6,7 +6,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import {
   verifyWebhookSignature,
-  extractMessageText,
+  extractWebhookMessageText,
   getMessageType,
   normalizePhone,
 } from '@/lib/whatsapp/cloud-api'
@@ -153,7 +153,7 @@ async function processIncomingMessage(
     const contactPhone = normalizePhone(message.from)
     const contactInfo = contacts?.find((c) => c.wa_id === message.from)
     const contactName = contactInfo?.profile?.name || contactPhone
-    const messageText = extractMessageText(message as any)
+    const messageText = extractWebhookMessageText(message as any)
     const messageType = getMessageType(message as any) as MessageType
 
     logger.info(LOG_PREFIX, `Incoming ${messageType} from ${contactPhone}`)

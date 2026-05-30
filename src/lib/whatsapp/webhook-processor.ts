@@ -19,7 +19,7 @@
 
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import {
-  extractMessageText,
+  extractWebhookMessageText,
   getMessageType,
   normalizePhone,
   type WebhookMessage,
@@ -187,7 +187,7 @@ async function processMessage(
   }
 
   const messageType = getMessageType(message);
-  const textBody = extractMessageText(message);
+  const textBody = extractWebhookMessageText(message);
   const content = buildMessageContent(message);
 
   await supabase.from('whatsapp_cloud_messages').insert({

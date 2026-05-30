@@ -640,7 +640,12 @@ export function normalizePhone(phone: string, country: string = 'BR'): string {
   }
 }
 
-export function extractMessageText(message: WebhookMessage): string {
+/**
+ * Extrai texto do payload Meta webhook cru (não confundir com
+ * `extractMessageText` em `message-content.ts`, que opera sobre o `content`
+ * já armazenado no DB com formato aninhado diferente).
+ */
+export function extractWebhookMessageText(message: WebhookMessage): string {
   if (message.text) return message.text.body;
   if (message.image?.caption) return message.image.caption;
   if (message.video?.caption) return message.video.caption;
