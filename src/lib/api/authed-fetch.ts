@@ -1,50 +1,24 @@
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-
 /**
- * Wrapper around fetch that automatically attaches the Supabase JWT to the
- * Authorization header. Use for ALL calls to internal API routes that read
- * organization-scoped data (the API helper `requireOrgFromAuth` reads orgId
- * from this token instead of trusting an organizationId query param).
+ * Wrapper de fetch para chamadas autenticadas a rotas internas /api/*.
  *
- * IMPORTANT: usa `createClientComponentClient` da @supabase/auth-helpers-nextjs
- * porque é o mesmo cliente usado pelo login/AuthContext do app. O plano
- * `createClient` da supabase-js armazena sessão em localStorage; já o helper
- * usa cookies (`sb-<project>-auth-token`). Se misturar, getSession() retorna
- * null infinitamente e 401 garantido em produção.
+ * O app autentica via cookies httpOnly (`sb-access-token`, `sb-refresh-token`)
+ * gravados pelo /api/auth no login. JS do browser NAO pode ler cookies
+ * httpOnly — entao authedFetch nao tenta montar Authorization header.
  *
- * Resilient to hydration race: on page load, getSession() can return null
- * briefly while the auth helper reads the cookie. Retry up to 5x with backoff
- * (0ms, 50ms, 100ms, 200ms, 400ms — ~750ms total).
+ * Em vez disso, apenas garante `credentials: 'include'` pra fetch enviar os
+ * cookies automaticamente, e o backend (`requireOrgFromAuth`) extrai o JWT
+ * do cookie `sb-access-token`.
  *
- * Returns the raw Response — caller decides whether to .json(), .text(),
- * check status, etc.
+ * Same-origin fetch ja envia cookies por default em chrome/firefox, mas
+ * 'include' explicito evita surpresas em casos edge (subdominio, iframes,
+ * algum SDK que sobrescreve default).
  */
-let cachedClient: ReturnType<typeof createClientComponentClient> | null = null
-function getAuthClient() {
-  if (!cachedClient) cachedClient = createClientComponentClient()
-  return cachedClient
-}
-
 export async function authedFetch(
   input: RequestInfo | URL,
   init: RequestInit = {},
 ): Promise<Response> {
-  const client = getAuthClient()
-  let token: string | undefined
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const { data: { session } } = await client.auth.getSession()
-    token = session?.access_token
-    if (token) break
-    if (attempt < 4) {
-      await new Promise(r => setTimeout(r, 50 * (1 << attempt)))
-    }
-  }
-
-  const headers = new Headers(init.headers || {})
-  if (token && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`)
-  }
-
-  return fetch(input, { ...init, headers })
+  return fetch(input, {
+    credentials: 'include',
+    ...init,
+  })
 }

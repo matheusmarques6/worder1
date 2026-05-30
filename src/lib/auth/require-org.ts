@@ -7,12 +7,21 @@ export interface AuthContext {
 }
 
 /**
- * Authenticates a request against the Supabase JWT in the Authorization header
- * and returns the caller's organization_id.
+ * Authenticates a request and returns the caller's organization_id.
  *
- * Use at the top of every WhatsApp/CRM API route that uses supabaseAdmin
- * (service_role bypasses RLS), so the route can scope queries to the caller's
- * org instead of trusting an organizationId provided in the query string.
+ * Aceita 2 fontes de token (em ordem de prioridade):
+ *   1. Authorization: Bearer <jwt>   — uso por integrações externas / SDKs
+ *   2. Cookie `sb-access-token`      — uso normal do front-end (cookie httpOnly
+ *                                       gravado por /api/auth no login)
+ *
+ * O app autentica via cookies httpOnly (middleware.ts lê em SSR), então o JS
+ * do browser não consegue acessar o token pra montar Authorization header. Por
+ * isso o fallback de cookie é obrigatório — sem ele, todas as fetch() do front
+ * recebem 401 sistemático mesmo com o usuário logado.
+ *
+ * Use at the top of every WhatsApp/CRM API route que usa supabaseAdmin
+ * (service_role bypassa RLS), pra escopar queries no org do caller em vez de
+ * confiar em organizationId vindo da query string.
  *
  * Returns a NextResponse on failure — caller must check with `instanceof` and
  * return it short-circuit. Returns { orgId, userId } on success.
@@ -20,14 +29,26 @@ export interface AuthContext {
 export async function requireOrgFromAuth(
   request: NextRequest,
 ): Promise<AuthContext | NextResponse> {
+  let token: string | null = null
+
+  // Source 1: Authorization header (preferido — integrações externas)
   const authHeader = request.headers.get('authorization')
-  if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
+  if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+    token = authHeader.slice('Bearer '.length).trim()
+  }
+
+  // Source 2: cookie httpOnly setado pelo /api/auth no login
+  if (!token) {
+    token = request.cookies.get('sb-access-token')?.value ?? null
+  }
+
+  if (!token) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const token = authHeader.slice('Bearer '.length).trim()
-  if (!token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Dev mode token shortcut — mesmo bypass usado pelo middleware
+  if (token === 'dev-access-token') {
+    return NextResponse.json({ error: 'Dev token not supported here' }, { status: 401 })
   }
 
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
