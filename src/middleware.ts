@@ -104,8 +104,10 @@ function isPublicRoute(pathname: string): boolean {
 }
 
 function isPublicApiRoute(pathname: string): boolean {
-  // WhatsApp webhook needs to be public
-  if (pathname.startsWith('/api/whatsapp/webhook')) return true;
+  // WhatsApp webhooks precisam ser publicas — Meta nao envia cookie de sessao.
+  // Cobre /api/whatsapp/webhook (Evolution legacy), /api/whatsapp/meta/webhook
+  // (legacy forward), /api/whatsapp/cloud/webhook (canonica), /api/whatsapp/evolution/webhook.
+  if (/^\/api\/whatsapp\/(webhook|.*\/webhook)(\/|$|\?)/.test(pathname)) return true;
   return publicApiRoutes.some(route => pathname.startsWith(route));
 }
 
