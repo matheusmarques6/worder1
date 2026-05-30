@@ -227,10 +227,17 @@ export function useInboxMessages(): UseInboxMessagesReturn {
       const data = await response.json()
 
       if (!response.ok) {
-        // Se falhou, atualizar mensagem otimista para "failed"
+        // Se falhou, atualizar mensagem otimista para "failed".
+        // Preservar `code` (Meta error code, ex: 190 = auth) pra UI
+        // poder renderizar CTA contextual no balao.
         setMessages(prev => prev.map(m =>
           m.id === tempId
-            ? { ...m, status: 'failed' as const, error_message: data.error }
+            ? {
+                ...m,
+                status: 'failed' as const,
+                error_message: data.error,
+                error_code: data.code != null ? String(data.code) : undefined,
+              }
             : m
         ))
         setError(data.error || 'Failed to send message')
