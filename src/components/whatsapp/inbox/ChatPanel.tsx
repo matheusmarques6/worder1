@@ -464,7 +464,14 @@ export function ChatPanel({
   const handleFileTypeSelect = (type: 'image' | 'video' | 'document') => {
     setSelectedMediaType(type)
     if (!fileInputRef.current) return
-    fileInputRef.current.accept = type === 'image' ? 'image/*' : type === 'video' ? 'video/*' : '*/*'
+    // Restrict to MIME types Meta's /media endpoint accepts. Anything
+    // else is rejected with code 131053 after upload.
+    fileInputRef.current.accept =
+      type === 'image'
+        ? 'image/jpeg,image/png,image/webp'
+        : type === 'video'
+          ? 'video/mp4,video/3gpp'
+          : '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv'
     fileInputRef.current.click()
     setShowAttachMenu(false)
   }

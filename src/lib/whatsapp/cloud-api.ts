@@ -452,10 +452,21 @@ export class WhatsAppCloudAPI {
   // =============================================
 
   async uploadMedia(fileData: ArrayBuffer, mimeType: string, filename?: string): Promise<{ id: string }> {
+    // Meta's /media endpoint expects `type` to be the category
+    // ("image" | "video" | "audio" | "document" | "sticker"), not the
+    // full MIME string. Passing "image/jpeg" here returns code 100.
+    const category = mimeType.startsWith('image/')
+      ? 'image'
+      : mimeType.startsWith('video/')
+        ? 'video'
+        : mimeType.startsWith('audio/')
+          ? 'audio'
+          : 'document';
+
     const formData = new FormData();
     formData.append('file', new Blob([fileData], { type: mimeType }), filename || 'file');
     formData.append('messaging_product', 'whatsapp');
-    formData.append('type', mimeType);
+    formData.append('type', category);
 
     const response = await fetch(`${META_BASE_URL}/${this.config.phoneNumberId}/media`, {
       method: 'POST',

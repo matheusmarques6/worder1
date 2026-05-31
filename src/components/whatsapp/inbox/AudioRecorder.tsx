@@ -26,20 +26,20 @@ interface AudioRecorderProps {
 type Phase = 'requesting' | 'recording' | 'preview' | 'error'
 
 function pickSupportedMime(): { mimeType: string; ext: string } {
-  // Order matters — prefer opus webm (smaller, broadly supported in Cloud API),
-  // fallback to mp4/aac for Safari which does not implement webm.
+  // Meta's Cloud API rejects audio/webm. Only ogg/opus, mp4, aac, mpeg,
+  // and amr are accepted. Prefer formats both the browser and Meta accept.
   const candidates: Array<{ mimeType: string; ext: string }> = [
-    { mimeType: 'audio/webm;codecs=opus', ext: 'webm' },
-    { mimeType: 'audio/webm', ext: 'webm' },
+    { mimeType: 'audio/ogg;codecs=opus', ext: 'ogg' },
     { mimeType: 'audio/mp4', ext: 'mp4' },
     { mimeType: 'audio/aac', ext: 'aac' },
+    { mimeType: 'audio/mpeg', ext: 'mp3' },
   ]
   for (const c of candidates) {
     if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(c.mimeType)) {
       return c
     }
   }
-  return { mimeType: '', ext: 'webm' }
+  return { mimeType: '', ext: '' }
 }
 
 function formatDuration(seconds: number): string {
@@ -155,9 +155,16 @@ export function AudioRecorder({ onSend, onCancel, isUploading = false }: AudioRe
         streamRef.current = stream
 
         const mime = pickSupportedMime()
+        if (!mime.mimeType) {
+          stream.getTracks().forEach(t => t.stop())
+          streamRef.current = null
+          setError('Browser nao grava em formato compativel com o WhatsApp. Use Chrome, Edge ou Safari.')
+          setPhase('error')
+          return
+        }
         mimeRef.current = mime
 
-        const recorder = new MediaRecorder(stream, mime.mimeType ? { mimeType: mime.mimeType } : undefined)
+        const recorder = new MediaRecorder(stream, { mimeType: mime.mimeType })
         recorderRef.current = recorder
         chunksRef.current = []
 
@@ -166,7 +173,7 @@ export function AudioRecorder({ onSend, onCancel, isUploading = false }: AudioRe
         }
 
         recorder.onstop = () => {
-          const blob = new Blob(chunksRef.current, { type: mime.mimeType || 'audio/webm' })
+          const blob = new Blob(chunksRef.current, { type: mime.mimeType })
           const ts = new Date().toISOString().replace(/[:.]/g, '-')
           const file = new File([blob], `voice-${ts}.${mime.ext}`, { type: blob.type })
           fileRef.current = file

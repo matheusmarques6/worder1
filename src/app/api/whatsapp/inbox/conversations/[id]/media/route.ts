@@ -17,19 +17,34 @@ const NO_CACHE_HEADERS = {
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY
 
-// ✅ FASE 2: CONFIGURAÇÕES DE SEGURANÇA
-const MAX_FILE_SIZE = 16 * 1024 * 1024 // 16MB
 const SIGNED_URL_EXPIRY = 3600 // 1 hora
 
+// Meta Cloud API enforces different size limits per media category.
+// Reject early instead of letting Meta refuse the upload.
+const MAX_SIZE_BY_TYPE: Record<string, number> = {
+  image: 5 * 1024 * 1024,      // 5 MB
+  video: 16 * 1024 * 1024,     // 16 MB
+  audio: 16 * 1024 * 1024,     // 16 MB
+  document: 100 * 1024 * 1024, // 100 MB
+}
+const FALLBACK_MAX_SIZE = 16 * 1024 * 1024
+
+// MIME types accepted by Meta's /media endpoint. Anything outside
+// these lists is rejected by Meta with code 131053.
 const ALLOWED_TYPES = {
-  image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
-  video: ['video/mp4', 'video/webm', 'video/quicktime', 'video/3gpp'],
-  audio: ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/webm', 'audio/mp4', 'audio/aac'],
+  image: ['image/jpeg', 'image/png', 'image/webp'],
+  video: ['video/mp4', 'video/3gpp'],
+  audio: ['audio/aac', 'audio/mpeg', 'audio/mp4', 'audio/amr', 'audio/ogg'],
   document: [
-    'application/pdf', 'application/msword', 'text/plain', 'text/csv',
+    'application/pdf',
+    'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-excel',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain',
+    'text/csv',
   ],
 }
 
@@ -44,8 +59,13 @@ function getEvolutionConfig(instance?: any) {
 
 // Validação de arquivo
 function validateFile(file: File, mediaType: string): { valid: boolean; error?: string } {
-  if (file.size > MAX_FILE_SIZE) {
-    return { valid: false, error: `Arquivo muito grande. Máximo: ${MAX_FILE_SIZE / (1024 * 1024)}MB` }
+  const maxSize = MAX_SIZE_BY_TYPE[mediaType] ?? FALLBACK_MAX_SIZE
+  if (file.size > maxSize) {
+    const label = mediaType === 'image' ? 'Imagem'
+      : mediaType === 'video' ? 'Video'
+      : mediaType === 'audio' ? 'Audio'
+      : 'Documento'
+    return { valid: false, error: `${label} muito grande. Maximo: ${maxSize / (1024 * 1024)}MB` }
   }
 
   if (DANGEROUS_EXTENSIONS.some(ext => file.name.toLowerCase().endsWith(ext))) {
@@ -53,11 +73,8 @@ function validateFile(file: File, mediaType: string): { valid: boolean; error?: 
   }
 
   const allowedList = ALLOWED_TYPES[mediaType as keyof typeof ALLOWED_TYPES]
-  if (allowedList && mediaType !== 'document') {
-    const baseType = file.type.split('/')[0]
-    if (!allowedList.includes(file.type) && !allowedList.some(t => t.startsWith(baseType))) {
-      return { valid: false, error: `Tipo de arquivo não permitido para ${mediaType}: ${file.type}` }
-    }
+  if (allowedList && !allowedList.includes(file.type)) {
+    return { valid: false, error: `Tipo de arquivo nao aceito pelo WhatsApp para ${mediaType}: ${file.type}` }
   }
 
   return { valid: true }
@@ -159,8 +176,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         metaMediaId = uploaded.id
       } catch (e: any) {
         console.error('[Media POST/Cloud] uploadMedia error:', e)
+        const codeStr = e?.code ? ` (code ${e.code})` : ''
         return NextResponse.json(
-          { error: e?.message || 'Failed to upload media to Meta', code: e?.code, success: false },
+          {
+            error: `Meta: ${e?.message || 'Failed to upload media'}${codeStr}`,
+            code: e?.code,
+            details: e?.error_data?.details,
+            success: false,
+          },
           { status: 400, headers: NO_CACHE_HEADERS },
         )
       }
@@ -182,8 +205,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         }
       } catch (e: any) {
         console.error('[Media POST/Cloud] send error:', e)
+        const codeStr = e?.code ? ` (code ${e.code})` : ''
         return NextResponse.json(
-          { error: e?.message || 'Failed to send media', code: e?.code, success: false },
+          {
+            error: `Meta: ${e?.message || 'Failed to send media'}${codeStr}`,
+            code: e?.code,
+            details: e?.error_data?.details,
+            success: false,
+          },
           { status: 400, headers: NO_CACHE_HEADERS },
         )
       }
