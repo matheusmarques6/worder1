@@ -821,6 +821,65 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
             </div>
           </details>
 
+          {/* Button styling */}
+          <details className="group border border-zinc-100 rounded-lg" open>
+            <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+              Botão <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <Field label="Texto do botão">
+                <TextInput value={p.buttonText ?? 'Comprar agora'} onChange={v => onChange('buttonText', v)} placeholder="Comprar agora" />
+              </Field>
+              <Field label="Link do botão">
+                <TextInput value={p.buttonHref ?? '{{ trigger.link }}'} onChange={v => onChange('buttonHref', v)} placeholder="{{ trigger.link }}" />
+                <p className="text-[10px] text-zinc-400 mt-1">Use <code className="font-mono">{'{{ trigger.link }}'}</code> para adaptar ao gatilho.</p>
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Cor de fundo"><ColorInput value={p.buttonColor || '#111827'} onChange={v => onChange('buttonColor', v)} /></Field>
+                <Field label="Cor do texto"><ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} /></Field>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Fonte (px)">
+                  <input type="number" min={10} max={32} value={p.buttonFontSize ?? 14}
+                    onChange={e => onChange('buttonFontSize', parseInt(e.target.value) || 14)}
+                    className="w-full px-2 py-1.5 border border-zinc-200 rounded text-[13px] focus:outline-none focus:ring-2 focus:ring-zinc-500/20" />
+                </Field>
+                <Field label="Arredondamento">
+                  <input type="number" min={0} max={50} value={p.buttonRadius ?? 4}
+                    onChange={e => onChange('buttonRadius', parseInt(e.target.value) || 0)}
+                    className="w-full px-2 py-1.5 border border-zinc-200 rounded text-[13px] focus:outline-none focus:ring-2 focus:ring-zinc-500/20" />
+                </Field>
+              </div>
+              <Field label="Alinhamento">
+                <div className="grid grid-cols-4 gap-1">
+                  {[
+                    { value: 'left', label: 'Esq' },
+                    { value: 'center', label: 'Centro' },
+                    { value: 'right', label: 'Dir' },
+                    { value: 'full', label: 'Largura' },
+                  ].map(opt => (
+                    <button key={opt.value} onClick={() => onChange('buttonAlign', opt.value)}
+                      className={`px-2 py-1.5 border rounded text-[11px] font-medium transition-colors ${(p.buttonAlign || 'left') === opt.value ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'}`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Padding V">
+                  <input type="number" min={0} max={40} value={p.buttonPaddingV ?? 10}
+                    onChange={e => onChange('buttonPaddingV', parseInt(e.target.value) || 0)}
+                    className="w-full px-2 py-1.5 border border-zinc-200 rounded text-[13px] focus:outline-none focus:ring-2 focus:ring-zinc-500/20" />
+                </Field>
+                <Field label="Padding H">
+                  <input type="number" min={0} max={60} value={p.buttonPaddingH ?? 24}
+                    onChange={e => onChange('buttonPaddingH', parseInt(e.target.value) || 0)}
+                    className="w-full px-2 py-1.5 border border-zinc-200 rounded text-[13px] focus:outline-none focus:ring-2 focus:ring-zinc-500/20" />
+                </Field>
+              </div>
+            </div>
+          </details>
+
           {commonTail()}
         </div>
       )
