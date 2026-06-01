@@ -455,6 +455,21 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
   const [inlineEditingBlockId, setInlineEditingBlockId] = useState<string | null>(null)
   const [selectedSubElement, setSelectedSubElement] = useState<string | null>(null)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
+
+  // Universal block edit confirmation: tracks which saved blocks the user
+  // already chose how to handle in this session (key = saved_block id,
+  // value = 'all' to propagate or 'detached' to unlink). When edit hits
+  // a block/section linked to a saved entry not yet decided, we show the
+  // confirmation modal and queue the pending edit.
+  const [universalDecisions, setUniversalDecisions] = useState<Record<string, 'all' | 'detached'>>({})
+  const [pendingUniversalEdit, setPendingUniversalEdit] = useState<{
+    kind: 'block' | 'section'
+    savedId: string
+    savedName?: string
+    blockId?: string
+    sectionId?: string
+    apply: () => void
+  } | null>(null)
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [isDirty, setIsDirty] = useState(false)
   const [switcherOpen, setSwitcherOpen] = useState(false)
@@ -798,6 +813,61 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     setShowSaveBlockModal(true)
   }, [])
 
+  // Confirm: user chose to edit ALL emails (propagate via library)
+  const confirmEditAllUniversal = useCallback(() => {
+    if (!pendingUniversalEdit) return
+    setUniversalDecisions(prev => ({ ...prev, [pendingUniversalEdit.savedId]: 'all' }))
+    const apply = pendingUniversalEdit.apply
+    setPendingUniversalEdit(null)
+    // Defer to next tick so the decision state is committed first
+    setTimeout(() => apply(), 0)
+  }, [pendingUniversalEdit])
+
+  // Confirm: user chose to detach (unlink) — edits stay local to this email
+  const confirmDetachUniversal = useCallback(() => {
+    if (!pendingUniversalEdit) return
+    const { kind, savedId, blockId, sectionId, apply } = pendingUniversalEdit
+
+    if (kind === 'block' && blockId) {
+      setDoc(prev => ({
+        ...prev,
+        sections: prev.sections.map(s => ({
+          ...s,
+          columns: s.columns.map(c => ({
+            ...c,
+            blocks: c.blocks.map(b => {
+              if (b.id !== blockId) return b
+              const stripped = { ...b }
+              delete (stripped as any)._savedBlockId
+              delete (stripped as any)._savedBlockName
+              return stripped
+            }),
+          })),
+        })),
+      }))
+    } else if (kind === 'section' && sectionId) {
+      setDoc(prev => ({
+        ...prev,
+        sections: prev.sections.map(s => {
+          if (s.id !== sectionId) return s
+          const stripped = { ...s }
+          delete (stripped as any)._savedSectionId
+          delete (stripped as any)._savedSectionName
+          return stripped
+        }),
+      }))
+    }
+
+    setUniversalDecisions(prev => ({ ...prev, [savedId]: 'detached' }))
+    setPendingUniversalEdit(null)
+    showToast(kind === 'section' ? 'Seção desvinculada — alterações ficam só neste email' : 'Bloco desvinculado — alterações ficam só neste email')
+    setTimeout(() => apply(), 0)
+  }, [pendingUniversalEdit, showToast])
+
+  const cancelUniversalEdit = useCallback(() => {
+    setPendingUniversalEdit(null)
+  }, [])
+
   // Unlink: keep the current block instance but drop its _savedBlockId so
   // further edits only affect THIS email (not the saved library entry).
   const unlinkUniversalBlock = useCallback((id: string) => {
@@ -1012,62 +1082,113 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     }
   }, [hydrateFromLibrary])
 
+  // Check if a block (or its parent section) is universal-linked and the user
+  // hasn't yet decided how to handle edits this session. If so, queue the
+  // edit and open the confirmation modal. Returns true if gated, false if
+  // the edit can proceed immediately.
+  const gateUniversalEdit = useCallback((blockId: string, apply: () => void): boolean => {
+    const block = allBlocks(doc).find(b => b.id === blockId)
+    if (!block) return false
+    const loc = findBlockLocation(doc, blockId)
+    const section = loc ? doc.sections[loc.sectionIdx] : null
+
+    // Block-level link takes priority over section-level (more specific scope)
+    const savedBlockId = (block as any)._savedBlockId
+    const savedSectionId = section ? (section as any)._savedSectionId : null
+
+    if (savedBlockId && !universalDecisions[savedBlockId]) {
+      setPendingUniversalEdit({
+        kind: 'block',
+        savedId: savedBlockId,
+        savedName: (block as any)._savedBlockName || 'Bloco universal',
+        blockId,
+        apply,
+      })
+      return true
+    }
+    if (savedSectionId && !universalDecisions[savedSectionId]) {
+      setPendingUniversalEdit({
+        kind: 'section',
+        savedId: savedSectionId,
+        savedName: (section as any)._savedSectionName || 'Seção universal',
+        sectionId: section?.id,
+        apply,
+      })
+      return true
+    }
+    return false
+  }, [doc, universalDecisions])
+
   const updateProp = useCallback((id: string, key: string, value: any) => {
-    setDoc(prev => {
-      let parentSection: EmailSection | null = null
-      const next = {
-        ...prev,
-        sections: prev.sections.map(s => {
-          if (!s.columns.some(c => c.blocks.some(b => b.id === id))) return s
-          const updated: EmailSection = {
-            ...s,
-            columns: s.columns.map(c => ({
-              ...c,
-              blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, [key]: value } } : b),
-            })),
-          }
-          parentSection = updated
-          return updated
-        }),
-      }
-      // If this block is linked to a saved_block, propagate the mutation.
-      const edited = allBlocks(next).find(b => b.id === id)
-      if (edited?._savedBlockId) scheduleUniversalSync(edited._savedBlockId, edited)
-      // If the parent SECTION is linked to a saved_section, propagate the
-      // whole section — nested block edits are part of the section content.
-      if (parentSection && (parentSection as EmailSection)._savedSectionId) {
-        scheduleUniversalSectionSync((parentSection as EmailSection)._savedSectionId!, parentSection)
-      }
-      return next
-    })
-  }, [scheduleUniversalSync, scheduleUniversalSectionSync])
+    const performUpdate = () => {
+      setDoc(prev => {
+        let parentSection: EmailSection | null = null
+        const next = {
+          ...prev,
+          sections: prev.sections.map(s => {
+            if (!s.columns.some(c => c.blocks.some(b => b.id === id))) return s
+            const updated: EmailSection = {
+              ...s,
+              columns: s.columns.map(c => ({
+                ...c,
+                blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, [key]: value } } : b),
+              })),
+            }
+            parentSection = updated
+            return updated
+          }),
+        }
+        // Only propagate to library if the user chose 'all' (decision is
+        // recorded in universalDecisions). 'detached' is handled by removing
+        // the _savedBlockId before this point so propagation is impossible.
+        const edited = allBlocks(next).find(b => b.id === id)
+        if (edited?._savedBlockId && universalDecisions[edited._savedBlockId] === 'all') {
+          scheduleUniversalSync(edited._savedBlockId, edited)
+        }
+        if (parentSection && (parentSection as EmailSection)._savedSectionId
+            && universalDecisions[(parentSection as EmailSection)._savedSectionId!] === 'all') {
+          scheduleUniversalSectionSync((parentSection as EmailSection)._savedSectionId!, parentSection)
+        }
+        return next
+      })
+    }
+    if (gateUniversalEdit(id, performUpdate)) return
+    performUpdate()
+  }, [scheduleUniversalSync, scheduleUniversalSectionSync, gateUniversalEdit, universalDecisions])
 
   const updateBlockMultiProps = useCallback((id: string, patch: Record<string, any>) => {
-    setDoc(prev => {
-      let parentSection: EmailSection | null = null
-      const next = {
-        ...prev,
-        sections: prev.sections.map(s => {
-          if (!s.columns.some(c => c.blocks.some(b => b.id === id))) return s
-          const updated: EmailSection = {
-            ...s,
-            columns: s.columns.map(c => ({
-              ...c,
-              blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, ...patch } } : b),
-            })),
-          }
-          parentSection = updated
-          return updated
-        }),
-      }
-      const edited = allBlocks(next).find(b => b.id === id)
-      if (edited?._savedBlockId) scheduleUniversalSync(edited._savedBlockId, edited)
-      if (parentSection && (parentSection as EmailSection)._savedSectionId) {
-        scheduleUniversalSectionSync((parentSection as EmailSection)._savedSectionId!, parentSection)
-      }
-      return next
-    })
-  }, [scheduleUniversalSync, scheduleUniversalSectionSync])
+    const performUpdate = () => {
+      setDoc(prev => {
+        let parentSection: EmailSection | null = null
+        const next = {
+          ...prev,
+          sections: prev.sections.map(s => {
+            if (!s.columns.some(c => c.blocks.some(b => b.id === id))) return s
+            const updated: EmailSection = {
+              ...s,
+              columns: s.columns.map(c => ({
+                ...c,
+                blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, ...patch } } : b),
+              })),
+            }
+            parentSection = updated
+            return updated
+          }),
+        }
+        const edited = allBlocks(next).find(b => b.id === id)
+        if (edited?._savedBlockId && universalDecisions[edited._savedBlockId] === 'all') {
+          scheduleUniversalSync(edited._savedBlockId, edited)
+        }
+        if (parentSection && (parentSection as EmailSection)._savedSectionId
+            && universalDecisions[(parentSection as EmailSection)._savedSectionId!] === 'all') {
+          scheduleUniversalSectionSync((parentSection as EmailSection)._savedSectionId!, parentSection)
+        }
+        return next
+      })
+    }
+    if (gateUniversalEdit(id, performUpdate)) return
+    performUpdate()
+  }, [scheduleUniversalSync, scheduleUniversalSectionSync, gateUniversalEdit, universalDecisions])
 
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
 
@@ -2297,6 +2418,76 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
             if (typeof window !== 'undefined') window.location.reload()
           }}
         />
+      )}
+
+      {/* ── Universal Edit Confirmation Modal ── */}
+      {pendingUniversalEdit && (
+        <div
+          className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4"
+          onClick={cancelUniversalEdit}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6"
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-semibold text-gray-900">
+                  Editar {pendingUniversalEdit.kind === 'section' ? 'seção universal' : 'bloco universal'}
+                </h3>
+                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                  <strong>{pendingUniversalEdit.savedName}</strong> é {pendingUniversalEdit.kind === 'section' ? 'uma seção universal' : 'um bloco universal'} usado em vários emails.
+                  Como você quer aplicar essa alteração?
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 mb-4">
+              <button
+                onClick={confirmEditAllUniversal}
+                className="w-full text-left p-3 border-2 border-violet-200 hover:border-violet-400 bg-violet-50/50 hover:bg-violet-50 rounded-lg transition-colors group"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                  <span className="text-sm font-semibold text-violet-900">Editar em todos os emails</span>
+                </div>
+                <p className="text-[11px] text-violet-700 leading-snug pl-6">
+                  A alteração será propagada para todas as campanhas e automações que usam este {pendingUniversalEdit.kind === 'section' ? 'rodapé / seção' : 'bloco'}.
+                </p>
+              </button>
+
+              <button
+                onClick={confirmDetachUniversal}
+                className="w-full text-left p-3 border-2 border-gray-200 hover:border-gray-400 hover:bg-gray-50 rounded-lg transition-colors group"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                  </svg>
+                  <span className="text-sm font-semibold text-gray-900">Desvincular e editar só aqui</span>
+                </div>
+                <p className="text-[11px] text-gray-500 leading-snug pl-6">
+                  O {pendingUniversalEdit.kind === 'section' ? 'rodapé / seção' : 'bloco'} ficará independente neste email. Outros emails continuam com a versão universal.
+                </p>
+              </button>
+            </div>
+
+            <button
+              onClick={cancelUniversalEdit}
+              className="w-full text-center text-xs text-gray-500 hover:text-gray-700 py-1.5 transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
