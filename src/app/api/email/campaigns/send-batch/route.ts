@@ -213,6 +213,23 @@ export async function POST(req: NextRequest) {
       ? allChunks
       : [{ contacts: eligibleContacts, isp: 'default', throttleMs: THROTTLE_MS }];
 
+    // Resolve the From address ONCE for the whole batch. It only depends on
+    // the campaign + organization (both constant per request), so computing
+    // it per-contact meant getOrgSender() hit the organizations table N times
+    // for a single batch. Hoisted out to a single lookup.
+    let batchFromAddress = campaign.from_email
+      ? (campaign.sender_name ? `${campaign.sender_name} <${campaign.from_email}>` : campaign.from_email)
+      : null;
+    if (!batchFromAddress) {
+      try {
+        const { getOrgSender } = await import('@/lib/email/sender');
+        const sender = await getOrgSender(organizationId);
+        batchFromAddress = sender.from;
+      } catch {
+        batchFromAddress = `Worder <${process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'}>`;
+      }
+    }
+
     for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
       const { contacts: chunk, isp: chunkIsp, throttleMs: chunkThrottleMs } = chunks[cIdx];
 
@@ -435,20 +452,8 @@ export async function POST(req: NextRequest) {
           finalSubject = finalSubject.replace(unresolvedPattern, '');
         }
 
-        // ---- Resolver remetente (com fallback org sender) ----
-        let fromAddress = campaign.from_email
-          ? (campaign.sender_name ? `${campaign.sender_name} <${campaign.from_email}>` : campaign.from_email)
-          : null;
-
-        if (!fromAddress) {
-          try {
-            const { getOrgSender } = await import('@/lib/email/sender');
-            const sender = await getOrgSender(organizationId);
-            fromAddress = sender.from;
-          } catch {
-            fromAddress = `Worder <${process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'}>`;
-          }
-        }
+        // ---- Remetente (resolvido uma vez por batch, ver batchFromAddress) ----
+        const fromAddress = batchFromAddress;
 
         const replyTo = campaign.reply_to || campaign.from_email || undefined;
 

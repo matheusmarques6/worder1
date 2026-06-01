@@ -29,8 +29,10 @@ export async function GET(request: NextRequest) {
   const contactId = searchParams.get('id');
   const search = searchParams.get('search');
   const tags = searchParams.get('tags');
-  const page = parseInt(searchParams.get('page') || '1');
-  const limit = parseInt(searchParams.get('limit') || '50');
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+  // Cap the page size so a crafted ?limit=1000000 can't pull the whole table
+  // into one response and exhaust memory/bandwidth.
+  const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '50')), 200);
   const storeId = searchParams.get('storeId');
   const sort = searchParams.get('sort');
   const source = searchParams.get('source');
