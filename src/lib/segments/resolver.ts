@@ -107,30 +107,40 @@ export async function resolveByConditions(
         ? { logic: conditions.logic || 'and', rules: conditions.rules || [] }
         : { logic: 'and', rules: [] })
 
-  // Busca superset de contatos da org (com escopo store quando aplicável)
-  let q: any = supabase
-    .from('contacts')
-    .select('id, email, phone, first_name, last_name, tags, custom_fields, created_at, last_active_at, total_orders, total_revenue, last_order_date, status, lifecycle_stage, is_subscribed_email, shopify_customer_id, store_id')
-    .eq('organization_id', orgId)
-  if (storeId) {
-    // Aceita contatos da mesma loja OR sem loja (legacy backfill pending)
-    q = q.or(`store_id.eq.${storeId},store_id.is.null`)
-  }
-  const { data: allContacts } = await q
-
-  if (!allContacts) return []
-
-  // Pre-carrega mapas auxiliares se a condição usa event/rfm
+  // Pre-carrega mapas auxiliares se a condição usa event/rfm (uma vez,
+  // não depende dos contatos)
   const usedEvents = collectEventRules(root)
   const eventOccurrencesByContact = usedEvents.length
     ? await loadEventOccurrences(supabase, orgId, usedEvents)
     : new Map<string, Map<string, string[]>>() // contactId → type → [occurred_at]
 
+  // Busca o superset de contatos PAGINADO em chunks de 1000. Antes era um
+  // único .select() sem limite: além do risco de OOM em orgs grandes, o
+  // default de linhas do PostgREST poderia truncar silenciosamente o
+  // resultado (perdendo destinatários de campanha). Paginar com .range()
+  // busca TODOS os contatos sem truncar e mantém o pico de memória em ~1
+  // página + o conjunto de matches (geralmente bem menor que o superset).
+  const PAGE = 1000
+  const SELECT = 'id, email, phone, first_name, last_name, tags, custom_fields, created_at, last_active_at, total_orders, total_revenue, last_order_date, status, lifecycle_stage, is_subscribed_email, shopify_customer_id, store_id'
   const matched: string[] = []
-  for (const c of allContacts) {
-    if (evalRule(root, c, eventOccurrencesByContact.get(c.id) || new Map())) {
-      matched.push(c.id)
+  for (let offset = 0; ; offset += PAGE) {
+    let q: any = supabase
+      .from('contacts')
+      .select(SELECT)
+      .eq('organization_id', orgId)
+    if (storeId) {
+      // Aceita contatos da mesma loja OR sem loja (legacy backfill pending)
+      q = q.or(`store_id.eq.${storeId},store_id.is.null`)
     }
+    q = q.order('id', { ascending: true }).range(offset, offset + PAGE - 1)
+    const { data: page, error } = await q
+    if (error || !page || page.length === 0) break
+    for (const c of page) {
+      if (evalRule(root, c, eventOccurrencesByContact.get(c.id) || new Map())) {
+        matched.push(c.id)
+      }
+    }
+    if (page.length < PAGE) break // última página
   }
   return matched
 }

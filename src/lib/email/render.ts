@@ -391,28 +391,21 @@ export async function resolveProductBlocks(
 
     let products: any[] = []
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-      const res = await fetch(`${baseUrl}/api/email/product-feeds/resolve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feed_type: feedType, contact_id: contactId, organization_id: orgId, max_products: maxProducts, event_data: eventData }),
+      // Direct library call — no internal HTTP round-trip. This runs once
+      // per contact for emails that contain a product block, so the saved
+      // 50-200ms/call adds up across a batch.
+      const { resolveProductFeed } = await import('@/lib/email/product-feeds')
+      products = await resolveProductFeed({
+        orgId, feedType, contactId, maxProducts, eventData,
       })
-      const data = await res.json()
-      products = data.products || []
     } catch {
       // No products available
     }
 
     if (products.length === 0 && feedType.startsWith('trigger_')) {
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-        const fallbackRes = await fetch(`${baseUrl}/api/email/product-feeds/resolve`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ feed_type: 'bestsellers', organization_id: orgId, max_products: maxProducts }),
-        })
-        const fallbackData = await fallbackRes.json()
-        products = fallbackData.products || []
+        const { resolveProductFeed } = await import('@/lib/email/product-feeds')
+        products = await resolveProductFeed({ orgId, feedType: 'bestsellers', maxProducts })
       } catch {}
     }
 
@@ -561,20 +554,14 @@ export async function resolveCartBlocks(
 
     let products: any[] = []
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-      const res = await fetch(`${baseUrl}/api/email/product-feeds/resolve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          feed_type: feedType,
-          contact_id: contactId,
-          organization_id: orgId,
-          max_products: cfg.maxItems || 2,
-          event_data: eventData,
-        }),
+      const { resolveProductFeed } = await import('@/lib/email/product-feeds')
+      products = await resolveProductFeed({
+        orgId,
+        feedType,
+        contactId,
+        maxProducts: cfg.maxItems || 2,
+        eventData,
       })
-      const data = await res.json()
-      products = data.products || []
     } catch {}
 
     // Fallback: when the API resolver returned nothing (network blip,
