@@ -6,7 +6,7 @@ import { Plus, Search, Trash2, Upload, Users, Phone, Mail, Edit2, Loader2, Check
 import { useWhatsAppPhonebooks } from '@/hooks/useWhatsApp'
 
 export default function PhonebooksPage() {
-  const { phonebooks, contacts, isLoading, fetchPhonebooks, fetchContacts, createPhonebook, addContacts, importCSV, deletePhonebook } = useWhatsAppPhonebooks()
+  const { phonebooks, contacts, isLoading, fetchPhonebooks, fetchContacts, createPhonebook, addContacts, updateContact, importCSV, deletePhonebook } = useWhatsAppPhonebooks()
   const [selectedPhonebook, setSelectedPhonebook] = useState<any>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAddContactModal, setShowAddContactModal] = useState(false)
@@ -16,6 +16,9 @@ export default function PhonebooksPage() {
   const [contactForm, setContactForm] = useState({ name: '', mobile: '', email: '' })
   const [csvData, setCsvData] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [editingContact, setEditingContact] = useState<any>(null)
+  const [editForm, setEditForm] = useState({ name: '', mobile: '', email: '' })
+  const [savingEdit, setSavingEdit] = useState(false)
 
   useEffect(() => { fetchPhonebooks() }, [])
   useEffect(() => { if (selectedPhonebook) fetchContacts(selectedPhonebook.id) }, [selectedPhonebook])
@@ -31,6 +34,24 @@ export default function PhonebooksPage() {
     await addContacts(selectedPhonebook.id, [contactForm])
     await fetchContacts(selectedPhonebook.id); await fetchPhonebooks()
     setShowAddContactModal(false); setContactForm({ name: '', mobile: '', email: '' })
+  }
+
+  const handleOpenEdit = (contact: any) => {
+    setEditingContact(contact)
+    setEditForm({ name: contact.name || '', mobile: contact.mobile || '', email: contact.email || '' })
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingContact || !editForm.mobile) return
+    setSavingEdit(true)
+    try {
+      await updateContact(editingContact.id, editForm)
+      setEditingContact(null)
+    } catch (err: any) {
+      alert(err.message || 'Erro ao atualizar contato')
+    } finally {
+      setSavingEdit(false)
+    }
   }
 
   const handleImportCSV = async () => {
@@ -112,7 +133,7 @@ export default function PhonebooksPage() {
                       {contact.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {contact.email}</span>}
                     </div>
                   </div>
-                  <button className="p-2 rounded-lg hover:bg-gray-200/50 text-gray-500 hover:text-white"><Edit2 className="w-4 h-4" /></button>
+                  <button onClick={() => handleOpenEdit(contact)} className="p-2 rounded-lg hover:bg-gray-200/50 text-gray-500 hover:text-white"><Edit2 className="w-4 h-4" /></button>
                 </div>
               ))}</div>}
             </div>
@@ -151,6 +172,25 @@ export default function PhonebooksPage() {
               <div className="p-6 border-t border-slate-800/50 flex gap-3">
                 <button onClick={() => setShowAddContactModal(false)} className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200">Cancelar</button>
                 <button onClick={handleAddContact} disabled={!contactForm.mobile} className="flex-1 px-4 py-2.5 bg-violet-600 text-white rounded-xl hover:bg-violet-700 disabled:opacity-50">Adicionar</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {editingContact && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setEditingContact(null)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="w-full max-w-md bg-white rounded-2xl border border-slate-800/50" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-slate-800/50"><h2 className="text-xl font-semibold text-gray-900">Editar Contato</h2></div>
+              <div className="p-6 space-y-4">
+                <div><label className="block text-sm font-medium text-gray-600 mb-2">Nome</label><input type="text" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nome" className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-400 focus:outline-none focus:border-violet-500/50" /></div>
+                <div><label className="block text-sm font-medium text-gray-600 mb-2">Telefone *</label><input type="text" value={editForm.mobile} onChange={e => setEditForm({ ...editForm, mobile: e.target.value })} placeholder="5511999999999" className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-400 focus:outline-none focus:border-violet-500/50" /></div>
+                <div><label className="block text-sm font-medium text-gray-600 mb-2">Email</label><input type="email" value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} placeholder="email@exemplo.com" className="w-full px-4 py-2.5 bg-gray-50 border border-slate-700/50 rounded-xl text-gray-900 placeholder-slate-400 focus:outline-none focus:border-violet-500/50" /></div>
+              </div>
+              <div className="p-6 border-t border-slate-800/50 flex gap-3">
+                <button onClick={() => setEditingContact(null)} className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200">Cancelar</button>
+                <button onClick={handleSaveEdit} disabled={!editForm.mobile || savingEdit} className="flex-1 px-4 py-2.5 bg-violet-600 text-white rounded-xl hover:bg-violet-700 disabled:opacity-50 flex items-center justify-center gap-2">{savingEdit && <Loader2 className="w-4 h-4 animate-spin" />} Salvar</button>
               </div>
             </motion.div>
           </motion.div>

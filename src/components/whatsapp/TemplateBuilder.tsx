@@ -29,6 +29,20 @@ export interface TemplateSubmitPayload extends TemplateInput {
   accountId: string
 }
 
+// Shape accepted to pre-fill the builder (e.g. editing a rejected
+// template). Accepts either Meta `components` or the flat DB columns.
+export interface TemplateInitialValue {
+  accountId?: string
+  name?: string
+  language?: string
+  category?: string
+  components?: any[]
+  header_text?: string | null
+  body_text?: string | null
+  footer_text?: string | null
+  buttons?: any[] | null
+}
+
 // =============================================
 // Types
 // =============================================
@@ -41,6 +55,8 @@ interface TemplateBuilderProps {
   onSubmit?: (template: TemplateSubmitPayload) => void | Promise<void>
   isSubmitting?: boolean
   className?: string
+  /** Pre-fill the form (e.g. duplicate/edit a rejected template). */
+  initialValue?: TemplateInitialValue
 }
 
 interface FormState {
@@ -92,6 +108,69 @@ const INITIAL_STATE: FormState = {
   buttons: [],
 }
 
+const VALID_CATEGORIES: Category[] = ['MARKETING', 'UTILITY', 'AUTHENTICATION']
+
+// Build a FormState from a stored template (Meta `components` or flat
+// columns). Used to pre-fill the builder when editing/resubmitting.
+function buildInitialState(initial: TemplateInitialValue | undefined, accountId: string): FormState {
+  if (!initial) return { ...INITIAL_STATE, accountId }
+
+  const category = (initial.category || '').toUpperCase() as Category
+  let headerText = initial.header_text || ''
+  let headerExamples: string[] = []
+  let bodyText = initial.body_text || ''
+  let bodyExamples: string[] = []
+  let footerText = initial.footer_text || ''
+  let buttons: TemplateButton[] = Array.isArray(initial.buttons)
+    ? (initial.buttons as TemplateButton[])
+    : []
+
+  // Prefer Meta `components` when available (synced templates).
+  if (Array.isArray(initial.components) && initial.components.length > 0) {
+    for (const comp of initial.components) {
+      if (comp.type === 'HEADER' && (comp.format === 'TEXT' || !comp.format)) {
+        headerText = comp.text || ''
+        const ex = comp.example?.header_text
+        if (Array.isArray(ex)) headerExamples = ex.map((v: any) => String(v ?? ''))
+      } else if (comp.type === 'BODY') {
+        bodyText = comp.text || ''
+        const ex = comp.example?.body_text?.[0]
+        if (Array.isArray(ex)) bodyExamples = ex.map((v: any) => String(v ?? ''))
+      } else if (comp.type === 'FOOTER') {
+        footerText = comp.text || ''
+      } else if (comp.type === 'BUTTONS') {
+        buttons = (comp.buttons || []).map((b: any) => ({
+          type: b.type,
+          text: b.text || '',
+          url: b.url,
+          phone_number: b.phone_number,
+        }))
+      }
+    }
+  }
+
+  // Ensure example arrays match the variable counts.
+  const bodyVars = countVars(bodyText)
+  bodyExamples = bodyExamples.slice(0, bodyVars)
+  while (bodyExamples.length < bodyVars) bodyExamples.push('')
+  const headerVars = countVars(headerText)
+  headerExamples = headerExamples.slice(0, headerVars)
+  while (headerExamples.length < headerVars) headerExamples.push('')
+
+  return {
+    accountId: initial.accountId || accountId,
+    name: initial.name || '',
+    language: initial.language || 'pt_BR',
+    category: VALID_CATEGORIES.includes(category) ? category : 'MARKETING',
+    headerText,
+    headerExamples,
+    bodyText,
+    bodyExamples,
+    footerText,
+    buttons,
+  }
+}
+
 // =============================================
 // Component
 // =============================================
@@ -101,11 +180,11 @@ export function TemplateBuilder({
   onSubmit,
   isSubmitting = false,
   className,
+  initialValue,
 }: TemplateBuilderProps) {
-  const [form, setForm] = useState<FormState>(() => ({
-    ...INITIAL_STATE,
-    accountId: accounts.length === 1 ? accounts[0].id : '',
-  }))
+  const [form, setForm] = useState<FormState>(() =>
+    buildInitialState(initialValue, accounts.length === 1 ? accounts[0].id : ''),
+  )
 
   // Sync example arrays whenever variables appear/disappear in the
   // body or header. Truncates extras; pads with '' when new vars appear.

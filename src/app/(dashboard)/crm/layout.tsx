@@ -2,12 +2,13 @@
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutGrid, Users, Settings2, Puzzle } from 'lucide-react'
+import { LayoutGrid, Users, Settings2, Puzzle, SlidersHorizontal } from 'lucide-react'
 
 const tabs = [
   { name: 'Deals', href: '/crm', icon: LayoutGrid },
   { name: 'Contatos', href: '/crm/contacts', icon: Users },
   { name: 'Pipelines', href: '/crm/pipelines', icon: Settings2 },
+  { name: 'Campos', href: '/crm/custom-fields', icon: SlidersHorizontal },
   { name: 'Integrações', href: '/crm/integrations', icon: Puzzle },
 ]
 

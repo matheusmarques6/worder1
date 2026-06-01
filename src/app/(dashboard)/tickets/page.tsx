@@ -7,6 +7,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
@@ -80,11 +81,11 @@ const CATEGORY_EMOJI: Record<string, string> = {
 
 interface TicketCardProps {
   ticket: TicketType
-  onSelect: (ticket: TicketType) => void
+  onOpen: (id: string) => void
   onStatusChange: (id: string, status: string) => Promise<boolean>
 }
 
-function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
+function TicketCard({ ticket, onOpen, onStatusChange }: TicketCardProps) {
   const [showMenu, setShowMenu] = useState(false)
   const statusConfig = STATUS_CONFIG[ticket.status] || STATUS_CONFIG.open
   const priorityConfig = PRIORITY_CONFIG[ticket.priority] || PRIORITY_CONFIG.normal
@@ -94,9 +95,9 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-50 border border-gray-200 rounded-xl p-4 hover:bg-white 
+      className="bg-gray-50 border border-gray-200 rounded-xl p-4 hover:bg-white
                  transition-colors cursor-pointer group"
-      onClick={() => onSelect(ticket)}
+      onClick={() => onOpen(ticket.id)}
     >
       <div className="flex items-start gap-4">
         {/* Status Icon */}
@@ -198,6 +199,11 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
                 SLA
               </span>
             )}
+
+            <span className="ml-auto text-gray-400 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              Abrir
+              <ExternalLink className="w-3 h-3" />
+            </span>
           </div>
         </div>
       </div>
@@ -210,6 +216,7 @@ function TicketCard({ ticket, onSelect, onStatusChange }: TicketCardProps) {
 // =============================================
 
 export default function TicketsPage() {
+  const router = useRouter()
   const { user } = useAuthStore()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>('')
@@ -228,7 +235,6 @@ export default function TicketsPage() {
     loadStats,
     createTicket,
     updateTicket,
-    setSelectedTicket,
   } = useTickets({
     organizationId,
     filters: {
@@ -422,7 +428,7 @@ export default function TicketsPage() {
               <TicketCard
                 key={ticket.id}
                 ticket={ticket}
-                onSelect={setSelectedTicket}
+                onOpen={(id) => { router.push(`/tickets/${id}`) }}
                 onStatusChange={handleStatusChange}
               />
             ))}

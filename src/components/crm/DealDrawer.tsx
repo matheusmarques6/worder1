@@ -134,15 +134,11 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
   const handleMarkAsLost = async () => {
     setStatusChanging(true)
     try {
-      const updateData: Partial<Deal> = { 
+      const updateData: Record<string, any> = {
         status: 'lost',
         lost_at: new Date().toISOString(),
+        lost_reason: lostReason.trim() || null,
         probability: 0,
-      }
-      if (lostReason.trim()) {
-        updateData.notes = deal.notes 
-          ? `${deal.notes}\n\n📌 Motivo da perda: ${lostReason}`
-          : `📌 Motivo da perda: ${lostReason}`
       }
       await onUpdate(deal.id, updateData as Partial<Deal>)
       setShowLostReasonModal(false)
@@ -157,11 +153,13 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
   const handleReopenDeal = async () => {
     setStatusChanging(true)
     try {
-      await onUpdate(deal.id, { 
+      const updateData: Record<string, any> = {
         status: 'open',
         won_at: undefined,
         lost_at: undefined,
-      } as Partial<Deal>)
+        lost_reason: null,
+      }
+      await onUpdate(deal.id, updateData as unknown as Partial<Deal>)
     } catch (error) {
       console.error('Erro ao reabrir deal:', error)
     } finally {
@@ -281,6 +279,9 @@ export function DealDrawer({ deal, stages, onClose, onUpdate, onDelete }: DealDr
                           {deal.status === 'won' && deal.won_at && <>Fechado em {formatDate(deal.won_at)}</>}
                           {deal.status === 'lost' && deal.lost_at && <>Perdido em {formatDate(deal.lost_at)}</>}
                         </p>
+                        {deal.status === 'lost' && deal.lost_reason && (
+                          <p className="text-sm text-red-400 mt-1">📌 Motivo: {deal.lost_reason}</p>
+                        )}
                         {cycleTime !== null && <p className="text-xs text-gray-400 mt-1">Ciclo de vendas: {cycleTime} dias</p>}
                       </div>
                     </div>

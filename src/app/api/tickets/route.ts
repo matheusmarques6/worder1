@@ -43,8 +43,9 @@ export async function GET(request: NextRequest) {
         .select('id')
         .eq('organization_id', organizationId)
         .or(`store_id.eq.${storeId},store_id.is.null`);
-      storeContactIds = (storeContacts || []).map((c: any) => c.id);
-      if (storeContactIds.length === 0) {
+      const ids: string[] = (storeContacts || []).map((c: any) => c.id);
+      storeContactIds = ids;
+      if (ids.length === 0) {
         return NextResponse.json({
           tickets: [],
           pagination: { total: 0, limit, offset, hasMore: false },

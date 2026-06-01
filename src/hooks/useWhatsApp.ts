@@ -368,6 +368,23 @@ export function useWhatsAppPhonebooks() {
     }
   }, []);
 
+  const updateContact = useCallback(async (id: string, updates: { name?: string; mobile?: string; email?: string }) => {
+    try {
+      setIsLoading(true);
+      const data = await api('/api/whatsapp/phonebooks', {
+        method: 'PATCH',
+        body: JSON.stringify({ type: 'contact', id, ...updates }),
+      });
+      setContacts(prev => prev.map(c => (c.id === id ? data.contact : c)));
+      return data.contact;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const importCSV = useCallback(async (phonebookId: string, csvData: string) => {
     try {
       setIsLoading(true);
@@ -397,7 +414,7 @@ export function useWhatsAppPhonebooks() {
     }
   }, [phonebooks]);
 
-  return { phonebooks, contacts, isLoading, error, fetchPhonebooks, fetchContacts, createPhonebook, addContacts, importCSV, deletePhonebook };
+  return { phonebooks, contacts, isLoading, error, fetchPhonebooks, fetchContacts, createPhonebook, addContacts, updateContact, importCSV, deletePhonebook };
 }
 
 // ===============================

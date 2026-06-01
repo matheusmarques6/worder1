@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MessageSquare, Plus, Search, RefreshCw, History, X, FileText } from 'lucide-react'
+import { MessageSquare, Plus, Search, RefreshCw, History, X, FileText, AlertTriangle, Pencil } from 'lucide-react'
 import { useAuthStore } from '@/stores'
 import {
   TemplateBuilder,
   type TemplateAccountOption,
   type TemplateSubmitPayload,
+  type TemplateInitialValue,
 } from '@/components/whatsapp/TemplateBuilder'
 import { TemplateStatusBadge, type TemplateStatus } from '@/components/whatsapp/TemplateStatusBadge'
 import { TemplateCategoryHistoryModal, type CategoryChange } from '@/components/whatsapp/TemplateCategoryHistoryModal'
@@ -20,10 +21,47 @@ interface Template {
   category?: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
   status?: TemplateStatus | string
   body?: string
+  body_text?: string
+  header_text?: string
+  footer_text?: string
+  buttons?: any[]
   content?: string
   use_count?: number
   created_at?: string
   components?: any[]
+  rejection_reason?: string | null
+  waba_id?: string | null
+}
+
+// Translate Meta's rejection reason codes to readable pt-BR text. When
+// the value isn't a known code (Meta sometimes returns freeform text),
+// show it as-is.
+const REJECTION_REASONS: Record<string, string> = {
+  ABUSIVE_CONTENT: 'Conteudo considerado abusivo pela Meta.',
+  INVALID_FORMAT: 'Formato invalido. Revise variaveis, botoes e exemplos.',
+  SCAM: 'Conteudo sinalizado como possivel golpe/fraude.',
+  PROMOTIONAL: 'Conteudo promocional em categoria nao permitida.',
+  TAG_CONTENT_MISMATCH: 'A categoria nao corresponde ao conteudo do template.',
+  NONE: 'A Meta nao informou um motivo especifico.',
+}
+
+function formatRejectionReason(reason: string): string {
+  if (!reason) return REJECTION_REASONS.NONE
+  const key = reason.toUpperCase().replace(/\s+/g, '_')
+  return REJECTION_REASONS[key] || reason
+}
+
+// Best-effort body preview from either the flat columns or the synced
+// Meta `components` array.
+function templatePreview(t: Template): string {
+  if (t.body) return t.body
+  if (t.body_text) return t.body_text
+  if (Array.isArray(t.components)) {
+    const body = t.components.find((c: any) => c?.type === 'BODY')
+    if (body?.text) return body.text
+  }
+  if (t.content) return t.content
+  return 'Sem conteudo'
 }
 
 export default function WhatsAppTemplatesPage() {
@@ -34,6 +72,7 @@ export default function WhatsAppTemplatesPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showBuilder, setShowBuilder] = useState(false)
+  const [builderInitial, setBuilderInitial] = useState<TemplateInitialValue | undefined>(undefined)
   const [submitting, setSubmitting] = useState(false)
   const [historyTemplate, setHistoryTemplate] = useState<Template | null>(null)
   const [historyData, setHistoryData] = useState<CategoryChange[]>([])
@@ -98,6 +137,7 @@ export default function WhatsAppTemplatesPage() {
       const data = text ? (() => { try { return JSON.parse(text) } catch { return { error: text.slice(0, 200) } } })() : {}
       if (res.ok) {
         setShowBuilder(false)
+        setBuilderInitial(undefined)
         fetchTemplates()
       } else {
         alert(`Erro ao criar template: ${data.error || data.details || `HTTP ${res.status}`}`)
@@ -107,6 +147,35 @@ export default function WhatsAppTemplatesPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  function openNewBuilder() {
+    setBuilderInitial(undefined)
+    setShowBuilder(true)
+  }
+
+  function openResubmitBuilder(template: Template) {
+    // Pre-fill the builder with the rejected template's content so the
+    // user can fix it and resubmit. Meta does not allow re-creating the
+    // same name+language while it exists, so we suggest a new name.
+    setBuilderInitial({
+      accountId: template.waba_id || undefined,
+      name: `${template.name}_v2`.slice(0, 512),
+      language: template.language,
+      category: template.category,
+      components: template.components,
+      header_text: template.header_text,
+      body_text: template.body_text || template.body || template.content,
+      footer_text: template.footer_text,
+      buttons: template.buttons,
+    })
+    setShowBuilder(true)
+  }
+
+  function closeBuilder() {
+    if (submitting) return
+    setShowBuilder(false)
+    setBuilderInitial(undefined)
   }
 
   async function openHistory(template: Template) {
@@ -150,7 +219,7 @@ export default function WhatsAppTemplatesPage() {
             Atualizar
           </button>
           <button
-            onClick={() => setShowBuilder(true)}
+            onClick={openNewBuilder}
             className="flex items-center gap-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-xl text-sm font-medium transition"
           >
             <Plus className="w-4 h-4" />
@@ -184,7 +253,7 @@ export default function WhatsAppTemplatesPage() {
             Crie seu primeiro template para usar com a Cloud API.
           </p>
           <button
-            onClick={() => setShowBuilder(true)}
+            onClick={openNewBuilder}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-xl text-sm font-medium"
           >
             <Plus className="w-4 h-4" />
@@ -205,7 +274,7 @@ export default function WhatsAppTemplatesPage() {
                   <TemplateStatusBadge status={status} size="sm" />
                 </div>
                 <p className="text-xs text-gray-500 mb-3 line-clamp-3 flex-1">
-                  {template.body || template.content || 'Sem conteudo'}
+                  {templatePreview(template)}
                 </p>
                 <div className="flex items-center gap-2 mb-3">
                   {template.category && (
@@ -219,17 +288,41 @@ export default function WhatsAppTemplatesPage() {
                     </span>
                   )}
                 </div>
+                {status === 'REJECTED' && (
+                  <div className="mb-3 p-2.5 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                      <span className="text-xs font-medium text-red-700">Rejeitado pela Meta</span>
+                    </div>
+                    <p className="text-xs text-red-600 break-words">
+                      {template.rejection_reason
+                        ? formatRejectionReason(template.rejection_reason)
+                        : 'A Meta nao informou um motivo especifico. Revise o conteudo e reenvie.'}
+                    </p>
+                  </div>
+                )}
                 <div className="flex items-center justify-between border-t border-gray-100 pt-3 mt-auto">
                   <span className="text-xs text-gray-400">
                     {template.use_count != null ? `${template.use_count} usos` : ''}
                   </span>
-                  <button
-                    onClick={() => openHistory(template)}
-                    className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700"
-                  >
-                    <History className="w-3 h-3" />
-                    Historico
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {status === 'REJECTED' && (
+                      <button
+                        onClick={() => openResubmitBuilder(template)}
+                        className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 font-medium"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        Editar e reenviar
+                      </button>
+                    )}
+                    <button
+                      onClick={() => openHistory(template)}
+                      className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700"
+                    >
+                      <History className="w-3 h-3" />
+                      Historico
+                    </button>
+                  </div>
                 </div>
               </div>
             )
@@ -245,7 +338,7 @@ export default function WhatsAppTemplatesPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 overflow-y-auto"
-            onClick={() => !submitting && setShowBuilder(false)}
+            onClick={closeBuilder}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -255,9 +348,11 @@ export default function WhatsAppTemplatesPage() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between p-5 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">Novo Template</h2>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  {builderInitial ? 'Editar e reenviar template' : 'Novo Template'}
+                </h2>
                 <button
-                  onClick={() => !submitting && setShowBuilder(false)}
+                  onClick={closeBuilder}
                   disabled={submitting}
                   className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 disabled:opacity-50"
                 >
@@ -265,7 +360,18 @@ export default function WhatsAppTemplatesPage() {
                 </button>
               </div>
               <div className="overflow-y-auto p-5">
-                <TemplateBuilder accounts={accounts} onSubmit={handleCreateTemplate} isSubmitting={submitting} />
+                {builderInitial && (
+                  <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+                    Reenviando um template rejeitado. A Meta nao permite reutilizar o mesmo nome enquanto o template existir &mdash; ajuste o nome (sugerimos um sufixo) e corrija o conteudo antes de enviar.
+                  </div>
+                )}
+                <TemplateBuilder
+                  key={builderInitial ? `resubmit-${builderInitial.name}` : 'new'}
+                  accounts={accounts}
+                  onSubmit={handleCreateTemplate}
+                  isSubmitting={submitting}
+                  initialValue={builderInitial}
+                />
               </div>
             </motion.div>
           </motion.div>
