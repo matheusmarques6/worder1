@@ -274,6 +274,26 @@ export function buildUnsubscribeUrl(
 }
 
 /**
+ * Build a signed URL to the preference center (manage channel subscriptions,
+ * email frequency, topics). Reuses the same HMAC token as unsubscribe.
+ */
+export function buildPreferencesUrl(
+  baseUrl: string,
+  contactId?: string,
+  orgId?: string,
+  campaignId?: string
+): string | null {
+  if (!contactId || !orgId) return null;
+  try {
+    const { signUnsubscribeToken } = require('@/lib/email/unsubscribe-token');
+    const token = signUnsubscribeToken({ contactId, orgId, campaignId });
+    return `${baseUrl}/preferencias?token=${token}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * RFC 2369 + RFC 8058 List-Unsubscribe headers. Gmail Postmaster
  * Tools requires both List-Unsubscribe and List-Unsubscribe-Post
  * for high-volume senders to qualify for the inbox; without them
@@ -302,21 +322,47 @@ export function addUnsubscribeLink(
   campaignId?: string
 ): string {
   const unsubUrl = buildUnsubscribeUrl(emailSendId, baseUrl, contactId, orgId, campaignId);
+  const prefsUrl = buildPreferencesUrl(baseUrl, contactId, orgId, campaignId);
 
-  const unsubscribeHtml = `
-<div style="text-align:center;padding:20px 0 10px;font-size:12px;color:#999;">
-  <a href="${unsubUrl}" style="color:#999;text-decoration:underline;">
-    Cancelar inscrição
-  </a>
-  &nbsp;|&nbsp;
-  Você recebeu este e-mail porque se inscreveu em nossa lista.
-</div>`;
-
-  if (html.includes('</body>')) {
-    return html.replace('</body>', `${unsubscribeHtml}</body>`);
+  // If the template already has a footer with an unsubscribe link (custom
+  // footer block, custom CAN-SPAM section), avoid double-appending. Detect
+  // by looking for any anchor pointing at /unsubscribe or /preferencias on
+  // our domain — these are the standard footer destinations.
+  const hasUnsubAnchor = /href=["'][^"']*\/unsubscribe(\?|["'])/i.test(html);
+  const hasPrefsAnchor = /href=["'][^"']*\/preferencias(\?|["'])/i.test(html);
+  if (hasUnsubAnchor && hasPrefsAnchor) {
+    return html;
   }
 
-  return html + unsubscribeHtml;
+  // Build the missing portions so we never lose either link. If only the
+  // unsubscribe is present in the template, we append a thin preferences
+  // line; if neither exists, we render the full footer.
+  const prefsLink = prefsUrl
+    ? `<a href="${prefsUrl}" style="color:#999;text-decoration:underline;">Editar preferências</a>`
+    : '';
+  const unsubLink = `<a href="${unsubUrl}" style="color:#999;text-decoration:underline;">Cancelar inscrição</a>`;
+
+  let footerHtml: string;
+  if (hasUnsubAnchor && !hasPrefsAnchor && prefsLink) {
+    footerHtml = `
+<div style="text-align:center;padding:8px 0;font-size:12px;color:#999;font-family:Arial,Helvetica,sans-serif;">
+  ${prefsLink}
+</div>`;
+  } else {
+    footerHtml = `
+<div style="text-align:center;padding:20px 0 10px;font-size:12px;color:#999;font-family:Arial,Helvetica,sans-serif;line-height:1.6;">
+  <div>
+    ${unsubLink}${prefsLink ? `&nbsp;&middot;&nbsp;${prefsLink}` : ''}
+  </div>
+  <div style="margin-top:6px;">Você recebeu este e-mail porque se inscreveu em nossa lista.</div>
+</div>`;
+  }
+
+  if (html.includes('</body>')) {
+    return html.replace('</body>', `${footerHtml}</body>`);
+  }
+
+  return html + footerHtml;
 }
 
 /**
