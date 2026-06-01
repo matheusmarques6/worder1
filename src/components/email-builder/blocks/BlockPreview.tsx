@@ -495,6 +495,11 @@ export function BlockPreview({
         const gridId = `pgrid-${block.id.replace(/[^a-z0-9]/gi,'')}`
         const subClick = (el: string) => (e: React.MouseEvent) => {
           e.stopPropagation()
+          // Select the block too so the properties panel opens even when the
+          // user clicks a sub-element (button/name/price) before selecting
+          // the block itself. Without this, stopPropagation swallows the
+          // block selection and the panel never appears.
+          onSelect()
           onSelectSubElement?.(el)
         }
         const subRing = (el: string) => selectedSubElement === el ? 'outline outline-2 outline-zinc-900 outline-offset-1 rounded-sm' : 'hover:outline hover:outline-1 hover:outline-zinc-300 hover:outline-offset-1 rounded-sm cursor-pointer'
@@ -659,6 +664,9 @@ export function BlockPreview({
         // Sub-element click handler (compound block)
         const subClick = (el: string) => (e: React.MouseEvent) => {
           e.stopPropagation()
+          // Select the block so the properties panel (with the button editor)
+          // opens when clicking the button/name/price directly on the canvas.
+          onSelect()
           onSelectSubElement?.(el)
         }
         const subRing = (el: string) => selectedSubElement === el ? 'outline outline-2 outline-zinc-900 outline-offset-1 rounded-sm' : 'hover:outline hover:outline-1 hover:outline-zinc-300 hover:outline-offset-1 rounded-sm cursor-pointer'

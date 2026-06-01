@@ -462,6 +462,11 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
   // a block/section linked to a saved entry not yet decided, we show the
   // confirmation modal and queue the pending edit.
   const [universalDecisions, setUniversalDecisions] = useState<Record<string, 'all' | 'detached'>>({})
+  // Mirror of universalDecisions kept in a ref so closures created BEFORE a
+  // decision is made (the queued edit) read the up-to-date value synchronously.
+  // Without this, the very first edit after choosing "Editar em todos" would
+  // read a stale empty map and silently skip propagation to the library.
+  const universalDecisionsRef = useRef<Record<string, 'all' | 'detached'>>({})
   const [pendingUniversalEdit, setPendingUniversalEdit] = useState<{
     kind: 'block' | 'section'
     savedId: string
@@ -816,11 +821,13 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
   // Confirm: user chose to edit ALL emails (propagate via library)
   const confirmEditAllUniversal = useCallback(() => {
     if (!pendingUniversalEdit) return
-    setUniversalDecisions(prev => ({ ...prev, [pendingUniversalEdit.savedId]: 'all' }))
+    // Write to the ref FIRST (synchronous) so the queued performUpdate closure
+    // reads 'all' and propagates. Then mirror into state for any UI reads.
+    universalDecisionsRef.current = { ...universalDecisionsRef.current, [pendingUniversalEdit.savedId]: 'all' }
+    setUniversalDecisions({ ...universalDecisionsRef.current })
     const apply = pendingUniversalEdit.apply
     setPendingUniversalEdit(null)
-    // Defer to next tick so the decision state is committed first
-    setTimeout(() => apply(), 0)
+    apply()
   }, [pendingUniversalEdit])
 
   // Confirm: user chose to detach (unlink) — edits stay local to this email
@@ -858,9 +865,12 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
       }))
     }
 
-    setUniversalDecisions(prev => ({ ...prev, [savedId]: 'detached' }))
+    universalDecisionsRef.current = { ...universalDecisionsRef.current, [savedId]: 'detached' }
+    setUniversalDecisions({ ...universalDecisionsRef.current })
     setPendingUniversalEdit(null)
     showToast(kind === 'section' ? 'Seção desvinculada — alterações ficam só neste email' : 'Bloco desvinculado — alterações ficam só neste email')
+    // Defer so the _savedBlockId strip (setDoc above) lands before the edit
+    // re-runs against the now-detached block.
     setTimeout(() => apply(), 0)
   }, [pendingUniversalEdit, showToast])
 
@@ -1096,7 +1106,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     const savedBlockId = (block as any)._savedBlockId
     const savedSectionId = section ? (section as any)._savedSectionId : null
 
-    if (savedBlockId && !universalDecisions[savedBlockId]) {
+    if (savedBlockId && !universalDecisionsRef.current[savedBlockId]) {
       setPendingUniversalEdit({
         kind: 'block',
         savedId: savedBlockId,
@@ -1106,7 +1116,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
       })
       return true
     }
-    if (savedSectionId && !universalDecisions[savedSectionId]) {
+    if (savedSectionId && !universalDecisionsRef.current[savedSectionId]) {
       setPendingUniversalEdit({
         kind: 'section',
         savedId: savedSectionId,
@@ -1117,7 +1127,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
       return true
     }
     return false
-  }, [doc, universalDecisions])
+  }, [doc])
 
   const updateProp = useCallback((id: string, key: string, value: any) => {
     const performUpdate = () => {
@@ -1138,15 +1148,16 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
             return updated
           }),
         }
-        // Only propagate to library if the user chose 'all' (decision is
-        // recorded in universalDecisions). 'detached' is handled by removing
-        // the _savedBlockId before this point so propagation is impossible.
+        // Only propagate to library if the user chose 'all'. Read from the
+        // ref (not state) so this closure always sees the latest decision,
+        // even on the first edit that triggered the modal. 'detached' is
+        // handled by removing _savedBlockId before this runs.
         const edited = allBlocks(next).find(b => b.id === id)
-        if (edited?._savedBlockId && universalDecisions[edited._savedBlockId] === 'all') {
+        if (edited?._savedBlockId && universalDecisionsRef.current[edited._savedBlockId] === 'all') {
           scheduleUniversalSync(edited._savedBlockId, edited)
         }
         if (parentSection && (parentSection as EmailSection)._savedSectionId
-            && universalDecisions[(parentSection as EmailSection)._savedSectionId!] === 'all') {
+            && universalDecisionsRef.current[(parentSection as EmailSection)._savedSectionId!] === 'all') {
           scheduleUniversalSectionSync((parentSection as EmailSection)._savedSectionId!, parentSection)
         }
         return next
@@ -1154,7 +1165,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     }
     if (gateUniversalEdit(id, performUpdate)) return
     performUpdate()
-  }, [scheduleUniversalSync, scheduleUniversalSectionSync, gateUniversalEdit, universalDecisions])
+  }, [scheduleUniversalSync, scheduleUniversalSectionSync, gateUniversalEdit])
 
   const updateBlockMultiProps = useCallback((id: string, patch: Record<string, any>) => {
     const performUpdate = () => {
@@ -1176,11 +1187,11 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
           }),
         }
         const edited = allBlocks(next).find(b => b.id === id)
-        if (edited?._savedBlockId && universalDecisions[edited._savedBlockId] === 'all') {
+        if (edited?._savedBlockId && universalDecisionsRef.current[edited._savedBlockId] === 'all') {
           scheduleUniversalSync(edited._savedBlockId, edited)
         }
         if (parentSection && (parentSection as EmailSection)._savedSectionId
-            && universalDecisions[(parentSection as EmailSection)._savedSectionId!] === 'all') {
+            && universalDecisionsRef.current[(parentSection as EmailSection)._savedSectionId!] === 'all') {
           scheduleUniversalSectionSync((parentSection as EmailSection)._savedSectionId!, parentSection)
         }
         return next
@@ -1188,7 +1199,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     }
     if (gateUniversalEdit(id, performUpdate)) return
     performUpdate()
-  }, [scheduleUniversalSync, scheduleUniversalSectionSync, gateUniversalEdit, universalDecisions])
+  }, [scheduleUniversalSync, scheduleUniversalSectionSync, gateUniversalEdit])
 
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
 

@@ -108,15 +108,20 @@ export async function POST(request: NextRequest) {
     if (typeof email_subscribed === 'boolean') {
       updatePayload.is_subscribed_email = email_subscribed;
       updatePayload.email_consent = email_subscribed;
-      // If re-subscribing, clear bounce/unsub status so the contact can
-      // receive again. Keep 'complained' contacts blocked — that's a hard
-      // signal we never override via self-service.
-      if (email_subscribed && String(contact.status || '').toLowerCase() === 'unsubscribed') {
+      // Record the consent change timestamp. Mirrors /api/email/unsubscribe
+      // which writes email_consent_at on the contacts table (the canonical
+      // column — contacts has no unsubscribed_at, only email_sends does).
+      updatePayload.email_consent_at = new Date().toISOString();
+      // If re-subscribing, clear recoverable block statuses (unsubscribed /
+      // bounced / invalid) so the contact can receive again. Keep 'complained'
+      // blocked — a spam complaint is a legal/reputation hard signal we never
+      // override via self-service.
+      const curStatus = String(contact.status || '').toLowerCase();
+      if (email_subscribed && ['unsubscribed', 'bounced', 'invalid'].includes(curStatus)) {
         updatePayload.status = 'active';
       }
       if (!email_subscribed) {
         updatePayload.status = 'unsubscribed';
-        updatePayload.unsubscribed_at = new Date().toISOString();
       }
     }
 
