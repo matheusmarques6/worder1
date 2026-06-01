@@ -1,6 +1,18 @@
 import type { EmailBlock, EmailSection, EmailDocument, Padding } from '@/components/email-builder/config/types'
 import { migrateV1toV2 } from '@/components/email-builder/config/types'
 
+// Escape a value for safe use inside an HTML attribute (src/alt/href/title).
+// Without this, an alt text like My "best" photo or a URL with a double quote
+// terminates the attribute early and corrupts the email markup.
+function attr(value: unknown): string {
+  if (value == null) return ''
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
 // Resolve dynamic product blocks by fetching real products from Shopify
 // Call this BEFORE renderDocumentToHtml if you need dynamic products resolved
 export async function resolveProductBlocks(doc: any, fetchProducts: () => Promise<any[]>): Promise<any> {
@@ -91,8 +103,8 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     case 'image': {
       const imgW = p.fillColumn ? '100%' : (p.width || 600)
       const imgStyle = `max-width:100%;height:auto;display:block;${p.fillColumn ? 'width:100%;' : `width:${imgW}px;`}margin:${p.align === 'left' ? '0 auto 0 0' : p.align === 'right' ? '0 0 0 auto' : '0 auto'};border:0;outline:0;vertical-align:bottom;${p.borderRadius ? `border-radius:${p.borderRadius}px;` : ''}${p.border?.width ? `border:${p.border.width}px solid ${p.border.color || '#E5E7EB'};` : ''}`
-      const img = `<img src="${p.src || ''}" alt="${p.alt || ''}" width="${p.fillColumn ? '100%' : imgW}" style="${imgStyle}" />`
-      const linked = p.href ? `<a href="${p.href}" target="_blank" style="text-decoration:none;display:block;line-height:0;font-size:0;">${img}</a>` : img
+      const img = `<img src="${attr(p.src)}" alt="${attr(p.alt)}" width="${p.fillColumn ? '100%' : imgW}" style="${imgStyle}" />`
+      const linked = p.href ? `<a href="${attr(p.href)}" target="_blank" style="text-decoration:none;display:block;line-height:0;font-size:0;">${img}</a>` : img
       const blockBg = p.blockBgColor ? `background-color:${p.blockBgColor};` : ''
       const blockPadStyle = p.blockPadding ? `padding:${p.blockPadding.top || 0}px ${p.blockPadding.right || 0}px ${p.blockPadding.bottom || 0}px ${p.blockPadding.left || 0}px;` : ''
       return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};line-height:0;font-size:0;${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}${blockBg}${blockPadStyle}">${linked}</td></tr>`

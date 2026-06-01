@@ -291,6 +291,20 @@ export class ExecutionEngine {
           const executor = nodeExecutors[nodeType];
           
           if (!executor) {
+            // Trigger nodes are entry markers — the actual trigger matching
+            // happens upstream in the dispatcher/event-processor, so a trigger
+            // without a dedicated executor is expected and must passthrough,
+            // NOT error. Only action/condition/control nodes without an
+            // executor are genuine misconfigurations.
+            const isTriggerNode = node.data.category === 'trigger' || String(nodeType).startsWith('trigger_');
+            if (isTriggerNode) {
+              nodeResults[node.id] = {
+                status: 'success',
+                output: context.trigger?.data ?? node.data.config ?? {},
+                duration: Date.now() - nodeStartTime,
+              };
+              continue;
+            }
             console.error(`[ExecutionEngine] No executor for node type: ${nodeType} — marking as error`);
             nodeResults[node.id] = {
               status: 'error',

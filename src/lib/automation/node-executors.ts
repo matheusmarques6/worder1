@@ -975,6 +975,15 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Contato sem telefone' };
       }
 
+      // Guard against empty messages — without this the row is created and a
+      // blank SMS is sent to the provider (Twilio/Zenvia rejects it, or worse
+      // bills for an empty segment). Validation should catch this at publish
+      // time but we defend at runtime too.
+      const smsBody = (config.message || config.text || '').trim();
+      if (!smsBody) {
+        return { status: 'error', output: null, error: 'Mensagem de SMS vazia' };
+      }
+
       // Pre-create the send row so attribution finds it even before
       // a real SMS provider (Twilio/Zenvia) is wired in. The row is
       // still useful: flow stats count it, attribution can claim it
@@ -1018,7 +1027,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
               automation_run_id: runId,
               flow_id: flowId,
               node_id: node?.id || null,
-              message_body: config.message || '',
+              message_body: smsBody,
               status: 'pending',
             })
             .select('id')
@@ -1045,7 +1054,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           const body = new URLSearchParams({
             To: phone.startsWith('+') ? phone : `+${phone.replace(/\D/g, '')}`,
             From: from,
-            Body: config.message || '',
+            Body: smsBody,
           });
           const response = await fetch(
             `https://api.twilio.com/2010-04-01/Accounts/${credentials.accountSid}/Messages.json`,
@@ -2003,8 +2012,19 @@ const conditionExecutors: Record<string, NodeExecutor> = {
   condition_whatsapp_keyword: {
     async execute({ config, context }) {
       const message = (context.message?.text || context.lastMessage || '').toLowerCase();
-      const keywords: string[] = config.keywords || [];
-      const mode = config.mode || 'contains'; // contains|equals|regex
+      // Accept both config shapes: the UI saves `keyword` (single string) and
+      // `matchType`; older/programmatic flows use `keywords` (array) and `mode`.
+      // Normalize both so the condition actually evaluates instead of always
+      // returning false on an empty `keywords` array.
+      let keywords: string[] = Array.isArray(config.keywords) ? config.keywords : [];
+      if (keywords.length === 0 && typeof config.keyword === 'string' && config.keyword.trim()) {
+        keywords = config.keyword.split(',').map((k: string) => k.trim()).filter(Boolean);
+      }
+      const mode = config.mode || config.matchType || 'contains'; // contains|equals|regex
+      // No keyword configured → match any message (matches trigger semantics).
+      if (keywords.length === 0) {
+        return { status: 'success', output: { matched: true, message }, branch: 'true' };
+      }
 
       let matched = false;
       for (const kw of keywords) {

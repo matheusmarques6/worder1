@@ -743,11 +743,20 @@ export const useFlowStore = create<FlowStore>()(
           }
         }
 
-        // Check condition nodes have both outputs connected
+        // Check condition nodes have BOTH the true and false branches wired.
+        // Counting edges alone isn't enough: two edges both on the 'true'
+        // handle pass a length>=2 check but leave the 'false' path a dead end,
+        // so the execution engine silently stops that branch at runtime.
+        const isTrueHandle = (h?: string) => h === 'true' || h === 'yes' || h === 'output-true'
+        const isFalseHandle = (h?: string) => h === 'false' || h === 'no' || h === 'output-false'
         for (const condNode of nodes.filter((n) => n.data.category === 'condition')) {
           const outEdges = edges.filter((e) => e.source === condNode.id);
-          if (outEdges.length < 2) {
-            errors.push(`Condição "${condNode.data.label}" precisa de conexões Sim e Não`);
+          const hasTrue = outEdges.some((e) => isTrueHandle((e as any).sourceHandle));
+          const hasFalse = outEdges.some((e) => isFalseHandle((e as any).sourceHandle));
+          // Fallback for legacy edges with no sourceHandle: accept any 2 edges.
+          const legacyTwoEdges = outEdges.length >= 2 && outEdges.every((e) => !(e as any).sourceHandle);
+          if (!((hasTrue && hasFalse) || legacyTwoEdges)) {
+            errors.push(`Condição "${condNode.data.label}" precisa das conexões Sim e Não`);
           }
         }
 
