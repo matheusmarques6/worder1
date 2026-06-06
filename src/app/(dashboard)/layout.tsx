@@ -192,7 +192,7 @@ export default function DashboardLayout({
   const pathname = usePathname()
 
   const { stores, currentStore, setStores, setCurrentStore, addStore, _hasHydrated } = useStoreStore()
-  const { user, setUser, signOut } = useAuthStore()
+  const { user, setUser, setLoading, signOut } = useAuthStore()
   const router = useRouter()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
@@ -322,38 +322,45 @@ export default function DashboardLayout({
   // Initialize user
   useEffect(() => {
     const initializeUser = async () => {
-      if (!user || !user.organization_id) {
-        try {
-          const response = await fetch('/api/auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get-or-create-org' }),
-          })
-          const result = await response.json()
-          if (result.organization) {
-            setUser({
-              id: result.user?.id || 'default-user',
-              email: result.user?.email || 'demo@worder.com',
-              name: result.user?.name || `${result.user?.first_name || ''} ${result.user?.last_name || ''}`.trim() || 'Usuário',
-              avatar_url: result.user?.avatar_url,
-              organization_id: result.user?.organization_id || result.organization.id,
-              role: result.user?.role || 'admin',
-              user_metadata: result.user?.user_metadata,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-          }
-        } catch {
+      // User already resolved — nothing to fetch, just clear the loading gate.
+      if (user && user.organization_id) {
+        setLoading(false)
+        return
+      }
+      try {
+        const response = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'get-or-create-org' }),
+        })
+        const result = await response.json()
+        if (result.organization) {
           setUser({
-            id: 'default-user', email: 'demo@worder.com', name: 'Usuário',
-            organization_id: 'default-org', role: 'admin',
-            created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+            id: result.user?.id || 'default-user',
+            email: result.user?.email || 'demo@worder.com',
+            name: result.user?.name || `${result.user?.first_name || ''} ${result.user?.last_name || ''}`.trim() || 'Usuário',
+            avatar_url: result.user?.avatar_url,
+            organization_id: result.user?.organization_id || result.organization.id,
+            role: result.user?.role || 'admin',
+            user_metadata: result.user?.user_metadata,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           })
         }
+      } catch {
+        setUser({
+          id: 'default-user', email: 'demo@worder.com', name: 'Usuário',
+          organization_id: 'default-org', role: 'admin',
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        })
+      } finally {
+        // Always release the auth loading gate so pages that wait on it
+        // (e.g. WhatsApp → Agentes de IA) can render.
+        setLoading(false)
       }
     }
     initializeUser()
-  }, [user, setUser])
+  }, [user, setUser, setLoading])
 
   const getInitials = (name: string) =>
     name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)
