@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
 import { META_BASE_URL } from '@/lib/whatsapp/cloud-api';
+import { requireOptIn, type TemplateCategory } from '@/lib/whatsapp/opt-out-guard';
 export const dynamic = 'force-dynamic';
 
 // Usar service role para bypassa RLS
@@ -84,6 +85,21 @@ async function processCampaign(campaign: any) {
 
     const waAccessToken = getAccessToken(waConfig);
 
+    // Onda 10 — categoria do template lida uma vez, reusada no loop pra guard.
+    let tplCategory: TemplateCategory | undefined
+    if (campaign.template_name) {
+      const { data: tpl } = await supabase
+        .from('whatsapp_templates')
+        .select('category')
+        .eq('waba_id', waConfig.id)
+        .eq('name', campaign.template_name)
+        .maybeSingle()
+      const upper = (tpl?.category as string | undefined)?.toUpperCase()
+      if (upper === 'MARKETING' || upper === 'UTILITY' || upper === 'AUTHENTICATION') {
+        tplCategory = upper
+      }
+    }
+
     // Buscar logs pendentes
     const { data: pendingLogs } = await supabase
       .from('whatsapp_campaign_logs')
@@ -111,6 +127,27 @@ async function processCampaign(campaign: any) {
 
     for (const log of pendingLogs) {
       try {
+        // Onda 10 — guard opt-out DENTRO do loop (race STOP-vs-campanha).
+        // STOP processado no meio do batch pula contatos opted_out em tempo real.
+        const optCheck = await requireOptIn(
+          campaign.organization_id,
+          log.contact_mobile,
+          tplCategory,
+          { sender: 'workers.campaign' },
+        )
+        if (!optCheck.allowed) {
+          await supabase
+            .from('whatsapp_campaign_logs')
+            .update({
+              status: 'SKIPPED_OPTOUT',
+              updated_at: new Date().toISOString(),
+              error_message: 'Contato opted_out',
+            })
+            .eq('id', log.id)
+          failed++
+          continue
+        }
+
         // Preparar componentes do template
         const components = [];
 

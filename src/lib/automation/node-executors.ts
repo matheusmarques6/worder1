@@ -6,6 +6,7 @@
 import { VariableContext } from './variable-engine';
 import { WorkflowNode } from './execution-engine';
 import { META_BASE_URL } from '@/lib/whatsapp/api-version';
+import { requireOptIn } from '@/lib/whatsapp/opt-out-guard';
 
 // ============================================
 // TYPES
@@ -245,6 +246,36 @@ const actionExecutors: Record<string, NodeExecutor> = {
         }
       } catch (e) {
         console.warn('[action_whatsapp] whatsapp_sends prep failed (proceeding):', e);
+      }
+
+      // Onda 10 — guard opt-out (automation nunca tem override; e silencioso).
+      if (organizationId && phone) {
+        let tplCategory: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION' | undefined
+        if (config.templateId && supabase) {
+          try {
+            const { data: tpl } = await supabase
+              .from('whatsapp_templates')
+              .select('category')
+              .eq('organization_id', organizationId)
+              .eq('name', config.templateId)
+              .maybeSingle()
+            const upper = (tpl?.category as string | undefined)?.toUpperCase()
+            if (upper === 'MARKETING' || upper === 'UTILITY' || upper === 'AUTHENTICATION') {
+              tplCategory = upper
+            }
+          } catch (e) {
+            console.warn('[action_whatsapp] template category lookup failed:', e)
+          }
+        }
+        const optCheck = await requireOptIn(organizationId, phone, tplCategory, {
+          sender: 'automation.action_whatsapp',
+        })
+        if (!optCheck.allowed) {
+          return {
+            status: 'success',
+            output: { skipped: true, reason: 'OPTED_OUT' },
+          }
+        }
       }
 
       try {

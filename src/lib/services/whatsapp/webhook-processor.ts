@@ -14,6 +14,7 @@ import { upsertConversation } from './conversation-service'
 import { updateMessageStatus } from './message-service'
 import { logger } from './logger'
 import { wlog } from '@/lib/observability/whatsapp-logger'
+import { isStopKeyword, requireOptIn } from '@/lib/whatsapp/opt-out-guard'
 import type {
   MetaWebhookEntry,
   MetaWebhookMessage,
@@ -278,7 +279,58 @@ async function processIncomingMessage(
       }
     }
 
-    // 7. Check opt-in status — auto opt-in on first message
+    // 7. Check opt-in status — handler STOP (Onda 10) ANTES do auto-opt-in.
+    // Se contato manda PARAR/STOP/CANCELAR (match exato), upsert opted_out
+    // com consent_evidence e envia confirmacao por texto livre.
+    if (isStopKeyword(messageText)) {
+      const now = new Date().toISOString()
+      await supabaseAdmin.from('whatsapp_opt_status').upsert(
+        {
+          organization_id: instance.organization_id,
+          phone: contactPhone,
+          contact_id: contactId,
+          status: 'opted_out',
+          opted_out_at: now,
+          opt_in_source: 'keyword',
+          opt_out_reason: messageText,
+          consent_evidence: {
+            source: 'keyword',
+            message_id: message.id,
+            raw_text: messageText,
+            received_at: now,
+          },
+        },
+        { onConflict: 'organization_id,phone' },
+      )
+
+      try {
+        const { WhatsAppCloudAPI } = await import('@/lib/whatsapp/cloud-api')
+        const client = new WhatsAppCloudAPI({
+          phoneNumberId: instance.phone_number_id,
+          accessToken: instance.access_token,
+        })
+        await client.sendText(
+          contactPhone,
+          'Voce foi removido da nossa lista. Para voltar a receber mensagens, responda VOLTAR.',
+        )
+      } catch (confirmErr) {
+        wlog.error('whatsapp.optout.confirm_send_failed', {
+          organization_id: instance.organization_id,
+          phone: contactPhone,
+          error: (confirmErr as Error)?.message,
+        })
+      }
+
+      wlog.info('whatsapp.optout.keyword', {
+        organization_id: instance.organization_id,
+        phone: contactPhone,
+        keyword: (messageText || '').trim().toUpperCase(),
+        wamid: message.id,
+      })
+      return // pular auto-opt-in e demais eventos
+    }
+
+    // 7b. Auto opt-in on first organic message
     await supabaseAdmin
       .from('whatsapp_opt_status')
       .upsert(
@@ -613,6 +665,15 @@ async function checkBusinessHoursAutoReply(
     const isWithinHours = currentMinutes >= startMinutes && currentMinutes <= endMinutes
 
     if (!isWithinHours && hours.out_of_hours_message) {
+      // Onda 10 — bloquear auto-reply para contato opted_out
+      const optCheck = await requireOptIn(
+        instance.organization_id,
+        conversation.contact_phone,
+        undefined,
+        { sender: 'webhook.auto_reply_out_of_hours' },
+      )
+      if (!optCheck.allowed) return
+
       // Send auto-reply
       const { WhatsAppCloudAPI } = await import('@/lib/whatsapp/cloud-api')
       const client = new WhatsAppCloudAPI({

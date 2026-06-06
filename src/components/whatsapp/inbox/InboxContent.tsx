@@ -224,23 +224,65 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
   // HANDLERS
   // =============================================
 
+  // Onda 10 — quando guard retorna OPTED_OUT_OVERRIDABLE, pergunta razao
+  // ao atendente e re-tenta com override. Marketing nao e overridable.
+  const handleOptOutDialog = (signal: { overridable: boolean; opted_out_at?: string | null; opt_out_reason?: string | null }) => {
+    if (!signal.overridable) {
+      window.alert(
+        `Contato optou por sair${signal.opted_out_at ? ' em ' + new Date(signal.opted_out_at).toLocaleDateString() : ''}. Esta categoria nao permite envio mesmo com override.`,
+      )
+      return null
+    }
+    const when = signal.opted_out_at ? new Date(signal.opted_out_at).toLocaleString() : 'data desconhecida'
+    const reason = signal.opt_out_reason ? ` (motivo: "${signal.opt_out_reason}")` : ''
+    const proceed = window.confirm(
+      `Contato optou por sair em ${when}${reason}. Deseja enviar mesmo assim?`,
+    )
+    if (!proceed) return null
+    const overrideReason = window.prompt('Justificativa do envio (obrigatorio para auditoria):')
+    if (!overrideReason || !overrideReason.trim()) return null
+    return overrideReason.trim()
+  }
+
   const handleSendMessage = async (content: string) => {
     if (!selectedInstance || !selectedConversation) return
-    await sendMessage({
+    const result = await sendMessage({
       conversationId: selectedConversation.id,
       content,
     })
+    if (result && 'optedOut' in result && result.optedOut) {
+      const overrideReason = handleOptOutDialog(result)
+      if (overrideReason) {
+        await sendMessage({
+          conversationId: selectedConversation.id,
+          content,
+          override: { reason: overrideReason },
+        })
+      }
+    }
   }
 
   const handleSendMedia = async (file: File, mediaType: string, caption?: string) => {
     if (!selectedInstance || !selectedConversation) return
-    
-    await sendMedia({
+
+    const result = await sendMedia({
       conversationId: selectedConversation.id,
       file,
       mediaType: mediaType as 'image' | 'video' | 'audio' | 'document',
       caption,
     })
+    if (result && 'optedOut' in result && result.optedOut) {
+      const overrideReason = handleOptOutDialog(result)
+      if (overrideReason) {
+        await sendMedia({
+          conversationId: selectedConversation.id,
+          file,
+          mediaType: mediaType as 'image' | 'video' | 'audio' | 'document',
+          caption,
+          override: { reason: overrideReason },
+        })
+      }
+    }
   }
 
   // NOVO: Função para tentar reenviar mensagem falha

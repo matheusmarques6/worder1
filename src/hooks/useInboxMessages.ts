@@ -15,8 +15,8 @@ interface UseInboxMessagesReturn {
   error: string | null
   hasMore: boolean
   fetchMessages: (conversationId: string, reset?: boolean) => Promise<void>
-  sendMessage: (params: SendMessageParams) => Promise<InboxMessage | null>
-  sendMedia: (params: SendMediaParams) => Promise<InboxMessage | null>
+  sendMessage: (params: SendMessageParams) => Promise<InboxMessage | OptedOutSignal | null>
+  sendMedia: (params: SendMediaParams) => Promise<InboxMessage | OptedOutSignal | null>
   loadMore: () => Promise<void>
   addMessage: (message: InboxMessage) => void
   updateMessageStatus: (messageId: string, status: InboxMessage['status']) => void
@@ -28,6 +28,7 @@ interface SendMessageParams {
   conversationId: string
   content?: string
   messageType?: InboxMessage['message_type']
+  override?: { reason: string }
 }
 
 interface SendMediaParams {
@@ -35,6 +36,16 @@ interface SendMediaParams {
   file: File
   mediaType: 'image' | 'video' | 'audio' | 'document'
   caption?: string
+  override?: { reason: string }
+}
+
+// Onda 10 — sinal de que o contato esta opted_out e o atendente pode
+// confirmar override. ChatPanel mostra dialog e re-chama com override.
+export interface OptedOutSignal {
+  optedOut: true
+  overridable: boolean
+  opted_out_at?: string | null
+  opt_out_reason?: string | null
 }
 
 const PAGE_SIZE = 50
@@ -191,7 +202,7 @@ export function useInboxMessages(): UseInboxMessagesReturn {
   // =============================================
   // SEND TEXT MESSAGE - COM OPTIMISTIC UI MELHORADO
   // =============================================
-  const sendMessage = useCallback(async (params: SendMessageParams): Promise<InboxMessage | null> => {
+  const sendMessage = useCallback(async (params: SendMessageParams): Promise<InboxMessage | OptedOutSignal | null> => {
     setIsSending(true)
     setError(null)
 
@@ -213,8 +224,11 @@ export function useInboxMessages(): UseInboxMessagesReturn {
     setMessages(prev => [...prev, optimisticMessage])
 
     try {
+      const url = params.override
+        ? `/api/whatsapp/inbox/conversations/${params.conversationId}/messages?override=true&override_reason=${encodeURIComponent(params.override.reason)}`
+        : `/api/whatsapp/inbox/conversations/${params.conversationId}/messages`
       const response = await authedFetch(
-        `/api/whatsapp/inbox/conversations/${params.conversationId}/messages`,
+        url,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -225,6 +239,18 @@ export function useInboxMessages(): UseInboxMessagesReturn {
         }
       )
       const data = await response.json()
+
+      // Onda 10 — 409 OPTED_OUT_OVERRIDABLE: remove a otimista e devolve
+      // sinal pro ChatPanel mostrar dialog de override.
+      if (response.status === 409 && (data?.code === 'OPTED_OUT_OVERRIDABLE' || data?.code === 'OPTED_OUT')) {
+        setMessages(prev => prev.filter(m => m.id !== tempId))
+        return {
+          optedOut: true,
+          overridable: data.code === 'OPTED_OUT_OVERRIDABLE',
+          opted_out_at: data.contact_opted_out_at ?? null,
+          opt_out_reason: data.opt_out_reason ?? null,
+        } as OptedOutSignal
+      }
 
       if (!response.ok) {
         // Se falhou, atualizar mensagem otimista para "failed".
@@ -283,7 +309,7 @@ export function useInboxMessages(): UseInboxMessagesReturn {
   // =============================================
   // SEND MEDIA
   // =============================================
-  const sendMedia = useCallback(async (params: SendMediaParams): Promise<InboxMessage | null> => {
+  const sendMedia = useCallback(async (params: SendMediaParams): Promise<InboxMessage | OptedOutSignal | null> => {
     setIsUploading(true)
     setError(null)
     try {
@@ -297,11 +323,22 @@ export function useInboxMessages(): UseInboxMessagesReturn {
       formData.append('mediaType', params.mediaType)
       if (params.caption) formData.append('caption', params.caption)
 
+      const mediaUrl = params.override
+        ? `/api/whatsapp/inbox/conversations/${params.conversationId}/media?override=true&override_reason=${encodeURIComponent(params.override.reason)}`
+        : `/api/whatsapp/inbox/conversations/${params.conversationId}/media`
       const response = await authedFetch(
-        `/api/whatsapp/inbox/conversations/${params.conversationId}/media`,
+        mediaUrl,
         { method: 'POST', body: formData }
       )
       const data = await response.json()
+      if (response.status === 409 && (data?.code === 'OPTED_OUT_OVERRIDABLE' || data?.code === 'OPTED_OUT')) {
+        return {
+          optedOut: true,
+          overridable: data.code === 'OPTED_OUT_OVERRIDABLE',
+          opted_out_at: data.contact_opted_out_at ?? null,
+          opt_out_reason: data.opt_out_reason ?? null,
+        } as OptedOutSignal
+      }
       if (!response.ok) throw new Error(data.error || 'Failed to upload media')
       if (!data.success) throw new Error(data.error || 'Evolution API failed')
 

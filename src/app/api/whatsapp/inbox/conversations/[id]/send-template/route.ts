@@ -15,6 +15,11 @@ import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api'
 import { getAccessToken } from '@/lib/whatsapp/account-loader'
 import { requireOrgFromAuth } from '@/lib/auth/require-org'
+import {
+  requireOptIn,
+  readOverrideFromRequest,
+  buildOptOutBlockedResponse,
+} from '@/lib/whatsapp/opt-out-guard'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -118,12 +123,30 @@ export async function POST(
       ? [{ type: 'body', parameters: parameters.map((text) => ({ type: 'text', text })) }]
       : undefined
 
+    const phoneNumber = cloudConv.contact_phone || cloudConv.wa_id
+
+    // Onda 10 — guard opt-out. UTILITY/AUTHENTICATION passa transacional;
+    // MARKETING e bloqueado e nao aceita override (regra de produto).
+    const optCheck = await requireOptIn(
+      orgId,
+      phoneNumber,
+      template.category as 'MARKETING' | 'UTILITY' | 'AUTHENTICATION' | undefined,
+      {
+        ...(readOverrideFromRequest(request, auth.userId) || {}),
+        sender: 'inbox.send_template',
+      },
+    )
+    if (!optCheck.allowed) {
+      return NextResponse.json(
+        buildOptOutBlockedResponse(optCheck, template.category),
+        { status: 409, headers: NO_CACHE_HEADERS },
+      )
+    }
+
     const client = createWhatsAppCloudClient({
       phoneNumberId: cloudConv.account.phone_number_id,
       accessToken: getAccessToken(cloudConv.account),
     })
-
-    const phoneNumber = cloudConv.contact_phone || cloudConv.wa_id
 
     let result
     try {

@@ -9,6 +9,7 @@ import { WhatsAppRateLimiter, getRateLimiter } from './rate-limiter'
 import { CircuitBreaker, getCircuitBreaker } from './circuit-breaker'
 import { withRetry, createWhatsAppRetry, sleep } from './backoff'
 import { sendTemplateMessage } from './meta-api'
+import { requireOptIn } from './opt-out-guard'
 
 // =============================================
 // SUPABASE CLIENT
@@ -65,7 +66,9 @@ export interface CampaignBatchData {
   template: {
     name: string
     language: string
+    category?: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
   }
+  organizationId: string
   mediaUrl?: string
   mediaType?: string
 }
@@ -178,7 +181,12 @@ export class CampaignProcessor {
           template: {
             name: campaign.template_name || campaign.template?.name,
             language: campaign.template?.language || 'pt_BR',
+            category: (() => {
+              const c = (campaign.template?.category as string | undefined)?.toUpperCase()
+              return c === 'MARKETING' || c === 'UTILITY' || c === 'AUTHENTICATION' ? c : undefined
+            })(),
           },
+          organizationId: campaign.organization_id,
           mediaUrl: campaign.media_url,
           mediaType: campaign.media_type,
         }
@@ -371,7 +379,7 @@ export class CampaignProcessor {
    * Processar batch de mensagens
    */
   private async processBatch(data: CampaignBatchData): Promise<ProcessResult> {
-    const { campaignId, recipients, instance, template, mediaUrl, mediaType } = data
+    const { campaignId, recipients, instance, template, mediaUrl, mediaType, organizationId } = data
 
     // Obter rate limiter e circuit breaker
     const rateLimiter = this.getRateLimiter(instance.id, instance.tier)
@@ -386,6 +394,26 @@ export class CampaignProcessor {
 
     for (const recipient of recipients) {
       try {
+        // Onda 10 — guard opt-out DENTRO do loop (race STOP-vs-campanha).
+        // STOP processado em paralelo pula recipients opted_out em tempo real.
+        const optCheck = await requireOptIn(
+          organizationId,
+          recipient.phone_number,
+          template.category,
+          { sender: 'campaign-processor' },
+        )
+        if (!optCheck.allowed) {
+          await supabase
+            .from('whatsapp_campaign_recipients')
+            .update({
+              status: 'skipped',
+              error_message: 'Contato opted_out',
+            })
+            .eq('id', recipient.id)
+          result.skipped++
+          continue
+        }
+
         // Verificar circuit breaker
         if (!await circuitBreaker.canExecute()) {
           console.log(`🔴 Circuit breaker OPEN for instance ${instance.id}`)

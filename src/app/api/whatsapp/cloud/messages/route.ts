@@ -7,6 +7,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient, normalizePhone } from '@/lib/whatsapp/cloud-api';
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
+import {
+  requireOptIn,
+  readOverrideFromRequest,
+  buildOptOutBlockedResponse,
+  type TemplateCategory,
+} from '@/lib/whatsapp/opt-out-guard';
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -135,6 +141,40 @@ export async function POST(request: NextRequest) {
 
     if (!account) {
       return NextResponse.json({ error: 'Account not found or inactive' }, { status: 404 });
+    }
+
+    // Onda 10 — guard opt-out. Para templates, le categoria do BD pra
+    // permitir bypass transacional (UTILITY/AUTHENTICATION).
+    let tplCategory: TemplateCategory | undefined
+    if (type === 'template' && templateName) {
+      const { data: tpl } = await supabase
+        .from('whatsapp_templates')
+        .select('category')
+        .eq('waba_id', account.id)
+        .eq('name', templateName)
+        .maybeSingle()
+      if (tpl?.category) {
+        const upper = (tpl.category as string).toUpperCase()
+        if (upper === 'MARKETING' || upper === 'UTILITY' || upper === 'AUTHENTICATION') {
+          tplCategory = upper
+        }
+      }
+    }
+
+    const optCheck = await requireOptIn(
+      profile.organization_id,
+      to,
+      tplCategory,
+      {
+        ...(readOverrideFromRequest(request) || {}),
+        sender: 'cloud.messages',
+      },
+    )
+    if (!optCheck.allowed) {
+      return NextResponse.json(
+        buildOptOutBlockedResponse(optCheck, tplCategory),
+        { status: 409 },
+      )
     }
 
     // Verificar janela de 24h (exceto para templates)

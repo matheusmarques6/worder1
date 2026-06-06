@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { requireOrgFromAuth } from '@/lib/auth/require-org'
+import {
+  requireOptIn,
+  readOverrideFromRequest,
+  buildOptOutBlockedResponse,
+} from '@/lib/whatsapp/opt-out-guard'
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api'
 import { getAccessToken } from '@/lib/whatsapp/account-loader'
 
@@ -127,12 +132,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .maybeSingle()
 
     if (cloudConv && cloudConv.account) {
+      const phoneNumber = cloudConv.contact_phone || cloudConv.wa_id
+
+      // Onda 10 — guard opt-out (midia = service window, atendente pode override)
+      const optCheck = await requireOptIn(orgId, phoneNumber, undefined, {
+        ...(readOverrideFromRequest(request, auth.userId) || {}),
+        sender: 'inbox.media',
+      })
+      if (!optCheck.allowed) {
+        return NextResponse.json(
+          buildOptOutBlockedResponse(optCheck, undefined),
+          { status: 409, headers: NO_CACHE_HEADERS },
+        )
+      }
+
       const client = createWhatsAppCloudClient({
         phoneNumberId: cloudConv.account.phone_number_id,
         accessToken: getAccessToken(cloudConv.account),
       })
-
-      const phoneNumber = cloudConv.contact_phone || cloudConv.wa_id
 
       // Upload to Supabase Storage in parallel — gives us a stable URL
       // for the chat bubble's player (Meta-hosted media id is opaque).
