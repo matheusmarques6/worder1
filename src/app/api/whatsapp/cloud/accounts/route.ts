@@ -7,9 +7,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
 import { encryptToken } from '@/lib/whatsapp/token-encryption';
+import { checkRateLimit } from '@/lib/rate-limit';
 import crypto from 'crypto';
 const nanoid = (size = 21) => crypto.randomBytes(size).toString('hex').slice(0, size);
 export const dynamic = 'force-dynamic';
+
+async function accountsRateLimit(orgId: string) {
+  const rl = await checkRateLimit(`wa:cloud:accounts:${orgId}`, { limit: 5, windowSec: 60 });
+  if (!rl.allowed) {
+    const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+    return NextResponse.json(
+      { error: 'rate_limited', retryAfter },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+    );
+  }
+  return null;
+}
 
 // =============================================
 // GET - Listar contas conectadas
@@ -101,32 +114,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
     }
 
+    const rateLimited = await accountsRateLimit(profile.organization_id);
+    if (rateLimited) return rateLimited;
+
     const body = await request.json();
-    const { 
-      wabaId, 
-      phoneNumberId, 
-      accessToken, 
+    const {
+      wabaId,
+      phoneNumberId,
+      accessToken,
       businessId,
-      appId 
+      appId
     } = body;
 
     // Validar campos obrigatórios
     if (!wabaId || !phoneNumberId || !accessToken) {
-      return NextResponse.json({ 
-        error: 'Missing required fields: wabaId, phoneNumberId, accessToken' 
+      return NextResponse.json({
+        error: 'Missing required fields: wabaId, phoneNumberId, accessToken'
       }, { status: 400 });
     }
 
-    // Verificar se já existe
+    // Checa duplicata dentro da org. UNIQUE agora e per-org, entao escopo
+    // por organization_id pra usar o novo index e nao bloquear outras orgs
+    // (cenario multi-tenant futuro).
     const { data: existing } = await supabase
       .from('whatsapp_business_accounts')
       .select('id')
+      .eq('organization_id', profile.organization_id)
       .eq('phone_number_id', phoneNumberId)
-      .single();
+      .maybeSingle();
 
     if (existing) {
-      return NextResponse.json({ 
-        error: 'Phone number already connected' 
+      return NextResponse.json({
+        error: 'Phone number already connected'
       }, { status: 409 });
     }
 
@@ -234,6 +253,9 @@ export async function DELETE(request: NextRequest) {
     if (!profile?.organization_id) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
     }
+
+    const rateLimited = await accountsRateLimit(profile.organization_id);
+    if (rateLimited) return rateLimited;
 
     const { searchParams } = new URL(request.url);
     const accountId = searchParams.get('id');

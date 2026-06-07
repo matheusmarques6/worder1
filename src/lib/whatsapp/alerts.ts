@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { wlog } from '@/lib/observability/whatsapp-logger';
 
 export interface AlertParams {
   severity: 'info' | 'warning' | 'critical';
@@ -13,9 +14,8 @@ export interface AlertParams {
 export async function sendAlert(params: AlertParams): Promise<void> {
   const { severity, type, title, message, metadata, organizationId, wabaId } = params;
 
-  // 1. Always log to structured console output
-  const logPayload = {
-    type: 'whatsapp_alert',
+  // Structured event emission via wlog (Datadog/Loki friendly).
+  const logFields = {
     alert_type: type,
     severity,
     title,
@@ -23,16 +23,10 @@ export async function sendAlert(params: AlertParams): Promise<void> {
     metadata,
     organization_id: organizationId,
     waba_id: wabaId,
-    timestamp: new Date().toISOString(),
   };
-
-  if (severity === 'critical') {
-    console.error('[ALERT]', JSON.stringify(logPayload));
-  } else if (severity === 'warning') {
-    console.warn('[ALERT]', JSON.stringify(logPayload));
-  } else {
-    console.log('[ALERT]', JSON.stringify(logPayload));
-  }
+  if (severity === 'critical') wlog.error('whatsapp.alert.emitted', logFields);
+  else if (severity === 'warning') wlog.warn('whatsapp.alert.emitted', logFields);
+  else wlog.info('whatsapp.alert.emitted', logFields);
 
   // 2. Insert into whatsapp_alerts with dedup_key (UNIQUE partial index suppresses duplicates)
   const dedupKey = wabaId ? `${type}:${wabaId}` : organizationId ? `${type}:${organizationId}` : null;
@@ -53,10 +47,10 @@ export async function sendAlert(params: AlertParams): Promise<void> {
       return;
     }
     if (result.error) {
-      console.warn('[alerts] insert failed:', result.error.message);
+      wlog.warn('whatsapp.alert.persist_insert_failed', { error: result.error.message });
     }
   } catch (e: any) {
-    console.warn('[alerts] persist failed:', e.message);
+    wlog.warn('whatsapp.alert.persist_failed', { error: e?.message });
   }
 
   // 4. Slack webhook (if configured)
@@ -96,12 +90,21 @@ export async function sendAlert(params: AlertParams): Promise<void> {
         }),
       });
     } catch (e: any) {
-      console.warn('[ALERT] Slack webhook failed:', e.message);
+      wlog.warn('whatsapp.alert.slack_failed', { error: e?.message });
     }
   }
 }
 
-export async function checkAndAlertQualityIssues(): Promise<{
+/**
+ * C3: quality_rating muda em horas, messaging_limit em dias. Antes uma unica
+ * funcao varria os dois loops a cada 30min — desperdicio. Split em 2:
+ *   - checkAndAlertQualityRating()  → cron 30min (responde rapido a RED/YELLOW)
+ *   - checkAndAlertMessagingLimits() → cron diario
+ *
+ * Wrapper de compat (checkAndAlertQualityIssues) ainda existe pra nao quebrar
+ * caller, mas as duas crons ja foram separadas.
+ */
+export async function checkAndAlertQualityRating(): Promise<{
   checked: number;
   alerts_sent: number;
   errors: string[];
@@ -110,7 +113,6 @@ export async function checkAndAlertQualityIssues(): Promise<{
   let alertsSent = 0;
   const errors: string[] = [];
 
-  // Fetch all WABA accounts
   const { data: accounts, error } = await supabaseAdmin
     .from('whatsapp_business_accounts')
     .select('id, waba_id, phone_number_id, display_phone_number, verified_name, quality_rating, messaging_limit, organization_id, status');
@@ -127,7 +129,6 @@ export async function checkAndAlertQualityIssues(): Promise<{
   for (const account of accounts) {
     checked++;
 
-    // Alert on RED quality
     if (account.quality_rating === 'RED') {
       await sendAlert({
         severity: 'critical',
@@ -143,9 +144,29 @@ export async function checkAndAlertQualityIssues(): Promise<{
         wabaId: account.id,
       });
       alertsSent++;
+
+      // D6: ao detectar RED, auto-pausa qualquer campanha 'running' dessa
+      // org+WABA. Evita esperar o proximo batch pular — corta sangria ja.
+      const { error: pauseErr, count } = await supabaseAdmin
+        .from('whatsapp_campaigns')
+        .update({ status: 'paused', paused_at: new Date().toISOString() }, { count: 'exact' })
+        .eq('organization_id', account.organization_id)
+        .eq('status', 'running');
+      if (pauseErr) {
+        wlog.warn('whatsapp.alert.auto_pause_failed', {
+          error: pauseErr.message,
+          organization_id: account.organization_id,
+          waba_id: account.id,
+        });
+      } else if (count && count > 0) {
+        wlog.warn('whatsapp.campaign.auto_paused_red_quality', {
+          organization_id: account.organization_id,
+          waba_id: account.id,
+          paused_count: count,
+        });
+      }
     }
 
-    // Alert on YELLOW quality
     if (account.quality_rating === 'YELLOW') {
       await sendAlert({
         severity: 'warning',
@@ -164,7 +185,33 @@ export async function checkAndAlertQualityIssues(): Promise<{
     }
   }
 
+  return { checked, alerts_sent: alertsSent, errors };
+}
+
+export async function checkAndAlertMessagingLimits(): Promise<{
+  checked: number;
+  alerts_sent: number;
+  errors: string[];
+}> {
+  let checked = 0;
+  let alertsSent = 0;
+  const errors: string[] = [];
+
+  const { data: accounts, error } = await supabaseAdmin
+    .from('whatsapp_business_accounts')
+    .select('id, waba_id, phone_number_id, display_phone_number, verified_name, messaging_limit, organization_id');
+
+  if (error) {
+    errors.push(`Failed to fetch accounts: ${error.message}`);
+    return { checked: 0, alerts_sent: 0, errors };
+  }
+
+  if (!accounts || accounts.length === 0) {
+    return { checked: 0, alerts_sent: 0, errors };
+  }
+
   for (const account of accounts) {
+    checked++;
     if (account.messaging_limit === 'TIER_250' || account.messaging_limit === 'TIER_1K') {
       await sendAlert({
         severity: 'info',
@@ -184,6 +231,24 @@ export async function checkAndAlertQualityIssues(): Promise<{
   }
 
   return { checked, alerts_sent: alertsSent, errors };
+}
+
+/**
+ * @deprecated mantido pra compat com callers existentes; use
+ * checkAndAlertQualityRating + checkAndAlertMessagingLimits diretamente.
+ */
+export async function checkAndAlertQualityIssues(): Promise<{
+  checked: number;
+  alerts_sent: number;
+  errors: string[];
+}> {
+  const a = await checkAndAlertQualityRating();
+  const b = await checkAndAlertMessagingLimits();
+  return {
+    checked: Math.max(a.checked, b.checked),
+    alerts_sent: a.alerts_sent + b.alerts_sent,
+    errors: [...a.errors, ...b.errors],
+  };
 }
 
 export async function checkFrequencyCapRate(organizationId: string): Promise<{

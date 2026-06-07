@@ -25,6 +25,16 @@ import {
   type WebhookMessage,
 } from './cloud-api';
 import { RuleEngine, type EventData } from '@/lib/services/automation/rule-engine';
+import { wlog } from '@/lib/observability/whatsapp-logger';
+
+// Ordem canonica de status WhatsApp. Webhooks chegam fora de ordem em raros
+// casos (delivered antes de sent); sem o guard de ordinal a row sofre retrograde.
+const STATUS_ORDINAL: Record<string, number> = {
+  sent: 1,
+  delivered: 2,
+  read: 3,
+  failed: 4,
+};
 
 export interface ProcessResult {
   processed: number;
@@ -43,6 +53,12 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
   }
 
   for (const entry of payload.entry || []) {
+    // entry.id e o WABA ID (globalmente unico na Meta). Usado pra
+    // desambiguar lookup quando duas orgs cadastram o mesmo phone_number_id
+    // (cenario futuro de multi-tenant). Sem isso, webhook pode vazar pra
+    // org errada.
+    const entryWabaId: string | undefined = entry?.id;
+
     for (const change of entry.changes || []) {
       const field = change.field;
       const value = change.value;
@@ -56,11 +72,34 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
             continue;
           }
 
-          const { data: account } = await supabase
+          // Lookup: filtra por phone_number_id + waba_id (quando disponivel).
+          // Row legacy pode ter waba_id NULL — neste caso so phone_number_id ja
+          // basta (pre-multi-tenant). Se >1 row casar, e bug (DB UNIQUE deveria
+          // impedir): logamos e pulamos pra nao chutar.
+          let accountQuery = supabase
             .from('whatsapp_business_accounts')
             .select('*')
-            .eq('phone_number_id', phoneNumberId)
-            .single();
+            .eq('phone_number_id', phoneNumberId);
+          if (entryWabaId) {
+            accountQuery = accountQuery.eq('waba_id', entryWabaId);
+          }
+          const { data: matchingAccounts } = await accountQuery.limit(2);
+          const account = matchingAccounts?.[0];
+
+          if (matchingAccounts && matchingAccounts.length > 1) {
+            wlog.error('whatsapp.webhook.account_ambiguous', {
+              phone_number_id: phoneNumberId,
+              waba_id: entryWabaId,
+              matches: matchingAccounts.length,
+            });
+            result.skipped++;
+            result.details.push({
+              type: 'change',
+              status: 'skipped',
+              reason: `ambiguous_account:${phoneNumberId}`,
+            });
+            continue;
+          }
 
           if (!account) {
             result.skipped++;
@@ -80,7 +119,11 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
             } catch (err: any) {
               result.errors++;
               result.details.push({ type: 'message', status: 'error', reason: err?.message });
-              console.error('[whatsapp-webhook-processor] processMessage error:', err);
+              wlog.error('whatsapp.webhook.process_message_error', {
+                error: err?.message,
+                account_id: account.id,
+                message_id: message?.id,
+              });
             }
           }
 
@@ -92,7 +135,11 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
             } catch (err: any) {
               result.errors++;
               result.details.push({ type: 'status', status: 'error', reason: err?.message });
-              console.error('[whatsapp-webhook-processor] processStatus error:', err);
+              wlog.error('whatsapp.webhook.process_status_error', {
+                error: err?.message,
+                account_id: account.id,
+                message_id: status?.id,
+              });
             }
           }
 
@@ -102,7 +149,11 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
               status: 'logged',
               reason: `code:${errorEntry?.code}`,
             });
-            console.error('[whatsapp-webhook-processor] Meta error:', errorEntry);
+            wlog.error('whatsapp.webhook.meta_error_entry', {
+              code: errorEntry?.code,
+              title: errorEntry?.title,
+              account_id: account.id,
+            });
           }
           break;
         }
@@ -115,7 +166,9 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
           } catch (err: any) {
             result.errors++;
             result.details.push({ type: 'template_status', status: 'error', reason: err?.message });
-            console.error('[whatsapp-webhook-processor] template status error:', err);
+            wlog.error('whatsapp.webhook.template_status_error', {
+              error: err?.message,
+            });
           }
           break;
         }
@@ -128,7 +181,9 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
           } catch (err: any) {
             result.errors++;
             result.details.push({ type: 'template_category', status: 'error', reason: err?.message });
-            console.error('[whatsapp-webhook-processor] template category error:', err);
+            wlog.error('whatsapp.webhook.template_category_error', {
+              error: err?.message,
+            });
           }
           break;
         }
@@ -141,7 +196,9 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
           } catch (err: any) {
             result.errors++;
             result.details.push({ type: 'phone_quality', status: 'error', reason: err?.message });
-            console.error('[whatsapp-webhook-processor] phone quality error:', err);
+            wlog.error('whatsapp.webhook.phone_quality_error', {
+              error: err?.message,
+            });
           }
           break;
         }
@@ -215,29 +272,18 @@ async function processMessage(
   });
 
   const nowIso = new Date().toISOString();
-  await supabase
-    .from('whatsapp_cloud_conversations')
-    .update({
-      status: 'open',
-      is_window_open: true,
-      window_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      last_customer_message_at: nowIso,
-      last_message_at: nowIso,
-      last_message_preview: textBody.substring(0, 100),
-      last_message_direction: 'inbound',
-      unread_count: (conversation.unread_count || 0) + 1,
-    })
-    .eq('id', conversation.id);
+  // Counters via RPC: UPDATE atomico (COALESCE(col,0)+1). Sem isso, duas
+  // webhooks concorrentes pro mesmo contato perdem incrementos.
+  await supabase.rpc('increment_conversation_inbound', {
+    p_conversation_id: conversation.id,
+    p_preview: textBody.substring(0, 100),
+    p_now: nowIso,
+  });
 
-  await supabase
-    .from('whatsapp_business_accounts')
-    .update({
-      messages_received_today: (account.messages_received_today || 0) + 1,
-      total_messages_received: (account.total_messages_received || 0) + 1,
-      last_message_at: nowIso,
-      last_webhook_at: nowIso,
-    })
-    .eq('id', account.id);
+  await supabase.rpc('increment_account_inbound', {
+    p_account_id: account.id,
+    p_now: nowIso,
+  });
 
   let crmContactId: string | undefined = contact?.crm_contact_id;
   if (!crmContactId) {
@@ -301,6 +347,27 @@ async function processMessage(
 async function processStatus(account: any, status: any) {
   const { id: messageId, status: newStatus, errors, conversation, pricing } = status;
 
+  // B2: guard contra retrograde. Meta as vezes entrega o webhook de 'sent'
+  // depois do 'delivered'; sem o guard a row volta pra 'sent'. failed sempre
+  // se aplica porque carrega error_code que precisa ser persistido.
+  const { data: currentRow } = await supabase
+    .from('whatsapp_cloud_messages')
+    .select('status')
+    .eq('message_id', messageId)
+    .maybeSingle();
+
+  const currentOrdinal = STATUS_ORDINAL[currentRow?.status ?? ''] ?? 0;
+  const newOrdinal = STATUS_ORDINAL[newStatus] ?? 0;
+
+  if (newOrdinal < currentOrdinal && newStatus !== 'failed') {
+    wlog.info('whatsapp.status.retrograde_skipped', {
+      message_id: messageId,
+      from: currentRow?.status,
+      to: newStatus,
+    });
+    return;
+  }
+
   const updateData: any = {
     status: newStatus,
     updated_at: new Date().toISOString(),
@@ -339,7 +406,10 @@ async function processTemplateStatusUpdate(value: any) {
   const rejectionReason = value?.reason || value?.rejection_reason;
 
   if (!templateName || !newStatus) {
-    console.warn('[webhook-processor] template status update missing name or event:', value);
+    wlog.warn('whatsapp.webhook.template_status_missing_fields', {
+      has_name: !!templateName,
+      has_event: !!newStatus,
+    });
     return;
   }
 
@@ -362,9 +432,15 @@ async function processTemplateStatusUpdate(value: any) {
     .eq('name', templateName);
 
   if (error) {
-    console.error('[webhook-processor] failed to update template status:', error);
+    wlog.error('whatsapp.webhook.template_status_update_failed', {
+      template_name: templateName,
+      error: error.message,
+    });
   } else {
-    console.log(`[webhook-processor] template "${templateName}" status → ${newStatus}`);
+    wlog.info('whatsapp.template.status_updated', {
+      name: templateName,
+      status: newStatus,
+    });
   }
 }
 
@@ -379,7 +455,10 @@ async function processTemplateCategoryUpdate(value: any) {
   const newCategory = value?.new_category;
 
   if (!templateName || !newCategory) {
-    console.warn('[webhook-processor] template category update missing data:', value);
+    wlog.warn('whatsapp.webhook.template_category_missing_fields', {
+      has_name: !!templateName,
+      has_new_category: !!newCategory,
+    });
     return;
   }
 
@@ -416,9 +495,16 @@ async function processTemplateCategoryUpdate(value: any) {
     .eq('name', templateName);
 
   if (error) {
-    console.error('[webhook-processor] failed to update template category:', error);
+    wlog.error('whatsapp.webhook.template_category_update_failed', {
+      template_name: templateName,
+      error: error.message,
+    });
   } else {
-    console.log(`[webhook-processor] template "${templateName}" category ${previousCategory} → ${newCategory}`);
+    wlog.info('whatsapp.template.category_changed', {
+      name: templateName,
+      from: previousCategory,
+      to: newCategory,
+    });
   }
 }
 
@@ -432,7 +518,7 @@ async function processPhoneQualityUpdate(value: any) {
   const event = value?.event;
 
   if (!displayPhone) {
-    console.warn('[webhook-processor] phone quality update missing display_phone_number:', value);
+    wlog.warn('whatsapp.webhook.phone_quality_missing_fields', {});
     return;
   }
 
@@ -462,9 +548,16 @@ async function processPhoneQualityUpdate(value: any) {
     .eq('phone_number', cleaned);
 
   if (error) {
-    console.error('[webhook-processor] failed to update phone quality:', error);
+    wlog.error('whatsapp.webhook.phone_quality_update_failed', {
+      display_phone: cleaned,
+      error: error.message,
+    });
   } else {
-    console.log(`[webhook-processor] phone quality update: event=${event}, limit=${currentLimit}`);
+    wlog.info('whatsapp.phone_quality.updated', {
+      event,
+      current_limit: currentLimit,
+      display_phone: cleaned,
+    });
   }
 }
 
@@ -473,25 +566,27 @@ async function processPhoneQualityUpdate(value: any) {
 // ============================================================
 
 async function getOrCreateContact(account: any, phoneNumber: string, name: string) {
+  // Hot path: maioria das webhooks bate em contato existente.
   const { data: existing } = await supabase
     .from('whatsapp_contacts')
     .select('*')
     .eq('organization_id', account.organization_id)
     .eq('phone_number', phoneNumber)
-    .limit(1);
+    .maybeSingle();
 
-  if (existing && existing.length > 0) {
-    const contact = existing[0];
-    if (name && name !== contact.name && name !== phoneNumber) {
+  if (existing) {
+    if (name && name !== existing.name && name !== phoneNumber) {
       await supabase
         .from('whatsapp_contacts')
         .update({ name, profile_name: name })
-        .eq('id', contact.id);
+        .eq('id', existing.id);
     }
-    return { ...contact, isNew: false };
+    return { ...existing, isNew: false };
   }
 
-  const { data: newContact } = await supabase
+  // INSERT com fallback de race: se outro processo criou primeiro, o
+  // UNIQUE (organization_id, phone_number) dispara 23505, reseleciona.
+  const { data: newContact, error: insertErr } = await supabase
     .from('whatsapp_contacts')
     .insert({
       organization_id: account.organization_id,
@@ -502,6 +597,17 @@ async function getOrCreateContact(account: any, phoneNumber: string, name: strin
     })
     .select()
     .single();
+
+  if (insertErr || !newContact) {
+    const { data: refetch } = await supabase
+      .from('whatsapp_contacts')
+      .select('*')
+      .eq('organization_id', account.organization_id)
+      .eq('phone_number', phoneNumber)
+      .maybeSingle();
+    if (refetch) return { ...refetch, isNew: false };
+    throw insertErr ?? new Error('contact_insert_failed');
+  }
 
   let crmContactId: string | undefined;
   const { data: existingCrmContact } = await supabase
@@ -545,23 +651,23 @@ async function getOrCreateConversation(account: any, contact: any, phoneNumber: 
   const { data: existing } = await supabase
     .from('whatsapp_cloud_conversations')
     .select('*')
-    .eq('organization_id', account.organization_id)
     .eq('waba_id', account.id)
     .eq('wa_id', phoneNumber)
-    .limit(1);
+    .maybeSingle();
 
-  if (existing && existing.length > 0) {
-    const conv = existing[0];
-    if (contact && conv.contact_id !== contact.id) {
+  if (existing) {
+    if (contact && existing.contact_id !== contact.id) {
       await supabase
         .from('whatsapp_cloud_conversations')
         .update({ contact_id: contact.id })
-        .eq('id', conv.id);
+        .eq('id', existing.id);
     }
-    return { ...conv, isNew: false };
+    return { ...existing, isNew: false };
   }
 
-  const { data: newConv } = await supabase
+  // INSERT com fallback de race: outro processo pode ter criado em paralelo.
+  // UNIQUE idx_wcc_waba_waid impede duplicata — capturamos e reselecionamos.
+  const { data: newConv, error: insertErr } = await supabase
     .from('whatsapp_cloud_conversations')
     .insert({
       organization_id: account.organization_id,
@@ -578,6 +684,17 @@ async function getOrCreateConversation(account: any, contact: any, phoneNumber: 
     })
     .select()
     .single();
+
+  if (insertErr || !newConv) {
+    const { data: refetch } = await supabase
+      .from('whatsapp_cloud_conversations')
+      .select('*')
+      .eq('waba_id', account.id)
+      .eq('wa_id', phoneNumber)
+      .maybeSingle();
+    if (refetch) return { ...refetch, isNew: false };
+    throw insertErr ?? new Error('conversation_insert_failed');
+  }
 
   return { ...newConv, isNew: true };
 }

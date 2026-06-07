@@ -8,6 +8,8 @@
 // Documentação: https://developers.facebook.com/docs/whatsapp/cloud-api
 export { META_API_VERSION, META_BASE_URL } from './api-version';
 import { META_BASE_URL } from './api-version';
+import { withRetry } from './backoff';
+import { wlog } from '@/lib/observability/whatsapp-logger';
 
 // =============================================
 // TIPOS
@@ -73,37 +75,85 @@ export class WhatsAppCloudAPI {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {},
-    retryCount = 0
+    options: RequestInit = {}
   ): Promise<T> {
     const url = endpoint.startsWith('http')
       ? endpoint
       : `${META_BASE_URL}${endpoint}`;
 
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Authorization': `Bearer ${this.config.accessToken}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
+    const doFetch = async (): Promise<T> => {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          'Authorization': `Bearer ${this.config.accessToken}`,
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok || data.error) {
-      const err = new WhatsAppCloudError(data.error || { message: 'Request failed', code: response.status });
-
-      if (err.isRateLimited() && retryCount < 3) {
-        const delay = Math.pow(2, retryCount) * 1000;
-        await new Promise((r) => setTimeout(r, delay));
-        return this.request<T>(endpoint, options, retryCount + 1);
+      if (!response.ok || data.error) {
+        const err = new WhatsAppCloudError(
+          data.error || { message: 'Request failed', code: response.status }
+        );
+        // status HTTP fica disponivel pro shouldRetry (5xx etc.)
+        (err as any).status = response.status;
+        // Meta envia Retry-After em segundos (ou data HTTP). Parsea e anexa
+        // no error pra o getDelayOverride do withRetry usar.
+        const retryAfterRaw = response.headers.get('Retry-After');
+        if (retryAfterRaw) {
+          const seconds = Number(retryAfterRaw);
+          if (Number.isFinite(seconds) && seconds > 0) {
+            (err as any).retryAfterMs = Math.round(seconds * 1000);
+          } else {
+            const ts = Date.parse(retryAfterRaw);
+            if (Number.isFinite(ts)) {
+              (err as any).retryAfterMs = Math.max(0, ts - Date.now());
+            }
+          }
+        }
+        throw err;
       }
 
-      throw err;
-    }
+      return data;
+    };
 
-    return data;
+    return withRetry<T>(doFetch, {
+      maxRetries: 5,
+      baseDelay: 1000,
+      maxDelay: 30_000,
+      jitter: 'decorrelated',
+      shouldRetry: (err, attempt) => {
+        if (err instanceof WhatsAppCloudError) {
+          // Erros permanentes da Meta — nao retry
+          if (err.isAuthError()) return false;
+          if (err.code === 100) return false;
+          // Rate limit / frequency cap — retry com backoff
+          if (err.isRateLimited() || err.isFrequencyCapped() || err.isSpamRateLimited()) {
+            return true;
+          }
+          // 5xx do servidor Meta
+          if ((err as any).status >= 500 && (err as any).status < 600) return true;
+          return false;
+        }
+        // Erros de rede (fetch failed etc.)
+        return attempt < 5;
+      },
+      getDelayOverride: (err) => {
+        const ms = (err as any)?.retryAfterMs;
+        return typeof ms === 'number' && ms > 0 ? ms : undefined;
+      },
+      onRetry: (err, attempt, delay) => {
+        wlog.warn('whatsapp.api.retry', {
+          attempt,
+          delay_ms: delay,
+          code: (err as any)?.code,
+          status: (err as any)?.status,
+          retry_after_ms: (err as any)?.retryAfterMs,
+        });
+      },
+    });
   }
 
   // =============================================

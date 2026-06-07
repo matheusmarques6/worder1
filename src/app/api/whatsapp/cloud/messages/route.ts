@@ -13,6 +13,9 @@ import {
   buildOptOutBlockedResponse,
   type TemplateCategory,
 } from '@/lib/whatsapp/opt-out-guard';
+import { wlog } from '@/lib/observability/whatsapp-logger';
+import { sendAlert } from '@/lib/whatsapp/alerts';
+import { checkRateLimit } from '@/lib/rate-limit';
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -63,12 +66,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       messages: (messages || []).reverse(),
       pagination: { limit, offset, hasMore: messages?.length === limit }
     });
-  } catch (error) {
-    console.error('Error:', error);
+  } catch (error: any) {
+    wlog.error('whatsapp.cloud.messages.list_error', { error: error?.message });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -98,6 +101,20 @@ export async function POST(request: NextRequest) {
 
     if (!profile?.organization_id) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
+    }
+
+    // B11: rate limit per-org. 80 msg/s e o cap pratico de Meta tier 3+;
+    // protege contra batch UI maluco e abusos por token comprometido.
+    const rl = await checkRateLimit(
+      `wa:cloud:messages:${profile.organization_id}`,
+      { limit: 80, windowSec: 1 },
+    );
+    if (!rl.allowed) {
+      const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+      return NextResponse.json(
+        { error: 'rate_limited', retryAfter },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+      );
     }
 
     const body = await request.json();
@@ -295,7 +312,13 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Invalid message type' }, { status: 400 });
       }
     } catch (apiError: any) {
-      console.error('WhatsApp API Error:', apiError);
+      wlog.error('whatsapp.send.api_error', {
+        code: apiError?.code,
+        subcode: apiError?.error_subcode,
+        message: apiError?.message,
+        account_id: account.id,
+        organization_id: profile.organization_id,
+      });
 
       if (apiError.code === 132015 || apiError.code === 132016) {
         const newStatus = apiError.code === 132015 ? 'PAUSED' : 'DISABLED';
@@ -308,11 +331,42 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // C5: token invalido/expirado precisa virar surface (UI badge) +
+      // alerta humano. sendAlert dedupa por (type, waba_id) — nao spamma.
       if ([190, 102, 200].includes(apiError.code)) {
+        const nowIso = new Date().toISOString();
         await supabase
           .from('whatsapp_business_accounts')
-          .update({ status: 'auth_error', updated_at: new Date().toISOString() })
+          .update({
+            status: 'auth_error',
+            token_invalid_at: nowIso,
+            token_invalid_code: apiError.code,
+            token_invalid_message: apiError.message ?? null,
+            updated_at: nowIso,
+          })
           .eq('id', account.id);
+
+        wlog.error('whatsapp.token.expired', {
+          organization_id: profile.organization_id,
+          account_id: account.id,
+          phone_number_id: account.phone_number_id,
+          code: apiError.code,
+          subcode: apiError.error_subcode,
+        });
+
+        await sendAlert({
+          severity: 'critical',
+          type: 'account_restricted',
+          title: 'WhatsApp token invalido/expirado',
+          message: `Account ${account.verified_name || account.phone_number} parou de enviar — Meta code ${apiError.code}. Reconecte no painel.`,
+          organizationId: profile.organization_id,
+          wabaId: account.id,
+          metadata: {
+            code: apiError.code,
+            subcode: apiError.error_subcode,
+            phone_number_id: account.phone_number_id,
+          },
+        });
       }
 
       return NextResponse.json({
@@ -399,8 +453,8 @@ export async function POST(request: NextRequest) {
       messageId,
       message: savedMessage,
     });
-  } catch (error) {
-    console.error('Error:', error);
+  } catch (error: any) {
+    wlog.error('whatsapp.cloud.messages.post_error', { error: error?.message });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

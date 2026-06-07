@@ -8,7 +8,21 @@ import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
+import { checkRateLimit } from '@/lib/rate-limit';
 export const dynamic = 'force-dynamic';
+
+// B11: template CRUD e raro (10/min por org e folgado). Aceita 429 com Retry-After.
+async function templateRateLimit(orgId: string) {
+  const rl = await checkRateLimit(`wa:cloud:templates:${orgId}`, { limit: 10, windowSec: 60 });
+  if (!rl.allowed) {
+    const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+    return NextResponse.json(
+      { error: 'rate_limited', retryAfter },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+    );
+  }
+  return null;
+}
 
 // =============================================
 // GET - Listar templates
@@ -128,6 +142,9 @@ export async function POST(request: NextRequest) {
     const auth = await requireOrgFromAuth(request);
     if (auth instanceof NextResponse) return auth;
     const profile = { organization_id: auth.orgId };
+
+    const rateLimited = await templateRateLimit(profile.organization_id);
+    if (rateLimited) return rateLimited;
 
     const body = await request.json();
     const { 
@@ -292,6 +309,9 @@ export async function DELETE(request: NextRequest) {
     if (!profile?.organization_id) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
     }
+
+    const rateLimited = await templateRateLimit(profile.organization_id);
+    if (rateLimited) return rateLimited;
 
     const { searchParams } = new URL(request.url);
     const templateId = searchParams.get('id');

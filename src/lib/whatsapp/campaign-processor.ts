@@ -10,6 +10,8 @@ import { CircuitBreaker, getCircuitBreaker } from './circuit-breaker'
 import { withRetry, createWhatsAppRetry, sleep } from './backoff'
 import { sendTemplateMessage } from './meta-api'
 import { requireOptIn } from './opt-out-guard'
+import { sendAlert } from './alerts'
+import { wlog } from '@/lib/observability/whatsapp-logger'
 
 // =============================================
 // SUPABASE CLIENT
@@ -344,6 +346,47 @@ export class CampaignProcessor {
       if (!campaign || !['running'].includes(campaign.status)) {
         console.log(`⏭️ Campaign ${job.data.campaignId} is ${campaign?.status}, skipping batch`)
         await campaignQueue.complete(job.id, { skipped: true, reason: 'Campaign not running' })
+        return
+      }
+
+      // D6: aborta o batch se a WABA esta com qualidade RED (risco de ban).
+      // Tambem auto-pausa a campanha pra parar batches seguintes; alerta
+      // humano via Slack. quality_rating stale + TIER_DISABLED = guardrail.
+      const { data: waba } = await supabase
+        .from('whatsapp_business_accounts')
+        .select('id, quality_rating, messaging_limit, verified_name, organization_id')
+        .eq('organization_id', job.data.organizationId)
+        .eq('phone_number_id', job.data.instance.phoneNumberId)
+        .maybeSingle()
+
+      if (waba?.quality_rating === 'RED' && waba?.messaging_limit !== 'TIER_DISABLED') {
+        wlog.warn('whatsapp.campaign.paused_red_quality', {
+          campaign_id: job.data.campaignId,
+          organization_id: job.data.organizationId,
+          waba_id: waba.id,
+          phone_number_id: job.data.instance.phoneNumberId,
+        })
+
+        await supabase
+          .from('whatsapp_campaigns')
+          .update({ status: 'paused', paused_at: new Date().toISOString() })
+          .eq('id', job.data.campaignId)
+
+        await sendAlert({
+          severity: 'critical',
+          type: 'quality_drop',
+          title: 'Campanha auto-pausada (RED quality)',
+          message: `Campanha ${job.data.campaignId} pausada — a WABA ${waba.verified_name || job.data.instance.phoneNumberId} esta com qualidade RED. Continuar enviar arrisca ban.`,
+          organizationId: job.data.organizationId,
+          wabaId: waba.id,
+          metadata: {
+            campaign_id: job.data.campaignId,
+            phone_number_id: job.data.instance.phoneNumberId,
+            messaging_limit: waba.messaging_limit,
+          },
+        })
+
+        await campaignQueue.complete(job.id, { skipped: true, reason: 'red_quality' })
         return
       }
 

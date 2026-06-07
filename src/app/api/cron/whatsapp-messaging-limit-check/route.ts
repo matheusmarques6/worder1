@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkAndAlertQualityRating } from '@/lib/whatsapp/alerts';
+import { checkAndAlertMessagingLimits } from '@/lib/whatsapp/alerts';
 import { wlog } from '@/lib/observability/whatsapp-logger';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
+// C3: separado de whatsapp-quality-check (que rodava /30min e fazia este loop
+// junto desperdicando ciclo). messaging_limit so muda em escala de dias.
+// Rodamos 1x/dia em vercel.json.
 function authorize(req: NextRequest): boolean {
   if (req.headers.get('x-vercel-cron')) return true;
   const cronSecret = process.env.CRON_SECRET;
@@ -21,14 +24,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await checkAndAlertQualityRating();
-
-    return NextResponse.json({
-      ok: true,
-      ...result,
-    });
+    const result = await checkAndAlertMessagingLimits();
+    return NextResponse.json({ ok: true, ...result });
   } catch (error: any) {
-    wlog.error('whatsapp.cron.quality_check_error', { error: error?.message });
+    wlog.error('whatsapp.cron.messaging_limit_check_error', { error: error?.message });
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 }

@@ -235,15 +235,23 @@ export async function POST(request: NextRequest) {
 }
 
 // DELETE - Desconectar WhatsApp
+//
+// C1: o DELETE original desativava TODAS as contas ativas da org. Em org
+// single-account era OK; com 2+ contas era um foot-gun catastrofico. Agora:
+//   - se a request traz accountId, desativa apenas essa (orgId valida posse)
+//   - se nao traz e a org tem 1 conta ativa, desativa ela (compat com
+//     o card antigo /crm/integrations que nao envia accountId)
+//   - se nao traz e a org tem 2+, exige accountId (400)
+//   - se nao traz e a org nao tem nenhuma ativa, 404
 export async function DELETE(request: NextRequest) {
   try {
-    // Onda 3.5 P0 — exige Bearer token e escopa pelo orgId do caller.
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth
     const { orgId } = auth
 
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
+    let accountId = searchParams.get('accountId')
 
     if (organizationId && organizationId !== orgId) {
       return NextResponse.json(
@@ -252,17 +260,69 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Desativar conta canônica — orgId vem do token.
-    await supabase
+    // Body opcional pode trazer accountId (compat com clientes existentes).
+    if (!accountId) {
+      try {
+        const body = await request.json()
+        if (body?.accountId && typeof body.accountId === 'string') {
+          accountId = body.accountId
+        }
+      } catch {
+        // sem body — segue
+      }
+    }
+
+    if (!accountId) {
+      const { data: activeAccounts } = await supabase
+        .from('whatsapp_business_accounts')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('status', 'active')
+
+      const count = activeAccounts?.length ?? 0
+      if (count === 0) {
+        return NextResponse.json(
+          { error: 'Nenhuma conta WhatsApp ativa pra desconectar' },
+          { status: 404 },
+        )
+      }
+      if (count > 1) {
+        return NextResponse.json(
+          {
+            error: 'accountId obrigatorio quando ha multiplas contas ativas',
+            code: 'ACCOUNT_ID_REQUIRED',
+            active_accounts: activeAccounts!.map((a) => a.id),
+          },
+          { status: 400 },
+        )
+      }
+      accountId = activeAccounts![0].id
+    }
+
+    const { data: updated, error: updateErr } = await supabase
       .from('whatsapp_business_accounts')
       .update({ status: 'inactive', updated_at: new Date().toISOString() })
+      .eq('id', accountId)
       .eq('organization_id', orgId)
+      .select('id')
 
-    wlog.info('whatsapp.connect.disconnect', { organization_id: orgId })
+    if (updateErr) throw updateErr
+
+    if (!updated || updated.length === 0) {
+      return NextResponse.json(
+        { error: 'Conta nao encontrada nesta organizacao' },
+        { status: 404 },
+      )
+    }
+
+    wlog.info('whatsapp.connect.disconnect', {
+      organization_id: orgId,
+      account_id: accountId,
+    })
 
     return NextResponse.json({ success: true, message: 'WhatsApp desconectado' })
   } catch (error: any) {
-    console.error('Error disconnecting WhatsApp:', error)
+    wlog.error('whatsapp.connect.disconnect_error', { error: error?.message })
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
@@ -448,9 +508,11 @@ async function upsertBusinessAccount(params: {
     updated_at: new Date().toISOString(),
   }
 
+  // Onda 11 / B4+N5: UNIQUE agora e (organization_id, phone_number_id).
+  // Mesmo phone_number_id pode existir em outra org no futuro multi-tenant.
   const { data, error } = await supabase
     .from('whatsapp_business_accounts')
-    .upsert(row, { onConflict: 'phone_number_id' })
+    .upsert(row, { onConflict: 'organization_id,phone_number_id' })
     .select()
     .single()
 

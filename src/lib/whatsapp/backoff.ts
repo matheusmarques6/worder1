@@ -13,6 +13,12 @@ export interface BackoffOptions {
 export interface RetryOptions extends BackoffOptions {
   shouldRetry?: (error: any, attempt: number) => boolean
   onRetry?: (error: any, attempt: number, delay: number) => void
+  /**
+   * Substitui o delay calculado quando retornado. Util pra honrar Retry-After
+   * (Meta envia em segundos no header em 429). Retornar undefined cai no
+   * calculo normal de jitter. Resultado e clampado por maxDelay.
+   */
+  getDelayOverride?: (error: any, attempt: number) => number | undefined
 }
 
 /**
@@ -92,6 +98,7 @@ export async function withRetry<T>(
     jitter = 'decorrelated',
     shouldRetry = defaultShouldRetry,
     onRetry,
+    getDelayOverride,
   } = options
 
   let lastError: any
@@ -108,8 +115,12 @@ export async function withRetry<T>(
         throw error
       }
 
-      // Calcular delay
-      const delay = calculateBackoff(attempt, { baseDelay, maxDelay, jitter })
+      // Override permite caller honrar Retry-After do servidor; fallback
+      // pro backoff calculado.
+      const override = getDelayOverride?.(error, attempt)
+      const delay = override !== undefined
+        ? Math.min(Math.round(override), maxDelay)
+        : calculateBackoff(attempt, { baseDelay, maxDelay, jitter })
       lastDelay = delay
 
       // Callback de retry

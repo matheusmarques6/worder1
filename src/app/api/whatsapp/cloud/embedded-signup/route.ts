@@ -27,6 +27,7 @@ import {
 } from '@/lib/whatsapp/cloud-api';
 import { encryptToken } from '@/lib/whatsapp/token-encryption';
 import { isFeatureEnabled } from '@/lib/feature-flags';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +62,23 @@ export async function POST(request: NextRequest) {
 
     if (!profile?.organization_id) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
+    }
+
+    // B11: signup e operacao rara — 3/min por org. Tambem keyear por IP pra
+    // bloquear bot fuzzing antes de chegar a Meta.
+    const ip = getClientIp(request);
+    for (const key of [
+      `wa:cloud:signup:org:${profile.organization_id}`,
+      `wa:cloud:signup:ip:${ip}`,
+    ]) {
+      const rl = await checkRateLimit(key, { limit: 3, windowSec: 60 });
+      if (!rl.allowed) {
+        const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+        return NextResponse.json(
+          { error: 'rate_limited', retryAfter },
+          { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+        );
+      }
     }
 
     // Coexistence: the manual form path keeps working; Embedded Signup is

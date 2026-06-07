@@ -123,6 +123,10 @@
     {
       "path": "/api/cron/whatsapp-quality-check",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/whatsapp-messaging-limit-check",
+      "schedule": "0 6 * * *"
     }
   ]
 }

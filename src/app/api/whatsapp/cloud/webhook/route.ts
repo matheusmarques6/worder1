@@ -94,21 +94,54 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true, ignored: 'not_whatsapp' });
   }
 
+  const phoneNumberIdForPersist =
+    payload?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id || null;
+
   // Legacy synchronous path (disable when async is canary-validated).
+  //
+  // B3: mesmo no caminho legacy, persistir o evento ANTES de processar pra
+  // garantir recuperabilidade. Se processWebhookPayload crashar, a row fica
+  // como 'failed' e o cron /api/cron/reprocess-whatsapp-pending pega ela em
+  // ate 60s. Sem isso, retornavamos 200 pra Meta mas o dado sumia.
   if (process.env.ENABLE_ASYNC_WEBHOOK !== 'true') {
+    const { data: inserted } = await supabase
+      .from('whatsapp_webhook_events')
+      .insert({
+        waba_phone_number_id: phoneNumberIdForPersist,
+        raw_payload: payload,
+        signature: signature || null,
+      })
+      .select('id')
+      .single();
+
     try {
       await processWebhookPayload(payload);
+      if (inserted?.id) {
+        await supabase
+          .from('whatsapp_webhook_events')
+          .update({ status: 'done', processed_at: new Date().toISOString() })
+          .eq('id', inserted.id);
+      }
     } catch (err) {
       wlog.error('whatsapp.webhook.sync_processing_error', {
         error: (err as Error)?.message,
+        event_id: inserted?.id,
       });
+      if (inserted?.id) {
+        await supabase
+          .from('whatsapp_webhook_events')
+          .update({
+            status: 'failed',
+            last_error: (err as Error)?.message,
+          })
+          .eq('id', inserted.id);
+      }
     }
     return NextResponse.json({ received: true });
   }
 
   // Async path — persist raw + enqueue.
-  const phoneNumberId =
-    payload?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id || null;
+  const phoneNumberId = phoneNumberIdForPersist;
 
   const { data: inserted, error: insertError } = await supabase
     .from('whatsapp_webhook_events')
