@@ -154,7 +154,6 @@ export interface AutomationExecution {
 
 export type CredentialType =
   | 'whatsappBusiness'
-  | 'whatsappEvolution'
   | 'shopifyOAuth2'
   | 'emailResend'
   | 'emailSendgrid'

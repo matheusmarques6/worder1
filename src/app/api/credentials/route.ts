@@ -33,12 +33,6 @@ const CREDENTIAL_TYPES = [
     fields: ['phoneNumberId', 'accessToken', 'webhookVerifyToken'],
   },
   {
-    type: 'whatsappEvolution',
-    name: 'WhatsApp Evolution API',
-    icon: 'MessageSquare',
-    fields: ['evolutionUrl', 'instanceName', 'apiKey'],
-  },
-  {
     type: 'shopifyOAuth2',
     name: 'Shopify',
     icon: 'ShoppingBag',
@@ -399,23 +393,6 @@ async function testCredential(
           return { success: false, message: 'Token inválido ou expirado' };
         }
         return { success: true, message: 'Conexão bem sucedida!' };
-      }
-
-      case 'whatsappEvolution': {
-        const response = await fetch(
-          `${data.evolutionUrl}/instance/connectionState/${data.instanceName}`,
-          {
-            headers: { 'apikey': data.apiKey },
-          }
-        );
-        if (!response.ok) {
-          return { success: false, message: 'Falha ao conectar com Evolution API' };
-        }
-        const result = await response.json();
-        return { 
-          success: result.state === 'open', 
-          message: result.state === 'open' ? 'WhatsApp conectado!' : 'WhatsApp desconectado',
-        };
       }
 
       case 'emailResend': {

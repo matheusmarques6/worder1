@@ -463,8 +463,9 @@ function FreeTextEditor({ config, onUpdate, onOpenVariables }: FreeTextEditorPro
           <div className="space-y-1">
             <p className="text-xs text-amber-300 font-medium">Modo Texto Livre</p>
             <p className="text-[11px] text-amber-300/70">
-              Este modo funciona com APIs não-oficiais (Evolution, Baileys, etc).
-              Você pode enviar qualquer mensagem sem aprovação prévia.
+              Texto livre só é entregue dentro da janela de atendimento de 24h
+              (após o cliente enviar uma mensagem). Fora dela, o WhatsApp Cloud
+              exige um template aprovado.
             </p>
           </div>
         </div>

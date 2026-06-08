@@ -41,30 +41,6 @@ const credentialTesters: Record<string, TestFunction> = {
     }
   },
 
-  // WhatsApp Evolution API
-  whatsappEvolution: async (data) => {
-    try {
-      const url = `${data.evolutionUrl.replace(/\/$/, '')}/instance/connectionState/${data.instanceName}`;
-      const response = await fetch(url, {
-        headers: {
-          apikey: data.apiKey,
-        },
-      });
-
-      if (!response.ok) {
-        return { success: false, error: 'API Key inválida ou instância não encontrada' };
-      }
-
-      const result = await response.json();
-      return { 
-        success: true, 
-        details: { state: result.state, instance: data.instanceName },
-      };
-    } catch (error: any) {
-      return { success: false, error: `Falha na conexão: ${error.message}` };
-    }
-  },
-
   // Email Resend
   emailResend: async (data) => {
     try {

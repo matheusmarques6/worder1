@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
           phone_number: instance.phone_number || instance.instance_name,
           phone_number_id: instance.phone_number_id,
           display_name: instance.display_name || instance.instance_name,
-          provider: instance.provider || 'evolution',
+          provider: instance.provider || 'meta_cloud',
           is_connected: instance.status === 'connected' || instance.is_connected,
           is_active: instance.is_active !== false,
           connection_status: instance.status || (instance.is_connected ? 'connected' : 'disconnected'),

@@ -75,17 +75,6 @@ const CREDENTIAL_TYPES: CredentialType[] = [
     ],
   },
   {
-    type: 'whatsappEvolution',
-    name: 'WhatsApp Evolution API',
-    icon: 'MessageSquare',
-    description: 'Evolution API para WhatsApp não-oficial',
-    fields: [
-      { name: 'evolutionUrl', label: 'URL da API', type: 'url', required: true, placeholder: 'https://sua-instancia.evolution.com' },
-      { name: 'instanceName', label: 'Nome da Instância', type: 'text', required: true, placeholder: 'Ex: minha-instancia' },
-      { name: 'apiKey', label: 'API Key', type: 'password', required: true, placeholder: 'Sua chave de API' },
-    ],
-  },
-  {
     type: 'emailResend',
     name: 'Email (Resend)',
     icon: 'Mail',
