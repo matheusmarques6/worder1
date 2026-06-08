@@ -27,7 +27,7 @@ export interface WhatsAppConversation {
   created_at: string;
   updated_at?: string;
   // Novas propriedades do CRM
-  origin?: 'meta' | 'qr' | 'evolution';
+  origin?: 'meta' | 'qr';
   instance_id?: string;
   chat_note?: string;
   is_bot_active?: boolean;

@@ -340,7 +340,7 @@ export function useInboxMessages(): UseInboxMessagesReturn {
         } as OptedOutSignal
       }
       if (!response.ok) throw new Error(data.error || 'Failed to upload media')
-      if (!data.success) throw new Error(data.error || 'Evolution API failed')
+      if (!data.success) throw new Error(data.error || 'Falha ao enviar mídia')
 
       const newMessage = data.message
       if (newMessage) {

@@ -20,7 +20,7 @@ interface WhatsAppNumber {
   id: string
   phone_number: string
   display_name?: string
-  provider: 'meta_cloud' | 'evolution'
+  provider: 'meta_cloud'
   is_connected: boolean
   is_active: boolean
   stats?: {
@@ -156,8 +156,8 @@ export default function NumberSelector({
                 {selectedNumber?.display_name || selectedNumber?.phone_number || 'Todos os números'}
               </p>
               <p className="text-xs text-gray-500">
-                {selectedNumber 
-                  ? (selectedNumber.provider === 'meta_cloud' ? 'API Oficial' : 'Evolution')
+                {selectedNumber
+                  ? 'API Oficial'
                   : `${connectedCount} conectado${connectedCount !== 1 ? 's' : ''}`}
               </p>
             </div>

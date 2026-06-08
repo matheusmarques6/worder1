@@ -96,7 +96,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       )
     }
 
-    // Detect provider: try Cloud first, fall back to Evolution
+    // Conversas Cloud (WhatsApp Cloud API / Meta)
     const { data: cloudConv } = await supabase
       .from('whatsapp_cloud_conversations')
       .select('*, account:whatsapp_business_accounts(*)')

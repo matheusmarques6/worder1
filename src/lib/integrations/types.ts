@@ -326,7 +326,7 @@ export interface WebFormSubmission {
 // TIPOS DE INSTÂNCIA WHATSAPP
 // ============================================
 
-export type WhatsAppProvider = 'evolution' | 'cloud_api' | 'baileys';
+export type WhatsAppProvider = 'cloud_api';
 
 export interface WhatsAppInstance {
   id: string;

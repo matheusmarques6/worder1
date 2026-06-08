@@ -34,7 +34,7 @@ interface WhatsAppNumber {
   id: string
   phone_number: string
   display_name?: string
-  provider: 'meta_cloud' | 'evolution'
+  provider: 'meta_cloud'
   is_connected: boolean
 }
 
@@ -408,7 +408,7 @@ export default function PermissionsEditor({
                                             {number.display_name || number.phone_number}
                                           </p>
                                           <p className="text-xs text-gray-400">
-                                            {number.phone_number} • {number.provider === 'meta_cloud' ? 'API Oficial' : 'Evolution'}
+                                            {number.phone_number} • API Oficial
                                           </p>
                                         </div>
                                         <div className={`w-2 h-2 rounded-full ${

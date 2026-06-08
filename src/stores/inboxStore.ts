@@ -53,7 +53,7 @@ export interface WhatsAppNumber {
   id: string
   phone_number: string
   display_name?: string
-  provider: 'meta_cloud' | 'evolution'
+  provider: 'meta_cloud'
   is_connected: boolean
   is_active: boolean
 }
