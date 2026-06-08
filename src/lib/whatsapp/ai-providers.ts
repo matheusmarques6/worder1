@@ -28,6 +28,70 @@ interface AIResponse {
 }
 
 // =============================================
+// TOOL-CALLING (Fase 2b) — tipos provider-agnósticos
+// =============================================
+
+/** Definição de tool no formato neutro consumido por loop.ts. */
+export interface ProviderTool {
+  name: string;
+  description: string;
+  /** JSON Schema (object). */
+  parameters: Record<string, any>;
+}
+
+/** Uma chamada de tool emitida pelo modelo. */
+export interface ProviderToolCall {
+  /** id da call (Anthropic tool_use.id / OpenAI tool_call.id). Gemini não tem; geramos um. */
+  id: string;
+  name: string;
+  args: any;
+}
+
+/**
+ * Mensagem no formato neutro do loop. Para resultados de tool usamos
+ * role 'tool' carregando os resultados (cada provider converte ao seu formato).
+ */
+export interface ToolLoopMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  /** texto (user/assistant/system) */
+  content?: string;
+  /** tool calls que o assistant pediu (quando role='assistant') */
+  toolCalls?: ProviderToolCall[];
+  /** resultados de tools (quando role='tool') */
+  toolResults?: Array<{ id: string; name: string; result: any }>;
+}
+
+export interface ProviderToolResult {
+  /** texto final (quando o modelo parou de chamar tools) */
+  content: string;
+  /** tool calls pedidas neste passo (vazio => resposta final) */
+  toolCalls: ProviderToolCall[];
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  /** sinal de rate-limit do provedor (HTTP 429) para abort gracioso no loop. */
+  rateLimited?: boolean;
+}
+
+/** Erro tipado para rate-limit (429) — o loop trata como abort gracioso. */
+export class ProviderRateLimitError extends Error {
+  constructor(message = 'rate_limited') {
+    super(message);
+    this.name = 'ProviderRateLimitError';
+  }
+}
+
+function isRateLimitStatus(status: number): boolean {
+  return status === 429;
+}
+
+function genCallId(prefix: string): string {
+  return `${prefix}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+// =============================================
 // OPENAI
 // =============================================
 async function callOpenAI(config: AIConfig, messages: AIMessage[]): Promise<AIResponse> {
@@ -241,6 +305,314 @@ export async function callAI(config: AIConfig, messages: AIMessage[]): Promise<A
       return callDeepSeek(config, finalMessages);
     default:
       throw new Error(`Unknown AI provider: ${config.provider}`);
+  }
+}
+
+// =============================================
+// TOOL-CALLING POR PROVIDER (Fase 2b)
+// =============================================
+// Cada função recebe o histórico no formato neutro (ToolLoopMessage[]) + as
+// tools, faz UMA rodada, e devolve { content, toolCalls, usage }. O loop
+// (src/lib/ai/tools/loop.ts) decide se executa as tools e chama de novo.
+
+// ---- Anthropic ----
+async function callAnthropicWithTools(
+  config: AIConfig,
+  messages: ToolLoopMessage[],
+  tools: ProviderTool[],
+): Promise<ProviderToolResult> {
+  const systemMessage = messages.find((m) => m.role === 'system');
+
+  // Converter histórico neutro -> blocos Anthropic.
+  const anthropicMessages: any[] = [];
+  for (const m of messages) {
+    if (m.role === 'system') continue;
+    if (m.role === 'assistant') {
+      const blocks: any[] = [];
+      if (m.content) blocks.push({ type: 'text', text: m.content });
+      for (const tc of m.toolCalls || []) {
+        blocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.args });
+      }
+      anthropicMessages.push({ role: 'assistant', content: blocks });
+    } else if (m.role === 'tool') {
+      const blocks = (m.toolResults || []).map((r) => ({
+        type: 'tool_result',
+        tool_use_id: r.id,
+        content: typeof r.result === 'string' ? r.result : JSON.stringify(r.result),
+      }));
+      anthropicMessages.push({ role: 'user', content: blocks });
+    } else {
+      anthropicMessages.push({ role: 'user', content: m.content || '' });
+    }
+  }
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': config.apiKey,
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: config.model || 'claude-3-haiku-20240307',
+      max_tokens: config.maxTokens ?? 1000,
+      temperature: config.temperature ?? 0.7,
+      system: systemMessage?.content || config.systemPrompt || '',
+      messages: anthropicMessages,
+      tools: tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.parameters,
+      })),
+    }),
+  });
+
+  if (isRateLimitStatus(response.status)) {
+    return { content: '', toolCalls: [], rateLimited: true };
+  }
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || 'Anthropic API error');
+  }
+
+  let text = '';
+  const toolCalls: ProviderToolCall[] = [];
+  for (const block of data.content || []) {
+    if (block.type === 'text') text += block.text;
+    else if (block.type === 'tool_use') {
+      toolCalls.push({ id: block.id, name: block.name, args: block.input || {} });
+    }
+  }
+
+  return {
+    content: text,
+    toolCalls,
+    usage: {
+      promptTokens: data.usage?.input_tokens || 0,
+      completionTokens: data.usage?.output_tokens || 0,
+      totalTokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0),
+    },
+  };
+}
+
+// ---- OpenAI-compatível (OpenAI / Groq / DeepSeek) ----
+async function callOpenAICompatWithTools(
+  url: string,
+  config: AIConfig,
+  messages: ToolLoopMessage[],
+  tools: ProviderTool[],
+): Promise<ProviderToolResult> {
+  // Converter histórico neutro -> mensagens OpenAI.
+  const openaiMessages: any[] = [];
+  for (const m of messages) {
+    if (m.role === 'assistant') {
+      const msg: any = { role: 'assistant', content: m.content || '' };
+      if (m.toolCalls && m.toolCalls.length > 0) {
+        msg.content = m.content || null;
+        msg.tool_calls = m.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.name, arguments: JSON.stringify(tc.args ?? {}) },
+        }));
+      }
+      openaiMessages.push(msg);
+    } else if (m.role === 'tool') {
+      for (const r of m.toolResults || []) {
+        openaiMessages.push({
+          role: 'tool',
+          tool_call_id: r.id,
+          content: typeof r.result === 'string' ? r.result : JSON.stringify(r.result),
+        });
+      }
+    } else {
+      openaiMessages.push({ role: m.role, content: m.content || '' });
+    }
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: openaiMessages,
+      temperature: config.temperature ?? 0.7,
+      max_tokens: config.maxTokens ?? 1000,
+      tools: tools.map((t) => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      })),
+    }),
+  });
+
+  if (isRateLimitStatus(response.status)) {
+    return { content: '', toolCalls: [], rateLimited: true };
+  }
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || 'OpenAI-compatible API error');
+  }
+
+  const choice = data.choices?.[0]?.message || {};
+  const toolCalls: ProviderToolCall[] = (choice.tool_calls || []).map((tc: any) => {
+    let args: any = {};
+    try {
+      args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
+    } catch {
+      args = {};
+    }
+    return { id: tc.id || genCallId('call'), name: tc.function?.name, args };
+  });
+
+  return {
+    content: choice.content || '',
+    toolCalls,
+    usage: {
+      promptTokens: data.usage?.prompt_tokens || 0,
+      completionTokens: data.usage?.completion_tokens || 0,
+      totalTokens: data.usage?.total_tokens || 0,
+    },
+  };
+}
+
+// ---- Gemini ----
+async function callGeminiWithTools(
+  config: AIConfig,
+  messages: ToolLoopMessage[],
+  tools: ProviderTool[],
+): Promise<ProviderToolResult> {
+  const systemMessage = messages.find((m) => m.role === 'system');
+
+  const contents: any[] = [];
+  for (const m of messages) {
+    if (m.role === 'system') continue;
+    if (m.role === 'assistant') {
+      const parts: any[] = [];
+      if (m.content) parts.push({ text: m.content });
+      for (const tc of m.toolCalls || []) {
+        parts.push({ functionCall: { name: tc.name, args: tc.args || {} } });
+      }
+      contents.push({ role: 'model', parts });
+    } else if (m.role === 'tool') {
+      const parts = (m.toolResults || []).map((r) => ({
+        functionResponse: {
+          name: r.name,
+          response: typeof r.result === 'object' && r.result !== null ? r.result : { result: r.result },
+        },
+      }));
+      contents.push({ role: 'user', parts });
+    } else {
+      contents.push({ role: 'user', parts: [{ text: m.content || '' }] });
+    }
+  }
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${config.model || 'gemini-1.5-flash'}:generateContent?key=${config.apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        systemInstruction: systemMessage
+          ? { parts: [{ text: systemMessage.content }] }
+          : undefined,
+        tools: [
+          {
+            functionDeclarations: tools.map((t) => ({
+              name: t.name,
+              description: t.description,
+              parameters: t.parameters,
+            })),
+          },
+        ],
+        generationConfig: {
+          temperature: config.temperature ?? 0.7,
+          maxOutputTokens: config.maxTokens ?? 1000,
+        },
+      }),
+    },
+  );
+
+  if (isRateLimitStatus(response.status)) {
+    return { content: '', toolCalls: [], rateLimited: true };
+  }
+
+  const data = await response.json();
+  if (!response.ok || data.error) {
+    throw new Error(data.error?.message || 'Gemini API error');
+  }
+
+  let text = '';
+  const toolCalls: ProviderToolCall[] = [];
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  for (const part of parts) {
+    if (part.text) text += part.text;
+    if (part.functionCall) {
+      toolCalls.push({
+        id: genCallId('gem'),
+        name: part.functionCall.name,
+        args: part.functionCall.args || {},
+      });
+    }
+  }
+
+  return {
+    content: text,
+    toolCalls,
+    usage: {
+      promptTokens: data.usageMetadata?.promptTokenCount || 0,
+      completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
+      totalTokens: data.usageMetadata?.totalTokenCount || 0,
+    },
+  };
+}
+
+/**
+ * Dispatcher de UMA rodada de tool-calling. Provider-agnóstico.
+ * Mantém callAI (sem tools) intacto. 429 => rateLimited=true (sem throw).
+ */
+export async function callAIWithTools(
+  config: AIConfig,
+  messages: ToolLoopMessage[],
+  tools: ProviderTool[],
+): Promise<ProviderToolResult> {
+  switch (config.provider) {
+    case 'anthropic':
+      return callAnthropicWithTools(config, messages, tools);
+    case 'openai':
+      return callOpenAICompatWithTools(
+        'https://api.openai.com/v1/chat/completions',
+        config,
+        messages,
+        tools,
+      );
+    case 'groq':
+      return callOpenAICompatWithTools(
+        'https://api.groq.com/openai/v1/chat/completions',
+        config,
+        messages,
+        tools,
+      );
+    case 'deepseek':
+      return callOpenAICompatWithTools(
+        'https://api.deepseek.com/v1/chat/completions',
+        config,
+        messages,
+        tools,
+      );
+    case 'gemini':
+    case 'google':
+      return callGeminiWithTools(config, messages, tools);
+    default:
+      throw new Error(`Unknown AI provider (tools): ${config.provider}`);
   }
 }
 

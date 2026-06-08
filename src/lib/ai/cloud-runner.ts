@@ -14,8 +14,9 @@
  *   - BYO-key gracioso: sem api_keys do provider => desabilita a conversa
  *     (ai_disabled_reason='no_valid_api_key') + console.error, sem 500.
  *   - Monta histórico (~20 últimas), cria engine (createAgentEngine), roda
- *     processMessage (engine atual, RAG pré-injetado — NÃO mexido nesta fase).
- *   - Grava 1 linha em agent_traces.
+ *     processMessage passando toolContext (Fase 2b): se o agente tem tools
+ *     ativas, o engine roda o tool-loop (RAG condicional sob demanda).
+ *   - Grava 1 linha em agent_traces (incl. tool_calls quando houver).
  *   - Transferência => ai_enabled=false e NÃO envia.
  *   - Entrega ao sender (cloud-sender.ts), salvo skipSend.
  */
@@ -23,6 +24,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createAgentEngine } from './engine';
 import type { EngineMessage } from './types';
+import type { ToolContext } from './tools/types';
 import { sendHumanizedReply } from './cloud-sender';
 
 const COOLDOWN_MS = 5000;
@@ -226,9 +228,8 @@ export async function maybeRunAgentForCloudConversation(
 
   const contactId: string | undefined = contact?.crm_contact_id || contact?.id;
 
-  // ToolContext mínimo (objeto local — NÃO passado ao engine nesta fase;
-  // guardado para a Fase 2b de tool-calling).
-  const _toolContext = {
+  // ToolContext multi-tenant (Fase 2b) — repassado ao engine para o tool-loop.
+  const toolContext: ToolContext = {
     organizationId,
     conversationId: conversation.id,
     contactId,
@@ -237,7 +238,6 @@ export async function maybeRunAgentForCloudConversation(
     accountId: account.id,
     agentId,
   };
-  void _toolContext;
 
   // ---------- Criar engine + rodar ----------
   let result;
@@ -251,6 +251,7 @@ export async function maybeRunAgentForCloudConversation(
         name: contact?.name || contact?.contact_name,
         phone,
       },
+      toolContext,
     });
   } catch (engineErr: any) {
     // Defesa extra: createAgentEngine pode lançar se a chave sumir entre o
@@ -287,7 +288,10 @@ export async function maybeRunAgentForCloudConversation(
         model: agent.model,
         input: text,
         output: result.response,
-        tool_calls: null,
+        tool_calls:
+          result.tool_calls && result.tool_calls.length > 0
+            ? { calls: result.tool_calls, stopped_by: result.stopped_by }
+            : null,
         tokens: result.tokens_used,
         latency_ms: result.response_time_ms,
       })

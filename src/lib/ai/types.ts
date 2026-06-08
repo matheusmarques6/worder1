@@ -240,6 +240,12 @@ export interface EngineContext {
   conversationId: string
   conversationHistory: EngineMessage[]
   contactInfo?: ContactInfo
+  /**
+   * Contexto multi-tenant para tool-calling (Fase 2b). Quando presente e o
+   * agente tem tools ativas, o engine roda o tool-loop em vez do callAI simples.
+   * Tipado como import dinâmico para evitar ciclo de imports nos tipos base.
+   */
+  toolContext?: import('./tools/types').ToolContext
 }
 
 export interface ContactInfo {
@@ -259,6 +265,10 @@ export interface EngineResponse {
   was_transferred: boolean
   transfer_to?: string
   action_result?: ActionExecutionResult
+  /** Tool calls executadas no turno (Fase 2b) — gravadas em agent_traces.tool_calls. */
+  tool_calls?: Array<{ name: string; args: any; result: any }>
+  /** Como o tool-loop terminou (Fase 2b): final | max_iterations | max_tokens | rate_limited | control_stop. */
+  stopped_by?: string
 }
 
 export interface ActionExecutionResult {

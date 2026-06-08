@@ -18,6 +18,8 @@ import { RAGService, createRAGService } from './rag'
 import { ActionsEngine } from './actions-engine'
 import { PromptBuilder, formatRAGAsContext } from './prompt-builder'
 import { callAI, AIProvider } from '@/lib/whatsapp/ai-providers'
+import { getActiveTools } from './tools/registry'
+import { runToolLoop } from './tools/loop'
 
 // =====================================================
 // AI AGENT ENGINE CLASS
@@ -100,15 +102,30 @@ export class AIAgentEngine {
         }
       }
 
-      // 5. Busca RAG (knowledge base)
-      const ragResults = await this.ragService.search({
-        agentId: this.agent.id,
-        query: currentMessage,
-        topK: 5,
-        threshold: 0.7,
-      })
+      // 4b. Resolver tools ativas (Fase 2b). Só roda o tool-loop quando há
+      // toolContext (passado pelo runner) E o agente tem tools habilitadas.
+      const toolContext = context.toolContext
+      const activeTools = toolContext
+        ? getActiveTools(this.agent as any, { storeId: toolContext.storeId })
+        : []
+      const useTools = activeTools.length > 0
+      const hasSearchKnowledge = activeTools.some(t => t.name === 'search_knowledge')
 
-      const ragContext = ragResults.length > 0 
+      // 5. Busca RAG (knowledge base)
+      // RAG CONDICIONAL: quando search_knowledge está ativa, NÃO pré-injetamos
+      // o RAG (a IA busca sob demanda via tool). Caso contrário, mantemos a
+      // pré-injeção (comportamento atual, não quebra agentes sem tools).
+      let ragResults: Awaited<ReturnType<RAGService['search']>> = []
+      if (!hasSearchKnowledge) {
+        ragResults = await this.ragService.search({
+          agentId: this.agent.id,
+          query: currentMessage,
+          topK: 5,
+          threshold: 0.7,
+        })
+      }
+
+      const ragContext = ragResults.length > 0
         ? formatRAGAsContext(ragResults)
         : undefined
 
@@ -121,7 +138,59 @@ export class AIAgentEngine {
         actionInstructions,
       })
 
-      // 7. Chamar LLM
+      const responseTimeMs0 = startTime
+      const sourcesUsed = ragResults.map(r => r.source_id)
+      const actionsTriggered = actionResult ? [actionResult.action_id] : []
+
+      // 7. Chamar LLM — tool-loop (se há tools ativas) ou callAI simples.
+      if (useTools && toolContext) {
+        const loopResult = await runToolLoop({
+          providerConfig: {
+            provider: this.agent.provider as AIProvider,
+            apiKey: this.apiKey,
+            model: this.agent.model,
+            systemPrompt,
+            temperature: this.agent.temperature,
+            maxTokens: this.agent.max_tokens,
+          },
+          messages: messages.map(m => ({
+            role: (m.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
+            content: m.content,
+          })),
+          tools: activeTools,
+          context: toolContext,
+        })
+
+        const response = this.postProcessResponse(loopResult.text || '')
+        const responseTimeMs = Date.now() - responseTimeMs0
+
+        await this.logUsage({
+          conversationId,
+          inputTokens: 0,
+          outputTokens: 0,
+          responseTimeMs,
+          sourcesUsed,
+          actionsTriggered,
+          success: true,
+        })
+
+        return {
+          response,
+          sources_used: sourcesUsed,
+          actions_triggered: actionsTriggered,
+          tokens_used: loopResult.tokens,
+          response_time_ms: responseTimeMs,
+          was_transferred: loopResult.transferred,
+          action_result: actionResult || undefined,
+          tool_calls: loopResult.toolCalls.map(c => ({
+            name: c.name,
+            args: c.args,
+            result: c.result,
+          })),
+          stopped_by: loopResult.stoppedBy,
+        }
+      }
+
       const llmResponse = await callAI(
         {
           provider: this.agent.provider as AIProvider,
@@ -138,9 +207,7 @@ export class AIAgentEngine {
       const response = this.postProcessResponse(llmResponse.content)
 
       // 9. Registrar uso
-      const responseTimeMs = Date.now() - startTime
-      const sourcesUsed = ragResults.map(r => r.source_id)
-      const actionsTriggered = actionResult ? [actionResult.action_id] : []
+      const responseTimeMs = Date.now() - responseTimeMs0
 
       await this.logUsage({
         conversationId,
