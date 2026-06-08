@@ -345,3 +345,64 @@ acionado por QStash): resolver agente em `ai_agents` → chamar
 `requireOptIn` → `WhatsAppCloudAPI.sendText` via `getAccessToken` → persistir outbound em
 `whatsapp_cloud_messages`. Descartar o caminho `services/whatsapp/ai-chatbot-service`
 (legado) exceto como referência.
+
+---
+
+## ✅ Veredito do Agente Juiz (verificação independente)
+
+**Status geral: APROVADO COM RESSALVAS.** As 8 afirmações-chave foram reverificadas no
+código e estão corretas (1 imprecisão de número de linha). As ressalvas abaixo são
+**omissões/adições**, não erros.
+
+### Correções e adições ao relatório
+
+- **P1 — `services/whatsapp/ai-chat-service.ts` é MORTO (mover de C2 para A).** 0 importadores
+  no repo. Tem um `getCopilotSuggestion` duplicado (`ai-chat-service.ts:176`) que NÃO é o usado
+  pelo copilot — a rota importa o de `ai-chatbot-service.ts:164`.
+- **P2 — `BotSelector.tsx` é órfão e decisivo para a escolha do modelo.** É a ÚNICA UI que
+  aponta para o modelo canônico `ai_agents` (`BotSelector.tsx:40` → `/api/ai-agents`), mas
+  **nunca é renderizado**. Ou seja: a única UI VIVA de config de agente (`AIAgentsTab`) escreve
+  no modelo LEGADO `whatsapp_ai_agents`, enquanto a UI do modelo canônico está morta.
+- **P3 — Imprecisão de linha no GAP.** O insert inbound está na **linha 250** de
+  `src/lib/whatsapp/webhook-processor.ts` (não "~341"; 341 é o fim de `processMessage`). Ponto
+  de injeção da IA: após a 250 e idealmente após os `RuleEngine`, antes do `return`.
+- **P4 — Guards faltando como passos do plano (não só "riscos"):** prevenção de loop
+  (`direction='outbound'`/echo `from_number === account.phone_number`) e idempotência por
+  `message_id` devem ser passos numerados.
+- **P5 — Falta esquema para ligar/desligar IA por conversa Cloud.** `whatsapp_cloud_conversations`
+  (criada em `webhook-processor.ts:670-686`) **não tem** `ai_enabled`/`bot_active` — só `status`,
+  `is_window_open`, `window_expires_at`. Religar a IA exige uma **migration** adicionando esse
+  campo. Não está pronto.
+- **P6 — `access_token` texto claro (A4):** manter como "investigar" (estado da migration
+  `20260523` não foi validado quanto à execução).
+
+### Recomendação do Juiz
+
+- **Modelo canônico = `ai_agents`** (lido por todo o motor `lib/ai/*` + RPC
+  `get_active_agent_for_conversation` + CRUD em `/api/ai/agents/*` e `/api/ai-agents`). Congelar
+  `whatsapp_ai_agents`. Antes de religar, resolver o gap de UI (re-apontar `AIAgentsTab` para
+  `ai_agents`, ou montar `BotSelector`).
+
+### Plano de religação corrigido/completo (em `webhook-processor.ts::processMessage`)
+
+1. **Guard de loop**: só inbound; blindar contra echo (`from_number === account.phone_number`).
+2. **Idempotência**: chamada de IA depois do dedup por `message_id` (já existe, linhas 236-244);
+   persistir outbound com `onConflict: 'message_id'`.
+3. **Flag bot por conversa**: adicionar `ai_enabled` em `whatsapp_cloud_conversations` (migration — P5)
+   e checar antes de responder.
+4. **Resolver agente** via `get_active_agent_for_conversation` com `p_organization_id =
+   account.organization_id`; validar o que `p_channel_id` espera no contexto Cloud (mapear ou `null`).
+5. **Montar histórico de `whatsapp_cloud_messages`** e chamar **`processWhatsAppWithAgent`
+   diretamente** (recebe histórico por parâmetro) — NÃO usar `handleIncomingWhatsAppMessage`
+   (lê tabelas legadas, linhas 213/228).
+6. **`requireOptIn`** antes de enviar (padrão inbox route:111).
+7. **Janela 24h**: checar `is_window_open`/`window_expires_at`; fora da janela `sendText` falha →
+   exige template aprovado (`sendTemplate`) ou bloquear.
+8. **Enviar** `client.sendText(phone, response)` com `getAccessToken(account)` + `phone_number_id`.
+9. **Persistir outbound** em `whatsapp_cloud_messages` + atualizar `whatsapp_cloud_conversations`
+   (last_message_*), igual inbox route:139-163.
+
+**Riscos de "MORTO" errado: baixos.** A1/A2 + adendos (`ai-chat-service.ts`, `BotSelector.tsx`)
+confirmados sem import vivo (incl. dynamic imports, barrels, testes). Cautelas: manter o morto
+A1 como referência de "IA→envio Cloud" até a religação estar feita; NÃO dropar
+`whatsapp_messages`/`whatsapp_conversations` antes de religar (quebram serviços de inbox vivos).
