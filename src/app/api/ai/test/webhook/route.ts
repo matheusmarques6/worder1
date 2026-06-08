@@ -35,7 +35,7 @@ export async function GET() {
     endpoints_related: {
       '/api/ai/test': 'Testes gerais (Redis, cache, agentes)',
       '/api/ai/test/webhook': 'Este simulador',
-      '/api/whatsapp/webhook': 'Webhook real (Evolution API)',
+      '/api/whatsapp/webhook': 'Webhook legado (encaminha para /api/whatsapp/cloud/webhook)',
     }
   })
 }
