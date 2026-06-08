@@ -376,6 +376,55 @@ export async function enqueueWhatsAppWebhook(
 }
 
 /**
+ * Enfileira o RUN de auto-resposta da IA (Fase 2d — debounce humanizado).
+ *
+ * O webhook NÃO roda mais o LLM síncrono. Em vez disso, marca
+ * whatsapp_cloud_conversations.ai_pending=true / ai_debounce_until=now+delay
+ * e chama esta função com delay = DEBOUNCE_SECONDS. Mensagens subsequentes
+ * empurram o ai_debounce_until e enfileiram outro job: o worker
+ * (/api/workers/whatsapp-ai-respond) só responde quando now >= ai_debounce_until
+ * E consegue o CLAIM atômico de ai_pending, garantindo 1 resposta agregada.
+ *
+ * Retorna o messageId do QStash, ou null quando QStash/APP_URL não estão
+ * configurados (nesse caso o caller pode cair para o caminho síncrono).
+ */
+export async function enqueueWhatsAppAiRespond(
+  job: { conversationId: string; accountId: string; organizationId: string },
+  delaySeconds: number
+): Promise<string | null> {
+  const client = getQStashClient();
+  if (!client) {
+    console.warn('[Queue] QStash not configured — ai-respond worker not enqueued');
+    return null;
+  }
+
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) {
+    console.warn('[Queue] APP_URL not configured');
+    return null;
+  }
+
+  const response = await client.publishJSON({
+    url: `${baseUrl}/api/workers/whatsapp-ai-respond`,
+    body: {
+      conversationId: job.conversationId,
+      accountId: job.accountId,
+      organizationId: job.organizationId,
+    },
+    delay: delaySeconds,
+    // 1 retry — o claim atômico já protege contra double-send; mais retries
+    // só re-disparariam após o claim consumir (no-op) ou após a janela já
+    // ter sido coberta por outro job.
+    retries: 1,
+  });
+
+  console.log(
+    `[Queue] Enqueued ai-respond conv=${job.conversationId} in ${delaySeconds}s, messageId: ${response.messageId}`
+  );
+  return response.messageId;
+}
+
+/**
  * Enfileira envio de WhatsApp
  */
 export async function enqueueWhatsAppSend(

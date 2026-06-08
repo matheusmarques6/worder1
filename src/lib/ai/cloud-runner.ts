@@ -38,6 +38,12 @@ export interface CloudRunnerParams {
   messageType?: string;
   phoneNumber?: string;
   skipSend?: boolean;
+  /**
+   * Pula os delays humanizados (typing/reply_delay/intervalo entre bolhas).
+   * Usado pelo simulador para E2E rápido e offline. O split em bolhas e a
+   * persistência continuam acontecendo.
+   */
+  skipDelays?: boolean;
 }
 
 export interface CloudRunnerResult {
@@ -61,6 +67,7 @@ export async function maybeRunAgentForCloudConversation(
     messageType,
     phoneNumber,
     skipSend = false,
+    skipDelays = false,
   } = params;
 
   const organizationId = account.organization_id;
@@ -341,6 +348,7 @@ export async function maybeRunAgentForCloudConversation(
     text: response,
     agent: { id: agentId, ...agent },
     inboundMessageId: params.inboundMessageId,
+    skipDelays,
   });
 
   return {

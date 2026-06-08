@@ -36,6 +36,11 @@ const STATUS_ORDINAL: Record<string, number> = {
   failed: 4,
 };
 
+// Janela de DEBOUNCE da auto-resposta da IA (Fase 2d). Mensagens do cliente
+// que cheguem dentro dessa janela são agregadas em UMA resposta. Configurável
+// via env; default 8s. Cada inbound EMPURRA a janela p/ frente (reschedule).
+const AI_DEBOUNCE_SECONDS = Number(process.env.WHATSAPP_AI_DEBOUNCE_SECONDS) || 8;
+
 export interface ProcessResult {
   processed: number;
   skipped: number;
@@ -340,23 +345,62 @@ async function processMessage(
   }
 
   // ============================================================
-  // INJEÇÃO DA IA (Fase 2a / P1) — auto-resposta do agente Cloud.
-  // Import dinâmico p/ evitar ciclo de import e manter o webhook leve.
+  // DEBOUNCE DA IA (Fase 2d / P4) — auto-resposta humanizada agregada.
+  // O webhook NÃO roda mais o LLM síncrono. Em vez disso:
+  //   - marca ai_debounce_until = now + DEBOUNCE_SECONDS e ai_pending = true;
+  //   - enfileira (QStash, delay = DEBOUNCE_SECONDS) o worker dedicado
+  //     /api/workers/whatsapp-ai-respond.
+  // Mensagens subsequentes EMPURRAM o ai_debounce_until p/ frente e enfileiram
+  // outro job: o worker só responde quando now >= ai_debounce_until E consegue
+  // o CLAIM atômico de ai_pending => 1 resposta agregada (sem double-send).
   // Try/catch que NUNCA quebra o webhook: erro da IA não bloqueia ingestão.
   // Guards finos (anti-loop, idempotência, text-only, ai_enabled) ficam
-  // dentro do runner; re-checados aqui pelos params passados.
+  // dentro do runner, executado no worker.
   // ============================================================
   try {
-    const { maybeRunAgentForCloudConversation } = await import('@/lib/ai/cloud-runner');
-    await maybeRunAgentForCloudConversation({
-      account,
-      conversation,
-      contact,
-      text: textBody,
-      inboundMessageId: message.id,
-      messageType,
-      phoneNumber,
-    });
+    // Só agenda p/ inbound de texto, fora de auto-conversa, com IA habilitada.
+    const isSelf = phoneNumber && account.phone_number && phoneNumber === account.phone_number;
+    if (
+      messageType === 'text' &&
+      textBody &&
+      textBody.trim() &&
+      !isSelf &&
+      conversation?.ai_enabled !== false
+    ) {
+      const debounceSeconds = AI_DEBOUNCE_SECONDS;
+      const debounceUntil = new Date(Date.now() + debounceSeconds * 1000).toISOString();
+
+      // Empurra a janela (reschedule) e marca pendente.
+      await supabase
+        .from('whatsapp_cloud_conversations')
+        .update({ ai_debounce_until: debounceUntil, ai_pending: true })
+        .eq('id', conversation.id);
+
+      const { enqueueWhatsAppAiRespond } = await import('@/lib/queue');
+      const messageId = await enqueueWhatsAppAiRespond(
+        {
+          conversationId: conversation.id,
+          accountId: account.id,
+          organizationId: account.organization_id,
+        },
+        debounceSeconds,
+      );
+
+      // Fallback: QStash não configurado => roda síncrono (caminho legado 2a)
+      // p/ não perder a resposta em ambientes sem fila.
+      if (!messageId) {
+        const { maybeRunAgentForCloudConversation } = await import('@/lib/ai/cloud-runner');
+        await maybeRunAgentForCloudConversation({
+          account,
+          conversation,
+          contact,
+          text: textBody,
+          inboundMessageId: message.id,
+          messageType,
+          phoneNumber,
+        });
+      }
+    }
   } catch (err: any) {
     wlog.error('whatsapp.ai.run_error', {
       error: err?.message,

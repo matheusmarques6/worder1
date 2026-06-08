@@ -497,6 +497,32 @@ export class WhatsAppCloudAPI {
     });
   }
 
+  /**
+   * Mostra o indicador "digitando..." no chat do cliente.
+   *
+   * IMPORTANTE — limitação real da Cloud API: a Meta NÃO expõe um endpoint
+   * de typing independente. O indicador só pode ser disparado JUNTO de um
+   * "mark as read" e EXIGE o message_id de uma mensagem INBOUND recente
+   * (a última recebida). Por isso este método precisa do inbound message_id.
+   * O typing dura ~25s ou some quando a próxima mensagem é enviada.
+   *
+   * Se o inbound message_id não estiver disponível (ex.: simulador), o caller
+   * deve pular o typing — não há como dispará-lo isoladamente.
+   *
+   * @see https://developers.facebook.com/docs/whatsapp/cloud-api/guides/typing-indicators
+   */
+  async sendTyping(inboundMessageId: string): Promise<{ success: boolean }> {
+    return this.request(`/${this.config.phoneNumberId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: inboundMessageId,
+        typing_indicator: { type: 'text' },
+      }),
+    });
+  }
+
   // =============================================
   // MÍDIA
   // =============================================

@@ -27,6 +27,12 @@ export async function GET() {
         phoneNumber: '5511999999999 (obrigatório)',
         message: 'Olá, preciso de ajuda (obrigatório)',
         skipSend: 'true => gera+traça sem chamar sendText (opcional, default false)',
+        immediate:
+          'true (default) => roda SÍNCRONO via cloud-runner, SEM debounce/QStash. ' +
+          'Mantém o E2E offline funcionando independentemente da fila.',
+        skipDelays:
+          'true (default) => pula typing/reply_delay/intervalo entre bolhas no ' +
+          'envio humanizado (E2E rápido). O split em bolhas continua ativo.',
         contactName: 'Nome do contato (opcional)',
       },
     },
@@ -43,6 +49,12 @@ export async function POST(request: NextRequest) {
       phoneNumber,
       message,
       skipSend = false,
+      // immediate (default true): caminho SÍNCRONO de teste — roda o runner
+      // direto, SEM passar pelo debounce/QStash. Mantém o E2E offline.
+      immediate = true,
+      // skipDelays (default true): pula os delays humanizados no envio p/ E2E
+      // rápido; o split em bolhas e a persistência continuam ocorrendo.
+      skipDelays = true,
       contactName = 'Teste Simulador Cloud',
     } = body;
 
@@ -168,22 +180,53 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
 
-    // ---------- 5. Rodar runner ----------
-    const runResult = await maybeRunAgentForCloudConversation({
-      account,
-      conversation,
-      contact,
-      text: message,
-      inboundMessageId: simulatedMessageId,
-      messageType: 'text',
-      phoneNumber,
-      skipSend: !!skipSend,
-    });
+    // ---------- 5. Rodar IA ----------
+    // immediate=true (default): SÍNCRONO via runner — sem debounce/QStash.
+    // immediate=false: exercita o caminho de DEBOUNCE (marca pending + enfileira
+    //   no QStash). Útil p/ validar o agendamento; a resposta vem do worker.
+    let runResult: any;
+    if (immediate) {
+      runResult = await maybeRunAgentForCloudConversation({
+        account,
+        conversation,
+        contact,
+        text: message,
+        inboundMessageId: simulatedMessageId,
+        messageType: 'text',
+        phoneNumber,
+        skipSend: !!skipSend,
+        skipDelays: !!skipDelays,
+      });
+    } else {
+      const debounceSeconds = Number(process.env.WHATSAPP_AI_DEBOUNCE_SECONDS) || 8;
+      const debounceUntil = new Date(Date.now() + debounceSeconds * 1000).toISOString();
+      await supabaseAdmin
+        .from('whatsapp_cloud_conversations')
+        .update({ ai_debounce_until: debounceUntil, ai_pending: true })
+        .eq('id', conversation.id);
+      const { enqueueWhatsAppAiRespond } = await import('@/lib/queue');
+      const qMessageId = await enqueueWhatsAppAiRespond(
+        {
+          conversationId: conversation.id,
+          accountId: account.id,
+          organizationId,
+        },
+        debounceSeconds,
+      );
+      runResult = {
+        replied: false,
+        transferred: false,
+        skipped: 'debounce_scheduled',
+        debounce: { seconds: debounceSeconds, until: debounceUntil, qMessageId },
+      };
+    }
 
     return NextResponse.json({
       success: true,
       simulation: true,
+      immediate: !!immediate,
       skipSend: !!skipSend,
+      skipDelays: !!skipDelays,
       replied: runResult.replied,
       response: runResult.response,
       transferred: runResult.transferred,
