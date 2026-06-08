@@ -10,21 +10,34 @@ import type { Tool, ToolContext } from './types'
 import { searchKnowledgeTool } from './handlers/search_knowledge'
 import { saveCustomerTool } from './handlers/save_customer'
 import { transferToHumanTool } from './handlers/transfer_to_human'
+import { saveInterestsTool } from './handlers/save_interests'
+import { timelineTool } from './handlers/timeline'
+import { productLookupTool } from './handlers/product_lookup'
+import { orderStatusTool } from './handlers/order_status'
 
-/** Todas as tools registradas nesta fase. */
+/** Todas as tools registradas (Fase 2b + 2c). */
 export const ALL_TOOLS: Tool[] = [
   searchKnowledgeTool,
   saveCustomerTool,
   transferToHumanTool,
+  // Fase 2c
+  saveInterestsTool,
+  timelineTool,
+  productLookupTool,
+  orderStatusTool,
 ]
 
 const TOOLS_BY_NAME = new Map(ALL_TOOLS.map((t) => [t.name, t]))
 
 /**
- * Tools que exigem loja conectada (storeId). Vazio nesta fase; product_lookup /
- * order_status entram aqui na 2c. Mantido como ponto de extensão.
+ * Tools que exigem loja conectada (storeId). product_lookup / order_status só
+ * são expostas quando ctx.storeId está presente (Fase 2c). save_interests e
+ * timeline NÃO são gated.
  */
-const STORE_GATED_TOOLS = new Set<string>([])
+const STORE_GATED_TOOLS = new Set<string>([
+  productLookupTool.name,
+  orderStatusTool.name,
+])
 
 /**
  * Resolve as tools ativas para um agente dado o contexto da conversa.

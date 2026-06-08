@@ -12,6 +12,25 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const ORG_COLUMN = 'organization_id'
 
+/**
+ * Sanitiza um valor de input (LLM/cliente) para uso seguro DENTRO de um filtro
+ * `.or('col.ilike.%<valor>%, ...')` do PostgREST. Na sintaxe do PostgREST a
+ * vírgula separa condições OR e os parênteses agrupam — então um valor cru com
+ * `,` `(` `)` `"` `\` pode alterar a ESTRUTURA do filtro (injeção de filtro:
+ * quebra a query ou força condições extras como status.eq.draft). Aqui:
+ *  1) removemos os caracteres estruturais do PostgREST;
+ *  2) escapamos os wildcards de ILIKE (`%` `_`) para tratá-los como literais.
+ * Não removemos `.` nem `@` (necessários p/ e-mails). O escopo (store_id/org)
+ * é sempre um `.eq()` separado em AND, então isto não afeta o multi-tenant —
+ * trata-se de robustez/abuso de filtro dentro do escopo já validado.
+ */
+export function sanitizeOrValue(value: string): string {
+  return (value || '')
+    .replace(/[,()"\\]/g, ' ')
+    .replace(/[%_]/g, (m) => `\\${m}`)
+    .trim()
+}
+
 function assertOrg(organizationId: string | undefined | null, op: string): string {
   if (!organizationId || typeof organizationId !== 'string' || !organizationId.trim()) {
     const msg =
@@ -88,6 +107,48 @@ export function orgUpdate(
 ) {
   const org = assertOrg(organizationId, `orgUpdate('${table}')`)
   return supabaseAdmin.from(table).update(values).eq(ORG_COLUMN, org)
+}
+
+/**
+ * SELECT escopado por LOJA para tabelas Shopify (`shopify_products`,
+ * `shopify_orders`) que NÃO possuem coluna `organization_id` — elas são
+ * escopadas por `store_id` (FK -> shopify_stores, que por sua vez tem
+ * organization_id). Para não furar o isolamento multi-tenant, esta função
+ * PRIMEIRO valida que a loja (storeId) pertence à organização via
+ * `shopify_stores` (org-scoped por orgSelect) e SÓ ENTÃO devolve um query
+ * builder filtrado por `store_id`. Se a loja não pertencer à org (ou não
+ * existir), retorna `{ builder: null }` e o handler deve abortar.
+ *
+ * Ex.:
+ *   const { builder, error } = await orgStoreSelect('shopify_products', orgId, storeId, 'id, title')
+ *   if (!builder) return { ok:false, error }
+ *   const { data } = await builder.ilike('title', `%${q}%`).limit(5)
+ */
+export async function orgStoreSelect(
+  table: 'shopify_products' | 'shopify_orders',
+  organizationId: string,
+  storeId: string | undefined | null,
+  columns = '*',
+): Promise<{ builder: any; error?: string }> {
+  const org = assertOrg(organizationId, `orgStoreSelect('${table}')`)
+  const sid = (storeId || '').trim()
+  if (!sid) {
+    return { builder: null, error: 'no_store' }
+  }
+  // Validar que a loja pertence à org (shopify_stores TEM organization_id).
+  const { data: store, error: storeErr } = await orgSelect('shopify_stores', org, 'id')
+    .eq('id', sid)
+    .maybeSingle()
+  if (storeErr) {
+    return { builder: null, error: storeErr.message }
+  }
+  if (!store) {
+    // Loja inexistente ou de outra org — não vazar dados.
+    return { builder: null, error: 'store_not_in_org' }
+  }
+  return {
+    builder: supabaseAdmin.from(table).select(columns).eq('store_id', sid),
+  }
 }
 
 /**
