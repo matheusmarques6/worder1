@@ -19,17 +19,6 @@ const NO_CACHE_HEADERS = {
   'Cache-Control': 'no-store, max-age=0',
 }
 
-// ✅ FASE 2: SEM FALLBACK HARDCODED
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY
-
-function getEvolutionConfig(instance?: any) {
-  const apiUrl = instance?.api_url || instance?.server_url || EVOLUTION_API_URL
-  const apiKey = instance?.api_key || EVOLUTION_API_KEY
-  if (!apiUrl || !apiKey) return null
-  return { apiUrl, apiKey }
-}
-
 // GET - Buscar mensagens (paginação real)
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -189,107 +178,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }, { headers: NO_CACHE_HEADERS })
     }
 
-    // Evolution path (legacy)
-    const { data: conversation, error: convError } = await supabase
-      .from('whatsapp_conversations')
-      .select('*, instance_id, store_id, contact_phone, phone_number, organization_id')
-      .eq('id', conversationId)
-      .eq('organization_id', orgId)
-      .single()
-
-    if (convError || !conversation) {
-      return NextResponse.json(
-        { error: 'Conversation not found' },
-        { status: 404, headers: NO_CACHE_HEADERS }
-      )
-    }
-
-    if (!conversation.instance_id) {
-      return NextResponse.json(
-        { error: 'Conversa não tem instância associada. Reabra a conversa.' },
-        { status: 400, headers: NO_CACHE_HEADERS }
-      )
-    }
-
-    const { data: instance, error: instError } = await supabase
-      .from('whatsapp_instances')
-      .select('*')
-      .eq('id', conversation.instance_id)
-      .single()
-
-    if (instError || !instance) {
-      return NextResponse.json(
-        { error: 'Instância WhatsApp não encontrada' },
-        { status: 404, headers: NO_CACHE_HEADERS }
-      )
-    }
-
-    const config = getEvolutionConfig(instance)
-    if (!config) {
-      return NextResponse.json({
-        error: 'Evolution API not configured. Set EVOLUTION_API_URL and EVOLUTION_API_KEY.'
-      }, { status: 503, headers: NO_CACHE_HEADERS })
-    }
-
-    const instanceName = instance.instance_name || instance.instance_id || instance.unique_id
-    const phoneNumber = conversation.contact_phone || conversation.phone_number
-
-    const sendResponse = await fetch(`${config.apiUrl}/message/sendText/${instanceName}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': config.apiKey },
-      body: JSON.stringify({ number: phoneNumber, text: content }),
-    })
-    const sendData = await sendResponse.json()
-
-    const payload: any = {
-      organization_id: conversation.organization_id,
-      store_id: conversation.store_id,
-      instance_id: conversation.instance_id,
-      conversation_id: conversationId,
-      message_id: sendData?.key?.id || `out-${Date.now()}`,
-      direction: 'outbound',
-      message_type,
-      content: { text: content },
-      text_body: content,
-      to_number: phoneNumber,
-      status: sendResponse.ok ? 'sent' : 'failed',
-      timestamp: new Date().toISOString(),
-    }
-
-    const { data: saved, error: msgError } = await supabase
-      .from('whatsapp_messages')
-      .upsert(payload, { onConflict: 'instance_id,message_id', ignoreDuplicates: true })
-      .select('*')
-      .maybeSingle()
-
-    if (msgError) {
-      return NextResponse.json(
-        { error: 'Erro ao salvar mensagem', details: msgError.message },
-        { status: 500, headers: NO_CACHE_HEADERS }
-      )
-    }
-
-    await supabase.from('whatsapp_conversations').update({
-      last_message_at: new Date().toISOString(),
-      last_message_preview: content.substring(0, 100),
-      last_message_direction: 'outbound',
-      updated_at: new Date().toISOString(),
-    }).eq('id', conversationId)
-
-    return NextResponse.json({
-      message: {
-        id: saved?.id,
-        conversation_id: conversationId,
-        direction: 'outbound',
-        message_type,
-        content: saved?.content?.text || content,
-        status: saved?.status,
-        sent_by_bot: false,
-        created_at: saved?.created_at,
-      },
-      provider: 'evolution',
-      success: sendResponse.ok,
-    }, { headers: NO_CACHE_HEADERS })
+    // Sem conversa Cloud correspondente: a única via de envio é a WhatsApp
+    // Cloud API (Meta). Conversas legadas (Evolution) não enviam mais.
+    return NextResponse.json(
+      { error: 'Conversa Cloud não encontrada para este id' },
+      { status: 404, headers: NO_CACHE_HEADERS }
+    )
   } catch (error: any) {
     console.error('[Messages POST] Error:', error)
     return NextResponse.json(

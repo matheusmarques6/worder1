@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
     const { 
       organization_id,
       store_id,
-      provider = 'evolution',
+      provider = 'meta_cloud',
       phone_number,
       display_name,
       // Meta Cloud
@@ -154,10 +154,9 @@ export async function POST(request: NextRequest) {
       access_token,
       business_account_id,
       webhook_verify_token,
-      // Evolution
+      // Legado (compat tabela antiga whatsapp_instances)
       instance_name,
       api_key,
-      base_url,
     } = body
 
     // ✅ FASE 1: Validações obrigatórias
@@ -194,16 +193,12 @@ export async function POST(request: NextRequest) {
       connection_status: 'disconnected',
     }
 
-    // Dados específicos por provider
+    // Dados específicos do provider Cloud (Meta)
     if (provider === 'meta_cloud') {
       numberData.phone_number_id = phone_number_id
       numberData.access_token = access_token
       numberData.business_account_id = business_account_id
       numberData.webhook_verify_token = webhook_verify_token || generateToken()
-    } else if (provider === 'evolution') {
-      numberData.instance_name = instance_name || phone_number
-      numberData.api_key = api_key
-      numberData.base_url = base_url || process.env.EVOLUTION_API_URL
     }
 
     // Inserir
