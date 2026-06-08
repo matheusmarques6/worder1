@@ -338,6 +338,31 @@ async function processMessage(
       eventData
     );
   }
+
+  // ============================================================
+  // INJEÇÃO DA IA (Fase 2a / P1) — auto-resposta do agente Cloud.
+  // Import dinâmico p/ evitar ciclo de import e manter o webhook leve.
+  // Try/catch que NUNCA quebra o webhook: erro da IA não bloqueia ingestão.
+  // Guards finos (anti-loop, idempotência, text-only, ai_enabled) ficam
+  // dentro do runner; re-checados aqui pelos params passados.
+  // ============================================================
+  try {
+    const { maybeRunAgentForCloudConversation } = await import('@/lib/ai/cloud-runner');
+    await maybeRunAgentForCloudConversation({
+      account,
+      conversation,
+      contact,
+      text: textBody,
+      inboundMessageId: message.id,
+      messageType,
+      phoneNumber,
+    });
+  } catch (err: any) {
+    wlog.error('whatsapp.ai.run_error', {
+      error: err?.message,
+      conversation_id: conversation?.id,
+    });
+  }
 }
 
 // ============================================================
@@ -679,6 +704,7 @@ async function getOrCreateConversation(account: any, contact: any, phoneNumber: 
       contact_name: contact?.name || phoneNumber,
       contact_phone: phoneNumber,
       status: 'open',
+      ai_enabled: true,
       is_window_open: true,
       window_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     })

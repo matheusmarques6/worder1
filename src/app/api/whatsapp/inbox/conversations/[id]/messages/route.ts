@@ -151,6 +151,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           content: { text: { body: content } },
           text_body: content,
           status: 'sent',
+          sent_by_bot: false,
+          sender: 'human',
           timestamp: new Date().toISOString(),
         }, { onConflict: 'message_id' })
         .select()
