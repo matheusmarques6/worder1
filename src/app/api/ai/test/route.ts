@@ -55,7 +55,6 @@ export async function GET(request: NextRequest) {
       UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL ? '✅ Configurado' : '❌ Não configurado',
       UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN ? '✅ Configurado' : '❌ Não configurado',
       OPENAI_API_KEY: process.env.OPENAI_API_KEY ? '✅ Configurado' : '❌ Não configurado',
-      EVOLUTION_API_URL: process.env.EVOLUTION_API_URL ? '✅ Configurado' : '❌ Não configurado',
     }
   })
 }
