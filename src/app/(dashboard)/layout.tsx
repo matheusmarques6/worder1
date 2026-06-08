@@ -44,8 +44,6 @@ import {
   Image as ImageIcon,
   Palette,
   MessageCircle,
-  Bot,
-  BookOpen,
   List as ListIcon,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
@@ -154,18 +152,6 @@ const navigation: NavSection[] = [
       },
       { name: 'CRM', href: '/crm', icon: Briefcase },
       { name: 'Recuperação', href: '/recovery', icon: RefreshCcw },
-    ],
-  },
-  {
-    label: 'IA',
-    items: [
-      {
-        name: 'Agentes IA', href: '/ai/persona', icon: Bot,
-        children: [
-          { name: 'Persona', href: '/ai/persona' },
-          { name: 'Knowledge Base', href: '/ai/knowledge' },
-        ],
-      },
     ],
   },
   {

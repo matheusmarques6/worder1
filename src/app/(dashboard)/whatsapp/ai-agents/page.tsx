@@ -5,12 +5,14 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores'
 import AIAgentList from '@/components/agents/AIAgentList'
 import ApiKeysManager from '@/components/whatsapp/ApiKeysManager'
-import { Bot, Key, Loader2 } from 'lucide-react'
+import KnowledgeBasePanel from '@/components/agents/KnowledgeBasePanel'
+import { Bot, Key, BookOpen, Loader2 } from 'lucide-react'
 
-type TabId = 'agents' | 'api-keys'
+type TabId = 'agents' | 'api-keys' | 'knowledge'
 
 const TABS: { id: TabId; label: string; icon: typeof Bot }[] = [
   { id: 'agents', label: 'Agentes', icon: Bot },
+  { id: 'knowledge', label: 'Knowledge Base', icon: BookOpen },
   { id: 'api-keys', label: 'API Keys', icon: Key },
 ]
 
@@ -20,7 +22,8 @@ function AIAgentsPageInner() {
   const { user, isLoading } = useAuthStore()
   const [mounted, setMounted] = useState(false)
 
-  const initialTab = (searchParams?.get('tab') === 'api-keys' ? 'api-keys' : 'agents') as TabId
+  const paramTab = searchParams?.get('tab')
+  const initialTab = (paramTab === 'api-keys' || paramTab === 'knowledge' ? paramTab : 'agents') as TabId
   const [activeTab, setActiveTab] = useState<TabId>(initialTab)
 
   useEffect(() => {
@@ -29,7 +32,7 @@ function AIAgentsPageInner() {
 
   useEffect(() => {
     const t = searchParams?.get('tab')
-    if (t === 'api-keys' || t === 'agents') {
+    if (t === 'api-keys' || t === 'agents' || t === 'knowledge') {
       setActiveTab(t as TabId)
     }
   }, [searchParams])
@@ -90,6 +93,7 @@ function AIAgentsPageInner() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'agents' && <AIAgentList organizationId={organizationId} />}
+        {activeTab === 'knowledge' && <KnowledgeBasePanel organizationId={organizationId} />}
         {activeTab === 'api-keys' && <ApiKeysManager />}
       </div>
     </div>

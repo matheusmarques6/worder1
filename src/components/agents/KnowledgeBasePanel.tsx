@@ -1,15 +1,14 @@
 'use client'
 
 // =============================================
-// WORDER: AI Knowledge Base
-// /ai/knowledge — listar sources, upload docs, ver status
+// WORDER: Knowledge Base Panel
+// Componente reutilizável — listar sources, upload docs, ver status.
+// Migrado de /ai/knowledge para viver como aba em /whatsapp/ai-agents.
 // =============================================
 
 import { useEffect, useState, useCallback } from 'react'
-import Link from 'next/link'
 import {
   BookOpen,
-  Upload,
   FileText,
   Globe,
   MessageSquare,
@@ -21,7 +20,6 @@ import {
   Clock,
   Plus,
   X,
-  ArrowLeft,
   AlertCircle,
   ShoppingBag,
 } from 'lucide-react'
@@ -71,7 +69,7 @@ const STATUS_CONFIG: Record<string, { label: string; className: string; icon: an
   error: { label: 'Erro', className: 'bg-red-50 text-red-700 border border-red-200', icon: XCircle },
 }
 
-export default function KnowledgeBasePage() {
+export default function KnowledgeBasePanel({ organizationId: _organizationId }: { organizationId: string }) {
   const [agents, setAgents] = useState<Agent[]>([])
   const [selectedAgent, setSelectedAgent] = useState<string>('')
   const [sources, setSources] = useState<Source[]>([])
@@ -146,7 +144,6 @@ export default function KnowledgeBasePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/ai/persona" className="p-2 rounded-lg hover:bg-gray-50"><ArrowLeft size={18} className="text-gray-500" /></Link>
           <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
             <BookOpen className="w-5 h-5 text-violet-600" />
           </div>
@@ -188,9 +185,7 @@ export default function KnowledgeBasePage() {
         <div className="bg-white border border-dashed border-gray-200 rounded-xl p-12 text-center">
           <BookOpen className="w-10 h-10 text-gray-300 mx-auto mb-3" />
           <p className="text-sm text-gray-500">Nenhum agente de IA criado.</p>
-          <Link href="/ai/persona" className="text-sm text-orange-500 hover:underline mt-2 inline-block">
-            Criar agente primeiro →
-          </Link>
+          <p className="text-xs text-gray-400 mt-1">Crie um agente na aba “Agentes” para adicionar fontes de conhecimento.</p>
         </div>
       )}
 
