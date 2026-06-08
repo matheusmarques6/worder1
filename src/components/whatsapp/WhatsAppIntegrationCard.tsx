@@ -33,20 +33,11 @@ interface WhatsAppConfig {
   created_at: string
 }
 
-interface WhatsAppInstance {
-  id: string
-  title: string
-  phone_number: string
-  status: string
-  created_at: string
-}
-
 export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppIntegrationCardProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(false)
   const [config, setConfig] = useState<WhatsAppConfig | null>(null)
-  const [instances, setInstances] = useState<WhatsAppInstance[]>([])
   const [disconnecting, setDisconnecting] = useState(false)
 
   useEffect(() => {
@@ -57,20 +48,12 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
     try {
       setLoading(true)
       
-      // Buscar configuração da API oficial
+      // Buscar configuração da API oficial (WhatsApp Cloud / Meta)
       const configRes = await authedFetch(`/api/whatsapp/connect?organizationId=${organizationId}`)
       const configData = await configRes.json()
-      
-      // Buscar instâncias (QR Code)
-      const instancesRes = await authedFetch(`/api/whatsapp/instances?organizationId=${organizationId}`)
-      const instancesData = await instancesRes.json()
-      
-      const hasConfig = configData.connected
-      const hasInstances = instancesData.instances?.length > 0
-      
-      setConnected(hasConfig || hasInstances)
+
+      setConnected(!!configData.connected)
       setConfig(configData.config)
-      setInstances(instancesData.instances || [])
     } catch (error) {
       console.error('Error fetching WhatsApp status:', error)
     } finally {
@@ -98,7 +81,6 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
       })
       setConnected(false)
       setConfig(null)
-      setInstances([])
     } catch (error) {
       console.error('Error disconnecting:', error)
     } finally {
@@ -107,7 +89,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
   }
 
   // Contar conexões ativas
-  const activeConnections = (config ? 1 : 0) + instances.filter(i => i.status === 'connected').length
+  const activeConnections = config ? 1 : 0
 
   if (loading) {
     return (
@@ -166,9 +148,9 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
             )}
           </div>
           <p className="text-sm text-gray-500">
-            {connected 
+            {connected
               ? 'Envie mensagens e gerencie conversas'
-              : 'Conecte via API oficial ou QR Code'
+              : 'Conecte via API oficial do WhatsApp (Meta)'
             }
           </p>
 
@@ -188,20 +170,6 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
                   </div>
                 </div>
               )}
-              
-              {/* Instâncias QR Code */}
-              {instances.filter(i => i.status === 'connected').map(instance => (
-                <div key={instance.id} className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <MessageSquare className="w-4 h-4 text-gray-400" />
-                    <span>{instance.title || 'QR Code'}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Phone className="w-4 h-4 text-gray-400" />
-                    <span>{instance.phone_number}</span>
-                  </div>
-                </div>
-              ))}
               
               {config && !config.webhook_verified && (
                 <div className="flex items-center gap-2 text-amber-400 text-xs">

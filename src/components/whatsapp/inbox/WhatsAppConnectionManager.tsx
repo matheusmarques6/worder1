@@ -22,7 +22,7 @@ import {
   Power,
   PowerOff
 } from 'lucide-react'
-import { type WhatsAppInstance } from '@/hooks/useWhatsAppConnectionManager'
+import { type WhatsAppInstance, mapNumberToInstance } from '@/hooks/useWhatsAppConnectionManager'
 
 // =============================================
 // TYPES
@@ -66,35 +66,34 @@ export default function WhatsAppConnectionManager({
     }
 
     try {
-      // ✅ CRÍTICO: Passar store_id na requisição
-      const response = await authedFetch(`/api/whatsapp/instances?organization_id=${organizationId}&store_id=${storeId}`)
+      // Números Cloud (WhatsApp Cloud API / Meta) da loja
+      const response = await authedFetch(`/api/whatsapp/numbers?organization_id=${organizationId}&store_id=${storeId}`)
       const data = await response.json()
-      
-      if (data.instances) {
-        console.log(`[ConnectionManager] Found ${data.instances.length} instances for store ${storeId}`)
-        setInstances(data.instances)
-        
-        // Auto-select first active instance if none selected
-        if (!selectedInstance && data.instances.length > 0) {
-          const activeInstance = data.instances.find(
+
+      if (data.numbers) {
+        const mapped: WhatsAppInstance[] = data.numbers.map(mapNumberToInstance)
+        setInstances(mapped)
+
+        // Auto-select first connected instance if none selected
+        if (!selectedInstance && mapped.length > 0) {
+          const activeInstance = mapped.find(
             (i: WhatsAppInstance) => i.status === 'ACTIVE' || i.status === 'connected'
           )
           if (activeInstance) {
             onSelectInstance(activeInstance)
           }
         }
-        
+
         // Se a instância selecionada mudou de status, atualizar
         if (selectedInstance) {
-          const updated = data.instances.find((i: WhatsAppInstance) => i.id === selectedInstance.id)
+          const updated = mapped.find((i: WhatsAppInstance) => i.id === selectedInstance.id)
           if (updated && updated.status !== selectedInstance.status) {
-            console.log('[ConnectionManager] Instance status changed:', updated.status)
             onSelectInstance(updated)
           }
         }
       }
     } catch (error) {
-      console.error('Error fetching instances:', error)
+      console.error('Error fetching numbers:', error)
     } finally {
       setLoading(false)
     }
@@ -122,29 +121,15 @@ export default function WhatsAppConnectionManager({
   // ACTIONS
   // =============================================
 
-  const handleDisconnect = async (instanceId: string) => {
-    setActionLoading(instanceId)
-    try {
-      await authedFetch('/api/whatsapp/instances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'disconnect', instance_id: instanceId })
-      })
-      await fetchInstances()
-    } catch (error) {
-      console.error('Error disconnecting:', error)
-    } finally {
-      setActionLoading(null)
-      setMenuOpen(null)
-    }
-  }
-
   const handleDelete = async (instanceId: string) => {
     if (!confirm('Tem certeza que deseja excluir esta conexão?')) return
-    
+
     setActionLoading(instanceId)
     try {
-      await authedFetch(`/api/whatsapp/instances?id=${instanceId}`, { method: 'DELETE' })
+      await authedFetch(
+        `/api/whatsapp/numbers?id=${instanceId}&organization_id=${organizationId}&store_id=${storeId}`,
+        { method: 'DELETE' }
+      )
       if (selectedInstance?.id === instanceId) {
         onSelectInstance(null)
       }
@@ -326,20 +311,6 @@ export default function WhatsAppConnectionManager({
 
                       {menuOpen === instance.id && (
                         <div className="absolute right-0 mt-1 w-40 bg-gray-100 border border-gray-300 rounded-lg shadow-xl z-10">
-                          {instance.status === 'connected' && (
-                            <button
-                              onClick={() => handleDisconnect(instance.id)}
-                              disabled={actionLoading === instance.id}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-yellow-400 hover:bg-gray-200"
-                            >
-                              {actionLoading === instance.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <PowerOff className="w-4 h-4" />
-                              )}
-                              Desconectar
-                            </button>
-                          )}
                           <button
                             onClick={() => handleDelete(instance.id)}
                             disabled={actionLoading === instance.id}
