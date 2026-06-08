@@ -187,8 +187,6 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Contato sem telefone' };
       }
 
-      const provider = credentials?.provider || credentials?.type || 'evolution';
-
       // Pre-create the send row in 'pending' so attribution + the
       // webhook's delivered/read updates can both find it later by
       // external_message_id. Same pattern email_sends uses (create
@@ -281,10 +279,9 @@ const actionExecutors: Record<string, NodeExecutor> = {
       try {
         let result: any;
         let externalMessageId: string | null = null;
-        let usedProvider = 'evolution';
+        let usedProvider = 'cloud';
 
-        if (provider === 'whatsappBusiness' || provider === 'cloud') {
-          usedProvider = 'cloud';
+        {
           const response = await fetch(
             `${META_BASE_URL}/${credentials?.phoneNumberId}/messages`,
             {
@@ -326,37 +323,6 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
           // Cloud API returns messages: [{ id: wamid }]
           externalMessageId = result?.messages?.[0]?.id || null;
-        } else {
-          const baseUrl = credentials?.evolutionUrl?.replace(/\/$/, '');
-          const response = await fetch(
-            `${baseUrl}/message/sendText/${credentials?.instanceName}`,
-            {
-              method: 'POST',
-              headers: {
-                'apikey': credentials?.apiKey,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                number: phone.replace(/\D/g, ''),
-                text: config.message,
-              }),
-            }
-          );
-
-          result = await response.json();
-
-          if (!response.ok) {
-            if (supabase && whatsappSendId) {
-              await supabase.from('whatsapp_sends').update({
-                status: 'failed',
-                error_message: result.message || 'Falha no envio',
-              }).eq('id', whatsappSendId);
-            }
-            return { status: 'error', output: result, error: result.message || 'Falha no envio' };
-          }
-
-          // Evolution returns { key: { id: <messageId> } }
-          externalMessageId = result?.key?.id || result?.messageId || null;
         }
 
         // Stamp the send row as 'sent' + persist the provider message id
