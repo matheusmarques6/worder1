@@ -205,6 +205,42 @@ export async function getCopilotSuggestion(
     }
   }
 
+  // =============================================
+  // RAG: injetar conhecimento relevante no systemPrompt (best-effort)
+  // =============================================
+  // Quando houver agentId resolvido e uma query (lastMessage) não vazia,
+  // busca trechos relevantes na base de conhecimento do agente (RAG por agentId,
+  // que já é da org) e os injeta como contexto no prompt do copiloto ANTES do LLM.
+  // Defensivo: sem agentId / query vazia / falha do RAG / vazio -> segue sem contexto.
+  const ragQuery = (lastMessage || '').trim()
+  if (conversation.ai_agent_id && ragQuery) {
+    try {
+      const { createRAGService } = await import('@/lib/ai/rag')
+      const rag = createRAGService()
+      // MESMOS valores do handler search_knowledge (Fase 2b): topK=5, threshold=0.7
+      const results = await rag.search({
+        agentId: conversation.ai_agent_id,
+        query: ragQuery,
+        topK: 5,
+        threshold: 0.7,
+      })
+
+      if (results && results.length > 0) {
+        const MAX_CHUNK_CHARS = 800
+        const blocks = results.slice(0, 5).map((r) => {
+          const content = (r.content || '').slice(0, MAX_CHUNK_CHARS)
+          const source = r.source_name || 'Desconhecido'
+          return `- ${content} (fonte: ${source})`
+        })
+
+        systemPrompt = `${systemPrompt}\n\nBase de conhecimento relevante (use estas informações para fundamentar a sugestão; se não for suficiente, responda com cautela):\n${blocks.join('\n')}`
+      }
+    } catch (ragErr: unknown) {
+      // Best-effort: não quebrar o copiloto se o RAG falhar.
+      logger.warn(LOG_PREFIX, `RAG indisponível no copiloto, seguindo sem contexto: ${(ragErr as Error)?.message}`)
+    }
+  }
+
   // Get recent conversation
   const { data: recentMessages } = await supabaseAdmin
     .from('whatsapp_messages')
