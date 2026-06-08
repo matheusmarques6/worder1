@@ -34,9 +34,9 @@ export async function generateAIResponse(
     messageHistory = [],
   } = params
 
-  // Get AI agent config
+  // Get AI agent config (canonical ai_agents table)
   const { data: agent } = await supabaseAdmin
-    .from('whatsapp_ai_agents')
+    .from('ai_agents')
     .select('*')
     .eq('id', aiAgentId)
     .eq('organization_id', organizationId)
@@ -156,7 +156,7 @@ export async function generateAIResponse(
 
     // Update agent stats
     await supabaseAdmin
-      .from('whatsapp_ai_agents')
+      .from('ai_agents')
       .update({
         total_messages: (agent.total_messages || 0) + 1,
       })
@@ -181,7 +181,7 @@ export async function getCopilotSuggestion(
   contactName?: string
 ): Promise<ServiceResult<{ suggestion: string }>> {
   const { data: agent } = await supabaseAdmin
-    .from('whatsapp_ai_agents')
+    .from('ai_agents')
     .select('*')
     .eq('id', aiAgentId)
     .eq('organization_id', organizationId)
@@ -191,6 +191,8 @@ export async function getCopilotSuggestion(
     return { error: 'AI agent not found' }
   }
 
+  // Conhecimento (knowledge_base legado) migrou para ai_agent_sources/ai_agent_chunks (RAG);
+  // ai_agents não tem coluna knowledge_base, então o bloco abaixo fica vazio por padrão.
   const systemPrompt = `Voce e um assistente copilot para atendentes de WhatsApp.
 Seu objetivo e sugerir respostas que o atendente pode enviar ao cliente.
 Baseie-se no contexto da conversa e no knowledge base da empresa.

@@ -32,9 +32,9 @@ export async function processWithAI(
     return { data: { shouldHandoff: true, reason: 'No AI agent configured' } }
   }
 
-  // Get AI agent config
+  // Get AI agent config (canonical ai_agents table)
   const { data: agent } = await supabaseAdmin
-    .from('whatsapp_ai_agents')
+    .from('ai_agents')
     .select('*')
     .eq('id', conversation.ai_agent_id)
     .eq('organization_id', organizationId)
@@ -143,7 +143,7 @@ export async function processWithAI(
 
     // Update agent stats
     await supabaseAdmin
-      .from('whatsapp_ai_agents')
+      .from('ai_agents')
       .update({
         total_messages: (agent.total_messages || 0) + 1,
       })
@@ -186,19 +186,22 @@ export async function getCopilotSuggestion(
 
   if (conversation.ai_agent_id) {
     const { data: agent } = await supabaseAdmin
-      .from('whatsapp_ai_agents')
-      .select('system_prompt, knowledge_base, model, temperature, max_tokens')
+      .from('ai_agents')
+      .select('system_prompt, model, temperature, max_tokens')
       .eq('id', conversation.ai_agent_id)
+      .eq('organization_id', organizationId)
       .single()
 
     if (agent) {
-      systemPrompt = `Voce e um copiloto de atendimento. Baseado no contexto abaixo, sugira uma resposta para o agente humano enviar ao cliente.\n\n${agent.system_prompt}`
-      if (agent.knowledge_base) {
-        systemPrompt += `\n\nBase de Conhecimento:\n${agent.knowledge_base}`
+      // ai_agents.system_prompt mapeia diretamente o prompt do copiloto.
+      // Conhecimento (knowledge_base legado) agora vive em ai_agent_sources/ai_agent_chunks (RAG)
+      // e não é injetado aqui; o copiloto usa apenas o prompt canônico.
+      if (agent.system_prompt) {
+        systemPrompt = `Voce e um copiloto de atendimento. Baseado no contexto abaixo, sugira uma resposta para o agente humano enviar ao cliente.\n\n${agent.system_prompt}`
       }
-      model = agent.model
-      temperature = agent.temperature
-      maxTokens = agent.max_tokens
+      if (agent.model) model = agent.model
+      if (agent.temperature != null) temperature = agent.temperature
+      if (agent.max_tokens != null) maxTokens = agent.max_tokens
     }
   }
 
