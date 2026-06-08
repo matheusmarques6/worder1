@@ -87,9 +87,6 @@ export async function POST(
         case 'whatsapp-cloud-api':
           lead = await processWhatsAppWebhook(supabase, installation, body)
           break
-        case 'evolution-api':
-          lead = await processEvolutionWebhook(supabase, installation, body)
-          break
         case 'google-forms':
           lead = await processGoogleFormsWebhook(supabase, installation, body)
           break
@@ -216,15 +213,6 @@ async function processWhatsAppWebhook(supabase: any, installation: any, payload:
   if (!normalized) return null
 
   const leadData = buildLeadData(installation, normalized, 'whatsapp')
-  return await createOrUpdateLead(supabase, installation, leadData, normalized.externalId)
-}
-
-// Evolution API webhook processor
-async function processEvolutionWebhook(supabase: any, installation: any, payload: any) {
-  const normalized = normalizeWebhookPayload('whatsapp_evolution', payload)
-  if (!normalized) return null
-
-  const leadData = buildLeadData(installation, normalized, 'whatsapp-evolution')
   return await createOrUpdateLead(supabase, installation, leadData, normalized.externalId)
 }
 

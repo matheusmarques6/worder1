@@ -9,7 +9,6 @@ import type {
   ShopifyOrder,
   ShopifyCheckout,
   WhatsAppCloudMessage,
-  EvolutionMessage,
   FacebookLeadData,
   GoogleFormsResponse,
   TypeformResponse,
@@ -329,64 +328,6 @@ export function normalizeWhatsAppCloudMessage(payload: WhatsAppCloudMessage): Un
 }
 
 /**
- * Normaliza mensagem da Evolution API
- */
-export function normalizeEvolutionMessage(payload: EvolutionMessage): UnifiedContact | null {
-  if (payload.event !== 'messages.upsert') {
-    return null;
-  }
-
-  const { data } = payload;
-  const remoteJid = data.key.remoteJid;
-
-  // Ignora grupos e broadcasts
-  if (remoteJid.includes('@g.us') || remoteJid.includes('@broadcast')) {
-    return null;
-  }
-
-  // Ignora mensagens enviadas por mim
-  if (data.key.fromMe) {
-    return null;
-  }
-
-  const phone = extractPhoneFromJid(remoteJid);
-  const whatsappJid = normalizeWhatsAppJid(remoteJid);
-
-  // Extrai texto da mensagem
-  let messageText: string | undefined;
-  if (data.message?.conversation) {
-    messageText = data.message.conversation;
-  } else if (data.message?.extendedTextMessage?.text) {
-    messageText = data.message.extendedTextMessage.text;
-  } else if (data.message?.imageMessage?.caption) {
-    messageText = data.message.imageMessage.caption;
-  } else if (data.message?.videoMessage?.caption) {
-    messageText = data.message.videoMessage.caption;
-  } else if (data.message?.documentMessage?.caption) {
-    messageText = data.message.documentMessage.caption;
-  }
-
-  return {
-    name: data.pushName || undefined,
-    phone,
-    phoneNormalized: normalizePhone(phone),
-    whatsappJid,
-    source: 'whatsapp_evolution',
-    platform: 'whatsapp',
-    externalId: phone,
-    tags: ['whatsapp', 'mensagem-recebida'],
-    customFields: {
-      instance: payload.instance,
-      push_name: data.pushName,
-      first_message_id: data.key.id,
-      first_message_text: messageText,
-      first_message_timestamp: data.messageTimestamp,
-    },
-    rawPayload: payload,
-  };
-}
-
-/**
  * Normaliza lead do Facebook Lead Ads
  */
 export function normalizeFacebookLead(leadData: FacebookLeadData): UnifiedContact {
@@ -654,7 +595,6 @@ export type PlatformType =
   | 'shopify_order' 
   | 'shopify_checkout'
   | 'whatsapp_cloud_api'
-  | 'whatsapp_evolution'
   | 'facebook_lead_ads'
   | 'google_forms'
   | 'typeform'
@@ -687,9 +627,6 @@ export function normalizeWebhookPayload(
       break;
     case 'whatsapp_cloud_api':
       contact = normalizeWhatsAppCloudMessage(payload);
-      break;
-    case 'whatsapp_evolution':
-      contact = normalizeEvolutionMessage(payload);
       break;
     case 'facebook_lead_ads':
       contact = normalizeFacebookLead(payload);

@@ -29,35 +29,9 @@ export async function GET(request: NextRequest) {
     }> = [];
 
     // ============================================
-    // WHATSAPP - Evolution Instances
+    // WHATSAPP - Cloud API
     // ============================================
     if (!connectionType || connectionType === 'whatsapp') {
-      try {
-        const { data: evolutionInstances } = await supabase
-          .from('evolution_instances')
-          .select('id, instance_name, phone_number, status, created_at')
-          .order('created_at', { ascending: false });
-
-        if (evolutionInstances) {
-          for (const inst of evolutionInstances) {
-            connections.push({
-              id: inst.id,
-              type: 'whatsapp_evolution',
-              typeName: 'WhatsApp Evolution',
-              name: inst.instance_name || 'WhatsApp',
-              identifier: inst.phone_number || undefined,
-              icon: 'MessageCircle',
-              color: '#25D366',
-              isActive: inst.status === 'connected',
-              createdAt: inst.created_at,
-            });
-          }
-        }
-      } catch (e) {
-        console.log('[Connections] evolution_instances not found');
-      }
-
-      // WhatsApp Cloud API
       try {
         const { data: whatsappConfigs } = await supabase
           .from('whatsapp_configs')

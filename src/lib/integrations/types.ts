@@ -191,54 +191,6 @@ export interface WhatsAppCloudMessage {
   }>;
 }
 
-// Evolution API
-export interface EvolutionMessage {
-  event: 'messages.upsert' | 'messages.update' | 'connection.update' | 'qrcode.updated' | 'contacts.upsert' | 'send.message';
-  instance: string;
-  data: {
-    key: {
-      remoteJid: string;
-      fromMe: boolean;
-      id: string;
-    };
-    pushName?: string;
-    message?: {
-      conversation?: string;
-      extendedTextMessage?: { text: string; contextInfo?: any };
-      imageMessage?: { url?: string; mimetype: string; caption?: string };
-      videoMessage?: { url?: string; mimetype: string; caption?: string };
-      audioMessage?: { url?: string; mimetype: string; ptt: boolean };
-      documentMessage?: { url?: string; mimetype: string; fileName?: string; caption?: string };
-      locationMessage?: { degreesLatitude: number; degreesLongitude: number; name?: string; address?: string };
-      contactMessage?: { displayName: string; vcard: string };
-      stickerMessage?: { url?: string; mimetype: string };
-      reactionMessage?: { key: { id: string }; text: string };
-    };
-    messageTimestamp?: number | string;
-    status?: 'PENDING' | 'SERVER_ACK' | 'DELIVERY_ACK' | 'READ' | 'PLAYED';
-  };
-}
-
-export interface EvolutionConnectionUpdate {
-  event: 'connection.update';
-  instance: string;
-  data: {
-    state: 'open' | 'connecting' | 'close';
-    statusReason?: number;
-  };
-}
-
-export interface EvolutionQRCode {
-  event: 'qrcode.updated';
-  instance: string;
-  data: {
-    qrcode: {
-      base64: string;
-      code: string;
-    };
-  };
-}
-
 // Facebook Lead Ads
 export interface FacebookLeadAdWebhook {
   object: 'page';
