@@ -222,40 +222,20 @@ export async function POST(request: NextRequest) {
     console.log(`[Simulador] 📥 Mensagem salva: ${simulatedMessageId}`)
 
     // =====================================================
-    // 5. PROCESSAR COM IA
+    // 5. PROCESSAR COM IA (sempre simulado — Evolution removido,
+    //    o simulador nunca envia pelo WhatsApp real)
     // =====================================================
-    const { processWebhookWithAI } = await import('@/lib/ai/webhook-processor')
-
-    // Se skipWhatsAppSend, vamos mockar o envio
-    let aiResult
-    
-    if (skipWhatsAppSend) {
-      // Processar sem enviar WhatsApp real
-      aiResult = await processWebhookWithAISimulated({
-        organizationId,
-        conversationId: conversation.id,
-        contactId: contact.id,
-        instanceId: instance.id,
-        instanceName: instance.unique_id,
-        phoneNumber,
-        message,
-        messageId: simulatedMessageId,
-        contactName,
-      })
-    } else {
-      // Processar com envio real ao WhatsApp
-      aiResult = await processWebhookWithAI({
-        organizationId,
-        conversationId: conversation.id,
-        contactId: contact.id,
-        instanceId: instance.id,
-        instanceName: instance.unique_id,
-        phoneNumber,
-        message,
-        messageId: simulatedMessageId,
-        contactName,
-      })
-    }
+    const aiResult = await processWebhookWithAISimulated({
+      organizationId,
+      conversationId: conversation.id,
+      contactId: contact.id,
+      instanceId: instance.id,
+      instanceName: instance.unique_id,
+      phoneNumber,
+      message,
+      messageId: simulatedMessageId,
+      contactName,
+    })
 
     const totalTime = Date.now() - startTime
 
@@ -265,7 +245,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       simulation: true,
-      whatsapp_sent: !skipWhatsAppSend && aiResult.replied,
+      whatsapp_sent: false,
       
       input: {
         phoneNumber,

@@ -403,60 +403,6 @@ export async function enqueueWhatsAppSend(
 }
 
 /**
- * Parâmetros para processamento de IA via WhatsApp
- */
-export interface WhatsAppAIParams {
-  organizationId: string;
-  conversationId: string;
-  contactId: string;
-  instanceId: string;
-  instanceName: string;
-  phoneNumber: string;
-  message: string;
-  messageId?: string;
-  contactName?: string;
-}
-
-/**
- * Enfileira processamento de IA para mensagem WhatsApp
- * Isso garante que o processamento seja durável em ambiente serverless
- */
-export async function enqueueWhatsAppAI(
-  params: WhatsAppAIParams
-): Promise<string | null> {
-  const client = getQStashClient();
-  
-  // Se QStash não está configurado, retorna null (fallback para sync)
-  if (!client) {
-    console.warn('[Queue] QStash not configured for WhatsApp AI');
-    return null;
-  }
-
-  const baseUrl = getBaseUrl();
-  if (!baseUrl) {
-    console.warn('[Queue] APP_URL not configured');
-    return null;
-  }
-
-  try {
-    const response = await client.publishJSON({
-      url: `${baseUrl}/api/workers/whatsapp-ai`,
-      body: {
-        type: 'whatsapp_ai',
-        data: params,
-      },
-      retries: 3,
-    });
-
-    console.log(`[Queue] WhatsApp AI enqueued: ${response.messageId} for ${params.phoneNumber}`);
-    return response.messageId;
-  } catch (error) {
-    console.error('[Queue] Failed to enqueue WhatsApp AI:', error);
-    return null;
-  }
-}
-
-/**
  * Verifica assinatura de request do QStash
  */
 export async function verifyQStashSignature(
