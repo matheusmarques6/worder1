@@ -15,27 +15,21 @@ import {
   Zap,
   Database,
 } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
 import { AIAgent } from '@/lib/ai/types'
+import { isAgentsRedesignEnabled } from '@/lib/agents-redesign-flag'
+import AgentPlaygroundView, { PlaygroundMessage } from './playground/AgentPlaygroundView'
 
 interface AgentPreviewProps {
   agent: AIAgent
   onClose: () => void
 }
 
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-  metadata?: {
-    sources_used?: string[]
-    actions_triggered?: string[]
-    response_time_ms?: number
-    tokens_used?: number
-  }
-}
+type Message = PlaygroundMessage
 
 export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
+  const searchParams = useSearchParams()
+  const redesign = isAgentsRedesignEnabled(searchParams)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -103,6 +97,8 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
           actions_triggered: data.actions_triggered,
           response_time_ms: responseTime,
           tokens_used: data.tokens_used,
+          was_transferred: data.was_transferred,
+          transfer_to: data.transfer_to,
         },
       }
 
@@ -129,6 +125,24 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
     }
   }
 
+  // Fase 4: WhatsApp-style playground + trace panel behind the agentsRedesign flag.
+  if (redesign) {
+    return (
+      <AgentPlaygroundView
+        agent={agent}
+        messages={messages}
+        input={input}
+        loading={loading}
+        error={error}
+        onInputChange={setInput}
+        onSend={handleSend}
+        onClear={handleClear}
+        onDismissError={() => setError('')}
+        onClose={onClose}
+      />
+    )
+  }
+
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Header */}
@@ -146,14 +160,14 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
         <div className="flex items-center gap-2">
           <button
             onClick={handleClear}
-            className="p-2 rounded-lg bg-white text-gray-500 hover:text-white transition-colors"
+            className="p-2 rounded-lg bg-white text-gray-500 hover:text-gray-700 transition-colors"
             title="Limpar conversa"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg bg-white text-gray-500 hover:text-white transition-colors"
+            className="p-2 rounded-lg bg-white text-gray-500 hover:text-gray-700 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -188,7 +202,7 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
                       setInput(prompt)
                       inputRef.current?.focus()
                     }}
-                    className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-500 hover:text-white rounded-full text-xs transition-colors"
+                    className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-500 hover:text-gray-700 rounded-full text-xs transition-colors"
                   >
                     {prompt}
                   </button>
@@ -316,7 +330,7 @@ export default function AgentPreview({ agent, onClose }: AgentPreviewProps) {
             onKeyPress={handleKeyPress}
             placeholder="Digite uma mensagem..."
             disabled={loading}
-            className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-brand-400 disabled:opacity-50"
+            className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 disabled:opacity-50"
           />
           <button
             onClick={handleSend}
