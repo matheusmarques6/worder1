@@ -16,7 +16,10 @@
 
 const STORAGE_KEY = 'agentsRedesign';
 
-export function isAgentsRedesignEnabled(searchParams?: URLSearchParams | null): boolean {
+/** Minimal shape shared by URLSearchParams and Next's ReadonlyURLSearchParams. */
+type ReadableParams = { get(key: string): string | null }
+
+export function isAgentsRedesignEnabled(searchParams?: ReadableParams | null): boolean {
   // 1. URL param wins so a screen can be previewed/forced per-request.
   const v = searchParams?.get('v');
   if (v === '2') return true;

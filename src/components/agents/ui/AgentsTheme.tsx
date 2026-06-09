@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode } from 'react'
+import { HTMLAttributes, ReactNode } from 'react'
 import '@/styles/agents-theme.css'
 
 /**
@@ -12,11 +12,13 @@ import '@/styles/agents-theme.css'
 export function AgentsTheme({
   children,
   className = '',
-}: {
-  children: ReactNode
-  className?: string
-}) {
-  return <div className={`agents-theme ${className}`}>{children}</div>
+  ...rest
+}: { children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={`agents-theme ${className}`} {...rest}>
+      {children}
+    </div>
+  )
 }
 
 export default AgentsTheme

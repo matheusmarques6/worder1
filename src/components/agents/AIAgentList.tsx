@@ -22,15 +22,20 @@ import {
   Filter,
   ChevronDown,
 } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
 import AIAgentEditor from './AIAgentEditor'
 import { CreateAgentFlow } from './create'
 import { AIAgent } from '@/lib/ai/types'
+import { isAgentsRedesignEnabled } from '@/lib/agents-redesign-flag'
+import AgentsDashboardView from './dashboard/AgentsDashboardView'
 
 interface AIAgentListProps {
   organizationId: string
 }
 
 export default function AIAgentList({ organizationId }: AIAgentListProps) {
+  const searchParams = useSearchParams()
+  const redesign = isAgentsRedesignEnabled(searchParams)
   const [agents, setAgents] = useState<AIAgent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -122,6 +127,71 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
   const totalMessages = safeAgents.reduce((sum, a) => sum + (a.total_messages || 0), 0)
   const totalConversations = safeAgents.reduce((sum, a) => sum + (a.total_conversations || 0), 0)
 
+  const cycleFilter = () =>
+    setFilterStatus(filterStatus === 'all' ? 'active' : filterStatus === 'active' ? 'inactive' : 'all')
+
+  // Shared overlays (editor drawer + create flow) — used by both UIs.
+  const overlays = (
+    <>
+      <AnimatePresence>
+        {selectedAgentId && (
+          <AIAgentEditor
+            agentId={selectedAgentId}
+            organizationId={organizationId}
+            onClose={() => setSelectedAgentId(null)}
+            onUpdate={fetchAgents}
+            onDelete={fetchAgents}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showCreateFlow && (
+          <CreateAgentFlow
+            organizationId={organizationId}
+            onClose={() => setShowCreateFlow(false)}
+            onSuccess={(newAgentId) => {
+              setShowCreateFlow(false)
+              setSelectedAgentId(newAgentId)
+              fetchAgents()
+            }}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  )
+
+  // Fase 2: redesigned dashboard behind the agentsRedesign flag.
+  if (redesign) {
+    return (
+      <>
+        <AgentsDashboardView
+          agents={safeAgents}
+          filtered={filteredAgents}
+          loading={loading}
+          error={error}
+          searchQuery={searchQuery}
+          filterStatus={filterStatus}
+          menuOpenId={menuOpenId}
+          stats={{
+            total: safeAgents.length,
+            active: activeAgents,
+            messages: totalMessages,
+            conversations: totalConversations,
+          }}
+          onSearch={setSearchQuery}
+          onCycleFilter={cycleFilter}
+          onRetry={fetchAgents}
+          onCreate={() => setShowCreateFlow(true)}
+          onSelect={(id) => setSelectedAgentId(id)}
+          onToggleActive={handleToggleActive}
+          onDelete={handleDelete}
+          onMenuToggle={(id) => setMenuOpenId(id)}
+        />
+        {overlays}
+      </>
+    )
+  }
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -187,7 +257,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar agentes..."
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-brand-400"
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-brand-400"
           />
         </div>
 
@@ -198,7 +268,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
               const next = filterStatus === 'all' ? 'active' : filterStatus === 'active' ? 'inactive' : 'all'
               setFilterStatus(next)
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-600 hover:text-white transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-600 hover:text-gray-900 transition-colors"
           >
             <Filter className="w-4 h-4" />
             <span className="text-sm">
@@ -218,11 +288,11 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-12">
             <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
-            <p className="text-white mb-2">Erro ao carregar agentes</p>
+            <p className="text-gray-900 mb-2">Erro ao carregar agentes</p>
             <p className="text-sm text-gray-500 mb-4">{error}</p>
             <button
               onClick={fetchAgents}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-white rounded-xl"
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl"
             >
               Tentar novamente
             </button>
@@ -315,7 +385,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
                       className={`p-2 rounded-lg transition-colors ${
                         agent.is_active
                           ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                          : 'bg-gray-100 text-gray-400 hover:text-white'
+                          : 'bg-gray-100 text-gray-400 hover:text-gray-600'
                       }`}
                       title={agent.is_active ? 'Desativar' : 'Ativar'}
                     >
@@ -328,7 +398,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
                           e.stopPropagation()
                           setMenuOpenId(menuOpenId === agent.id ? null : agent.id)
                         }}
-                        className="p-2 rounded-lg bg-gray-100 text-gray-500 hover:text-white transition-colors"
+                        className="p-2 rounded-lg bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                       >
                         <MoreVertical className="w-4 h-4" />
                       </button>
@@ -347,7 +417,7 @@ export default function AIAgentList({ organizationId }: AIAgentListProps) {
                                 setSelectedAgentId(agent.id)
                                 setMenuOpenId(null)
                               }}
-                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:text-white hover:bg-gray-100 transition-colors"
+                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                             >
                               <Settings className="w-4 h-4" />
                               Configurar
