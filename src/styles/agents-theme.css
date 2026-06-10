@@ -464,3 +464,22 @@
 .agents-theme .fail-tag { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border-2); background: var(--surface); transition: .13s; }
 .agents-theme .fail-tag:hover { border-color: var(--red); color: var(--red); background: var(--red-tint); }
 .agents-theme .fail-tag.on { border-color: var(--red); color: #fff; background: var(--red); }
+
+/* ---- Anotação (data-flywheel) — Bloco E2 ----
+   Markup absent from the mockup (only `annotation.jsx` is referenced), so these
+   are inferred from the surrounding design system (vrow/case-card idiom). */
+.agents-theme .annot { border: 1px solid var(--border); border-radius: 13px; background: var(--surface); padding: 14px 15px; transition: .14s; }
+.agents-theme .annot:hover { border-color: var(--border-2); box-shadow: var(--sh-sm); }
+.agents-theme .annot.on { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-tint); }
+.agents-theme .annot-msg { font-size: 13px; line-height: 1.55; color: var(--text-2); }
+.agents-theme .annot-msg .who { font-weight: 700; color: var(--text); }
+.agents-theme .rate-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; font-size: 12.5px; font-weight: 700; cursor: pointer; border: 1px solid var(--border-2); background: var(--surface); color: var(--text-2); transition: .13s; }
+.agents-theme .rate-btn svg { width: 14px; height: 14px; }
+.agents-theme .rate-btn.good.on { border-color: var(--green); color: #fff; background: var(--green); }
+.agents-theme .rate-btn.bad.on { border-color: var(--red); color: #fff; background: var(--red); }
+.agents-theme .rate-btn.fix.on { border-color: var(--brand); color: #fff; background: var(--brand); }
+.agents-theme .flywheel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.agents-theme .fw-cell { border: 1px solid var(--border); border-radius: 13px; background: var(--surface); padding: 14px; text-align: center; }
+.agents-theme .fw-cell .fw-v { font-size: 22px; font-weight: 800; letter-spacing: -.02em; color: var(--text); }
+.agents-theme .fw-cell .fw-k { font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
+.agents-theme .fw-cell svg { width: 18px; height: 18px; margin: 0 auto 6px; color: var(--brand); display: block; }

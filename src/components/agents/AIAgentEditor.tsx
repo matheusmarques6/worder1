@@ -10,6 +10,8 @@ import {
   Plug,
   UserCircle,
   Settings,
+  History,
+  Tag,
   Save,
   Loader2,
   ArrowLeft,
@@ -29,6 +31,8 @@ import ActionsTab from './tabs/ActionsTab'
 import IntegrationsTab from './tabs/IntegrationsTab'
 import PersonaTab from './tabs/PersonaTab'
 import SettingsTab from './tabs/SettingsTab'
+import VersionsTab from './tabs/VersionsTab'
+import AnnotationTab from './tabs/AnnotationTab'
 import AgentPreview from './AgentPreview'
 
 // Scoped design system ("Agentes de IA" redesign)
@@ -67,6 +71,8 @@ const tabs = [
   { id: 'actions', label: 'Ações', icon: Zap },
   { id: 'integrations', label: 'Integrações', icon: Plug },
   { id: 'settings', label: 'Configurações', icon: Settings },
+  { id: 'versions', label: 'Versões', icon: History },
+  { id: 'annotation', label: 'Anotação', icon: Tag },
 ] as const
 
 type TabId = typeof tabs[number]['id']
@@ -508,6 +514,30 @@ export default function AIAgentEditor({
                     organizationId={organizationId}
                     onUpdate={updateAgent}
                   />
+                </motion.div>
+              )}
+
+              {activeTab === 'versions' && (
+                <motion.div
+                  key="versions"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="h-full"
+                >
+                  <VersionsTab />
+                </motion.div>
+              )}
+
+              {activeTab === 'annotation' && (
+                <motion.div
+                  key="annotation"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="h-full"
+                >
+                  <AnnotationTab />
                 </motion.div>
               )}
             </AnimatePresence>
