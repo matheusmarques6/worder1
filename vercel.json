@@ -131,6 +131,10 @@
     {
       "path": "/api/cron/send-scheduled-whatsapp-campaigns",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/process-scheduled-messages",
+      "schedule": "* * * * *"
     }
   ]
 }
