@@ -6,12 +6,16 @@
 // com FOR UPDATE — imune à corrida delivered/read entre workers QStash.
 // Chamado de processStatus (webhook-processor) como best-effort: a
 // atualização de whatsapp_cloud_messages nunca é bloqueada por isto.
+//
+// 'sent' é excluído intencionalmente: o campaign-processor grava status='sent'
+// e meta_message_id no MESMO update no momento do envio, tornando o webhook de
+// 'sent' sempre no-op no RPC (lock + retrograde log enganoso por mensagem).
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { wlog } from '@/lib/observability/whatsapp-logger'
 
-const CAMPAIGN_STATUSES = new Set(['sent', 'delivered', 'read', 'failed'])
+const CAMPAIGN_STATUSES = new Set(['delivered', 'read', 'failed'])
 
 export async function applyCampaignRecipientWebhookStatus(
   metaMessageId: string,

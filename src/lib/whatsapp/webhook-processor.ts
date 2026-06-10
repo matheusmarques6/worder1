@@ -464,13 +464,17 @@ async function processStatus(account: any, status: any) {
     .update(updateData)
     .eq('message_id', messageId);
 
-  // P0 — se a mensagem pertence a uma campanha (meta_message_id gravado pelo
-  // campaign-processor), propaga delivered/read/failed pro recipient e pros
-  // contadores da campanha. Best-effort: nunca falha o processamento do webhook.
-  await applyCampaignRecipientWebhookStatus(messageId, newStatus, {
-    errorCode: errors?.[0]?.code?.toString(),
-    errorMessage: errors?.[0]?.message || errors?.[0]?.title,
-  });
+  // P0 — campanha: mensagens enviadas via meta-api não existem em
+  // whatsapp_cloud_messages (currentRow null). Inbox: currentRow existe →
+  // skip (lookup seria sempre miss, economiza 1 RPC por status de TODO o
+  // tráfego de inbox). Se campanhas migrarem para o caminho cloud um dia,
+  // revisar este gate.
+  if (!currentRow) {
+    await applyCampaignRecipientWebhookStatus(messageId, newStatus, {
+      errorCode: errors?.[0]?.code?.toString(),
+      errorMessage: errors?.[0]?.message || errors?.[0]?.title,
+    });
+  }
 }
 
 // ============================================================

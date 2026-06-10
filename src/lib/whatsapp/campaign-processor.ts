@@ -255,7 +255,7 @@ export class CampaignProcessor {
       }))
 
       await campaignQueue.addBatch('send_campaign_batch', batchItems, {
-        delay: 0,     // stagger interno: index*10ms (ver comentário acima)
+        delay: 0,     // score = baseTime + index (1ms por item; ver comentário acima)
         priority: 0,  // processar em ordem de inserção
       })
 

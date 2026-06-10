@@ -41,4 +41,13 @@ describe('applyCampaignRecipientWebhookStatus', () => {
     expect(mockRpc).not.toHaveBeenCalled()
     expect(applied).toBe(false)
   })
+
+  it("ignora 'sent' (gravado pelo processor no envio; webhook de sent é sempre no-op)", async () => {
+    // campaign-processor already writes status='sent' + meta_message_id in the
+    // same DB update at send time, so the Meta 'sent' webhook is always a no-op
+    // in the RPC. CAMPAIGN_STATUSES no longer contains 'sent'.
+    const applied = await applyCampaignRecipientWebhookStatus('wamid.X', 'sent')
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(applied).toBe(false)
+  })
 })
