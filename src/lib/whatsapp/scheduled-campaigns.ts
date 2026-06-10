@@ -35,15 +35,27 @@ export async function processDueWhatsappCampaigns(deps: DispatchDeps): Promise<D
 
   for (const camp of due) {
     if (camp.scheduled_at && new Date(camp.scheduled_at).getTime() < cutoff) {
-      await supabaseAdmin
+      const { error: cancelErr } = await supabaseAdmin
         .from('whatsapp_campaigns')
         .update({ status: 'cancelled', completed_at: new Date().toISOString() })
         .eq('id', camp.id)
-      await supabaseAdmin.from('whatsapp_campaign_logs').insert({
+      if (cancelErr) {
+        wlog.error('whatsapp.campaign.cancel_update_failed', {
+          campaign_id: camp.id,
+          error: cancelErr.message,
+        })
+      }
+      const { error: logErr } = await supabaseAdmin.from('whatsapp_campaign_logs').insert({
         campaign_id: camp.id,
         log_type: 'warning',
         message: `Campanha expirada: agendada para ${camp.scheduled_at}, mais de 48h no passado. Cancelada automaticamente.`,
       })
+      if (logErr) {
+        wlog.error('whatsapp.campaign.log_insert_failed', {
+          campaign_id: camp.id,
+          error: logErr.message,
+        })
+      }
       wlog.warn('whatsapp.campaign.scheduled_expired', {
         campaign_id: camp.id,
         organization_id: camp.organization_id,

@@ -33,7 +33,7 @@ vi.mock('@/lib/supabase-admin', () => ({
 }))
 
 vi.mock('./queue', () => ({
-  campaignQueue: { add: vi.fn(), getStats: vi.fn(), complete: vi.fn(), fail: vi.fn(), recoverStuckJobs: vi.fn() },
+  campaignQueue: { add: vi.fn(), addBatch: vi.fn().mockResolvedValue([]), getStats: vi.fn(), complete: vi.fn(), fail: vi.fn(), recoverStuckJobs: vi.fn() },
   MessageQueue: class {},
 }))
 vi.mock('./rate-limiter', () => ({ getRateLimiter: vi.fn(), WhatsAppRateLimiter: class {} }))
@@ -169,6 +169,93 @@ describe('startCampaign — claim do cron (queued)', () => {
     const revertCall = updateCalls.find(c => c.data?.status === 'scheduled')
     expect(revertCall).toBeDefined()
 
+    const failedCall = updateCalls.find(c => c.data?.status === 'failed')
+    expect(failedCall).toBeUndefined()
+  })
+})
+
+// =============================================
+// startCampaign — queued sem instância conectada (soft-revert)
+// =============================================
+describe('startCampaign — queued sem instância conectada', () => {
+  const updateCalls: Array<{ data: any; id: string }> = []
+  let mockUpdate: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    updateCalls.length = 0
+    mockEnsureTemplateApproved.mockReset()
+    mockSelect.mockReset()
+
+    mockUpdate = vi.fn((data: any) => {
+      const eq = vi.fn((col: string, val: string) => {
+        updateCalls.push({ data, id: val })
+        return Promise.resolve({ error: null })
+      })
+      return { eq }
+    }) as any
+
+    // Template APPROVED — passa o guard de template
+    mockEnsureTemplateApproved.mockResolvedValue({ ok: true })
+
+    // mockSingle responde em ordem:
+    // 1ª chamada: query da campanha (status='queued')
+    // 2ª chamada: query da instância (vazio — nenhuma instância conectada)
+    let callCount = 0
+    const mockSingle = vi.fn(() => {
+      callCount++
+      if (callCount === 1) {
+        return Promise.resolve({
+          data: {
+            id: 'camp-2',
+            status: 'queued',
+            template_id: 'tpl-1',
+            organization_id: 'org-1',
+            template_name: 'promo',
+            template_variables: {},
+            audience_type: 'import',
+            imported_contacts: [],
+          },
+          error: null,
+        })
+      }
+      // 2ª chamada: instância — retorna erro (nenhuma encontrada)
+      return Promise.resolve({ data: null, error: { message: 'No rows found' } })
+    })
+
+    // A instância é consultada com .select().eq(org).eq(status).single()
+    // — dois níveis de .eq(). O mock precisa que o segundo .eq() também
+    // retorne { single, maybeSingle, in }.
+    const makeLeaf = () => ({
+      single: mockSingle,
+      maybeSingle: vi.fn().mockResolvedValue({ data: null }),
+      in: vi.fn().mockResolvedValue({ data: [], error: null }),
+    })
+    const makeEqChain = () => ({
+      eq: vi.fn(() => makeLeaf()),
+      single: mockSingle,
+      in: vi.fn().mockResolvedValue({ data: [], error: null }),
+    })
+
+    vi.mocked(supabaseAdmin.from).mockImplementation(((table: string) => ({
+      select: vi.fn(() => ({ eq: vi.fn(() => makeEqChain()) })),
+      update: mockUpdate,
+      insert: vi.fn(() => ({ select: mockSelect })),
+    })) as any)
+  })
+
+  it('queued sem instância conectada → revert para scheduled, NÃO failed', async () => {
+    const processor = new CampaignProcessor()
+    const result = await processor.startCampaign('camp-2')
+
+    // Deve retornar success:false sem lançar erro
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/No configured WhatsApp instance found/)
+
+    // Deve ter feito update com status:'scheduled' (soft-revert)
+    const revertCall = updateCalls.find(c => c.data?.status === 'scheduled')
+    expect(revertCall).toBeDefined()
+
+    // NÃO deve ter marcado 'failed'
     const failedCall = updateCalls.find(c => c.data?.status === 'failed')
     expect(failedCall).toBeUndefined()
   })

@@ -137,10 +137,18 @@ export class CampaignProcessor {
       const tplCheck = await ensureCampaignTemplateApproved(campaign)
       if (!tplCheck.ok) {
         if (campaign.status === 'queued') {
-          await supabase
+          const { error: revertErr } = await supabase
             .from('whatsapp_campaigns')
             .update({ status: 'scheduled', updated_at: new Date().toISOString() })
             .eq('id', campaignId)
+          if (revertErr) {
+            wlog.error('whatsapp.campaign.revert_update_failed', {
+              campaign_id: campaignId,
+              revert_to: 'scheduled',
+              reason: 'template_not_approved',
+              error: revertErr.message,
+            })
+          }
         }
         wlog.warn('whatsapp.campaign.start_blocked_template', {
           campaign_id: campaignId,
@@ -159,6 +167,29 @@ export class CampaignProcessor {
         .single()
 
       if (instanceError || !instance?.access_token || !instance?.phone_number_id) {
+        // Instância desconectada é condição temporária (rotineiramente transitória).
+        // Campanhas disparadas pelo cron ('queued') revertem para 'scheduled' e
+        // serão re-tentadas no próximo tick. Campanhas manuais (draft/paused)
+        // mantêm o throw para que o usuário veja o erro imediatamente.
+        if (campaign.status === 'queued') {
+          const { error: revertErr } = await supabase
+            .from('whatsapp_campaigns')
+            .update({ status: 'scheduled', updated_at: new Date().toISOString() })
+            .eq('id', campaignId)
+          if (revertErr) {
+            wlog.error('whatsapp.campaign.revert_update_failed', {
+              campaign_id: campaignId,
+              revert_to: 'scheduled',
+              reason: 'no_instance',
+              error: revertErr.message,
+            })
+          }
+          wlog.warn('whatsapp.campaign.start_blocked_no_instance', {
+            campaign_id: campaignId,
+            status: campaign.status,
+          })
+          return { success: false, totalRecipients: 0, totalBatches: 0, error: 'No configured WhatsApp instance found' }
+        }
         throw new Error('No configured WhatsApp instance found')
       }
 
@@ -191,36 +222,42 @@ export class CampaignProcessor {
         batches.push(recipients.slice(i, i + CAMPAIGN_CONFIG.batchSize))
       }
 
-      // 6. Enfileirar batches
-      for (let i = 0; i < batches.length; i++) {
-        const batchData: CampaignBatchData = {
-          campaignId,
-          batchIndex: i,
-          recipients: batches[i],
-          instance: {
-            id: instance.id,
-            phoneNumberId: instance.phone_number_id,
-            accessToken: instance.access_token,
-            tier: instance.messaging_tier || 1,
-          },
-          template: {
-            name: campaign.template_name || campaign.template?.name,
-            language: campaign.template?.language || 'pt_BR',
-            category: (() => {
-              const c = (campaign.template?.category as string | undefined)?.toUpperCase()
-              return c === 'MARKETING' || c === 'UTILITY' || c === 'AUTHENTICATION' ? c : undefined
-            })(),
-          },
-          organizationId: campaign.organization_id,
-          mediaUrl: campaign.media_url,
-          mediaType: campaign.media_type,
-        }
+      // 6. Enfileirar batches (pipelined via addBatch)
+      // CONCERN: addBatch aceita opções COMPARTILHADAS para todos os itens —
+      // não suporta delay/priority por item. O stagger interno é index*10ms
+      // em vez dos i*2000ms originais. O ganho de pipeline (SET em pipeline
+      // Redis em vez de N round-trips individuais) é preservado. Prioridade
+      // relativa é preservada pela ordem de inserção no sorted set; o stagger
+      // de 10ms entre batches é suficiente para ordenação prática em produção.
+      // Se o stagger exato de 2000ms for crítico, avaliar adicionar suporte a
+      // per-item options em addBatch.
+      const batchItems: CampaignBatchData[] = batches.map((batch, i) => ({
+        campaignId,
+        batchIndex: i,
+        recipients: batch,
+        instance: {
+          id: instance.id,
+          phoneNumberId: instance.phone_number_id,
+          accessToken: instance.access_token,
+          tier: instance.messaging_tier || 1,
+        },
+        template: {
+          name: campaign.template_name || campaign.template?.name,
+          language: campaign.template?.language || 'pt_BR',
+          category: (() => {
+            const c = (campaign.template?.category as string | undefined)?.toUpperCase()
+            return c === 'MARKETING' || c === 'UTILITY' || c === 'AUTHENTICATION' ? c : undefined
+          })(),
+        },
+        organizationId: campaign.organization_id,
+        mediaUrl: campaign.media_url,
+        mediaType: campaign.media_type,
+      }))
 
-        await campaignQueue.add('send_campaign_batch', batchData, {
-          delay: i * CAMPAIGN_CONFIG.batchStaggerMs,
-          priority: i, // Processar em ordem
-        })
-      }
+      await campaignQueue.addBatch('send_campaign_batch', batchItems, {
+        delay: 0,     // stagger interno: index*10ms (ver comentário acima)
+        priority: 0,  // processar em ordem de inserção
+      })
 
       // 7. Log
       await this.log(campaignId, 'info', `Campaign started with ${recipients.length} recipients in ${batches.length} batches`)

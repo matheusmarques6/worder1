@@ -60,4 +60,35 @@ describe('processDueWhatsappCampaigns', () => {
     mockRpc.mockResolvedValue({ data: null, error: { message: 'function does not exist' } })
     await expect(processDueWhatsappCampaigns({ startCampaign })).rejects.toThrow(/function does not exist/)
   })
+
+  it('startCampaign retorna {success:false} → result.failed=1 e outcome=failed', async () => {
+    mockRpc.mockResolvedValue({
+      data: [{ id: 'c1', organization_id: 'o1', scheduled_at: new Date(Date.now() - 60_000).toISOString() }],
+      error: null,
+    })
+    startCampaign.mockResolvedValue({ success: false, error: 'No configured WhatsApp instance found' })
+
+    const result = await processDueWhatsappCampaigns({ startCampaign })
+
+    expect(result.failed).toBe(1)
+    expect(result.dispatched).toBe(0)
+    expect(result.results).toHaveLength(1)
+    expect(result.results[0].outcome).toBe('failed')
+    expect(result.results[0].error).toBe('No configured WhatsApp instance found')
+  })
+
+  it('startCampaign rejeita → failed++ e o erro não é propagado', async () => {
+    mockRpc.mockResolvedValue({
+      data: [{ id: 'c2', organization_id: 'o1', scheduled_at: new Date(Date.now() - 60_000).toISOString() }],
+      error: null,
+    })
+    startCampaign.mockRejectedValue(new Error('unexpected crash'))
+
+    const result = await processDueWhatsappCampaigns({ startCampaign })
+
+    expect(result.failed).toBe(1)
+    expect(result.dispatched).toBe(0)
+    expect(result.results[0].outcome).toBe('failed')
+    expect(result.results[0].error).toBe('unexpected crash')
+  })
 })

@@ -12,6 +12,12 @@
 CREATE INDEX IF NOT EXISTS idx_campaigns_scheduled
   ON whatsapp_campaigns(scheduled_at) WHERE status = 'scheduled';
 
+-- Índice para reclaim de jobs 'queued' órfãos (crash/timeout entre claim e
+-- status terminal). O worker re-clama qualquer queued não atualizado há
+-- mais de 10 minutos.
+CREATE INDEX IF NOT EXISTS idx_campaigns_queued_reclaim
+  ON whatsapp_campaigns(updated_at) WHERE status = 'queued';
+
 CREATE INDEX IF NOT EXISTS idx_recipients_meta_msg_notnull
   ON whatsapp_campaign_recipients(meta_message_id)
   WHERE meta_message_id IS NOT NULL;
@@ -27,7 +33,11 @@ BEGIN
 END
 $do$;
 
--- 2) Claim atômico de campanhas agendadas
+-- 2) Claim atômico de campanhas agendadas + reclaim de queued órfãos.
+-- O UPDATE seta updated_at = NOW() ao transitar para 'queued', o que
+-- garante que um reclaim de órfão só ocorre após MAIS de 10 minutos sem
+-- atualização — impedindo que o cron re-claime campanhas normalmente em
+-- execução ou faça loop de reclaims.
 CREATE OR REPLACE FUNCTION claim_due_whatsapp_campaigns(p_limit INT DEFAULT 3)
 RETURNS SETOF whatsapp_campaigns AS $$
 BEGIN
@@ -36,7 +46,8 @@ BEGIN
   SET status = 'queued', updated_at = NOW()
   WHERE c.id IN (
     SELECT w.id FROM whatsapp_campaigns w
-    WHERE w.status = 'scheduled' AND w.scheduled_at <= NOW()
+    WHERE (w.status = 'scheduled' AND w.scheduled_at <= NOW())
+       OR (w.status = 'queued' AND w.updated_at < NOW() - INTERVAL '10 minutes')
     ORDER BY w.scheduled_at
     LIMIT p_limit
     FOR UPDATE SKIP LOCKED
