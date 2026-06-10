@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAuthClient } from '@/lib/api-utils'
 import { listEval, runEvaluation } from '@/lib/ai/evals'
 import type { AIAgent } from '@/lib/ai/types'
+import { AiBudgetExceededError } from '@/lib/ai/budget'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -57,6 +58,9 @@ export async function GET(
     return NextResponse.json(payload)
   } catch (error: any) {
     console.error('Error in GET /api/ai/agents/[id]/evals:', error)
+    if (error instanceof AiBudgetExceededError) {
+      return NextResponse.json({ error: error.message, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
+    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
@@ -99,6 +103,9 @@ export async function POST(
     return NextResponse.json(payload)
   } catch (error: any) {
     console.error('Error in POST /api/ai/agents/[id]/evals:', error)
+    if (error instanceof AiBudgetExceededError) {
+      return NextResponse.json({ error: error.message, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
+    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

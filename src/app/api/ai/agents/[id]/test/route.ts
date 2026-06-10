@@ -3,6 +3,7 @@ import { processWithAgent } from '@/lib/ai/engine'
 import { EngineMessage } from '@/lib/ai/types'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
+import { AiBudgetExceededError } from '@/lib/ai/budget';
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
@@ -104,10 +105,14 @@ export async function POST(
 
   } catch (error: any) {
     console.error('Error in POST /api/ai/agents/[id]/test:', error)
-    
+
+    if (error instanceof AiBudgetExceededError) {
+      return NextResponse.json({ error: error.message, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
+    }
+
     // Retornar erro mais amigável
     let errorMessage = error.message
-    
+
     if (error.message.includes('API key')) {
       errorMessage = 'API key do provedor de IA não configurada. Configure em Configurações > Chaves de API.'
     } else if (error.message.includes('não está ativo')) {
@@ -116,7 +121,7 @@ export async function POST(
       errorMessage = 'Fora do horário de funcionamento configurado para este agente.'
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: errorMessage,
       original_error: error.message,
     }, { status: 500 })

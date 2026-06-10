@@ -12,6 +12,7 @@ import { checkAiBudget, clearBudgetCache, AiBudgetExceededError, type BudgetChec
 vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
     from: vi.fn(),
+    rpc: vi.fn(),
   },
 }))
 
@@ -31,6 +32,7 @@ function makeChain(overrides: Record<string, any> = {}) {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     gte: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue(result),
     single: vi.fn().mockResolvedValue(result),
     then: (resolve: any) => Promise.resolve(result).then(resolve),
@@ -42,30 +44,62 @@ describe('checkAiBudget', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     clearBudgetCache()
+    // Por padrão: RPC retorna 0 (sem gastos)
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({ data: 0, error: null })
   })
 
-  it('retorna { allowed: true } quando nao ha budget configurado', async () => {
+  it('retorna { allowed: true } quando nao ha budget configurado (usa default $50)', async () => {
     const fromMock = vi.fn()
     ;(supabaseAdmin as any).from = fromMock
 
-    // Budget query: nao encontra linha
+    // Budget query: nao encontra linha → usa default
     fromMock.mockReturnValueOnce(makeChain({ data: null, error: null }))
-    // Usage query: nao importa quando budget = null
-    fromMock.mockReturnValueOnce(makeChain({ data: [{ cost_usd: 0.5 }], error: null }))
+    // RPC retorna gasto zero
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({ data: 0, error: null })
 
     const result: BudgetCheckResult = await checkAiBudget(ORG)
 
     expect(result.allowed).toBe(true)
-    expect(result.budgetUsd).toBeNull()
+    // budgetUsd agora é o default (50) em vez de null
+    expect(result.budgetUsd).toBe(50)
+    expect(result.spentUsd).toBe(0)
   })
 
-  it('retorna { allowed: true } quando gasto < limite', async () => {
+  it('org sem linha em ai_budgets com gasto abaixo de $50 é permitida', async () => {
+    const fromMock = vi.fn()
+    ;(supabaseAdmin as any).from = fromMock
+
+    fromMock.mockReturnValueOnce(makeChain({ data: null, error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({ data: 30.5, error: null })
+
+    const result = await checkAiBudget(ORG)
+
+    expect(result.allowed).toBe(true)
+    expect(result.budgetUsd).toBe(50)
+    expect(result.spentUsd).toBeCloseTo(30.5)
+  })
+
+  it('org sem linha em ai_budgets com gasto acima de $50 é bloqueada', async () => {
+    const fromMock = vi.fn()
+    ;(supabaseAdmin as any).from = fromMock
+
+    fromMock.mockReturnValueOnce(makeChain({ data: null, error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({ data: 55.0, error: null })
+
+    const result = await checkAiBudget(ORG)
+
+    expect(result.allowed).toBe(false)
+    expect(result.budgetUsd).toBe(50)
+    expect(result.spentUsd).toBeCloseTo(55.0)
+  })
+
+  it('retorna { allowed: true } quando gasto < limite (via RPC)', async () => {
     const fromMock = vi.fn()
     ;(supabaseAdmin as any).from = fromMock
 
     fromMock
       .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 10.0 }, error: null }))
-      .mockReturnValueOnce(makeChain({ data: [{ cost_usd: 3.0 }], error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({ data: 3.0, error: null })
 
     const result = await checkAiBudget(ORG)
 
@@ -74,13 +108,13 @@ describe('checkAiBudget', () => {
     expect(result.budgetUsd).toBe(10.0)
   })
 
-  it('retorna { allowed: false } quando gasto >= limite', async () => {
+  it('retorna { allowed: false } quando gasto >= limite (via RPC)', async () => {
     const fromMock = vi.fn()
     ;(supabaseAdmin as any).from = fromMock
 
     fromMock
       .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 5.0 }, error: null }))
-      .mockReturnValueOnce(makeChain({ data: [{ cost_usd: 5.5 }], error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({ data: 5.5, error: null })
 
     const result = await checkAiBudget(ORG)
 
@@ -89,18 +123,37 @@ describe('checkAiBudget', () => {
     expect(result.budgetUsd).toBe(5.0)
   })
 
-  it('retorna { allowed: true } quando a query de uso retorna null (sem historico)', async () => {
+  it('retorna { allowed: true } quando o RPC retorna zero (sem historico)', async () => {
     const fromMock = vi.fn()
     ;(supabaseAdmin as any).from = fromMock
 
     fromMock
       .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 10.0 }, error: null }))
-      .mockReturnValueOnce(makeChain({ data: null, error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({ data: 0, error: null })
 
     const result = await checkAiBudget(ORG)
 
     expect(result.allowed).toBe(true)
     expect(result.spentUsd).toBe(0)
+  })
+
+  it('fallback para .select() quando RPC nao existe (erro 42883)', async () => {
+    const fromMock = vi.fn()
+    ;(supabaseAdmin as any).from = fromMock
+
+    fromMock
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 10.0 }, error: null }))
+      .mockReturnValueOnce(makeChain({ data: [{ cost_usd: 3.0 }], error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '42883', message: 'function ai_monthly_cost_usd does not exist' },
+    })
+
+    const result = await checkAiBudget(ORG)
+
+    expect(result.allowed).toBe(true)
+    expect(result.spentUsd).toBeCloseTo(3.0)
+    expect(result.budgetUsd).toBe(10.0)
   })
 
   it('lanca AiBudgetExceededError quando budget excedido e throwOnExceeded=true', async () => {
@@ -109,7 +162,7 @@ describe('checkAiBudget', () => {
 
     fromMock
       .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 5.0 }, error: null }))
-      .mockReturnValueOnce(makeChain({ data: [{ cost_usd: 6.0 }], error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({ data: 6.0, error: null })
 
     await expect(checkAiBudget(ORG, { throwOnExceeded: true }))
       .rejects
@@ -122,11 +175,27 @@ describe('checkAiBudget', () => {
     expect(err.message).toContain('budget')
   })
 
-  it('retorna { allowed: true } quando erro de DB (fail-open gracioso)', async () => {
+  it('retorna { allowed: true } quando erro de DB em ai_budgets (fail-open gracioso)', async () => {
     const fromMock = vi.fn()
     ;(supabaseAdmin as any).from = fromMock
 
     fromMock.mockReturnValueOnce(makeChain({ data: null, error: new Error('db error') }))
+
+    const result = await checkAiBudget(ORG)
+
+    expect(result.allowed).toBe(true)
+  })
+
+  it('retorna { allowed: true } quando RPC falha com erro inesperado (fail-open gracioso)', async () => {
+    const fromMock = vi.fn()
+    ;(supabaseAdmin as any).from = fromMock
+
+    fromMock
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 10.0 }, error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '08006', message: 'connection failure' },
+    })
 
     const result = await checkAiBudget(ORG)
 

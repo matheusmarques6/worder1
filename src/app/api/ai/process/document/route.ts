@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chunkText, cleanTextForIndexing, extractTextMetadata } from '@/lib/ai/processors/text-processor'
 import { generateEmbeddingsBatch } from '@/lib/ai/embeddings'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { checkAiBudget } from '@/lib/ai/budget';
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
@@ -38,6 +39,25 @@ export async function POST(request: NextRequest) {
 
     if (!sourceId || !organization_id) {
       return NextResponse.json({ error: 'source_id e organization_id são obrigatórios' }, { status: 400 })
+    }
+
+    // Verificação de orçamento (soft gate): se excedido, marca fonte como erro
+    // com mensagem de budget em vez de processar embeddings (custo desnecessário).
+    // Fail-open: erro de DB no checkAiBudget nunca bloqueia o fluxo.
+    const budgetCheck = await checkAiBudget(organization_id, { skipCache: false })
+    if (!budgetCheck.allowed) {
+      const budgetMsg = `Orçamento AI excedido: $${budgetCheck.spentUsd.toFixed(4)} de $${budgetCheck.budgetUsd?.toFixed(4)} USD/mês`
+      if (sourceId) {
+        await supabase
+          .from('ai_agent_sources')
+          .update({
+            status: 'error',
+            error_message: budgetMsg,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', sourceId)
+      }
+      return NextResponse.json({ error: budgetMsg, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
     }
 
     // Buscar fonte

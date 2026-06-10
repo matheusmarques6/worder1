@@ -3,11 +3,18 @@
 // /src/lib/ai/budget.ts
 //
 // checkAiBudget: verifica se a org ainda tem cota mensal disponivel.
-// - Lê ai_budgets.monthly_limit_usd (NULL = sem limite → permite).
-// - Soma cost_usd de ai_usage_logs no mês corrente.
+// - Lê ai_budgets.monthly_limit_usd (DEFAULT 50 USD quando sem linha).
+// - Soma cost_usd via RPC ai_monthly_cost_usd (sem truncar em 1000 linhas).
+//   Fallback gracioso para .select() COM .limit(100000) se o RPC não existir
+//   (erro 42883 / function does not exist) — degrade documentado.
 // - Cache em memória curto (30s) para não bater o DB a cada mensagem.
 // - Fail-open: erro de DB → permite (não trava fluxo).
 // - Opção throwOnExceeded: lança AiBudgetExceededError (status 402).
+//
+// Env:
+//   DEFAULT_MONTHLY_LIMIT_USD — limite padrão para orgs sem linha em ai_budgets.
+//   Padrão: 50 USD/mês. Orgs que legitimamente gastam mais precisam de linha
+//   própria em ai_budgets (deploy checklist).
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -57,6 +64,59 @@ export class AiBudgetExceededError extends Error {
 }
 
 // =============================================
+// Limite padrão quando a org não tem linha em ai_budgets.
+// Orgs que legitimamente gastam mais de $50/mês precisam de linha
+// própria em ai_budgets (veja deploy checklist).
+// =============================================
+function _defaultBudgetUsd(): number {
+  const env = process.env.DEFAULT_MONTHLY_LIMIT_USD
+  if (env) {
+    const parsed = parseFloat(env)
+    if (!isNaN(parsed) && parsed > 0) return parsed
+  }
+  return 50
+}
+
+// =============================================
+// Soma do custo do mês via RPC (sem truncar em 1000 linhas).
+// Fallback gracioso: se a função não existir (código 42883),
+// usa .select() com .limit(100000) e soma no cliente.
+// Degrade documentado: ambientes sem a migration 20260616 usam fallback.
+// =============================================
+async function _sumMonthCostUsd(organizationId: string, monthStart: string): Promise<number> {
+  // Tentativa 1: RPC ai_monthly_cost_usd (soma server-side, sem truncar)
+  const { data: rpcData, error: rpcErr } = await (supabaseAdmin as any).rpc(
+    'ai_monthly_cost_usd',
+    { p_organization_id: organizationId, p_month_start: monthStart }
+  )
+
+  if (!rpcErr) {
+    return Number(rpcData) || 0
+  }
+
+  // Degrade: RPC não existe (42883 = undefined_function) → fallback com limite
+  if (rpcErr.code === '42883' || (rpcErr.message && rpcErr.message.includes('function') && rpcErr.message.includes('does not exist'))) {
+    console.warn('[checkAiBudget] RPC ai_monthly_cost_usd não encontrado — usando fallback .select() com limit(100000)')
+    const { data: usageRows, error: usageErr } = await (supabaseAdmin as any)
+      .from('ai_usage_logs')
+      .select('cost_usd')
+      .eq('organization_id', organizationId)
+      .gte('created_at', monthStart)
+      .limit(100000)
+
+    if (usageErr) {
+      throw usageErr
+    }
+
+    const rows: Array<{ cost_usd: number }> = Array.isArray(usageRows) ? usageRows : []
+    return rows.reduce((sum, r) => sum + (Number(r.cost_usd) || 0), 0)
+  }
+
+  // Outro erro inesperado: propaga para fail-open no caller
+  throw rpcErr
+}
+
+// =============================================
 // Função principal
 // =============================================
 
@@ -92,36 +152,26 @@ export async function checkAiBudget(
       return { allowed: true, budgetUsd: null, spentUsd: 0 }
     }
 
-    const budgetUsd: number | null = budgetRow?.monthly_limit_usd ?? null
+    // Sem linha → usa DEFAULT_MONTHLY_LIMIT_USD (padrão $50/mês)
+    const budgetUsd: number =
+      budgetRow?.monthly_limit_usd != null
+        ? Number(budgetRow.monthly_limit_usd)
+        : _defaultBudgetUsd()
 
-    // Sem limite configurado → permite imediatamente
-    if (budgetUsd === null) {
-      const result: BudgetCheckResult = { allowed: true, budgetUsd: null, spentUsd: 0 }
-      _setCached(organizationId, result)
-      return result
-    }
-
-    // 2. Somar gasto do mês corrente
+    // 2. Somar gasto do mês corrente via RPC (com fallback gracioso)
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
-    const { data: usageRows, error: usageErr } = await (supabaseAdmin as any)
-      .from('ai_usage_logs')
-      .select('cost_usd')
-      .eq('organization_id', organizationId)
-      .gte('created_at', monthStart)
-
-    if (usageErr) {
-      console.warn('[checkAiBudget] erro ao ler ai_usage_logs:', usageErr?.message)
+    let spentUsd: number
+    try {
+      spentUsd = await _sumMonthCostUsd(organizationId, monthStart)
+    } catch (usageErr: any) {
+      console.warn('[checkAiBudget] erro ao somar ai_usage_logs:', usageErr?.message)
       // Fail-open
       const result: BudgetCheckResult = { allowed: true, budgetUsd, spentUsd: 0 }
       _setCached(organizationId, result)
       return result
     }
-
-    // usageRows é um array de linhas; somamos cost_usd no cliente
-    const rows: Array<{ cost_usd: number }> = Array.isArray(usageRows) ? usageRows : []
-    const spentUsd: number = rows.reduce((sum, r) => sum + (Number(r.cost_usd) || 0), 0)
 
     const allowed = spentUsd < budgetUsd
     const result: BudgetCheckResult = { allowed, budgetUsd, spentUsd }

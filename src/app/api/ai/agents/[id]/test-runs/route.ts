@@ -7,6 +7,7 @@ import {
   generateScenarios,
 } from '@/lib/ai/test-runner'
 import type { AIAgent } from '@/lib/ai/types'
+import { AiBudgetExceededError } from '@/lib/ai/budget'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -61,6 +62,9 @@ export async function GET(
     return NextResponse.json({ scenarios })
   } catch (error: any) {
     console.error('Error in GET /api/ai/agents/[id]/test-runs:', error)
+    if (error instanceof AiBudgetExceededError) {
+      return NextResponse.json({ error: error.message, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
+    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
@@ -119,6 +123,9 @@ export async function POST(
     return NextResponse.json({ scenarios })
   } catch (error: any) {
     console.error('Error in POST /api/ai/agents/[id]/test-runs:', error)
+    if (error instanceof AiBudgetExceededError) {
+      return NextResponse.json({ error: error.message, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
+    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
