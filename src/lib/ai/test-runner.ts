@@ -24,6 +24,9 @@ import {
 /** Limite duro de cenários por execução (cap de custo). */
 export const MAX_SCENARIOS_PER_RUN = 10
 
+/** Limite duro de turnos do usuário por cenário (cap de custo por execução). */
+export const MAX_TURNS_PER_SCENARIO = 10
+
 export type ScenarioStatus = 'pass' | 'flag' | 'grave'
 
 /** Shape consumido pela UI (TestRunView). */
@@ -250,7 +253,9 @@ interface ScenarioRow {
 
 function normalizeUserTurns(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
-  return raw.filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+  return raw
+    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+    .slice(0, MAX_TURNS_PER_SCENARIO)
 }
 
 /**
