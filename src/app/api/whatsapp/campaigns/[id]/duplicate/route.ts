@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // POST /api/whatsapp/campaigns/[id]/duplicate
@@ -7,6 +8,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // ✅ P1 v2: org do token; valida que a campanha pertence à org antes de duplicar
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const { id } = params
 
@@ -14,6 +20,7 @@ export async function POST(
       .from('whatsapp_campaigns')
       .select('*')
       .eq('id', id)
+      .eq('organization_id', organizationId) // ✅ escopo de org
       .single()
 
     if (!original) {
@@ -24,7 +31,7 @@ export async function POST(
     const { data: duplicate, error } = await supabase
       .from('whatsapp_campaigns')
       .insert({
-        organization_id: original.organization_id,
+        organization_id: organizationId,
         instance_id: original.instance_id,
         name: `${original.name} (Cópia)`,
         description: original.description,

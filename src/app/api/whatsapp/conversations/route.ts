@@ -1,54 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { getSupabaseClient } from '@/lib/api-utils';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // Helper para obter organization_id do usuário
 async function getOrgIdFromSession(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { orgId: null, user: null };
-  
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('organization_id')
     .eq('id', user.id)
     .single();
-    
+
   return { orgId: profile?.organization_id, user };
 }
 
 // GET - Lista conversas
 export async function GET(request: NextRequest) {
+  // ✅ P1 v2: org SEMPRE do token; organization_id/organizationId da query é IGNORADO
+  // (remover ramo que usava orgIdFromQuery diretamente — IDOR)
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const orgId = auth.orgId;
+
+  // Usar createRouteHandlerClient para operações que precisam do cliente com RLS
+  const supabase = createRouteHandlerClient({ cookies });
+
   try {
     const searchParams = request.nextUrl.searchParams;
-    
-    // Tentar pegar organization_id da query string primeiro
-    const orgIdFromQuery = searchParams.get('organization_id') || searchParams.get('organizationId');
     const agentIdFromQuery = searchParams.get('agent_id');
-    
-    let supabase: any;
-    let orgId: string | null = null;
-    let currentUser: any = null;
-    
-    if (orgIdFromQuery) {
-      // Usar client direto se organization_id foi fornecido
-      supabase = getSupabaseClient();
-      if (!supabase) {
-        return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-      }
-      orgId = orgIdFromQuery;
-    } else {
-      // Fallback para autenticação por sessão
-      supabase = createRouteHandlerClient({ cookies });
-      const result = await getOrgIdFromSession(supabase);
-      orgId = result.orgId;
-      currentUser = result.user;
-    }
-    
-    if (!orgId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
-    }
 
     const status = searchParams.get('status');
     const search = searchParams.get('search');
@@ -78,7 +61,7 @@ export async function GET(request: NextRequest) {
     if (agentId) {
       query = query.eq('assigned_agent_id', agentId);
     }
-    
+
     // Filtrar por número WhatsApp específico
     if (whatsappNumberId) {
       query = query.eq('whatsapp_number_id', whatsappNumberId);
@@ -96,7 +79,7 @@ export async function GET(request: NextRequest) {
         .select('whatsapp_access_all, whatsapp_number_ids')
         .eq('agent_id', agentIdFromQuery)
         .single();
-      
+
       if (permissions && !permissions.whatsapp_access_all && permissions.whatsapp_number_ids?.length > 0) {
         // Filtrar por números permitidos
         query = query.in('whatsapp_number_id', permissions.whatsapp_number_ids);
@@ -137,7 +120,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
     const { orgId } = await getOrgIdFromSession(supabase);
-    
+
     if (!orgId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -161,7 +144,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (existing) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         conversation: existing,
         message: 'Conversation already exists'
       });
@@ -199,7 +182,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
     const { orgId } = await getOrgIdFromSession(supabase);
-    
+
     if (!orgId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -213,11 +196,11 @@ export async function PATCH(request: NextRequest) {
 
     // Campos permitidos
     const allowedFields = [
-      'status', 'assigned_agent_id', 'chat_note', 
+      'status', 'assigned_agent_id', 'chat_note',
       'is_bot_active', 'bot_disabled_until', 'contact_name',
       'priority', 'unread_count'
     ];
-    
+
     const filteredData: Record<string, any> = {};
     for (const field of allowedFields) {
       if (field in updateData) {
@@ -254,7 +237,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
     const { orgId } = await getOrgIdFromSession(supabase);
-    
+
     if (!orgId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
