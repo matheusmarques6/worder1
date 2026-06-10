@@ -1,77 +1,107 @@
 // =============================================
 // API: /api/whatsapp/ai
-// Chatbot IA e sugestões de resposta
+// Chatbot IA e sugestoes de resposta
+// =============================================
+// P1.3: api_key_encrypted gravado em AES-256-GCM (secret-box).
+//       Leitura dual: AES primeiro; fallback base64 legacy com
+//       re-encrypt preguicoso (idempotente sob concorrencia).
+// P1 v2: org SEMPRE derivada do token (requireOrgFromAuth);
+//        organization_id de query/body e aceito e IGNORADO.
 // =============================================
 
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
-import { callAI, generateWhatsAppResponse, suggestResponse, AI_MODELS } from '@/lib/whatsapp/ai-providers';
-export const dynamic = 'force-dynamic';
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { callAI, generateWhatsAppResponse, suggestResponse, AI_MODELS } from '@/lib/whatsapp/ai-providers'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
+import { encryptApiKey, decodeApiKey } from '@/lib/ai/api-key-codec'
+export const dynamic = 'force-dynamic'
 
-// GET - Listar configurações de AI e modelos disponíveis
+// GET - Listar configuracoes de AI e modelos disponiveis
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
-    const action = searchParams.get('action');
+    const { searchParams } = new URL(request.url)
+    const action = searchParams.get('action')
 
-    // Retornar modelos disponíveis
+    // Retornar modelos disponiveis (publico -- sem auth)
     if (action === 'models') {
-      return NextResponse.json({ models: AI_MODELS });
+      return NextResponse.json({ models: AI_MODELS })
     }
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id required' }, { status: 400 });
-    }
+    // P1 v2: org do token; organization_id da query e IGNORADO
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const organizationId = auth.orgId
 
-    // Buscar configurações de AI da organização
+    // Buscar configuracoes de AI da organizacao
     const { data: configs, error } = await supabase
       .from('whatsapp_ai_configs')
       .select('id, provider, model, system_prompt, temperature, max_tokens, is_active, created_at')
       .eq('organization_id', organizationId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
 
-    if (error) throw error;
+    if (error) throw error
 
-    return NextResponse.json({ configs });
+    return NextResponse.json({ configs })
   } catch (error: any) {
-    console.error('AI GET error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('AI GET error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
 // POST - Criar config, gerar resposta ou sugerir
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { action } = body;
+    // P1 v2: org do token para acoes que a requerem
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const organizationId = auth.orgId
+
+    const body = await request.json()
+    const { action } = body
 
     switch (action) {
       case 'create_config':
-        return handleCreateConfig(body);
+        return handleCreateConfig(body, organizationId)
       case 'generate':
-        return handleGenerate(body);
+        return handleGenerate(body, organizationId)
       case 'suggest':
-        return handleSuggest(body);
+        return handleSuggest(body, organizationId)
       case 'test':
-        return handleTest(body);
+        return handleTest(body)
       default:
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+        return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
   } catch (error: any) {
-    console.error('AI POST error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('AI POST error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
-// PATCH - Atualizar configuração
+// PATCH - Atualizar configuracao
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { id, ...updates } = body;
+    // P1 v2: org do token; validar que a config pertence a esta org
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const organizationId = auth.orgId
+
+    const body = await request.json()
+    const { id, ...updates } = body
 
     if (!id) {
-      return NextResponse.json({ error: 'id required' }, { status: 400 });
+      return NextResponse.json({ error: 'id required' }, { status: 400 })
+    }
+
+    // Validar que a config pertence a org do token (evita IDOR no PATCH)
+    const { data: existing, error: fetchErr } = await supabase
+      .from('whatsapp_ai_configs')
+      .select('id')
+      .eq('id', id)
+      .eq('organization_id', organizationId)
+      .single()
+
+    if (fetchErr || !existing) {
+      return NextResponse.json({ error: 'Config nao encontrada' }, { status: 404 })
     }
 
     const { data, error } = await supabase
@@ -81,39 +111,47 @@ export async function PATCH(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('organization_id', organizationId)
       .select()
-      .single();
+      .single()
 
-    if (error) throw error;
+    if (error) throw error
 
-    return NextResponse.json({ config: data });
+    return NextResponse.json({ config: data })
   } catch (error: any) {
-    console.error('AI PATCH error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('AI PATCH error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
-// DELETE - Remover configuração
+// DELETE - Remover configuracao
 export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    // P1 v2: org do token; validar que a config pertence a esta org
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const organizationId = auth.orgId
+
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
 
     if (!id) {
-      return NextResponse.json({ error: 'id required' }, { status: 400 });
+      return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
 
+    // Validar que a config pertence a org do token (evita IDOR no DELETE)
     const { error } = await supabase
       .from('whatsapp_ai_configs')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('organization_id', organizationId)
 
-    if (error) throw error;
+    if (error) throw error
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('AI DELETE error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('AI DELETE error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
@@ -121,20 +159,20 @@ export async function DELETE(request: NextRequest) {
 // HANDLERS
 // =============================================
 
-async function handleCreateConfig(body: any) {
-  const { organization_id, provider, model, api_key, system_prompt, temperature, max_tokens } = body;
+async function handleCreateConfig(body: any, organizationId: string) {
+  const { provider, model, api_key, system_prompt, temperature, max_tokens } = body
 
-  if (!organization_id || !provider || !model || !api_key) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  if (!provider || !model || !api_key) {
+    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  // Criptografar API key (em produção, use uma solução mais robusta)
-  const api_key_encrypted = Buffer.from(api_key).toString('base64');
+  // P1.3: AES-256-GCM via secret-box (substitui base64)
+  const api_key_encrypted = encryptApiKey(api_key)
 
   const { data, error } = await supabase
     .from('whatsapp_ai_configs')
     .insert({
-      organization_id,
+      organization_id: organizationId,
       provider,
       model,
       api_key_encrypted,
@@ -144,46 +182,46 @@ async function handleCreateConfig(body: any) {
       is_active: true,
     })
     .select()
-    .single();
+    .single()
 
-  if (error) throw error;
+  if (error) throw error
 
-  return NextResponse.json({ config: data });
+  return NextResponse.json({ config: data })
 }
 
-async function handleGenerate(body: any) {
-  const { organization_id, conversation_id, user_message, contact_name } = body;
+async function handleGenerate(body: any, organizationId: string) {
+  const { conversation_id, user_message, contact_name } = body
 
-  if (!organization_id || !user_message) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  if (!user_message) {
+    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  // Buscar config de AI ativa
+  // Buscar config de AI ativa (escopada pela org do token)
   const { data: config, error: configError } = await supabase
     .from('whatsapp_ai_configs')
     .select('*')
-    .eq('organization_id', organization_id)
+    .eq('organization_id', organizationId)
     .eq('is_active', true)
-    .single();
+    .single()
 
   if (configError || !config) {
-    return NextResponse.json({ error: 'No active AI config found' }, { status: 404 });
+    return NextResponse.json({ error: 'No active AI config found' }, { status: 404 })
   }
 
-  // Descriptografar API key
-  const apiKey = Buffer.from(config.api_key_encrypted, 'base64').toString('utf-8');
+  // P1.3: leitura dual + re-encrypt preguicoso
+  const apiKey = await readConfigApiKey(config)
 
-  // Buscar histórico de conversa
-  let conversationHistory: any[] = [];
+  // Buscar historico de conversa
+  let conversationHistory: any[] = []
   if (conversation_id) {
     const { data: messages } = await supabase
       .from('whatsapp_messages')
       .select('direction, content')
       .eq('conversation_id', conversation_id)
       .order('created_at', { ascending: true })
-      .limit(20);
+      .limit(20)
 
-    conversationHistory = messages || [];
+    conversationHistory = messages || []
   }
 
   // Gerar resposta
@@ -199,47 +237,47 @@ async function handleGenerate(body: any) {
     conversationHistory,
     userMessage: user_message,
     contactName: contact_name,
-  });
+  })
 
-  return NextResponse.json({ response });
+  return NextResponse.json({ response })
 }
 
-async function handleSuggest(body: any) {
-  const { organization_id, conversation_id, user_message } = body;
+async function handleSuggest(body: any, organizationId: string) {
+  const { conversation_id, user_message } = body
 
-  if (!organization_id || !user_message) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  if (!user_message) {
+    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  // Buscar config de AI ativa
+  // Buscar config de AI ativa (escopada pela org do token)
   const { data: config, error: configError } = await supabase
     .from('whatsapp_ai_configs')
     .select('*')
-    .eq('organization_id', organization_id)
+    .eq('organization_id', organizationId)
     .eq('is_active', true)
-    .single();
+    .single()
 
   if (configError || !config) {
-    return NextResponse.json({ error: 'No active AI config found' }, { status: 404 });
+    return NextResponse.json({ error: 'No active AI config found' }, { status: 404 })
   }
 
-  // Descriptografar API key
-  const apiKey = Buffer.from(config.api_key_encrypted, 'base64').toString('utf-8');
+  // P1.3: leitura dual + re-encrypt preguicoso
+  const apiKey = await readConfigApiKey(config)
 
-  // Buscar histórico de conversa
-  let conversationHistory: any[] = [];
+  // Buscar historico de conversa
+  let conversationHistory: any[] = []
   if (conversation_id) {
     const { data: messages } = await supabase
       .from('whatsapp_messages')
       .select('direction, content')
       .eq('conversation_id', conversation_id)
       .order('created_at', { ascending: true })
-      .limit(10);
+      .limit(10)
 
-    conversationHistory = messages || [];
+    conversationHistory = messages || []
   }
 
-  // Gerar sugestões
+  // Gerar sugestoes
   const suggestions = await suggestResponse({
     config: {
       provider: config.provider,
@@ -250,16 +288,16 @@ async function handleSuggest(body: any) {
     },
     conversationHistory,
     userMessage: user_message,
-  });
+  })
 
-  return NextResponse.json({ suggestions });
+  return NextResponse.json({ suggestions })
 }
 
 async function handleTest(body: any) {
-  const { provider, api_key, model, test_message } = body;
+  const { provider, api_key, model, test_message } = body
 
   if (!provider || !api_key || !model) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
   try {
@@ -271,20 +309,41 @@ async function handleTest(body: any) {
         temperature: 0.7,
         maxTokens: 100,
       },
-      [
-        { role: 'user', content: test_message || 'Olá, tudo bem?' },
-      ]
-    );
+      [{ role: 'user', content: test_message || 'Ola, tudo bem?' }]
+    )
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       response: response.content,
-      usage: response.usage 
-    });
+      usage: response.usage,
+    })
   } catch (error: any) {
-    return NextResponse.json({ 
-      success: false, 
-      error: error.message 
-    }, { status: 400 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: error.message,
+      },
+      { status: 400 }
+    )
   }
+}
+
+// =============================================
+// HELPER: Leitura dual + re-encrypt preguicoso (P1.3)
+// Durante a transicao ha linhas base64 no banco; ao ler uma,
+// re-gravamos ja encriptada. Guard .eq no valor antigo => idempotente.
+// =============================================
+async function readConfigApiKey(config: { id: string; api_key_encrypted: string }): Promise<string> {
+  const { apiKey, legacyBase64 } = decodeApiKey(config.api_key_encrypted)
+  if (legacyBase64 && apiKey) {
+    supabase
+      .from('whatsapp_ai_configs')
+      .update({ api_key_encrypted: encryptApiKey(apiKey), updated_at: new Date().toISOString() })
+      .eq('id', config.id)
+      .eq('api_key_encrypted', config.api_key_encrypted)
+      .then(({ error }) => {
+        if (error) console.warn('[whatsapp/ai] re-encrypt lazy falhou:', error.message)
+      })
+  }
+  return apiKey
 }
