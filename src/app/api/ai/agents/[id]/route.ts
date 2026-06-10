@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
+import { snapshotIfChanged } from '@/lib/ai/versions';
 export const dynamic = 'force-dynamic';
 
 // =====================================================
@@ -85,16 +86,35 @@ export async function PUT(
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
     }
 
-    // Verificar se agente existe
+    // Verificar se agente existe (estado pré-update usado pelo snapshot de versão)
     const { data: existing, error: checkError } = await supabase
       .from('ai_agents')
-      .select('id')
+      .select('id, system_prompt, persona, settings')
       .eq('id', agentId)
       .eq('organization_id', organization_id)
       .single()
 
     if (checkError || !existing) {
       return NextResponse.json({ error: 'Agente não encontrado' }, { status: 404 })
+    }
+
+    // Snapshot de versão (Bloco F1) — não-fatal: o save continua mesmo se falhar
+    try {
+      await snapshotIfChanged(
+        supabase,
+        {
+          id: agentId,
+          organization_id,
+          system_prompt: existing.system_prompt,
+          persona: existing.persona,
+          settings: existing.settings,
+        },
+        { system_prompt: body.system_prompt, persona: body.persona, settings: body.settings },
+        typeof body.user_id === 'string' ? body.user_id : null,
+        typeof body.version_label === 'string' ? body.version_label : null
+      )
+    } catch (snapshotError) {
+      console.error('Error snapshotting agent version (non-fatal):', snapshotError)
     }
 
     // Preparar dados para atualização
@@ -193,6 +213,40 @@ export async function PATCH(
       if (body[field] !== undefined) {
         updateData[field] = body[field]
       }
+    }
+
+    // Snapshot de versão (Bloco F1) — não-fatal: o save continua mesmo se falhar
+    try {
+      if (
+        body.system_prompt !== undefined ||
+        body.persona !== undefined ||
+        body.settings !== undefined
+      ) {
+        const { data: current } = await supabase
+          .from('ai_agents')
+          .select('id, system_prompt, persona, settings')
+          .eq('id', agentId)
+          .eq('organization_id', organization_id)
+          .single()
+
+        if (current) {
+          await snapshotIfChanged(
+            supabase,
+            {
+              id: agentId,
+              organization_id,
+              system_prompt: current.system_prompt,
+              persona: current.persona,
+              settings: current.settings,
+            },
+            { system_prompt: body.system_prompt, persona: body.persona, settings: body.settings },
+            typeof body.user_id === 'string' ? body.user_id : null,
+            typeof body.version_label === 'string' ? body.version_label : null
+          )
+        }
+      }
+    } catch (snapshotError) {
+      console.error('Error snapshotting agent version (non-fatal):', snapshotError)
     }
 
     // Atualizar

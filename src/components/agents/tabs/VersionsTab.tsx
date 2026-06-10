@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   History,
@@ -9,19 +9,21 @@ import {
   User,
   Clock,
   AlertTriangle,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react'
+import { useAuthStore } from '@/stores'
 import { Button, Card, DiffViewer } from '../ui/primitives'
 import type { DiffLine } from '../ui/primitives'
 
 /**
- * Versões tab — version history with a before/after diff and a (visual-only)
- * rollback action guarded by a confirm modal. Reuses the `vrow`/`vtag` rows
- * (already in agents-theme.css) and the `DiffViewer` primitive from E1.
+ * Versões tab — version history with a before/after diff and a rollback action
+ * guarded by a confirm modal. Reuses the `vrow`/`vtag` rows (already in
+ * agents-theme.css) and the `DiffViewer` primitive from E1.
  *
- * VISUAL ONLY — every dataset below is in-file mock; Bloco F wires real data.
+ * Bloco F1: wired to real data (GET /versions + POST /versions/[id]/rollback).
  */
 
-// MOCK — wired to real data in Bloco F
 interface AgentVersion {
   id: string
   tag: string
@@ -35,50 +37,11 @@ interface AgentVersion {
   diff: DiffLine[]
 }
 
-// MOCK — wired to real data in Bloco F
-const MOCK_VERSIONS: AgentVersion[] = [
-  {
-    id: 'v3',
-    tag: 'v3',
-    label: 'Tom mais empático em reembolsos',
-    author: 'Mariana Alves',
-    date: 'hoje · 14:20',
-    status: 'rascunho',
-    current: true,
-    diff: [
-      { type: 'ctx', text: 'Você é um assistente de suporte ao cliente.' },
-      { type: 'rem', text: 'Responda de forma objetiva e direta.' },
-      { type: 'add', text: 'Acolha o cliente antes de resolver casos sensíveis.' },
-      { type: 'add', text: 'Em reembolsos, confirme a política antes de prometer prazos.' },
-      { type: 'ctx', text: 'Nunca invente valores ou datas.' },
-    ],
-  },
-  {
-    id: 'v2',
-    tag: 'v2',
-    label: 'Adiciona citação de fonte (RAG)',
-    author: 'Carlos Pereira',
-    date: '12 mai · 09:10',
-    status: 'produção',
-    diff: [
-      { type: 'ctx', text: 'Você é um assistente de suporte ao cliente.' },
-      { type: 'add', text: 'Sempre cite a fonte usada para responder.' },
-      { type: 'ctx', text: 'Responda de forma objetiva e direta.' },
-    ],
-  },
-  {
-    id: 'v1',
-    tag: 'v1',
-    label: 'Versão inicial',
-    author: 'Mariana Alves',
-    date: '02 mai · 16:42',
-    status: 'arquivada',
-    diff: [
-      { type: 'add', text: 'Você é um assistente de suporte ao cliente.' },
-      { type: 'add', text: 'Responda de forma objetiva e direta.' },
-    ],
-  },
-]
+interface VersionsTabProps {
+  agentId: string
+  organizationId: string
+  onRolledBack?: () => void
+}
 
 const STATUS_TONE: Record<AgentVersion['status'], { bg: string; fg: string }> = {
   produção: { bg: 'var(--green-tint)', fg: 'var(--green)' },
@@ -86,11 +49,84 @@ const STATUS_TONE: Record<AgentVersion['status'], { bg: string; fg: string }> = 
   arquivada: { bg: 'var(--surface-3)', fg: 'var(--text-3)' },
 }
 
-export default function VersionsTab() {
-  const [selected, setSelected] = useState<string>('v3')
-  const [showRollback, setShowRollback] = useState(false)
+/** ISO → "12 mai · 09:10" (pt-BR curto, como no mock do Bloco E2) */
+function formatVersionDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const date = d
+    .toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+    .replace(' de ', ' ')
+    .replace('.', '')
+  const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return `${date} · ${time}`
+}
 
-  const current = MOCK_VERSIONS.find((v) => v.id === selected) ?? MOCK_VERSIONS[0]
+function mapVersions(raw: AgentVersion[]): AgentVersion[] {
+  return (raw || []).map((v) => ({ ...v, date: formatVersionDate(v.date) }))
+}
+
+export default function VersionsTab({ agentId, organizationId, onRolledBack }: VersionsTabProps) {
+  const { user } = useAuthStore()
+  const [versions, setVersions] = useState<AgentVersion[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [selected, setSelected] = useState<string>('')
+  const [showRollback, setShowRollback] = useState(false)
+  const [rollingBack, setRollingBack] = useState(false)
+
+  const fetchVersions = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/ai/agents/${agentId}/versions?organization_id=${organizationId}`)
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || 'Erro ao carregar versões')
+      }
+      const data = await res.json()
+      const mapped = mapVersions(data.versions || [])
+      setVersions(mapped)
+      setSelected((prev) => (mapped.some((v) => v.id === prev) ? prev : mapped[0]?.id ?? ''))
+    } catch (err: any) {
+      setError(err.message || 'Erro ao carregar versões')
+    } finally {
+      setLoading(false)
+    }
+  }, [agentId, organizationId])
+
+  useEffect(() => {
+    fetchVersions()
+  }, [fetchVersions])
+
+  const current = versions.find((v) => v.id === selected) ?? versions[0]
+
+  const handleRollback = async () => {
+    if (!current || current.current || rollingBack) return
+    setRollingBack(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/ai/agents/${agentId}/versions/${current.id}/rollback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organization_id: organizationId, user_id: user?.id ?? null }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || 'Erro ao reverter versão')
+      }
+      const data = await res.json()
+      const mapped = mapVersions(data.versions || [])
+      setVersions(mapped)
+      setSelected(mapped[0]?.id ?? '')
+      setShowRollback(false)
+      onRolledBack?.()
+    } catch (err: any) {
+      setError(err.message || 'Erro ao reverter versão')
+      setShowRollback(false)
+    } finally {
+      setRollingBack(false)
+    }
+  }
 
   return (
     <div className="editor-content-inner space-y-6">
@@ -105,85 +141,113 @@ export default function VersionsTab() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
-        {/* left: version list */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {MOCK_VERSIONS.map((v) => {
-            const sel = selected === v.id
-            const tone = STATUS_TONE[v.status]
-            return (
-              <button
-                key={v.id}
-                type="button"
-                aria-pressed={sel}
-                className={`vrow${v.current ? ' cur' : ''}${sel ? ' sel' : ''}`}
-                onClick={() => setSelected(v.id)}
-              >
-                <span className="vtag">{v.tag}</span>
-                <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {v.label}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                      <User style={{ width: 11, height: 11 }} /> {v.author}
-                    </span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                      <Clock style={{ width: 11, height: 11 }} /> {v.date}
-                    </span>
-                  </div>
-                </div>
-                <span className="score-pill" style={{ background: tone.bg, color: tone.fg }}>
-                  {v.status}
-                </span>
-              </button>
-            )
-          })}
+      {/* Error state (load ou rollback) */}
+      {error && !loading && (
+        <div className="callout red">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span>{error}</span>
+          <Button variant="soft" size="sm" style={{ marginLeft: 'auto' }} onClick={fetchVersions}>
+            Tentar novamente
+          </Button>
         </div>
+      )}
 
-        {/* right: diff vs previous + rollback */}
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <GitCompare style={{ width: 16, height: 16, color: 'var(--brand)' }} />
-            <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>
-              Diferenças desta versão
-            </span>
-            <span className="vtag" style={{ marginLeft: 'auto' }}>{current.tag}</span>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 12px' }}>
-            Alterações no prompt em relação à versão anterior.
-          </p>
-
-          <DiffViewer lines={current.diff} />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>
-            <Button
-              variant="soft"
-              size="sm"
-              disabled={current.current}
-              onClick={() => setShowRollback(true)}
-            >
-              <RotateCcw className="w-4 h-4" />
-              Reverter para {current.tag}
-            </Button>
-            {current.current && (
-              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                Esta já é a versão atual.
-              </span>
-            )}
-          </div>
+      {loading ? (
+        /* Loading state */
+        <Card style={{ padding: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+          <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--brand)' }} />
+          <span style={{ color: 'var(--text-2)' }}>Carregando versões...</span>
         </Card>
-      </div>
+      ) : versions.length === 0 ? (
+        /* Empty state */
+        !error && (
+          <Card style={{ padding: 32, textAlign: 'center' }}>
+            <p style={{ color: 'var(--text-2)', margin: 0 }}>
+              Nenhuma versão ainda — salve o agente para criar a primeira.
+            </p>
+          </Card>
+        )
+      ) : current ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
+          {/* left: version list */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {versions.map((v) => {
+              const sel = selected === v.id
+              const tone = STATUS_TONE[v.status]
+              return (
+                <button
+                  key={v.id}
+                  type="button"
+                  aria-pressed={sel}
+                  className={`vrow${v.current ? ' cur' : ''}${sel ? ' sel' : ''}`}
+                  onClick={() => setSelected(v.id)}
+                >
+                  <span className="vtag">{v.tag}</span>
+                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {v.label}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                        <User style={{ width: 11, height: 11 }} /> {v.author}
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                        <Clock style={{ width: 11, height: 11 }} /> {v.date}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="score-pill" style={{ background: tone.bg, color: tone.fg }}>
+                    {v.status}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
 
-      {/* Rollback confirmation modal — inert (visual only) */}
+          {/* right: diff vs previous + rollback */}
+          <Card style={{ padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <GitCompare style={{ width: 16, height: 16, color: 'var(--brand)' }} />
+              <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>
+                Diferenças desta versão
+              </span>
+              <span className="vtag" style={{ marginLeft: 'auto' }}>{current.tag}</span>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 12px' }}>
+              Alterações no prompt em relação à versão anterior.
+            </p>
+
+            <DiffViewer lines={current.diff} />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>
+              <Button
+                variant="soft"
+                size="sm"
+                disabled={current.current}
+                onClick={() => setShowRollback(true)}
+              >
+                <RotateCcw className="w-4 h-4" />
+                Reverter para {current.tag}
+              </Button>
+              {current.current && (
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                  Esta já é a versão atual.
+                </span>
+              )}
+            </div>
+          </Card>
+        </div>
+      ) : null}
+
+      {/* Rollback confirmation modal */}
       <AnimatePresence>
-        {showRollback && (
+        {showRollback && current && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="modal-overlay"
-            onClick={() => setShowRollback(false)}
+            onClick={() => !rollingBack && setShowRollback(false)}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -210,11 +274,11 @@ export default function VersionsTab() {
                 </p>
 
                 <div className="flex gap-3">
-                  <Button variant="soft" block onClick={() => setShowRollback(false)}>
+                  <Button variant="soft" block disabled={rollingBack} onClick={() => setShowRollback(false)}>
                     Cancelar
                   </Button>
-                  {/* Inert — rollback is wired to real data in Bloco F */}
-                  <Button variant="primary" block onClick={() => setShowRollback(false)}>
+                  <Button variant="primary" block disabled={rollingBack} onClick={handleRollback}>
+                    {rollingBack && <Loader2 className="w-4 h-4 animate-spin" />}
                     Reverter
                   </Button>
                 </div>

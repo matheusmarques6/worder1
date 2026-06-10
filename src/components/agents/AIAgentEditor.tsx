@@ -38,6 +38,7 @@ import AgentPreview from './AgentPreview'
 // Scoped design system ("Agentes de IA" redesign)
 import { AgentsTheme } from './ui/AgentsTheme'
 import { Button } from './ui/primitives'
+import { useAuthStore } from '@/stores'
 
 // Types - importar do módulo central
 import {
@@ -92,6 +93,7 @@ export default function AIAgentEditor({
   onUpdate,
   onDelete,
 }: AIAgentEditorProps) {
+  const { user } = useAuthStore()
   // State
   const [agent, setAgent] = useState<AIAgent | null>(null)
   const [loading, setLoading] = useState(true)
@@ -127,6 +129,20 @@ export default function AIAgentEditor({
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Refetch silencioso (sem flash de loading) — usado após rollback de versão
+  const refreshAgent = async () => {
+    try {
+      const res = await fetch(`/api/ai/agents/${agentId}?organization_id=${organizationId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setAgent(data.agent)
+        setHasChanges(false)
+      }
+    } catch (err) {
+      console.error('Error refreshing agent:', err)
     }
   }
 
@@ -187,6 +203,7 @@ export default function AIAgentEditor({
         body: JSON.stringify({
           ...agent,
           organization_id: organizationId,
+          user_id: user?.id ?? null,
         }),
       })
 
@@ -525,7 +542,11 @@ export default function AIAgentEditor({
                   exit={{ opacity: 0, x: -20 }}
                   className="h-full"
                 >
-                  <VersionsTab />
+                  <VersionsTab
+                    agentId={agentId}
+                    organizationId={organizationId}
+                    onRolledBack={refreshAgent}
+                  />
                 </motion.div>
               )}
 
