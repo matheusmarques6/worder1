@@ -6,6 +6,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { logger } from './logger'
 import type { AIAgent, Message, ServiceResult } from './types'
+import { sanitizeForPrompt } from '@/lib/ai/prompt-sanitizer'
 
 const LOG_PREFIX = 'AIChatService'
 
@@ -358,9 +359,9 @@ function buildSystemPrompt(agent: AIAgent, contactName?: string): string {
       break
   }
 
-  // Add contact context
+  // Add contact context (P1: sanitizar contactName -- push name e 100% controlado pelo atacante)
   if (contactName) {
-    prompt += `\n\nNome do cliente: ${contactName}`
+    prompt += `\n\nNome do cliente: ${sanitizeForPrompt(contactName, 100)}`
   }
 
   prompt += '\n\nIMPORTANTE: Responda em portugues do Brasil. Seja conciso e profissional.'

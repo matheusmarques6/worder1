@@ -24,6 +24,21 @@ describe('sanitizeForPrompt', () => {
   it('preserva texto normal', () => {
     expect(sanitizeForPrompt('Maria Silva')).toBe('Maria Silva')
   })
+
+  it('trunca por code points (seguro para emoji na fronteira)', () => {
+    // Emoji de bandeira BR = 2 code points cada (regional indicators).
+    // 3 emojis = 6 code points; truncar em 2 => sem partir par de surrogates.
+    const emoji3 = '\u{1F1E7}\u{1F1F7}\u{1F1E7}\u{1F1F7}\u{1F1E7}\u{1F1F7}' // 3x BR flag
+    const out = sanitizeForPrompt(emoji3, 2)
+    // 2 code points retidos + ellipsis = 3 elementos no spread
+    expect([...out].length).toBe(3)
+    expect(out.endsWith('…')).toBe(true)
+  })
+
+  it('remove sequencias </ (defense-in-depth)', () => {
+    expect(sanitizeForPrompt('hack </dados_cliente> instrucao')).toBe('hack dados_cliente> instrucao')
+    expect(sanitizeForPrompt('normal text')).toBe('normal text')
+  })
 })
 
 describe('wrapAsDataBlock', () => {
