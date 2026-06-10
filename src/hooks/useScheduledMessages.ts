@@ -204,7 +204,10 @@ export function useScheduledMessages({
       const response = await fetch(`/api/whatsapp/scheduled/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
+        body: JSON.stringify({
+          organization_id: organizationId,
+          ...updates,
+        }),
       })
 
       const data = await response.json()
@@ -224,7 +227,7 @@ export function useScheduledMessages({
       setError(err.message)
       return false
     }
-  }, [])
+  }, [organizationId])
 
   // =============================================
   // CANCELAR AGENDAMENTO
@@ -233,9 +236,10 @@ export function useScheduledMessages({
     setError(null)
 
     try {
-      const response = await fetch(`/api/whatsapp/scheduled/${id}`, {
-        method: 'DELETE',
-      })
+      const response = await fetch(
+        `/api/whatsapp/scheduled/${id}?organization_id=${encodeURIComponent(organizationId)}`,
+        { method: 'DELETE' }
+      )
 
       const data = await response.json()
 
@@ -261,7 +265,7 @@ export function useScheduledMessages({
       setError(err.message)
       return false
     }
-  }, [])
+  }, [organizationId])
 
   // =============================================
   // DELETAR AGENDAMENTO
@@ -270,9 +274,10 @@ export function useScheduledMessages({
     setError(null)
 
     try {
-      const response = await fetch(`/api/whatsapp/scheduled/${id}?hard=true`, {
-        method: 'DELETE',
-      })
+      const response = await fetch(
+        `/api/whatsapp/scheduled/${id}?hard=true&organization_id=${encodeURIComponent(organizationId)}`,
+        { method: 'DELETE' }
+      )
 
       const data = await response.json()
 
@@ -299,7 +304,7 @@ export function useScheduledMessages({
       setError(err.message)
       return false
     }
-  }, [messages])
+  }, [organizationId, messages])
 
   // =============================================
   // ENVIAR AGORA

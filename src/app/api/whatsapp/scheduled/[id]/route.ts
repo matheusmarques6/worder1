@@ -136,8 +136,8 @@ export async function PUT(
     // Validar nova data se fornecida.
     // Tolerância de 5 minutos no passado: "enviar agora" define scheduled_at = now()
     // que pode chegar alguns segundos antes da validação. Datas mais antigas que isso
-    // são rejeitadas (acúmulo acidental), EXCETO se a mensagem já estava pending e a
-    // data é >= now-5min (significa "enviar no próximo tick").
+    // são rejeitadas (acúmulo acidental). A tolerância aplica-se a qualquer status
+    // editável (pending, failed, cancelled) — não há verificação de status aqui.
     if (scheduled_at !== undefined) {
       const scheduleDate = new Date(scheduled_at);
       const CLOCK_TOLERANCE_MS = 5 * 60 * 1000; // 5 minutos
@@ -149,6 +149,11 @@ export async function PUT(
         );
       }
       updates.scheduled_at = scheduled_at;
+      // Se a mensagem estava com status 'failed', resetar para 'pending' para que
+      // o worker a processe novamente (sendNow em mensagem falha deve re-enviar).
+      if (existing.status === 'failed') {
+        updates.status = 'pending';
+      }
     }
 
     if (Object.keys(updates).length === 0) {
