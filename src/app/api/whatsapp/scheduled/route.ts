@@ -4,27 +4,31 @@
 // GET - Listar mensagens agendadas
 // POST - Criar agendamento
 // =============================================
+// ✅ P1 v2: org SEMPRE derivada do token (requireOrgFromAuth);
+// organization_id de query/body é aceito e IGNORADO (compat com
+// useScheduledMessages, que continua enviando o campo).
+// =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // =============================================
 // GET - Listar mensagens agendadas
 // =============================================
 export async function GET(request: NextRequest) {
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
     const status = searchParams.get('status'); // pending, sent, failed, cancelled
     const contactId = searchParams.get('contact_id');
     const instanceId = searchParams.get('instance_id');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
 
     let query = supabaseAdmin
       .from('scheduled_messages')
@@ -83,10 +87,14 @@ export async function GET(request: NextRequest) {
 // POST - Criar agendamento
 // =============================================
 export async function POST(request: NextRequest) {
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const body = await request.json();
     const {
-      organization_id,
+      // organization_id do body é IGNORADO (P1 v2)
       store_id,
       instance_id,
       instance_name,
@@ -110,11 +118,6 @@ export async function POST(request: NextRequest) {
       metadata = {},
     } = body;
 
-    // Validações
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
-
     if (!phone_number) {
       return NextResponse.json({ error: 'phone_number é obrigatório' }, { status: 400 });
     }
@@ -130,30 +133,30 @@ export async function POST(request: NextRequest) {
     // Validar data futura
     const scheduledDate = new Date(scheduled_at);
     if (scheduledDate <= new Date()) {
-      return NextResponse.json({ 
-        error: 'A data de agendamento deve ser no futuro' 
+      return NextResponse.json({
+        error: 'A data de agendamento deve ser no futuro'
       }, { status: 400 });
     }
 
     // Validar recorrência
     const validRecurrences = ['daily', 'weekly', 'monthly', null];
     if (recurrence && !validRecurrences.includes(recurrence)) {
-      return NextResponse.json({ 
-        error: 'Recorrência inválida. Use: daily, weekly ou monthly' 
+      return NextResponse.json({
+        error: 'Recorrência inválida. Use: daily, weekly ou monthly'
       }, { status: 400 });
     }
 
-    // Criar agendamento
+    // Criar agendamento — org do token, criador do token (fallback p/ body)
     const { data: scheduled, error } = await supabaseAdmin
       .from('scheduled_messages')
       .insert({
-        organization_id,
+        organization_id: organizationId,
         store_id,
         instance_id,
         instance_name,
         contact_id,
         conversation_id,
-        phone_number: phone_number.replace(/\D/g, ''), // Apenas números
+        phone_number: phone_number.replace(/\D/g, ''),
         contact_name,
         message_type,
         content,
@@ -167,7 +170,7 @@ export async function POST(request: NextRequest) {
         recurrence,
         recurrence_end_date,
         status: 'pending',
-        created_by,
+        created_by: created_by || auth.userId,
         created_by_name,
         metadata,
       })

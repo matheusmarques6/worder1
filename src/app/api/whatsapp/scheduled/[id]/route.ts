@@ -5,12 +5,14 @@
 // PUT - Atualizar agendamento
 // DELETE - Cancelar/remover agendamento
 // =============================================
-// ⚠️ SEGURANÇA: OBRIGATÓRIO validar organization_id
-// NUNCA permitir acesso a dados de outra organização
+// ✅ P1 v2: org SEMPRE derivada do token (requireOrgFromAuth);
+// organization_id de query/body é aceito e IGNORADO (compat com
+// useScheduledMessages, que continua enviando o campo).
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -44,16 +46,12 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
-    const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
-
-    // ⚠️ CRÍTICO: organization_id é OBRIGATÓRIO
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
-
-    // ⚠️ SEGURANÇA: Buscar FILTRADO por organization_id
+    // ✅ P1 v2: org do token — organization_id da query é IGNORADO
     const { data, error } = await supabaseAdmin
       .from('scheduled_messages')
       .select('*')
@@ -82,10 +80,14 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const body = await request.json();
     const {
-      organization_id, // ⚠️ OBRIGATÓRIO
+      // organization_id do body é IGNORADO (P1 v2)
       content,
       media_url,
       media_type,
@@ -95,13 +97,8 @@ export async function PUT(
       recurrence_end_date,
     } = body;
 
-    // ⚠️ CRÍTICO: organization_id é OBRIGATÓRIO
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
-
-    // ⚠️ SEGURANÇA: Validar acesso antes de atualizar
-    const validation = await validateScheduledMessageAccess(params.id, organization_id);
+    // ✅ P1 v2: Validar acesso com org do token
+    const validation = await validateScheduledMessageAccess(params.id, organizationId);
     if (!validation.valid) {
       return NextResponse.json({ error: 'Agendamento não encontrado' }, { status: 404 });
     }
@@ -111,7 +108,7 @@ export async function PUT(
       .from('scheduled_messages')
       .select('*')
       .eq('id', params.id)
-      .eq('organization_id', organization_id) // ⚠️ CRÍTICO
+      .eq('organization_id', organizationId) // ⚠️ CRÍTICO
       .single();
 
     if (fetchError || !existing) {
@@ -160,18 +157,18 @@ export async function PUT(
       return NextResponse.json({ error: 'Nenhum campo para atualizar' }, { status: 400 });
     }
 
-    // ⚠️ SEGURANÇA: Update com filtro de organization_id
+    // ✅ P1 v2: Update com org do token
     const { data, error } = await supabaseAdmin
       .from('scheduled_messages')
       .update(updates)
       .eq('id', params.id)
-      .eq('organization_id', organization_id) // ⚠️ CRÍTICO
+      .eq('organization_id', organizationId) // ⚠️ CRÍTICO
       .select()
       .single();
 
     if (error) throw error;
 
-    console.log('[Scheduled UPDATE] Updated:', params.id, 'Org:', organization_id);
+    console.log('[Scheduled UPDATE] Updated:', params.id, 'Org:', organizationId);
 
     return NextResponse.json({
       message: data,
@@ -190,17 +187,16 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
     const hard = searchParams.get('hard') === 'true';
+    // organization_id da query é IGNORADO (P1 v2)
 
-    // ⚠️ CRÍTICO: organization_id é OBRIGATÓRIO
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
-
-    // ⚠️ SEGURANÇA: Validar acesso antes de deletar
+    // ✅ P1 v2: Validar acesso com org do token
     const validation = await validateScheduledMessageAccess(params.id, organizationId);
     if (!validation.valid) {
       return NextResponse.json({ error: 'Agendamento não encontrado' }, { status: 404 });
