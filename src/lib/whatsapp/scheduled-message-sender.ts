@@ -101,6 +101,22 @@ export function validateScheduledSend(input: {
   return { ok: true }
 }
 
+// ---------------------------------------------
+// pickTemplateRow — tolerante a múltiplos idiomas
+// ---------------------------------------------
+// Unique key em whatsapp_templates é (waba_id, name, language): um nome
+// pode ter N linhas (uma por idioma). maybeSingle() com >1 linha retorna
+// PGRST116 + data null, silenciosamente descartado → tplStatus=null →
+// TEMPLATE_NOT_APPROVED mata série recorrente.
+// Recebe o array bruto da query e prefere a primeira linha APPROVED;
+// se não houver APPROVED retorna a primeira (para reportar status real).
+export function pickTemplateRow<T extends { status: string }>(
+  rows: T[] | null | undefined,
+): T | null {
+  if (!rows || rows.length === 0) return null
+  return rows.find((r) => isTemplateApproved(r.status)) ?? rows[0]
+}
+
 // Códigos permanentes: a série de recorrência deve ser cancelada (falha do negócio).
 // Tudo mais (erros transitórios, API Meta, sem conta) é recuperável — pula a
 // ocorrência e reagenda.
@@ -223,14 +239,17 @@ async function processOne(
   let tplStatus: string | null = null
   let tplLanguage: string = 'pt_BR'
   if (msg.message_type === 'template' && msg.template_name) {
-    const { data: tpl } = await supabaseAdmin
+    // Unique key: (waba_id, name, language) — N rows per name (one per language).
+    // maybeSingle() returns PGRST116 + data null when >1 row. Use pickTemplateRow
+    // to prefer the APPROVED row and use its language for the actual send.
+    const { data: tplRows } = await supabaseAdmin
       .from('whatsapp_templates')
-      .select('category, status, language') // Fix 4: incluir language
+      .select('category, status, language')
       .eq('waba_id', account.id)
       .eq('name', msg.template_name)
-      .maybeSingle()
+    const tpl = pickTemplateRow(tplRows as Array<{ category: string; status: string; language: string }> | null)
     tplStatus = tpl?.status ?? null
-    tplLanguage = tpl?.language || 'pt_BR' // Fix 4: usar language real do template
+    tplLanguage = tpl?.language || 'pt_BR'
     const upper = (tpl?.category || '').toUpperCase()
     if (upper === 'MARKETING' || upper === 'UTILITY' || upper === 'AUTHENTICATION') {
       tplCategory = upper as TemplateCategory

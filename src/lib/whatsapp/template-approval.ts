@@ -42,13 +42,17 @@ export async function ensureCampaignTemplateApproved(campaign: {
   }
 
   if (!row && campaign.template_name) {
-    const { data } = await supabaseAdmin
+    // Unique key is (waba_id, name, language) — a single name can have multiple
+    // rows (one per language). maybeSingle() would return PGRST116 when >1 row,
+    // silently dropping data. Fetch all rows and prefer the first APPROVED one.
+    const { data: rows } = await supabaseAdmin
       .from('whatsapp_templates')
       .select('status, name')
       .eq('organization_id', campaign.organization_id)
       .eq('name', campaign.template_name)
-      .maybeSingle()
-    row = data
+    if (rows && rows.length > 0) {
+      row = rows.find((r: { status: string; name: string }) => isTemplateApproved(r.status)) ?? rows[0]
+    }
   }
 
   if (!row) {

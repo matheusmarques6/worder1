@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeNextOccurrence, validateScheduledSend, isRecoverableFailure } from './scheduled-message-sender'
+import { computeNextOccurrence, validateScheduledSend, isRecoverableFailure, pickTemplateRow } from './scheduled-message-sender'
 
 describe('computeNextOccurrence', () => {
   const base = '2026-06-10T14:00:00.000Z'
@@ -48,6 +48,52 @@ describe('isRecoverableFailure', () => {
   })
   it('código numérico da Meta (desconhecido) é recuperável por default', () => {
     expect(isRecoverableFailure('131030')).toBe(true)
+  })
+})
+
+// -------------------------------------------------------
+// Fix 2 — pickTemplateRow
+// Unique key: (waba_id, name, language). maybeSingle() com
+// >1 linha retorna PGRST116 + data null → tplStatus=null →
+// TEMPLATE_NOT_APPROVED mata série recorrente.
+// pickTemplateRow recebe o array bruto e prefere APPROVED.
+// -------------------------------------------------------
+describe('pickTemplateRow', () => {
+  it('array vazio → null', () => {
+    expect(pickTemplateRow([])).toBeNull()
+  })
+
+  it('array null/undefined → null', () => {
+    expect(pickTemplateRow(null as any)).toBeNull()
+    expect(pickTemplateRow(undefined as any)).toBeNull()
+  })
+
+  it('única linha APPROVED → retorna ela', () => {
+    const rows = [{ status: 'APPROVED', category: 'MARKETING', language: 'pt_BR' }]
+    expect(pickTemplateRow(rows)).toEqual(rows[0])
+  })
+
+  it('única linha PENDING → retorna ela (para reportar status real)', () => {
+    const rows = [{ status: 'PENDING', category: 'MARKETING', language: 'pt_BR' }]
+    expect(pickTemplateRow(rows)).toEqual(rows[0])
+  })
+
+  it('2 linhas (PENDING + APPROVED) → prefere APPROVED', () => {
+    const pending = { status: 'PENDING', category: 'MARKETING', language: 'en_US' }
+    const approved = { status: 'APPROVED', category: 'MARKETING', language: 'pt_BR' }
+    expect(pickTemplateRow([pending, approved])).toEqual(approved)
+  })
+
+  it('2 linhas (APPROVED + PENDING) → prefere APPROVED (primeira já é)', () => {
+    const approved = { status: 'APPROVED', category: 'MARKETING', language: 'pt_BR' }
+    const pending = { status: 'PENDING', category: 'MARKETING', language: 'en_US' }
+    expect(pickTemplateRow([approved, pending])).toEqual(approved)
+  })
+
+  it('2 linhas ambas PENDING → retorna a primeira (status real)', () => {
+    const a = { status: 'PENDING', category: 'MARKETING', language: 'pt_BR' }
+    const b = { status: 'PENDING', category: 'MARKETING', language: 'en_US' }
+    expect(pickTemplateRow([a, b])).toEqual(a)
   })
 })
 

@@ -1,17 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // -------------------------------------------------------
-// Mock refactored to record .eq() calls for org-scope test.
-// eqCalls accumulates every [column, value] pair passed to
-// .eq() across the entire chain so we can assert that the
-// template_id lookup ALSO filters by organization_id.
+// Mock supports two query shapes:
+//   - template_id lookup: chain ends with .maybeSingle()
+//   - name fallback lookup: chain resolves as array (no maybeSingle)
+//
+// mockMaybeSingle   — controls the .maybeSingle() terminal
+// mockArrayQuery    — controls the bare-array terminal (name fallback)
+// eqCalls           — accumulates every .eq(col, val) call
 // -------------------------------------------------------
 const mockMaybeSingle = vi.fn()
+const mockArrayQuery = vi.fn()
 let eqCalls: [string, unknown][] = []
 
-function makeEqChain(): any {
+function makeEqChain(isArray = false): any {
   const chain: any = {
     maybeSingle: mockMaybeSingle,
+    then(resolve: (v: any) => any, reject?: (e: any) => any) {
+      // Makes the chain itself thenable (await chain == await chain.then(...))
+      return mockArrayQuery().then(resolve, reject)
+    },
     eq(col: string, val: unknown) {
       eqCalls.push([col, val])
       return chain
@@ -20,10 +28,16 @@ function makeEqChain(): any {
   return chain
 }
 
+// selectCalls tracks which columns were requested per query
+let selectCalls: string[] = []
+
 vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
     from: vi.fn(() => ({
-      select: vi.fn(() => makeEqChain()),
+      select: vi.fn((cols: string) => {
+        selectCalls.push(cols)
+        return makeEqChain()
+      }),
     })),
   },
 }))
@@ -49,7 +63,9 @@ describe('isTemplateApproved', () => {
 describe('ensureCampaignTemplateApproved', () => {
   beforeEach(() => {
     mockMaybeSingle.mockReset()
+    mockArrayQuery.mockReset()
     eqCalls = []
+    selectCalls = []
   })
 
   it('ok=true quando template_id aponta pra template APPROVED', async () => {
@@ -72,16 +88,16 @@ describe('ensureCampaignTemplateApproved', () => {
   })
 
   // -------------------------------------------------------
-  // NEW TEST (a): fallback por name+org quando template_id
-  // não encontra nada — guard de regressão do path fallback.
-  // O primeiro maybeSingle (lookup por id) retorna null;
-  // o segundo (fallback por name+org) retorna APPROVED.
-  // Deve resultar em ok=true.
+  // Fallback por name: busca array de linhas — se nome tem
+  // múltiplos idiomas, maybeSingle() retornaria PGRST116.
+  // O novo código faz query sem maybeSingle e escolhe a linha
+  // APPROVED se houver.
   // -------------------------------------------------------
   it('fallback por name+org quando template_id não encontra', async () => {
-    mockMaybeSingle
-      .mockResolvedValueOnce({ data: null })                             // lookup por id → miss
-      .mockResolvedValueOnce({ data: { status: 'APPROVED', name: 'promo' } }) // fallback → hit
+    // id lookup via maybeSingle: miss
+    mockMaybeSingle.mockResolvedValueOnce({ data: null })
+    // name fallback via array: retorna uma linha APPROVED
+    mockArrayQuery.mockResolvedValueOnce({ data: [{ status: 'APPROVED', name: 'promo' }], error: null })
     const r = await ensureCampaignTemplateApproved({
       template_id: 'tpl-missing',
       template_name: 'promo',
@@ -91,12 +107,51 @@ describe('ensureCampaignTemplateApproved', () => {
   })
 
   // -------------------------------------------------------
-  // NEW TEST (b): lookup por template_id DEVE incluir filtro
-  // de organization_id — impede que template APPROVED de outra
-  // org passe no gate.
-  // Antes do fix: eqCalls NÃO conterá ['organization_id','org-1']
-  // no primeiro lookup → FALHA (RED).
-  // Após o fix: conterá → PASSA (GREEN).
+  // FIX 1 — nome com 2 linhas (2 idiomas): uma PENDING, uma
+  // APPROVED. maybeSingle() retornaria PGRST116 + data null.
+  // O novo código prefere a linha APPROVED → ok=true.
+  // -------------------------------------------------------
+  it('nome com 2 idiomas (PENDING + APPROVED): prefere linha APPROVED → ok=true', async () => {
+    // template_id lookup: miss (nenhum id)
+    // name fallback retorna duas linhas
+    mockArrayQuery.mockResolvedValueOnce({
+      data: [
+        { status: 'PENDING', name: 'promo' },
+        { status: 'APPROVED', name: 'promo' },
+      ],
+      error: null,
+    })
+    const r = await ensureCampaignTemplateApproved({
+      template_id: null,
+      template_name: 'promo',
+      organization_id: 'org-1',
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  // -------------------------------------------------------
+  // nome com 2 linhas, nenhuma APPROVED: ok=false com status
+  // real da primeira linha (não 'desconhecido').
+  // -------------------------------------------------------
+  it('nome com 2 idiomas (ambas PENDING): ok=false com status real', async () => {
+    mockArrayQuery.mockResolvedValueOnce({
+      data: [
+        { status: 'PENDING', name: 'promo' },
+        { status: 'PENDING', name: 'promo' },
+      ],
+      error: null,
+    })
+    const r = await ensureCampaignTemplateApproved({
+      template_id: null,
+      template_name: 'promo',
+      organization_id: 'org-1',
+    })
+    expect(r.ok).toBe(false)
+    expect(r.reason).toMatch(/PENDING/)
+  })
+
+  // -------------------------------------------------------
+  // lookup por template_id DEVE incluir filtro de organization_id
   // -------------------------------------------------------
   it('lookup por template_id inclui filtro de organization_id', async () => {
     mockMaybeSingle.mockResolvedValue({ data: { status: 'APPROVED', name: 'promo' } })
@@ -105,8 +160,6 @@ describe('ensureCampaignTemplateApproved', () => {
       template_name: null,
       organization_id: 'org-1',
     })
-    // eqCalls acumula TODAS as chamadas .eq() feitas durante a query.
-    // Deve haver pelo menos uma com coluna 'organization_id' e valor 'org-1'.
     expect(eqCalls).toContainEqual(['organization_id', 'org-1'])
   })
 })
