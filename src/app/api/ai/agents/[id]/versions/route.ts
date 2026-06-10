@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient } from '@/lib/api-utils';
 import { listVersions } from '@/lib/ai/versions'
 export const dynamic = 'force-dynamic';
 
@@ -12,11 +13,17 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    // ✅ Validar autenticação (espelha o padrão endurecido de [id]/route.ts)
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
     const supabase = getSupabaseAdmin()
     const agentId = params.id
 
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
+    // ✅ Escopo de org vem SEMPRE do usuário autenticado, nunca do cliente
+    const organizationId = auth.user.organization_id
 
     if (!organizationId) {
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })

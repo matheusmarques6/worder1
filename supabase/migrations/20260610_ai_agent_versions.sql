@@ -28,6 +28,13 @@ CREATE TABLE IF NOT EXISTS ai_agent_versions (
 CREATE INDEX IF NOT EXISTS idx_agent_versions_agent
   ON ai_agent_versions (agent_id, version_number DESC);
 
+-- No máximo uma versão 'produção' por agente. O fluxo de escrita é sequencial
+-- (arquiva a produção anterior ANTES de inserir a nova), então saves normais
+-- nunca colidem; sob saves concorrentes este índice rejeita a segunda inserção
+-- de 'produção' (capturada de forma não-fatal no snapshot do save).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_versions_one_production
+  ON ai_agent_versions (agent_id) WHERE status = 'produção';
+
 -- Helper de RLS (cria se não existir — mesmo padrão do projeto)
 CREATE OR REPLACE FUNCTION user_belongs_to_org(org_id UUID)
 RETURNS BOOLEAN AS $$

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient } from '@/lib/api-utils';
 import { listVersions, rollbackToVersion } from '@/lib/ai/versions'
 export const dynamic = 'force-dynamic';
 
@@ -12,17 +13,24 @@ export async function POST(
   { params }: { params: { id: string; versionId: string } }
 ) {
   try {
+    // ✅ Validar autenticação (espelha o padrão endurecido de [id]/route.ts)
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
     const supabase = getSupabaseAdmin()
     const { id: agentId, versionId } = params
-    const body = await request.json()
 
-    const { organization_id, user_id } = body
+    // ✅ Org e autor vêm do usuário autenticado, nunca do cliente
+    const organization_id = auth.user.organization_id
+    const userId = auth.user.id ?? null
 
     if (!organization_id) {
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
     }
 
-    // Verificar se agente existe na organização
+    // Verificar se agente existe na organização (autenticada)
     const { data: agent, error: agentError } = await supabase
       .from('ai_agents')
       .select('id')
@@ -39,7 +47,7 @@ export async function POST(
       agentId,
       organization_id,
       versionId,
-      typeof user_id === 'string' ? user_id : null
+      userId
     )
 
     const versions = await listVersions(supabase, agentId, organization_id)
