@@ -115,6 +115,7 @@ export default function VersionsTab() {
               <button
                 key={v.id}
                 type="button"
+                aria-pressed={sel}
                 className={`vrow${v.current ? ' cur' : ''}${sel ? ' sel' : ''}`}
                 onClick={() => setSelected(v.id)}
               >

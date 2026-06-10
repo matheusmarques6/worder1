@@ -80,7 +80,14 @@ export default function AnnotationTab() {
   const [corrections, setCorrections] = useState<Record<string, string>>({})
 
   const rate = (id: string, value: Rating) =>
-    setRatings((prev) => ({ ...prev, [id]: prev[id] === value ? undefined : (value as Rating) } as Record<string, Rating>))
+    setRatings((prev) => {
+      if (prev[id] === value) {
+        // toggle off — drop the key so the record stays truthful
+        const { [id]: _removed, ...rest } = prev
+        return rest
+      }
+      return { ...prev, [id]: value }
+    })
 
   const annotatedCount = Object.values(ratings).filter(Boolean).length
 
@@ -139,10 +146,11 @@ export default function AnnotationTab() {
                   <span style={{ fontSize: 11.5, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{turn.date}</span>
                 </div>
 
-                {/* rate buttons — inert (visual only) */}
+                {/* rate buttons — update local UI state only (persisted in Bloco F) */}
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button
                     type="button"
+                    aria-pressed={rating === 'good'}
                     className={`rate-btn good${rating === 'good' ? ' on' : ''}`}
                     onClick={() => rate(turn.id, 'good')}
                   >
@@ -150,6 +158,7 @@ export default function AnnotationTab() {
                   </button>
                   <button
                     type="button"
+                    aria-pressed={rating === 'bad'}
                     className={`rate-btn bad${rating === 'bad' ? ' on' : ''}`}
                     onClick={() => rate(turn.id, 'bad')}
                   >
@@ -157,6 +166,7 @@ export default function AnnotationTab() {
                   </button>
                   <button
                     type="button"
+                    aria-pressed={rating === 'fix'}
                     className={`rate-btn fix${rating === 'fix' ? ' on' : ''}`}
                     onClick={() => rate(turn.id, 'fix')}
                   >
