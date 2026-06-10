@@ -4,6 +4,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const inserted: any[] = []
 const mockSelect = vi.fn()
 
+// Mock para template-approval — controlado por describe 'claim do cron (queued)'
+const mockEnsureTemplateApproved = vi.fn()
+vi.mock('./template-approval', () => ({
+  ensureCampaignTemplateApproved: (...args: any[]) => mockEnsureTemplateApproved(...args),
+  isTemplateApproved: (status: string) => (status || '').toUpperCase() === 'APPROVED',
+}))
+
 vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
     from: vi.fn((table: string) => ({
@@ -38,6 +45,7 @@ vi.mock('@/lib/observability/whatsapp-logger', () => ({
   wlog: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import CampaignProcessor from './campaign-processor'
 
 describe('createRecipients', () => {
@@ -84,5 +92,84 @@ describe('createRecipients', () => {
       imported_contacts: [{ phone: '5511999990001', name: 'A' }], template_variables: {},
     }
     await expect((processor as any).createRecipients(campaign)).rejects.toThrow(/contact_id/)
+  })
+})
+
+// =============================================
+// startCampaign — claim do cron (queued)
+// Handoff da Task 3: campanha com status 'queued' + template PENDING deve
+// reverter para 'scheduled' (NÃO 'failed') e retornar {success:false}.
+// Testa o allowlist fix e o bloco soft-return/revert de startCampaign.
+// =============================================
+describe('startCampaign — claim do cron (queued)', () => {
+  // Rastreamento de chamadas update().eq()
+  const updateCalls: Array<{ data: any; id: string }> = []
+  let mockEq: ReturnType<typeof vi.fn>
+  let mockUpdate: ReturnType<typeof vi.fn>
+  let mockSingle: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    updateCalls.length = 0
+    mockEnsureTemplateApproved.mockReset()
+    mockSelect.mockReset()
+
+    mockEq = vi.fn().mockResolvedValue({ error: null })
+    mockUpdate = vi.fn((data: any) => {
+      // captura chamadas update para assertar revert
+      const eq = vi.fn((col: string, val: string) => {
+        updateCalls.push({ data, id: val })
+        return Promise.resolve({ error: null })
+      })
+      return { eq }
+    }) as any
+
+    mockSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: 'camp-1',
+        status: 'queued',
+        template_id: 'tpl-1',
+        organization_id: 'org-1',
+        template_name: 'promo',
+        template_variables: {},
+        audience_type: 'import',
+        imported_contacts: [],
+      },
+      error: null,
+    })
+
+    // Override supabaseAdmin.from para este describe (usa import já resolvido no topo)
+    vi.mocked(supabaseAdmin.from).mockImplementation(((table: string) => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null }) })),
+          single: mockSingle,
+          in: vi.fn(() => Promise.resolve({ data: [], error: null })),
+        })),
+      })),
+      update: mockUpdate,
+      insert: vi.fn(() => ({ select: mockSelect })),
+    })) as any)
+  })
+
+  it('queued + template PENDING → revert para scheduled, retorna {success:false}', async () => {
+    // Template não aprovado (PENDING)
+    mockEnsureTemplateApproved.mockResolvedValue({
+      ok: false,
+      reason: 'Template "promo" não está aprovado pela Meta (status: PENDING).',
+    })
+
+    const processor = new CampaignProcessor()
+    const result = await processor.startCampaign('camp-1')
+
+    // Deve retornar success:false (não lançar erro)
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/PENDING|não está aprovado|Template/i)
+
+    // Deve ter feito update com status:'scheduled' (revert), NÃO 'failed'
+    const revertCall = updateCalls.find(c => c.data?.status === 'scheduled')
+    expect(revertCall).toBeDefined()
+
+    const failedCall = updateCalls.find(c => c.data?.status === 'failed')
+    expect(failedCall).toBeUndefined()
   })
 })

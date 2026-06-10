@@ -124,7 +124,7 @@ export class CampaignProcessor {
         throw new Error('Campaign not found')
       }
 
-      if (!['draft', 'scheduled', 'paused'].includes(campaign.status)) {
+      if (!['draft', 'scheduled', 'paused', 'queued'].includes(campaign.status)) {
         throw new Error(`Campaign cannot be started (status: ${campaign.status})`)
       }
 
