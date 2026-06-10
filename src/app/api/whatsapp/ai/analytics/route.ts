@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 
 export const dynamic = 'force-dynamic';
 import type {
@@ -24,17 +25,17 @@ import type { DateRange } from '@/types/whatsapp-analytics';
 
 // GET - Buscar analytics de agentes de IA
 export async function GET(request: NextRequest) {
+  // ✅ P1 v2: org do token; organization_id da query é IGNORADO
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
     const period = (searchParams.get('period') || '7d') as DateRange;
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
     const agentId = searchParams.get('agent_id');
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id required' }, { status: 400 });
-    }
 
     // Calcular datas do período
     const { currentStart, currentEnd, previousStart, previousEnd } = calculatePeriodDates(period, startDate, endDate);

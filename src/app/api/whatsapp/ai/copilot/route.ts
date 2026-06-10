@@ -5,18 +5,18 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getCopilotSuggestion } from '@/lib/services/whatsapp/ai-chatbot-service'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  // ✅ P1 v2: org do token; organizationId da query é IGNORADO
+  // (CopilotSidebar.tsx usa fetch() same-origin → cookie flui)
+  const auth = await requireOrgFromAuth(request)
+  if (auth instanceof NextResponse) return auth
+  const organizationId = auth.orgId
+
   try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
-
     const body = await request.json()
     const { conversationId, lastMessage } = body
 
