@@ -427,6 +427,10 @@ export async function applyProposal(
   const proposal = await loadPendingProposal(supabase, agent.id, orgId, proposalId)
   if (!proposal) throw new Error('Proposta não encontrada')
 
+  // Só há versão nova quando o prompt de fato muda; senão snapshotIfChanged é
+  // no-op e NÃO devemos apontar applied_version_id para uma versão pré-existente.
+  const promptChanged = (agent.system_prompt ?? '') !== (proposal.proposed_prompt ?? '')
+
   // 1) cria a versão 'produção' a partir do estado pré-update (serviço F1).
   await snapshotIfChanged(
     supabase,
@@ -450,20 +454,25 @@ export async function applyProposal(
     .eq('organization_id', orgId)
   if (updErr) throw updErr
 
-  // 3) resolve a versão 'produção' recém-criada para registrar applied_version_id.
-  const { data: ver } = await supabase
-    .from('ai_agent_versions')
-    .select('id')
-    .eq('agent_id', agent.id)
-    .eq('organization_id', orgId)
-    .eq('status', 'produção')
-    .order('version_number', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  // 3) resolve a versão 'produção' recém-criada para registrar applied_version_id
+  //    (apenas quando o prompt mudou — caso contrário não há versão nova).
+  let appliedVersionId: string | null = null
+  if (promptChanged) {
+    const { data: ver } = await supabase
+      .from('ai_agent_versions')
+      .select('id')
+      .eq('agent_id', agent.id)
+      .eq('organization_id', orgId)
+      .eq('status', 'produção')
+      .order('version_number', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    appliedVersionId = (ver?.id as string | undefined) ?? null
+  }
 
   const { error: statusErr } = await supabase
     .from('ai_prompt_proposals')
-    .update({ status: 'applied', applied_version_id: (ver?.id as string | undefined) ?? null })
+    .update({ status: 'applied', applied_version_id: appliedVersionId })
     .eq('id', proposalId)
     .eq('agent_id', agent.id)
     .eq('organization_id', orgId)
