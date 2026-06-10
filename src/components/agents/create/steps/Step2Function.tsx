@@ -195,22 +195,24 @@ export function Step2Function({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2 flex items-center gap-2">
-          <Target className="w-5 h-5 text-blue-400" />
-          Função do Agente
-        </h2>
-        <p className="text-gray-500">
-          Defina o objetivo principal e as tarefas que seu agente vai executar.
-        </p>
+      <div className="sec-head">
+        <div className="sec-ico">
+          <Target />
+        </div>
+        <div>
+          <h2 className="sec-t">Função do Agente</h2>
+          <p className="sec-s">
+            Defina o objetivo principal e as tarefas que seu agente vai executar.
+          </p>
+        </div>
       </div>
 
       {/* Objective Selection */}
       <div className="space-y-3">
-        <label className="text-sm font-medium text-gray-700">
-          Objetivo Principal <span className="text-red-400">*</span>
+        <label className="label" style={{ marginBottom: 0 }}>
+          Objetivo Principal <span style={{ color: 'var(--red)' }}>*</span>
         </label>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <div className="obj-grid">
           {OBJECTIVES.map((obj) => {
             const Icon = obj.icon;
             const isSelected = agentFunction.objective === obj.id;
@@ -218,21 +220,15 @@ export function Step2Function({
               <button
                 key={obj.id}
                 onClick={() => handleObjectiveSelect(obj.id)}
-                className={`
-                  p-3 rounded-lg border text-left transition-all
-                  ${isSelected
-                    ? 'border-blue-500 bg-blue-500/10'
-                    : 'border-gray-200 bg-gray-50/50 hover:border-gray-200'
-                  }
-                `}
+                className={`obj ${isSelected ? 'on' : ''}`}
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <Icon className={`w-4 h-4 ${isSelected ? 'text-blue-400' : 'text-gray-500'}`} />
-                  <span className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-gray-700'}`}>
-                    {obj.label}
-                  </span>
+                <div className="obj-ico">
+                  <Icon />
                 </div>
-                <p className="text-xs text-gray-500 line-clamp-2">{obj.description}</p>
+                <div>
+                  <div className="obj-t">{obj.label}</div>
+                  <p className="obj-d line-clamp-2">{obj.description}</p>
+                </div>
               </button>
             );
           })}
@@ -250,7 +246,7 @@ export function Step2Function({
               value={agentFunction.objectiveCustom || ''}
               onChange={(e) => onFunctionChange({ ...agentFunction, objectiveCustom: e.target.value })}
               placeholder="Descreva o objetivo do seu agente..."
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-white placeholder:text-gray-500 focus:border-blue-500 focus:outline-none"
+              className="field"
             />
           </motion.div>
         )}
@@ -258,10 +254,10 @@ export function Step2Function({
 
       {/* Main Tasks */}
       <div className="space-y-3">
-        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+        <label className="label flex items-center gap-2" style={{ marginBottom: 0 }}>
           <ListChecks className="w-4 h-4" />
-          Tarefas Principais <span className="text-red-400">*</span>
-          <span className="text-gray-500 font-normal">({agentFunction.mainTasks.length})</span>
+          Tarefas Principais <span style={{ color: 'var(--red)' }}>*</span>
+          <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>({agentFunction.mainTasks.length})</span>
         </label>
 
         <div className="space-y-2">
@@ -270,15 +266,13 @@ export function Step2Function({
               key={index}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-2 p-2 bg-gray-50/50 border border-gray-200 rounded-lg group"
+              className="task-item"
             >
-              <span className="w-6 h-6 bg-blue-500/20 text-blue-400 rounded text-xs flex items-center justify-center">
-                {index + 1}
-              </span>
-              <span className="flex-1 text-sm text-gray-700">{task}</span>
+              <span className="task-num">{index + 1}</span>
+              <span className="flex-1">{task}</span>
               <button
                 onClick={() => removeTask(index)}
-                className="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                className="task-del"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -294,12 +288,12 @@ export function Step2Function({
             onChange={(e) => setNewTask(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && addTask()}
             placeholder="Adicionar tarefa..."
-            className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-white text-sm placeholder:text-gray-500 focus:border-blue-500 focus:outline-none"
+            className="field flex-1"
           />
           <button
             onClick={addTask}
             disabled={!newTask.trim()}
-            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-500 text-white rounded-lg transition-colors"
+            className="btn btn-primary btn-icon"
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -308,10 +302,10 @@ export function Step2Function({
 
       {/* Limitations */}
       <div className="space-y-3">
-        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+        <label className="label flex items-center gap-2" style={{ marginBottom: 0 }}>
           <Ban className="w-4 h-4" />
           Limitações (o que NÃO fazer)
-          <span className="text-gray-500 font-normal">({agentFunction.limitations.length})</span>
+          <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>({agentFunction.limitations.length})</span>
         </label>
 
         {/* Current limitations */}
@@ -321,12 +315,12 @@ export function Step2Function({
               key={index}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-500/10 border border-red-500/30 text-red-300 text-sm rounded-full"
+              className="chip chip-red"
             >
               {limitation}
               <button
                 onClick={() => removeLimitation(index)}
-                className="ml-1 hover:text-red-400"
+                className="ml-1"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -340,7 +334,7 @@ export function Step2Function({
             <button
               key={index}
               onClick={() => addLimitation(limitation)}
-              className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-50 border border-gray-200 text-gray-500 text-sm rounded-full hover:border-gray-200 hover:text-gray-700 transition-colors"
+              className="chip chip-outline"
             >
               <Plus className="w-3 h-3" />
               {limitation}
@@ -356,12 +350,12 @@ export function Step2Function({
             onChange={(e) => setNewLimitation(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && newLimitation.trim() && addLimitation(newLimitation.trim())}
             placeholder="Adicionar limitação personalizada..."
-            className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-white text-sm placeholder:text-gray-500 focus:border-blue-500 focus:outline-none"
+            className="field flex-1"
           />
           <button
             onClick={() => newLimitation.trim() && addLimitation(newLimitation.trim())}
             disabled={!newLimitation.trim()}
-            className="px-3 py-2 bg-red-600/20 hover:bg-red-600/30 disabled:bg-gray-100 disabled:text-gray-500 text-red-400 rounded-lg transition-colors"
+            className="btn btn-soft btn-icon"
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -370,7 +364,7 @@ export function Step2Function({
 
       {/* Handoff Rules */}
       <div className="space-y-3">
-        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+        <label className="label flex items-center gap-2" style={{ marginBottom: 0 }}>
           <UserCheck className="w-4 h-4" />
           Quando transferir para humano
         </label>
@@ -379,9 +373,9 @@ export function Step2Function({
           onChange={(e) => onFunctionChange({ ...agentFunction, handoffRules: e.target.value })}
           placeholder="Ex: Quando o cliente estiver irritado, quando pedir reembolso, quando a dúvida for muito complexa..."
           rows={3}
-          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-white placeholder:text-gray-500 focus:border-blue-500 focus:outline-none resize-none"
+          className="field"
         />
-        <p className="text-xs text-gray-500">
+        <p className="hint">
           Defina situações em que o agente deve transferir a conversa para um atendente humano.
         </p>
       </div>
@@ -390,7 +384,7 @@ export function Step2Function({
       <div className="flex gap-3 pt-4">
         <button
           onClick={onBack}
-          className="px-6 py-3 bg-gray-100 hover:bg-zinc-600 text-gray-900 font-medium rounded-lg transition-colors flex items-center gap-2"
+          className="btn btn-ghost btn-lg"
         >
           <ChevronLeft className="w-4 h-4" />
           Voltar
@@ -398,7 +392,7 @@ export function Step2Function({
         <button
           onClick={onNext}
           disabled={!canProceed}
-          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-500 text-gray-900 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+          className="btn btn-primary btn-lg flex-1"
         >
           Próximo
           <ChevronRight className="w-4 h-4" />

@@ -27,13 +27,7 @@ export function NicheCard({
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
-      className={`
-        relative p-4 rounded-xl border-2 text-left transition-all duration-200
-        ${selected 
-          ? 'border-blue-500 bg-blue-500/10 ring-2 ring-blue-500/20' 
-          : 'border-gray-200 bg-gray-50/50 hover:border-gray-200 hover:bg-gray-50'
-        }
-      `}
+      className={`niche ${selected ? 'on' : ''}`}
       style={{
         borderColor: selected ? color : undefined,
         backgroundColor: selected ? `${color}10` : undefined,
@@ -47,21 +41,21 @@ export function NicheCard({
           className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
           style={{ backgroundColor: color }}
         >
-          <Check className="w-3 h-3 text-white" />
+          <Check className="w-3 h-3" style={{ color: "#fff" }} />
         </motion.div>
       )}
 
       {/* Icon */}
-      <div 
-        className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl mb-3"
+      <div
+        className="niche-ico"
         style={{ backgroundColor: `${color}20` }}
       >
         {icon}
       </div>
 
       {/* Content */}
-      <h3 className="font-semibold text-gray-900 mb-1">{name}</h3>
-      <p className="text-sm text-gray-500 line-clamp-2">{description}</p>
+      <h3 className="niche-name">{name}</h3>
+      <p className="niche-desc line-clamp-2">{description}</p>
     </motion.button>
   );
 }

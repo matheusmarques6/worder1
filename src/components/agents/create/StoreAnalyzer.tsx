@@ -124,14 +124,14 @@ export function StoreAnalyzer({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-            <Store className="w-5 h-5 text-blue-400" />
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center chip-blue">
+            <Store className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-medium text-gray-900">
+            <h3 className="font-semibold" style={{ color: 'var(--text)' }}>
               {storeName || 'Analisar loja'}
             </h3>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm" style={{ color: 'var(--text-3)' }}>
               {isAnalyzing
                 ? 'Analisando sua loja...'
                 : 'Detectamos uma loja Shopify conectada'}
@@ -142,7 +142,7 @@ export function StoreAnalyzer({
         {!isAnalyzing && (
           <button
             onClick={startAnalysis}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+            className="btn btn-primary btn-sm"
           >
             <Sparkles className="w-4 h-4" />
             Analisar com IA
@@ -160,12 +160,13 @@ export function StoreAnalyzer({
           {/* Progress bar */}
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Progresso</span>
-              <span className="text-gray-900 font-medium">{Math.round(progress)}%</span>
+              <span style={{ color: 'var(--text-3)' }}>Progresso</span>
+              <span className="font-semibold" style={{ color: 'var(--text)' }}>{Math.round(progress)}%</span>
             </div>
-            <div className="h-2 bg-gray-50 rounded-full overflow-hidden">
+            <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--surface-3)' }}>
               <motion.div
-                className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+                className="h-full"
+                style={{ background: 'var(--grad)' }}
                 initial={{ width: 0 }}
                 animate={{ width: `${progress}%` }}
                 transition={{ duration: 0.5 }}
@@ -176,7 +177,8 @@ export function StoreAnalyzer({
           {/* Steps toggle */}
           <button
             onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center gap-2 text-sm text-gray-500 hover:text-white transition-colors"
+            className="flex items-center gap-2 text-sm font-semibold transition-colors"
+            style={{ color: 'var(--text-2)' }}
           >
             <ChevronDown
               className={`w-4 h-4 transition-transform ${showDetails ? 'rotate-180' : ''}`}
@@ -201,21 +203,28 @@ export function StoreAnalyzer({
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.05 }}
-                      className={`
-                        flex items-center gap-3 p-2 rounded-lg transition-colors
-                        ${step.status === 'running' ? 'bg-blue-500/10' : ''}
-                        ${step.status === 'complete' ? 'opacity-60' : ''}
-                        ${step.status === 'error' ? 'bg-red-500/10' : ''}
-                      `}
+                      className="flex items-center gap-3 p-2 rounded-lg transition-colors"
+                      style={
+                        step.status === 'running'
+                          ? { background: 'var(--brand-tint)' }
+                          : step.status === 'complete'
+                          ? { opacity: 0.6 }
+                          : step.status === 'error'
+                          ? { background: 'var(--red-tint)' }
+                          : undefined
+                      }
                     >
                       <div
-                        className={`
-                          w-8 h-8 rounded-lg flex items-center justify-center
-                          ${step.status === 'pending' ? 'bg-gray-50 text-gray-500' : ''}
-                          ${step.status === 'running' ? 'bg-blue-500/20 text-blue-400' : ''}
-                          ${step.status === 'complete' ? 'bg-green-500/20 text-green-400' : ''}
-                          ${step.status === 'error' ? 'bg-red-500/20 text-red-400' : ''}
-                        `}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center"
+                        style={
+                          step.status === 'running'
+                            ? { background: 'var(--brand-tint-2)', color: 'var(--brand-ink)' }
+                            : step.status === 'complete'
+                            ? { background: 'var(--green-tint)', color: 'var(--green)' }
+                            : step.status === 'error'
+                            ? { background: 'var(--red-tint)', color: 'var(--red)' }
+                            : { background: 'var(--surface-3)', color: 'var(--text-3)' }
+                        }
                       >
                         {step.status === 'running' ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -228,13 +237,14 @@ export function StoreAnalyzer({
                         )}
                       </div>
                       <span
-                        className={`
-                          text-sm
-                          ${step.status === 'running' ? 'text-gray-900 font-medium' : ''}
-                          ${step.status === 'complete' ? 'text-gray-500' : ''}
-                          ${step.status === 'pending' ? 'text-gray-500' : ''}
-                          ${step.status === 'error' ? 'text-red-400' : ''}
-                        `}
+                        className="text-sm"
+                        style={
+                          step.status === 'running'
+                            ? { color: 'var(--text)', fontWeight: 600 }
+                            : step.status === 'error'
+                            ? { color: 'var(--red)' }
+                            : { color: 'var(--text-3)' }
+                        }
                       >
                         {step.name}
                       </span>
@@ -252,20 +262,19 @@ export function StoreAnalyzer({
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg"
+          className="callout red"
         >
-          <div className="flex items-start gap-3">
-            <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-            <div>
-              <p className="text-sm text-red-400 font-medium">Erro na análise</p>
-              <p className="text-sm text-red-300 mt-1">{error}</p>
-              <button
-                onClick={startAnalysis}
-                className="mt-3 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm rounded-lg transition-colors"
-              >
-                Tentar novamente
-              </button>
-            </div>
+          <XCircle className="flex-shrink-0" />
+          <div>
+            <p className="font-semibold">Erro na análise</p>
+            <p className="mt-1">{error}</p>
+            <button
+              onClick={startAnalysis}
+              className="btn btn-sm mt-3"
+              style={{ background: 'var(--red-tint)', color: 'var(--red)' }}
+            >
+              Tentar novamente
+            </button>
           </div>
         </motion.div>
       )}

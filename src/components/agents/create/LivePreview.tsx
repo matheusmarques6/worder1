@@ -152,28 +152,28 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
   };
 
   return (
-    <div className="h-full flex flex-col bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className="card h-full flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="p-3 border-b border-gray-200 flex items-center justify-between">
+      <div className="p-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-2">
-          <div 
+          <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-lg"
             style={{ backgroundColor: `${template.color}20` }}
           >
             {template.icon}
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-900">
+            <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
               {formData.storeName || 'Seu Agente'}
             </p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs" style={{ color: 'var(--text-3)' }}>
               Tom: {toneEmoji[persona.tone]} {persona.tone}
             </p>
           </div>
         </div>
         <button
           onClick={handleReset}
-          className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-50 rounded-lg transition-colors"
+          className="btn btn-soft btn-icon btn-sm"
           title="Resetar conversa"
         >
           <RefreshCw className="w-4 h-4" />
@@ -181,7 +181,7 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3" style={{ background: 'var(--surface-2)' }}>
         <AnimatePresence>
           {messages.map((message) => (
             <motion.div
@@ -191,13 +191,12 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`
-                  max-w-[85%] px-3 py-2 rounded-2xl text-sm
-                  ${message.role === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-sm'
-                    : 'bg-gray-50 text-gray-900 rounded-bl-sm'
-                  }
-                `}
+                className="max-w-[85%] px-3 py-2 rounded-2xl text-sm"
+                style={
+                  message.role === 'user'
+                    ? { background: 'var(--brand)', color: '#fff', borderBottomRightRadius: 4 }
+                    : { background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderBottomLeftRadius: 4 }
+                }
               >
                 {message.content}
               </div>
@@ -212,11 +211,11 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
             animate={{ opacity: 1 }}
             className="flex justify-start"
           >
-            <div className="bg-gray-50 px-4 py-2 rounded-2xl rounded-bl-sm">
+            <div className="px-4 py-2 rounded-2xl" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderBottomLeftRadius: 4 }}>
               <div className="flex gap-1">
-                <span className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--text-4)', animationDelay: '0ms' }} />
+                <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--text-4)', animationDelay: '150ms' }} />
+                <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--text-4)', animationDelay: '300ms' }} />
               </div>
             </div>
           </motion.div>
@@ -226,7 +225,7 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t border-gray-200">
+      <div className="p-3" style={{ borderTop: '1px solid var(--border)' }}>
         <div className="flex gap-2">
           <input
             type="text"
@@ -234,18 +233,18 @@ export function LivePreview({ template, formData, persona }: LivePreviewProps) {
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Digite uma mensagem..."
-            className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-zinc-500 focus:outline-none focus:border-gray-200"
+            className="field flex-1"
             disabled={isTyping}
           />
           <button
             onClick={handleSend}
             disabled={!inputValue.trim() || isTyping}
-            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 text-white rounded-lg transition-colors"
+            className="btn btn-primary btn-icon"
           >
             <Send className="w-4 h-4" />
           </button>
         </div>
-        <p className="text-xs text-gray-400 mt-2 text-center">
+        <p className="text-xs mt-2 text-center" style={{ color: 'var(--text-4)' }}>
           Preview simulado • Respostas reais podem variar
         </p>
       </div>

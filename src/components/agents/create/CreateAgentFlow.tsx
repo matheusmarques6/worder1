@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
   Check,
-  ChevronRight,
   Sparkles,
   Target,
   User,
@@ -15,15 +14,17 @@ import {
   Store,
   AlertCircle,
 } from 'lucide-react';
-import { 
-  Step1Niche, 
+import {
+  Step1Niche,
   Step2Function,
-  Step3Personalize, 
+  Step3Personalize,
   Step4PromptPreview,
-  Step5Knowledge, 
+  Step5Knowledge,
   Step6Activate,
   type AgentFunction,
 } from './steps';
+import { AgentsTheme } from '../ui/AgentsTheme';
+import { Stepper } from '../ui/primitives';
 import {
   NicheTemplate,
   getTemplateById,
@@ -618,132 +619,104 @@ ${agentFunction.handoffRules}
   };
 
   return (
-    <motion.div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onClick={onClose}
-    >
-      <motion.div 
-        className="relative w-full max-w-5xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-200"
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        transition={{ duration: 0.2 }}
-        onClick={(e) => e.stopPropagation()}
+    <AgentsTheme>
+      <motion.div
+        className="modal-overlay"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
       >
-        {/* Header - fixo */}
-        <div className="flex-shrink-0 h-16 border-b border-gray-200 flex items-center justify-between px-6">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={onClose}
-              className="p-2 text-gray-500 hover:text-white hover:bg-gray-50 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <h1 className="text-lg font-semibold text-gray-900">Criar Agente de IA</h1>
-          </div>
-
-          {/* Steps indicator */}
-          <div className="hidden md:flex items-center gap-1">
-            {STEPS.map((step, index) => {
-              const Icon = step.icon;
-              const isCompleted = currentStep > step.id;
-              const isCurrent = currentStep === step.id;
-              
-              return (
-                <div key={step.id} className="flex items-center">
-                  <button
-                    onClick={() => goToStep(step.id)}
-                    disabled={step.id > currentStep && !canProceed(step.id - 1)}
-                    className={`
-                      flex items-center gap-1.5 px-2 py-1 rounded-full text-xs transition-all
-                      ${isCompleted
-                        ? 'bg-green-500/20 text-green-400'
-                        : isCurrent
-                        ? 'bg-blue-500/20 text-blue-400'
-                        : 'bg-gray-50 text-gray-500'
-                      }
-                    `}
-                  >
-                    {isCompleted ? (
-                      <Check className="w-3 h-3" />
-                    ) : (
-                      <Icon className="w-3 h-3" />
-                    )}
-                    <span className="hidden lg:inline">{step.name}</span>
-                  </button>
-                  
-                  {index < STEPS.length - 1 && (
-                    <ChevronRight className="w-3 h-3 text-gray-400 mx-0.5" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Store indicator */}
-          {storeId && storeAnalysis && (
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-full">
-              <Store className="w-4 h-4 text-green-400" />
-              <span className="text-sm text-gray-700">{storeAnalysis.storeName}</span>
+        <motion.div
+          className="modal relative w-full max-w-5xl"
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ duration: 0.2 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header - fixo */}
+          <div className="modal-head">
+            <div className="flex items-center gap-3">
+              <button onClick={onClose} className="modal-x">
+                <X className="w-5 h-5" />
+              </button>
+              <h1 className="modal-title">Criar Agente de IA</h1>
             </div>
-          )}
-        </div>
 
-        {/* Content - scroll interno */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto px-6 py-8">
-            {/* Error display */}
-            {(analysisError || createError) && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3"
-              >
-                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-                <div>
-                  <p className="text-sm text-red-400 font-medium">Erro</p>
-                  <p className="text-sm text-red-300">{analysisError || createError}</p>
-                </div>
-              </motion.div>
-            )}
-
-            {/* Step content */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentStep}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                {renderStep()}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </div>
-
-        {/* Mobile step indicator - fixo no bottom */}
-        <div className="md:hidden flex-shrink-0 h-14 border-t border-gray-200 bg-white flex items-center justify-center gap-2 px-4">
-          {STEPS.map((step) => (
-            <div
-              key={step.id}
-              className={`
-                w-2 h-2 rounded-full transition-all
-                ${currentStep === step.id
-                  ? 'w-6 bg-blue-500'
-                  : currentStep > step.id
-                  ? 'bg-green-500'
-                  : 'bg-gray-100'
-                }
-              `}
+            {/* Steps indicator */}
+            <Stepper
+              className="hidden md:flex"
+              steps={STEPS.map((step) => ({ label: step.name }))}
+              current={currentStep - 1}
+              onStepClick={(index) => goToStep(index + 1)}
+              doneIcon={<Check className="w-3 h-3" />}
             />
-          ))}
-        </div>
+
+            {/* Store indicator */}
+            {storeId && storeAnalysis && (
+              <span className="chip chip-green hidden lg:inline-flex">
+                <Store className="w-4 h-4" />
+                {storeAnalysis.storeName}
+              </span>
+            )}
+          </div>
+
+          {/* Content - scroll interno */}
+          <div className="modal-body">
+            <div className="max-w-2xl mx-auto">
+              {/* Error display */}
+              {(analysisError || createError) && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="callout red mb-6"
+                >
+                  <AlertCircle className="flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold">Erro</p>
+                    <p>{analysisError || createError}</p>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Step content */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentStep}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {renderStep()}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* Mobile step indicator - fixo no bottom */}
+          <div className="modal-foot md:hidden justify-center">
+            {STEPS.map((step) => (
+              <span
+                key={step.id}
+                className="dotn"
+                style={{
+                  width: currentStep === step.id ? 22 : 7,
+                  background:
+                    currentStep === step.id
+                      ? 'var(--brand)'
+                      : currentStep > step.id
+                      ? 'var(--green)'
+                      : 'var(--border-strong)',
+                  transition: '.18s',
+                }}
+              />
+            ))}
+          </div>
+        </motion.div>
       </motion.div>
-    </motion.div>
+    </AgentsTheme>
   );
 }
 

@@ -47,13 +47,16 @@ export function Step1Niche({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">
-          Escolha o nicho do seu agente
-        </h2>
-        <p className="text-gray-500">
-          Selecione o template que mais se aproxima do seu negócio. Você poderá personalizar tudo depois.
-        </p>
+      <div className="sec-head">
+        <div className="sec-ico">
+          <Sparkles />
+        </div>
+        <div>
+          <h2 className="sec-t">Escolha o nicho do seu agente</h2>
+          <p className="sec-s">
+            Selecione o template que mais se aproxima do seu negócio. Você poderá personalizar tudo depois.
+          </p>
+        </div>
       </div>
 
       {/* Store Analysis Card */}
@@ -61,60 +64,46 @@ export function Step1Niche({
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`
-            p-4 rounded-xl border
-            ${storeAnalysis 
-              ? 'bg-green-500/10 border-green-500/30' 
-              : 'bg-gray-50/50 border-gray-200'
-            }
-          `}
+          className="card"
+          style={{ padding: 16 }}
         >
           <div className="flex items-start gap-4">
-            <div className={`
-              w-10 h-10 rounded-lg flex items-center justify-center
-              ${storeAnalysis ? 'bg-green-500/20' : 'bg-blue-500/20'}
-            `}>
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${storeAnalysis ? 'chip-green' : 'chip-blue'}`}>
               {storeAnalysis ? (
-                <CheckCircle className="w-5 h-5 text-green-400" />
+                <CheckCircle className="w-5 h-5" />
               ) : (
-                <Store className="w-5 h-5 text-blue-400" />
+                <Store className="w-5 h-5" />
               )}
             </div>
-            
+
             <div className="flex-1">
               {storeAnalysis ? (
                 <>
-                  <h3 className="font-medium text-gray-900 mb-1">
+                  <h3 className="font-semibold mb-1" style={{ color: 'var(--text)' }}>
                     ✨ Análise concluída: {storeAnalysis.storeName}
                   </h3>
-                  <p className="text-sm text-gray-500 mb-2">
-                    Detectamos o nicho <strong className="text-white">{storeAnalysis.detectedNiche}</strong> com {storeAnalysis.nicheConfidence}% de confiança.
+                  <p className="text-sm mb-2" style={{ color: 'var(--text-3)' }}>
+                    Detectamos o nicho <strong style={{ color: 'var(--text)' }}>{storeAnalysis.detectedNiche}</strong> com {storeAnalysis.nicheConfidence}% de confiança.
                     {storeAnalysis.products.total} produtos encontrados.
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    <span className="px-2 py-1 text-xs bg-gray-100 rounded-full text-gray-700">
-                      {storeAnalysis.products.total} produtos
-                    </span>
-                    <span className="px-2 py-1 text-xs bg-gray-100 rounded-full text-gray-700">
-                      {storeAnalysis.categories.length} categorias
-                    </span>
-                    <span className="px-2 py-1 text-xs bg-gray-100 rounded-full text-gray-700">
-                      Score: {storeAnalysis.scores.overall}/100
-                    </span>
+                    <span className="chip">{storeAnalysis.products.total} produtos</span>
+                    <span className="chip">{storeAnalysis.categories.length} categorias</span>
+                    <span className="chip">Score: {storeAnalysis.scores.overall}/100</span>
                   </div>
                 </>
               ) : (
                 <>
-                  <h3 className="font-medium text-gray-900 mb-1">
+                  <h3 className="font-semibold mb-1" style={{ color: 'var(--text)' }}>
                     🔍 Analisar sua loja automaticamente
                   </h3>
-                  <p className="text-sm text-gray-500 mb-3">
+                  <p className="text-sm mb-3" style={{ color: 'var(--text-3)' }}>
                     Detectamos que você tem uma loja Shopify conectada. Podemos analisá-la para sugerir o melhor template e preencher informações automaticamente.
                   </p>
                   <button
                     onClick={onAnalyzeStore}
                     disabled={analyzingStore}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                    className="btn btn-primary btn-sm"
                   >
                     {analyzingStore ? (
                       <>
@@ -136,22 +125,22 @@ export function Step1Niche({
       )}
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+      <div className="search-field">
+        <Search />
         <input
           type="text"
           placeholder="Buscar nicho..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-gray-200"
+          className="field"
         />
       </div>
 
       {/* Suggested Template (from analysis) */}
       {storeAnalysis && storeAnalysis.suggestedTemplate && (
         <div className="space-y-2">
-          <p className="text-sm text-gray-500 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-yellow-400" />
+          <p className="text-sm flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
+            <Sparkles className="w-4 h-4" style={{ color: 'var(--amber)' }} />
             Recomendado para sua loja:
           </p>
           {(() => {
@@ -175,11 +164,11 @@ export function Step1Niche({
 
       {/* Templates Grid */}
       <div className="space-y-3">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm" style={{ color: 'var(--text-3)' }}>
           {storeAnalysis ? 'Ou escolha outro nicho:' : 'Nichos disponíveis:'}
         </p>
-        
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+
+        <div className="niche-grid">
           {templatesToShow.map((template) => (
             <NicheCard
               key={template.id}
@@ -198,10 +187,11 @@ export function Step1Niche({
         {mainTemplates.length > 6 && (
           <button
             onClick={() => setShowAllTemplates(!showAllTemplates)}
-            className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+            className="text-sm font-semibold transition-colors"
+            style={{ color: 'var(--brand-ink)' }}
           >
-            {showAllTemplates 
-              ? 'Mostrar menos' 
+            {showAllTemplates
+              ? 'Mostrar menos'
               : `Ver todos os ${mainTemplates.length} nichos`
             }
           </button>
@@ -210,8 +200,8 @@ export function Step1Niche({
 
       {/* Custom Template */}
       {customTemplate && (
-        <div className="pt-4 border-t border-gray-200">
-          <p className="text-sm text-gray-500 mb-3">
+        <div className="pt-4" style={{ borderTop: '1px solid var(--border)' }}>
+          <p className="text-sm mb-3" style={{ color: 'var(--text-3)' }}>
             Ou comece do zero:
           </p>
           <NicheCard
@@ -231,10 +221,10 @@ export function Step1Niche({
         <button
           onClick={onNext}
           disabled={!selectedTemplate}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-500 text-gray-900 font-medium rounded-lg transition-colors"
+          className="btn btn-primary btn-lg btn-block"
         >
-          {selectedTemplate 
-            ? `Continuar com ${selectedTemplate.name}` 
+          {selectedTemplate
+            ? `Continuar com ${selectedTemplate.name}`
             : 'Selecione um nicho para continuar'
           }
         </button>
