@@ -221,8 +221,8 @@ async function seedCriteriaIfNone(
 
 /**
  * Materializa ai_eval_cases a partir de:
- * (a) agent_trace_annotations com rating em ('bad','fix') →
- *     input = trace.input, expected = fix.correction_text (bad → ''),
+ * (a) agent_trace_annotations com rating em ('good','bad','fix') →
+ *     input = trace.input, expected = fix.correction_text (good/bad → ''),
  *     source='annotation', source_id = trace_id.
  * (b) ai_test_scenarios → title, input = primeiro user_turn,
  *     source='scenario', source_id = scenario_id, tags = scenario.tags.
@@ -244,13 +244,15 @@ export async function syncCases(
     tags: string[]
   }> = []
 
-  // (a) anotações bad/fix → casos
+  // (a) anotações good/bad/fix → casos. Incluímos 'good' de propósito: o kappa
+  // juiz×humano precisa das duas classes no eixo humano (só bad/fix deixaria o
+  // rótulo humano sempre = fail, degenerando a concordância).
   const { data: anns, error: annErr } = await supabase
     .from('agent_trace_annotations')
     .select('trace_id, rating, correction_text')
     .eq('agent_id', agentId)
     .eq('organization_id', orgId)
-    .in('rating', ['bad', 'fix'])
+    .in('rating', ['good', 'bad', 'fix'])
   if (annErr) throw annErr
 
   const traceIds = (anns ?? []).map((a) => a.trace_id as string)
