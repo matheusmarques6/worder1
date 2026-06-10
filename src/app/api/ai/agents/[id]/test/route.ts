@@ -2,18 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { processWithAgent } from '@/lib/ai/engine'
 import { EngineMessage } from '@/lib/ai/types'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient } from '@/lib/api-utils';
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-// =====================================================
-// SUPABASE CLIENT
-// =====================================================
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 // =====================================================
 // POST - TESTAR AGENTE
@@ -24,28 +17,31 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    // ✅ P1: org do usuário autenticado; organization_id do body é IGNORADO
+    // (compat — AgentPreview.tsx continua enviando sem quebrar).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+    const organizationId = auth.user.organization_id;
+
     const agentId = params.id
     const body = await request.json()
 
-    const { organization_id, message, conversation_history = [] } = body
-
-    // Validações
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
-    }
+    const { message, conversation_history = [] } = body
 
     if (!message || !message.trim()) {
       return NextResponse.json({ error: 'message é obrigatório' }, { status: 400 })
     }
 
-    const supabase = getSupabase()
+    const supabase = getSupabaseAdmin()
 
-    // Verificar se agente existe
+    // Verificar se agente existe e pertence à org autenticada
     const { data: agent, error: agentError } = await supabase
       .from('ai_agents')
       .select('id, name, is_active')
       .eq('id', agentId)
-      .eq('organization_id', organization_id)
+      .eq('organization_id', organizationId)
       .single()
 
     if (agentError || !agent) {
@@ -63,7 +59,7 @@ export async function POST(
     
     const result = await processWithAgent(
       agentId,
-      organization_id,
+      organizationId,
       message.trim(),
       history,
       'test-conversation'

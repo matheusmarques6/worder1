@@ -9,11 +9,14 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 // =====================================================
-// SUPABASE CLIENT
+// P1: rota INTERNA (chamada por sources/upload/reprocess via fetch server-side).
+// Sem proteção, qualquer um reprocessa/envenena a base de conhecimento de
+// outra org. Mesmo padrão de auth dos crons (Bearer CRON_SECRET).
 // =====================================================
-
-function getSupabase() {
-  return getSupabaseAdmin();
+function isInternalAuthorized(request: NextRequest): boolean {
+  const secret = process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET
+  if (!secret) return process.env.NODE_ENV !== 'production'
+  return request.headers.get('authorization') === `Bearer ${secret}`
 }
 
 // =====================================================
@@ -21,7 +24,11 @@ function getSupabase() {
 // =====================================================
 
 export async function POST(request: NextRequest) {
-  const supabase = getSupabase()
+  if (!isInternalAuthorized(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const supabase = getSupabaseAdmin()
   let sourceId: string | null = null
 
   try {
