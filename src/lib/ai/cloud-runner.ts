@@ -26,6 +26,7 @@ import { createAgentEngine } from './engine';
 import type { EngineMessage } from './types';
 import type { ToolContext } from './tools/types';
 import { sendHumanizedReply } from './cloud-sender';
+import { AiBudgetExceededError } from './budget';
 
 const COOLDOWN_MS = 5000;
 
@@ -261,6 +262,29 @@ export async function maybeRunAgentForCloudConversation(
       toolContext,
     });
   } catch (engineErr: any) {
+    // Budget excedido: silenciar + marcar conversa para revisão humana.
+    // NÃO é falha permanente — budget pode renovar no próximo mês.
+    if (engineErr instanceof AiBudgetExceededError) {
+      await supabaseAdmin
+        .from('whatsapp_cloud_conversations')
+        .update({
+          ai_enabled: false,
+          ai_disabled_at: new Date().toISOString(),
+          ai_disabled_reason: 'budget_exceeded',
+        })
+        .eq('id', conversation.id);
+      console.warn(
+        `[cloud-runner] budget_exceeded — org=${organizationId} agent=${agentId} ` +
+          `conversation=${conversation.id}. IA desabilitada até renovacao do orcamento.`,
+      );
+      return {
+        replied: false,
+        transferred: false,
+        agentId,
+        skipped: 'budget_exceeded',
+      };
+    }
+
     // Defesa extra: createAgentEngine pode lançar se a chave sumir entre o
     // SELECT e a criação. Tratar como no_valid_api_key e desabilitar.
     await supabaseAdmin

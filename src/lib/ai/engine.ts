@@ -20,6 +20,8 @@ import { PromptBuilder, formatRAGAsContext } from './prompt-builder'
 import { callAI, AIProvider } from '@/lib/whatsapp/ai-providers'
 import { getActiveTools } from './tools/registry'
 import { runToolLoop } from './tools/loop'
+import { trackAiUsage } from './cost-tracker'
+import { checkAiBudget, AiBudgetExceededError } from './budget'
 
 // =====================================================
 // AI AGENT ENGINE CLASS
@@ -63,6 +65,9 @@ export class AIAgentEngine {
       if (!this.checkSchedule()) {
         throw new Error('Fora do horário de atendimento')
       }
+
+      // 2b. Verificar budget mensal (lança AiBudgetExceededError se excedido)
+      await checkAiBudget(this.organizationId, { throwOnExceeded: true })
 
       // 3. Carregar ações e criar engine
       const actions = await this.loadActions()
@@ -368,7 +373,9 @@ export class AIAgentEngine {
   }
 
   /**
-   * Registra uso para métricas
+   * Registra uso via trackAiUsage (colunas corretas de ai_usage_logs).
+   * Colunas legadas (input_tokens, output_tokens, estimated_cost_cents) foram
+   * substituídas por prompt_tokens, completion_tokens, cost_usd via cost-tracker.
    */
   private async logUsage(params: {
     conversationId?: string
@@ -380,58 +387,45 @@ export class AIAgentEngine {
     success: boolean
     errorMessage?: string
   }): Promise<void> {
-    try {
-      const totalTokens = params.inputTokens + params.outputTokens
-      
-      // Calcular custo estimado (simplificado)
-      const costPer1kInput = 0.00015  // GPT-4o-mini input
-      const costPer1kOutput = 0.0006  // GPT-4o-mini output
-      const estimatedCost = (params.inputTokens / 1000) * costPer1kInput + 
-                           (params.outputTokens / 1000) * costPer1kOutput
-
-      const usageLog: Partial<UsageLog> = {
-        organization_id: this.organizationId,
-        agent_id: this.agent.id,
-        conversation_id: params.conversationId,
-        provider: this.agent.provider,
-        model: this.agent.model,
-        input_tokens: params.inputTokens,
-        output_tokens: params.outputTokens,
-        total_tokens: totalTokens,
-        estimated_cost_cents: Math.ceil(estimatedCost * 100),
-        response_time_ms: params.responseTimeMs,
+    await trackAiUsage({
+      organizationId: this.organizationId,
+      provider: this.agent.provider,
+      model: this.agent.model,
+      feature: 'whatsapp_agent',
+      agentId: this.agent.id,
+      conversationId: params.conversationId,
+      promptTokens: params.inputTokens,
+      completionTokens: params.outputTokens,
+      durationMs: params.responseTimeMs,
+      success: params.success,
+      error: params.errorMessage,
+      metadata: {
         chunks_used: params.sourcesUsed.length,
         sources_used: params.sourcesUsed,
         actions_triggered: params.actionsTriggered,
-        success: params.success,
-        error_message: params.errorMessage,
+      },
+    })
+
+    // Atualizar estatísticas do agente (best-effort)
+    if (params.success) {
+      const totalTokens = params.inputTokens + params.outputTokens
+      const { error: rpcError } = await this.supabase.rpc('update_agent_stats', {
+        p_agent_id: this.agent.id,
+        p_tokens: totalTokens,
+        p_response_time: params.responseTimeMs,
+      })
+
+      // Se RPC não existe, fazer update manual (best-effort, sem .catch() inválido)
+      if (rpcError) {
+        this.supabase
+          .from('ai_agents')
+          .update({
+            total_messages: this.agent.total_messages + 1,
+            total_tokens_used: this.agent.total_tokens_used + totalTokens,
+          })
+          .eq('id', this.agent.id)
+          .then(() => {/* best-effort, não falhar */}, () => {/* ignorar erro */})
       }
-
-      await this.supabase.from('ai_usage_logs').insert(usageLog)
-
-      // Atualizar estatísticas do agente
-      if (params.success) {
-        const { error: rpcError } = await this.supabase.rpc('update_agent_stats', {
-          p_agent_id: this.agent.id,
-          p_tokens: totalTokens,
-          p_response_time: params.responseTimeMs,
-        })
-        
-        // Se RPC não existe, fazer update manual
-        if (rpcError) {
-          await this.supabase
-            .from('ai_agents')
-            .update({
-              total_messages: this.agent.total_messages + 1,
-              total_tokens_used: this.agent.total_tokens_used + totalTokens,
-            })
-            .eq('id', this.agent.id)
-        }
-      }
-
-    } catch (error) {
-      console.error('Error logging usage:', error)
-      // Não falhar por erro de log
     }
   }
 }

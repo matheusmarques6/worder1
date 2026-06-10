@@ -14,6 +14,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { processWithAgent } from './engine'
 import type { AIAgent, EngineMessage } from './types'
 import { callAI, type AIProvider } from '@/lib/whatsapp/ai-providers'
+import { trackAiUsage } from './cost-tracker'
+import { checkAiBudget, AiBudgetExceededError } from './budget'
 import {
   judgeTranscript,
   JUDGE_MODELS,
@@ -140,6 +142,13 @@ export async function generateScenarios(
   organizationId: string,
   userId: string | null
 ): Promise<any[]> {
+  // Budget check: 402 se excedido (F3 é rota interna — deve retornar vazio, não lançar)
+  const budget = await checkAiBudget(organizationId)
+  if (!budget.allowed) {
+    console.warn(`[generateScenarios] budget_exceeded org=${organizationId}`)
+    return []
+  }
+
   const apiKey = await resolveApiKey(supabase, organizationId, agent.provider)
   if (!apiKey) return []
 
@@ -167,6 +176,17 @@ export async function generateScenarios(
       [{ role: 'user', content: userPrompt }]
     )
     generated = parseGeneratedScenarios(res.content)
+    // Track usage
+    await trackAiUsage({
+      organizationId,
+      provider,
+      model: JUDGE_MODELS[provider] || JUDGE_MODELS.openai,
+      feature: 'test_runner_generate',
+      agentId: agent.id,
+      promptTokens: res.usage?.promptTokens,
+      completionTokens: res.usage?.completionTokens,
+      success: true,
+    })
   } catch {
     generated = []
   }
@@ -312,6 +332,9 @@ export async function runScenarios(
 
   const toRun = (scenarios ?? []).slice(0, MAX_SCENARIOS_PER_RUN) as ScenarioRow[]
   if (toRun.length === 0) return []
+
+  // Budget check: 402 via AiBudgetExceededError (caller/rota captura)
+  await checkAiBudget(organizationId, { throwOnExceeded: true })
 
   const apiKey = await resolveApiKey(supabase, organizationId, agent.provider)
   const versionId = await resolveProductionVersionId(supabase, agent.id, organizationId)

@@ -17,6 +17,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AIAgent } from './types'
 import { callAI, type AIProvider } from '@/lib/whatsapp/ai-providers'
 import { JUDGE_MODELS } from './judge'
+import { trackAiUsage } from './cost-tracker'
+import { checkAiBudget } from './budget'
 import { diffLines, type DiffLine } from './diff'
 import { snapshotIfChanged } from './versions'
 import {
@@ -342,6 +344,9 @@ export async function generateProposals(
 
   if (signals.length === 0) return // sem sinais → nada a propor
 
+  // Budget check: 402 via AiBudgetExceededError (caller/rota captura)
+  await checkAiBudget(orgId, { throwOnExceeded: true })
+
   const apiKey = await resolveApiKey(supabase, orgId, agent.provider)
   if (!apiKey) return
   const provider = agent.provider as AIProvider
@@ -369,6 +374,17 @@ export async function generateProposals(
       [{ role: 'user', content: userPrompt }]
     )
     parsed = parseProposalsJson(response.content)
+    // Track usage
+    await trackAiUsage({
+      organizationId: orgId,
+      provider,
+      model,
+      feature: 'proposals_generate',
+      agentId: agent.id,
+      promptTokens: response.usage?.promptTokens,
+      completionTokens: response.usage?.completionTokens,
+      success: true,
+    })
   } catch {
     return // falha na chamada → não quebra a UI
   }

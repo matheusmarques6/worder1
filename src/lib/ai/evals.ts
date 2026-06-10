@@ -15,6 +15,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AIAgent } from './types'
 import { type AIProvider } from '@/lib/whatsapp/ai-providers'
 import { judgeCase, JUDGE_MODELS, type JudgeCriterion } from './judge'
+import { trackAiUsage } from './cost-tracker'
+import { checkAiBudget } from './budget'
 import {
   cohenKappa,
   buildKappaRows,
@@ -418,6 +420,9 @@ export async function runEvaluation(
   const cases = (caseRows ?? []) as CaseRow[]
   if (cases.length === 0) return
 
+  // Budget check: 402 via AiBudgetExceededError (caller/rota captura)
+  await checkAiBudget(orgId, { throwOnExceeded: true })
+
   const apiKey = await resolveApiKey(supabase, orgId, agent.provider)
   if (!apiKey) return
   const provider = agent.provider as AIProvider
@@ -438,6 +443,15 @@ export async function runEvaluation(
         output,
         expected: c.expected ?? undefined,
         criteria,
+      })
+      // Track usage
+      await trackAiUsage({
+        organizationId: orgId,
+        provider,
+        model: judgeModel,
+        feature: 'eval_judge',
+        agentId: agent.id,
+        success: true,
       })
     } catch {
       verdict = {
