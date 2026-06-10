@@ -6,15 +6,20 @@ import { useAuthStore } from '@/stores'
 import AIAgentList from '@/components/agents/AIAgentList'
 import ApiKeysManager from '@/components/whatsapp/ApiKeysManager'
 import KnowledgeBasePanel from '@/components/agents/KnowledgeBasePanel'
-import { Bot, Key, BookOpen, Loader2 } from 'lucide-react'
+import { AgentsTheme } from '@/components/agents/ui/AgentsTheme'
+import { Bot, Key, BookOpen, BarChart3, ClipboardCheck, Loader2 } from 'lucide-react'
 
-type TabId = 'agents' | 'api-keys' | 'knowledge'
+type TabId = 'agents' | 'reports' | 'eval' | 'knowledge' | 'api-keys'
 
 const TABS: { id: TabId; label: string; icon: typeof Bot }[] = [
   { id: 'agents', label: 'Agentes', icon: Bot },
+  { id: 'reports', label: 'Relatórios', icon: BarChart3 },
+  { id: 'eval', label: 'Avaliação', icon: ClipboardCheck },
   { id: 'knowledge', label: 'Knowledge Base', icon: BookOpen },
   { id: 'api-keys', label: 'API Keys', icon: Key },
 ]
+
+const VALID_TABS = TABS.map(t => t.id)
 
 function AIAgentsPageInner() {
   const router = useRouter()
@@ -23,7 +28,7 @@ function AIAgentsPageInner() {
   const [mounted, setMounted] = useState(false)
 
   const paramTab = searchParams?.get('tab')
-  const initialTab = (paramTab === 'api-keys' || paramTab === 'knowledge' ? paramTab : 'agents') as TabId
+  const initialTab = (paramTab && VALID_TABS.includes(paramTab as TabId) ? paramTab : 'agents') as TabId
   const [activeTab, setActiveTab] = useState<TabId>(initialTab)
 
   useEffect(() => {
@@ -32,8 +37,10 @@ function AIAgentsPageInner() {
 
   useEffect(() => {
     const t = searchParams?.get('tab')
-    if (t === 'api-keys' || t === 'agents' || t === 'knowledge') {
+    if (t && VALID_TABS.includes(t as TabId)) {
       setActiveTab(t as TabId)
+    } else if (!t) {
+      setActiveTab('agents')
     }
   }, [searchParams])
 
@@ -65,36 +72,50 @@ function AIAgentsPageInner() {
   }
 
   return (
-    <div className="h-full bg-white flex flex-col">
+    <AgentsTheme className="h-full flex flex-col" style={{ background: 'var(--bg)' }}>
       {/* Tabs */}
-      <div className="px-6 pt-4 border-b border-gray-200">
-        <div className="flex items-center gap-1">
-          {TABS.map(tab => {
-            const Icon = tab.icon
-            const isActive = activeTab === tab.id
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all -mb-px ${
-                  isActive
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            )
-          })}
-        </div>
+      <div className="tabs-row">
+        {TABS.map(tab => {
+          const Icon = tab.icon
+          const isActive = activeTab === tab.id
+          return (
+            <button
+              key={tab.id}
+              onClick={() => handleTabChange(tab.id)}
+              className={`tab${isActive ? ' on' : ''}`}
+            >
+              <Icon />
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'agents' && <AIAgentList organizationId={organizationId} />}
+        {activeTab === 'reports' && <ComingSoon icon={BarChart3} title="Relatórios" description="Acompanhe a qualidade, o volume de conversas e a satisfação dos seus agentes. Em breve." />}
+        {activeTab === 'eval' && <ComingSoon icon={ClipboardCheck} title="Avaliação" description="Teste e compare versões dos seus agentes com casos de avaliação. Em breve." />}
         {activeTab === 'knowledge' && <KnowledgeBasePanel organizationId={organizationId} />}
         {activeTab === 'api-keys' && <ApiKeysManager />}
+      </div>
+    </AgentsTheme>
+  )
+}
+
+/* Lightweight placeholder for views built in a later phase (Relatórios / Avaliação). */
+function ComingSoon({ icon: Icon, title, description }: { icon: typeof Bot; title: string; description: string }) {
+  return (
+    <div className="page">
+      <div className="page-inner">
+        <div className="empty-wrap">
+          <div className="empty-ico">
+            <Icon />
+          </div>
+          <h2>{title}</h2>
+          <p>{description}</p>
+          <span className="chip chip-brand">Em breve</span>
+        </div>
       </div>
     </div>
   )

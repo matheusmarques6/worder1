@@ -92,6 +92,7 @@
 .agents-theme .chip-brand { background: var(--brand-tint); color: var(--brand-ink); }
 .agents-theme .chip-green { background: var(--green-tint); color: var(--green); }
 .agents-theme .chip-blue { background: var(--blue-tint); color: var(--blue); }
+.agents-theme .chip-red { background: var(--red-tint); color: var(--red); }
 .agents-theme .chip-outline { background: var(--surface); border: 1px dashed var(--border-strong); color: var(--text-2); cursor: pointer; }
 .agents-theme .chip-outline:hover { border-color: var(--brand); color: var(--brand-ink); background: var(--brand-tint); }
 .agents-theme .dotn { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
