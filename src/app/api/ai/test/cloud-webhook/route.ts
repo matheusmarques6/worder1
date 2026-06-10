@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { maybeRunAgentForCloudConversation } from '@/lib/ai/cloud-runner';
+import { assertDebugAllowed } from '@/lib/debug-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +41,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  // ✅ P1: mesmo guard do /api/ai/test — simulador de dev, não expor em produção
+  const blocked = assertDebugAllowed(request)
+  if (blocked) return blocked
+
   const startTime = Date.now();
 
   try {

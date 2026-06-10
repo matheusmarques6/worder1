@@ -101,20 +101,25 @@ export async function GET(request: NextRequest) {
 
 // POST - Recalcular analytics de uma campanha
 export async function POST(request: NextRequest) {
+  // ✅ P1 v2: org do token; organization_id do body é IGNORADO
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const body = await request.json();
-    const { campaign_id, organization_id } = body;
+    const { campaign_id } = body;
 
-    if (!campaign_id || !organization_id) {
-      return NextResponse.json({ error: 'campaign_id and organization_id required' }, { status: 400 });
+    if (!campaign_id) {
+      return NextResponse.json({ error: 'campaign_id required' }, { status: 400 });
     }
 
-    // Verificar se a campanha pertence à organização
+    // Verificar se a campanha pertence à organização autenticada
     const { data: campaign, error: campaignError } = await supabase
       .from('whatsapp_campaigns')
       .select('id')
       .eq('id', campaign_id)
-      .eq('organization_id', organization_id)
+      .eq('organization_id', organizationId)
       .single();
 
     if (campaignError || !campaign) {
