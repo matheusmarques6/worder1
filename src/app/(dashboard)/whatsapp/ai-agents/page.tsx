@@ -6,6 +6,8 @@ import { useAuthStore } from '@/stores'
 import AIAgentList from '@/components/agents/AIAgentList'
 import ApiKeysManager from '@/components/whatsapp/ApiKeysManager'
 import KnowledgeBasePanel from '@/components/agents/KnowledgeBasePanel'
+import ReportsView from '@/components/agents/reports/ReportsView'
+import EvalView from '@/components/agents/eval/EvalView'
 import { AgentsTheme } from '@/components/agents/ui/AgentsTheme'
 import { Bot, Key, BookOpen, BarChart3, ClipboardCheck, Loader2 } from 'lucide-react'
 
@@ -94,30 +96,12 @@ function AIAgentsPageInner() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'agents' && <AIAgentList organizationId={organizationId} />}
-        {activeTab === 'reports' && <ComingSoon icon={BarChart3} title="Relatórios" description="Acompanhe a qualidade, o volume de conversas e a satisfação dos seus agentes. Em breve." />}
-        {activeTab === 'eval' && <ComingSoon icon={ClipboardCheck} title="Avaliação" description="Teste e compare versões dos seus agentes com casos de avaliação. Em breve." />}
+        {activeTab === 'reports' && <ReportsView />}
+        {activeTab === 'eval' && <EvalView />}
         {activeTab === 'knowledge' && <KnowledgeBasePanel organizationId={organizationId} />}
         {activeTab === 'api-keys' && <ApiKeysManager />}
       </div>
     </AgentsTheme>
-  )
-}
-
-/* Lightweight placeholder for views built in a later phase (Relatórios / Avaliação). */
-function ComingSoon({ icon: Icon, title, description }: { icon: typeof Bot; title: string; description: string }) {
-  return (
-    <div className="page">
-      <div className="page-inner">
-        <div className="empty-wrap">
-          <div className="empty-ico">
-            <Icon />
-          </div>
-          <h2>{title}</h2>
-          <p>{description}</p>
-          <span className="chip chip-brand">Em breve</span>
-        </div>
-      </div>
-    </div>
   )
 }
 

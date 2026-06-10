@@ -8,5 +8,9 @@ export {
   SegmentedControl,
   Stepper,
   AccordionItem,
+  Gauge,
+  RatingBar,
+  ScorePill,
+  DiffViewer,
 } from './primitives'
-export type { SegmentOption, StepItem } from './primitives'
+export type { SegmentOption, StepItem, DiffLine } from './primitives'

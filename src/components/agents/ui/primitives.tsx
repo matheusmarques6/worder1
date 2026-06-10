@@ -1,7 +1,7 @@
 'use client'
 
 import { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Star } from 'lucide-react'
 
 /**
  * Reusable primitives for the "Agentes de IA" redesign. They emit the scoped
@@ -272,6 +272,120 @@ export function AccordionItem({
         <ChevronDown className="ch" />
       </button>
       {open && <div className="acc-body">{children}</div>}
+    </div>
+  )
+}
+
+/* ---------------- Gauge ---------------- */
+/**
+ * Circular score gauge (`.gauge`). The ring is drawn with a conic-gradient that
+ * fills `value`% of the circle in `color`; the inner disc (`::after` in CSS)
+ * masks it into a ring. Used by Relatórios for the quality score.
+ */
+export function Gauge({
+  value,
+  label,
+  display,
+  color = 'var(--brand)',
+  track = 'var(--surface-3)',
+  className,
+}: {
+  /** 0–100 fill percentage */
+  value: number
+  label?: ReactNode
+  /** big text in the center; defaults to the rounded value */
+  display?: ReactNode
+  color?: string
+  track?: string
+  className?: string
+}) {
+  const pct = Math.max(0, Math.min(100, value))
+  return (
+    <div
+      className={cx('gauge', className)}
+      style={{ background: `conic-gradient(${color} ${pct * 3.6}deg, ${track} 0)` }}
+    >
+      <div className="gauge-in">
+        <div className="gauge-v">{display ?? Math.round(pct)}</div>
+        {label && <div className="gauge-k">{label}</div>}
+      </div>
+    </div>
+  )
+}
+
+/* ---------------- RatingBar (stars) ---------------- */
+/**
+ * Star rating row (`.stars`). Renders `max` stars, filling the first `value`
+ * (rounded) with the theme amber. Presentational only.
+ */
+export function RatingBar({
+  value,
+  max = 5,
+  className,
+}: {
+  value: number
+  max?: number
+  className?: string
+}) {
+  const filled = Math.round(value)
+  return (
+    <span className={cx('stars', className)} aria-label={`${value} de ${max}`}>
+      {Array.from({ length: max }).map((_, i) => (
+        <Star key={i} fill={i < filled ? 'currentColor' : 'none'} stroke="currentColor" />
+      ))}
+    </span>
+  )
+}
+
+/* ---------------- ScorePill ---------------- */
+/**
+ * Colored score badge (`.score-pill`). The caller picks the tone (green/amber/
+ * red) — used by Test-run rows and eval cases. Tints come from the theme tokens.
+ */
+type ScoreTone = 'green' | 'amber' | 'red' | 'neutral'
+const SCORE_TONE: Record<ScoreTone, { bg: string; fg: string }> = {
+  green: { bg: 'var(--green-tint)', fg: 'var(--green)' },
+  amber: { bg: 'var(--amber-tint)', fg: 'var(--amber)' },
+  red: { bg: 'var(--red-tint)', fg: 'var(--red)' },
+  neutral: { bg: 'var(--surface-3)', fg: 'var(--text-2)' },
+}
+
+export function ScorePill({
+  tone = 'neutral',
+  className,
+  children,
+  ...rest
+}: { tone?: ScoreTone } & HTMLAttributes<HTMLSpanElement>) {
+  const c = SCORE_TONE[tone]
+  return (
+    <span className={cx('score-pill', className)} style={{ background: c.bg, color: c.fg }} {...rest}>
+      {children}
+    </span>
+  )
+}
+
+/* ---------------- DiffViewer (before/after) ---------------- */
+export interface DiffLine {
+  /** 'rem' = removed (before), 'add' = added (after), 'ctx' = unchanged context */
+  type: 'add' | 'rem' | 'ctx'
+  text: string
+}
+
+/**
+ * Monospace before/after diff (`.diff`). Each line is rendered with the sign
+ * gutter and the appropriate add/rem/ctx tint. Used by Relatórios prompt
+ * improvement proposals.
+ */
+export function DiffViewer({ lines, className }: { lines: DiffLine[]; className?: string }) {
+  const SIGN: Record<DiffLine['type'], string> = { add: '+', rem: '-', ctx: '' }
+  return (
+    <div className={cx('diff', className)}>
+      {lines.map((line, i) => (
+        <div key={i} className={cx('diff-line', line.type)}>
+          <span className="diff-sign">{SIGN[line.type]}</span>
+          <span className="tx">{line.text}</span>
+        </div>
+      ))}
     </div>
   )
 }
