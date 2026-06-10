@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient } from '@/lib/api-utils';
+import { assertAgentInOrg } from '@/lib/ai/agent-access';
 export const dynamic = 'force-dynamic';
-
-// =====================================================
-// SUPABASE CLIENT
-// =====================================================
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 const MAX_ACTIONS_PER_AGENT = 20
 
@@ -21,17 +15,22 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabase()
-    const agentId = params.id
-
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    // ✅ P1: org SEMPRE do usuário autenticado; organization_id da
+    // querystring é aceito e IGNORADO (compat com frontend atual).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    // Buscar ações ordenadas por prioridade
+    const supabase = getSupabaseAdmin()
+    const agentId = params.id
+    const organizationId = auth.user.organization_id
+
+    const access = await assertAgentInOrg(supabase, agentId, organizationId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status })
+    }
+
     const { data: actions, error } = await supabase
       .from('ai_agent_actions')
       .select('*')
@@ -50,7 +49,6 @@ export async function GET(
       count: actions?.length || 0,
       max_allowed: MAX_ACTIONS_PER_AGENT,
     })
-
   } catch (error: any) {
     console.error('Error in GET /api/ai/agents/[id]/actions:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -66,17 +64,21 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabase()
-    const agentId = params.id
-    const body = await request.json()
-
-    const { organization_id, name, conditions, actions: actionsList } = body
-
-    // Validações
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    // ✅ P1: org SEMPRE do usuário autenticado; organization_id do
+    // body é aceito e IGNORADO (compat com frontend atual).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    const supabase = getSupabaseAdmin()
+    const agentId = params.id
+    const organizationId = auth.user.organization_id
+    const body = await request.json()
+
+    const { name, conditions, actions: actionsList } = body
+
+    // Validações
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'name é obrigatório' }, { status: 400 })
     }
@@ -89,16 +91,10 @@ export async function POST(
       return NextResponse.json({ error: 'Pelo menos uma ação é obrigatória' }, { status: 400 })
     }
 
-    // Verificar se agente existe
-    const { data: agent, error: agentError } = await supabase
-      .from('ai_agents')
-      .select('id')
-      .eq('id', agentId)
-      .eq('organization_id', organization_id)
-      .single()
-
-    if (agentError || !agent) {
-      return NextResponse.json({ error: 'Agente não encontrado' }, { status: 404 })
+    // Verificar se agente pertence à org autenticada
+    const access = await assertAgentInOrg(supabase, agentId, organizationId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status })
     }
 
     // Verificar limite de ações
@@ -110,14 +106,14 @@ export async function POST(
     if (countError) throw countError
 
     if ((count || 0) >= MAX_ACTIONS_PER_AGENT) {
-      return NextResponse.json({ 
-        error: `Limite de ${MAX_ACTIONS_PER_AGENT} ações por agente atingido` 
+      return NextResponse.json({
+        error: `Limite de ${MAX_ACTIONS_PER_AGENT} ações por agente atingido`
       }, { status: 400 })
     }
 
     // Preparar dados
     const actionData = {
-      organization_id,
+      organization_id: organizationId,
       agent_id: agentId,
       name: name.trim(),
       description: body.description?.trim() || null,
