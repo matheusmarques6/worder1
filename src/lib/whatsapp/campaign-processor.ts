@@ -130,9 +130,24 @@ export class CampaignProcessor {
 
       // P0 — defesa em profundidade: nunca enviar com template não-APPROVED
       // (o send route também valida; aqui cobre cron e resume).
+      // Template pendente NÃO é falha permanente: campanha claimada pelo cron
+      // ('queued') volta pra 'scheduled' e re-tenta no próximo tick (até o
+      // guard de 48h cancelar); 'paused' permanece paused. Por isso retorna
+      // success:false em vez de throw (o catch marcaria 'failed' pra sempre).
       const tplCheck = await ensureCampaignTemplateApproved(campaign)
       if (!tplCheck.ok) {
-        throw new Error(tplCheck.reason || 'Template not approved')
+        if (campaign.status === 'queued') {
+          await supabase
+            .from('whatsapp_campaigns')
+            .update({ status: 'scheduled', updated_at: new Date().toISOString() })
+            .eq('id', campaignId)
+        }
+        wlog.warn('whatsapp.campaign.start_blocked_template', {
+          campaign_id: campaignId,
+          status: campaign.status,
+          reason: tplCheck.reason,
+        })
+        return { success: false, totalRecipients: 0, totalBatches: 0, error: tplCheck.reason || 'Template not approved' }
       }
 
       // 2. Buscar instância WhatsApp

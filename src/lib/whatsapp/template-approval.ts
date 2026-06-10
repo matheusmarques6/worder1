@@ -36,6 +36,7 @@ export async function ensureCampaignTemplateApproved(campaign: {
       .from('whatsapp_templates')
       .select('status, name')
       .eq('id', campaign.template_id)
+      .eq('organization_id', campaign.organization_id)
       .maybeSingle()
     row = data
   }
