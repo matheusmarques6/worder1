@@ -655,10 +655,14 @@ export class CampaignProcessor {
       contacts = data || []
     }
 
-    // Criar recipients
+    // Criar recipients. contact_id só é gravado quando é UUID real
+    // (audiência 'import' gera ids sintéticos que NÃO podem ir pra coluna UUID).
+    const isUuid = (v: any) =>
+      typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+
     const recipients = contacts.map(contact => ({
       campaign_id: campaign.id,
-      contact_id: contact.id,
+      contact_id: isUuid(contact.id) ? contact.id : null,
       phone_number: contact.phone_number,
       contact_name: contact.name,
       status: 'pending',
@@ -666,19 +670,26 @@ export class CampaignProcessor {
       queued_at: new Date().toISOString(),
     }))
 
-    // Inserir em batches
+    // Inserir em batches COM .select() pra retornar os IDs reais do banco.
+    // Bug anterior: insert sem select + retorno de id 'new-${i}' fazia todos
+    // os UPDATEs do processBatch (.eq('id', 'new-0')) falharem — recipient
+    // nunca virava 'sent', meta_message_id nunca era gravado e a campanha
+    // ficava 'running' pra sempre (checkCampaignCompletion via pending > 0).
     const insertBatchSize = 500
+    const created: any[] = []
     for (let i = 0; i < recipients.length; i += insertBatchSize) {
-      await supabase
+      const { data, error } = await supabase
         .from('whatsapp_campaign_recipients')
         .insert(recipients.slice(i, i + insertBatchSize))
+        .select('id, phone_number, contact_name, resolved_variables, retry_count')
+
+      if (error) {
+        throw new Error(`Failed to create recipients (batch ${i / insertBatchSize}): ${error.message}`)
+      }
+      created.push(...(data || []))
     }
 
-    // Retornar para processamento
-    return recipients.map((r, i) => ({
-      ...r,
-      id: `new-${i}`, // ID temporário, será buscado depois
-    }))
+    return created
   }
 
   private resolveVariables(
