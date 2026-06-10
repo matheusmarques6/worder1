@@ -1,11 +1,13 @@
 // =============================================
-// WORDER: AI usage cost summary
+// WORDER: AI usage cost summary + budget status
 // GET /api/ai/usage?period=30d&group_by=model|feature|day
+// Task 17 (P1): inclui campo `budget` com limite/gasto/allowed.
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { checkAiBudget } from '@/lib/ai/budget'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +69,15 @@ export async function GET(req: NextRequest) {
     grouped.set(key, g)
   }
 
+  // Budget status (skipCache=true para refletir gasto atual)
+  let budget: { allowed: boolean; budgetUsd: number | null; spentUsd: number } | null = null
+  try {
+    budget = await checkAiBudget(orgId, { skipCache: true })
+  } catch {
+    // Não quebrar a resposta se o budget falhar
+    budget = null
+  }
+
   return NextResponse.json({
     period,
     totals: {
@@ -76,5 +87,15 @@ export async function GET(req: NextRequest) {
     grouped: Array.from(grouped.values())
       .map((g) => ({ ...g, costUsd: Math.round(g.costUsd * 10000) / 10000 }))
       .sort((a, b) => b.costUsd - a.costUsd),
+    budget: budget
+      ? {
+          allowed: budget.allowed,
+          budgetUsd: budget.budgetUsd,
+          spentUsd: Math.round(budget.spentUsd * 10000) / 10000,
+          usedPct: budget.budgetUsd
+            ? Math.round((budget.spentUsd / budget.budgetUsd) * 10000) / 100
+            : null,
+        }
+      : null,
   })
 }
