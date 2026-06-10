@@ -26,7 +26,8 @@ export const CAMPAIGN_CONFIG = {
   // Batching
   batchSize: 100,              // Recipients por batch
   maxParallelBatches: 5,       // Batches em paralelo
-  batchStaggerMs: 2000,        // Delay entre batches na fila
+  /** @deprecated Nunca consumido — addBatch usa delay:0 com score baseTime+batchIndex. */
+  batchStaggerMs: 2000,
 
   // Rate limiting
   targetMPS: 70,               // Target msg/segundo
@@ -224,12 +225,11 @@ export class CampaignProcessor {
 
       // 6. Enfileirar batches (pipelined via addBatch)
       // CONCERN: addBatch aceita opções COMPARTILHADAS para todos os itens —
-      // não suporta delay/priority por item. O stagger interno é index*10ms
-      // em vez dos i*2000ms originais. O ganho de pipeline (SET em pipeline
-      // Redis em vez de N round-trips individuais) é preservado. Prioridade
-      // relativa é preservada pela ordem de inserção no sorted set; o stagger
-      // de 10ms entre batches é suficiente para ordenação prática em produção.
-      // Se o stagger exato de 2000ms for crítico, avaliar adicionar suporte a
+      // não suporta delay/priority por item. Com delay:0 o score real de cada
+      // job no sorted set é baseTime + batchIndex (1 ms por item — jobs
+      // imediatamente elegíveis; ordenação por batchIndex preservada). O ganho
+      // de pipeline (SET em pipeline Redis em vez de N round-trips individuais)
+      // é mantido. Se delay exato entre batches for crítico, avaliar suporte a
       // per-item options em addBatch.
       const batchItems: CampaignBatchData[] = batches.map((batch, i) => ({
         campaignId,

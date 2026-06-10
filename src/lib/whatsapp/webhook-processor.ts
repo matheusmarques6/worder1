@@ -26,6 +26,7 @@ import {
 } from './cloud-api';
 import { RuleEngine, type EventData } from '@/lib/services/automation/rule-engine';
 import { wlog } from '@/lib/observability/whatsapp-logger';
+import { applyCampaignRecipientWebhookStatus } from './campaign-recipient-status';
 
 // Ordem canonica de status WhatsApp. Webhooks chegam fora de ordem em raros
 // casos (delivered antes de sent); sem o guard de ordinal a row sofre retrograde.
@@ -462,6 +463,14 @@ async function processStatus(account: any, status: any) {
     .from('whatsapp_cloud_messages')
     .update(updateData)
     .eq('message_id', messageId);
+
+  // P0 — se a mensagem pertence a uma campanha (meta_message_id gravado pelo
+  // campaign-processor), propaga delivered/read/failed pro recipient e pros
+  // contadores da campanha. Best-effort: nunca falha o processamento do webhook.
+  await applyCampaignRecipientWebhookStatus(messageId, newStatus, {
+    errorCode: errors?.[0]?.code?.toString(),
+    errorMessage: errors?.[0]?.message || errors?.[0]?.title,
+  });
 }
 
 // ============================================================
