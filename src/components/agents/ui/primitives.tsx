@@ -299,7 +299,7 @@ export function Gauge({
   track?: string
   className?: string
 }) {
-  const pct = Math.max(0, Math.min(100, value))
+  const pct = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0
   return (
     <div
       className={cx('gauge', className)}

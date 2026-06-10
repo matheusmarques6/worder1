@@ -181,7 +181,18 @@ export default function TestRunView({ versionLabel = 'v3 · rascunho', onBack }:
             const open = openId === scn.id
             return (
               <div key={scn.id} className={`scn ${meta.cls}`}>
-                <div className="scn-head" onClick={() => setOpenId(open ? null : scn.id)}>
+                <div
+                  className="scn-head"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setOpenId(open ? null : scn.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setOpenId(open ? null : scn.id)
+                    }
+                  }}
+                >
                   <span className="scn-num">{i + 1}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{scn.title}</div>

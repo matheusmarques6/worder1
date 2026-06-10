@@ -120,7 +120,7 @@ export default function ReportsView() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
             {/* quality */}
             <Card style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 18 }}>
-              <Gauge value={s.quality} label="qualidade" display={`${s.quality}`} />
+              <Gauge value={s.quality} label="qualidade" />
               <div>
                 <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>Score de qualidade</div>
                 <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '4px 0 0', lineHeight: 1.5 }}>
