@@ -12,12 +12,20 @@
 CREATE INDEX IF NOT EXISTS idx_campaigns_scheduled
   ON whatsapp_campaigns(scheduled_at) WHERE status = 'scheduled';
 
-CREATE INDEX IF NOT EXISTS idx_recipients_meta_msg
+CREATE INDEX IF NOT EXISTS idx_recipients_meta_msg_notnull
   ON whatsapp_campaign_recipients(meta_message_id)
   WHERE meta_message_id IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_scheduled_messages_due
-  ON scheduled_messages(scheduled_at) WHERE status IN ('pending', 'processing');
+-- scheduled_messages vem de script manual (sql/fase3-scheduled-messages.sql)
+-- e pode não existir em todos os ambientes — guard evita abortar a migration.
+DO $do$
+BEGIN
+  IF to_regclass('public.scheduled_messages') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_scheduled_messages_due
+      ON scheduled_messages(scheduled_at) WHERE status IN ('pending', 'processing');
+  END IF;
+END
+$do$;
 
 -- 2) Claim atômico de campanhas agendadas
 CREATE OR REPLACE FUNCTION claim_due_whatsapp_campaigns(p_limit INT DEFAULT 3)
@@ -35,9 +43,10 @@ BEGIN
   )
   RETURNING c.*;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 GRANT EXECUTE ON FUNCTION claim_due_whatsapp_campaigns TO service_role;
+REVOKE ALL ON FUNCTION claim_due_whatsapp_campaigns(INT) FROM PUBLIC, anon, authenticated;
 
 -- 3) Webhook -> recipient (anti-retrógrado + contadores por delta)
 CREATE OR REPLACE FUNCTION apply_campaign_recipient_webhook(
@@ -65,6 +74,9 @@ BEGIN
     RETURN; -- mensagem não pertence a campanha (caminho comum: inbox)
   END IF;
 
+  -- Statuses fora do mapa (skipped, clicked, replied) viram ordinal 0 e podem
+  -- ser sobrescritos por delivered/read — aceitável hoje (nada grava esses
+  -- statuses com meta_message_id); revisar se click/reply tracking for ligado.
   v_old_ord := CASE v_old
     WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'read' THEN 3
     WHEN 'failed' THEN 4 ELSE 0 END;
@@ -105,10 +117,14 @@ BEGIN
 
   RETURN QUERY SELECT v_id, v_campaign, TRUE;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 GRANT EXECUTE ON FUNCTION apply_campaign_recipient_webhook TO service_role;
+REVOKE ALL ON FUNCTION apply_campaign_recipient_webhook(VARCHAR, VARCHAR, VARCHAR, TEXT, TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;
 
 -- 4) Remove o trigger de recontagem total (7 COUNT(*) por update de status;
 --    com webhook atualizando recipients viraria O(N^2) por campanha).
 DROP TRIGGER IF EXISTS trigger_update_campaign_metrics ON whatsapp_campaign_recipients;
+DROP FUNCTION IF EXISTS update_campaign_metrics();
+-- Atenção: NÃO re-aplicar supabase/campaigns-schema.sql em ambientes já
+-- migrados — ele recriaria o trigger O(N^2) removido acima.
