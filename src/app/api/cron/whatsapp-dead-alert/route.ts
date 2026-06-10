@@ -36,28 +36,42 @@ async function checkCampaignWorkerHealth(): Promise<any> {
 
     if (!workerHealth.healthy) {
       console.error(`[dead-alert] Campaign worker unhealthy: ${workerHealth.reason}`);
-      await sendAlert({
-        severity: 'critical',
-        type: 'campaign_worker_stalled',
-        title: 'Campaign worker parado com fila acumulando',
-        message: workerHealth.reason,
-        dedupKey: 'campaign_worker_stalled:global',
-        metadata: {
-          pending: stats.pending,
-          oldest_pending_age_ms: oldestPendingAgeMs,
-          heartbeat_age_ms: heartbeatAgeMs,
-        },
-      }).catch(() => {});
 
-      const { error: notifErr } = await supabaseAdmin.from('notifications').insert({
-        type: 'whatsapp_campaign_worker_stalled',
-        title: 'Campaign worker parado',
-        message: workerHealth.reason,
-        severity: 'critical',
-        metadata: workerHealth,
-        created_at: new Date().toISOString(),
-      });
-      if (notifErr) console.log('[dead-alert] notification insert failed (best-effort):', notifErr.message);
+      // Dedup explícito: organization_id é NULL neste alerta e NULLs são
+      // distintos no UNIQUE index — o pre-check evita spam a cada tick de 15min.
+      // Re-alerta só depois que o alerta anterior for acknowledged.
+      const { data: openAlert } = await supabaseAdmin
+        .from('whatsapp_alerts')
+        .select('id')
+        .eq('type', 'campaign_worker_stalled')
+        .eq('acknowledged', false)
+        .limit(1)
+        .maybeSingle();
+
+      if (!openAlert) {
+        await sendAlert({
+          severity: 'critical',
+          type: 'campaign_worker_stalled',
+          title: 'Campaign worker parado com fila acumulando',
+          message: workerHealth.reason,
+          dedupKey: 'campaign_worker_stalled:global',
+          metadata: {
+            pending: stats.pending,
+            oldest_pending_age_ms: oldestPendingAgeMs,
+            heartbeat_age_ms: heartbeatAgeMs,
+          },
+        }).catch(() => {});
+
+        const { error: notifErr } = await supabaseAdmin.from('notifications').insert({
+          type: 'whatsapp_campaign_worker_stalled',
+          title: 'Campaign worker parado',
+          message: workerHealth.reason,
+          severity: 'critical',
+          metadata: workerHealth,
+          created_at: new Date().toISOString(),
+        });
+        if (notifErr) console.log('[dead-alert] notification insert failed (best-effort):', notifErr.message);
+      }
     }
   } catch (e: any) {
     // Redis indisponível não pode derrubar o cron de dead events
