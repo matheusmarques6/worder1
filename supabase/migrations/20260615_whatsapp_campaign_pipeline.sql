@@ -1,0 +1,114 @@
+-- =============================================
+-- P0 — WhatsApp Campaign Pipeline
+-- 1) Índices garantidos (schemas legados podem não tê-los em prod)
+-- 2) Claim atômico de campanhas agendadas (FOR UPDATE SKIP LOCKED)
+-- 3) Aplicação retrograde-safe de status de webhook em campaign_recipients
+--    com incremento de contadores por delta exato (1 transação)
+-- 4) Remove trigger O(N^2) de recontagem (substituído pelos deltas do item 3;
+--    checkCampaignCompletion recomputa totais absolutos no fim da campanha)
+-- =============================================
+
+-- 1) Índices
+CREATE INDEX IF NOT EXISTS idx_campaigns_scheduled
+  ON whatsapp_campaigns(scheduled_at) WHERE status = 'scheduled';
+
+CREATE INDEX IF NOT EXISTS idx_recipients_meta_msg
+  ON whatsapp_campaign_recipients(meta_message_id)
+  WHERE meta_message_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_scheduled_messages_due
+  ON scheduled_messages(scheduled_at) WHERE status IN ('pending', 'processing');
+
+-- 2) Claim atômico de campanhas agendadas
+CREATE OR REPLACE FUNCTION claim_due_whatsapp_campaigns(p_limit INT DEFAULT 3)
+RETURNS SETOF whatsapp_campaigns AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE whatsapp_campaigns c
+  SET status = 'queued', updated_at = NOW()
+  WHERE c.id IN (
+    SELECT w.id FROM whatsapp_campaigns w
+    WHERE w.status = 'scheduled' AND w.scheduled_at <= NOW()
+    ORDER BY w.scheduled_at
+    LIMIT p_limit
+    FOR UPDATE SKIP LOCKED
+  )
+  RETURNING c.*;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION claim_due_whatsapp_campaigns TO service_role;
+
+-- 3) Webhook -> recipient (anti-retrógrado + contadores por delta)
+CREATE OR REPLACE FUNCTION apply_campaign_recipient_webhook(
+  p_meta_message_id VARCHAR,
+  p_new_status VARCHAR,
+  p_error_code VARCHAR DEFAULT NULL,
+  p_error_message TEXT DEFAULT NULL,
+  p_timestamp TIMESTAMPTZ DEFAULT NOW()
+)
+RETURNS TABLE(recipient_id UUID, out_campaign_id UUID, applied BOOLEAN) AS $$
+DECLARE
+  v_id UUID;
+  v_campaign UUID;
+  v_old VARCHAR;
+  v_old_ord INT;
+  v_new_ord INT;
+BEGIN
+  SELECT r.id, r.campaign_id, r.status INTO v_id, v_campaign, v_old
+  FROM whatsapp_campaign_recipients r
+  WHERE r.meta_message_id = p_meta_message_id
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_id IS NULL THEN
+    RETURN; -- mensagem não pertence a campanha (caminho comum: inbox)
+  END IF;
+
+  v_old_ord := CASE v_old
+    WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'read' THEN 3
+    WHEN 'failed' THEN 4 ELSE 0 END;
+  v_new_ord := CASE p_new_status
+    WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'read' THEN 3
+    WHEN 'failed' THEN 4 ELSE 0 END;
+
+  -- Guard anti-retrógrado (mesma semântica do STATUS_ORDINAL do
+  -- webhook-processor para whatsapp_cloud_messages); failed sempre aplica.
+  IF v_new_ord <= v_old_ord AND p_new_status <> 'failed' THEN
+    RETURN QUERY SELECT v_id, v_campaign, FALSE;
+    RETURN;
+  END IF;
+
+  UPDATE whatsapp_campaign_recipients SET
+    status = p_new_status,
+    delivered_at = CASE WHEN p_new_status IN ('delivered','read') AND delivered_at IS NULL
+                        THEN p_timestamp ELSE delivered_at END,
+    read_at      = CASE WHEN p_new_status = 'read' AND read_at IS NULL
+                        THEN p_timestamp ELSE read_at END,
+    failed_at    = CASE WHEN p_new_status = 'failed' AND failed_at IS NULL
+                        THEN p_timestamp ELSE failed_at END,
+    error_code   = COALESCE(p_error_code, error_code),
+    error_message = COALESCE(p_error_message, error_message)
+  WHERE id = v_id;
+
+  -- Contadores por delta exato:
+  --  read vindo direto de sent => +delivered E +read
+  UPDATE whatsapp_campaigns SET
+    total_delivered = COALESCE(total_delivered, 0) +
+      CASE WHEN p_new_status IN ('delivered','read') AND v_old_ord < 2 THEN 1 ELSE 0 END,
+    total_read = COALESCE(total_read, 0) +
+      CASE WHEN p_new_status = 'read' AND v_old_ord < 3 THEN 1 ELSE 0 END,
+    total_failed = COALESCE(total_failed, 0) +
+      CASE WHEN p_new_status = 'failed' AND v_old <> 'failed' THEN 1 ELSE 0 END,
+    updated_at = NOW()
+  WHERE id = v_campaign;
+
+  RETURN QUERY SELECT v_id, v_campaign, TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION apply_campaign_recipient_webhook TO service_role;
+
+-- 4) Remove o trigger de recontagem total (7 COUNT(*) por update de status;
+--    com webhook atualizando recipients viraria O(N^2) por campanha).
+DROP TRIGGER IF EXISTS trigger_update_campaign_metrics ON whatsapp_campaign_recipients;
