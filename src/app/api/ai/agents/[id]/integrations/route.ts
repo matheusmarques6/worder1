@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient } from '@/lib/api-utils';
+import { assertAgentInOrg } from '@/lib/ai/agent-access';
 export const dynamic = 'force-dynamic';
-
-// =====================================================
-// SUPABASE CLIENT
-// =====================================================
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 // =====================================================
 // GET - LISTAR INTEGRAÇÕES DO AGENTE
@@ -19,14 +13,20 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabase()
+    // ✅ P1: org SEMPRE do usuário autenticado; organization_id da
+    // querystring é aceito e IGNORADO (compat com frontend atual).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    const supabase = getSupabaseAdmin()
     const agentId = params.id
+    const organizationId = auth.user.organization_id
 
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    const access = await assertAgentInOrg(supabase, agentId, organizationId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status })
     }
 
     // Buscar integrações do agente
@@ -70,31 +70,29 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabase()
-    const agentId = params.id
-    const body = await request.json()
-
-    const { organization_id, integration_id, integration_type } = body
-
-    // Validações
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    // ✅ P1: org SEMPRE do usuário autenticado; organization_id do
+    // body é aceito e IGNORADO (compat com frontend atual).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    const supabase = getSupabaseAdmin()
+    const agentId = params.id
+    const organizationId = auth.user.organization_id
+    const body = await request.json()
+
+    const { integration_id, integration_type } = body
+
+    // Validações
     if (!integration_type || !['shopify', 'woocommerce', 'nuvemshop'].includes(integration_type)) {
       return NextResponse.json({ error: 'integration_type inválido' }, { status: 400 })
     }
 
-    // Verificar se agente existe
-    const { data: agent, error: agentError } = await supabase
-      .from('ai_agents')
-      .select('id')
-      .eq('id', agentId)
-      .eq('organization_id', organization_id)
-      .single()
-
-    if (agentError || !agent) {
-      return NextResponse.json({ error: 'Agente não encontrado' }, { status: 404 })
+    // Verificar se agente pertence à org autenticada
+    const access = await assertAgentInOrg(supabase, agentId, organizationId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status })
     }
 
     // Verificar se já existe integração do mesmo tipo
@@ -106,14 +104,14 @@ export async function POST(
       .single()
 
     if (existing) {
-      return NextResponse.json({ 
-        error: `Já existe uma integração ${integration_type} para este agente` 
+      return NextResponse.json({
+        error: `Já existe uma integração ${integration_type} para este agente`
       }, { status: 400 })
     }
 
     // Criar integração
     const integrationData = {
-      organization_id,
+      organization_id: organizationId,
       agent_id: agentId,
       integration_id: integration_id || null,
       integration_type,
@@ -138,7 +136,7 @@ export async function POST(
 
     // Se sync_products está ativo, criar fonte de produtos
     if (integrationData.sync_products) {
-      await createProductSource(supabase, organization_id, agentId, integration.id, integration_type)
+      await createProductSource(supabase, organizationId, agentId, integration.id, integration_type)
     }
 
     return NextResponse.json({ integration }, { status: 201 })
