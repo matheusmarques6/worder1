@@ -12,6 +12,7 @@ import { sendTemplateMessage } from './meta-api'
 import { requireOptIn } from './opt-out-guard'
 import { sendAlert } from './alerts'
 import { wlog } from '@/lib/observability/whatsapp-logger'
+import { ensureCampaignTemplateApproved } from './template-approval'
 
 // =============================================
 // SUPABASE CLIENT
@@ -125,6 +126,13 @@ export class CampaignProcessor {
 
       if (!['draft', 'scheduled', 'paused'].includes(campaign.status)) {
         throw new Error(`Campaign cannot be started (status: ${campaign.status})`)
+      }
+
+      // P0 — defesa em profundidade: nunca enviar com template não-APPROVED
+      // (o send route também valida; aqui cobre cron e resume).
+      const tplCheck = await ensureCampaignTemplateApproved(campaign)
+      if (!tplCheck.ok) {
+        throw new Error(tplCheck.reason || 'Template not approved')
       }
 
       // 2. Buscar instância WhatsApp
