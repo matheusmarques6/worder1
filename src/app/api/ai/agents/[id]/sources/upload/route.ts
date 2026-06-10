@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient } from '@/lib/api-utils';
+import { assertAgentInOrg } from '@/lib/ai/agent-access';
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-// =====================================================
-// SUPABASE CLIENT
-// =====================================================
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 // Tipos de arquivo permitidos
 const ALLOWED_MIME_TYPES = [
@@ -33,18 +27,21 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabase()
+    // ✅ P1: org SEMPRE do usuário autenticado; organization_id do
+    // formData é aceito e IGNORADO (compat com frontend atual).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    const supabase = getSupabaseAdmin()
     const agentId = params.id
+    const organizationId = auth.user.organization_id
 
     // Parse form data
     const formData = await request.formData()
     const file = formData.get('file') as File | null
-    const organizationId = formData.get('organization_id') as string | null
-
-    // Validações
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
-    }
+    // organization_id from formData is intentionally IGNORED (P1 compat no-op)
 
     if (!file) {
       return NextResponse.json({ error: 'file é obrigatório' }, { status: 400 })
@@ -52,7 +49,7 @@ export async function POST(
 
     // Validar tipo de arquivo
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: 'Tipo de arquivo não suportado. Use PDF, DOCX, DOC, TXT ou CSV.',
         allowed_types: ALLOWED_MIME_TYPES,
       }, { status: 400 })
@@ -60,21 +57,15 @@ export async function POST(
 
     // Validar tamanho
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: `Arquivo muito grande. Máximo permitido: ${MAX_FILE_SIZE / 1024 / 1024}MB`,
       }, { status: 400 })
     }
 
-    // Verificar se agente existe
-    const { data: agent, error: agentError } = await supabase
-      .from('ai_agents')
-      .select('id')
-      .eq('id', agentId)
-      .eq('organization_id', organizationId)
-      .single()
-
-    if (agentError || !agent) {
-      return NextResponse.json({ error: 'Agente não encontrado' }, { status: 404 })
+    // Verificar se agente pertence à org autenticada
+    const access = await assertAgentInOrg(supabase, agentId, organizationId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status })
     }
 
     // Gerar nome único para o arquivo
@@ -84,7 +75,7 @@ export async function POST(
 
     // Upload para o storage do Supabase
     const fileBuffer = Buffer.from(await file.arrayBuffer())
-    
+
     const { data: uploadData, error: uploadError } = await supabase
       .storage
       .from('ai-sources')
@@ -107,7 +98,7 @@ export async function POST(
         .storage
         .from('ai-sources')
         .getPublicUrl(fileName)
-      
+
       fileUrl = urlData?.publicUrl
     }
 
@@ -155,17 +146,20 @@ export async function POST(
 // =====================================================
 
 async function processFileAsync(
-  sourceId: string, 
+  sourceId: string,
   organizationId: string,
   fileBuffer: Buffer,
   mimeType: string
 ) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    
+
     await fetch(`${baseUrl}/api/ai/process/document`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
+      },
       body: JSON.stringify({
         source_id: sourceId,
         organization_id: organizationId,
@@ -177,4 +171,3 @@ async function processFileAsync(
     console.error('Error triggering file processing:', error)
   }
 }
-

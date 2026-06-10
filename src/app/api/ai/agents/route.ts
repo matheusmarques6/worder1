@@ -80,15 +80,19 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // ✅ P1: org SEMPRE do usuário autenticado; organization_id do
+    // body é aceito e IGNORADO (compat com frontend atual).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
     const supabase = getSupabase()
     const body = await request.json()
 
     // Validação
-    const { organization_id, name, provider, model } = body
-
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
-    }
+    const { name, provider, model } = body
+    const organizationId = auth.user.organization_id
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'name é obrigatório' }, { status: 400 })
@@ -96,7 +100,7 @@ export async function POST(request: NextRequest) {
 
     // Preparar dados
     const agentData = {
-      organization_id,
+      organization_id: organizationId,
       name: name.trim(),
       description: body.description?.trim() || null,
       system_prompt: body.system_prompt?.trim() || null,

@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient } from '@/lib/api-utils';
+import { assertAgentInOrg } from '@/lib/ai/agent-access';
 export const dynamic = 'force-dynamic';
-
-// =====================================================
-// SUPABASE CLIENT
-// =====================================================
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 // =====================================================
 // GET - BUSCAR FONTE ESPECÍFICA
@@ -19,14 +13,20 @@ export async function GET(
   { params }: { params: { id: string; sourceId: string } }
 ) {
   try {
-    const supabase = getSupabase()
+    // ✅ P1: org SEMPRE do usuário autenticado; organization_id da
+    // querystring é aceito e IGNORADO (compat com frontend atual).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    const supabase = getSupabaseAdmin()
     const { id: agentId, sourceId } = params
+    const organizationId = auth.user.organization_id
 
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    const access = await assertAgentInOrg(supabase, agentId, organizationId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status })
     }
 
     const { data: source, error } = await supabase
@@ -61,14 +61,20 @@ export async function DELETE(
   { params }: { params: { id: string; sourceId: string } }
 ) {
   try {
-    const supabase = getSupabase()
+    // ✅ P1: org SEMPRE do usuário autenticado; organization_id da
+    // querystring é aceito e IGNORADO (compat com frontend atual).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    const supabase = getSupabaseAdmin()
     const { id: agentId, sourceId } = params
+    const organizationId = auth.user.organization_id
 
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    const access = await assertAgentInOrg(supabase, agentId, organizationId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status })
     }
 
     // Buscar fonte para obter file_url (para deletar do storage)

@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient } from '@/lib/api-utils';
+import { assertAgentInOrg } from '@/lib/ai/agent-access';
 export const dynamic = 'force-dynamic';
-
-// =====================================================
-// SUPABASE CLIENT
-// =====================================================
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 // =====================================================
 // POST - REPROCESSAR FONTE
@@ -19,14 +13,21 @@ export async function POST(
   { params }: { params: { id: string; sourceId: string } }
 ) {
   try {
-    const supabase = getSupabase()
+    // ✅ P1: org SEMPRE do usuário autenticado; organization_id do
+    // body é aceito e IGNORADO (compat com frontend atual).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    const supabase = getSupabaseAdmin()
     const { id: agentId, sourceId } = params
-    const body = await request.json()
+    const organizationId = auth.user.organization_id
 
-    const { organization_id } = body
-
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    // Verificar se agente pertence à org autenticada
+    const access = await assertAgentInOrg(supabase, agentId, organizationId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status })
     }
 
     // Verificar se fonte existe
@@ -35,7 +36,7 @@ export async function POST(
       .select('*')
       .eq('id', sourceId)
       .eq('agent_id', agentId)
-      .eq('organization_id', organization_id)
+      .eq('organization_id', organizationId)
       .single()
 
     if (sourceError || !source) {
@@ -66,20 +67,23 @@ export async function POST(
 
     // Disparar reprocessamento em background
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    
+
     fetch(`${baseUrl}/api/ai/process/document`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
+      },
       body: JSON.stringify({
         source_id: sourceId,
-        organization_id,
+        organization_id: organizationId,
       }),
     }).catch(err => {
       console.error('Error triggering reprocess:', err)
     })
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       message: 'Reprocessamento iniciado',
       source_id: sourceId,
     })

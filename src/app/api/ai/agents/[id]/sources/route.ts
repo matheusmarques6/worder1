@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient } from '@/lib/api-utils';
+import { assertAgentInOrg } from '@/lib/ai/agent-access';
 export const dynamic = 'force-dynamic';
-
-// =====================================================
-// SUPABASE CLIENT
-// =====================================================
-
-function getSupabase() {
-  return getSupabaseAdmin();
-}
 
 // =====================================================
 // GET - LISTAR FONTES DO AGENTE
@@ -19,14 +13,20 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabase()
+    // ✅ P1: org SEMPRE do usuário autenticado; organization_id da
+    // querystring é aceito e IGNORADO (compat com frontend atual).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    const supabase = getSupabaseAdmin()
     const agentId = params.id
+    const organizationId = auth.user.organization_id
 
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    const access = await assertAgentInOrg(supabase, agentId, organizationId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status })
     }
 
     // Buscar fontes
@@ -69,17 +69,21 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabase()
-    const agentId = params.id
-    const body = await request.json()
-
-    const { organization_id, source_type, name } = body
-
-    // Validações
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
+    // ✅ P1: org SEMPRE do usuário autenticado; organization_id do
+    // body é aceito e IGNORADO (compat com frontend atual).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    const supabase = getSupabaseAdmin()
+    const agentId = params.id
+    const organizationId = auth.user.organization_id
+    const body = await request.json()
+
+    const { source_type, name } = body
+
+    // Validações
     if (!source_type || !['url', 'text', 'products'].includes(source_type)) {
       return NextResponse.json({ error: 'source_type inválido' }, { status: 400 })
     }
@@ -88,21 +92,15 @@ export async function POST(
       return NextResponse.json({ error: 'name é obrigatório' }, { status: 400 })
     }
 
-    // Verificar se agente existe
-    const { data: agent, error: agentError } = await supabase
-      .from('ai_agents')
-      .select('id')
-      .eq('id', agentId)
-      .eq('organization_id', organization_id)
-      .single()
-
-    if (agentError || !agent) {
-      return NextResponse.json({ error: 'Agente não encontrado' }, { status: 404 })
+    // Verificar se agente pertence à org autenticada
+    const access = await assertAgentInOrg(supabase, agentId, organizationId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status })
     }
 
     // Preparar dados da fonte
     const sourceData: Record<string, any> = {
-      organization_id,
+      organization_id: organizationId,
       agent_id: agentId,
       source_type,
       name: name.trim(),
@@ -149,8 +147,7 @@ export async function POST(
     // Para URL e texto, iniciar processamento assíncrono
     if (source_type === 'url' || source_type === 'text') {
       // Disparar processamento em background
-      // Em produção, isso seria um job na fila
-      processSourceAsync(source.id, organization_id).catch(err => {
+      processSourceAsync(source.id, organizationId).catch(err => {
         console.error('Error in async source processing:', err)
       })
     }
@@ -169,12 +166,15 @@ export async function POST(
 
 async function processSourceAsync(sourceId: string, organizationId: string) {
   try {
-    // Chamar endpoint de processamento
+    // Chamar endpoint de processamento (rota interna, Bearer obrigatório)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    
+
     await fetch(`${baseUrl}/api/ai/process/document`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
+      },
       body: JSON.stringify({
         source_id: sourceId,
         organization_id: organizationId,
