@@ -139,3 +139,26 @@ DROP TRIGGER IF EXISTS trigger_update_campaign_metrics ON whatsapp_campaign_reci
 DROP FUNCTION IF EXISTS update_campaign_metrics();
 -- Atenção: NÃO re-aplicar supabase/campaigns-schema.sql em ambientes já
 -- migrados — ele recriaria o trigger O(N^2) removido acima.
+
+-- whatsapp_alerts vem de script manual (worder-cloud-api-fixes/09) — guard.
+-- Estende o CHECK de type com 'campaign_worker_stalled' (Task 7).
+DO $alerts$
+BEGIN
+  IF to_regclass('public.whatsapp_alerts') IS NOT NULL THEN
+    ALTER TABLE whatsapp_alerts DROP CONSTRAINT IF EXISTS whatsapp_alerts_type_check;
+    ALTER TABLE whatsapp_alerts ADD CONSTRAINT whatsapp_alerts_type_check
+      CHECK (type IN (
+        'quality_drop',
+        'frequency_cap',
+        'template_rejected',
+        'template_paused',
+        'template_disabled',
+        'account_restricted',
+        'webhook_dead',
+        'window_expiry_bulk',
+        'low_messaging_limit',
+        'campaign_worker_stalled'
+      ));
+  END IF;
+END
+$alerts$;

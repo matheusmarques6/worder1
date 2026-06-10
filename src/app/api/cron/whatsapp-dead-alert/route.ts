@@ -34,19 +34,35 @@ async function checkCampaignWorkerHealth(): Promise<any> {
       heartbeat_age_ms: heartbeatAgeMs,
     };
 
+    if (workerHealth.healthy) {
+      // Auto-resolve: se o worker voltou saudável, fecha alertas abertos.
+      // recover→restall volta a alertar (acknowledged=false é a gate do pre-check).
+      const { error: resolveErr } = await supabaseAdmin
+        .from('whatsapp_alerts')
+        .update({
+          acknowledged: true,
+          acknowledged_at: new Date().toISOString(),
+          resolved_at: new Date().toISOString(),
+        })
+        .eq('type', 'campaign_worker_stalled')
+        .eq('acknowledged', false);
+      if (resolveErr) console.log('[dead-alert] auto-resolve error (best-effort):', resolveErr.message);
+    }
+
     if (!workerHealth.healthy) {
       console.error(`[dead-alert] Campaign worker unhealthy: ${workerHealth.reason}`);
 
       // Dedup explícito: organization_id é NULL neste alerta e NULLs são
       // distintos no UNIQUE index — o pre-check evita spam a cada tick de 15min.
       // Re-alerta só depois que o alerta anterior for acknowledged.
-      const { data: openAlert } = await supabaseAdmin
+      const { data: openAlert, error: preErr } = await supabaseAdmin
         .from('whatsapp_alerts')
         .select('id')
         .eq('type', 'campaign_worker_stalled')
         .eq('acknowledged', false)
         .limit(1)
         .maybeSingle();
+      if (preErr) console.log('[dead-alert] pre-check query error:', preErr.message);
 
       if (!openAlert) {
         await sendAlert({
