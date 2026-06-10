@@ -8,9 +8,8 @@ import {
   Check,
   Loader2,
   Sparkles,
-  Zap,
-  DollarSign,
 } from 'lucide-react'
+import { AgentsTheme } from './ui/AgentsTheme'
 
 export interface LLMModel {
   id: string
@@ -100,15 +99,15 @@ export default function ModelSelector({
   const currentProviderInfo = providerConfig[provider] || { name: provider, color: 'text-gray-500', bg: 'bg-gray-100' }
 
   return (
-    <div className={`space-y-4 ${className}`}>
+    <AgentsTheme className={`space-y-4 ${className}`}>
       {/* Provider Selection */}
       <div>
-        <label className="block text-sm font-medium text-gray-600 mb-2">Provedor</label>
+        <label className="label">Provedor</label>
         <div className="flex flex-wrap gap-2">
           {providers.map((p) => {
             const info = providerConfig[p] || { name: p, color: 'text-gray-500', bg: 'bg-gray-100' }
             const isSelected = provider === p
-            
+
             return (
               <button
                 key={p}
@@ -117,11 +116,7 @@ export default function ModelSelector({
                   const firstModel = models.find(m => m.provider === p)
                   if (firstModel) onModelChange(firstModel.id)
                 }}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                  isSelected
-                    ? `${info.bg} ${info.color} border border-current/30`
-                    : 'bg-gray-50 text-gray-500 border border-gray-200 hover:text-white hover:bg-white'
-                }`}
+                className={`chip ${isSelected ? 'chip-brand' : 'chip-outline'}`}
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 {info.name}
@@ -133,30 +128,28 @@ export default function ModelSelector({
 
       {/* Model Selection */}
       <div>
-        <label className="block text-sm font-medium text-gray-600 mb-2">Modelo</label>
-        
+        <label className="label">Modelo</label>
+
         {loading ? (
           <div className="flex items-center justify-center py-4">
-            <Loader2 className="w-5 h-5 text-brand-600 animate-spin" />
+            <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--brand)' }} />
           </div>
         ) : (
           <div className="relative">
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white hover:bg-white transition-colors"
+              className="model-row w-full"
             >
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-lg ${currentProviderInfo.bg} flex items-center justify-center`}>
-                  <Brain className={`w-4 h-4 ${currentProviderInfo.color}`} />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm text-gray-700">{currentModel?.name || model}</p>
-                  {currentModel?.description && (
-                    <p className="text-xs text-gray-400">{currentModel.description}</p>
-                  )}
-                </div>
+              <div className="model-logo" style={{ background: 'var(--brand)' }}>
+                <Brain className="w-4 h-4" />
               </div>
-              <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+              <div className="text-left flex-1">
+                <p className="model-name">{currentModel?.name || model}</p>
+                {currentModel?.description && (
+                  <p className="model-desc">{currentModel.description}</p>
+                )}
+              </div>
+              <ChevronDown className={`w-4 h-4 transition-transform ${showDropdown ? 'rotate-180' : ''}`} style={{ color: 'var(--text-3)' }} />
             </button>
 
             <AnimatePresence>
@@ -165,7 +158,7 @@ export default function ModelSelector({
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="absolute z-20 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto"
+                  className="menu absolute z-20 w-full mt-2 max-h-64 overflow-y-auto"
                 >
                   {providerModels.map((m) => (
                     <button
@@ -174,24 +167,20 @@ export default function ModelSelector({
                         onModelChange(m.id)
                         setShowDropdown(false)
                       }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                        model === m.id
-                          ? 'bg-brand-50 border-l-2 border-primary-500'
-                          : 'hover:bg-gray-100 border-l-2 border-transparent'
-                      }`}
+                      className="w-full flex items-center gap-3"
                     >
-                      <Brain className={`w-4 h-4 ${model === m.id ? 'text-brand-600' : 'text-gray-400'}`} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-700">{m.name}</p>
+                      <Brain className="w-4 h-4" style={{ color: model === m.id ? 'var(--brand)' : 'var(--text-4)' }} />
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="text-sm" style={{ color: 'var(--text)' }}>{m.name}</p>
                         {m.description && (
-                          <p className="text-xs text-gray-400 truncate">{m.description}</p>
+                          <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{m.description}</p>
                         )}
                       </div>
                       {m.context_window && (
-                        <span className="text-xs text-gray-400">{(m.context_window / 1000).toFixed(0)}k</span>
+                        <span className="text-xs" style={{ color: 'var(--text-3)' }}>{(m.context_window / 1000).toFixed(0)}k</span>
                       )}
                       {model === m.id && (
-                        <Check className="w-4 h-4 text-brand-600" />
+                        <Check className="w-4 h-4" style={{ color: 'var(--brand)' }} />
                       )}
                     </button>
                   ))}
@@ -206,8 +195,8 @@ export default function ModelSelector({
       {showTemperature && onTemperatureChange && (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-sm font-medium text-gray-600">Temperatura</label>
-            <span className="text-sm text-brand-600">{temperature}</span>
+            <label className="label" style={{ marginBottom: 0 }}>Temperatura</label>
+            <span className="text-sm" style={{ color: 'var(--brand-ink)' }}>{temperature}</span>
           </div>
           <input
             type="range"
@@ -216,9 +205,9 @@ export default function ModelSelector({
             step="0.1"
             value={temperature}
             onChange={(e) => onTemperatureChange(parseFloat(e.target.value))}
-            className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary-500"
+            className="range"
           />
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <div className="flex justify-between text-xs mt-1" style={{ color: 'var(--text-3)' }}>
             <span>Preciso</span>
             <span>Criativo</span>
           </div>
@@ -232,6 +221,6 @@ export default function ModelSelector({
           onClick={() => setShowDropdown(false)}
         />
       )}
-    </div>
+    </AgentsTheme>
   )
 }

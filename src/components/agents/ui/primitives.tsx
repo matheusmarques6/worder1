@@ -1,6 +1,7 @@
 'use client'
 
 import { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
 
 /**
  * Reusable primitives for the "Agentes de IA" redesign. They emit the scoped
@@ -241,6 +242,36 @@ export function Stepper({
           </span>
         )
       })}
+    </div>
+  )
+}
+
+/* ---------------- Accordion ---------------- */
+/**
+ * Collapsible section using the scoped `.accordion`/`.acc-*` classes. Used by
+ * the editor's Persona/Configurações/Permissões tabs. The header content
+ * (`title`) is fully caller-controlled; this only wires the open/close affordance.
+ */
+export function AccordionItem({
+  open,
+  onToggle,
+  title,
+  className,
+  children,
+}: {
+  open: boolean
+  onToggle: () => void
+  title: ReactNode
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <div className={cx('accordion', className)}>
+      <button type="button" className={cx('acc-head', open && 'open')} onClick={onToggle}>
+        {title}
+        <ChevronDown className="ch" />
+      </button>
+      {open && <div className="acc-body">{children}</div>}
     </div>
   )
 }

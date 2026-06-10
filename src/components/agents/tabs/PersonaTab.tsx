@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
   UserCircle,
   MessageSquare,
@@ -14,9 +14,9 @@ import {
   Sparkles,
   Volume2,
   AlignLeft,
-  ChevronDown,
 } from 'lucide-react'
 import { AIAgent, AgentPersona } from '@/lib/ai/types'
+import { AccordionItem } from '../ui/primitives'
 
 interface PersonaTabProps {
   agent: AIAgent
@@ -82,183 +82,133 @@ export default function PersonaTab({ agent, onUpdate }: PersonaTabProps) {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="editor-content-inner space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-          <UserCircle className="w-5 h-5 text-purple-400" />
+      <div className="sec-head">
+        <div className="sec-ico">
+          <UserCircle />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Persona</h3>
-          <p className="text-sm text-gray-500">Configure a personalidade e comportamento do agente</p>
+          <h3 className="sec-t">Persona</h3>
+          <p className="sec-s">Configure a personalidade e comportamento do agente</p>
         </div>
       </div>
 
       {/* Role Description */}
-      <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
-        <button
-          onClick={() => toggleSection('role')}
-          className="w-full flex items-center justify-between p-4 hover:bg-gray-100/30 transition-colors"
-        >
+      <AccordionItem
+        open={expandedSection === 'role'}
+        onToggle={() => toggleSection('role')}
+        title={
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-purple-400" />
+            <div className="act-ico" style={{ background: 'var(--brand-tint)', color: 'var(--brand)' }}>
+              <Sparkles className="w-4 h-4" />
             </div>
-            <div className="text-left">
-              <span className="text-gray-900 font-medium">Função e Personalidade</span>
-              <p className="text-xs text-gray-400">Descreva quem é o agente e como ele deve se comportar</p>
+            <div>
+              <span style={{ color: 'var(--text)' }}>Função e Personalidade</span>
+              <p className="text-xs" style={{ color: 'var(--text-3)', fontWeight: 500 }}>Descreva quem é o agente e como ele deve se comportar</p>
             </div>
           </div>
-          <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${expandedSection === 'role' ? 'rotate-180' : ''}`} />
-        </button>
-
-        <AnimatePresence>
-          {expandedSection === 'role' && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="border-t border-gray-200"
-            >
-              <div className="p-4">
-                <textarea
-                  value={persona.role_description}
-                  onChange={(e) => updatePersona({ role_description: e.target.value.slice(0, 1500) })}
-                  placeholder="Você é um assistente de suporte ao cliente. Sua função é responder perguntas dos usuários de forma clara, profissional e com base em informações precisas..."
-                  className="w-full h-40 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 resize-none focus:outline-none focus:border-purple-500/50"
-                />
-                <div className="flex justify-between mt-2">
-                  <p className="text-xs text-gray-400">
-                    Descreva o papel, personalidade e estilo de comunicação do agente
-                  </p>
-                  <span className={`text-xs ${persona.role_description.length > 1400 ? 'text-yellow-400' : 'text-gray-400'}`}>
-                    {persona.role_description.length}/1500
-                  </span>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+        }
+      >
+        <textarea
+          value={persona.role_description}
+          onChange={(e) => updatePersona({ role_description: e.target.value.slice(0, 1500) })}
+          placeholder="Você é um assistente de suporte ao cliente. Sua função é responder perguntas dos usuários de forma clara, profissional e com base em informações precisas..."
+          className="field"
+          style={{ minHeight: 160 }}
+        />
+        <div className="flex justify-between mt-2">
+          <p className="hint" style={{ marginTop: 0 }}>
+            Descreva o papel, personalidade e estilo de comunicação do agente
+          </p>
+          <span className="text-xs" style={{ color: persona.role_description.length > 1400 ? 'var(--amber)' : 'var(--text-3)' }}>
+            {persona.role_description.length}/1500
+          </span>
+        </div>
+      </AccordionItem>
 
       {/* Tone, Length, Language */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Tone */}
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+        <div className="card" style={{ padding: 16 }}>
           <div className="flex items-center gap-2 mb-3">
-            <Volume2 className="w-4 h-4 text-purple-400" />
-            <span className="text-sm font-medium text-gray-900">Tom de Voz</span>
+            <Volume2 className="w-4 h-4" style={{ color: 'var(--brand)' }} />
+            <span className="label" style={{ marginBottom: 0 }}>Tom de Voz</span>
           </div>
           <div className="space-y-2">
             {toneOptions.map((option) => (
-              <label
+              <button
                 key={option.value}
-                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                  persona.tone === option.value
-                    ? 'bg-purple-500/20 border border-purple-500/30'
-                    : 'bg-gray-50 border border-transparent hover:bg-white'
-                }`}
+                type="button"
+                onClick={() => updatePersona({ tone: option.value })}
+                className={`selcard ${persona.tone === option.value ? 'on' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, width: '100%' }}
               >
-                <input
-                  type="radio"
-                  name="tone"
-                  value={option.value}
-                  checked={persona.tone === option.value}
-                  onChange={() => updatePersona({ tone: option.value })}
-                  className="sr-only"
-                />
                 <span className="text-lg">{option.emoji}</span>
                 <div className="flex-1">
-                  <p className="text-sm text-gray-700">{option.label}</p>
-                  <p className="text-xs text-gray-400">{option.description}</p>
+                  <p className="text-sm" style={{ color: 'var(--text)', fontWeight: 600 }}>{option.label}</p>
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>{option.description}</p>
                 </div>
-                {persona.tone === option.value && (
-                  <div className="w-2 h-2 rounded-full bg-purple-400" />
-                )}
-              </label>
+              </button>
             ))}
           </div>
         </div>
 
         {/* Response Length */}
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+        <div className="card" style={{ padding: 16 }}>
           <div className="flex items-center gap-2 mb-3">
-            <AlignLeft className="w-4 h-4 text-blue-400" />
-            <span className="text-sm font-medium text-gray-900">Tamanho das Respostas</span>
+            <AlignLeft className="w-4 h-4" style={{ color: 'var(--blue)' }} />
+            <span className="label" style={{ marginBottom: 0 }}>Tamanho das Respostas</span>
           </div>
           <div className="space-y-2">
             {responseLengthOptions.map((option) => (
-              <label
+              <button
                 key={option.value}
-                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                  persona.response_length === option.value
-                    ? 'bg-blue-500/20 border border-blue-500/30'
-                    : 'bg-gray-50 border border-transparent hover:bg-white'
-                }`}
+                type="button"
+                onClick={() => updatePersona({ response_length: option.value })}
+                className={`selcard ${persona.response_length === option.value ? 'on' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, width: '100%' }}
               >
-                <input
-                  type="radio"
-                  name="response_length"
-                  value={option.value}
-                  checked={persona.response_length === option.value}
-                  onChange={() => updatePersona({ response_length: option.value })}
-                  className="sr-only"
-                />
                 <span className="text-lg">{option.icon}</span>
                 <div className="flex-1">
-                  <p className="text-sm text-gray-700">{option.label}</p>
-                  <p className="text-xs text-gray-400">{option.description}</p>
+                  <p className="text-sm" style={{ color: 'var(--text)', fontWeight: 600 }}>{option.label}</p>
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>{option.description}</p>
                 </div>
-                {persona.response_length === option.value && (
-                  <div className="w-2 h-2 rounded-full bg-blue-400" />
-                )}
-              </label>
+              </button>
             ))}
           </div>
         </div>
 
         {/* Language */}
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+        <div className="card" style={{ padding: 16 }}>
           <div className="flex items-center gap-2 mb-3">
-            <Globe className="w-4 h-4 text-green-400" />
-            <span className="text-sm font-medium text-gray-900">Idioma</span>
+            <Globe className="w-4 h-4" style={{ color: 'var(--green)' }} />
+            <span className="label" style={{ marginBottom: 0 }}>Idioma</span>
           </div>
           <div className="space-y-2">
             {languageOptions.map((option) => (
-              <label
+              <button
                 key={option.value}
-                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                  persona.language === option.value
-                    ? 'bg-green-500/20 border border-green-500/30'
-                    : 'bg-gray-50 border border-transparent hover:bg-white'
-                }`}
+                type="button"
+                onClick={() => updatePersona({ language: option.value })}
+                className={`selcard ${persona.language === option.value ? 'on' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, width: '100%' }}
               >
-                <input
-                  type="radio"
-                  name="language"
-                  value={option.value}
-                  checked={persona.language === option.value}
-                  onChange={() => updatePersona({ language: option.value })}
-                  className="sr-only"
-                />
                 <span className="text-lg">{option.flag}</span>
-                <span className="text-sm text-gray-700 flex-1">{option.label}</span>
-                {persona.language === option.value && (
-                  <div className="w-2 h-2 rounded-full bg-green-400" />
-                )}
-              </label>
+                <span className="text-sm flex-1" style={{ color: 'var(--text)', fontWeight: 600 }}>{option.label}</span>
+              </button>
             ))}
           </div>
         </div>
       </div>
 
       {/* Reply Delay */}
-      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+      <div className="card" style={{ padding: 16 }}>
         <div className="flex items-center gap-2 mb-3">
-          <Clock className="w-4 h-4 text-orange-400" />
-          <span className="text-sm font-medium text-gray-900">Pausa Antes de Responder</span>
+          <Clock className="w-4 h-4" style={{ color: 'var(--brand)' }} />
+          <span className="label" style={{ marginBottom: 0 }}>Pausa Antes de Responder</span>
         </div>
-        
+
         <div className="flex items-center gap-4">
           <input
             type="range"
@@ -266,24 +216,25 @@ export default function PersonaTab({ agent, onUpdate }: PersonaTabProps) {
             max="60"
             value={persona.reply_delay}
             onChange={(e) => updatePersona({ reply_delay: parseInt(e.target.value) })}
-            className="flex-1 h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-orange-500"
+            className="range flex-1"
           />
-          <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg min-w-[100px]">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg min-w-[100px]" style={{ background: 'var(--surface-3)' }}>
             <input
               type="number"
               min="1"
               max="86400"
               value={persona.reply_delay}
               onChange={(e) => updatePersona({ reply_delay: Math.min(86400, Math.max(1, parseInt(e.target.value) || 1)) })}
-              className="w-16 bg-transparent text-white text-center focus:outline-none"
+              className="w-16 text-center focus:outline-none"
+              style={{ background: 'transparent', color: 'var(--text)', border: 'none' }}
             />
-            <span className="text-gray-500 text-sm">seg</span>
+            <span className="text-sm" style={{ color: 'var(--text-3)' }}>seg</span>
           </div>
         </div>
-        
-        <div className="flex items-start gap-2 mt-3 p-3 bg-gray-50 rounded-lg">
-          <Info className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-gray-500">
+
+        <div className="callout mt-3">
+          <Info className="w-4 h-4 flex-shrink-0" />
+          <p>
             Às vezes os clientes enviam várias mensagens seguidas. O agente aguardará este tempo antes de responder,
             permitindo considerar todo o contexto. O timer reinicia a cada nova mensagem.
           </p>
@@ -291,103 +242,88 @@ export default function PersonaTab({ agent, onUpdate }: PersonaTabProps) {
       </div>
 
       {/* Guidelines */}
-      <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
-        <button
-          onClick={() => toggleSection('guidelines')}
-          className="w-full flex items-center justify-between p-4 hover:bg-gray-100/30 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-              <MessageSquare className="w-4 h-4 text-yellow-400" />
+      <AccordionItem
+        open={expandedSection === 'guidelines'}
+        onToggle={() => toggleSection('guidelines')}
+        title={
+          <div className="flex items-center gap-3 flex-1">
+            <div className="act-ico" style={{ background: 'var(--amber-tint)', color: 'var(--amber)' }}>
+              <MessageSquare className="w-4 h-4" />
             </div>
-            <div className="text-left">
-              <span className="text-gray-900 font-medium">Diretrizes</span>
-              <p className="text-xs text-gray-400">Regras que o agente SEMPRE seguirá</p>
+            <div className="flex-1">
+              <span style={{ color: 'var(--text)' }}>Diretrizes</span>
+              <p className="text-xs" style={{ color: 'var(--text-3)', fontWeight: 500 }}>Regras que o agente SEMPRE seguirá</p>
             </div>
+            <span className="chip">{persona.guidelines.length}/50</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-              {persona.guidelines.length}/50
-            </span>
-            <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${expandedSection === 'guidelines' ? 'rotate-180' : ''}`} />
-          </div>
-        </button>
-
-        <AnimatePresence>
-          {expandedSection === 'guidelines' && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="border-t border-gray-200"
-            >
-              <div className="p-4 space-y-3">
-                {/* Existing Guidelines */}
-                {persona.guidelines.length > 0 ? (
-                  <div className="space-y-2">
-                    {persona.guidelines.map((guideline, index) => (
-                      <motion.div
-                        key={index}
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg group"
-                      >
-                        <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5 cursor-grab" />
-                        <span className="text-yellow-400 text-sm">✓</span>
-                        <p className="flex-1 text-sm text-gray-600">{guideline}</p>
-                        <button
-                          onClick={() => removeGuideline(index)}
-                          className="p-1 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </motion.div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-400 text-center py-4">
-                    Nenhuma diretriz adicionada. Adicione regras que o agente deve sempre seguir.
-                  </p>
-                )}
-
-                {/* Add New Guideline */}
-                {persona.guidelines.length < 50 && (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newGuideline}
-                      onChange={(e) => setNewGuideline(e.target.value.slice(0, 300))}
-                      onKeyDown={(e) => e.key === 'Enter' && addGuideline()}
-                      placeholder="Digite uma nova diretriz..."
-                      className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-yellow-500/50"
-                    />
-                    <button
-                      onClick={addGuideline}
-                      disabled={!newGuideline.trim()}
-                      className="px-4 py-2.5 bg-yellow-500/20 text-yellow-400 rounded-xl hover:bg-yellow-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <Plus className="w-5 h-5" />
-                    </button>
-                  </div>
-                )}
-
-                <p className="text-xs text-gray-400">
-                  Máximo de 50 diretrizes, 300 caracteres cada. Pressione Enter para adicionar.
-                </p>
-              </div>
-            </motion.div>
+        }
+      >
+        <div className="space-y-3">
+          {/* Existing Guidelines */}
+          {persona.guidelines.length > 0 ? (
+            <div className="space-y-2">
+              {persona.guidelines.map((guideline, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="flex items-start gap-2 p-3 rounded-lg group"
+                  style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+                >
+                  <GripVertical className="w-4 h-4 flex-shrink-0 mt-0.5 cursor-grab" style={{ color: 'var(--text-4)' }} />
+                  <span className="text-sm" style={{ color: 'var(--green)' }}>✓</span>
+                  <p className="flex-1 text-sm" style={{ color: 'var(--text-2)' }}>{guideline}</p>
+                  <button
+                    onClick={() => removeGuideline(index)}
+                    className="p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                    style={{ color: 'var(--text-4)', background: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>
+              Nenhuma diretriz adicionada. Adicione regras que o agente deve sempre seguir.
+            </p>
           )}
-        </AnimatePresence>
-      </div>
+
+          {/* Add New Guideline */}
+          {persona.guidelines.length < 50 && (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newGuideline}
+                onChange={(e) => setNewGuideline(e.target.value.slice(0, 300))}
+                onKeyDown={(e) => e.key === 'Enter' && addGuideline()}
+                placeholder="Digite uma nova diretriz..."
+                className="field flex-1"
+              />
+              <button
+                onClick={addGuideline}
+                disabled={!newGuideline.trim()}
+                className="btn btn-primary btn-icon"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+
+          <p className="hint">
+            Máximo de 50 diretrizes, 300 caracteres cada. Pressione Enter para adicionar.
+          </p>
+        </div>
+      </AccordionItem>
 
       {/* Quick Tips */}
-      <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-xl p-4">
-        <h4 className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-purple-400" />
+      <div className="callout brand" style={{ flexDirection: 'column', gap: 6 }}>
+        <h4 className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--brand-ink)' }}>
+          <Sparkles className="w-4 h-4" />
           Dicas para uma boa persona
         </h4>
-        <ul className="text-sm text-gray-500 space-y-1">
+        <ul className="text-sm space-y-1" style={{ color: 'var(--brand-ink)' }}>
           <li>• Seja específico sobre o papel e contexto do agente</li>
           <li>• Defina limites claros (o que o agente deve e não deve fazer)</li>
           <li>• Use diretrizes para regras inquebráveis</li>

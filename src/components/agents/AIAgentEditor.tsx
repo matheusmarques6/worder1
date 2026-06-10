@@ -31,6 +31,10 @@ import PersonaTab from './tabs/PersonaTab'
 import SettingsTab from './tabs/SettingsTab'
 import AgentPreview from './AgentPreview'
 
+// Scoped design system ("Agentes de IA" redesign)
+import { AgentsTheme } from './ui/AgentsTheme'
+import { Button } from './ui/primitives'
+
 // Types - importar do módulo central
 import {
   AIAgent,
@@ -55,13 +59,14 @@ export type {
   AgentIntegration,
 }
 
-// Tab Configuration
+// Tab Configuration — order/labels match the mockup; the scoped `.tab` style
+// handles active/idle colors, so no per-tab Tailwind palette is needed here.
 const tabs = [
-  { id: 'sources', label: 'Fontes', icon: Database, color: 'text-blue-400', bg: 'bg-blue-500/20' },
-  { id: 'actions', label: 'Ações', icon: Zap, color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
-  { id: 'integrations', label: 'Integrações', icon: Plug, color: 'text-green-400', bg: 'bg-green-500/20' },
-  { id: 'persona', label: 'Persona', icon: UserCircle, color: 'text-purple-400', bg: 'bg-purple-500/20' },
-  { id: 'settings', label: 'Configurações', icon: Settings, color: 'text-orange-400', bg: 'bg-orange-500/20' },
+  { id: 'persona', label: 'Persona', icon: UserCircle },
+  { id: 'sources', label: 'Fontes', icon: Database },
+  { id: 'actions', label: 'Ações', icon: Zap },
+  { id: 'integrations', label: 'Integrações', icon: Plug },
+  { id: 'settings', label: 'Configurações', icon: Settings },
 ] as const
 
 type TabId = typeof tabs[number]['id']
@@ -242,47 +247,47 @@ export default function AIAgentEditor({
   // Render loading
   if (loading) {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center"
-      >
-        <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 text-brand-600 animate-spin" />
-          <p className="text-gray-600">Carregando agente...</p>
-        </div>
-      </motion.div>
+      <AgentsTheme>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="editor-overlay items-center justify-center"
+        >
+          <div className="card" style={{ padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            <Loader2 className="w-8 h-8 animate-spin" style={{ color: 'var(--brand)' }} />
+            <p style={{ color: 'var(--text-2)' }}>Carregando agente...</p>
+          </div>
+        </motion.div>
+      </AgentsTheme>
     )
   }
 
   // Render error
   if (!agent) {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center"
-      >
-        <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4 max-w-md">
-          <AlertCircle className="w-12 h-12 text-red-400" />
-          <p className="text-white text-center">Agente não encontrado</p>
-          <button
-            onClick={onClose}
-            className="px-6 py-2 bg-gray-100 hover:bg-gray-200 text-white rounded-xl"
-          >
-            Voltar
-          </button>
-        </div>
-      </motion.div>
+      <AgentsTheme>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="editor-overlay items-center justify-center"
+        >
+          <div className="card" style={{ padding: 32, maxWidth: 420, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            <AlertCircle className="w-12 h-12" style={{ color: 'var(--red)' }} />
+            <p style={{ color: 'var(--text)', textAlign: 'center' }}>Agente não encontrado</p>
+            <Button variant="soft" onClick={onClose}>Voltar</Button>
+          </div>
+        </motion.div>
+      </AgentsTheme>
     )
   }
 
   return (
+    <AgentsTheme>
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/60 flex"
+      className="editor-overlay"
     >
       {/* Main Editor */}
       <motion.div
@@ -290,27 +295,25 @@ export default function AIAgentEditor({
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="ml-auto h-full w-full max-w-5xl bg-white border-l border-gray-200 flex flex-col"
+        className="editor-panel"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+        <div className="editor-head">
           <div className="flex items-center gap-4">
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
-            >
+            <Button variant="soft" size="icon" onClick={onClose} aria-label="Voltar">
               <ArrowLeft className="w-5 h-5" />
-            </button>
-            
+            </Button>
+
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                agent.is_active ? 'bg-purple-500/20' : 'bg-gray-100'
-              }`}>
-                <Bot className={`w-5 h-5 ${agent.is_active ? 'text-purple-400' : 'text-gray-400'}`} />
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center"
+                style={{ background: agent.is_active ? 'var(--brand-tint)' : 'var(--surface-3)' }}
+              >
+                <Bot className="w-5 h-5" style={{ color: agent.is_active ? 'var(--brand)' : 'var(--text-3)' }} />
               </div>
               <div>
-                <h2 className="text-gray-900 font-semibold">{agent.name}</h2>
-                <p className="text-xs text-gray-500">
+                <h2 className="font-semibold" style={{ color: 'var(--text)' }}>{agent.name}</h2>
+                <p className="text-xs" style={{ color: 'var(--text-3)' }}>
                   {agent.provider} • {agent.model}
                 </p>
               </div>
@@ -319,65 +322,45 @@ export default function AIAgentEditor({
 
           <div className="flex items-center gap-2">
             {/* Preview Button */}
-            <button
+            <Button
+              variant={showPreview ? 'primary' : 'ghost'}
+              size="sm"
               onClick={() => setShowPreview(!showPreview)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-colors ${
-                showPreview 
-                  ? 'bg-brand-100 text-brand-600' 
-                  : 'bg-gray-100 text-gray-600 hover:text-white'
-              }`}
             >
               <MessageSquare className="w-4 h-4" />
-              <span className="text-sm">Preview</span>
-            </button>
+              <span>Preview</span>
+            </Button>
 
             {/* Toggle Active */}
-            <button
+            <Button
+              variant={agent.is_active ? 'primary' : 'soft'}
+              size="sm"
               onClick={handleToggleActive}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-colors ${
-                agent.is_active
-                  ? 'bg-green-500/20 text-green-400'
-                  : 'bg-gray-100 text-gray-500'
-              }`}
             >
-              {agent.is_active ? (
-                <>
-                  <Power className="w-4 h-4" />
-                  <span className="text-sm">Ativo</span>
-                </>
-              ) : (
-                <>
-                  <PowerOff className="w-4 h-4" />
-                  <span className="text-sm">Inativo</span>
-                </>
-              )}
-            </button>
+              {agent.is_active ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
+              <span>{agent.is_active ? 'Ativo' : 'Inativo'}</span>
+            </Button>
 
             {/* Delete Button */}
-            <button
+            <Button
+              className="btn-danger"
+              size="sm"
               onClick={() => setShowDeleteConfirm(true)}
-              className="p-2 rounded-xl bg-gray-100 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
             >
               <Trash2 className="w-4 h-4" />
-            </button>
+              <span>Excluir</span>
+            </Button>
 
             {/* Save Button */}
-            <button
+            <Button
+              variant="primary"
+              size="sm"
               onClick={handleSave}
               disabled={saving || !hasChanges}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all ${
-                hasChanges
-                  ? 'bg-gradient-to-r from-primary-500 to-accent-500 text-white hover:from-primary-600 hover:to-accent-600'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              }`}
             >
-              {saving ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-              <span className="text-sm">Salvar</span>
-            </button>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <span>Salvar</span>
+            </Button>
           </div>
         </div>
 
@@ -388,11 +371,12 @@ export default function AIAgentEditor({
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="mx-4 mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-2 text-red-400"
+              className="callout red"
+              style={{ margin: '14px 20px 0' }}
             >
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span className="text-sm">{error}</span>
-              <button onClick={() => setError('')} className="ml-auto">
+              <span>{error}</span>
+              <button onClick={() => setError('')} className="ml-auto" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>
                 <X className="w-4 h-4" />
               </button>
             </motion.div>
@@ -403,20 +387,21 @@ export default function AIAgentEditor({
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="mx-4 mt-4 p-3 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center gap-2 text-green-400"
+              className="callout green"
+              style={{ margin: '14px 20px 0' }}
             >
               <CheckCircle className="w-4 h-4 flex-shrink-0" />
-              <span className="text-sm">{success}</span>
+              <span>{success}</span>
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Tabs Navigation */}
-        <div className="flex gap-1 p-4 border-b border-gray-200 overflow-x-auto">
+        <div className="editor-tabs">
           {tabs.map((tab) => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
-            
+
             // Count badges
             let badge = ''
             if (tab.id === 'sources') badge = sources.length > 0 ? `${sources.length}` : ''
@@ -427,29 +412,19 @@ export default function AIAgentEditor({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all whitespace-nowrap ${
-                  isActive
-                    ? `${tab.bg} ${tab.color}`
-                    : 'text-gray-500 hover:text-white hover:bg-white'
-                }`}
+                className={`tab ${isActive ? 'on' : ''}`}
               >
                 <Icon className="w-4 h-4" />
-                <span className="text-sm">{tab.label}</span>
-                {badge && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-xs ${
-                    isActive ? 'bg-white/20' : 'bg-gray-100'
-                  }`}>
-                    {badge}
-                  </span>
-                )}
+                <span>{tab.label}</span>
+                {badge && <span className="chip" style={{ height: 20, padding: '0 8px' }}>{badge}</span>}
               </button>
             )
           })}
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-hidden flex">
-          <div className={`flex-1 overflow-y-auto ${showPreview ? 'w-1/2' : 'w-full'}`}>
+        <div className="editor-body">
+          <div className="editor-content" style={{ width: showPreview ? '50%' : '100%' }}>
             <AnimatePresence mode="wait">
               {activeTab === 'sources' && (
                 <motion.div
@@ -545,7 +520,8 @@ export default function AIAgentEditor({
                 initial={{ width: 0, opacity: 0 }}
                 animate={{ width: '50%', opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
-                className="border-l border-gray-200 overflow-hidden"
+                className="overflow-hidden"
+                style={{ borderLeft: '1px solid var(--border)' }}
               >
                 <AgentPreview
                   agent={agent}
@@ -564,49 +540,47 @@ export default function AIAgentEditor({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4"
+            className="modal-overlay"
             onClick={() => setShowDeleteConfirm(false)}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 max-w-md w-full border border-gray-200"
+              className="modal"
+              style={{ maxWidth: 440 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center">
-                  <Trash2 className="w-6 h-6 text-red-400" />
+              <div className="modal-body">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--red-tint)' }}>
+                    <Trash2 className="w-6 h-6" style={{ color: 'var(--red)' }} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>Excluir Agente</h3>
+                    <p className="text-sm" style={{ color: 'var(--text-3)' }}>Esta ação não pode ser desfeita</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Excluir Agente</h3>
-                  <p className="text-sm text-gray-500">Esta ação não pode ser desfeita</p>
+
+                <p className="mb-6" style={{ color: 'var(--text-2)' }}>
+                  Tem certeza que deseja excluir o agente <strong style={{ color: 'var(--text)' }}>{agent.name}</strong>?
+                  Todas as fontes, ações e configurações serão perdidas.
+                </p>
+
+                <div className="flex gap-3">
+                  <Button variant="soft" block onClick={() => setShowDeleteConfirm(false)}>
+                    Cancelar
+                  </Button>
+                  <Button className="btn-danger btn-block" onClick={handleDelete}>
+                    Excluir
+                  </Button>
                 </div>
-              </div>
-
-              <p className="text-gray-600 mb-6">
-                Tem certeza que deseja excluir o agente <strong className="text-white">{agent.name}</strong>? 
-                Todas as fontes, ações e configurações serão perdidas.
-              </p>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors"
-                >
-                  Excluir
-                </button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
     </motion.div>
+    </AgentsTheme>
   )
 }

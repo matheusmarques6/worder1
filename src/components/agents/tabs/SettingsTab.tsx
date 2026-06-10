@@ -1,20 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   Settings,
   Phone,
   GitBranch,
   Clock,
   Cog,
-  ChevronDown,
   Info,
-  CheckCircle,
-  Circle,
   Loader2,
 } from 'lucide-react'
 import { AIAgent, AgentSettings } from '@/lib/ai/types'
+import { AccordionItem } from '../ui/primitives'
 
 interface SettingsTabProps {
   agent: AIAgent
@@ -161,496 +158,417 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="editor-content-inner space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center">
-          <Settings className="w-5 h-5 text-orange-400" />
+      <div className="sec-head">
+        <div className="sec-ico">
+          <Settings />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Configurações</h3>
-          <p className="text-sm text-gray-500">Defina onde e quando o agente deve atuar</p>
+          <h3 className="sec-t">Configurações</h3>
+          <p className="sec-s">Defina onde e quando o agente deve atuar</p>
         </div>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 text-brand-600 animate-spin" />
+          <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--brand)' }} />
         </div>
       ) : (
         <>
           {/* Channels Section */}
-          <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
-            <button
-              onClick={() => toggleSection('channels')}
-              className="w-full flex items-center justify-between p-4 hover:bg-gray-100/30 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
-                  <Phone className="w-4 h-4 text-green-400" />
+          <AccordionItem
+            open={expandedSection === 'channels'}
+            onToggle={() => toggleSection('channels')}
+            title={
+              <div className="flex items-center gap-3 flex-1">
+                <div className="act-ico" style={{ background: 'var(--green-tint)', color: 'var(--green)' }}>
+                  <Phone className="w-4 h-4" />
                 </div>
-                <div className="text-left">
-                  <span className="text-gray-900 font-medium">Canais de Atendimento</span>
-                  <p className="text-xs text-gray-400">Números de WhatsApp onde o agente atuará</p>
+                <div className="flex-1">
+                  <span style={{ color: 'var(--text)' }}>Canais de Atendimento</span>
+                  <p className="text-xs" style={{ color: 'var(--text-3)', fontWeight: 500 }}>Números de WhatsApp onde o agente atuará</p>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-                  {settings.channels.all_channels 
-                    ? 'Todos' 
+                <span className="chip">
+                  {settings.channels.all_channels
+                    ? 'Todos'
                     : `${settings.channels.channel_ids?.length || 0} selecionados`}
                 </span>
-                <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${expandedSection === 'channels' ? 'rotate-180' : ''}`} />
               </div>
-            </button>
+            }
+          >
+            <div className="space-y-3">
+              {/* All channels toggle */}
+              <label className="flex items-center justify-between p-3 rounded-lg cursor-pointer" style={{ background: 'var(--surface-2)' }}>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={settings.channels.all_channels}
+                    onChange={(e) => updateSettings({
+                      channels: {
+                        all_channels: e.target.checked,
+                        channel_ids: e.target.checked ? [] : settings.channels.channel_ids
+                      }
+                    })}
+                  />
+                  <span className="text-sm" style={{ color: 'var(--text-2)' }}>Todos os canais</span>
+                </div>
+                <span className="text-xs" style={{ color: 'var(--text-3)' }}>O agente responderá em todos os números conectados</span>
+              </label>
 
-            <AnimatePresence>
-              {expandedSection === 'channels' && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="border-t border-gray-200"
-                >
-                  <div className="p-4 space-y-3">
-                    {/* All channels toggle */}
-                    <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="checkbox"
-                          checked={settings.channels.all_channels}
-                          onChange={(e) => updateSettings({
-                            channels: { 
-                              all_channels: e.target.checked, 
-                              channel_ids: e.target.checked ? [] : settings.channels.channel_ids 
-                            }
-                          })}
-                          className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-green-500"
-                        />
-                        <span className="text-sm text-gray-700">Todos os canais</span>
-                      </div>
-                      <span className="text-xs text-gray-400">O agente responderá em todos os números conectados</span>
-                    </label>
+              {/* Individual channels */}
+              {!settings.channels.all_channels && (
+                <div className="space-y-2">
+                  {whatsappNumbers.length === 0 ? (
+                    <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>
+                      Nenhum número WhatsApp conectado
+                    </p>
+                  ) : (
+                    whatsappNumbers.map((number) => {
+                      const isSelected = settings.channels.channel_ids?.includes(number.id)
+                      return (
+                        <label
+                          key={number.id}
+                          className={`selcard ${isSelected ? 'on' : ''} flex items-center gap-3`}
+                          style={{ padding: 12 }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleChannel(number.id)}
+                          />
+                          <div className="flex-1">
+                            <p className="text-sm" style={{ color: 'var(--text)' }}>
+                              {number.display_name || number.phone_number}
+                            </p>
+                            <p className="text-xs" style={{ color: 'var(--text-3)' }}>{number.phone_number}</p>
+                          </div>
+                          <div className="w-2 h-2 rounded-full" style={{ background: number.is_connected ? 'var(--green)' : 'var(--red)' }} />
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+          </AccordionItem>
 
-                    {/* Individual channels */}
-                    {!settings.channels.all_channels && (
-                      <div className="space-y-2">
-                        {whatsappNumbers.length === 0 ? (
-                          <p className="text-sm text-gray-400 text-center py-4">
-                            Nenhum número WhatsApp conectado
-                          </p>
-                        ) : (
-                          whatsappNumbers.map((number) => {
-                            const isSelected = settings.channels.channel_ids?.includes(number.id)
+          {/* Pipeline Stages Section */}
+          <AccordionItem
+            open={expandedSection === 'pipelines'}
+            onToggle={() => toggleSection('pipelines')}
+            title={
+              <div className="flex items-center gap-3 flex-1">
+                <div className="act-ico" style={{ background: 'var(--blue-tint)', color: 'var(--blue)' }}>
+                  <GitBranch className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <span style={{ color: 'var(--text)' }}>Etapas do Pipeline</span>
+                  <p className="text-xs" style={{ color: 'var(--text-3)', fontWeight: 500 }}>Em quais etapas o agente deve atuar</p>
+                </div>
+                <span className="chip">
+                  {settings.pipelines.all_pipelines
+                    ? 'Todas'
+                    : `${settings.pipelines.stage_ids?.length || 0} etapas`}
+                </span>
+              </div>
+            }
+          >
+            <div className="space-y-3">
+              {/* All pipelines toggle */}
+              <label className="flex items-center justify-between p-3 rounded-lg cursor-pointer" style={{ background: 'var(--surface-2)' }}>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={settings.pipelines.all_pipelines}
+                    onChange={(e) => updateSettings({
+                      pipelines: {
+                        all_pipelines: e.target.checked,
+                        pipeline_ids: [],
+                        stage_ids: e.target.checked ? [] : settings.pipelines.stage_ids
+                      }
+                    })}
+                  />
+                  <span className="text-sm" style={{ color: 'var(--text-2)' }}>Todas as etapas</span>
+                </div>
+                <span className="text-xs" style={{ color: 'var(--text-3)' }}>O agente responderá em qualquer etapa</span>
+              </label>
+
+              {/* Individual stages */}
+              {!settings.pipelines.all_pipelines && (
+                <div className="space-y-4">
+                  {pipelines.length === 0 ? (
+                    <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>
+                      Nenhum pipeline criado
+                    </p>
+                  ) : (
+                    pipelines.map((pipeline) => (
+                      <div key={pipeline.id} className="space-y-2">
+                        <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{pipeline.name}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {pipeline.stages?.map((stage) => {
+                            const isSelected = settings.pipelines.stage_ids?.includes(stage.id)
                             return (
                               <label
-                                key={number.id}
-                                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                                  isSelected
-                                    ? 'bg-green-500/10 border border-green-500/30'
-                                    : 'bg-gray-50 border border-transparent hover:bg-white'
-                                }`}
+                                key={stage.id}
+                                className={`selcard ${isSelected ? 'on' : ''} flex items-center gap-2`}
+                                style={{ padding: 10 }}
                               >
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
-                                  onChange={() => toggleChannel(number.id)}
-                                  className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-green-500"
+                                  onChange={() => toggleStage(stage.id)}
                                 />
-                                <div className="flex-1">
-                                  <p className="text-sm text-gray-700">
-                                    {number.display_name || number.phone_number}
-                                  </p>
-                                  <p className="text-xs text-gray-400">{number.phone_number}</p>
-                                </div>
-                                <div className={`w-2 h-2 rounded-full ${
-                                  number.is_connected ? 'bg-green-400' : 'bg-red-400'
-                                }`} />
+                                <div
+                                  className="w-2.5 h-2.5 rounded-full"
+                                  style={{ backgroundColor: stage.color || '#6b7280' }}
+                                />
+                                <span className="text-xs truncate" style={{ color: 'var(--text-2)' }}>{stage.name}</span>
                               </label>
                             )
-                          })
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Pipeline Stages Section */}
-          <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
-            <button
-              onClick={() => toggleSection('pipelines')}
-              className="w-full flex items-center justify-between p-4 hover:bg-gray-100/30 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                  <GitBranch className="w-4 h-4 text-blue-400" />
-                </div>
-                <div className="text-left">
-                  <span className="text-gray-900 font-medium">Etapas do Pipeline</span>
-                  <p className="text-xs text-gray-400">Em quais etapas o agente deve atuar</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-                  {settings.pipelines.all_pipelines 
-                    ? 'Todas' 
-                    : `${settings.pipelines.stage_ids?.length || 0} etapas`}
-                </span>
-                <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${expandedSection === 'pipelines' ? 'rotate-180' : ''}`} />
-              </div>
-            </button>
-
-            <AnimatePresence>
-              {expandedSection === 'pipelines' && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="border-t border-gray-200"
-                >
-                  <div className="p-4 space-y-3">
-                    {/* All pipelines toggle */}
-                    <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="checkbox"
-                          checked={settings.pipelines.all_pipelines}
-                          onChange={(e) => updateSettings({
-                            pipelines: { 
-                              all_pipelines: e.target.checked, 
-                              pipeline_ids: [],
-                              stage_ids: e.target.checked ? [] : settings.pipelines.stage_ids 
-                            }
                           })}
-                          className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-blue-500"
-                        />
-                        <span className="text-sm text-gray-700">Todas as etapas</span>
+                        </div>
                       </div>
-                      <span className="text-xs text-gray-400">O agente responderá em qualquer etapa</span>
-                    </label>
-
-                    {/* Individual stages */}
-                    {!settings.pipelines.all_pipelines && (
-                      <div className="space-y-4">
-                        {pipelines.length === 0 ? (
-                          <p className="text-sm text-gray-400 text-center py-4">
-                            Nenhum pipeline criado
-                          </p>
-                        ) : (
-                          pipelines.map((pipeline) => (
-                            <div key={pipeline.id} className="space-y-2">
-                              <p className="text-sm font-medium text-gray-900">{pipeline.name}</p>
-                              <div className="grid grid-cols-2 gap-2">
-                                {pipeline.stages?.map((stage) => {
-                                  const isSelected = settings.pipelines.stage_ids?.includes(stage.id)
-                                  return (
-                                    <label
-                                      key={stage.id}
-                                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
-                                        isSelected
-                                          ? 'bg-blue-500/10 border border-blue-500/30'
-                                          : 'bg-gray-50 border border-transparent hover:bg-white'
-                                      }`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        onChange={() => toggleStage(stage.id)}
-                                        className="w-3.5 h-3.5 rounded bg-gray-100 border-gray-300 text-blue-500"
-                                      />
-                                      <div
-                                        className="w-2.5 h-2.5 rounded-full"
-                                        style={{ backgroundColor: stage.color || '#6b7280' }}
-                                      />
-                                      <span className="text-xs text-gray-600 truncate">{stage.name}</span>
-                                    </label>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
-
-                    <div className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg">
-                      <Info className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-gray-500">
-                        O agente só responderá quando a conversa estiver em uma das etapas selecionadas.
-                        Se a conversa mudar de etapa, o agente continuará ativo até ser transferido ou desativado.
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
+                    ))
+                  )}
+                </div>
               )}
-            </AnimatePresence>
-          </div>
+
+              <div className="callout">
+                <Info className="w-4 h-4 flex-shrink-0" />
+                <p>
+                  O agente só responderá quando a conversa estiver em uma das etapas selecionadas.
+                  Se a conversa mudar de etapa, o agente continuará ativo até ser transferido ou desativado.
+                </p>
+              </div>
+            </div>
+          </AccordionItem>
 
           {/* Schedule Section */}
-          <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
-            <button
-              onClick={() => toggleSection('schedule')}
-              className="w-full flex items-center justify-between p-4 hover:bg-gray-100/30 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                  <Clock className="w-4 h-4 text-purple-400" />
+          <AccordionItem
+            open={expandedSection === 'schedule'}
+            onToggle={() => toggleSection('schedule')}
+            title={
+              <div className="flex items-center gap-3 flex-1">
+                <div className="act-ico" style={{ background: 'var(--purple-tint)', color: 'var(--purple)' }}>
+                  <Clock className="w-4 h-4" />
                 </div>
-                <div className="text-left">
-                  <span className="text-gray-900 font-medium">Horário de Funcionamento</span>
-                  <p className="text-xs text-gray-400">Quando o agente deve estar ativo</p>
+                <div className="flex-1">
+                  <span style={{ color: 'var(--text)' }}>Horário de Funcionamento</span>
+                  <p className="text-xs" style={{ color: 'var(--text-3)', fontWeight: 500 }}>Quando o agente deve estar ativo</p>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-                  {settings.schedule.always_active 
-                    ? '24/7' 
+                <span className="chip">
+                  {settings.schedule.always_active
+                    ? '24/7'
                     : `${settings.schedule.hours?.start} - ${settings.schedule.hours?.end}`}
                 </span>
-                <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${expandedSection === 'schedule' ? 'rotate-180' : ''}`} />
               </div>
-            </button>
-
-            <AnimatePresence>
-              {expandedSection === 'schedule' && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="border-t border-gray-200"
-                >
-                  <div className="p-4 space-y-4">
-                    {/* Always active */}
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer">
-                        <input
-                          type="radio"
-                          name="schedule_type"
-                          checked={settings.schedule.always_active}
-                          onChange={() => updateSettings({
-                            schedule: { ...settings.schedule, always_active: true }
-                          })}
-                          className="w-4 h-4 bg-gray-100 border-gray-300 text-purple-500"
-                        />
-                        <div>
-                          <span className="text-sm text-gray-700">Sempre ativo</span>
-                          <p className="text-xs text-gray-400">O agente responde 24 horas por dia, 7 dias por semana</p>
-                        </div>
-                      </label>
-
-                      <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer">
-                        <input
-                          type="radio"
-                          name="schedule_type"
-                          checked={!settings.schedule.always_active}
-                          onChange={() => updateSettings({
-                            schedule: { ...settings.schedule, always_active: false }
-                          })}
-                          className="w-4 h-4 bg-gray-100 border-gray-300 text-purple-500"
-                        />
-                        <div>
-                          <span className="text-sm text-gray-700">Horário personalizado</span>
-                          <p className="text-xs text-gray-400">Defina dias e horários específicos</p>
-                        </div>
-                      </label>
-                    </div>
-
-                    {/* Custom schedule */}
-                    {!settings.schedule.always_active && (
-                      <div className="space-y-4 pt-2">
-                        {/* Days */}
-                        <div>
-                          <p className="text-sm font-medium text-gray-900 mb-2">Dias da semana</p>
-                          <div className="flex gap-2">
-                            {weekDays.map((day) => {
-                              const isSelected = settings.schedule.days?.includes(day.id)
-                              return (
-                                <button
-                                  key={day.id}
-                                  onClick={() => toggleDay(day.id)}
-                                  className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
-                                    isSelected
-                                      ? 'bg-purple-500 text-white'
-                                      : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
-                                  }`}
-                                >
-                                  {day.label}
-                                </button>
-                              )
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Hours */}
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-600 mb-2">Início</label>
-                            <input
-                              type="time"
-                              value={settings.schedule.hours?.start || '08:00'}
-                              onChange={(e) => updateSettings({
-                                schedule: { 
-                                  ...settings.schedule, 
-                                  hours: { ...settings.schedule.hours, start: e.target.value } 
-                                }
-                              })}
-                              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-600 mb-2">Fim</label>
-                            <input
-                              type="time"
-                              value={settings.schedule.hours?.end || '18:00'}
-                              onChange={(e) => updateSettings({
-                                schedule: { 
-                                  ...settings.schedule, 
-                                  hours: { ...settings.schedule.hours, end: e.target.value } 
-                                }
-                              })}
-                              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
+            }
+          >
+            <div className="space-y-4">
+              {/* Always active */}
+              <div className="space-y-2">
+                <label className="selcard flex items-center gap-3" style={{ padding: 12 }}>
+                  <input
+                    type="radio"
+                    name="schedule_type"
+                    checked={settings.schedule.always_active}
+                    onChange={() => updateSettings({
+                      schedule: { ...settings.schedule, always_active: true }
+                    })}
+                  />
+                  <div>
+                    <span className="text-sm" style={{ color: 'var(--text)' }}>Sempre ativo</span>
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>O agente responde 24 horas por dia, 7 dias por semana</p>
                   </div>
-                </motion.div>
+                </label>
+
+                <label className="selcard flex items-center gap-3" style={{ padding: 12 }}>
+                  <input
+                    type="radio"
+                    name="schedule_type"
+                    checked={!settings.schedule.always_active}
+                    onChange={() => updateSettings({
+                      schedule: { ...settings.schedule, always_active: false }
+                    })}
+                  />
+                  <div>
+                    <span className="text-sm" style={{ color: 'var(--text)' }}>Horário personalizado</span>
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>Defina dias e horários específicos</p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Custom schedule */}
+              {!settings.schedule.always_active && (
+                <div className="space-y-4 pt-2">
+                  {/* Days */}
+                  <div>
+                    <p className="label">Dias da semana</p>
+                    <div className="day-pick">
+                      {weekDays.map((day) => {
+                        const isSelected = settings.schedule.days?.includes(day.id)
+                        return (
+                          <button
+                            key={day.id}
+                            onClick={() => toggleDay(day.id)}
+                            className={`day ${isSelected ? 'on' : ''}`}
+                          >
+                            {day.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Hours */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Início</label>
+                      <input
+                        type="time"
+                        value={settings.schedule.hours?.start || '08:00'}
+                        onChange={(e) => updateSettings({
+                          schedule: {
+                            ...settings.schedule,
+                            hours: { ...settings.schedule.hours, start: e.target.value }
+                          }
+                        })}
+                        className="field"
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Fim</label>
+                      <input
+                        type="time"
+                        value={settings.schedule.hours?.end || '18:00'}
+                        onChange={(e) => updateSettings({
+                          schedule: {
+                            ...settings.schedule,
+                            hours: { ...settings.schedule.hours, end: e.target.value }
+                          }
+                        })}
+                        className="field"
+                      />
+                    </div>
+                  </div>
+                </div>
               )}
-            </AnimatePresence>
-          </div>
+            </div>
+          </AccordionItem>
 
           {/* Behavior Section */}
-          <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
-            <button
-              onClick={() => toggleSection('behavior')}
-              className="w-full flex items-center justify-between p-4 hover:bg-gray-100/30 transition-colors"
-            >
+          <AccordionItem
+            open={expandedSection === 'behavior'}
+            onToggle={() => toggleSection('behavior')}
+            title={
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                  <Cog className="w-4 h-4 text-orange-400" />
+                <div className="act-ico" style={{ background: 'var(--brand-tint)', color: 'var(--brand)' }}>
+                  <Cog className="w-4 h-4" />
                 </div>
-                <div className="text-left">
-                  <span className="text-gray-900 font-medium">Comportamento</span>
-                  <p className="text-xs text-gray-400">Como o agente deve se comportar</p>
+                <div>
+                  <span style={{ color: 'var(--text)' }}>Comportamento</span>
+                  <p className="text-xs" style={{ color: 'var(--text-3)', fontWeight: 500 }}>Como o agente deve se comportar</p>
                 </div>
               </div>
-              <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${expandedSection === 'behavior' ? 'rotate-180' : ''}`} />
-            </button>
-
-            <AnimatePresence>
-              {expandedSection === 'behavior' && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="border-t border-gray-200"
-                >
-                  <div className="p-4 space-y-4">
-                    {/* Activate On */}
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 mb-2">Quando ativar</p>
-                      <div className="space-y-2">
-                        {activateOnOptions.map((option) => (
-                          <label
-                            key={option.value}
-                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                              settings.behavior.activate_on === option.value
-                                ? 'bg-orange-500/10 border border-orange-500/30'
-                                : 'bg-gray-50 border border-transparent hover:bg-white'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name="activate_on"
-                              value={option.value}
-                              checked={settings.behavior.activate_on === option.value}
-                              onChange={() => updateSettings({
-                                behavior: { ...settings.behavior, activate_on: option.value }
-                              })}
-                              className="w-4 h-4 bg-gray-100 border-gray-300 text-orange-500"
-                            />
-                            <div>
-                              <span className="text-sm text-gray-700">{option.label}</span>
-                              <p className="text-xs text-gray-400">{option.description}</p>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Stop on Human Reply */}
-                    <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
+            }
+          >
+            <div className="space-y-4">
+              {/* Activate On */}
+              <div>
+                <p className="label">Quando ativar</p>
+                <div className="space-y-2">
+                  {activateOnOptions.map((option) => (
+                    <label
+                      key={option.value}
+                      className={`selcard ${settings.behavior.activate_on === option.value ? 'on' : ''} flex items-center gap-3`}
+                      style={{ padding: 12 }}
+                    >
+                      <input
+                        type="radio"
+                        name="activate_on"
+                        value={option.value}
+                        checked={settings.behavior.activate_on === option.value}
+                        onChange={() => updateSettings({
+                          behavior: { ...settings.behavior, activate_on: option.value }
+                        })}
+                      />
                       <div>
-                        <span className="text-sm text-gray-700">Parar quando humano responder</span>
-                        <p className="text-xs text-gray-400">O agente para de responder quando um humano assume a conversa</p>
+                        <span className="text-sm" style={{ color: 'var(--text)' }}>{option.label}</span>
+                        <p className="text-xs" style={{ color: 'var(--text-3)' }}>{option.description}</p>
                       </div>
-                      <input
-                        type="checkbox"
-                        checked={settings.behavior.stop_on_human_reply}
-                        onChange={(e) => updateSettings({
-                          behavior: { ...settings.behavior, stop_on_human_reply: e.target.checked }
-                        })}
-                        className="w-5 h-5 rounded bg-gray-100 border-gray-300 text-orange-500"
-                      />
                     </label>
+                  ))}
+                </div>
+              </div>
 
-                    {/* Cooldown */}
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-700">Cooldown após transferência</span>
-                        <span className="text-sm text-orange-400">
-                          {Math.floor(settings.behavior.cooldown_after_transfer / 60)} min
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="1800"
-                        step="60"
-                        value={settings.behavior.cooldown_after_transfer}
-                        onChange={(e) => updateSettings({
-                          behavior: { ...settings.behavior, cooldown_after_transfer: parseInt(e.target.value) }
-                        })}
-                        className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                      />
-                      <p className="text-xs text-gray-400 mt-2">
-                        Tempo que o agente aguarda antes de voltar a responder após uma transferência
-                      </p>
-                    </div>
+              {/* Stop on Human Reply */}
+              <div className="rule-card flex items-center justify-between">
+                <div>
+                  <span className="text-sm" style={{ color: 'var(--text)' }}>Parar quando humano responder</span>
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>O agente para de responder quando um humano assume a conversa</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={settings.behavior.stop_on_human_reply}
+                  onClick={() => updateSettings({
+                    behavior: { ...settings.behavior, stop_on_human_reply: !settings.behavior.stop_on_human_reply }
+                  })}
+                  className={`tog ${settings.behavior.stop_on_human_reply ? 'on' : ''}`}
+                />
+              </div>
 
-                    {/* Max Messages */}
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-700">Limite de mensagens por conversa</span>
-                        <span className="text-sm text-orange-400">
-                          {settings.behavior.max_messages_per_conversation === 0 
-                            ? 'Ilimitado' 
-                            : settings.behavior.max_messages_per_conversation}
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="50"
-                        value={settings.behavior.max_messages_per_conversation}
-                        onChange={(e) => updateSettings({
-                          behavior: { ...settings.behavior, max_messages_per_conversation: parseInt(e.target.value) }
-                        })}
-                        className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                      />
-                      <p className="text-xs text-gray-400 mt-2">
-                        Após este número de mensagens, o agente para de responder automaticamente (0 = ilimitado)
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+              {/* Cooldown */}
+              <div className="rule-card">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm" style={{ color: 'var(--text)' }}>Cooldown após transferência</span>
+                  <span className="text-sm" style={{ color: 'var(--brand-ink)' }}>
+                    {Math.floor(settings.behavior.cooldown_after_transfer / 60)} min
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1800"
+                  step="60"
+                  value={settings.behavior.cooldown_after_transfer}
+                  onChange={(e) => updateSettings({
+                    behavior: { ...settings.behavior, cooldown_after_transfer: parseInt(e.target.value) }
+                  })}
+                  className="range"
+                />
+                <p className="hint">
+                  Tempo que o agente aguarda antes de voltar a responder após uma transferência
+                </p>
+              </div>
+
+              {/* Max Messages */}
+              <div className="rule-card">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm" style={{ color: 'var(--text)' }}>Limite de mensagens por conversa</span>
+                  <span className="text-sm" style={{ color: 'var(--brand-ink)' }}>
+                    {settings.behavior.max_messages_per_conversation === 0
+                      ? 'Ilimitado'
+                      : settings.behavior.max_messages_per_conversation}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  value={settings.behavior.max_messages_per_conversation}
+                  onChange={(e) => updateSettings({
+                    behavior: { ...settings.behavior, max_messages_per_conversation: parseInt(e.target.value) }
+                  })}
+                  className="range"
+                />
+                <p className="hint">
+                  Após este número de mensagens, o agente para de responder automaticamente (0 = ilimitado)
+                </p>
+              </div>
+            </div>
+          </AccordionItem>
         </>
       )}
     </div>

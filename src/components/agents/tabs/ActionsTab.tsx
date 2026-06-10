@@ -9,8 +9,6 @@ import {
   ChevronDown,
   ChevronUp,
   GripVertical,
-  Power,
-  PowerOff,
   ShoppingCart,
   HelpCircle,
   RotateCcw,
@@ -162,25 +160,25 @@ export default function ActionsTab({
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="editor-content-inner space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center">
-            <Zap className="w-5 h-5 text-yellow-400" />
+        <div className="sec-head">
+          <div className="sec-ico">
+            <Zap />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Ações</h3>
-            <p className="text-sm text-gray-500">Configure regras "Quando... Fazer..."</p>
+            <h3 className="sec-t">Ações</h3>
+            <p className="sec-s">Configure regras "Quando... Fazer..."</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-400">{actions.length}/20 ações</span>
+          <span className="text-sm" style={{ color: 'var(--text-3)' }}>{actions.length}/20 ações</span>
           <button
             onClick={() => setShowCreateModal(true)}
             disabled={actions.length >= 20}
-            className="flex items-center gap-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-200 text-white disabled:text-gray-500 rounded-xl font-medium transition-colors"
+            className="btn btn-primary"
           >
             <Plus className="w-4 h-4" />
             Nova Ação
@@ -190,18 +188,19 @@ export default function ActionsTab({
 
       {/* Actions List */}
       {actions.length === 0 ? (
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
-            <Zap className="w-8 h-8 text-gray-400" />
+        <div className="card text-center" style={{ padding: 32 }}>
+          <div className="empty-ico" style={{ margin: '0 auto 16px' }}>
+            <Zap />
           </div>
-          <h4 className="text-lg font-medium text-gray-900 mb-2">Nenhuma ação configurada</h4>
-          <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
+          <h4 className="text-lg font-medium mb-2" style={{ color: 'var(--text)' }}>Nenhuma ação configurada</h4>
+          <p className="text-sm mb-4 max-w-md mx-auto" style={{ color: 'var(--text-3)' }}>
             Crie regras para definir como o agente deve responder em situações específicas,
             como transferir para um humano quando o cliente está frustrado.
           </p>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-xl font-medium transition-colors"
+            className="btn btn-primary"
+            style={{ display: 'inline-flex' }}
           >
             <Plus className="w-4 h-4" />
             Criar Primeira Ação
@@ -225,12 +224,12 @@ export default function ActionsTab({
       )}
 
       {/* Info Box */}
-      <div className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-xl p-4">
-        <h4 className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-yellow-400" />
+      <div className="callout amber" style={{ flexDirection: 'column', gap: 6 }}>
+        <h4 className="text-sm font-medium flex items-center gap-2">
+          <Sparkles className="w-4 h-4" />
           Como as ações funcionam?
         </h4>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm">
           Ações são executadas na ordem de prioridade. Quando uma mensagem chega, o sistema verifica
           cada ação e executa a primeira que corresponder às condições. Use análise de intenção
           e sentimento para criar experiências personalizadas.
@@ -281,29 +280,27 @@ function ActionCard({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`bg-gray-50 border rounded-xl overflow-hidden transition-colors ${
-        action.is_active ? 'border-gray-200' : 'border-gray-200 opacity-60'
-      }`}
+      className={`act-row ${action.is_active ? 'on' : ''}`}
+      style={{ flexDirection: 'column', alignItems: 'stretch', gap: 0, padding: 0, opacity: action.is_active ? 1 : 0.6 }}
     >
       {/* Header */}
       <div className="flex items-center gap-3 p-4">
-        <button className="cursor-grab text-gray-400 hover:text-gray-500">
+        <button className="cursor-grab" style={{ color: 'var(--text-4)', background: 'none', border: 'none' }}>
           <GripVertical className="w-4 h-4" />
         </button>
 
         <button
           onClick={onToggleExpand}
           className="flex-1 flex items-center gap-3 text-left"
+          style={{ background: 'none', border: 'none' }}
         >
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-            action.is_active ? 'bg-yellow-500/20' : 'bg-gray-100'
-          }`}>
-            <Zap className={`w-4 h-4 ${action.is_active ? 'text-yellow-400' : 'text-gray-400'}`} />
+          <div className="act-ico" style={{ width: 32, height: 32, background: action.is_active ? 'var(--brand-tint)' : 'var(--surface-3)', color: action.is_active ? 'var(--brand)' : 'var(--text-3)' }}>
+            <Zap className="w-4 h-4" />
           </div>
-          
+
           <div className="flex-1 min-w-0">
-            <h4 className="text-gray-900 font-medium truncate">{action.name}</h4>
-            <p className="text-xs text-gray-400">
+            <h4 className="act-t truncate">{action.name}</h4>
+            <p className="text-xs" style={{ color: 'var(--text-3)' }}>
               {conditionsCount} {conditionsCount === 1 ? 'condição' : 'condições'} → {actionsCount} {actionsCount === 1 ? 'ação' : 'ações'}
             </p>
           </div>
@@ -311,25 +308,21 @@ function ActionCard({
 
         <div className="flex items-center gap-2">
           {action.times_triggered > 0 && (
-            <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-500">
-              {action.times_triggered}x
-            </span>
+            <span className="chip">{action.times_triggered}x</span>
           )}
-          
+
           <button
+            type="button"
             onClick={onToggleActive}
-            className={`p-2 rounded-lg transition-colors ${
-              action.is_active
-                ? 'bg-green-500/20 text-green-400'
-                : 'bg-gray-100 text-gray-400'
-            }`}
-          >
-            {action.is_active ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
-          </button>
+            className={`tog ${action.is_active ? 'on' : ''}`}
+            role="switch"
+            aria-checked={action.is_active}
+            aria-label={action.is_active ? 'Desativar ação' : 'Ativar ação'}
+          />
 
           <button
             onClick={onToggleExpand}
-            className="p-2 rounded-lg bg-gray-100 text-gray-500 hover:text-white transition-colors"
+            className="btn btn-soft btn-icon btn-sm"
           >
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
@@ -343,14 +336,14 @@ function ActionCard({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="border-t border-gray-200"
+            style={{ borderTop: '1px solid var(--border)' }}
           >
             <div className="p-4 space-y-4">
               {/* Conditions */}
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2 flex items-center gap-2">
-                  <span className="text-yellow-400">QUANDO</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                <p className="text-sm font-medium mb-2 flex items-center gap-2" style={{ color: 'var(--text-2)' }}>
+                  <span style={{ color: 'var(--brand-ink)' }}>QUANDO</span>
+                  <span className="chip">
                     {action.conditions?.match_type === 'all' ? 'TODAS' : 'QUALQUER'}
                   </span>
                 </p>
@@ -363,8 +356,8 @@ function ActionCard({
 
               {/* Actions */}
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2">
-                  <span className="text-green-400">FAZER</span>
+                <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-2)' }}>
+                  <span style={{ color: 'var(--green)' }}>FAZER</span>
                 </p>
                 <div className="space-y-2">
                   {action.actions?.map((actionDo, i) => (
@@ -374,16 +367,16 @@ function ActionCard({
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2 pt-2 border-t border-gray-200">
+              <div className="flex gap-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
                 <button
                   onClick={onEdit}
-                  className="flex-1 py-2 bg-gray-100 hover:bg-gray-100 text-gray-600 hover:text-white rounded-lg text-sm transition-colors"
+                  className="btn btn-soft btn-sm btn-block"
                 >
                   Editar
                 </button>
                 <button
                   onClick={onDelete}
-                  className="py-2 px-4 bg-gray-100 hover:bg-red-500/10 text-gray-500 hover:text-red-400 rounded-lg text-sm transition-colors"
+                  className="btn btn-soft btn-icon btn-sm"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -419,9 +412,9 @@ function ConditionBadge({ condition }: { condition: ActionCondition }) {
   }
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
+    <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'var(--surface-3)' }}>
       <Icon className={`w-4 h-4 ${color}`} />
-      <span className="text-sm text-gray-600">{label}</span>
+      <span className="text-sm" style={{ color: 'var(--text-2)' }}>{label}</span>
     </div>
   )
 }
@@ -511,53 +504,47 @@ function ActionBuilderModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+      className="modal-overlay"
       onClick={onClose}
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-200 flex flex-col"
+        className="modal"
+        style={{ maxWidth: 672 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">
+        <div className="modal-head">
+          <h3 className="modal-title">
             {action ? 'Editar Ação' : 'Nova Ação'}
           </h3>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
-          >
+          <button onClick={onClose} className="modal-x">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Steps */}
-        <div className="flex items-center gap-2 p-4 border-b border-gray-200">
+        <div className="seg" style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
           {[1, 2, 3].map((s) => (
             <button
               key={s}
               onClick={() => setStep(s)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                step === s
-                  ? 'bg-yellow-500/20 text-yellow-400'
-                  : step > s
-                  ? 'bg-green-500/10 text-green-400'
-                  : 'bg-gray-100 text-gray-500'
-              }`}
+              className={`step-pill ${step === s ? 'on' : step > s ? 'done' : ''}`}
+              style={{ justifyContent: 'center' }}
             >
-              {s}. {s === 1 ? 'Nome' : s === 2 ? 'Quando' : 'Fazer'}
-              {step > s && <CheckCircle className="w-3.5 h-3.5 inline ml-1" />}
+              <span className="num">{s}</span>
+              {s === 1 ? 'Nome' : s === 2 ? 'Quando' : 'Fazer'}
+              {step > s && <CheckCircle className="w-3.5 h-3.5" />}
             </button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="modal-body">
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+            <div className="callout red mb-4">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               {error}
             </div>
@@ -566,18 +553,18 @@ function ActionBuilderModal({
           {step === 1 && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">Nome da ação</label>
+                <label className="label">Nome da ação</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ex: Transferir cliente frustrado"
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-yellow-500/50"
+                  className="field"
                 />
               </div>
-              <div className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg">
-                <Info className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-gray-500">
+              <div className="callout">
+                <Info className="w-4 h-4 flex-shrink-0" />
+                <p>
                   Dê um nome descritivo para identificar facilmente o que esta ação faz.
                 </p>
               </div>
@@ -587,17 +574,18 @@ function ActionBuilderModal({
           {step === 2 && (
             <div className="space-y-4">
               {/* Match Type */}
-              <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                <span className="text-sm text-gray-600">Executar quando</span>
+              <div className="rule-card flex items-center gap-2 flex-wrap">
+                <span className="text-sm" style={{ color: 'var(--text-2)' }}>Executar quando</span>
                 <select
                   value={matchType}
                   onChange={(e) => setMatchType(e.target.value as 'all' | 'any')}
-                  className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-white text-sm"
+                  className="field text-sm"
+                  style={{ width: 'auto', height: 36, paddingRight: 28 }}
                 >
                   <option value="all">TODAS as condições</option>
                   <option value="any">QUALQUER condição</option>
                 </select>
-                <span className="text-sm text-gray-600">forem verdadeiras</span>
+                <span className="text-sm" style={{ color: 'var(--text-2)' }}>forem verdadeiras</span>
               </div>
 
               {/* Existing Conditions */}
@@ -608,7 +596,7 @@ function ActionBuilderModal({
                       <ConditionBadge condition={condition} />
                       <button
                         onClick={() => removeCondition(condition.id)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10"
+                        className="btn btn-soft btn-icon btn-sm"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -619,30 +607,31 @@ function ActionBuilderModal({
 
               {/* Add Condition */}
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2">Adicionar condição</p>
+                <p className="label">Adicionar condição</p>
                 <div className="grid grid-cols-2 gap-2">
                   {intentPresets.slice(0, 4).map((preset) => (
                     <button
                       key={preset.id}
                       onClick={() => addCondition('intent', { intent: preset.id })}
-                      className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg hover:bg-white text-left transition-colors"
+                      className="selcard flex items-center gap-2"
+                      style={{ padding: 12 }}
                     >
-                      <preset.icon className="w-4 h-4 text-blue-400" />
-                      <span className="text-sm text-gray-600">{preset.label}</span>
+                      <preset.icon className="w-4 h-4" style={{ color: 'var(--blue)' }} />
+                      <span className="text-sm" style={{ color: 'var(--text-2)' }}>{preset.label}</span>
                     </button>
                   ))}
                 </div>
 
-                <p className="text-xs text-gray-400 mt-3 mb-2">Sentimento do cliente</p>
-                <div className="flex gap-2">
+                <p className="hint mb-2">Sentimento do cliente</p>
+                <div className="flex gap-2 flex-wrap">
                   {sentimentPresets.map((preset) => (
                     <button
                       key={preset.id}
                       onClick={() => addCondition('sentiment', { sentiment: preset.id })}
-                      className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg hover:bg-white transition-colors"
+                      className="chip-outline chip"
                     >
-                      <preset.icon className={`w-4 h-4 ${preset.color}`} />
-                      <span className="text-xs text-gray-600">{preset.label}</span>
+                      <preset.icon className="w-4 h-4" />
+                      {preset.label}
                     </button>
                   ))}
                 </div>
@@ -660,7 +649,7 @@ function ActionBuilderModal({
                       <ActionBadge action={actionDo} />
                       <button
                         onClick={() => removeAction(actionDo.id)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10"
+                        className="btn btn-soft btn-icon btn-sm"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -671,14 +660,15 @@ function ActionBuilderModal({
 
               {/* Add Action */}
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-2">Adicionar ação</p>
+                <p className="label">Adicionar ação</p>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => addAction('transfer', { transfer_to: 'queue' })}
-                    className="flex items-center gap-2 p-3 bg-blue-500/10 rounded-lg hover:bg-blue-500/20 text-left transition-colors"
+                    className="selcard flex items-center gap-2"
+                    style={{ padding: 12 }}
                   >
-                    <ArrowRight className="w-4 h-4 text-blue-400" />
-                    <span className="text-sm text-blue-400">Transferir para fila</span>
+                    <ArrowRight className="w-4 h-4" style={{ color: 'var(--blue)' }} />
+                    <span className="text-sm" style={{ color: 'var(--text-2)' }}>Transferir para fila</span>
                   </button>
 
                   <button
@@ -686,10 +676,11 @@ function ActionBuilderModal({
                       const message = prompt('Digite a mensagem exata:')
                       if (message) addAction('exact_message', { message })
                     }}
-                    className="flex items-center gap-2 p-3 bg-green-500/10 rounded-lg hover:bg-green-500/20 text-left transition-colors"
+                    className="selcard flex items-center gap-2"
+                    style={{ padding: 12 }}
                   >
-                    <Send className="w-4 h-4 text-green-400" />
-                    <span className="text-sm text-green-400">Enviar mensagem</span>
+                    <Send className="w-4 h-4" style={{ color: 'var(--green)' }} />
+                    <span className="text-sm" style={{ color: 'var(--text-2)' }}>Enviar mensagem</span>
                   </button>
 
                   <button
@@ -697,10 +688,11 @@ function ActionBuilderModal({
                       const field = prompt('Qual dado pedir? (email, telefone, nome)')
                       if (field) addAction('ask_for', { ask_field: field })
                     }}
-                    className="flex items-center gap-2 p-3 bg-orange-500/10 rounded-lg hover:bg-orange-500/20 text-left transition-colors"
+                    className="selcard flex items-center gap-2"
+                    style={{ padding: 12 }}
                   >
-                    <MessageSquare className="w-4 h-4 text-orange-400" />
-                    <span className="text-sm text-orange-400">Pedir dados</span>
+                    <MessageSquare className="w-4 h-4" style={{ color: 'var(--brand)' }} />
+                    <span className="text-sm" style={{ color: 'var(--text-2)' }}>Pedir dados</span>
                   </button>
 
                   <button
@@ -708,10 +700,11 @@ function ActionBuilderModal({
                       const topic = prompt('Qual tópico não mencionar?')
                       if (topic) addAction('dont_mention', { topic })
                     }}
-                    className="flex items-center gap-2 p-3 bg-red-500/10 rounded-lg hover:bg-red-500/20 text-left transition-colors"
+                    className="selcard flex items-center gap-2"
+                    style={{ padding: 12 }}
                   >
-                    <Ban className="w-4 h-4 text-red-400" />
-                    <span className="text-sm text-red-400">Não mencionar</span>
+                    <Ban className="w-4 h-4" style={{ color: 'var(--red)' }} />
+                    <span className="text-sm" style={{ color: 'var(--text-2)' }}>Não mencionar</span>
                   </button>
                 </div>
               </div>
@@ -720,23 +713,23 @@ function ActionBuilderModal({
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 p-4 border-t border-gray-200">
+        <div className="modal-foot">
           {step > 1 && (
             <button
               onClick={() => setStep(step - 1)}
-              className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
+              className="btn btn-soft"
             >
               Voltar
             </button>
           )}
-          
+
           <div className="flex-1" />
 
           {step < 3 ? (
             <button
               onClick={() => setStep(step + 1)}
               disabled={step === 1 && !name.trim()}
-              className="px-6 py-2.5 bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-200 text-white rounded-xl font-medium transition-colors"
+              className="btn btn-primary"
             >
               Próximo
             </button>
@@ -744,7 +737,7 @@ function ActionBuilderModal({
             <button
               onClick={handleSave}
               disabled={loading || conditions.length === 0 || actionsDo.length === 0}
-              className="px-6 py-2.5 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-dark-600 disabled:to-dark-600 text-white rounded-xl font-medium transition-colors flex items-center gap-2"
+              className="btn btn-primary"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               {action ? 'Salvar' : 'Criar Ação'}

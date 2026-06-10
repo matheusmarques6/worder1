@@ -17,7 +17,6 @@ import {
   File,
   Globe,
   X,
-  ChevronDown,
   Info,
   Sparkles,
   ExternalLink,
@@ -209,30 +208,24 @@ export default function SourcesTab({
   const readySources = sources.filter(s => s.status === 'ready').length
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="editor-content-inner space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
-            <Database className="w-5 h-5 text-blue-400" />
+        <div className="sec-head">
+          <div className="sec-ico">
+            <Database />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Fontes de Conhecimento</h3>
-            <p className="text-sm text-gray-500">Treine seu agente com informações do seu negócio</p>
+            <h3 className="sec-t">Fontes de Conhecimento</h3>
+            <p className="sec-s">Treine seu agente com informações do seu negócio</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={onRefresh}
-            className="p-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 hover:text-white transition-colors"
-          >
+          <button onClick={onRefresh} className="btn btn-ghost btn-icon" aria-label="Atualizar">
             <RefreshCw className="w-4 h-4" />
           </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors"
-          >
+          <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
             <Plus className="w-4 h-4" />
             Adicionar Fonte
           </button>
@@ -241,34 +234,31 @@ export default function SourcesTab({
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-          <p className="text-2xl font-bold text-gray-900">{sources.length}</p>
-          <p className="text-sm text-gray-500">Fontes totais</p>
+        <div className="tile">
+          <p className="tile-v">{sources.length}</p>
+          <p className="tile-k">Fontes totais</p>
         </div>
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-          <p className="text-2xl font-bold text-green-400">{readySources}</p>
-          <p className="text-sm text-gray-500">Prontas para uso</p>
+        <div className="tile">
+          <p className="tile-v" style={{ color: 'var(--green)' }}>{readySources}</p>
+          <p className="tile-k">Prontas para uso</p>
         </div>
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-          <p className="text-2xl font-bold text-blue-400">{totalChunks}</p>
-          <p className="text-sm text-gray-500">Chunks indexados</p>
+        <div className="tile">
+          <p className="tile-v" style={{ color: 'var(--blue)' }}>{totalChunks}</p>
+          <p className="tile-k">Chunks indexados</p>
         </div>
       </div>
 
       {/* Sources List */}
       {sources.length === 0 ? (
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
-            <Database className="w-8 h-8 text-gray-400" />
+        <div className="card text-center" style={{ padding: 32 }}>
+          <div className="empty-ico" style={{ margin: '0 auto 16px' }}>
+            <Database />
           </div>
-          <h4 className="text-lg font-medium text-gray-900 mb-2">Nenhuma fonte adicionada</h4>
-          <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
+          <h4 className="text-lg font-medium mb-2" style={{ color: 'var(--text)' }}>Nenhuma fonte adicionada</h4>
+          <p className="text-sm mb-4 max-w-md mx-auto" style={{ color: 'var(--text-3)' }}>
             Adicione URLs, arquivos ou textos para treinar seu agente com informações específicas do seu negócio.
           </p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors"
-          >
+          <button onClick={() => setShowAddModal(true)} className="btn btn-primary" style={{ display: 'inline-flex' }}>
             <Plus className="w-4 h-4" />
             Adicionar Primeira Fonte
           </button>
@@ -286,33 +276,34 @@ export default function SourcesTab({
                 key={source.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-gray-50 border border-gray-200 rounded-xl p-4 hover:bg-white/70 transition-colors group"
+                className="act-row group"
               >
-                <div className="flex items-start gap-4">
+                <div className="flex items-start gap-4 w-full">
                   {/* Icon */}
-                  <div className={`w-10 h-10 rounded-xl ${typeInfo.bg} flex items-center justify-center flex-shrink-0`}>
-                    <TypeIcon className={`w-5 h-5 ${typeInfo.color}`} />
+                  <div className="act-ico" style={{ background: 'var(--brand-tint)', color: 'var(--brand)' }}>
+                    <TypeIcon className="w-5 h-5" />
                   </div>
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h4 className="text-gray-900 font-medium truncate">{source.name}</h4>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusInfo.bg} ${statusInfo.color} flex items-center gap-1`}>
+                      <h4 className="act-t truncate">{source.name}</h4>
+                      <span className="chip" style={{ height: 22 }}>
                         <StatusIcon className={`w-3 h-3 ${source.status === 'processing' ? 'animate-spin' : ''}`} />
                         {statusInfo.label}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-4 mt-1">
-                      <span className="text-xs text-gray-400">{typeInfo.label}</span>
-                      
+                      <span className="text-xs" style={{ color: 'var(--text-3)' }}>{typeInfo.label}</span>
+
                       {source.source_type === 'url' && source.url && (
                         <a
                           href={source.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                          className="text-xs flex items-center gap-1"
+                          style={{ color: 'var(--blue)' }}
                         >
                           {source.url.slice(0, 40)}...
                           <ExternalLink className="w-3 h-3" />
@@ -320,18 +311,18 @@ export default function SourcesTab({
                       )}
 
                       {source.source_type === 'file' && source.original_filename && (
-                        <span className="text-xs text-gray-500">{source.original_filename}</span>
+                        <span className="text-xs" style={{ color: 'var(--text-3)' }}>{source.original_filename}</span>
                       )}
 
                       {source.chunks_count > 0 && (
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs" style={{ color: 'var(--text-3)' }}>
                           {source.chunks_count} chunks
                         </span>
                       )}
                     </div>
 
                     {source.status === 'error' && source.error_message && (
-                      <p className="text-xs text-red-400 mt-2">{source.error_message}</p>
+                      <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>{source.error_message}</p>
                     )}
                   </div>
 
@@ -340,7 +331,7 @@ export default function SourcesTab({
                     {source.status === 'error' && (
                       <button
                         onClick={() => handleReprocess(source.id)}
-                        className="p-2 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                        className="btn btn-soft btn-icon btn-sm"
                         title="Reprocessar"
                       >
                         <RefreshCw className="w-4 h-4" />
@@ -348,7 +339,7 @@ export default function SourcesTab({
                     )}
                     <button
                       onClick={() => handleDelete(source.id)}
-                      className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      className="btn btn-soft btn-icon btn-sm"
                       title="Excluir"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -362,12 +353,12 @@ export default function SourcesTab({
       )}
 
       {/* Info Box */}
-      <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-xl p-4">
-        <h4 className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-blue-400" />
+      <div className="callout blue" style={{ flexDirection: 'column', gap: 6 }}>
+        <h4 className="text-sm font-medium flex items-center gap-2">
+          <Sparkles className="w-4 h-4" />
           Como funciona o RAG?
         </h4>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm">
           Seus documentos são processados, divididos em partes menores (chunks) e indexados.
           Quando o cliente faz uma pergunta, o sistema busca os chunks mais relevantes e os inclui
           no contexto da IA, permitindo respostas precisas baseadas no seu conteúdo.
@@ -381,33 +372,34 @@ export default function SourcesTab({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+            className="modal-overlay"
             onClick={() => { setShowAddModal(false); setAddType(null); setError(''); }}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl w-full max-w-lg border border-gray-200 overflow-hidden"
+              className="modal"
+              style={{ maxWidth: 520 }}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">
+              <div className="modal-head">
+                <h3 className="modal-title">
                   {addType ? `Adicionar ${sourceTypeConfig[addType].label}` : 'Adicionar Fonte'}
                 </h3>
                 <button
                   onClick={() => { setShowAddModal(false); setAddType(null); setError(''); }}
-                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
+                  className="modal-x"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               {/* Content */}
-              <div className="p-4">
+              <div className="modal-body">
                 {error && (
-                  <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+                  <div className="callout red mb-4">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" />
                     {error}
                   </div>
@@ -418,53 +410,57 @@ export default function SourcesTab({
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => setAddType('url')}
-                      className="flex flex-col items-center gap-3 p-6 bg-gray-50 border border-gray-200 rounded-xl hover:bg-white hover:border-blue-500/30 transition-all group"
+                      className="selcard"
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 24 }}
                     >
-                      <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <Globe className="w-6 h-6 text-blue-400" />
+                      <div className="act-ico" style={{ width: 48, height: 48, background: 'var(--blue-tint)', color: 'var(--blue)' }}>
+                        <Globe className="w-6 h-6" />
                       </div>
                       <div className="text-center">
-                        <p className="text-gray-900 font-medium">URL</p>
-                        <p className="text-xs text-gray-400">Site ou página web</p>
+                        <p className="font-medium" style={{ color: 'var(--text)' }}>URL</p>
+                        <p className="text-xs" style={{ color: 'var(--text-3)' }}>Site ou página web</p>
                       </div>
                     </button>
 
                     <button
                       onClick={() => setAddType('file')}
-                      className="flex flex-col items-center gap-3 p-6 bg-gray-50 border border-gray-200 rounded-xl hover:bg-white hover:border-green-500/30 transition-all group"
+                      className="selcard"
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 24 }}
                     >
-                      <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <Upload className="w-6 h-6 text-green-400" />
+                      <div className="act-ico" style={{ width: 48, height: 48, background: 'var(--green-tint)', color: 'var(--green)' }}>
+                        <Upload className="w-6 h-6" />
                       </div>
                       <div className="text-center">
-                        <p className="text-gray-900 font-medium">Arquivo</p>
-                        <p className="text-xs text-gray-400">PDF, DOCX, TXT</p>
+                        <p className="font-medium" style={{ color: 'var(--text)' }}>Arquivo</p>
+                        <p className="text-xs" style={{ color: 'var(--text-3)' }}>PDF, DOCX, TXT</p>
                       </div>
                     </button>
 
                     <button
                       onClick={() => setAddType('text')}
-                      className="flex flex-col items-center gap-3 p-6 bg-gray-50 border border-gray-200 rounded-xl hover:bg-white hover:border-purple-500/30 transition-all group"
+                      className="selcard"
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 24 }}
                     >
-                      <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <FileText className="w-6 h-6 text-purple-400" />
+                      <div className="act-ico" style={{ width: 48, height: 48, background: 'var(--purple-tint)', color: 'var(--purple)' }}>
+                        <FileText className="w-6 h-6" />
                       </div>
                       <div className="text-center">
-                        <p className="text-gray-900 font-medium">Texto</p>
-                        <p className="text-xs text-gray-400">Cole texto diretamente</p>
+                        <p className="font-medium" style={{ color: 'var(--text)' }}>Texto</p>
+                        <p className="text-xs" style={{ color: 'var(--text-3)' }}>Cole texto diretamente</p>
                       </div>
                     </button>
 
                     <button
                       onClick={() => setAddType('products')}
-                      className="flex flex-col items-center gap-3 p-6 bg-gray-50 border border-gray-200 rounded-xl hover:bg-white hover:border-orange-500/30 transition-all group"
+                      className="selcard"
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 24 }}
                     >
-                      <div className="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <ShoppingBag className="w-6 h-6 text-orange-400" />
+                      <div className="act-ico" style={{ width: 48, height: 48, background: 'var(--brand-tint)', color: 'var(--brand)' }}>
+                        <ShoppingBag className="w-6 h-6" />
                       </div>
                       <div className="text-center">
-                        <p className="text-gray-900 font-medium">Produtos</p>
-                        <p className="text-xs text-gray-400">Via integração</p>
+                        <p className="font-medium" style={{ color: 'var(--text)' }}>Produtos</p>
+                        <p className="text-xs" style={{ color: 'var(--text-3)' }}>Via integração</p>
                       </div>
                     </button>
                   </div>
@@ -472,18 +468,18 @@ export default function SourcesTab({
                   /* URL Form */
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-2">URL do site</label>
+                      <label className="label">URL do site</label>
                       <input
                         type="url"
                         value={urlInput}
                         onChange={(e) => setUrlInput(e.target.value)}
                         placeholder="https://exemplo.com/pagina"
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-blue-500/50"
+                        className="field"
                       />
                     </div>
-                    <div className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg">
-                      <Info className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-gray-500">
+                    <div className="callout">
+                      <Info className="w-4 h-4 flex-shrink-0" />
+                      <p>
                         O sistema irá crawlear até 100 páginas a partir desta URL.
                         Certifique-se de que o site é público e acessível.
                       </p>
@@ -491,14 +487,14 @@ export default function SourcesTab({
                     <div className="flex gap-3">
                       <button
                         onClick={() => { setAddType(null); setUrlInput(''); }}
-                        className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
+                        className="btn btn-soft btn-block"
                       >
                         Voltar
                       </button>
                       <button
                         onClick={handleAddUrl}
                         disabled={loading || !urlInput.trim()}
-                        className="flex-1 py-2.5 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-200 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                        className="btn btn-primary btn-block"
                       >
                         {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                         Adicionar
@@ -510,11 +506,12 @@ export default function SourcesTab({
                   <div className="space-y-4">
                     <div
                       onClick={() => fileInputRef.current?.click()}
-                      className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-green-500/50 hover:bg-green-500/5 transition-all"
+                      className="kb-add"
+                      style={{ flexDirection: 'column', padding: 32 }}
                     >
-                      <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                      <p className="text-gray-900 font-medium mb-1">Clique para selecionar</p>
-                      <p className="text-sm text-gray-400">PDF, DOCX, TXT até 25MB</p>
+                      <Upload className="w-12 h-12 mb-3" style={{ color: 'var(--text-4)' }} />
+                      <p className="font-medium mb-1" style={{ color: 'var(--text)' }}>Clique para selecionar</p>
+                      <p className="text-sm" style={{ color: 'var(--text-3)' }}>PDF, DOCX, TXT até 25MB</p>
                     </div>
                     <input
                       ref={fileInputRef}
@@ -524,14 +521,14 @@ export default function SourcesTab({
                       className="hidden"
                     />
                     {loading && (
-                      <div className="flex items-center justify-center gap-2 text-gray-500">
+                      <div className="flex items-center justify-center gap-2" style={{ color: 'var(--text-3)' }}>
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span className="text-sm">Enviando arquivo...</span>
                       </div>
                     )}
                     <button
                       onClick={() => setAddType(null)}
-                      className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
+                      className="btn btn-soft btn-block"
                     >
                       Voltar
                     </button>
@@ -540,36 +537,37 @@ export default function SourcesTab({
                   /* Text Form */
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-2">Nome da fonte</label>
+                      <label className="label">Nome da fonte</label>
                       <input
                         type="text"
                         value={textName}
                         onChange={(e) => setTextName(e.target.value)}
                         placeholder="Ex: FAQ, Políticas, Informações gerais"
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:border-purple-500/50"
+                        className="field"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-2">Conteúdo</label>
+                      <label className="label">Conteúdo</label>
                       <textarea
                         value={textContent}
                         onChange={(e) => setTextContent(e.target.value.slice(0, 10000))}
                         placeholder="Cole aqui as informações que o agente deve conhecer..."
-                        className="w-full h-40 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-white placeholder:text-gray-400 resize-none focus:outline-none focus:border-purple-500/50"
+                        className="field"
+                        style={{ minHeight: 160 }}
                       />
-                      <p className="text-xs text-gray-400 mt-1 text-right">{textContent.length}/10000</p>
+                      <p className="hint text-right">{textContent.length}/10000</p>
                     </div>
                     <div className="flex gap-3">
                       <button
                         onClick={() => { setAddType(null); setTextName(''); setTextContent(''); }}
-                        className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
+                        className="btn btn-soft btn-block"
                       >
                         Voltar
                       </button>
                       <button
                         onClick={handleAddText}
                         disabled={loading || !textName.trim() || !textContent.trim()}
-                        className="flex-1 py-2.5 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-200 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                        className="btn btn-primary btn-block"
                       >
                         {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                         Adicionar
@@ -580,16 +578,16 @@ export default function SourcesTab({
                   /* Products Info */
                   <div className="space-y-4">
                     <div className="text-center py-6">
-                      <ShoppingBag className="w-12 h-12 text-orange-400 mx-auto mb-3" />
-                      <h4 className="text-gray-900 font-medium mb-2">Sincronizar Produtos</h4>
-                      <p className="text-sm text-gray-500 mb-4">
+                      <ShoppingBag className="w-12 h-12 mx-auto mb-3" style={{ color: 'var(--brand)' }} />
+                      <h4 className="font-medium mb-2" style={{ color: 'var(--text)' }}>Sincronizar Produtos</h4>
+                      <p className="text-sm mb-4" style={{ color: 'var(--text-3)' }}>
                         Configure uma integração na aba "Integrações" para sincronizar
                         automaticamente os produtos da sua loja.
                       </p>
                     </div>
                     <button
                       onClick={() => setAddType(null)}
-                      className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
+                      className="btn btn-soft btn-block"
                     >
                       Voltar
                     </button>

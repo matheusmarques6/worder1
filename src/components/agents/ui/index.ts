@@ -7,5 +7,6 @@ export {
   Toggle,
   SegmentedControl,
   Stepper,
+  AccordionItem,
 } from './primitives'
 export type { SegmentOption, StepItem } from './primitives'

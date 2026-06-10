@@ -7,16 +7,14 @@ import {
   ShoppingBag,
   RefreshCw,
   CheckCircle,
-  AlertCircle,
   Loader2,
-  ExternalLink,
-  Settings,
   Trash2,
   Plus,
   Package,
   Clock,
   DollarSign,
   Sparkles,
+  X,
 } from 'lucide-react'
 import { AgentIntegration } from '@/lib/ai/types'
 
@@ -196,23 +194,23 @@ export default function IntegrationsTab({
   const availableToConnect = availableIntegrations.filter(i => !connectedIds.includes(i.id))
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="editor-content-inner space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
-            <Plug className="w-5 h-5 text-green-400" />
+        <div className="sec-head">
+          <div className="sec-ico">
+            <Plug />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Integrações</h3>
-            <p className="text-sm text-gray-500">Conecte dados de e-commerce ao agente</p>
+            <h3 className="sec-t">Integrações</h3>
+            <p className="sec-s">Conecte dados de e-commerce ao agente</p>
           </div>
         </div>
 
         {availableToConnect.length > 0 && (
           <button
             onClick={() => setShowConnectModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium transition-colors"
+            className="btn btn-primary"
           >
             <Plus className="w-4 h-4" />
             Conectar
@@ -223,30 +221,31 @@ export default function IntegrationsTab({
       {/* Loading */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 text-brand-600 animate-spin" />
+          <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--brand)' }} />
         </div>
       ) : integrations.length === 0 ? (
         /* Empty State */
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
-            <ShoppingBag className="w-8 h-8 text-gray-400" />
+        <div className="card text-center" style={{ padding: 32 }}>
+          <div className="empty-ico" style={{ margin: '0 auto 16px' }}>
+            <ShoppingBag />
           </div>
-          <h4 className="text-lg font-medium text-gray-900 mb-2">Nenhuma integração conectada</h4>
-          <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
+          <h4 className="text-lg font-medium mb-2" style={{ color: 'var(--text)' }}>Nenhuma integração conectada</h4>
+          <p className="text-sm mb-4 max-w-md mx-auto" style={{ color: 'var(--text-3)' }}>
             Conecte sua loja virtual para que o agente possa consultar produtos,
             preços e status de pedidos em tempo real.
           </p>
-          
+
           {availableIntegrations.length > 0 ? (
             <button
               onClick={() => setShowConnectModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium transition-colors"
+              className="btn btn-primary"
+              style={{ display: 'inline-flex' }}
             >
               <Plus className="w-4 h-4" />
               Conectar Integração
             </button>
           ) : (
-            <p className="text-sm text-gray-400">
+            <p className="text-sm" style={{ color: 'var(--text-3)' }}>
               Nenhuma integração disponível. Configure primeiro em Configurações → Integrações.
             </p>
           )}
@@ -263,41 +262,37 @@ export default function IntegrationsTab({
                 key={integration.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden"
+                className="card overflow-hidden"
               >
                 {/* Header */}
                 <div className="flex items-center gap-4 p-4">
-                  <div className={`w-12 h-12 rounded-xl ${typeConfig.bg} flex items-center justify-center`}>
-                    <ShoppingBag className={`w-6 h-6 ${typeConfig.color}`} />
+                  <div className="act-ico" style={{ width: 48, height: 48, background: 'var(--green-tint)', color: 'var(--green)' }}>
+                    <ShoppingBag className="w-6 h-6" />
                   </div>
 
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <h4 className="text-gray-900 font-medium">{typeConfig.name}</h4>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        integration.sync_status === 'synced' 
-                          ? 'bg-green-500/20 text-green-400' 
-                          : 'bg-yellow-500/20 text-yellow-400'
-                      }`}>
+                      <h4 className="font-medium" style={{ color: 'var(--text)' }}>{typeConfig.name}</h4>
+                      <span className={`chip ${integration.sync_status === 'synced' ? 'chip-green' : ''}`}>
                         {integration.sync_status === 'synced' ? 'Sincronizado' : 'Pendente'}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-400">{typeConfig.description}</p>
+                    <p className="text-sm" style={{ color: 'var(--text-3)' }}>{typeConfig.description}</p>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleSync(integration.id)}
                       disabled={isSyncing}
-                      className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-100 text-gray-600 hover:text-white rounded-lg transition-colors"
+                      className="btn btn-soft btn-sm"
                     >
                       <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                      <span className="text-sm">Sincronizar</span>
+                      <span>Sincronizar</span>
                     </button>
 
                     <button
                       onClick={() => handleDisconnect(integration.id)}
-                      className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      className="btn btn-soft btn-icon btn-sm"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -306,80 +301,84 @@ export default function IntegrationsTab({
 
                 {/* Stats */}
                 <div className="grid grid-cols-3 gap-4 px-4 pb-4">
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="flex items-center gap-2 text-gray-500 mb-1">
+                  <div className="rounded-lg p-3" style={{ background: 'var(--surface-2)' }}>
+                    <div className="flex items-center gap-2 mb-1" style={{ color: 'var(--text-3)' }}>
                       <Package className="w-4 h-4" />
                       <span className="text-xs">Produtos</span>
                     </div>
-                    <p className="text-lg font-semibold text-gray-900">{integration.products_synced || 0}</p>
+                    <p className="text-lg font-semibold" style={{ color: 'var(--text)' }}>{integration.products_synced || 0}</p>
                   </div>
 
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="flex items-center gap-2 text-gray-500 mb-1">
+                  <div className="rounded-lg p-3" style={{ background: 'var(--surface-2)' }}>
+                    <div className="flex items-center gap-2 mb-1" style={{ color: 'var(--text-3)' }}>
                       <Clock className="w-4 h-4" />
                       <span className="text-xs">Última Sync</span>
                     </div>
-                    <p className="text-sm text-gray-700">
-                      {integration.last_sync_at 
+                    <p className="text-sm" style={{ color: 'var(--text-2)' }}>
+                      {integration.last_sync_at
                         ? new Date(integration.last_sync_at).toLocaleDateString('pt-BR')
                         : 'Nunca'}
                     </p>
                   </div>
 
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="flex items-center gap-2 text-gray-500 mb-1">
+                  <div className="rounded-lg p-3" style={{ background: 'var(--surface-2)' }}>
+                    <div className="flex items-center gap-2 mb-1" style={{ color: 'var(--text-3)' }}>
                       <DollarSign className="w-4 h-4" />
                       <span className="text-xs">Preços</span>
                     </div>
-                    <p className="text-sm text-gray-700">
+                    <p className="text-sm" style={{ color: 'var(--text-2)' }}>
                       {integration.allow_price_info ? 'Habilitado' : 'Desabilitado'}
                     </p>
                   </div>
                 </div>
 
                 {/* Settings */}
-                <div className="border-t border-gray-200 p-4 space-y-3">
-                  <p className="text-sm font-medium text-gray-600">Permissões do Agente</p>
-                  
-                  <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <span className="text-sm text-gray-600">Sincronizar produtos automaticamente</span>
-                    <input
-                      type="checkbox"
-                      checked={integration.sync_products}
-                      onChange={(e) => handleUpdateSettings(integration.id, { sync_products: e.target.checked })}
-                      className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-green-500"
-                    />
-                  </label>
+                <div className="p-4 space-y-3" style={{ borderTop: '1px solid var(--border)' }}>
+                  <p className="label" style={{ marginBottom: 0 }}>Permissões do Agente</p>
 
-                  <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <span className="text-sm text-gray-600">Consultar pedidos do cliente</span>
-                    <input
-                      type="checkbox"
-                      checked={integration.sync_orders}
-                      onChange={(e) => handleUpdateSettings(integration.id, { sync_orders: e.target.checked })}
-                      className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-green-500"
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm" style={{ color: 'var(--text-2)' }}>Sincronizar produtos automaticamente</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={integration.sync_products}
+                      onClick={() => handleUpdateSettings(integration.id, { sync_products: !integration.sync_products })}
+                      className={`tog ${integration.sync_products ? 'on' : ''}`}
                     />
-                  </label>
+                  </div>
 
-                  <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <span className="text-sm text-gray-600">Informar preços</span>
-                    <input
-                      type="checkbox"
-                      checked={integration.allow_price_info}
-                      onChange={(e) => handleUpdateSettings(integration.id, { allow_price_info: e.target.checked })}
-                      className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-green-500"
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm" style={{ color: 'var(--text-2)' }}>Consultar pedidos do cliente</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={integration.sync_orders}
+                      onClick={() => handleUpdateSettings(integration.id, { sync_orders: !integration.sync_orders })}
+                      className={`tog ${integration.sync_orders ? 'on' : ''}`}
                     />
-                  </label>
+                  </div>
 
-                  <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <span className="text-sm text-gray-600">Informar disponibilidade de estoque</span>
-                    <input
-                      type="checkbox"
-                      checked={integration.allow_stock_info}
-                      onChange={(e) => handleUpdateSettings(integration.id, { allow_stock_info: e.target.checked })}
-                      className="w-4 h-4 rounded bg-gray-100 border-gray-300 text-green-500"
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm" style={{ color: 'var(--text-2)' }}>Informar preços</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={integration.allow_price_info}
+                      onClick={() => handleUpdateSettings(integration.id, { allow_price_info: !integration.allow_price_info })}
+                      className={`tog ${integration.allow_price_info ? 'on' : ''}`}
                     />
-                  </label>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm" style={{ color: 'var(--text-2)' }}>Informar disponibilidade de estoque</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={integration.allow_stock_info}
+                      onClick={() => handleUpdateSettings(integration.id, { allow_stock_info: !integration.allow_stock_info })}
+                      className={`tog ${integration.allow_stock_info ? 'on' : ''}`}
+                    />
+                  </div>
                 </div>
               </motion.div>
             )
@@ -388,12 +387,12 @@ export default function IntegrationsTab({
       )}
 
       {/* Info Box */}
-      <div className="bg-gradient-to-r from-green-500/10 to-blue-500/10 border border-green-500/20 rounded-xl p-4">
-        <h4 className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-green-400" />
+      <div className="callout green" style={{ flexDirection: 'column', gap: 6 }}>
+        <h4 className="text-sm font-medium flex items-center gap-2">
+          <Sparkles className="w-4 h-4" />
           O que o agente pode fazer com integrações?
         </h4>
-        <ul className="text-sm text-gray-500 space-y-1">
+        <ul className="text-sm space-y-1">
           <li>• Recomendar produtos baseado nas preferências do cliente</li>
           <li>• Informar preços e disponibilidade em tempo real</li>
           <li>• Consultar status de pedidos (quando o cliente fornece o número)</li>
@@ -408,49 +407,47 @@ export default function IntegrationsTab({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+            className="modal-overlay"
             onClick={() => setShowConnectModal(false)}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl w-full max-w-md border border-gray-200 overflow-hidden"
+              className="modal"
+              style={{ maxWidth: 440 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Conectar Integração</h3>
-                <button
-                  onClick={() => setShowConnectModal(false)}
-                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
-                >
-                  <Trash2 className="w-5 h-5" />
+              <div className="modal-head">
+                <h3 className="modal-title">Conectar Integração</h3>
+                <button onClick={() => setShowConnectModal(false)} className="modal-x">
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-4 space-y-3">
+              <div className="modal-body space-y-3">
                 {availableToConnect.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-4">
+                  <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>
                     Todas as integrações disponíveis já estão conectadas.
                   </p>
                 ) : (
                   availableToConnect.map((integration) => {
                     const typeConfig = integrationTypeConfig[integration.type]
-                    
+
                     return (
                       <button
                         key={integration.id}
                         onClick={() => handleConnect(integration)}
-                        className="w-full flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-white transition-colors text-left"
+                        className="selcard w-full flex items-center gap-4"
                       >
-                        <div className={`w-12 h-12 rounded-xl ${typeConfig.bg} flex items-center justify-center`}>
-                          <ShoppingBag className={`w-6 h-6 ${typeConfig.color}`} />
+                        <div className="act-ico" style={{ width: 48, height: 48, background: 'var(--green-tint)', color: 'var(--green)' }}>
+                          <ShoppingBag className="w-6 h-6" />
                         </div>
                         <div className="flex-1">
-                          <p className="text-gray-900 font-medium">{typeConfig.name}</p>
-                          <p className="text-sm text-gray-400">{integration.name}</p>
+                          <p className="font-medium" style={{ color: 'var(--text)' }}>{typeConfig.name}</p>
+                          <p className="text-sm" style={{ color: 'var(--text-3)' }}>{integration.name}</p>
                         </div>
-                        <CheckCircle className="w-5 h-5 text-green-400" />
+                        <CheckCircle className="w-5 h-5" style={{ color: 'var(--green)' }} />
                       </button>
                     )
                   })
