@@ -64,6 +64,10 @@ export async function GET(request: NextRequest) {
 // =====================================================
 
 export async function POST(request: NextRequest) {
+  // ✅ P1: mesmo guard do GET — rota de debug, não expor em produção
+  const blocked = assertDebugAllowed(request)
+  if (blocked) return blocked
+
   try {
     const body = await request.json()
     const { action } = body
