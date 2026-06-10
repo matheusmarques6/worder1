@@ -7,6 +7,7 @@
 
 import { Redis } from '@upstash/redis'
 
+// Key global única — assume 1 worker ativo; múltiplas réplicas: um worker vivo mascara os demais mortos.
 const HEARTBEAT_KEY = 'whatsapp:campaigns:worker:heartbeat'
 const HEARTBEAT_TTL_SECONDS = 180
 

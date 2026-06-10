@@ -349,6 +349,7 @@ export class MessageQueue {
   /**
    * Idade (ms) do job pendente mais antigo, ou null se a fila está vazia.
    * Score do sorted set = timestamp de quando o job fica elegível.
+   * Caveat: score embute priority (Date.now() - priority*1_000_000); hoje o único producer usa priority 0, então score==timestamp; revisar se priority for usado.
    */
   async getOldestPendingAgeMs(): Promise<number | null> {
     const redis = getRedis()

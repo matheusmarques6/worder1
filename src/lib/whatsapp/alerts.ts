@@ -9,10 +9,12 @@ export interface AlertParams {
   metadata?: Record<string, any>;
   organizationId?: string;
   wabaId?: string;
+  /** Quando presente, usado diretamente como dedup_key (precedência sobre o cálculo wabaId/organizationId). */
+  dedupKey?: string;
 }
 
 export async function sendAlert(params: AlertParams): Promise<void> {
-  const { severity, type, title, message, metadata, organizationId, wabaId } = params;
+  const { severity, type, title, message, metadata, organizationId, wabaId, dedupKey: explicitDedupKey } = params;
 
   // Structured event emission via wlog (Datadog/Loki friendly).
   const logFields = {
@@ -28,8 +30,9 @@ export async function sendAlert(params: AlertParams): Promise<void> {
   else if (severity === 'warning') wlog.warn('whatsapp.alert.emitted', logFields);
   else wlog.info('whatsapp.alert.emitted', logFields);
 
-  // 2. Insert into whatsapp_alerts with dedup_key (UNIQUE partial index suppresses duplicates)
-  const dedupKey = wabaId ? `${type}:${wabaId}` : organizationId ? `${type}:${organizationId}` : null;
+  // 2. Insert into whatsapp_alerts with dedup_key (UNIQUE partial index suppresses duplicates).
+  // explicitDedupKey takes precedence over the calculated wabaId/organizationId key.
+  const dedupKey = explicitDedupKey ?? (wabaId ? `${type}:${wabaId}` : organizationId ? `${type}:${organizationId}` : null);
 
   try {
     const result = await supabaseAdmin.from('whatsapp_alerts').insert({

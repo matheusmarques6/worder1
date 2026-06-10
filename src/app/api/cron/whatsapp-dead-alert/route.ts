@@ -17,6 +17,55 @@ function authorize(req: NextRequest): boolean {
   return process.env.NODE_ENV !== 'production';
 }
 
+// P0 — Saúde do campaign worker (Railway): fila com pending antigo +
+// heartbeat ausente => worker morto/travado. Chamada nos dois return paths.
+async function checkCampaignWorkerHealth(): Promise<any> {
+  let workerHealth: any = { healthy: true };
+  try {
+    const [stats, oldestPendingAgeMs, heartbeatAgeMs] = await Promise.all([
+      campaignQueue.getStats(),
+      campaignQueue.getOldestPendingAgeMs(),
+      getWorkerHeartbeatAgeMs(),
+    ]);
+    workerHealth = {
+      ...evaluateWorkerHealth({ pendingCount: stats.pending, oldestPendingAgeMs, heartbeatAgeMs }),
+      pending: stats.pending,
+      oldest_pending_age_ms: oldestPendingAgeMs,
+      heartbeat_age_ms: heartbeatAgeMs,
+    };
+
+    if (!workerHealth.healthy) {
+      console.error(`[dead-alert] Campaign worker unhealthy: ${workerHealth.reason}`);
+      await sendAlert({
+        severity: 'critical',
+        type: 'campaign_worker_stalled',
+        title: 'Campaign worker parado com fila acumulando',
+        message: workerHealth.reason,
+        dedupKey: 'campaign_worker_stalled:global',
+        metadata: {
+          pending: stats.pending,
+          oldest_pending_age_ms: oldestPendingAgeMs,
+          heartbeat_age_ms: heartbeatAgeMs,
+        },
+      }).catch(() => {});
+
+      const { error: notifErr } = await supabaseAdmin.from('notifications').insert({
+        type: 'whatsapp_campaign_worker_stalled',
+        title: 'Campaign worker parado',
+        message: workerHealth.reason,
+        severity: 'critical',
+        metadata: workerHealth,
+        created_at: new Date().toISOString(),
+      });
+      if (notifErr) console.log('[dead-alert] notification insert failed (best-effort):', notifErr.message);
+    }
+  } catch (e: any) {
+    // Redis indisponível não pode derrubar o cron de dead events
+    console.log('[dead-alert] worker health check skipped:', e?.message);
+  }
+  return workerHealth;
+}
+
 export async function GET(req: NextRequest) {
   if (!authorize(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -34,50 +83,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (!summary || summary.length === 0) {
-    // P0 — saúde do campaign worker (Railway): fila com pending antigo +
-    // heartbeat ausente => worker morto/travado.
-    let workerHealth: any = { healthy: true };
-    try {
-      const [stats, oldestPendingAgeMs, heartbeatAgeMs] = await Promise.all([
-        campaignQueue.getStats(),
-        campaignQueue.getOldestPendingAgeMs(),
-        getWorkerHeartbeatAgeMs(),
-      ]);
-      workerHealth = {
-        ...evaluateWorkerHealth({ pendingCount: stats.pending, oldestPendingAgeMs, heartbeatAgeMs }),
-        pending: stats.pending,
-        oldest_pending_age_ms: oldestPendingAgeMs,
-        heartbeat_age_ms: heartbeatAgeMs,
-      };
-
-      if (!workerHealth.healthy) {
-        console.error(`[dead-alert] Campaign worker unhealthy: ${workerHealth.reason}`);
-        await sendAlert({
-          severity: 'critical',
-          type: 'campaign_worker_stalled',
-          title: 'Campaign worker parado com fila acumulando',
-          message: workerHealth.reason,
-          metadata: {
-            pending: stats.pending,
-            oldest_pending_age_ms: oldestPendingAgeMs,
-            heartbeat_age_ms: heartbeatAgeMs,
-          },
-        }).catch(() => {});
-        try {
-          await supabaseAdmin.from('notifications').insert({
-            type: 'whatsapp_campaign_worker_stalled',
-            title: 'Campaign worker parado',
-            message: workerHealth.reason,
-            severity: 'critical',
-            metadata: workerHealth,
-            created_at: new Date().toISOString(),
-          });
-        } catch { /* tabela pode não existir — best-effort, padrão do arquivo */ }
-      }
-    } catch (e: any) {
-      // Redis indisponível não pode derrubar o cron de dead events
-      console.log('[dead-alert] worker health check skipped:', e?.message);
-    }
+    const workerHealth = await checkCampaignWorkerHealth();
     return NextResponse.json({ ok: true, dead_groups: 0, worker: workerHealth });
   }
 
@@ -125,50 +131,7 @@ export async function GET(req: NextRequest) {
     console.log('[dead-alert] Notification insert skipped:', e.message);
   }
 
-  // P0 — saúde do campaign worker (Railway): fila com pending antigo +
-  // heartbeat ausente => worker morto/travado.
-  let workerHealth: any = { healthy: true };
-  try {
-    const [stats, oldestPendingAgeMs, heartbeatAgeMs] = await Promise.all([
-      campaignQueue.getStats(),
-      campaignQueue.getOldestPendingAgeMs(),
-      getWorkerHeartbeatAgeMs(),
-    ]);
-    workerHealth = {
-      ...evaluateWorkerHealth({ pendingCount: stats.pending, oldestPendingAgeMs, heartbeatAgeMs }),
-      pending: stats.pending,
-      oldest_pending_age_ms: oldestPendingAgeMs,
-      heartbeat_age_ms: heartbeatAgeMs,
-    };
-
-    if (!workerHealth.healthy) {
-      console.error(`[dead-alert] Campaign worker unhealthy: ${workerHealth.reason}`);
-      await sendAlert({
-        severity: 'critical',
-        type: 'campaign_worker_stalled',
-        title: 'Campaign worker parado com fila acumulando',
-        message: workerHealth.reason,
-        metadata: {
-          pending: stats.pending,
-          oldest_pending_age_ms: oldestPendingAgeMs,
-          heartbeat_age_ms: heartbeatAgeMs,
-        },
-      }).catch(() => {});
-      try {
-        await supabaseAdmin.from('notifications').insert({
-          type: 'whatsapp_campaign_worker_stalled',
-          title: 'Campaign worker parado',
-          message: workerHealth.reason,
-          severity: 'critical',
-          metadata: workerHealth,
-          created_at: new Date().toISOString(),
-        });
-      } catch { /* tabela pode não existir — best-effort, padrão do arquivo */ }
-    }
-  } catch (e: any) {
-    // Redis indisponível não pode derrubar o cron de dead events
-    console.log('[dead-alert] worker health check skipped:', e?.message);
-  }
+  const workerHealth = await checkCampaignWorkerHealth();
 
   return NextResponse.json({
     ok: true,
