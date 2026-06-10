@@ -13,7 +13,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { Button, ScorePill } from '@/components/agents/ui/primitives'
-import { buildScenarioSummary, type ScenarioResult } from '@/lib/ai/test-runner'
+import { buildScenarioSummary, type ScenarioResult } from '@/lib/ai/test-run-shared'
 
 /**
  * Test-run screen (`scn` scenarios + `run-row` + `bub-flag`). Reachable from the

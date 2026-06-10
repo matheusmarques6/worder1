@@ -21,14 +21,10 @@ export const JUDGE_MODELS: Record<AIProvider, string> = {
   deepseek: 'deepseek-chat',
 }
 
-export interface JudgeFlag {
-  /** índice do turno (no transcript completo) que está sendo sinalizado */
-  turn_index: number
-  /** rótulo curto do problema (ex.: "Sem acolhimento") */
-  label: string
-  /** problema grave (rebaixa o status para 'grave') */
-  severe?: boolean
-}
+import type { JudgeFlag, TranscriptLine } from './test-run-shared'
+
+// Re-export para os consumidores server-side existentes (test-runner, evals).
+export type { JudgeFlag, TranscriptLine } from './test-run-shared'
 
 export interface JudgeVerdict {
   /** nota 0-100 */
@@ -37,13 +33,6 @@ export interface JudgeVerdict {
   note: string
   /** sinalizações por turno */
   flags: JudgeFlag[]
-}
-
-/** Linha de transcript consumida pelo juiz e pela UI. */
-export interface TranscriptLine {
-  role: 'them' | 'me'
-  text: string
-  flag?: string
 }
 
 const JUDGE_SYSTEM_PROMPT = `Você é um avaliador rigoroso e imparcial de conversas de atendimento.
