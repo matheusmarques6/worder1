@@ -77,6 +77,17 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Colunas editáveis via PATCH (allowlist anti mass-assignment).
+// organization_id / id / api_key_encrypted NUNCA aceitos diretamente.
+const PATCH_ALLOWED: ReadonlySet<string> = new Set([
+  'is_active',
+  'provider',
+  'model',
+  'system_prompt',
+  'temperature',
+  'max_tokens',
+])
+
 // PATCH - Atualizar configuracao
 export async function PATCH(request: NextRequest) {
   try {
@@ -86,7 +97,7 @@ export async function PATCH(request: NextRequest) {
     const organizationId = auth.orgId
 
     const body = await request.json()
-    const { id, ...updates } = body
+    const { id, api_key, ...rest } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -104,10 +115,27 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Config nao encontrada' }, { status: 404 })
     }
 
+    // Allowlist: aceita apenas colunas seguras do body
+    const safeUpdates: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(rest)) {
+      if (PATCH_ALLOWED.has(key)) {
+        safeUpdates[key] = value
+      }
+    }
+
+    // api_key em texto limpo → criptografar antes de persistir
+    if (typeof api_key === 'string' && api_key.trim().length > 0) {
+      safeUpdates['api_key_encrypted'] = encryptApiKey(api_key.trim())
+    }
+
+    if (Object.keys(safeUpdates).length === 0) {
+      return NextResponse.json({ error: 'Nenhum campo editavel fornecido' }, { status: 400 })
+    }
+
     const { data, error } = await supabase
       .from('whatsapp_ai_configs')
       .update({
-        ...updates,
+        ...safeUpdates,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
