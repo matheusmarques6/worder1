@@ -97,7 +97,7 @@ function AIAgentsPageInner() {
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'agents' && <AIAgentList organizationId={organizationId} />}
         {activeTab === 'reports' && <ReportsView />}
-        {activeTab === 'eval' && <EvalView />}
+        {activeTab === 'eval' && <EvalView organizationId={organizationId} />}
         {activeTab === 'knowledge' && <KnowledgeBasePanel organizationId={organizationId} />}
         {activeTab === 'api-keys' && <ApiKeysManager />}
       </div>

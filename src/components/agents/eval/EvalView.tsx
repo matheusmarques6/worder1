@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { AgentsTheme } from '@/components/agents/ui/AgentsTheme'
 import { Button, Card, ScorePill } from '@/components/agents/ui/primitives'
+import AgentSelect from '@/components/agents/ui/AgentSelect'
 import TestRunView from '@/components/agents/testrun/TestRunView'
 
 /**
@@ -95,10 +96,15 @@ function kappaTone(v: number): 'green' | 'amber' | 'red' {
   return v >= 0.8 ? 'green' : v >= 0.6 ? 'amber' : 'red'
 }
 
-export default function EvalView() {
+interface EvalViewProps {
+  organizationId: string
+}
+
+export default function EvalView({ organizationId }: EvalViewProps) {
   const [selectedVersion, setSelectedVersion] = useState<string>('v3')
   const [activeTags, setActiveTags] = useState<string[]>([])
   const [showTestRun, setShowTestRun] = useState(false)
+  const [agentId, setAgentId] = useState<string | null>(null)
 
   const toggleTag = (tag: string) =>
     setActiveTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))
@@ -110,10 +116,14 @@ export default function EvalView() {
 
   const current = MOCK_VERSIONS.find((v) => v.id === selectedVersion)
 
-  if (showTestRun) {
+  if (showTestRun && agentId) {
     return (
       <AgentsTheme className="h-full flex flex-col" style={{ background: 'var(--bg)' }}>
-        <TestRunView versionLabel={`${current?.tag} · ${current?.label}`} onBack={() => setShowTestRun(false)} />
+        <TestRunView
+          agentId={agentId}
+          organizationId={organizationId}
+          onBack={() => setShowTestRun(false)}
+        />
       </AgentsTheme>
     )
   }
@@ -131,7 +141,8 @@ export default function EvalView() {
               <h1>Avaliação</h1>
               <p>Compare versões, audite critérios e rode test-runs antes de publicar</p>
             </div>
-            <Button variant="primary" onClick={() => setShowTestRun(true)}>
+            <AgentSelect organizationId={organizationId} value={agentId} onChange={setAgentId} />
+            <Button variant="primary" onClick={() => setShowTestRun(true)} disabled={!agentId}>
               <Play />
               Rodar test-run
             </Button>
