@@ -145,6 +145,163 @@ export interface JudgeArgs {
   transcript: TranscriptLine[]
 }
 
+// =============================================
+// Juiz de CASO (Bloco F4) — avalia UMA resposta contra uma rubrica de
+// critérios, com saída JSON por-critério (pass/fail) + nota global. Reutiliza
+// o mesmo provider/modelo/temperature do juiz de transcript (ONE judge module).
+// =============================================
+
+/** Critério da rubrica passado ao juiz de caso. */
+export interface JudgeCriterion {
+  id: string
+  label: string
+  description?: string
+}
+
+/** Resultado por-critério devolvido pelo juiz de caso. */
+export interface CriterionResult {
+  id: string
+  pass: boolean
+}
+
+export interface CaseVerdict {
+  /** nota 0-100 */
+  score: number
+  /** pass quando todos os critérios passam, senão fail */
+  verdict: 'pass' | 'fail'
+  /** veredito por-critério */
+  criteria: CriterionResult[]
+  /** nota textual curta do juiz */
+  note: string
+}
+
+const JUDGE_CASE_SYSTEM_PROMPT = `Você é um avaliador rigoroso e imparcial de respostas de atendimento.
+Recebe a pergunta do cliente, a resposta do agente, (opcionalmente) a resposta esperada e uma lista numerada de critérios.
+Avalie a resposta do agente contra CADA critério.
+
+Responda APENAS com um objeto JSON válido, sem texto fora dele, sem markdown, no formato:
+{"score": <0-100>, "note": "<resumo curto em pt-BR>", "criteria": [{"id": "<id do critério>", "pass": <true|false>}]}
+
+Regras:
+- score: 0-100 (qualidade geral da resposta perante os critérios).
+- criteria: um item por critério fornecido, usando o "id" exato dado. pass=true se a resposta atende ao critério.
+- Não invente critérios nem ids. Inclua TODOS os critérios fornecidos.`
+
+/** Constrói o prompt do usuário do juiz de caso. PURO. */
+function buildCaseUserPrompt(args: {
+  input: string
+  output: string
+  expected?: string
+  criteria: JudgeCriterion[]
+}): string {
+  const crit = args.criteria
+    .map((c, i) => `[${i}] id=${c.id} — ${c.label}${c.description ? `: ${c.description}` : ''}`)
+    .join('\n')
+  return [
+    `Pergunta do cliente: ${args.input || '(vazia)'}`,
+    `Resposta do agente: ${args.output || '(vazia)'}`,
+    args.expected ? `Resposta esperada (referência): ${args.expected}` : '',
+    'Critérios a avaliar:',
+    crit,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+/**
+ * Parse defensivo da resposta do juiz de caso. PURA, exportada e testada.
+ * Reconcilia os ids contra a rubrica fornecida (critérios ausentes → fail).
+ */
+export function parseCaseJson(
+  raw: string,
+  criteria: JudgeCriterion[]
+): CaseVerdict | null {
+  if (typeof raw !== 'string') return null
+  let text = raw.trim().replace(/```(?:json)?/gi, '').trim()
+  if (!text) return null
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start === -1 || end === -1 || end <= start) return null
+  let obj: any
+  try {
+    obj = JSON.parse(text.slice(start, end + 1))
+  } catch {
+    return null
+  }
+  if (!obj || typeof obj !== 'object') return null
+  if (typeof obj.score !== 'number' || Number.isNaN(obj.score)) return null
+
+  const score = Math.max(0, Math.min(100, Math.round(obj.score)))
+  const note = typeof obj.note === 'string' ? obj.note : ''
+
+  const byId = new Map<string, boolean>()
+  if (Array.isArray(obj.criteria)) {
+    for (const c of obj.criteria) {
+      if (c && typeof c === 'object' && typeof c.id === 'string') {
+        byId.set(c.id, c.pass === true)
+      }
+    }
+  }
+  // Reconcilia contra a rubrica fornecida (ausente → fail).
+  const results: CriterionResult[] = criteria.map((c) => ({
+    id: c.id,
+    pass: byId.get(c.id) === true,
+  }))
+  const verdict: 'pass' | 'fail' = results.every((r) => r.pass) ? 'pass' : 'fail'
+  return { score, verdict, criteria: results, note }
+}
+
+export interface JudgeCaseArgs {
+  provider: AIProvider
+  apiKey: string
+  model?: string
+  input: string
+  output: string
+  expected?: string
+  criteria: JudgeCriterion[]
+}
+
+/**
+ * Avalia UMA resposta contra a rubrica com UMA chamada ao provider
+ * (temperature 0, JSON-only). Em falha de parse, devolve um veredito neutro
+ * (score 0, todos os critérios fail) para não quebrar o run.
+ */
+export async function judgeCase(args: JudgeCaseArgs): Promise<CaseVerdict> {
+  const model = args.model || JUDGE_MODELS[args.provider] || JUDGE_MODELS.openai
+
+  const response = await callAI(
+    {
+      provider: args.provider,
+      apiKey: args.apiKey,
+      model,
+      temperature: 0,
+      maxTokens: 600,
+      systemPrompt: JUDGE_CASE_SYSTEM_PROMPT,
+    },
+    [
+      {
+        role: 'user',
+        content: buildCaseUserPrompt({
+          input: args.input,
+          output: args.output,
+          expected: args.expected,
+          criteria: args.criteria,
+        }),
+      },
+    ]
+  )
+
+  const parsed = parseCaseJson(response.content, args.criteria)
+  if (parsed) return parsed
+
+  return {
+    score: 0,
+    verdict: 'fail',
+    criteria: args.criteria.map((c) => ({ id: c.id, pass: false })),
+    note: 'Não foi possível interpretar a avaliação do juiz.',
+  }
+}
+
 /**
  * Avalia um transcript com UMA chamada ao provider (cap de custo: 1 call/transcript).
  * temperature 0, rubrica JSON-only. Em falha de parse, retorna um veredito
