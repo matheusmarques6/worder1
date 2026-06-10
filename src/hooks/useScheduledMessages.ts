@@ -313,6 +313,7 @@ export function useScheduledMessages({
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          organization_id: organizationId,
           scheduled_at: new Date().toISOString(),
         }),
       })
@@ -332,7 +333,7 @@ export function useScheduledMessages({
       setError(err.message)
       return false
     }
-  }, [loadMessages])
+  }, [organizationId, loadMessages])
 
   // =============================================
   // AUTO LOAD

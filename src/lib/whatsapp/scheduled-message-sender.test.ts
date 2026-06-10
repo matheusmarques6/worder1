@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeNextOccurrence, validateScheduledSend } from './scheduled-message-sender'
+import { computeNextOccurrence, validateScheduledSend, isRecoverableFailure } from './scheduled-message-sender'
 
 describe('computeNextOccurrence', () => {
   const base = '2026-06-10T14:00:00.000Z'
@@ -21,6 +21,33 @@ describe('computeNextOccurrence', () => {
   })
   it('retorna null sem recorrência', () => {
     expect(computeNextOccurrence(base, null, null)).toBeNull()
+  })
+})
+
+describe('isRecoverableFailure', () => {
+  it('OPTED_OUT é permanente', () => {
+    expect(isRecoverableFailure('OPTED_OUT')).toBe(false)
+  })
+  it('TEMPLATE_NOT_APPROVED é permanente', () => {
+    expect(isRecoverableFailure('TEMPLATE_NOT_APPROVED')).toBe(false)
+  })
+  it('INVALID_TYPE é permanente', () => {
+    expect(isRecoverableFailure('INVALID_TYPE')).toBe(false)
+  })
+  it('META_API_ERROR é recuperável', () => {
+    expect(isRecoverableFailure('META_API_ERROR')).toBe(true)
+  })
+  it('EXPIRED é recuperável', () => {
+    expect(isRecoverableFailure('EXPIRED')).toBe(true)
+  })
+  it('WINDOW_EXPIRED é recuperável', () => {
+    expect(isRecoverableFailure('WINDOW_EXPIRED')).toBe(true)
+  })
+  it('NO_ACCOUNT é recuperável', () => {
+    expect(isRecoverableFailure('NO_ACCOUNT')).toBe(true)
+  })
+  it('código numérico da Meta (desconhecido) é recuperável por default', () => {
+    expect(isRecoverableFailure('131030')).toBe(true)
   })
 })
 

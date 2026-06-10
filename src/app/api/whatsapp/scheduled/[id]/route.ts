@@ -133,11 +133,20 @@ export async function PUT(
     if (recurrence !== undefined) updates.recurrence = recurrence;
     if (recurrence_end_date !== undefined) updates.recurrence_end_date = recurrence_end_date;
 
-    // Validar nova data se fornecida
+    // Validar nova data se fornecida.
+    // Tolerância de 5 minutos no passado: "enviar agora" define scheduled_at = now()
+    // que pode chegar alguns segundos antes da validação. Datas mais antigas que isso
+    // são rejeitadas (acúmulo acidental), EXCETO se a mensagem já estava pending e a
+    // data é >= now-5min (significa "enviar no próximo tick").
     if (scheduled_at !== undefined) {
       const scheduleDate = new Date(scheduled_at);
-      if (scheduleDate <= new Date()) {
-        return NextResponse.json({ error: 'A data de agendamento deve ser no futuro' }, { status: 400 });
+      const CLOCK_TOLERANCE_MS = 5 * 60 * 1000; // 5 minutos
+      const cutoff = new Date(Date.now() - CLOCK_TOLERANCE_MS);
+      if (scheduleDate < cutoff) {
+        return NextResponse.json(
+          { error: 'A data de agendamento está muito no passado (mais de 5 minutos). Use uma data futura ou envie agora.' },
+          { status: 400 }
+        );
       }
       updates.scheduled_at = scheduled_at;
     }

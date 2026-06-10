@@ -19,6 +19,9 @@ import { wlog } from '@/lib/observability/whatsapp-logger'
 const BATCH_LIMIT = 25            // mensagens por tick (cron roda a cada minuto)
 const STUCK_PROCESSING_MS = 10 * 60 * 1000
 const EXPIRE_AFTER_MS = 6 * 60 * 60 * 1000 // pending atrasado > 6h não envia mais
+// maxDuration é 60s no Vercel; parar aos 45s deixa as restantes em pending
+// para o próximo tick e estreita a janela de double-send pós-envio.
+export const TICK_BUDGET_MS = 45_000
 
 // ---------------------------------------------
 // Funções puras (testáveis)
@@ -98,6 +101,15 @@ export function validateScheduledSend(input: {
   return { ok: true }
 }
 
+// Códigos permanentes: a série de recorrência deve ser cancelada (falha do negócio).
+// Tudo mais (erros transitórios, API Meta, sem conta) é recuperável — pula a
+// ocorrência e reagenda.
+const PERMANENT_ERROR_CODES = new Set(['OPTED_OUT', 'TEMPLATE_NOT_APPROVED', 'INVALID_TYPE'])
+
+export function isRecoverableFailure(code: string): boolean {
+  return !PERMANENT_ERROR_CODES.has(code)
+}
+
 // ---------------------------------------------
 // Processamento
 // ---------------------------------------------
@@ -114,11 +126,13 @@ export interface ProcessScheduledResult {
 export async function processDueScheduledMessages(): Promise<ProcessScheduledResult> {
   const result: ProcessScheduledResult = { claimed: 0, sent: 0, failed: 0, rescheduled: 0, expired: 0, recovered: 0 }
   const nowIso = new Date().toISOString()
+  // Fix 2: captura o início do tick para evitar duplicados por timeout
+  const startedAt = Date.now()
 
   // 0) Crash recovery: linhas presas em 'processing' há >10min voltam pra pending
   const { data: recovered } = await supabaseAdmin
     .from('scheduled_messages')
-    .update({ status: 'pending' })
+    .update({ status: 'pending', updated_at: new Date().toISOString() }) // Fix 3: updated_at explícito
     .eq('status', 'processing')
     .lt('updated_at', new Date(Date.now() - STUCK_PROCESSING_MS).toISOString())
     .select('id')
@@ -137,24 +151,30 @@ export async function processDueScheduledMessages(): Promise<ProcessScheduledRes
   if (!due || due.length === 0) return result
 
   for (const msg of due) {
+    // Fix 2: orçamento de tempo — mensagens restantes ficam em pending para o
+    // próximo tick, evitando double-send após timeout do Vercel (maxDuration 60s).
+    if (Date.now() - startedAt > TICK_BUDGET_MS) break
+
     // 2) Claim atômico por linha (cron roda a cada minuto — duas execuções
     //    concorrentes nunca processam a mesma row).
-    const { data: claimed } = await supabaseAdmin
+    // Fix 6: select('*') para usar o estado pós-claim (edições da UI) em processOne.
+    const { data: claimedRow } = await supabaseAdmin
       .from('scheduled_messages')
-      .update({ status: 'processing' })
+      .update({ status: 'processing', updated_at: new Date().toISOString() }) // Fix 3
       .eq('id', msg.id)
       .eq('status', 'pending')
-      .select('id')
+      .select('*')
       .maybeSingle()
-    if (!claimed) continue
+    if (!claimedRow) continue
     result.claimed++
 
     try {
-      const outcome = await processOne(msg)
+      // Fix 6: passar claimedRow (estado pós-claim) em vez de msg (pré-claim)
+      const outcome = await processOne(claimedRow)
       result[outcome]++
     } catch (err: any) {
       result.failed++
-      await markFailed(msg.id, 'INTERNAL_ERROR', err?.message || 'unknown error')
+      await failOrSkip(claimedRow, 'INTERNAL_ERROR', err?.message || 'unknown error')
     }
   }
 
@@ -166,8 +186,7 @@ async function processOne(
 ): Promise<'sent' | 'failed' | 'rescheduled' | 'expired'> {
   // Expirado: agendado há horas (acúmulo pré-deploy ou cron parado).
   if (new Date(msg.scheduled_at).getTime() < Date.now() - EXPIRE_AFTER_MS) {
-    await markFailed(msg.id, 'EXPIRED', 'Agendamento expirado (mais de 6h no passado) — não enviado.')
-    return 'expired'
+    return await failOrSkip(msg, 'EXPIRED', 'Agendamento expirado (mais de 6h no passado) — não enviado.')
   }
 
   // 1) Resolver conta de envio: instance_id quando aponta pra uma
@@ -194,8 +213,7 @@ async function processOne(
     account = data
   }
   if (!account) {
-    await markFailed(msg.id, 'NO_ACCOUNT', 'Nenhuma conta WhatsApp ativa na organização.')
-    return 'failed'
+    return await failOrSkip(msg, 'NO_ACCOUNT', 'Nenhuma conta WhatsApp ativa na organização.')
   }
 
   const phone = normalizePhone(msg.phone_number)
@@ -203,14 +221,16 @@ async function processOne(
   // 2) Categoria do template (pro bypass transacional do opt-out-guard)
   let tplCategory: TemplateCategory | undefined
   let tplStatus: string | null = null
+  let tplLanguage: string = 'pt_BR'
   if (msg.message_type === 'template' && msg.template_name) {
     const { data: tpl } = await supabaseAdmin
       .from('whatsapp_templates')
-      .select('category, status')
+      .select('category, status, language') // Fix 4: incluir language
       .eq('waba_id', account.id)
       .eq('name', msg.template_name)
       .maybeSingle()
     tplStatus = tpl?.status ?? null
+    tplLanguage = tpl?.language || 'pt_BR' // Fix 4: usar language real do template
     const upper = (tpl?.category || '').toUpperCase()
     if (upper === 'MARKETING' || upper === 'UTILITY' || upper === 'AUTHENTICATION') {
       tplCategory = upper as TemplateCategory
@@ -222,8 +242,7 @@ async function processOne(
     sender: 'scheduled-message-sender',
   })
   if (!optCheck.allowed) {
-    await markFailed(msg.id, 'OPTED_OUT', 'Contato optou por não receber mensagens (opt-out).')
-    return 'failed'
+    return await failOrSkip(msg, 'OPTED_OUT', 'Contato optou por não receber mensagens (opt-out).')
   }
 
   // 4) Janela de 24h + template aprovado
@@ -244,8 +263,7 @@ async function processOne(
     templateStatus: tplStatus,
   })
   if (!validation.ok) {
-    await markFailed(msg.id, validation.errorCode!, validation.errorMessage!)
-    return 'failed'
+    return await failOrSkip(msg, validation.errorCode!, validation.errorMessage!)
   }
 
   // 5) Enviar pelo cliente cloud canônico
@@ -290,24 +308,25 @@ async function processOne(
         const components = Array.isArray(msg.template_params) && msg.template_params.length > 0
           ? [{ type: 'body', parameters: msg.template_params.map((v: any) => ({ type: 'text', text: String(v) })) }]
           : undefined
-        sendResult = await client.sendTemplate(phone, msg.template_name, 'pt_BR', components)
-        messageContent = { template: { name: msg.template_name, language: 'pt_BR', components } }
+        // Fix 4: usar o language real do template (buscado acima), não hardcoded 'pt_BR'
+        sendResult = await client.sendTemplate(phone, msg.template_name, tplLanguage, components)
+        messageContent = { template: { name: msg.template_name, language: tplLanguage, components } }
         textBody = `[Template: ${msg.template_name}]`
         break
       }
       default:
-        await markFailed(msg.id, 'INVALID_TYPE', `Tipo de mensagem não suportado: ${msg.message_type}`)
-        return 'failed'
+        return await failOrSkip(msg, 'INVALID_TYPE', `Tipo de mensagem não suportado: ${msg.message_type}`)
     }
   } catch (apiError: any) {
-    await markFailed(msg.id, apiError?.code?.toString() || 'META_API_ERROR', apiError?.message || 'Falha no envio')
+    const errCode = apiError?.code?.toString() || 'META_API_ERROR'
+    const errMsg = apiError?.message || 'Falha no envio'
     wlog.error('whatsapp.scheduled.send_error', {
       scheduled_message_id: msg.id,
       organization_id: msg.organization_id,
-      code: apiError?.code,
-      error: apiError?.message,
+      code: errCode,
+      error: errMsg,
     })
-    return 'failed'
+    return await failOrSkip(msg, errCode, errMsg)
   }
 
   const metaMessageId = sendResult?.messages?.[0]?.id || null
@@ -356,6 +375,7 @@ async function processOne(
         message_id: metaMessageId,
         error_message: null,
         error_code: null,
+        updated_at: new Date().toISOString(), // Fix 3
       })
       .eq('id', msg.id)
     wlog.info('whatsapp.scheduled.sent_rescheduled', {
@@ -372,6 +392,7 @@ async function processOne(
       message_id: metaMessageId,
       error_message: null,
       error_code: null,
+      updated_at: new Date().toISOString(), // Fix 3
     })
     .eq('id', msg.id)
   wlog.info('whatsapp.scheduled.sent', { scheduled_message_id: msg.id, meta_message_id: metaMessageId })
@@ -381,7 +402,48 @@ async function processOne(
 async function markFailed(id: string, code: string, message: string): Promise<void> {
   await supabaseAdmin
     .from('scheduled_messages')
-    .update({ status: 'failed', error_code: code, error_message: message })
+    .update({
+      status: 'failed',
+      error_code: code,
+      error_message: message,
+      updated_at: new Date().toISOString(), // Fix 3
+    })
     .eq('id', id)
   wlog.warn('whatsapp.scheduled.failed', { scheduled_message_id: id, error_code: code })
+}
+
+// Fix 5: Para mensagens COM recorrência e falhas RECUPERÁVEIS, pula a ocorrência
+// e reagenda; para falhas PERMANENTES ou sem recorrência, comportamento atual (failed).
+async function failOrSkip(
+  msg: any,
+  code: string,
+  message: string,
+): Promise<'failed' | 'rescheduled' | 'expired'> {
+  const outcome = (code === 'EXPIRED') ? 'expired' : 'failed'
+
+  if (msg.recurrence && isRecoverableFailure(code)) {
+    const next = computeNextOccurrence(msg.scheduled_at, msg.recurrence, msg.recurrence_end_date)
+    if (next) {
+      await supabaseAdmin
+        .from('scheduled_messages')
+        .update({
+          status: 'pending',
+          scheduled_at: next,
+          next_occurrence_at: next,
+          error_code: code,
+          error_message: `${message} (ocorrência pulada; reagendado)`,
+          updated_at: new Date().toISOString(), // Fix 3
+        })
+        .eq('id', msg.id)
+      wlog.warn('whatsapp.scheduled.occurrence_skipped', {
+        scheduled_message_id: msg.id,
+        error_code: code,
+        next_occurrence: next,
+      })
+      return 'rescheduled'
+    }
+  }
+
+  await markFailed(msg.id, code, message)
+  return outcome
 }
