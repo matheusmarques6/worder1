@@ -3,7 +3,7 @@ import { wlog } from '@/lib/observability/whatsapp-logger';
 
 export interface AlertParams {
   severity: 'info' | 'warning' | 'critical';
-  type: 'quality_drop' | 'frequency_cap' | 'template_rejected' | 'template_paused' | 'template_disabled' | 'account_restricted' | 'webhook_dead' | 'window_expiry_bulk' | 'low_messaging_limit';
+  type: 'quality_drop' | 'frequency_cap' | 'template_rejected' | 'template_paused' | 'template_disabled' | 'account_restricted' | 'webhook_dead' | 'window_expiry_bulk' | 'low_messaging_limit' | 'campaign_worker_stalled';
   title: string;
   message: string;
   metadata?: Record<string, any>;

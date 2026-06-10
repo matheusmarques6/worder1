@@ -8,6 +8,7 @@
 
 import { campaignProcessor } from '../src/lib/whatsapp/campaign-processor'
 import { campaignQueue } from '../src/lib/whatsapp/queue'
+import { beatWorkerHeartbeat } from '../src/lib/whatsapp/worker-heartbeat'
 
 // Configurações
 const CONFIG = {
@@ -33,6 +34,11 @@ async function main() {
 
   // Verificar variáveis de ambiente
   checkEnvVars()
+
+  // Heartbeat: o cron whatsapp-dead-alert usa pra detectar worker morto
+  // com fila acumulando.
+  await beatWorkerHeartbeat().catch((e: any) =>
+    console.warn('⚠️ heartbeat failed (ignored):', e?.message))
 
   // Setup graceful shutdown
   setupGracefulShutdown()
@@ -131,6 +137,11 @@ function setupGracefulShutdown() {
 function setupHealthCheck() {
   setInterval(async () => {
     if (isShuttingDown) return
+
+    // Heartbeat: o cron whatsapp-dead-alert usa pra detectar worker morto
+    // com fila acumulando.
+    await beatWorkerHeartbeat().catch((e: any) =>
+      console.warn('⚠️ heartbeat failed (ignored):', e?.message))
 
     const uptime = Math.round((Date.now() - startTime) / 1000)
     const memUsage = process.memoryUsage()

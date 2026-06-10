@@ -347,6 +347,20 @@ export class MessageQueue {
   }
 
   /**
+   * Idade (ms) do job pendente mais antigo, ou null se a fila está vazia.
+   * Score do sorted set = timestamp de quando o job fica elegível.
+   */
+  async getOldestPendingAgeMs(): Promise<number | null> {
+    const redis = getRedis()
+    // zrange com withScores retorna array plano intercalado [member, score, ...]
+    const entries = await redis.zrange(this.pendingKey, 0, 0, { withScores: true })
+    if (!entries || entries.length < 2) return null
+    const score = Number(entries[1])
+    if (!Number.isFinite(score)) return null
+    return Math.max(0, Date.now() - score)
+  }
+
+  /**
    * Obter jobs da DLQ
    */
   async getDLQJobs(limit: number = 100): Promise<QueueJob[]> {
