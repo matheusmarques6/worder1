@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 // ✅ FASE 1: Force dynamic para evitar cache
 export const dynamic = 'force-dynamic'
@@ -12,21 +13,16 @@ const NO_CACHE_HEADERS = {
 
 // GET - Lista números de WhatsApp
 export async function GET(request: NextRequest) {
+  // ✅ P1 v2: org do token; organization_id/organizationId da query é IGNORADO
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const { searchParams } = new URL(request.url)
-    
-    // Parâmetros obrigatórios
-    const organizationId = searchParams.get('organization_id') || searchParams.get('organizationId')
+
     const storeId = searchParams.get('store_id') || searchParams.get('storeId')
-    
-    // ✅ FASE 1: storeId OBRIGATÓRIO
-    if (!organizationId) {
-      return NextResponse.json(
-        { error: 'organization_id is required' },
-        { status: 400, headers: NO_CACHE_HEADERS }
-      )
-    }
-    
+
     if (!storeId) {
       return NextResponse.json(
         { error: 'store_id is required for multi-store isolation' },
@@ -141,10 +137,14 @@ export async function GET(request: NextRequest) {
 
 // POST - Adicionar número de WhatsApp
 export async function POST(request: NextRequest) {
+  // ✅ P1 v2: org do token; organization_id do body é IGNORADO
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const body = await request.json()
-    const { 
-      organization_id,
+    const {
       store_id,
       provider = 'meta_cloud',
       phone_number,
@@ -158,14 +158,6 @@ export async function POST(request: NextRequest) {
       instance_name,
       api_key,
     } = body
-
-    // ✅ FASE 1: Validações obrigatórias
-    if (!organization_id) {
-      return NextResponse.json(
-        { error: 'organization_id is required' },
-        { status: 400, headers: NO_CACHE_HEADERS }
-      )
-    }
 
     if (!store_id) {
       return NextResponse.json(
@@ -183,7 +175,7 @@ export async function POST(request: NextRequest) {
 
     // Dados do número
     const numberData: any = {
-      organization_id,
+      organization_id: organizationId,
       store_id,
       provider,
       phone_number: phone_number || instance_name,
@@ -211,7 +203,7 @@ export async function POST(request: NextRequest) {
     // Se a tabela não existe, usa a antiga
     if (error && error.code === '42P01') {
       const instanceData = {
-        organization_id,
+        organization_id: organizationId,
         store_id,
         instance_name: instance_name || phone_number,
         phone_number,
@@ -257,9 +249,14 @@ export async function POST(request: NextRequest) {
 
 // PATCH - Atualizar número de WhatsApp
 export async function PATCH(request: NextRequest) {
+  // ✅ P1 v2: org do token
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const body = await request.json()
-    const { id, organization_id, store_id, ...updateData } = body
+    const { id, store_id, ...updateData } = body
 
     if (!id) {
       return NextResponse.json(
@@ -268,9 +265,9 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    if (!organization_id || !store_id) {
+    if (!store_id) {
       return NextResponse.json(
-        { error: 'organization_id and store_id are required' },
+        { error: 'store_id is required' },
         { status: 400, headers: NO_CACHE_HEADERS }
       )
     }
@@ -296,7 +293,7 @@ export async function PATCH(request: NextRequest) {
       .from('whatsapp_numbers')
       .update(filtered)
       .eq('id', id)
-      .eq('organization_id', organization_id)
+      .eq('organization_id', organizationId)
       .eq('store_id', store_id)
       .select()
       .single()
@@ -307,7 +304,7 @@ export async function PATCH(request: NextRequest) {
         .from('whatsapp_instances')
         .update(filtered)
         .eq('id', id)
-        .eq('organization_id', organization_id)
+        .eq('organization_id', organizationId)
         .eq('store_id', store_id)
         .select()
         .single()
@@ -334,12 +331,16 @@ export async function PATCH(request: NextRequest) {
 
 // DELETE - Remover número de WhatsApp
 export async function DELETE(request: NextRequest) {
+  // ✅ P1 v2: org do token
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    const organizationId = searchParams.get('organization_id') || searchParams.get('organizationId')
     const storeId = searchParams.get('store_id') || searchParams.get('storeId')
-    
+
     if (!id) {
       return NextResponse.json(
         { error: 'id é obrigatório' },
@@ -347,9 +348,9 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    if (!organizationId || !storeId) {
+    if (!storeId) {
       return NextResponse.json(
-        { error: 'organization_id and store_id are required' },
+        { error: 'store_id is required' },
         { status: 400, headers: NO_CACHE_HEADERS }
       )
     }

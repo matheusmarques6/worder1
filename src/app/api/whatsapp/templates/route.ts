@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { getTemplates } from '@/lib/whatsapp/meta-api'
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // GET /api/whatsapp/templates
 export async function GET(request: NextRequest) {
+  // ✅ P1 v2: org do token; organizationId da query é IGNORADO
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
     const category = searchParams.get('category')
     const status = searchParams.get('status')
     const search = searchParams.get('search')
@@ -18,9 +23,7 @@ export async function GET(request: NextRequest) {
       .order('use_count', { ascending: false })
 
     // Filtrar por organização ou templates globais
-    if (organizationId) {
-      query = query.or(`organization_id.eq.${organizationId},organization_id.eq.00000000-0000-0000-0000-000000000000`)
-    }
+    query = query.or(`organization_id.eq.${organizationId},organization_id.eq.00000000-0000-0000-0000-000000000000`)
 
     if (category) query = query.eq('category', category)
     if (status) query = query.eq('status', status)
@@ -44,16 +47,21 @@ export async function GET(request: NextRequest) {
 
 // POST /api/whatsapp/templates - Criar template OU sincronizar da Meta
 export async function POST(request: NextRequest) {
+  // ✅ P1 v2: org do token; organizationId do body é IGNORADO
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const body = await request.json()
-    
+
     // Se action = 'sync', sincronizar da Meta
     if (body.action === 'sync') {
-      return await syncTemplatesFromMeta(body.organizationId)
+      return await syncTemplatesFromMeta(organizationId)
     }
 
     // Criar template manual
-    const { organizationId, name, category = 'MARKETING', language = 'pt_BR',
+    const { name, category = 'MARKETING', language = 'pt_BR',
       header_type, header_text, header_media_url, body_text, footer_text, buttons = [] } = body
 
     if (!name || !body_text) {
@@ -66,7 +74,7 @@ export async function POST(request: NextRequest) {
     const { data: template, error } = await supabase
       .from('whatsapp_templates')
       .insert({
-        organization_id: organizationId || '00000000-0000-0000-0000-000000000000',
+        organization_id: organizationId,
         name, category, language, status: 'PENDING',
         header_type, header_text, header_media_url, body_text, body_variables, footer_text, buttons
       })

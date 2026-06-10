@@ -12,11 +12,20 @@ import { processProductBackInStock } from '@/lib/services/whatsapp/back-in-stock
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
+/** ✅ P1 v2: verifica Bearer secret para rotas server-to-server (admin/cron) */
+function isInternalAuthorized(request: NextRequest): boolean {
+  const secret = process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET
+  if (!secret) return false
+  const auth = request.headers.get('authorization') || ''
+  return auth === `Bearer ${secret}`
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
     // Case 1: Shopify webhook payload (inventory_levels/update)
+    // Org derived from shop domain → store lookup — NOT from client body (already safe)
     if (body.inventory_item_id !== undefined) {
       const { inventory_item_id, available, location_id } = body
 
@@ -77,7 +86,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: 'processed', notified: result.data?.notified || 0 })
     }
 
-    // Case 2: Direct call (admin or cron)
+    // Case 2: Direct call (admin or cron) — ✅ P1 v2: requer Bearer secret
+    if (!isInternalAuthorized(request)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { organizationId, storeId, productId, variantId, productTitle, productUrl } = body
 
     if (!organizationId || !productId) {
@@ -125,14 +138,19 @@ export async function POST(request: NextRequest) {
  * Checks all products with active interests whose inventory > 0
  */
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
+  // ✅ P1 v2: rota de cron — requer Bearer secret (INTERNAL_API_SECRET || CRON_SECRET)
+  // ou x-cron-secret legado; organizationId da query é aceito pois só cron acessa
+  if (!isInternalAuthorized(request)) {
+    // fallback: accept legacy x-cron-secret header
     const cronSecret = request.headers.get('x-cron-secret')
-    const expectedSecret = process.env.CRON_SECRET
-
-    if (expectedSecret && cronSecret !== expectedSecret) {
+    const expectedSecret = process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET
+    if (!expectedSecret || cronSecret !== expectedSecret) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+  }
+
+  try {
+    const { searchParams } = new URL(request.url)
 
     const organizationId = searchParams.get('organizationId')
     if (!organizationId) {

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { META_BASE_URL } from '@/lib/whatsapp/api-version';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -36,16 +37,16 @@ interface QualityHistoryItem {
 // =============================================
 
 export async function GET(request: NextRequest) {
+  // ✅ P1 v2: org do token; organization_id da query é IGNORADO
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
     const action = searchParams.get('action') || 'dashboard'
     const phoneNumberId = searchParams.get('phone_number_id')
     const days = parseInt(searchParams.get('days') || '30')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
 
     switch (action) {
       case 'dashboard':
@@ -71,21 +72,22 @@ export async function GET(request: NextRequest) {
 // =============================================
 
 export async function POST(request: NextRequest) {
+  // ✅ P1 v2: org do token
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const body = await request.json()
-    const { organization_id, phone_number_id } = body
-
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
+    const { phone_number_id } = body
 
     // Se phone_number_id fornecido, verificar apenas esse
     if (phone_number_id) {
-      return checkQualityNow(organization_id, phone_number_id)
+      return checkQualityNow(organizationId, phone_number_id)
     }
 
     // Senão, verificar todas as instâncias da organização
-    return checkAllInstances(organization_id)
+    return checkAllInstances(organizationId)
   } catch (error: any) {
     console.error('Quality POST error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

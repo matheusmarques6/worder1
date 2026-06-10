@@ -6,18 +6,18 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
     const storeId = searchParams.get('storeId')
     const embed = searchParams.get('embed')
 
     if (embed) {
-      // Return embeddable widget JS
+      // ✅ P1 v2: GET com ?embed= é PÚBLICO por design — widget JS em sites de lojistas
       const widgetId = searchParams.get('id')
       if (!widgetId) {
         return new Response('// Widget ID required', { headers: { 'Content-Type': 'text/javascript' } })
@@ -43,9 +43,10 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
+    // ✅ P1 v2: dashboard requests — org do token; organizationId da query é IGNORADO
+    const auth = await requireOrgFromAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const organizationId = auth.orgId
 
     let query = supabaseAdmin
       .from('whatsapp_widget_config')
@@ -68,14 +69,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // ✅ P1 v2: org do token; organizationId da query é IGNORADO
+  const auth = await requireOrgFromAuth(request)
+  if (auth instanceof NextResponse) return auth
+  const organizationId = auth.orgId
+
   try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
-
     const body = await request.json()
     const {
       store_id,

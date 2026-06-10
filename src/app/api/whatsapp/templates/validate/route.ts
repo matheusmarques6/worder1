@@ -5,14 +5,19 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getTemplateManager, buildTemplateComponents } from '@/lib/whatsapp/template-manager'
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // POST - Validar template e variáveis
 export async function POST(request: NextRequest) {
+  // ✅ P1 v2: org do token; organization_id do body é IGNORADO
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const body = await request.json()
     const {
-      organization_id,
       template_name,
       template_language = 'pt_BR',
       variables = {},
@@ -21,17 +26,13 @@ export async function POST(request: NextRequest) {
       media_type,
     } = body
 
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
-
     if (!template_name) {
       return NextResponse.json({ error: 'template_name is required' }, { status: 400 })
     }
 
     // Usar Template Manager para validação completa
-    const templateManager = getTemplateManager(organization_id)
-    
+    const templateManager = getTemplateManager(organizationId)
+
     const validation = await templateManager.validateForCampaign(
       template_name,
       template_language,
@@ -68,31 +69,31 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Template validation error:', error)
-    return NextResponse.json({ 
-      error: error.message || 'Validation failed' 
+    return NextResponse.json({
+      error: error.message || 'Validation failed'
     }, { status: 500 })
   }
 }
 
 // GET - Extrair variáveis de um template
 export async function GET(request: NextRequest) {
+  // ✅ P1 v2: org do token; organization_id da query é IGNORADO
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
     const templateName = searchParams.get('template_name')
     const templateId = searchParams.get('template_id')
     const language = searchParams.get('language') || 'pt_BR'
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
 
     if (!templateName && !templateId) {
       return NextResponse.json({ error: 'template_name or template_id is required' }, { status: 400 })
     }
 
     const templateManager = getTemplateManager(organizationId)
-    
+
     let template
     if (templateId) {
       template = await templateManager.getTemplate(templateId)
@@ -127,8 +128,8 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Get template variables error:', error)
-    return NextResponse.json({ 
-      error: error.message || 'Failed to get template' 
+    return NextResponse.json({
+      error: error.message || 'Failed to get template'
     }, { status: 500 })
   }
 }

@@ -11,19 +11,20 @@ import {
   getContactsBySegment,
   RFM_SEGMENTS,
 } from '@/lib/services/whatsapp/rfm-service'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
+  // ✅ P1 v2: org do token; organizationId da query é IGNORADO
+  const auth = await requireOrgFromAuth(request)
+  if (auth instanceof NextResponse) return auth
+  const organizationId = auth.orgId
+
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
     const storeId = searchParams.get('storeId') || undefined
     const segment = searchParams.get('segment')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
 
     if (segment) {
       const result = await getContactsBySegment(
@@ -55,14 +56,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // ✅ P1 v2: org do token; organizationId da query é IGNORADO
+  const auth = await requireOrgFromAuth(request)
+  if (auth instanceof NextResponse) return auth
+  const organizationId = auth.orgId
+
   try {
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
     const storeId = searchParams.get('storeId') || undefined
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
-    }
 
     const result = await calculateRFM(organizationId, storeId)
     if (result.error) {
