@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
@@ -21,6 +22,11 @@ const supabase = new Proxy({} as SupabaseClient, {
 
 // GET - Buscar permissões do agente
 export async function GET(request: NextRequest) {
+  // ✅ P1 v2: org do token; organization_id/organizationId da query são IGNORADOS
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const orgId = auth.orgId;
+
   try {
     getDb();
   } catch {
@@ -29,14 +35,9 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams;
   const agentId = searchParams.get('agent_id');
-  const orgId = searchParams.get('organization_id') || searchParams.get('organizationId');
 
   if (!agentId) {
     return NextResponse.json({ error: 'agent_id is required' }, { status: 400 });
-  }
-
-  if (!orgId) {
-    return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
   }
 
   try {
@@ -88,6 +89,11 @@ export async function GET(request: NextRequest) {
 
 // POST - Criar ou atualizar permissões
 export async function POST(request: NextRequest) {
+  // ✅ P1 v2: org do token
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const orgId = auth.orgId;
+
   try {
     getDb();
   } catch {
@@ -96,15 +102,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { agent_id, organization_id, organizationId, ...permissionsData } = body;
-    const orgId = organization_id || organizationId;
+    const { agent_id, ...permissionsData } = body;
 
     if (!agent_id) {
       return NextResponse.json({ error: 'agent_id is required' }, { status: 400 });
-    }
-
-    if (!orgId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
     }
 
     // Verificar se o agente pertence à organização

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
@@ -21,6 +22,11 @@ const supabase = new Proxy({} as SupabaseClient, {
 
 // GET - List agents with status (for transfer modal, etc.)
 export async function GET(request: NextRequest) {
+  // ✅ P1 v2: org do token; organizationId/organization_id da query são IGNORADOS
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     getDb();
   } catch {
@@ -28,12 +34,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organizationId') || searchParams.get('organization_id');
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organizationId is required' }, { status: 400 });
-    }
 
     // Prefer whatsapp_agent_status (new schema) with fallback to agents/whatsapp_agents
     let agents: any[] = [];
@@ -83,6 +83,11 @@ export async function GET(request: NextRequest) {
 
 // PATCH - Atualizar status do agente
 export async function PATCH(request: NextRequest) {
+  // ✅ P1 v2: org do token
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const orgId = auth.orgId;
+
   try {
     getDb();
   } catch {
@@ -91,15 +96,10 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { agent_id, organization_id, organizationId, status } = body;
-    const orgId = organization_id || organizationId;
+    const { agent_id, status } = body;
 
     if (!agent_id) {
       return NextResponse.json({ error: 'agent_id is required' }, { status: 400 });
-    }
-
-    if (!orgId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
     }
 
     if (!status || !['online', 'offline', 'away', 'busy'].includes(status)) {

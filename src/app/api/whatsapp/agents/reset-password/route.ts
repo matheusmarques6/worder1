@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
@@ -49,6 +50,11 @@ function generateStrongPassword(length: number = 12): string {
 
 // POST - Reset password
 export async function POST(request: NextRequest) {
+  // ✅ P1 v2: org do token; reset de senha sem auth era IDOR crítico
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const orgId = auth.orgId;
+
   try {
     getDb();
   } catch {
@@ -57,18 +63,13 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { agent_id, organization_id, organizationId } = body;
-    const orgId = organization_id || organizationId;
+    const { agent_id } = body;
 
     if (!agent_id) {
       return NextResponse.json({ error: 'agent_id is required' }, { status: 400 });
     }
 
-    if (!orgId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
-    }
-
-    // Buscar agente
+    // Buscar agente (org do token, não do body)
     const { data: agent, error: agentError } = await supabase
       .from('agents')
       .select('id, user_id, type, email')

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
@@ -73,6 +74,11 @@ function generateStrongPassword(length: number = 12): string {
 
 // GET - Lista agentes
 export async function GET(request: NextRequest) {
+  // ✅ P1 v2: org do token; organization_id/organizationId da query são IGNORADOS
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const orgId = auth.orgId;
+
   try {
     getDb();
   } catch {
@@ -80,12 +86,7 @@ export async function GET(request: NextRequest) {
   }
 
   const searchParams = request.nextUrl.searchParams;
-  const orgId = searchParams.get('organization_id') || searchParams.get('organizationId');
-  const storeId = searchParams.get('store_id') || searchParams.get('storeId'); // ✅ NOVO
-  
-  if (!orgId) {
-    return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
-  }
+  const storeId = searchParams.get('store_id') || searchParams.get('storeId');
 
   try {
     const includeStats = searchParams.get('include_stats') === 'true';
@@ -190,6 +191,11 @@ export async function GET(request: NextRequest) {
 
 // POST - Criar agente ou atribuir chat
 export async function POST(request: NextRequest) {
+  // ✅ P1 v2: org do token; organization_id/organizationId do body são IGNORADOS
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const orgId = auth.orgId;
+
   try {
     getDb();
   } catch {
@@ -199,11 +205,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { action, type } = body;
-    const orgId = body.organization_id || body.organizationId;
-    
-    if (!orgId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
-    }
 
     // Ação: Atribuir chat
     if (action === 'assign') {
@@ -666,6 +667,11 @@ export async function POST(request: NextRequest) {
 
 // PATCH - Atualizar agente
 export async function PATCH(request: NextRequest) {
+  // ✅ P1 v2: org do token
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const orgId = auth.orgId;
+
   try {
     getDb();
   } catch {
@@ -674,11 +680,9 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { id, organization_id, organizationId, ...updateData } = body;
-    const orgId = organization_id || organizationId;
-    
+    const { id, ...updateData } = body;
+
     if (!id) return NextResponse.json({ error: 'Agent ID required' }, { status: 400 });
-    if (!orgId) return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
 
     const allowed = ['name', 'email', 'role', 'is_active', 'is_available', 'max_concurrent_chats', 'status', 'avatar_url'];
     const filtered: any = {};
@@ -727,6 +731,11 @@ export async function PATCH(request: NextRequest) {
 
 // DELETE - Deletar agente
 export async function DELETE(request: NextRequest) {
+  // ✅ P1 v2: org do token
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const orgId = auth.orgId;
+
   try {
     getDb();
   } catch {
@@ -736,10 +745,8 @@ export async function DELETE(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get('id');
-    const orgId = searchParams.get('organization_id') || searchParams.get('organizationId');
-    
+
     if (!id) return NextResponse.json({ error: 'Agent ID required' }, { status: 400 });
-    if (!orgId) return NextResponse.json({ error: 'organization_id is required' }, { status: 400 });
 
     // Verificar chats ativos
     const { count } = await supabase
