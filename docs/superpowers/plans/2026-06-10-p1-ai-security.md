@@ -1,24 +1,52 @@
-# P1 — AI Module Security Hardening Implementation Plan
+# P1 v2 — AI Module Security Hardening Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fechar 4 brechas de segurança do módulo de IA: IDOR via `organization_id` controlado pelo cliente nas rotas legadas de agentes, prompt injection via dados do contato no system prompt, API keys "criptografadas" em base64, e ausência de cap global de custo LLM por organização.
+**Goal:** Fechar as brechas de segurança do módulo de IA e da mesma classe no módulo WhatsApp: IDOR via `organization_id` controlado pelo cliente (rotas legadas de agentes, rota de teste de agente, rotas de mensagens agendadas, copilot/analytics de IA e demais rotas WhatsApp da mesma classe), prompt injection via dados do contato no system prompt, API keys "criptografadas" em base64, e ausência de cap global de custo LLM por organização.
 
-**Architecture:** Replicar o padrão de auth já endurecido das rotas F1–F5 (`getAuthClient()` + org derivada do token + `assertAgentInOrg`) nas rotas legadas; sanitização + delimitadores de dados no `PromptBuilder`; generalizar o AES-256-GCM de `token-encryption.ts` para um util compartilhado com leitura dual (AES → base64 legacy com re-encrypt preguiçoso); budget mensal por org em tabela `ai_budgets` com enforcement centralizado (`checkAiBudget`) antes de toda chamada LLM, erro tipado 402 nas rotas e degradação graciosa no bot (silencia + marca conversa para humano).
+**Architecture:** Org SEMPRE derivada do token do usuário, NUNCA de query/body — replicando dois padrões já existentes no repo: `getAuthClient()` (rotas F1–F5 de `api/ai/agents/[id]/**`, baseado em `cookies()`) e `requireOrgFromAuth(request)` (27+ rotas inbox, Bearer ou cookie httpOnly `sb-access-token`). Rota interna server-to-server (`process/document`) protegida por Bearer secret (mesmo estilo dos crons). Sanitização + delimitadores de dados no `PromptBuilder`; AES-256-GCM generalizado de `token-encryption.ts` para `secret-box` com leitura dual (AES → base64 legacy com re-encrypt preguiçoso); budget mensal por org em `ai_budgets` com enforcement centralizado (`checkAiBudget`) antes de toda chamada LLM, erro tipado 402 nas rotas e degradação graciosa no bot. Tasks reordenadas: IDOR explorável remotamente primeiro, infra de budget por último.
 
-**Tech Stack:** Next.js 14 (App Router, rotas em `src/app/api`), Supabase (service-role via `supabase-admin.ts`, RLS por `organization_id`), Vitest (`npx vitest run`), Node `crypto` (AES-256-GCM), migrations em `supabase/migrations/YYYYMMDD_nome.sql`.
+**Tech Stack:** Next.js 14 (App Router, rotas em `src/app/api`), Supabase (service-role via `supabase-admin.ts`, RLS por `organization_id`), Vitest (`npx vitest run`, include `src/**/*.test.ts`, alias `@` → `./src`), Node `crypto` (AES-256-GCM), migrations em `supabase/migrations/YYYYMMDD_nome.sql`.
+
+---
+
+## Revisão pós-P0 (o que mudou vs v1)
+
+Revalidação feita contra HEAD `8a378fe4` (branch `claude/debug-console-error-FWrLE`, worktree `D:\worder1-fwrle`), após merge dos 20 commits do pacote P0 de campanhas.
+
+**Confirmações (v1 continua válida sem alteração):**
+
+- `git diff 7681704a..8a378fe4 -- src/lib/ai src/app/api/ai src/lib/api-utils.ts src/lib/auth` é **VAZIO** → todas as referências de arquivo/linha da v1 em `prompt-builder.ts`, `engine.ts`, `cloud-runner.ts`, `test-runner.ts`, `evals.ts`, `proposals.ts`, `cost-tracker.ts`, rotas `api/ai/agents/[id]/*` e `api-utils.ts` permanecem EXATAS como citadas.
+- `src/app/api/whatsapp/ai/route.ts` NÃO foi tocado pelo P0 → linhas 131-132 (escrita base64), 174 e 227 (leituras) continuam válidas.
+- `src/lib/whatsapp/token-encryption.ts` (+ teste) intacto; `src/lib/auth/require-org.ts` intacto; `getAuthClient` em `src/lib/api-utils.ts` intacto.
+- O P0 ADICIONOU auth onde prometido: `whatsapp/campaigns/[id]/send` (commit `d04cab37`) e o pipeline de campanhas roda por cron com `CRON_SECRET`/`x-vercel-cron` (`api/cron/process-scheduled-messages/route.ts:16-21`) — padrão reutilizado neste plano para a rota interna `process/document`.
+
+**Atualizações obrigatórias:**
+
+1. **Migration renumerada:** a última migration agora é `20260615_whatsapp_campaign_pipeline.sql` (P0). A migration de budget da v1 (`20260615_ai_budgets.sql`) passa a ser **`20260616_ai_budgets.sql`** (Task 14).
+2. **`src/app/api/whatsapp/scheduled/[id]/route.ts` mudou no P0** (commit `022a4bd9`/`7e321351`): o PUT ganhou tolerância de 5 min no passado p/ "enviar agora" e reset `failed→pending` (l.136-157). O código completo da Task 6 deste plano **preserva essa lógica**.
+3. **`src/hooks/useScheduledMessages.ts` mudou no P0** (commit `7e321351`): update/cancel/delete agora ENVIAM `organization_id`. As rotas continuam confiando nesse valor sem auth de sessão — IDOR completo (ver Item 5 abaixo).
+
+**Tasks novas na v2 (mesma classe IDOR, achadas na revisão final do P0):**
+
+- **Task 5 (nova):** `api/ai/agents/[id]/test` (org do body, sem auth — roda o agente/LLM com a API key da org alvo; NÃO estava no mapa da v1) + `api/ai/process/document` (org do body, sem auth — rota interna server-to-server; protegida por Bearer secret, não por sessão).
+- **Task 6 (nova, detalhada):** `api/whatsapp/scheduled/route.ts` + `scheduled/[id]/route.ts` — IDOR completo em mensagens agendadas (ler/criar/editar/cancelar/deletar de outra org).
+- **Task 7 (nova):** `api/whatsapp/ai/analytics` e `api/whatsapp/ai/copilot` — na v1 eram "follow-up"; promovidas a task (copilot dispara LLM sem auth = custo + vazamento de conversa).
+- **Task 8 (nova):** lote mecânico das demais rotas WhatsApp da mesma classe (mapa completo do grep no Item 5).
+
+**Reordenação (segurança primeiro):** IDOR explorável remotamente (Tasks 1–8) → prompt injection (9–10) → API keys (11–13) → budget/infra (14–17). O conteúdo das tasks da v1 foi mantido onde válido, com renumeração: v1 T5→T9, T6→T10, T7→T11, T8→T12, T9→T13, T10→T14, T11→T15, T12→T16, T13→T17.
 
 ---
 
 ## Contexto e Análise de Impacto
 
-Tudo abaixo foi **verificado no código real** do worktree `D:\worder1-fwrle` (branch `claude/debug-console-error-FWrLE`, HEAD `7681704a`).
+Tudo abaixo foi **verificado no código real** do worktree `D:\worder1-fwrle` (HEAD `8a378fe4`).
 
-### Item 1 — IDOR: mapa completo (grep por `searchParams.get('organization_id')` + leitura de cada arquivo)
+### Item 1 — IDOR: rotas legadas de agentes (inalterado vs v1)
 
-**Padrão CORRETO a replicar** (verificado em `src/app/api/ai/agents/[id]/versions/route.ts` e `test-runs/route.ts`): `getAuthClient()` de `src/lib/api-utils.ts` → 401 se nulo → `organizationId = auth.user.organization_id` → carregar agente com `.eq('id', agentId).eq('organization_id', organizationId)` → 404 se não pertence. O `test-runs/route.ts:15-28` tem o helper local `loadAgentInOrg` que será promovido a util compartilhado.
+**Padrão CORRETO a replicar** (verificado em `src/app/api/ai/agents/[id]/versions/route.ts` e `test-runs/route.ts`): `getAuthClient()` de `src/lib/api-utils.ts` → 401 se nulo → `organizationId = auth.user.organization_id` → carregar agente com `.eq('id', agentId).eq('organization_id', organizationId)` → 404 se não pertence.
 
-**Rotas VULNERÁVEIS** (zero auth — qualquer requisição anônima com org alheia na query/body funciona, pois usam `getSupabaseAdmin()` que bypassa RLS):
+**Rotas VULNERÁVEIS** (zero auth — requisição anônima com org alheia na query/body funciona, pois usam `getSupabaseAdmin()` que bypassa RLS):
 
 | Arquivo | Handlers vulneráveis | Fonte do org |
 |---|---|---|
@@ -30,66 +58,116 @@ Tudo abaixo foi **verificado no código real** do worktree `D:\worder1-fwrle` (b
 | `src/app/api/ai/agents/[id]/sources/[sourceId]/route.ts` | GET (l.26), DELETE (l.68) | query |
 | `src/app/api/ai/agents/[id]/sources/upload/route.ts` | POST (l.42) | formData |
 | `src/app/api/ai/agents/[id]/sources/[sourceId]/reprocess/route.ts` | POST (l.26) | body |
-| `src/app/api/ai/agents/route.ts` | **POST (l.87)** — cria agente em org arbitrária sem auth (o GET já valida, l.41) | body |
+| `src/app/api/ai/agents/route.ts` | **POST (l.87)** — cria agente em org arbitrária sem auth (GET já valida, l.41) | body |
+| **`src/app/api/ai/agents/[id]/test/route.ts`** (NOVO v2) | **POST (l.30-34)** — roda o agente via `processWithAgent` com a org do body: queima API key/budget da org alvo e extrai comportamento do agente | body |
 
-**Já corrigidas (NÃO tocar):** `agents/route.ts` GET, `agents/[id]/route.ts` (todos), `annotations`, `versions`, `versions/[versionId]/rollback`, `test-runs`, `evals`, `reports`, `proposals/*`, `integrations/[integrationId]/sync`.
+**Já corrigidas (NÃO tocar):** `agents/route.ts` GET, `agents/[id]/route.ts`, `annotations`, `versions`, `versions/[versionId]/rollback`, `test-runs`, `evals`, `reports`, `proposals/*`, `integrations/[integrationId]/sync`, e também `api/ai-agents/route.ts` (verificado na v2: `getAuthClient` + 403 quando `orgParam !== organizationId`, l.8-15).
 
-**Call sites do frontend** (verificados): `AIAgentEditor.tsx` l.151/163/175 (GET sources/actions/integrations com org na query), `SourcesTab.tsx` l.180 (DELETE com query) e l.117/147/195 (POST upload/sources/reprocess com org no body/formData), `ActionsTab.tsx` l.94/120/142 (POST/PATCH com body, DELETE com query), `IntegrationsTab.tsx` l.118/142/174 (POST body, DELETE query), `KnowledgeBasePanel.tsx` l.325 (POST sources com body).
-**Decisão:** o parâmetro `organization_id` (query/body/formData) passa a ser **aceito e IGNORADO** (no-op compat). Zero mudança obrigatória no frontend → deploy sem janela de quebra; requests antigos em voo continuam funcionando. Cleanup dos call sites fica fora deste pacote (anotar como follow-up).
-**Risco residual anotado:** `auth.user.organization_id` vem de `profiles.organization_id` (org padrão). Usuários multi-org via `organization_members` perdem acesso cross-org nessas rotas — comportamento idêntico ao das rotas F1–F5 já em produção; consistente, aceito.
-**Adjacente (fora de escopo, registrar em follow-up):** `/api/whatsapp/ai/copilot/route.ts` e `/api/whatsapp/ai/analytics` têm o mesmo padrão de org na query sem auth.
+**Call sites do frontend** (verificados): `AIAgentEditor.tsx` l.151/163/175, `SourcesTab.tsx` l.117/147/180/195, `ActionsTab.tsx` l.94/120/142, `IntegrationsTab.tsx` l.118/142/174, `KnowledgeBasePanel.tsx` l.325, `AgentPreview.tsx` l.69 (`POST [id]/test`). Todos usam `fetch()` same-origin (cookie httpOnly flui sozinho).
+**Decisão:** o parâmetro `organization_id` (query/body/formData) passa a ser **aceito e IGNORADO** (no-op compat). Zero mudança obrigatória no frontend.
+**Risco residual anotado:** `auth.user.organization_id` vem de `profiles.organization_id` (org padrão). Usuários multi-org via `organization_members` perdem acesso cross-org nessas rotas — idêntico às F1–F5 em produção; aceito.
 
-### Item 2 — Prompt injection (verificado em `src/lib/ai/prompt-builder.ts`)
+**Caso especial `api/ai/process/document` (NOVO v2):** POST com org do body, sem auth (l.30-41) — mas é rota INTERNA server-to-server: os únicos callers são `fetch(baseUrl + '/api/ai/process/document')` em `sources/route.ts:175`, `sources/upload/route.ts:166` e `reprocess/route.ts:70` (fire-and-forget, sem cookies). Auth de sessão QUEBRARIA esses callers. Risco real: qualquer um na internet pode reprocessar/envenenar chunks da base de conhecimento de outra org (`file_content` arbitrário) e queimar embeddings. **Fix: Bearer secret interno** (mesmo padrão `isAuthorized` dos crons, `api/cron/process-scheduled-messages/route.ts:16-21`) + os 3 callers passam o header.
 
-Campos **controlados pelo cliente final** interpolados no system prompt: `buildContactSection` (l.230-244) — `contact.name` (l.233; no WhatsApp é o *push name* do contato = 100% controlado pelo atacante), `email`, `phone`, e `customFields` (chaves E valores). Campos controlados pela própria org (risco menor, não sanitizar): `agent.name` (l.117), `persona.role_description`, `guidelines`, `system_prompt`. RAG (`buildRAGSection` l.258 + `formatRAGAsContext` l.310) contém docs da org — risco médio (docs importados podem conter injection); ganha delimitadores, sem truncamento.
-**Decisão sobre histórico:** mensagens do histórico vão como `role: 'user'` no array de messages (l.282-300), NÃO são interpoladas no system prompt — é o canal normal do chat. Sanitizá-las mutilaria conteúdo legítimo sem eliminar o vetor. **Não sanitizar histórico**; mitigação via regra explícita no system prompt + delimitadores no bloco de dados.
-Consumidores do `PromptBuilder`: apenas `engine.ts` (l.45, l.133) → cobre webhook (`cloud-runner.ts`), simulador, test-runner indireto e rota `[id]/test`.
+### Item 2 — Prompt injection (inalterado vs v1; verificado em `src/lib/ai/prompt-builder.ts`)
 
-### Item 3 — API keys base64 (verificado)
+Campos **controlados pelo cliente final** interpolados no system prompt: `buildContactSection` (l.230-244) — `contact.name` (no WhatsApp é o *push name* = 100% controlado pelo atacante), `email`, `phone`, `customFields` (chaves E valores). Campos da própria org (risco menor, não sanitizar): `agent.name`, `persona.role_description`, `guidelines`, `system_prompt`. RAG (`buildRAGSection` l.258 + `formatRAGAsContext` l.310) ganha delimitadores, sem truncamento.
+**Decisão sobre histórico:** mensagens do histórico vão como `role: 'user'` (l.282-300), não interpoladas no system prompt — **não sanitizar**; mitigação via regra explícita + delimitadores.
+Consumidores do `PromptBuilder`: apenas `engine.ts` (l.45, l.133) → cobre webhook (`cloud-runner.ts`), simulador, test-runner e rota `[id]/test`.
 
-`Buffer.from(api_key).toString('base64')` em `src/app/api/whatsapp/ai/route.ts:132` (escrita) e decodificação base64 nas l.174 e l.227 (leitura). **Grep completo por `api_key_encrypted` em `src/`: esses 3 pontos são os ÚNICOS** — engine/webhook/F3-F5 usam outra tabela (`api_keys.api_key`, plaintext, lida em `engine.ts:466-471`, `cloud-runner.ts:182-187`, `test-runner.ts:46-57`, `evals.ts:158`, `proposals.ts:70-81` — criptografar `api_keys` é mudança maior, fica como follow-up anotado, NÃO neste pacote).
-Reuso: `src/lib/whatsapp/token-encryption.ts` (AES-256-GCM, formato `iv:tag:cipher` hex, chave via `ENCRYPTION_KEY` + scrypt) com teste `token-encryption.test.ts` e script-precedente `scripts/encrypt-whatsapp-tokens.ts`.
-**Deploy:** valores base64 antigos não têm `:`; formato AES tem exatamente 2 `:` hex → detecção determinística via `isEncryptedSecret`. Leitura dual (AES → fallback base64 + re-encrypt preguiçoso) + script de backfill idempotente. `ENCRYPTION_KEY` já é obrigatória em prod (usada pelos tokens WhatsApp).
+### Item 3 — API keys base64 (inalterado vs v1)
 
-### Item 4 — Cap global de custo (verificações críticas)
+`Buffer.from(api_key).toString('base64')` em `src/app/api/whatsapp/ai/route.ts:132` (escrita) e leituras base64 nas l.174 e l.227. **Grep por `api_key_encrypted` em `src/`: esses 3 pontos são os ÚNICOS** — engine/webhook/F3-F5 usam outra tabela (`api_keys.api_key`, plaintext — criptografar é mudança maior, segue como follow-up).
+Reuso: `src/lib/whatsapp/token-encryption.ts` (AES-256-GCM, `iv:tag:cipher` hex, `ENCRYPTION_KEY` + scrypt) com teste e script-precedente `scripts/encrypt-whatsapp-tokens.ts`.
+**Deploy:** base64 antigo não tem `:`; AES tem exatamente 2 `:` hex → detecção determinística (`isEncryptedSecret`). Leitura dual + re-encrypt preguiçoso + backfill idempotente. `ENCRYPTION_KEY` já obrigatória em prod.
 
-- Tabela `ai_usage_logs`: **existem DUAS definições históricas conflitantes** — `supabase/migrations/20260416_ai_costs_attribution.sql` (colunas `prompt_tokens`, `completion_tokens`, `cost_usd NUMERIC(10,6)`, `feature`, `total_tokens` GENERATED) e a legada `sql/ai-agents-rpc-functions.sql:368` (`input_tokens`, `output_tokens`, `estimated_cost_cents`). Ambas `CREATE TABLE IF NOT EXISTS` → o schema em prod depende de qual rodou primeiro.
-- **Bug verificado:** `engine.ts:logUsage` (l.392-410) insere `input_tokens`/`estimated_cost_cents`/`response_time_ms`/`sources_used`... — se prod tem o schema novo, **esse insert falha silenciosamente** (catch l.432) e o uso do bot do webhook NÃO é registrado → um budget baseado em `ai_usage_logs` nunca veria o maior consumidor. Correção obrigatória: `logUsage` passa a usar `trackAiUsage` (`cost-tracker.ts`, colunas corretas + pricing real) e a migration reconcilia colunas defensivamente.
-- Quem grava certo hoje: `trackAiUsage` (chamado só por `api/ai/respond/route.ts:376`). Caps locais existentes: `MAX_SCENARIOS_PER_RUN = 10` (`test-runner.ts:25`), `MAX_CASES_PER_RUN = 20` (`evals.ts:27`), `MAX_PROPOSALS/MAX_SOURCE_TRACES` (`proposals.ts:30-31`).
-- Pontos de enforcement (entradas de LLM): `engine.processMessage` (cobre webhook via `cloud-runner.ts:252`, simulador e `[id]/test`), `test-runner.runScenarios` + `generateScenarios`, `evals.runEvaluation`, `proposals.generateProposals`, e batches de embeddings (`integrations/[integrationId]/sync/route.ts:131` e `process/document/route.ts:101`).
-- `organizations.settings` não aparece nas migrations versionadas → **decisão: tabela dedicada `ai_budgets`** (mais segura que depender de coluna não versionada). Default 50 USD/mês, override por env `AI_MONTHLY_BUDGET_USD_DEFAULT`.
-- **Degradação graciosa no bot (decisão):** `cloud-runner` captura o erro tipado, NÃO derruba o atendimento — loga, seta `ai_enabled=false` + `ai_disabled_reason='ai_budget_exceeded'` na conversa (mesmo mecanismo já usado para `no_valid_api_key` l.190-197 e `transferred_to_human` l.314-321; o inbox já exibe conversas com IA desligada para humano assumir). Worker retorna 200 (padrão da rota, l.178).
-- Rotas interativas: **HTTP 402** com `code: 'AI_BUDGET_EXCEEDED'`. Visibilidade mínima: estender `GET /api/ai/usage` (já autenticado) com bloco `budget` — sem UI nova (YAGNI).
-- Embeddings: enforcement sim; *tracking* de custo de embeddings fica fora (ada-002 ≈ $0.10/1M tokens, marginal; documentado).
-- Cache do budget: in-memory por instância, TTL 60s — em serverless cada instância tem cache próprio; pior caso o estouro é detectado com ~60s de atraso por instância. Aceito (limite é guarda-corpo, não billing).
+### Item 4 — Cap global de custo (inalterado vs v1, exceto numeração da migration)
+
+- `ai_usage_logs` tem DUAS definições históricas conflitantes (`20260416_ai_costs_attribution.sql` com `prompt_tokens`/`cost_usd` vs `sql/ai-agents-rpc-functions.sql:368` com `input_tokens`/`estimated_cost_cents`).
+- **Bug verificado:** `engine.ts:logUsage` (l.392-410) insere colunas do schema legado — contra o schema novo o insert falha silencioso (catch l.432) e o consumo do bot fica invisível ao budget. Correção: `logUsage` → `trackAiUsage` (`cost-tracker.ts`) + migration reconcilia colunas.
+- Pontos de enforcement: `engine.processMessage` (webhook via `cloud-runner.ts:252`, simulador, `[id]/test`), `test-runner.generateScenarios`/`runScenarios`, `evals.runEvaluation`, `proposals.generateProposals`, batches de embeddings (`sync/route.ts:131`, `process/document/route.ts:101`).
+- Tabela dedicada **`ai_budgets`** (default 50 USD/mês, env `AI_MONTHLY_BUDGET_USD_DEFAULT`). Migration agora **`20260616_ai_budgets.sql`**.
+- **Degradação graciosa no bot:** `cloud-runner` captura o erro tipado, seta `ai_enabled=false` + `ai_disabled_reason='ai_budget_exceeded'` (mesmo mecanismo de `no_valid_api_key` l.190-197). Rotas interativas: **HTTP 402** `code: 'AI_BUDGET_EXCEEDED'`. Visibilidade: bloco `budget` em `GET /api/ai/usage`. Cache in-memory 60s por instância (guarda-corpo, não billing).
+
+### Item 5 (NOVO v2) — IDOR em `scheduled` + mapa do grep sistemático da classe
+
+**Rotas scheduled (verificadas linha a linha):**
+
+| Arquivo | Handler | Vulnerabilidade |
+|---|---|---|
+| `src/app/api/whatsapp/scheduled/route.ts` | GET (l.18-26) | lista TODAS as mensagens agendadas de qualquer org passada na query (`supabaseAdmin`, zero auth) |
+| idem | POST (l.114-115) | cria agendamento (= envia WhatsApp no futuro!) em nome de qualquer org via body |
+| `src/app/api/whatsapp/scheduled/[id]/route.ts` | GET (l.49-53), PUT (l.88-100), DELETE (l.195-200) | lê/edita/cancela/deleta agendamento de outra org — o "⚠️ SEGURANÇA" do arquivo valida o recurso contra a org **fornecida pelo atacante**, não contra o usuário |
+
+**O que o frontend envia HOJE (verificado em `src/hooks/useScheduledMessages.ts`, único caller; usado por `src/app/(dashboard)/whatsapp/scheduled/page.tsx`):** `fetch()` same-origin SEM header `Authorization` — o browser anexa automaticamente o cookie httpOnly `sb-access-token` (gravado por `/api/auth` no login). `organization_id` vai na query (GET l.128, DELETE l.240/278) e no body (POST l.162, PUT l.207/321). `requireOrgFromAuth` (`src/lib/auth/require-org.ts:40-43`) tem fallback EXATAMENTE para esse cookie → **o fix não exige nenhuma mudança no hook**; o `organization_id` enviado passa a ser ignorado (compat no-op). Única mudança de contrato: sem sessão a rota responde 401 (antes 400 por falta de param) — irrelevante, a página é dashboard autenticado.
+**O worker NÃO passa por essas rotas:** o cron `api/cron/process-scheduled-messages` chama `processDueScheduledMessages()` da lib direto (`src/lib/whatsapp/scheduled-message-sender.ts`) — auth de sessão nas rotas REST não afeta o processamento.
+
+**Grep sistemático** (`searchParams.get('organization_id')` / `organizationId` / org no body + `supabaseAdmin`/`getSupabaseAdmin` SEM `requireOrgFromAuth`/`getAuthClient`, em `src/app/api/ai/**` e `src/app/api/whatsapp/**`):
+
+*Já cobertas por tasks deste plano:* `ai/agents/[id]/{actions,integrations,sources}/**`, `ai/agents/route.ts` POST, `ai/agents/[id]/test`, `ai/process/document`, `whatsapp/ai/route.ts`, `whatsapp/ai/analytics`, `whatsapp/ai/copilot`, `whatsapp/scheduled/**`.
+
+*Achados restantes da classe — entram na Task 8 (lote mecânico):*
+
+| Rota | Handlers | Observação |
+|---|---|---|
+| `whatsapp/agents/route.ts` | 4 | gestão de agentes humanos |
+| `whatsapp/agents/status/route.ts` | 2 | aceita `organizationId` E `organization_id` |
+| `whatsapp/agents/permissions/route.ts` | 2 | idem |
+| `whatsapp/agents/reset-password/route.ts` | 1 | **reset de senha sem auth** |
+| `whatsapp/cloud/messages/route.ts` | 2 | **POST envia mensagem WhatsApp em nome de qualquer org** |
+| `whatsapp/cloud/accounts/route.ts` | 3 | contas Cloud API |
+| `whatsapp/cloud/conversations/route.ts` | 3 | conversas |
+| `whatsapp/conversations/route.ts` | 4 | usa org da query QUANDO fornecida, senão deriva do usuário — remover o ramo da query |
+| `whatsapp/campaigns/[id]/duplicate/route.ts` | 1 | duplicação de campanha |
+| `whatsapp/analytics/route.ts` | 2 | leitura cross-org |
+| `whatsapp/numbers/route.ts` | 4 | números |
+| `whatsapp/quality/route.ts` | 2 | qualidade |
+| `whatsapp/templates/route.ts` | 2 | templates |
+| `whatsapp/templates/validate/route.ts` | 2 | validação |
+| `whatsapp/queues/route.ts` + `queues/[id]/route.ts` | 2+3 | filas |
+| `whatsapp/opt-status/route.ts` | 2 | opt-in/out |
+| `whatsapp/back-in-stock/route.ts` | 2 | BIS |
+| `whatsapp/business-hours/route.ts` | 2 | horários |
+| `whatsapp/rfm/route.ts` | 2 | RFM |
+| `whatsapp/widget/route.ts` | POST apenas | **GET `?embed=` é público POR DESIGN** (JS do widget em sites de lojistas) — manter; o POST (upsert de config) ganha auth |
+
+*Falsos positivos confirmados (NÃO tocar):* `whatsapp/cloud/webhook` (verify_token + HMAC da Meta, org derivada da conta), `whatsapp/flows/data-exchange` (payload criptografado Meta, org derivada da conta), `whatsapp/cloud/embedded-signup` (org derivada do profile autenticado, l.59-71), `whatsapp/campaigns/route.ts` e `campaigns/[id]/send` (getAuthClient + membership — P0), `api/ai-agents/route.ts` (getAuthClient + 403).
+
+*Fora de escopo — registrar (outros domínios, mesma classe CANDIDATA; verificação handler a handler pendente, SEM tasks aqui):* `users`, `users/search`, `tickets/[id]`, `tickets/[id]/comments`, `tickets/stats`, `tasks/[id]`, `tasks/stats`, `sla`, `segments`, `reports`, `queue/{settings,items,agents}`, `notifications`, `notifications/preferences`, `lead-scoring`, `integrations/{tiktok,installed,google}`, `instagram/{conversations,messages,auth}`, `deal-time-tracking`, `crm/analytics`, `contacts/{export,count,[id]/attachments}`, `contact-activities`, `chat-templates`, `automations`, `analytics`, `agents/status` (raiz). Registrar como pacote P-next ("IDOR multi-domínio").
 
 ## File Structure
 
 ```
-src/lib/crypto/secret-box.ts                     [CREATE] AES-256-GCM genérico (extraído de token-encryption)
-src/lib/crypto/secret-box.test.ts                [CREATE]
-src/lib/whatsapp/token-encryption.ts             [MODIFY] delega para secret-box (API pública intacta)
 src/lib/ai/agent-access.ts                       [CREATE] assertAgentInOrg compartilhado
 src/lib/ai/__tests__/agent-access.test.ts        [CREATE]
+src/app/api/ai/agents/[id]/{actions,integrations,sources}/**  [MODIFY] auth F1-F5 (9 arquivos)
+src/app/api/ai/agents/route.ts                   [MODIFY] POST com auth
+src/app/api/ai/agents/[id]/test/route.ts         [MODIFY] auth F1-F5 (NOVO v2)
+src/app/api/ai/process/document/route.ts         [MODIFY] Bearer secret interno (NOVO v2)
+src/app/api/whatsapp/scheduled/route.ts          [MODIFY] requireOrgFromAuth (NOVO v2)
+src/app/api/whatsapp/scheduled/[id]/route.ts     [MODIFY] requireOrgFromAuth (NOVO v2)
+src/app/api/whatsapp/scheduled/scheduled-auth.test.ts [CREATE] (NOVO v2)
+src/app/api/whatsapp/ai/analytics/route.ts       [MODIFY] requireOrgFromAuth (NOVO v2)
+src/app/api/whatsapp/ai/copilot/route.ts         [MODIFY] requireOrgFromAuth (NOVO v2)
+src/app/api/whatsapp/{agents,cloud,...}/**       [MODIFY] lote mecânico requireOrgFromAuth (NOVO v2, ~21 arquivos)
 src/lib/ai/prompt-sanitizer.ts                   [CREATE] sanitizeForPrompt puro
 src/lib/ai/__tests__/prompt-sanitizer.test.ts    [CREATE]
 src/lib/ai/prompt-builder.ts                     [MODIFY] contato sanitizado + delimitadores + regra anti-injection
 src/lib/ai/__tests__/prompt-builder.test.ts      [CREATE]
+src/lib/crypto/secret-box.ts                     [CREATE] AES-256-GCM genérico
+src/lib/crypto/secret-box.test.ts                [CREATE]
+src/lib/whatsapp/token-encryption.ts             [MODIFY] delega para secret-box (API pública intacta)
 src/lib/ai/api-key-codec.ts                      [CREATE] encryptApiKey/decodeApiKey (leitura dual)
 src/lib/ai/__tests__/api-key-codec.test.ts       [CREATE]
+src/app/api/whatsapp/ai/route.ts                 [MODIFY] AES + dual-read + auth
+scripts/encrypt-ai-api-keys.ts                   [CREATE] backfill idempotente
+supabase/migrations/20260616_ai_budgets.sql      [CREATE] ai_budgets + reconciliação ai_usage_logs + RPC
 src/lib/ai/budget.ts                             [CREATE] checkAiBudget + AiBudgetExceededError + cache
 src/lib/ai/__tests__/budget.test.ts              [CREATE]
 src/lib/ai/engine.ts                             [MODIFY] checkAiBudget + logUsage→trackAiUsage
 src/lib/ai/cloud-runner.ts                       [MODIFY] degradação graciosa do bot
 src/lib/ai/test-runner.ts, evals.ts, proposals.ts [MODIFY] checkAiBudget na entrada
-src/app/api/ai/agents/[id]/{actions,integrations,sources}/**  [MODIFY] auth F1-F5 (9 arquivos)
-src/app/api/ai/agents/route.ts                   [MODIFY] POST com auth
-src/app/api/whatsapp/ai/route.ts                 [MODIFY] AES + dual-read + auth
 src/app/api/ai/usage/route.ts                    [MODIFY] bloco budget
-src/app/api/ai/agents/[id]/{test-runs,evals,proposals/generate,test}/route.ts e
-src/app/api/ai/{process/document}/..sync/route.ts [MODIFY] catch → 402
-scripts/encrypt-ai-api-keys.ts                   [CREATE] backfill idempotente
-supabase/migrations/20260615_ai_budgets.sql      [CREATE] ai_budgets + reconciliação ai_usage_logs + RPC
 ```
 
 ---
@@ -207,7 +285,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Modify: `src/app/api/ai/agents/[id]/actions/route.ts`
 - Modify: `src/app/api/ai/agents/[id]/actions/[actionId]/route.ts`
 
-Padrão para TODOS os handlers destes arquivos (e das Tasks 3–4): adicionar `getAuthClient()`, derivar org do token, validar agente via `assertAgentInOrg`, e **ignorar** `organization_id` de query/body/formData (compat no-op — frontend continua enviando sem quebrar).
+Padrão para TODOS os handlers destes arquivos (e das Tasks 3–5): adicionar `getAuthClient()`, derivar org do token, validar agente via `assertAgentInOrg`, e **ignorar** `organization_id` de query/body/formData (compat no-op — frontend continua enviando sem quebrar).
 
 - [ ] **Step 1: Reescrever `actions/route.ts`** — código completo do GET (o POST segue o mesmo cabeçalho; manter o corpo de validação/insert existente trocando `organization_id` do body pela variável `organizationId` derivada do auth):
 
@@ -276,7 +354,7 @@ No **POST** do mesmo arquivo: mesmo bloco de auth no topo; remover `organization
 
 - [ ] **Step 3: Verificar que nenhum handler de actions lê org do cliente**
 
-Run: `npx vitest run src/lib/ai/__tests__/agent-access.test.ts && grep -rn "searchParams.get('organization_id')\|body" src/app/api/ai/agents/[id]/actions --include=route.ts | grep organization_id`
+Run: `npx vitest run src/lib/ai/__tests__/agent-access.test.ts && grep -rn "searchParams.get('organization_id')\|body" "src/app/api/ai/agents/[id]/actions" --include=route.ts | grep organization_id`
 Expected: testes PASS; grep sem ocorrências de org vindo de query/body (apenas `organizationId` do auth).
 
 - [ ] **Step 4: Commit**
@@ -319,13 +397,13 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Files:**
 - Modify: `src/app/api/ai/agents/[id]/sources/route.ts` (GET l.26, POST l.76 — atenção: `processSourceAsync(source.id, organization_id)` l.153 passa a receber a org do auth)
 - Modify: `src/app/api/ai/agents/[id]/sources/[sourceId]/route.ts` (GET l.26, DELETE l.68)
-- Modify: `src/app/api/ai/agents/[id]/sources/upload/route.ts` (POST — org vem de `formData.get('organization_id')` l.42; passa a ser ignorada)
+- Modify: `src/app/api/ai/agents/[id]/sources/upload/route.ts` (POST — org de `formData.get('organization_id')` l.42; passa a ser ignorada)
 - Modify: `src/app/api/ai/agents/[id]/sources/[sourceId]/reprocess/route.ts` (POST — org do body l.26)
 - Modify: `src/app/api/ai/agents/route.ts` (POST l.80-99 — adicionar `getAuthClient()`, usar `organization_id: auth.user.organization_id` no `agentData`)
 
 - [ ] **Step 1: Aplicar o padrão da Task 2** nos 6 handlers de sources + no POST de agents. No upload, manter `formData.get('organization_id')` sem uso (ou simplesmente não ler) — o arquivo continua chegando normalmente.
 
-- [ ] **Step 2: Verificação global do item 1**
+- [ ] **Step 2: Verificação do item**
 
 Run: `grep -rn "searchParams.get('organization_id')" src/app/api/ai`
 Expected: ZERO ocorrências em rotas sem validação (o GET de `agents/route.ts:31` pode manter — já valida contra `auth.user.organization_id` na l.41).
@@ -346,7 +424,479 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 5: `sanitizeForPrompt` (prompt injection — função pura)
+### Task 5 (NOVA v2): IDOR — `[id]/test` + Bearer interno em `process/document`
+
+**Files:**
+- Modify: `src/app/api/ai/agents/[id]/test/route.ts` (POST — org do body l.30-34)
+- Modify: `src/app/api/ai/process/document/route.ts` (POST — Bearer secret interno)
+- Modify: `src/app/api/ai/agents/[id]/sources/route.ts:175`, `sources/upload/route.ts:166`, `sources/[sourceId]/reprocess/route.ts:70` (callers internos passam o header)
+
+- [ ] **Step 1: `[id]/test` — padrão F1-F5.** No topo do POST (antes de ler o body):
+
+```ts
+    // ✅ P1: org do usuário autenticado; organization_id do body é IGNORADO
+    // (compat — AgentPreview.tsx continua enviando sem quebrar).
+    const auth = await getAuthClient();
+    if (!auth) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+    const organizationId = auth.user.organization_id;
+```
+
+Remover o destructuring de `organization_id` do body (l.30) e a validação `if (!organization_id)` (l.33-35); a query do agente (l.44-49) e a chamada `processWithAgent(agentId, organizationId, ...)` (l.66) usam `organizationId` do auth. Import: `import { getAuthClient } from '@/lib/api-utils'`.
+Caller verificado: `src/components/agents/AgentPreview.tsx:69` usa `fetch()` same-origin → cookie flui, zero mudança no frontend.
+
+- [ ] **Step 2: `process/document` — Bearer interno** (NÃO usar auth de sessão: os 3 callers são server-to-server fire-and-forget sem cookies). No topo do arquivo:
+
+```ts
+// P1: rota INTERNA (chamada por sources/upload/reprocess via fetch server-side).
+// Sem proteção, qualquer um reprocessa/envenena a base de conhecimento de
+// outra org. Mesmo padrão de auth dos crons (Bearer CRON_SECRET).
+function isInternalAuthorized(request: NextRequest): boolean {
+  const secret = process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET
+  if (!secret) return process.env.NODE_ENV !== 'production'
+  return request.headers.get('authorization') === `Bearer ${secret}`
+}
+```
+
+E no início do POST:
+
+```ts
+    if (!isInternalAuthorized(request)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+```
+
+O `organization_id` do body continua sendo usado — agora o caller é confiável (as rotas de sources já derivam a org do auth após as Tasks 4).
+
+- [ ] **Step 3: Callers internos passam o header.** Nos 3 `fetch(baseUrl + '/api/ai/process/document', ...)` (`sources/route.ts:175`, `upload/route.ts:166`, `reprocess/route.ts:70`), adicionar ao `headers`:
+
+```ts
+        headers: {
+          'Content-Type': 'application/json',
+          authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
+        },
+```
+
+- [ ] **Step 4: Verificar tipos e ausência de org de cliente**
+
+Run: `npx tsc --noEmit && grep -rn "body" "src/app/api/ai/agents/[id]/test/route.ts" | grep organization_id`
+Expected: tsc sem novos erros; grep vazio.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add "src/app/api/ai/agents/[id]/test" src/app/api/ai/process/document "src/app/api/ai/agents/[id]/sources"
+git commit -m "fix(security): IDOR — [id]/test deriva org do token; process/document exige Bearer interno (P1.1)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 6 (NOVA v2): IDOR — rotas de mensagens agendadas (`whatsapp/scheduled`)
+
+**Files:**
+- Modify: `src/app/api/whatsapp/scheduled/route.ts` (GET, POST)
+- Modify: `src/app/api/whatsapp/scheduled/[id]/route.ts` (GET, PUT, DELETE)
+- Test: `src/app/api/whatsapp/scheduled/scheduled-auth.test.ts`
+
+Padrão: `requireOrgFromAuth(request)` (o mesmo das 27 rotas inbox — essas rotas recebem `NextRequest`, e o frontend autentica via cookie httpOnly `sb-access-token` que o helper lê como fonte 2). `organization_id` de query/body é aceito e IGNORADO. **Preservar a lógica P0 do PUT** (tolerância 5 min + `failed→pending`). Contrato de resposta intacto (`messages`/`stats`/`pagination`, `{ message, success }`).
+
+- [ ] **Step 1: Escrever teste que falha**
+
+```ts
+// src/app/api/whatsapp/scheduled/scheduled-auth.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { NextRequest } from 'next/server'
+
+// Builder de query chainable e awaitable
+function makeQuery(result: any) {
+  const q: any = {}
+  for (const m of ['select', 'eq', 'order', 'range', 'update', 'insert', 'delete', 'single']) {
+    q[m] = vi.fn().mockReturnValue(q)
+  }
+  q.then = (resolve: any) => Promise.resolve(result).then(resolve)
+  return q
+}
+
+const profileQuery = makeQuery({ data: { organization_id: 'org-do-token' }, error: null })
+const msgQuery = makeQuery({ data: [], error: null, count: 0 })
+
+vi.mock('@/lib/supabase-admin', () => ({
+  supabaseAdmin: {
+    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }) },
+    from: vi.fn((table: string) => (table === 'profiles' ? profileQuery : msgQuery)),
+  },
+}))
+
+import { GET } from './route'
+
+describe('GET /api/whatsapp/scheduled — auth de sessão (P1 v2)', () => {
+  beforeEach(() => {
+    msgQuery.eq.mockClear()
+  })
+
+  it('retorna 401 sem token (nem cookie nem Bearer)', async () => {
+    const req = new NextRequest('http://localhost/api/whatsapp/scheduled?organization_id=org-vitima')
+    const res = await GET(req)
+    expect(res.status).toBe(401)
+  })
+
+  it('ignora organization_id da query e usa a org do token', async () => {
+    const req = new NextRequest(
+      'http://localhost/api/whatsapp/scheduled?organization_id=org-vitima',
+      { headers: { cookie: 'sb-access-token=tok-valido' } }
+    )
+    const res = await GET(req)
+    expect(res.status).toBe(200)
+    // toda query em scheduled_messages é escopada na org DO TOKEN
+    expect(msgQuery.eq).toHaveBeenCalledWith('organization_id', 'org-do-token')
+    const orgEqCalls = msgQuery.eq.mock.calls.filter((c: any[]) => c[0] === 'organization_id')
+    expect(orgEqCalls.every((c: any[]) => c[1] === 'org-do-token')).toBe(true)
+  })
+})
+```
+
+- [ ] **Step 2: Rodar e ver falhar**
+
+Run: `npx vitest run src/app/api/whatsapp/scheduled/scheduled-auth.test.ts`
+Expected: FAIL — hoje o GET responde 400 (sem token retorna "organization_id é obrigatório"? não: responde 200 com dados da org-vitima no segundo teste; o primeiro teste falha com 200/500 em vez de 401).
+
+- [ ] **Step 3: Reescrever `scheduled/route.ts`** — código completo:
+
+```ts
+// =============================================
+// API: Scheduled Messages
+// src/app/api/whatsapp/scheduled/route.ts
+// GET - Listar mensagens agendadas
+// POST - Criar agendamento
+// =============================================
+// ✅ P1 v2: org SEMPRE derivada do token (requireOrgFromAuth);
+// organization_id de query/body é aceito e IGNORADO (compat com
+// useScheduledMessages, que continua enviando o campo).
+// =============================================
+
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
+export const dynamic = 'force-dynamic';
+
+// =============================================
+// GET - Listar mensagens agendadas
+// =============================================
+export async function GET(request: NextRequest) {
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get('status'); // pending, sent, failed, cancelled
+    const contactId = searchParams.get('contact_id');
+    const instanceId = searchParams.get('instance_id');
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const offset = parseInt(searchParams.get('offset') || '0');
+
+    let query = supabaseAdmin
+      .from('scheduled_messages')
+      .select('*', { count: 'exact' })
+      .eq('organization_id', organizationId)
+      .order('scheduled_at', { ascending: true })
+      .range(offset, offset + limit - 1);
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    if (contactId) {
+      query = query.eq('contact_id', contactId);
+    }
+
+    if (instanceId) {
+      query = query.eq('instance_id', instanceId);
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    // Contar por status
+    const { data: statusCounts } = await supabaseAdmin
+      .from('scheduled_messages')
+      .select('status')
+      .eq('organization_id', organizationId);
+
+    const stats = {
+      pending: statusCounts?.filter(s => s.status === 'pending').length || 0,
+      sent: statusCounts?.filter(s => s.status === 'sent').length || 0,
+      failed: statusCounts?.filter(s => s.status === 'failed').length || 0,
+      cancelled: statusCounts?.filter(s => s.status === 'cancelled').length || 0,
+      total: statusCounts?.length || 0,
+    };
+
+    return NextResponse.json({
+      messages: data || [],
+      stats,
+      pagination: {
+        total: count || 0,
+        limit,
+        offset,
+        hasMore: (count || 0) > offset + limit,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Scheduled GET] Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// =============================================
+// POST - Criar agendamento
+// =============================================
+export async function POST(request: NextRequest) {
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
+  try {
+    const body = await request.json();
+    const {
+      // organization_id do body é IGNORADO (P1 v2)
+      store_id,
+      instance_id,
+      instance_name,
+      contact_id,
+      conversation_id,
+      phone_number,
+      contact_name,
+      message_type = 'text',
+      content,
+      media_url,
+      media_type,
+      media_filename,
+      template_name,
+      template_params,
+      scheduled_at,
+      timezone = 'America/Sao_Paulo',
+      recurrence,
+      recurrence_end_date,
+      created_by,
+      created_by_name,
+      metadata = {},
+    } = body;
+
+    if (!phone_number) {
+      return NextResponse.json({ error: 'phone_number é obrigatório' }, { status: 400 });
+    }
+
+    if (!content) {
+      return NextResponse.json({ error: 'content é obrigatório' }, { status: 400 });
+    }
+
+    if (!scheduled_at) {
+      return NextResponse.json({ error: 'scheduled_at é obrigatório' }, { status: 400 });
+    }
+
+    // Validar data futura
+    const scheduledDate = new Date(scheduled_at);
+    if (scheduledDate <= new Date()) {
+      return NextResponse.json({
+        error: 'A data de agendamento deve ser no futuro'
+      }, { status: 400 });
+    }
+
+    // Validar recorrência
+    const validRecurrences = ['daily', 'weekly', 'monthly', null];
+    if (recurrence && !validRecurrences.includes(recurrence)) {
+      return NextResponse.json({
+        error: 'Recorrência inválida. Use: daily, weekly ou monthly'
+      }, { status: 400 });
+    }
+
+    // Criar agendamento — org do token, criador do token (fallback p/ body)
+    const { data: scheduled, error } = await supabaseAdmin
+      .from('scheduled_messages')
+      .insert({
+        organization_id: organizationId,
+        store_id,
+        instance_id,
+        instance_name,
+        contact_id,
+        conversation_id,
+        phone_number: phone_number.replace(/\D/g, ''),
+        contact_name,
+        message_type,
+        content,
+        media_url,
+        media_type,
+        media_filename,
+        template_name,
+        template_params,
+        scheduled_at,
+        timezone,
+        recurrence,
+        recurrence_end_date,
+        status: 'pending',
+        created_by: created_by || auth.userId,
+        created_by_name,
+        metadata,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    console.log('[Scheduled] Created:', scheduled.id);
+
+    return NextResponse.json({
+      message: scheduled,
+      success: true,
+    });
+  } catch (error: any) {
+    console.error('[Scheduled POST] Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+```
+
+- [ ] **Step 4: Reescrever `scheduled/[id]/route.ts`** — mesmo padrão nos 3 handlers, PRESERVANDO a lógica P0 do PUT. Mudanças exatas sobre o arquivo atual:
+  - Adicionar `import { requireOrgFromAuth } from '@/lib/auth/require-org';`
+  - Em GET/PUT/DELETE, no topo: `const auth = await requireOrgFromAuth(request); if (auth instanceof NextResponse) return auth; const organizationId = auth.orgId;`
+  - GET: remover leitura/validação de `organization_id` da query (l.48-54); a query (l.57-62) usa `organizationId` do auth.
+  - PUT: remover `organization_id` do destructuring (l.88) e a validação (l.98-101); `validateScheduledMessageAccess(params.id, organizationId)` e todas as queries usam a org do auth. **Manter intactos:** bloqueio de edição de `sent` (l.122-124), tolerância de 5 min + reset `failed→pending` (l.136-157), update com `.eq('organization_id', organizationId)`.
+  - DELETE: remover leitura/validação de `organization_id` da query (l.195-201); manter `hard` e o soft-cancel, com a org do auth.
+  - O helper `validateScheduledMessageAccess` permanece como está (agora sempre recebe a org do token).
+
+- [ ] **Step 5: Rodar e ver passar**
+
+Run: `npx vitest run src/app/api/whatsapp/scheduled/scheduled-auth.test.ts`
+Expected: PASS (2 tests)
+
+- [ ] **Step 6: Verificação de contrato com o frontend**
+
+O hook `useScheduledMessages` (único caller, verificado) usa `fetch()` same-origin sem header `Authorization` → o cookie httpOnly `sb-access-token` flui automaticamente e é a fonte 2 do `requireOrgFromAuth`. O `organization_id` que o hook envia (query no GET/DELETE, body no POST/PUT) passa a ser ignorado. Nenhuma mudança no hook é necessária.
+
+Run: `grep -rn "searchParams.get('organization_id')" src/app/api/whatsapp/scheduled`
+Expected: zero ocorrências.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/app/api/whatsapp/scheduled
+git commit -m "fix(security): IDOR — rotas de scheduled messages derivam org do token via requireOrgFromAuth (P1 v2)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 7 (NOVA v2): IDOR — `whatsapp/ai/analytics` + `whatsapp/ai/copilot`
+
+**Files:**
+- Modify: `src/app/api/whatsapp/ai/analytics/route.ts` (GET — org da query l.29-37, `supabaseAdmin`, zero auth)
+- Modify: `src/app/api/whatsapp/ai/copilot/route.ts` (POST — `organizationId` da query l.13-18; **dispara LLM** via `getCopilotSuggestion` = custo + vazamento de sugestão baseada em conversa de outra org)
+
+- [ ] **Step 1: `analytics`** — adicionar `requireOrgFromAuth`:
+
+```ts
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
+
+export async function GET(request: NextRequest) {
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId; // P1 v2: query é ignorada
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const period = (searchParams.get('period') || '7d') as DateRange;
+    // ... resto do handler inalterado, removendo a leitura/validação de
+    // organization_id da query (l.29, l.35-37)
+```
+
+- [ ] **Step 2: `copilot`** — mesmo padrão; remover leitura de `organizationId` da query (l.13-18) e usar `auth.orgId` na chamada `getCopilotSuggestion(conversationId, organizationId, lastMessage)`. Caller verificado: `src/components/whatsapp/inbox/CopilotSidebar.tsx:27` usa `fetch()` same-origin → cookie flui; o `?organizationId=` enviado passa a ser ignorado.
+
+- [ ] **Step 3: Verificar**
+
+Run: `npx tsc --noEmit && grep -rn "searchParams.get('organization_id')\|searchParams.get('organizationId')" src/app/api/whatsapp/ai`
+Expected: tsc limpo; grep zero ocorrências (a rota `whatsapp/ai/route.ts` é tratada na Task 12).
+
+Nota: a Task 12 (keys) ainda toca `whatsapp/ai/route.ts` — se este grep apontar ela, é esperado até a Task 12 concluir.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/app/api/whatsapp/ai/analytics src/app/api/whatsapp/ai/copilot
+git commit -m "fix(security): IDOR — copilot e analytics de IA derivam org do token (P1 v2)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 8 (NOVA v2): IDOR — lote mecânico das demais rotas WhatsApp
+
+**Files (21 arquivos, mapa do Item 5):**
+- Modify: `src/app/api/whatsapp/agents/route.ts`, `agents/status/route.ts`, `agents/permissions/route.ts`, `agents/reset-password/route.ts`
+- Modify: `src/app/api/whatsapp/cloud/messages/route.ts`, `cloud/accounts/route.ts`, `cloud/conversations/route.ts`
+- Modify: `src/app/api/whatsapp/conversations/route.ts`, `campaigns/[id]/duplicate/route.ts`
+- Modify: `src/app/api/whatsapp/analytics/route.ts`, `numbers/route.ts`, `quality/route.ts`, `templates/route.ts`, `templates/validate/route.ts`, `queues/route.ts`, `queues/[id]/route.ts`, `opt-status/route.ts`, `back-in-stock/route.ts`, `business-hours/route.ts`, `rfm/route.ts`, `widget/route.ts` (somente POST)
+
+Aplicação MECÂNICA do mesmo padrão em todos os handlers que leem org de query/body (`organization_id` OU `organizationId`):
+
+```ts
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
+
+// topo de cada handler:
+const auth = await requireOrgFromAuth(request);
+if (auth instanceof NextResponse) return auth;
+const organizationId = auth.orgId;
+// remover leitura/validação do org de query/body; manter os .eq('organization_id', ...)
+// existentes alimentados por organizationId do auth.
+```
+
+**Exceções e cuidados (verificados):**
+- `whatsapp/widget/route.ts`: o **GET com `?embed=`/`?id=` é PÚBLICO por design** (serve o JS do widget em sites de lojistas, resolve config por `widgetId`) — NÃO adicionar auth no GET embed. O GET de config por `organizationId` e o POST (upsert de config) ganham auth.
+- `whatsapp/conversations/route.ts`: hoje usa org da query QUANDO fornecida, senão deriva do usuário (l.26-50) — remover o ramo da query, sempre derivar.
+- `whatsapp/cloud/webhook`, `whatsapp/flows/data-exchange`, `whatsapp/cloud/embedded-signup`: **NÃO TOCAR** (auth por assinatura Meta / profile).
+- `whatsapp/agents/status` e `agents/permissions` aceitam `organizationId` E `organization_id` — ambos passam a ser ignorados.
+- Antes de alterar cada arquivo, conferir os callers (`grep -rn "<rota>" src/components src/hooks src/app --include=*.tsx --include=*.ts | grep -v src/app/api`) — todos os frontends deste repo usam `fetch()` same-origin com cookie; se algum caller for server-to-server (sem cookie), tratá-lo como `process/document` (Bearer interno) e ANOTAR no commit.
+
+- [ ] **Step 1: Grupo agents** (`agents/`, `agents/status`, `agents/permissions`, `agents/reset-password`) — aplicar padrão, rodar `npx tsc --noEmit`, commit:
+
+```bash
+git add src/app/api/whatsapp/agents
+git commit -m "fix(security): IDOR — rotas de agentes WhatsApp derivam org do token (P1 v2 lote 1)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 2: Grupo cloud + conversas + campanhas** (`cloud/messages`, `cloud/accounts`, `cloud/conversations`, `conversations`, `campaigns/[id]/duplicate`) — prioridade ao `cloud/messages` (envio de mensagem sem auth). Aplicar padrão, `npx tsc --noEmit`, commit:
+
+```bash
+git add src/app/api/whatsapp/cloud src/app/api/whatsapp/conversations "src/app/api/whatsapp/campaigns/[id]/duplicate"
+git commit -m "fix(security): IDOR — cloud messages/accounts/conversations e duplicate de campanha derivam org do token (P1 v2 lote 2)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 3: Grupo restante** (`analytics`, `numbers`, `quality`, `templates`, `templates/validate`, `queues`, `queues/[id]`, `opt-status`, `back-in-stock`, `business-hours`, `rfm`, `widget` POST) — aplicar padrão, `npx tsc --noEmit`, commit:
+
+```bash
+git add src/app/api/whatsapp
+git commit -m "fix(security): IDOR — demais rotas WhatsApp derivam org do token; widget embed segue público (P1 v2 lote 3)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 4: Verificação global da classe**
+
+Run: `grep -rln "searchParams.get('organization_id')\|searchParams.get('organizationId')" src/app/api/whatsapp src/app/api/ai | xargs grep -L "requireOrgFromAuth\|getAuthClient"`
+Expected: somente `whatsapp/cloud/webhook`, `whatsapp/flows/data-exchange` e (até a Task 12) `whatsapp/ai/route.ts` — nenhum outro arquivo.
+
+---
+
+### Task 9: `sanitizeForPrompt` (prompt injection — função pura)
 
 **Files:**
 - Create: `src/lib/ai/prompt-sanitizer.ts`
@@ -464,7 +1014,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 6: Aplicar sanitização no PromptBuilder
+### Task 10: Aplicar sanitização no PromptBuilder
 
 **Files:**
 - Modify: `src/lib/ai/prompt-builder.ts:230-263` (`buildContactSection`, `buildRAGSection`, `buildGeneralRules`)
@@ -493,8 +1043,6 @@ describe('PromptBuilder — anti prompt-injection (P1.2)', () => {
       },
     })
     // quebras de linha do nome não criam seções novas no prompt
-    // (o sanitizador NÃO remove '#'; ele colapsa quebras de linha — o que
-    // garante é que o payload não inicia uma linha/section própria)
     expect(prompt).not.toMatch(/^## NOVAS REGRAS/m)
     expect(prompt).toContain('<dados_cliente>')
     expect(prompt).toContain('</dados_cliente>')
@@ -527,7 +1075,7 @@ describe('PromptBuilder — anti prompt-injection (P1.2)', () => {
 - [ ] **Step 2: Rodar e ver falhar**
 
 Run: `npx vitest run src/lib/ai/__tests__/prompt-builder.test.ts`
-Expected: FAIL — sem `<dados_cliente>`, e `## NOVAS REGRAS` aparece em início de linha no prompt (o nome cru ainda contém quebras de linha reais).
+Expected: FAIL — sem `<dados_cliente>`, e `## NOVAS REGRAS` aparece em início de linha no prompt.
 
 - [ ] **Step 3: Implementar** — substituir `buildContactSection` (l.230-244) e `buildRAGSection` (l.258-263); acrescentar regra 8 em `buildGeneralRules`:
 
@@ -598,7 +1146,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 7: Generalizar AES-256-GCM em `secret-box`
+### Task 11: Generalizar AES-256-GCM em `secret-box`
 
 **Files:**
 - Create: `src/lib/crypto/secret-box.ts`
@@ -714,7 +1262,7 @@ export function isEncryptedToken(value: string | null | undefined): boolean {
 }
 ```
 
-> Atenção: o `isEncryptedToken` antigo aceitava `'ab:cd:12'`; o teste existente `token-encryption.test.ts` exige que `'ab:cd:gg'` seja falso e roundtrips passem — rodar a suíte para confirmar compatibilidade.
+> Atenção: o teste existente `token-encryption.test.ts` exige que `'ab:cd:gg'` seja falso e roundtrips passem — rodar a suíte para confirmar compatibilidade.
 
 - [ ] **Step 4: Rodar novos testes + regressão do WhatsApp**
 
@@ -732,12 +1280,12 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 8: API keys — codec dual-read + rota `whatsapp/ai`
+### Task 12: API keys — codec dual-read + rota `whatsapp/ai` (AES + auth)
 
 **Files:**
 - Create: `src/lib/ai/api-key-codec.ts`
 - Test: `src/lib/ai/__tests__/api-key-codec.test.ts`
-- Modify: `src/app/api/whatsapp/ai/route.ts:131-132,174,227`
+- Modify: `src/app/api/whatsapp/ai/route.ts:131-132,174,227` (linhas revalidadas no HEAD atual — arquivo não foi tocado pelo P0)
 
 - [ ] **Step 1: Teste que falha**
 
@@ -848,12 +1396,15 @@ async function readConfigApiKey(config: { id: string; api_key_encrypted: string 
 
 Nos handlers: `const apiKey = await readConfigApiKey(config);`
 
-(c) **Endurecimento adicional verificado** (mesma classe de IDOR do item 1, nesta rota): adicionar `getAuthClient()` no GET/POST/PATCH/DELETE de `/api/whatsapp/ai` e usar `auth.user.organization_id` no lugar de `organization_id` de query/body (PATCH/DELETE: validar que a config `id` pertence à org do auth antes de alterar/deletar).
+(c) **Endurecimento da mesma classe de IDOR nesta rota:** adicionar `requireOrgFromAuth(request)` no GET/POST/PATCH/DELETE de `/api/whatsapp/ai` e usar `auth.orgId` no lugar de `organization_id` de query/body (PATCH/DELETE: validar que a config `id` pertence à org do auth antes de alterar/deletar).
 
 - [ ] **Step 6: Verificar que não sobrou base64 no código**
 
 Run: `grep -rn "toString('base64')\|, 'base64')" src/app/api/whatsapp/ai/route.ts`
 Expected: zero ocorrências.
+
+Run: `grep -rln "searchParams.get('organization_id')\|searchParams.get('organizationId')" src/app/api/whatsapp src/app/api/ai | xargs grep -L "requireOrgFromAuth\|getAuthClient"`
+Expected: somente `whatsapp/cloud/webhook` e `whatsapp/flows/data-exchange` (verificação global da classe IDOR concluída).
 
 - [ ] **Step 7: Commit**
 
@@ -866,7 +1417,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 9: Script de backfill idempotente das keys
+### Task 13: Script de backfill idempotente das keys
 
 **Files:**
 - Create: `scripts/encrypt-ai-api-keys.ts` (espelha `scripts/encrypt-whatsapp-tokens.ts`)
@@ -947,12 +1498,12 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 10: Migration — `ai_budgets` + reconciliação de `ai_usage_logs`
+### Task 14: Migration — `ai_budgets` + reconciliação de `ai_usage_logs`
 
 **Files:**
-- Create: `supabase/migrations/20260615_ai_budgets.sql`
+- Create: `supabase/migrations/20260616_ai_budgets.sql` (**v2: renumerada** — o P0 ocupou `20260615_whatsapp_campaign_pipeline.sql`; novas migrations do P1 começam em 20260616)
 
-- [ ] **Step 1: Criar a migration** (data segue a última existente, `20260614_ai_prompt_proposals.sql`):
+- [ ] **Step 1: Criar a migration**
 
 ```sql
 -- =============================================
@@ -1005,7 +1556,7 @@ $$;
 - [ ] **Step 2: Commit**
 
 ```bash
-git add supabase/migrations/20260615_ai_budgets.sql
+git add supabase/migrations/20260616_ai_budgets.sql
 git commit -m "feat(ai): migration ai_budgets + reconciliação de ai_usage_logs + RPC ai_monthly_cost_usd (P1.4)
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
@@ -1013,7 +1564,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 11: `checkAiBudget` + erro tipado + cache
+### Task 15: `checkAiBudget` + erro tipado + cache
 
 **Files:**
 - Create: `src/lib/ai/budget.ts`
@@ -1216,7 +1767,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 12: Enforcement do budget em todos os consumidores + fix do tracking do engine
+### Task 16: Enforcement do budget em todos os consumidores + fix do tracking do engine
 
 **Files:**
 - Modify: `src/lib/ai/engine.ts` (l.51-60 enforcement; l.373-436 `logUsage`)
@@ -1225,6 +1776,8 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Modify: `src/lib/ai/evals.ts` (`runEvaluation` l.384)
 - Modify: `src/lib/ai/proposals.ts` (`generateProposals` l.275)
 - Modify: rotas: `[id]/test-runs/route.ts`, `[id]/evals/route.ts`, `[id]/proposals/generate/route.ts`, `[id]/test/route.ts`, `[id]/integrations/[integrationId]/sync/route.ts`, `ai/process/document/route.ts`
+
+(Todas as linhas revalidadas no HEAD atual — diff vazio em `src/lib/ai` desde a v1.)
 
 - [ ] **Step 1: Engine — enforcement no topo de `processMessage`** (engine.ts, logo após l.56 `try {`):
 
@@ -1302,7 +1855,7 @@ Manter o bloco `update_agent_stats` (l.413-430) como está.
 
 Em: `test-runner.generateScenarios` (l.137) e `test-runner.runScenarios` (l.288); `evals.runEvaluation` (l.384); `proposals.generateProposals` (l.275).
 
-- [ ] **Step 5: Rotas — mapear erro para 402.** No `catch` existente de cada rota listada (todas hoje retornam 500), acrescentar ANTES do retorno genérico:
+- [ ] **Step 5: Rotas — mapear erro para 402.** No `catch` existente de cada rota listada, acrescentar ANTES do retorno genérico:
 
 ```ts
     const { AiBudgetExceededError } = await import('@/lib/ai/budget')
@@ -1316,7 +1869,7 @@ Em: `test-runner.generateScenarios` (l.137) e `test-runner.runScenarios` (l.288)
 
 E nos dois call sites de embeddings batch, adicionar o check antes da chamada: `sync/route.ts` antes da l.131 (`generateEmbeddingsBatch`) e `process/document/route.ts` antes da l.101 — usando a org já validada na rota.
 
-**Decisão documentada:** custo de embeddings (ada-002) NÃO é gravado em `ai_usage_logs` (sem pricing na tabela do cost-tracker; custo marginal ~$0.10/1M tokens). O enforcement vale (bloqueia novos batches quando o budget de LLM estourou), o tracking fino fica como follow-up.
+**Decisão documentada:** custo de embeddings (ada-002) NÃO é gravado em `ai_usage_logs` (custo marginal ~$0.10/1M tokens). O enforcement vale (bloqueia novos batches quando o budget estourou), o tracking fino fica como follow-up.
 
 - [ ] **Step 6: Regressão completa das libs de IA**
 
@@ -1334,7 +1887,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 13: Visibilidade — budget em `GET /api/ai/usage` + verificação final
+### Task 17: Visibilidade — budget em `GET /api/ai/usage` + verificação final
 
 **Files:**
 - Modify: `src/app/api/ai/usage/route.ts` (rota já autenticada via `getAuthClient`)
@@ -1364,13 +1917,13 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - [ ] **Step 2: Verificação final completa**
 
 Run: `npx vitest run`
-Expected: TODAS as suítes PASS (incluindo `token-encryption.test.ts`, `flows-encryption.test.ts` e demais pré-existentes).
+Expected: TODAS as suítes PASS (incluindo `token-encryption.test.ts`, `flows-encryption.test.ts`, suítes do P0 — `campaign-processor`, `scheduled-message-sender`, `template-approval`, `worker-heartbeat` etc. — e as novas deste plano).
 
 Run: `npx tsc --noEmit`
 Expected: sem novos erros vs. baseline.
 
-Run: `grep -rn "searchParams.get('organization_id')" src/app/api/ai src/app/api/whatsapp/ai`
-Expected: nenhuma ocorrência sem validação contra o usuário autenticado.
+Run: `grep -rln "searchParams.get('organization_id')\|searchParams.get('organizationId')" src/app/api/whatsapp src/app/api/ai | xargs grep -L "requireOrgFromAuth\|getAuthClient"`
+Expected: somente `whatsapp/cloud/webhook` e `whatsapp/flows/data-exchange` (auth por assinatura Meta, não sessão).
 
 - [ ] **Step 3: Commit**
 
@@ -1385,25 +1938,27 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ## Checklist de deploy (operacional, fora do código)
 
-1. Rodar a migration `20260615_ai_budgets.sql` ANTES do deploy do app (colunas novas são aditivas; RPC com fallback no código).
-2. Deploy do app — chaves base64 continuam funcionando via leitura dual; requests antigos com `organization_id` na query continuam funcionando (param ignorado).
-3. Rodar `npx ts-node scripts/encrypt-ai-api-keys.ts --dry-run` e depois sem `--dry-run`.
-4. Definir limites custom: `INSERT INTO ai_budgets (organization_id, monthly_limit_usd) VALUES (...)` (default global 50 USD ou env `AI_MONTHLY_BUDGET_USD_DEFAULT`).
-5. Monitorar logs `[cloud-runner] ai_budget_exceeded` na primeira semana (conversas marcadas para humano).
+1. Rodar a migration `20260616_ai_budgets.sql` ANTES do deploy do app (colunas aditivas; RPC com fallback no código).
+2. Garantir `CRON_SECRET` definido em produção (já requerido pelos crons do P0) — agora também protege `POST /api/ai/process/document`; opcionalmente definir `INTERNAL_API_SECRET` dedicado.
+3. Deploy do app — chaves base64 continuam funcionando via leitura dual; requests antigos com `organization_id` na query/body continuam funcionando (param ignorado); o hook `useScheduledMessages` não muda.
+4. Rodar `npx ts-node scripts/encrypt-ai-api-keys.ts --dry-run` e depois sem `--dry-run`.
+5. Definir limites custom: `INSERT INTO ai_budgets (organization_id, monthly_limit_usd) VALUES (...)` (default global 50 USD ou env `AI_MONTHLY_BUDGET_USD_DEFAULT`).
+6. Monitorar na primeira semana: logs `[cloud-runner] ai_budget_exceeded` e 401s nas rotas WhatsApp recém-autenticadas (Task 8) — qualquer 401 inesperado indica caller server-to-server não mapeado.
 
 ## Follow-ups anotados (fora deste pacote)
 
+- **IDOR multi-domínio (P-next):** verificação handler a handler e correção das rotas candidatas listadas em "fora de escopo — registrar" (users, tickets, tasks, sla, segments, reports, queue, notifications, lead-scoring, integrations, instagram, deal-time-tracking, crm, contacts, contact-activities, chat-templates, automations, analytics, agents/status raiz).
 - Criptografar `api_keys.api_key` (plaintext, lido por engine/cloud-runner/test-runner/evals/proposals) com o mesmo `secret-box`.
-- IDOR em `/api/whatsapp/ai/copilot` e `/api/whatsapp/ai/analytics`.
-- Remover `organization_id` dos call sites do frontend (no-op hoje).
+- Remover `organization_id` dos call sites do frontend (no-op hoje), incluindo `useScheduledMessages` e `CopilotSidebar`.
 - Tracking de custo de embeddings em `ai_usage_logs`.
+- Multi-org real (via `organization_members`) nas rotas endurecidas, se houver demanda — padrão `validateStoreAccess`/`whatsapp/campaigns` já existe como referência.
 
 ---
 
 ### Critical Files for Implementation
 
-- `D:\worder1-fwrle\src\app\api\ai\agents\[id]\test-runs\route.ts` (padrão de auth a replicar, incl. `loadAgentInOrg`)
-- `D:\worder1-fwrle\src\lib\ai\engine.ts` (enforcement do budget + fix do `logUsage` que hoje grava em colunas inexistentes)
-- `D:\worder1-fwrle\src\lib\ai\prompt-builder.ts` (sanitização do `buildContactSection`/`buildRAGSection`)
-- `D:\worder1-fwrle\src\lib\whatsapp\token-encryption.ts` (base do `secret-box` AES-256-GCM)
-- `D:\worder1-fwrle\src\app\api\whatsapp\ai\route.ts` (única superfície de leitura/escrita de `api_key_encrypted` base64)
+- `D:\worder1-fwrle\src\lib\auth\require-org.ts` (padrão de auth Bearer+cookie a replicar nas rotas WhatsApp/scheduled — Tasks 6, 7, 8, 12)
+- `D:\worder1-fwrle\src\app\api\whatsapp\scheduled\[id]\route.ts` (IDOR + lógica P0 de send-now a preservar)
+- `D:\worder1-fwrle\src\app\api\ai\agents\[id]\test-runs\route.ts` (padrão `getAuthClient` correto a replicar nas rotas legadas de agentes)
+- `D:\worder1-fwrle\src\lib\ai\engine.ts` (enforcement do budget + fix do `logUsage` que grava em colunas inexistentes)
+- `D:\worder1-fwrle\src\app\api\whatsapp\ai\route.ts` (única superfície de `api_key_encrypted` base64 + auth pendente)
