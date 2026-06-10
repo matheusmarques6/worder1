@@ -558,7 +558,10 @@ export default function AIAgentEditor({
                   exit={{ opacity: 0, x: -20 }}
                   className="h-full"
                 >
-                  <AnnotationTab />
+                  <AnnotationTab
+                    agentId={agentId}
+                    organizationId={organizationId}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
