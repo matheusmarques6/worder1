@@ -4,6 +4,7 @@ import { generateEmbeddingsBatch } from '@/lib/ai/embeddings'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { checkAiBudget } from '@/lib/ai/budget';
 import { extractTextFromFile } from '@/lib/ai/processors/file-extractor'
+import { extractStoragePathFromFileUrl, AI_SOURCES_BUCKET } from '@/lib/ai/source-storage'
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
@@ -87,13 +88,33 @@ export async function POST(request: NextRequest) {
     if (source.source_type === 'text') {
       // Texto direto
       text = source.text_content || ''
-    } else if (source.source_type === 'file' && file_content) {
-      // Arquivo enviado como base64
-      text = await extractTextFromFile(file_content, mime_type || source.mime_type)
+    } else if (source.source_type === 'file') {
+      let contentBase64: string | undefined = file_content
+      if (!contentBase64) {
+        // Reprocess: o body não traz o arquivo — baixar o original do storage.
+        const storagePath = extractStoragePathFromFileUrl(source.file_url)
+        if (!storagePath) {
+          throw new Error(
+            'Arquivo original não está arquivado no storage. Exclua esta fonte e envie o arquivo novamente.'
+          )
+        }
+        const { data: blob, error: downloadError } = await supabase.storage
+          .from(AI_SOURCES_BUCKET)
+          .download(storagePath)
+        if (downloadError || !blob) {
+          throw new Error(
+            `Falha ao baixar o arquivo original do storage: ${downloadError?.message || 'arquivo não encontrado'}`
+          )
+        }
+        contentBase64 = Buffer.from(await blob.arrayBuffer()).toString('base64')
+      }
+      text = await extractTextFromFile(contentBase64, mime_type || source.mime_type)
     } else if (source.source_type === 'url') {
       // Crawl de URL
       text = await crawlUrl(source.url)
     } else {
+      // Nota: source_type='products' pode ser criado por sources/route.ts mas
+      // nunca foi suportado aqui (gap pré-existente, fora do escopo deste plano).
       throw new Error(`Tipo de fonte não suportado: ${source.source_type}`)
     }
 
