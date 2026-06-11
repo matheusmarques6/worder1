@@ -328,7 +328,7 @@ export default function SourcesTab({
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {source.status === 'error' && (
+                    {(source.status === 'error' || source.status === 'ready') && (
                       <button
                         onClick={() => handleReprocess(source.id)}
                         className="btn btn-soft btn-icon btn-sm"

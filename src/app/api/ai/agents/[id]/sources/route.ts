@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
 import { assertAgentInOrg } from '@/lib/ai/agent-access';
+import { findStaleSourceIds, STALE_SOURCE_MESSAGE } from '@/lib/ai/stale-sources';
 export const dynamic = 'force-dynamic';
 
 // =====================================================
@@ -40,6 +41,26 @@ export async function GET(
     if (error) {
       console.error('Error fetching sources:', error)
       throw error
+    }
+
+    // Recuperação de fontes órfãs: pending/processing há >1h viram 'error'
+    // (com mensagem acionável) — o botão Reprocessar da UI faz o resto.
+    const staleIds = findStaleSourceIds(sources || [])
+    if (staleIds.length > 0) {
+      console.warn(`[ai/sources] Marcando ${staleIds.length} fonte(s) órfã(s) como error:`, staleIds)
+      const nowIso = new Date().toISOString()
+      await supabase
+        .from('ai_agent_sources')
+        .update({ status: 'error', error_message: STALE_SOURCE_MESSAGE, updated_at: nowIso })
+        .in('id', staleIds)
+        .eq('organization_id', organizationId)
+      for (const s of sources || []) {
+        if (staleIds.includes(s.id)) {
+          s.status = 'error'
+          s.error_message = STALE_SOURCE_MESSAGE
+          s.updated_at = nowIso
+        }
+      }
     }
 
     // Calcular stats
