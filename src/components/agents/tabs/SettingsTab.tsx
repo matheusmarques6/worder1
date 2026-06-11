@@ -223,8 +223,15 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
             <div className="callout" style={{ marginTop: 16 }}>
               <Info className="w-4 h-4 flex-shrink-0" />
               <p>
-                A chave do provedor precisa estar cadastrada em <strong>Configurações → API Keys</strong>.
-                OpenRouter aceita modelos de OpenAI, Anthropic, Google etc no formato <code>vendor/model-id</code>.
+                A chave do provedor precisa estar cadastrada em{' '}
+                <a
+                  href="/whatsapp/ai-agents?tab=api-keys"
+                  style={{ color: 'var(--brand-ink)', textDecoration: 'underline' }}
+                >
+                  API Keys
+                </a>
+                . OpenRouter aceita modelos de OpenAI, Anthropic, Google etc no formato{' '}
+                <code>vendor/model-id</code>.
               </p>
             </div>
           </AccordionItem>

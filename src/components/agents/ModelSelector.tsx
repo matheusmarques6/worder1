@@ -8,6 +8,8 @@ import {
   Check,
   Loader2,
   Sparkles,
+  KeyRound,
+  AlertTriangle,
 } from 'lucide-react'
 import { AgentsTheme } from './ui/AgentsTheme'
 
@@ -43,6 +45,20 @@ const providerConfig: Record<string, { name: string; color: string; bg: string }
   openrouter: { name: 'OpenRouter', color: 'text-indigo-400', bg: 'bg-indigo-500/20' },
 }
 
+// Aliases — UI/db normaliza 'gemini' como 'google'. Se vier um, conta pelos dois.
+const PROVIDER_ALIASES: Record<string, string[]> = {
+  google: ['google', 'gemini'],
+  gemini: ['gemini', 'google'],
+}
+
+function expandConfigured(set: Set<string>): Set<string> {
+  const out = new Set<string>(set)
+  for (const p of set) {
+    for (const alias of PROVIDER_ALIASES[p] || []) out.add(alias)
+  }
+  return out
+}
+
 export default function ModelSelector({
   provider,
   model,
@@ -54,16 +70,15 @@ export default function ModelSelector({
   className = '',
 }: ModelSelectorProps) {
   const [models, setModels] = useState<LLMModel[]>([])
+  const [configuredProviders, setConfiguredProviders] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [showDropdown, setShowDropdown] = useState(false)
 
-  // Fetch models
   useEffect(() => {
-    fetchModels()
+    Promise.all([fetchModels(), fetchConfiguredProviders()]).finally(() => setLoading(false))
   }, [])
 
   const fetchModels = async () => {
-    setLoading(true)
     try {
       const res = await fetch('/api/ai/models')
       if (res.ok) {
@@ -72,25 +87,42 @@ export default function ModelSelector({
       }
     } catch (err) {
       console.error('Error fetching models:', err)
-      // Fallback models
+      // Fallback models — usados apenas quando a API falha.
       setModels([
         { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai', description: 'Rápido e econômico' },
         { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', description: 'Mais inteligente' },
-        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai', description: 'Melhor custo-benefício' },
         { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic', description: 'Equilíbrio perfeito' },
-        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', provider: 'anthropic', description: 'Mais poderoso' },
-        { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'google', description: 'Contexto longo' },
         { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'google', description: 'Rápido' },
-        { id: 'llama-3.1-70b-versatile', name: 'Llama 3.1 70B', provider: 'groq', description: 'Open source' },
-        { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B', provider: 'groq', description: 'MoE' },
       ])
-    } finally {
-      setLoading(false)
     }
   }
 
-  // Get unique providers
-  const providers = [...new Set(models.map(m => m.provider))]
+  // Lista os providers que ja tem chave cadastrada/valida em
+  // organization_api_keys (UI Configurações → API Keys).
+  const fetchConfiguredProviders = async () => {
+    try {
+      const res = await fetch('/api/api-keys')
+      if (res.ok) {
+        const data = await res.json()
+        const active = (data.keys || [])
+          .filter((k: any) => k.is_active !== false && k.is_valid !== false)
+          .map((k: any) => k.provider as string)
+        setConfiguredProviders(expandConfigured(new Set(active)))
+      }
+    } catch (err) {
+      console.error('Error fetching configured api keys:', err)
+    }
+  }
+
+  // Providers oferecidos = intersecao (modelos cadastrados) ∩ (chaves configuradas).
+  // Inclui o provider atual mesmo sem chave (pra nao virar undefined no agente
+  // ja salvo) com flag visual.
+  const allProvidersFromModels = [...new Set(models.map((m) => m.provider))]
+  const providers = allProvidersFromModels.filter(
+    (p) => configuredProviders.has(p) || p === provider,
+  )
+  const hasAnyConfigured = configuredProviders.size > 0
+  const currentProviderHasKey = configuredProviders.has(provider)
 
   // Get models for selected provider
   const providerModels = models.filter(m => m.provider === provider)
@@ -101,6 +133,44 @@ export default function ModelSelector({
 
   return (
     <AgentsTheme className={`space-y-4 ${className}`}>
+      {/* Aviso global: nenhuma chave configurada ainda */}
+      {!hasAnyConfigured && (
+        <div className="callout" style={{ borderColor: 'var(--amber)', background: 'var(--amber-tint)' }}>
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--amber)' }} />
+          <div className="flex-1">
+            <p style={{ color: 'var(--text)' }}>
+              <strong>Nenhuma chave de IA configurada.</strong> Cadastre uma em{' '}
+              <a
+                href="/whatsapp/ai-agents?tab=api-keys"
+                style={{ color: 'var(--brand-ink)', textDecoration: 'underline' }}
+              >
+                Configurações → API Keys
+              </a>{' '}
+              antes de ativar o agente.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Aviso pontual: provider atual sem chave (agente salvo apontando pra provedor descadastrado) */}
+      {hasAnyConfigured && !currentProviderHasKey && (
+        <div className="callout" style={{ borderColor: 'var(--red)', background: 'var(--red-tint)' }}>
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--red)' }} />
+          <div className="flex-1">
+            <p style={{ color: 'var(--text)' }}>
+              O provedor <strong>{providerConfig[provider]?.name || provider}</strong> nao tem chave ativa.
+              Escolha um provedor configurado abaixo ou cadastre a chave em{' '}
+              <a
+                href="/whatsapp/ai-agents?tab=api-keys"
+                style={{ color: 'var(--brand-ink)', textDecoration: 'underline' }}
+              >
+                Configurações → API Keys
+              </a>.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Provider Selection */}
       <div>
         <label className="label">Provedor</label>
@@ -108,6 +178,7 @@ export default function ModelSelector({
           {providers.map((p) => {
             const info = providerConfig[p] || { name: p, color: 'text-gray-500', bg: 'bg-gray-100' }
             const isSelected = provider === p
+            const hasKey = configuredProviders.has(p)
 
             return (
               <button
@@ -118,13 +189,28 @@ export default function ModelSelector({
                   if (firstModel) onModelChange(firstModel.id)
                 }}
                 className={`chip ${isSelected ? 'chip-brand' : 'chip-outline'}`}
+                title={hasKey ? `${info.name} — chave configurada` : `${info.name} — sem chave (cadastre em API Keys)`}
               >
-                <Sparkles className="w-3.5 h-3.5" />
+                {hasKey ? (
+                  <KeyRound className="w-3.5 h-3.5" style={{ color: 'var(--green)' }} />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5" />
+                )}
                 {info.name}
+                {!hasKey && (
+                  <span className="text-xs" style={{ color: 'var(--text-3)', marginLeft: 4 }}>
+                    sem chave
+                  </span>
+                )}
               </button>
             )
           })}
         </div>
+        {providers.length === 0 && !loading && (
+          <p className="text-xs" style={{ color: 'var(--text-3)', marginTop: 8 }}>
+            Nenhum provedor disponivel. Cadastre uma chave em Configurações → API Keys.
+          </p>
+        )}
       </div>
 
       {/* Model Selection */}
