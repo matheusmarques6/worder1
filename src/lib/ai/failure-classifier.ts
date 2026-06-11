@@ -37,3 +37,27 @@ export function classifyAiFailure(error: unknown): AiFailureClass {
   if (PERMANENT_PATTERNS.some((re) => re.test(message))) return 'permanent'
   return 'transient'
 }
+
+/** Cap de retentativas transient por "rodada" de resposta (zera em sucesso). */
+export const MAX_AI_RETRY_ATTEMPTS = 3
+
+/** Backoff por tentativa (1-based): 30s, 2min, 8min. */
+const RETRY_DELAYS_SECONDS = [30, 120, 480]
+
+export function computeAiRetryDelaySeconds(attempt: number): number {
+  const idx = Math.min(Math.max(attempt, 1), RETRY_DELAYS_SECONDS.length) - 1
+  return RETRY_DELAYS_SECONDS[idx]
+}
+
+export type AiRetryPlan =
+  | { action: 'retry'; attempt: number; delaySeconds: number }
+  | { action: 'give_up'; attempts: number }
+
+/** previousRetryCount = whatsapp_cloud_conversations.ai_retry_count atual. */
+export function planAiRetry(previousRetryCount: number): AiRetryPlan {
+  const attempt = previousRetryCount + 1
+  if (attempt > MAX_AI_RETRY_ATTEMPTS) {
+    return { action: 'give_up', attempts: previousRetryCount }
+  }
+  return { action: 'retry', attempt, delaySeconds: computeAiRetryDelaySeconds(attempt) }
+}
