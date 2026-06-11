@@ -160,9 +160,12 @@ BEGIN
   END IF;
 END$$;
 
--- Indice por mes (para queries de budget mensal via RPC e fallback)
-CREATE INDEX IF NOT EXISTS ai_usage_logs_org_month_idx
-  ON ai_usage_logs (organization_id, date_trunc('month', created_at) DESC);
+-- Indice para queries de budget mensal (RPC e fallback filtram por
+-- organization_id + created_at >= inicio do mes — range scan simples).
+-- NOTA: date_trunc('month', timestamptz) NAO e IMMUTABLE (depende de
+-- timezone) e o Postgres rejeita em expressao de indice (42P17).
+CREATE INDEX IF NOT EXISTS ai_usage_logs_org_created_idx
+  ON ai_usage_logs (organization_id, created_at DESC);
 
 -- =============================================
 -- 3. RPC ai_monthly_cost_usd — soma server-side sem truncar em 1000 linhas
