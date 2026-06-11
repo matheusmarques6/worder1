@@ -20,15 +20,76 @@ const supabase = new Proxy({} as SupabaseClient, {
   }
 })
 
+// =========================================================
+// OpenRouter live catalog
+// =========================================================
+// O catalogo do OpenRouter tem ~300 modelos e muda toda semana. Hardcode
+// fica obsoleto rapido. /v1/models e publico (nao precisa de chave) e o
+// fetch dura ~200ms, entao cacheamos em memoria por 1h pra evitar bater
+// toda vez que algum agente abre o seletor.
+
+type OpenRouterModel = {
+  id: string
+  name?: string
+  description?: string
+  context_length?: number
+  pricing?: { prompt?: string; completion?: string }
+}
+
+let _openRouterCache: { models: any[]; fetchedAt: number } | null = null
+const OPENROUTER_TTL_MS = 60 * 60 * 1000 // 1h
+
+async function fetchOpenRouterCatalog(): Promise<any[]> {
+  const now = Date.now()
+  if (_openRouterCache && now - _openRouterCache.fetchedAt < OPENROUTER_TTL_MS) {
+    return _openRouterCache.models
+  }
+
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/models', {
+      next: { revalidate: 3600 },
+    })
+    if (!res.ok) return []
+    const data: { data?: OpenRouterModel[] } = await res.json()
+    const list = data.data || []
+    const normalized = list.map((m) => {
+      const inputPrice = parseFloat(m.pricing?.prompt || '0') * 1000 // $/1k tokens
+      const outputPrice = parseFloat(m.pricing?.completion || '0') * 1000
+      const isFree = inputPrice === 0 && outputPrice === 0
+      return {
+        id: m.id,
+        provider: 'openrouter',
+        display_name: m.name || m.id,
+        name: m.name || m.id,
+        description: m.description ? m.description.split('\n')[0].slice(0, 140) : undefined,
+        max_tokens: 4096,
+        context_window: m.context_length || 8192,
+        supports_vision: false,
+        supports_function_calling: true,
+        cost_per_1k_input: inputPrice,
+        cost_per_1k_output: outputPrice,
+        tier: isFree ? 'free' : inputPrice < 0.001 ? 'budget' : inputPrice < 0.005 ? 'standard' : 'premium',
+        category: 'flagship',
+      }
+    })
+    _openRouterCache = { models: normalized, fetchedAt: now }
+    return normalized
+  } catch (err) {
+    console.error('[ai/models] fetchOpenRouterCatalog failed:', err)
+    return []
+  }
+}
+
 // GET - Lista todos os modelos de IA disponíveis
 export async function GET(request: NextRequest) {
   try {
     getDb()
   } catch {
-    // Se banco não configurado, retornar modelos padrão
+    // Se banco não configurado, retornar modelos padrão + catalogo OpenRouter ao vivo.
+    const live = await fetchOpenRouterCatalog()
     return NextResponse.json({
-      models: getDefaultModels(),
-      source: 'fallback'
+      models: [...getDefaultModels().filter((m) => m.provider !== 'openrouter'), ...live],
+      source: live.length > 0 ? 'fallback+openrouter' : 'fallback',
     })
   }
 
@@ -60,39 +121,46 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching models:', error)
-      
-      // Se a tabela não existe, retornar modelos padrão
+
+      // Se a tabela não existe, retornar modelos padrão + OpenRouter ao vivo
       if (error.code === '42P01') {
+        const live = await fetchOpenRouterCatalog()
         return NextResponse.json({
-          models: getDefaultModels(),
-          source: 'fallback'
+          models: [...getDefaultModels().filter((m) => m.provider !== 'openrouter'), ...live],
+          source: live.length > 0 ? 'fallback+openrouter' : 'fallback',
         })
       }
-      
+
       throw error
     }
 
-    // Se não há modelos no banco, retornar padrão
+    // Se não há modelos no banco, retornar padrão + OpenRouter ao vivo
     if (!models || models.length === 0) {
+      const live = await fetchOpenRouterCatalog()
       return NextResponse.json({
-        models: getDefaultModels(),
-        source: 'fallback'
+        models: [...getDefaultModels().filter((m) => m.provider !== 'openrouter'), ...live],
+        source: live.length > 0 ? 'fallback+openrouter' : 'fallback',
       })
     }
 
-    return NextResponse.json({ 
-      models,
-      source: 'database'
+    // DB tem modelos. Adiciona catalogo OpenRouter ao vivo sempre que possivel,
+    // pq DB tipicamente nao mantem o catalogo OpenRouter (300+ entries).
+    const live = await fetchOpenRouterCatalog()
+    const dbHasOpenrouter = models.some((m: any) => m.provider === 'openrouter')
+    return NextResponse.json({
+      models: dbHasOpenrouter ? models : [...models, ...live],
+      source: live.length > 0 ? 'database+openrouter' : 'database',
     })
 
   } catch (error: any) {
     console.error('Error in AI models API:', error)
-    
-    // Retornar modelos padrão em caso de erro
+
+    // Retornar modelos padrão + OpenRouter ao vivo em caso de erro
+    const live = await fetchOpenRouterCatalog()
     return NextResponse.json({
-      models: getDefaultModels(),
-      source: 'fallback',
-      error: error.message
+      models: [...getDefaultModels().filter((m) => m.provider !== 'openrouter'), ...live],
+      source: live.length > 0 ? 'fallback+openrouter' : 'fallback',
+      error: error.message,
     })
   }
 }

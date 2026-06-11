@@ -10,6 +10,7 @@ import {
   Sparkles,
   KeyRound,
   AlertTriangle,
+  Search,
 } from 'lucide-react'
 import { AgentsTheme } from './ui/AgentsTheme'
 
@@ -73,6 +74,7 @@ export default function ModelSelector({
   const [configuredProviders, setConfiguredProviders] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [showDropdown, setShowDropdown] = useState(false)
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     Promise.all([fetchModels(), fetchConfiguredProviders()]).finally(() => setLoading(false))
@@ -114,6 +116,11 @@ export default function ModelSelector({
     }
   }
 
+  // Reset busca quando troca de provider
+  useEffect(() => {
+    setSearch('')
+  }, [provider])
+
   // Providers oferecidos = intersecao (modelos cadastrados) ∩ (chaves configuradas).
   // Inclui o provider atual mesmo sem chave (pra nao virar undefined no agente
   // ja salvo) com flag visual.
@@ -124,8 +131,17 @@ export default function ModelSelector({
   const hasAnyConfigured = configuredProviders.size > 0
   const currentProviderHasKey = configuredProviders.has(provider)
 
-  // Get models for selected provider
-  const providerModels = models.filter(m => m.provider === provider)
+  // Modelos do provider atual, filtrados por busca (id + name + description).
+  const providerModelsBase = models.filter((m) => m.provider === provider)
+  const q = search.trim().toLowerCase()
+  const filteredProviderModels = q
+    ? providerModelsBase.filter(
+        (m) =>
+          m.id.toLowerCase().includes(q) ||
+          (m.name || '').toLowerCase().includes(q) ||
+          (m.description || '').toLowerCase().includes(q),
+      )
+    : providerModelsBase
 
   // Get current model info
   const currentModel = models.find(m => m.id === model)
@@ -245,32 +261,68 @@ export default function ModelSelector({
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="menu absolute z-20 w-full mt-2 max-h-64 overflow-y-auto"
+                  className="menu absolute z-20 w-full mt-2 max-h-96 overflow-hidden flex flex-col"
                 >
-                  {providerModels.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => {
-                        onModelChange(m.id)
-                        setShowDropdown(false)
-                      }}
-                      className="w-full flex items-center gap-3"
-                    >
-                      <Brain className="w-4 h-4" style={{ color: model === m.id ? 'var(--brand)' : 'var(--text-4)' }} />
-                      <div className="flex-1 min-w-0 text-left">
-                        <p className="text-sm" style={{ color: 'var(--text)' }}>{m.name}</p>
-                        {m.description && (
-                          <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{m.description}</p>
-                        )}
+                  {/* Search — util pra OpenRouter (300+ modelos) */}
+                  {providerModelsBase.length > 10 && (
+                    <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: 'var(--border)' }}>
+                      <Search className="w-4 h-4" style={{ color: 'var(--text-3)' }} />
+                      <input
+                        type="text"
+                        autoFocus
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder={`Buscar entre ${providerModelsBase.length} modelos...`}
+                        className="flex-1 text-sm bg-transparent outline-none"
+                        style={{ color: 'var(--text)' }}
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex-1 overflow-y-auto">
+                    {filteredProviderModels.length === 0 ? (
+                      <div className="px-3 py-6 text-center text-sm" style={{ color: 'var(--text-3)' }}>
+                        Nenhum modelo encontrado
                       </div>
-                      {m.context_window && (
-                        <span className="text-xs" style={{ color: 'var(--text-3)' }}>{(m.context_window / 1000).toFixed(0)}k</span>
-                      )}
-                      {model === m.id && (
-                        <Check className="w-4 h-4" style={{ color: 'var(--brand)' }} />
-                      )}
-                    </button>
-                  ))}
+                    ) : (
+                      filteredProviderModels.slice(0, 200).map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => {
+                            onModelChange(m.id)
+                            setShowDropdown(false)
+                          }}
+                          className="w-full flex items-center gap-3"
+                        >
+                          <Brain
+                            className="w-4 h-4 flex-shrink-0"
+                            style={{ color: model === m.id ? 'var(--brand)' : 'var(--text-4)' }}
+                          />
+                          <div className="flex-1 min-w-0 text-left">
+                            <p className="text-sm truncate" style={{ color: 'var(--text)' }}>{m.name}</p>
+                            <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>
+                              {m.description || m.id}
+                            </p>
+                          </div>
+                          {m.context_window && (
+                            <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-3)' }}>
+                              {m.context_window >= 1000
+                                ? `${(m.context_window / 1000).toFixed(0)}k`
+                                : m.context_window}
+                            </span>
+                          )}
+                          {model === m.id && (
+                            <Check className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--brand)' }} />
+                          )}
+                        </button>
+                      ))
+                    )}
+                    {filteredProviderModels.length > 200 && (
+                      <div className="px-3 py-2 text-center text-xs" style={{ color: 'var(--text-3)' }}>
+                        Mostrando 200 de {filteredProviderModels.length} — refine a busca
+                      </div>
+                    )}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
