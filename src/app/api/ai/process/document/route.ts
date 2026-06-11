@@ -3,6 +3,7 @@ import { chunkText, cleanTextForIndexing, extractTextMetadata } from '@/lib/ai/p
 import { generateEmbeddingsBatch } from '@/lib/ai/embeddings'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { checkAiBudget } from '@/lib/ai/budget';
+import { extractTextFromFile } from '@/lib/ai/processors/file-extractor'
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
@@ -197,69 +198,6 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
-
-// =====================================================
-// EXTRAÇÃO DE TEXTO DE ARQUIVOS
-// =====================================================
-
-async function extractTextFromFile(base64Content: string, mimeType: string): Promise<string> {
-  const buffer = Buffer.from(base64Content, 'base64')
-
-  if (mimeType === 'text/plain' || mimeType === 'text/csv') {
-    return buffer.toString('utf-8')
-  }
-
-  if (mimeType === 'application/pdf') {
-    return await extractTextFromPDF(buffer)
-  }
-
-  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      mimeType === 'application/msword') {
-    return await extractTextFromDOCX(buffer)
-  }
-
-  throw new Error(`Tipo de arquivo não suportado: ${mimeType}`)
-}
-
-// =====================================================
-// EXTRAÇÃO DE PDF (Simplificada)
-// =====================================================
-
-async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  // Extração básica de texto de PDF sem dependências externas
-  // Para suporte completo a PDF, instale: npm install pdf-parse
-  console.warn('PDF extraction: using basic fallback. For better results, install pdf-parse')
-
-  // Extração muito básica de texto de PDF (não funciona bem para PDFs complexos)
-  const text = buffer.toString('utf-8')
-  const extracted = text.match(/\(([^)]+)\)/g) || []
-  return extracted.map(s => s.slice(1, -1)).join(' ')
-}
-
-// =====================================================
-// EXTRAÇÃO DE DOCX (Simplificada)
-// =====================================================
-
-async function extractTextFromDOCX(buffer: Buffer): Promise<string> {
-  // Extração básica de DOCX sem dependências externas
-  // Para suporte completo a DOCX, instale: npm install mammoth adm-zip
-  console.warn('DOCX extraction: using basic fallback. For better results, install mammoth')
-
-  // DOCX é um arquivo ZIP - tentar extrair via descompressão básica
-  // Isso é uma aproximação muito simples que pode não funcionar em todos os casos
-  try {
-    const text = buffer.toString('utf-8')
-    // Tentar extrair texto entre tags <w:t>
-    const matches = text.match(/<w:t[^>]*>([^<]*)<\/w:t>/g) || []
-    const extracted = matches.map(m => m.replace(/<[^>]+>/g, '')).join(' ')
-    if (extracted.trim()) {
-      return extracted.trim()
-    }
-    throw new Error('Não foi possível extrair texto')
-  } catch (e) {
-    throw new Error('Não foi possível extrair texto do DOCX. Considere converter para .txt ou instalar as dependências mammoth e adm-zip.')
   }
 }
 
