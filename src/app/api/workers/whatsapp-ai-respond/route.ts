@@ -27,6 +27,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Receiver } from '@upstash/qstash';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { planAiRetry } from '@/lib/ai/failure-classifier';
+import { wlog } from '@/lib/observability/whatsapp-logger';
+import { sendAlert } from '@/lib/whatsapp/alerts';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -172,6 +175,83 @@ export async function POST(req: NextRequest) {
       messageType: 'text',
       phoneNumber: conversation.contact_phone || conversation.wa_id,
     });
+
+    // ---------- 7. Falha transient => retry com backoff (cap em ai_retry_count) ----------
+    if (result.failure === 'transient') {
+      const plan = planAiRetry(conversation.ai_retry_count ?? 0);
+
+      if (plan.action === 'retry') {
+        // Reabre o claim: repõe ai_pending e empurra a janela p/ o backoff.
+        await supabaseAdmin
+          .from('whatsapp_cloud_conversations')
+          .update({
+            ai_pending: true,
+            ai_debounce_until: new Date(Date.now() + plan.delaySeconds * 1000).toISOString(),
+            ai_retry_count: plan.attempt,
+          })
+          .eq('id', conversationId);
+
+        const { enqueueWhatsAppAiRespond } = await import('@/lib/queue');
+        const qId = await enqueueWhatsAppAiRespond(
+          { conversationId, accountId, organizationId },
+          plan.delaySeconds,
+        );
+        // qId null (QStash off) => o sweep do cron reprocess-whatsapp-pending cobre.
+        wlog.warn('whatsapp.ai.retry_scheduled', {
+          organization_id: organizationId,
+          conversation_id: conversationId,
+          attempt: plan.attempt,
+          delay_seconds: plan.delaySeconds,
+          enqueued: Boolean(qId),
+          error: result.error,
+        });
+        return NextResponse.json(
+          { ok: false, retry_scheduled: true, attempt: plan.attempt },
+          { status: 200 },
+        );
+      }
+
+      // ---------- 8. Esgotou tentativas => gave_up com visibilidade ----------
+      await supabaseAdmin
+        .from('whatsapp_cloud_conversations')
+        .update({ ai_retry_count: 0 })
+        .eq('id', conversationId);
+
+      wlog.error('whatsapp.ai.gave_up', {
+        organization_id: organizationId,
+        conversation_id: conversationId,
+        attempts: plan.attempts,
+        error: result.error,
+      });
+      await sendAlert({
+        severity: 'warning',
+        type: 'ai_response_failed',
+        title: 'IA não conseguiu responder cliente no WhatsApp',
+        message: `Conversa ${conversationId}: ${plan.attempts} tentativas esgotadas sem resposta. Último erro: ${result.error || 'desconhecido'}`,
+        organizationId,
+        dedupKey: `ai_response_failed:gave_up:${organizationId}:${conversationId}`,
+        metadata: { conversation_id: conversationId, attempts: plan.attempts, last_error: result.error },
+      }).catch(() => {});
+      const { error: notifErr } = await supabaseAdmin.from('notifications').insert({
+        organization_id: organizationId,
+        type: 'whatsapp_ai_gave_up',
+        title: 'Cliente sem resposta da IA',
+        message: 'A IA esgotou as tentativas de responder uma conversa do WhatsApp. Responda manualmente.',
+        metadata: { conversation_id: conversationId, attempts: plan.attempts, last_error: result.error },
+        action_url: '/whatsapp/inbox',
+      });
+      if (notifErr) console.error('[whatsapp-ai-respond] notification insert failed:', notifErr.message);
+
+      return NextResponse.json({ ok: false, gave_up: true }, { status: 200 });
+    }
+
+    // ---------- 9. Sucesso/skip: zera contador de retry se necessário ----------
+    if ((conversation.ai_retry_count ?? 0) > 0) {
+      await supabaseAdmin
+        .from('whatsapp_cloud_conversations')
+        .update({ ai_retry_count: 0 })
+        .eq('id', conversationId);
+    }
 
     return NextResponse.json({ ok: true, conversationId, result }, { status: 200 });
   } catch (err: any) {
