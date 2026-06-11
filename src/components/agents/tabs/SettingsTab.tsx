@@ -9,9 +9,11 @@ import {
   Cog,
   Info,
   Loader2,
+  Brain,
 } from 'lucide-react'
 import { AIAgent, AgentSettings } from '@/lib/ai/types'
 import { AccordionItem } from '../ui/primitives'
+import ModelSelector from '../ModelSelector'
 import { authedFetch } from '@/lib/api/authed-fetch'
 import { useStoreStore } from '@/stores'
 
@@ -58,7 +60,7 @@ const activateOnOptions = [
 ] as const
 
 export default function SettingsTab({ agent, organizationId, onUpdate }: SettingsTabProps) {
-  const [expandedSection, setExpandedSection] = useState<string | null>('channels')
+  const [expandedSection, setExpandedSection] = useState<string | null>('model')
   const [whatsappNumbers, setWhatsappNumbers] = useState<WhatsAppNumber[]>([])
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
   const [loading, setLoading] = useState(true)
@@ -188,6 +190,45 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
         </div>
       ) : (
         <>
+          {/* Model Section — provider + LLM + temperature */}
+          <AccordionItem
+            open={expandedSection === 'model'}
+            onToggle={() => toggleSection('model')}
+            title={
+              <div className="flex items-center gap-3 flex-1">
+                <div className="act-ico" style={{ background: 'var(--brand-tint)', color: 'var(--brand)' }}>
+                  <Brain className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <span style={{ color: 'var(--text)' }}>Modelo de IA</span>
+                  <p className="text-xs" style={{ color: 'var(--text-3)', fontWeight: 500 }}>
+                    Provedor e modelo que o agente vai usar
+                  </p>
+                </div>
+                <span className="chip">
+                  {agent.provider} · {agent.model}
+                </span>
+              </div>
+            }
+          >
+            <ModelSelector
+              provider={agent.provider || 'openai'}
+              model={agent.model || 'gpt-4o-mini'}
+              temperature={agent.temperature ?? 0.7}
+              onProviderChange={(provider) => onUpdate({ provider })}
+              onModelChange={(model) => onUpdate({ model })}
+              onTemperatureChange={(temperature) => onUpdate({ temperature })}
+              showTemperature={true}
+            />
+            <div className="callout" style={{ marginTop: 16 }}>
+              <Info className="w-4 h-4 flex-shrink-0" />
+              <p>
+                A chave do provedor precisa estar cadastrada em <strong>Configurações → API Keys</strong>.
+                OpenRouter aceita modelos de OpenAI, Anthropic, Google etc no formato <code>vendor/model-id</code>.
+              </p>
+            </div>
+          </AccordionItem>
+
           {/* Channels Section */}
           <AccordionItem
             open={expandedSection === 'channels'}
