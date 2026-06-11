@@ -15,7 +15,7 @@ import { extractTextFromFile } from './file-extractor'
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 describe('extractTextFromFile', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => { vi.clearAllMocks() })
 
   it('text/plain: decodifica utf-8 direto', async () => {
     const b64 = Buffer.from('olá mundo', 'utf-8').toString('base64')
