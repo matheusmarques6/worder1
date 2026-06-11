@@ -27,8 +27,42 @@ import type { EngineMessage } from './types';
 import type { ToolContext } from './tools/types';
 import { sendHumanizedReply } from './cloud-sender';
 import { AiBudgetExceededError } from './budget';
+import { classifyAiFailure } from './failure-classifier';
+import { sendAlert } from '@/lib/whatsapp/alerts';
+import { wlog } from '@/lib/observability/whatsapp-logger';
 
 const COOLDOWN_MS = 5000;
+
+/** Alerta + notificação quando a IA é DESLIGADA por falha permanent.
+ *  Padrão campaign_worker_stalled (whatsapp-dead-alert/route.ts:67-90):
+ *  sendAlert com dedupKey + insert best-effort em notifications. */
+async function notifyAiDisabled(params: {
+  organizationId: string;
+  conversationId: string;
+  reason: string;
+  detail?: string;
+}): Promise<void> {
+  const { organizationId, conversationId, reason, detail } = params;
+  await sendAlert({
+    severity: 'critical',
+    type: 'ai_response_failed',
+    title: 'IA do WhatsApp desativada para uma conversa',
+    message: `Conversa ${conversationId}: IA desativada (${reason}). ${detail || ''}`.trim(),
+    organizationId,
+    dedupKey: `ai_response_failed:disabled:${organizationId}:${conversationId}`,
+    metadata: { conversation_id: conversationId, reason, detail },
+  }).catch(() => {});
+
+  const { error: notifErr } = await supabaseAdmin.from('notifications').insert({
+    organization_id: organizationId,
+    type: 'whatsapp_ai_disabled',
+    title: 'IA do WhatsApp desativada',
+    message: `A IA foi desativada em uma conversa (${reason}). Verifique a chave de API / configuração do agente.`,
+    metadata: { conversation_id: conversationId, reason, detail },
+    action_url: '/whatsapp/inbox',
+  });
+  if (notifErr) wlog.warn('whatsapp.ai.notify_insert_failed', { error: notifErr.message });
+}
 
 export interface CloudRunnerParams {
   account: any;
@@ -55,6 +89,8 @@ export interface CloudRunnerResult {
   agentId?: string;
   skipped?: string;
   error?: string;
+  /** Classificação da falha — o worker usa p/ decidir retry vs gave_up. */
+  failure?: 'transient' | 'permanent';
 }
 
 export async function maybeRunAgentForCloudConversation(
@@ -202,10 +238,17 @@ export async function maybeRunAgentForCloudConversation(
         `org=${organizationId} agent=${agentId} conversation=${conversation.id}. ` +
         `IA desabilitada para esta conversa até configurar a chave.`,
     );
+    await notifyAiDisabled({
+      organizationId,
+      conversationId: conversation.id,
+      reason: 'no_valid_api_key',
+      detail: `provider=${agent.provider} agent=${agentId}`,
+    });
     return {
       replied: false,
       transferred: false,
       agentId,
+      failure: 'permanent',
       error: 'no_valid_api_key',
     };
   }
@@ -285,23 +328,53 @@ export async function maybeRunAgentForCloudConversation(
       };
     }
 
-    // Defesa extra: createAgentEngine pode lançar se a chave sumir entre o
-    // SELECT e a criação. Tratar como no_valid_api_key e desabilitar.
+    const failureClass = classifyAiFailure(engineErr);
+
+    if (failureClass === 'skip') {
+      // Gates intencionais (agente inativo / fora do horário) — não é falha.
+      return { replied: false, transferred: false, agentId, skipped: 'agent_unavailable' };
+    }
+
+    if (failureClass === 'transient') {
+      // NÃO desabilita. O worker agenda retry com backoff.
+      wlog.warn('whatsapp.ai.transient_error', {
+        organization_id: organizationId,
+        conversation_id: conversation.id,
+        agent_id: agentId,
+        error: engineErr?.message,
+      });
+      return {
+        replied: false,
+        transferred: false,
+        agentId,
+        failure: 'transient',
+        error: engineErr?.message || 'engine_error',
+      };
+    }
+
+    // permanent: desabilita com motivo correto + visibilidade.
+    const reason = /api[ _-]?key/i.test(engineErr?.message || '')
+      ? 'no_valid_api_key'
+      : 'ai_permanent_error';
     await supabaseAdmin
       .from('whatsapp_cloud_conversations')
       .update({
         ai_enabled: false,
         ai_disabled_at: new Date().toISOString(),
-        ai_disabled_reason: 'no_valid_api_key',
+        ai_disabled_reason: reason,
       })
       .eq('id', conversation.id);
-    console.error(
-      `[cloud-runner] engine error (tratado como no_valid_api_key): ${engineErr?.message}`,
-    );
+    await notifyAiDisabled({
+      organizationId,
+      conversationId: conversation.id,
+      reason,
+      detail: engineErr?.message,
+    });
     return {
       replied: false,
       transferred: false,
       agentId,
+      failure: 'permanent',
       error: engineErr?.message || 'engine_error',
     };
   }
@@ -331,6 +404,26 @@ export async function maybeRunAgentForCloudConversation(
     traceId = trace?.id;
   } catch (traceErr: any) {
     console.error('[cloud-runner] falha ao gravar trace:', traceErr?.message);
+  }
+
+  // ---------- 429 no tool-loop ----------
+  // rate_limited: loop.ts:139-146 aborta gracioso com stopped_by='rate_limited'
+  // e texto vazio — hoje cairia no `if (!response)` silencioso.
+  if (result.stopped_by === 'rate_limited' && !(result.response || '').trim()) {
+    wlog.warn('whatsapp.ai.transient_error', {
+      organization_id: organizationId,
+      conversation_id: conversation.id,
+      agent_id: agentId,
+      error: 'rate_limited',
+    });
+    return {
+      replied: false,
+      transferred: false,
+      traceId,
+      agentId,
+      failure: 'transient',
+      error: 'rate_limited',
+    };
   }
 
   // ---------- Transferência ----------
@@ -381,6 +474,7 @@ export async function maybeRunAgentForCloudConversation(
     response,
     traceId,
     agentId,
+    failure: sendResult.sent ? undefined : 'transient',
     error: sendResult.sent ? undefined : sendResult.reason || sendResult.error,
   };
 }
