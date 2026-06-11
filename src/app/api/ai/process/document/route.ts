@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { checkAiBudget } from '@/lib/ai/budget';
 import { extractTextFromFile } from '@/lib/ai/processors/file-extractor'
 import { extractStoragePathFromFileUrl, AI_SOURCES_BUCKET } from '@/lib/ai/source-storage'
+import { crawlSite } from '@/lib/ai/crawler'
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
       text = await extractTextFromFile(contentBase64, mime_type || source.mime_type)
     } else if (source.source_type === 'url') {
       // Crawl de URL
-      text = await crawlUrl(source.url)
+      text = await crawlSite(source.url)
     } else {
       // Nota: source_type='products' pode ser criado por sources/route.ts mas
       // nunca foi suportado aqui (gap pré-existente, fora do escopo deste plano).
@@ -222,60 +223,4 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// =====================================================
-// CRAWL DE URL (Simplificado)
-// =====================================================
-
-async function crawlUrl(url: string): Promise<string> {
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Worder/1.0; +https://worder.com)',
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
-    }
-
-    const html = await response.text()
-    
-    // Extração básica de texto do HTML
-    // Remover scripts e styles
-    let text = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
-      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
-      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
-
-    // Extrair título
-    const titleMatch = text.match(/<title[^>]*>([^<]*)<\/title>/i)
-    const title = titleMatch ? titleMatch[1].trim() : ''
-
-    // Remover todas as tags HTML
-    text = text.replace(/<[^>]+>/g, ' ')
-    
-    // Decodificar entidades HTML
-    text = text
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-
-    // Limpar espaços
-    text = text.replace(/\s+/g, ' ').trim()
-
-    // Adicionar título no início se existir
-    if (title) {
-      text = `${title}\n\n${text}`
-    }
-
-    return text
-  } catch (error: any) {
-    throw new Error(`Erro ao acessar URL: ${error.message}`)
-  }
-}
 

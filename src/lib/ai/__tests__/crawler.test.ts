@@ -81,7 +81,7 @@ const LONG = 'Produto excelente para o dia a dia com tecido confortável. '.repe
 describe('crawlSite', () => {
   const fetchMock = vi.fn()
   beforeEach(() => { fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock) })
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => { vi.unstubAllGlobals() })
 
   function respond(map: Record<string, { status?: number; body: string }>) {
     fetchMock.mockImplementation(async (input: any) => {
