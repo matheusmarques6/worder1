@@ -351,6 +351,8 @@ git commit -m "fix(nps): send_survey retorna 501 honesto em vez de fake-success;
 
 ### Task 5: Upload de fonte de conhecimento — falhas visíveis (item 10)
 
+> **SUBSTITUÍDA** pelo plano `2026-06-10-ai-rag-robustness.md` (Tasks 5–7 de lá, que incluem também o bucket ai-sources e o conserto do reprocess de arquivos). NÃO executar esta task.
+
 Decisão de design (após análise do fluxo async): o fallback "processa sem storage" é **legítimo** — o buffer segue em base64 para `/api/ai/process/document`, e a fonte fica `ready` mesmo sem `file_url`. Os bugs reais: (a) cliente não sabe que o arquivo não foi arquivado; (b) se o trigger de processamento falhar, a fonte fica `pending` para sempre.
 
 **Files:**
@@ -649,6 +651,8 @@ git commit -m "feat(agents): email de boas-vindas com link de definicao de senha
 ---
 
 ### Task 7: Extração real de PDF/DOCX com pdf-parse e mammoth (item 9)
+
+> **SUBSTITUÍDA** pelo plano `2026-06-10-ai-rag-robustness.md` (Tasks 1–4 de lá, que incluem também o .d.ts do deep import e testes de integração com fixtures reais). NÃO executar esta task.
 
 **Files:**
 - Create: `src/lib/ai/processors/file-extractor.ts`
