@@ -165,22 +165,33 @@ export async function POST(
 // =====================================================
 
 async function processSourceAsync(sourceId: string, organizationId: string) {
+  const supabase = getSupabaseAdmin()
   try {
-    // Chamar endpoint de processamento (rota interna, Bearer obrigatório)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
-    await fetch(`${baseUrl}/api/ai/process/document`, {
+    const res = await fetch(`${baseUrl}/api/ai/process/document`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
       },
-      body: JSON.stringify({
-        source_id: sourceId,
-        organization_id: organizationId,
-      }),
+      body: JSON.stringify({ source_id: sourceId, organization_id: organizationId }),
     })
-  } catch (error) {
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body?.error || `process/document respondeu ${res.status}`)
+    }
+  } catch (error: any) {
     console.error('Error triggering source processing:', error)
+    await supabase
+      .from('ai_agent_sources')
+      .update({
+        status: 'error',
+        error_message: `Falha ao iniciar processamento: ${error?.message || 'erro desconhecido'}. Clique em Reprocessar.`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', sourceId)
+      .then(undefined, () => {})
   }
 }

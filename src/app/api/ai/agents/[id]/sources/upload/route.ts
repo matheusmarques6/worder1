@@ -84,11 +84,14 @@ export async function POST(
         cacheControl: '3600',
       })
 
+    let storageUploaded = true
     if (uploadError) {
-      console.error('Error uploading file:', uploadError)
-      // Se o bucket não existir, criar a fonte sem o arquivo
-      // e processar o conteúdo diretamente
-      console.log('Storage upload failed, will process file content directly')
+      storageUploaded = false
+      console.error('[ai/sources/upload] Storage upload failed (bucket ai-sources):', uploadError.message)
+      // Fallback explícito: o processamento abaixo usa o buffer em memória
+      // (base64), então a fonte ainda será indexada — mas sem arquivo
+      // arquivado (file_url = null), o que torna o REPROCESS impossível
+      // para esta fonte. O cliente é informado via storage_uploaded: false.
     }
 
     // Obter URL pública (se upload foi bem sucedido)
@@ -133,7 +136,16 @@ export async function POST(
       console.error('Error in async file processing:', err)
     })
 
-    return NextResponse.json({ source }, { status: 201 })
+    return NextResponse.json(
+      {
+        source,
+        storage_uploaded: storageUploaded,
+        ...(storageUploaded ? {} : {
+          warning: 'Arquivo será indexado, mas não pôde ser arquivado no storage (bucket ai-sources indisponível). Reprocessamento futuro exigirá novo upload.',
+        }),
+      },
+      { status: 201 }
+    )
 
   } catch (error: any) {
     console.error('Error in POST /api/ai/agents/[id]/sources/upload:', error)
@@ -151,10 +163,11 @@ async function processFileAsync(
   fileBuffer: Buffer,
   mimeType: string
 ) {
+  const supabase = getSupabaseAdmin()
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
-    await fetch(`${baseUrl}/api/ai/process/document`, {
+    const res = await fetch(`${baseUrl}/api/ai/process/document`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -167,7 +180,25 @@ async function processFileAsync(
         mime_type: mimeType,
       }),
     })
-  } catch (error) {
+
+    if (!res.ok) {
+      // process/document já marca a fonte como error no catch dele;
+      // este throw cobre respostas de erro ANTES do processamento
+      // (404 fonte não encontrada, 400 etc.).
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body?.error || `process/document respondeu ${res.status}`)
+    }
+  } catch (error: any) {
     console.error('Error triggering file processing:', error)
+    // Sem isso a fonte ficaria presa em 'pending' para sempre.
+    await supabase
+      .from('ai_agent_sources')
+      .update({
+        status: 'error',
+        error_message: `Falha ao iniciar processamento: ${error?.message || 'erro desconhecido'}. Clique em Reprocessar.`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', sourceId)
+      .then(undefined, () => {})
   }
 }
