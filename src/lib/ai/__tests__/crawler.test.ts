@@ -66,3 +66,67 @@ describe('MIN_USEFUL_CHARS', () => {
     expect(MIN_USEFUL_CHARS).toBe(200)
   })
 })
+
+// =============================================
+// crawlSite — testes com fetch mockado
+// =============================================
+import { vi, beforeEach, afterEach } from 'vitest'
+import { crawlSite, SPA_ERROR_MESSAGE } from '../crawler'
+
+function htmlPage(body: string, title = 'T') {
+  return `<html><head><title>${title}</title></head><body>${body}</body></html>`
+}
+const LONG = 'Produto excelente para o dia a dia com tecido confortável. '.repeat(10)
+
+describe('crawlSite', () => {
+  const fetchMock = vi.fn()
+  beforeEach(() => { fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock) })
+  afterEach(() => vi.unstubAllGlobals())
+
+  function respond(map: Record<string, { status?: number; body: string }>) {
+    fetchMock.mockImplementation(async (input: any) => {
+      const url = String(input)
+      const hit = map[url]
+      if (!hit) return new Response('not found', { status: 404 })
+      return new Response(hit.body, { status: hit.status ?? 200 })
+    })
+  }
+
+  it('usa sitemap.xml quando existe e concatena texto das páginas (mesmo domínio)', async () => {
+    respond({
+      'https://loja.com/': { body: htmlPage(LONG) },
+      'https://loja.com/sitemap.xml': {
+        body: `<urlset><url><loc>https://loja.com/p1</loc></url>
+               <url><loc>https://outra.com/x</loc></url></urlset>`,
+      },
+      'https://loja.com/p1': { body: htmlPage('Página 1 com detalhes. ' + LONG) },
+    })
+    const text = await crawlSite('https://loja.com/')
+    expect(text).toContain('Página 1')
+    // página de outro domínio não foi buscada
+    expect(fetchMock.mock.calls.map((c) => String(c[0]))).not.toContain('https://outra.com/x')
+  })
+
+  it('sem sitemap → segue links internos da página inicial (cap)', async () => {
+    respond({
+      'https://loja.com/': { body: htmlPage(`<a href="/sobre">s</a>${LONG}`) },
+      'https://loja.com/sitemap.xml': { status: 404, body: '' },
+      'https://loja.com/sobre': { body: htmlPage('Sobre a loja. ' + LONG) },
+    })
+    const text = await crawlSite('https://loja.com/')
+    expect(text).toContain('Sobre a loja')
+  })
+
+  it('SPA (texto útil < limiar) → lança SPA_ERROR_MESSAGE, nunca sucesso vazio', async () => {
+    respond({
+      'https://spa.com/': { body: '<html><body><div id="root"></div></body></html>' },
+      'https://spa.com/sitemap.xml': { status: 404, body: '' },
+    })
+    await expect(crawlSite('https://spa.com/')).rejects.toThrow(SPA_ERROR_MESSAGE)
+  })
+
+  it('página inicial com erro HTTP → lança erro com status', async () => {
+    respond({ 'https://down.com/': { status: 500, body: 'x' } })
+    await expect(crawlSite('https://down.com/')).rejects.toThrow(/500/)
+  })
+})
