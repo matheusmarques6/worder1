@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ['undici'],
+    serverComponentsExternalPackages: ['undici', 'pdf-parse', 'mammoth'],
   },
   images: {
     remotePatterns: [
