@@ -40,6 +40,7 @@ const providerConfig: Record<string, { name: string; color: string; bg: string }
   groq: { name: 'Groq', color: 'text-purple-400', bg: 'bg-purple-500/20' },
   together: { name: 'Together', color: 'text-pink-400', bg: 'bg-pink-500/20' },
   mistral: { name: 'Mistral', color: 'text-cyan-400', bg: 'bg-cyan-500/20' },
+  openrouter: { name: 'OpenRouter', color: 'text-indigo-400', bg: 'bg-indigo-500/20' },
 }
 
 export default function ModelSelector({
