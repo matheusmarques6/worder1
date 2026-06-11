@@ -104,7 +104,7 @@ function ConversationItem({
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2 mb-1">
-          <span className={`font-medium truncate ${hasUnread ? 'text-white' : 'text-gray-700'}`}>
+          <span className={`truncate ${hasUnread ? 'text-gray-900 font-semibold' : 'text-gray-700 font-medium'}`}>
             {name}
           </span>
           <span className={`text-xs flex-shrink-0 ${
