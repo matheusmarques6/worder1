@@ -39,7 +39,12 @@ export async function extractTextFromFile(
 export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   try {
     const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default
-    const result = await pdfParse(buffer)
+    // pdf.js 1.10.100 (embutido no pdf-parse v1.1.4) falha com "bad XRef entry"
+    // para qualquer Node Buffer no Node 22. Converter para Uint8Array independente
+    // (cópia de memória própria, sem prototype de Buffer) resolve o problema.
+    const data = new Uint8Array(buffer.byteLength)
+    data.set(buffer)
+    const result = await pdfParse(data as unknown as Buffer)
     if (result?.text?.trim()) return result.text
     console.warn('[file-extractor] pdf-parse retornou texto vazio (PDF escaneado?), tentando fallback')
   } catch (e: any) {

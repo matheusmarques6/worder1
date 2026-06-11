@@ -1,7 +1,7 @@
 // Testes de integração: pdf-parse e mammoth REAIS (sem vi.mock).
 // Mantidos em arquivo separado do unit test porque os mocks de lá
 // são hoisted para o módulo inteiro.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { extractTextFromFile } from './file-extractor'
@@ -9,8 +9,10 @@ import { extractTextFromFile } from './file-extractor'
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 // PDF mínimo válido construído inline (PDF é formato textual).
-// Sem tabela xref: o pdf.js (motor do pdf-parse) reconstrói o índice
-// de objetos via recovery scan quando o xref está ausente/quebrado.
+// Sem tabela xref: o pdf.js (motor do pdf-parse) faz recovery scan dos
+// objetos. Com Uint8Array (fix aplicado em extractTextFromPDF) o parse
+// funciona corretamente no Node 22 — com Buffer bruto falharia com
+// "bad XRef entry" e cairia no fallback regex.
 const MINIMAL_PDF = [
   '%PDF-1.4',
   '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj',
@@ -27,9 +29,15 @@ const MINIMAL_PDF = [
 
 describe('file-extractor (integração, libs reais)', () => {
   it('extrai texto de um PDF mínimo real com pdf-parse', async () => {
+    // warnSpy garante que o fallback regex NÃO foi acionado.
+    // Se pdf-parse falhar (Buffer→bad XRef) o warn é emitido → teste FALHA.
+    // Com o fix Uint8Array o parser extrai texto diretamente → PASSA.
+    const warnSpy = vi.spyOn(console, 'warn')
     const b64 = Buffer.from(MINIMAL_PDF, 'latin1').toString('base64')
     const text = await extractTextFromFile(b64, 'application/pdf')
     expect(text).toContain('Worder fixture PDF de teste')
+    expect(warnSpy).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
   })
 
   it('extrai texto de um DOCX mínimo real com mammoth', async () => {
@@ -38,6 +46,20 @@ describe('file-extractor (integração, libs reais)', () => {
     )
     const text = await extractTextFromFile(fixture.toString('base64'), DOCX_MIME)
     expect(text).toContain('Worder fixture DOCX para teste de extracao real')
+  })
+
+  it('extrai texto de PDF real (fixture pdfkit) sem acionar fallback', async () => {
+    // Fixture gerada com @react-pdf/pdfkit — PDF com xref completo e
+    // estrutura canônica. Valida que o fix Uint8Array funciona também para
+    // PDFs reais (não só para o sintético sem xref do teste acima).
+    const fixture = readFileSync(
+      join(__dirname, '..', '__tests__', 'fixtures', 'minimal.pdf')
+    )
+    const warnSpy = vi.spyOn(console, 'warn')
+    const text = await extractTextFromFile(fixture.toString('base64'), 'application/pdf')
+    expect(text).toContain('Worder fixture PDF de teste')
+    expect(warnSpy).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
   })
 
   it('DOCX fixture NÃO seria extraível pelo fallback regex (prova de valor)', () => {
