@@ -24,8 +24,8 @@ import AgentSelect from '@/components/agents/ui/AgentSelect'
  * (propose-card + diff). Wired a dados reais via GET/POST
  * /api/ai/agents/[id]/reports + /proposals/* (Bloco F5).
  *
- * Nota de produto: NÃO há captura real de CSAT. A "satisfação" é um proxy
- * estimado pela IA (notas do juiz → estrelas). Os tiles refletem isso.
+ * Nota de produto: CSAT real (whatsapp_csat_ratings) quando há amostra suficiente;
+ * caso contrário, proxy estimado pela IA (notas do juiz → estrelas). Os tiles refletem a fonte.
  */
 
 type Period = '7d' | '30d' | '90d'

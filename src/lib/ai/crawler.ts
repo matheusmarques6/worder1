@@ -44,9 +44,10 @@ export function stripHtmlToText(html: string): { title: string; text: string } {
 }
 
 function decodeEntities(s: string): string {
+  // &amp; DEVE ser decodificado por último — senão "&amp;lt;" viraria "<"
+  // em vez de "&lt;" (double-decode).
   return s
     .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
@@ -56,6 +57,7 @@ function decodeEntities(s: string): string {
     .replace(/&uacute;/g, 'ú').replace(/&atilde;/g, 'ã')
     .replace(/&otilde;/g, 'õ').replace(/&ccedil;/g, 'ç')
     .replace(/&#\d+;/g, ' ')
+    .replace(/&amp;/g, '&')
 }
 
 /** Extrai <loc> de urlset OU sitemapindex. XML inválido/sem locs → []. */

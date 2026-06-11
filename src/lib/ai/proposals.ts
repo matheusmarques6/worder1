@@ -10,7 +10,7 @@
 //
 // Escrita via service role (o caller passa getSupabaseAdmin()). RLS de
 // ai_prompt_proposals é SELECT-only por org. Toda query é escopada pela org
-// AUTENTICADA. CSAT é PROXY ESTIMADO PELA IA (scoreToStars), não captura real.
+// AUTENTICADA. CSAT: real (whatsapp_csat_ratings) quando amostra suficiente; senão proxy estimado pela IA (scoreToStars).
 // =============================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -162,15 +162,27 @@ export async function getReportSummary(
   // --- CSAT real (whatsapp_csat_ratings) das conversas deste agente ---
   // Vínculo honesto: conversation_id ∈ conversas com ai_agent_id = agente
   // (cloud + legado). NUNCA via csat.agent_id — lá é o ATENDENTE HUMANO.
+  //
+  // IMPORTANTE: NÃO filtrar agentConvIds por created_at — uma avaliação pode
+  // ocorrer no período mas referenciar uma conversa criada antes do início do
+  // mesmo (janela assimétrica). O filtro de data fica APENAS em csatRows
+  // (gte created_at), não na lista de conversas elegíveis.
+  // A query `convs` (whatsapp_cloud_conversations) mantém o gte p/ métricas
+  // de volume/resolução — não mexer nela.
+  const { data: cloudConvIdsRows } = await supabase
+    .from('whatsapp_cloud_conversations')
+    .select('id')
+    .eq('ai_agent_id', agentId)
+    .eq('organization_id', orgId)
+    .limit(2000)
   const { data: legacyConvRows } = await supabase
     .from('whatsapp_conversations')
     .select('id')
     .eq('ai_agent_id', agentId)
     .eq('organization_id', orgId)
-    .gte('created_at', sinceISO)
     .limit(2000)
   const agentConvIds = new Set<string>([
-    ...convs.map((c: any) => c.id),
+    ...(cloudConvIdsRows ?? []).map((c) => c.id),
     ...(legacyConvRows ?? []).map((c) => c.id),
   ])
 

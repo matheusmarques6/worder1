@@ -29,6 +29,15 @@ describe('stripHtmlToText', () => {
   it('html vazio → texto vazio', () => {
     expect(stripHtmlToText('').text).toBe('')
   })
+
+  it('&amp;lt; não causa double-decode (deve virar "&lt;" e não "<")', () => {
+    const html = `<html><body><p>&amp;lt;tag&amp;gt; e R&amp;amp;D</p></body></html>`
+    const { text } = stripHtmlToText(html)
+    expect(text).toContain('&lt;')
+    expect(text).toContain('&gt;')
+    expect(text).toContain('&amp;')
+    expect(text).not.toContain('<<')
+  })
 })
 
 describe('extractSitemapUrls', () => {
