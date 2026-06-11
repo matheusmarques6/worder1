@@ -18,7 +18,7 @@ export async function GET(
     const conversationId = params.id
 
     const { data: conversation, error } = await supabase
-      .from('whatsapp_conversations')
+      .from('whatsapp_cloud_conversations')
       .select(`
         id,
         ai_enabled,
@@ -101,7 +101,7 @@ export async function POST(
 
     // Atualizar conversa
     const { data: updatedConversation, error: updateError } = await supabase
-      .from('whatsapp_conversations')
+      .from('whatsapp_cloud_conversations')
       .update(updateData)
       .eq('id', conversationId)
       .eq('organization_id', orgId)

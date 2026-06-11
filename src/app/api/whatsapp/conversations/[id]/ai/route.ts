@@ -18,7 +18,7 @@ export async function GET(
     const conversationId = params.id
 
     const { data: conversation, error } = await supabase
-      .from('whatsapp_conversations')
+      .from('whatsapp_cloud_conversations')
       .select('id, ai_enabled, ai_agent_id, ai_disabled_at, ai_disabled_reason')
       .eq('id', conversationId)
       .single()
@@ -55,7 +55,7 @@ export async function POST(
 
     // Buscar status atual
     const { data: conversation, error: fetchError } = await supabase
-      .from('whatsapp_conversations')
+      .from('whatsapp_cloud_conversations')
       .select('ai_enabled')
       .eq('id', conversationId)
       .single()
@@ -84,7 +84,7 @@ export async function POST(
     if (newStatus) {
       // Habilitar IA
       const { error: updateError } = await supabase
-        .from('whatsapp_conversations')
+        .from('whatsapp_cloud_conversations')
         .update({
           ai_enabled: true,
           ai_disabled_at: null,
@@ -106,7 +106,7 @@ export async function POST(
     } else {
       // Desabilitar IA
       const { error: updateError } = await supabase
-        .from('whatsapp_conversations')
+        .from('whatsapp_cloud_conversations')
         .update({
           ai_enabled: false,
           ai_disabled_at: new Date().toISOString(),
