@@ -12,6 +12,8 @@ import {
 } from 'lucide-react'
 import { AIAgent, AgentSettings } from '@/lib/ai/types'
 import { AccordionItem } from '../ui/primitives'
+import { authedFetch } from '@/lib/api/authed-fetch'
+import { useStoreStore } from '@/stores'
 
 interface SettingsTabProps {
   agent: AIAgent
@@ -60,6 +62,10 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
   const [whatsappNumbers, setWhatsappNumbers] = useState<WhatsAppNumber[]>([])
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
   const [loading, setLoading] = useState(true)
+  // ✅ FIX: a API /api/whatsapp/numbers exige store_id (multi-loja); sem ele
+  // retornava 400 e a lista de canais ficava sempre vazia.
+  const { currentStore } = useStoreStore()
+  const storeId = currentStore?.id || null
 
   const settings = agent.settings || {
     channels: { all_channels: true, channel_ids: [] },
@@ -81,20 +87,26 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
   // Fetch data
   useEffect(() => {
     fetchData()
-  }, [organizationId])
+  }, [organizationId, storeId])
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      // Fetch WhatsApp numbers
-      const numbersRes = await fetch(`/api/whatsapp/numbers?organization_id=${organizationId}`)
-      if (numbersRes.ok) {
-        const data = await numbersRes.json()
-        setWhatsappNumbers(data.numbers || [])
+      // Fetch WhatsApp numbers — store_id é obrigatório na API
+      if (storeId) {
+        const numbersRes = await authedFetch(`/api/whatsapp/numbers?store_id=${storeId}`)
+        if (numbersRes.ok) {
+          const data = await numbersRes.json()
+          setWhatsappNumbers(data.numbers || [])
+        } else {
+          console.error('[SettingsTab] /api/whatsapp/numbers failed:', numbersRes.status)
+        }
+      } else {
+        setWhatsappNumbers([])
       }
 
       // Fetch pipelines
-      const pipelinesRes = await fetch(`/api/deals?organization_id=${organizationId}&type=pipelines`)
+      const pipelinesRes = await authedFetch(`/api/deals?organization_id=${organizationId}&type=pipelines`)
       if (pipelinesRes.ok) {
         const data = await pipelinesRes.json()
         setPipelines(data.pipelines || [])
