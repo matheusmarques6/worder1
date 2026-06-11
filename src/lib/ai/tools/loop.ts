@@ -22,6 +22,8 @@ export interface ToolLoopProviderConfig {
   systemPrompt: string
   temperature?: number
   maxTokens?: number
+  /** Endpoint base override (OpenRouter, proxy privado etc). */
+  baseUrl?: string
 }
 
 export interface ToolLoopCaps {
@@ -116,6 +118,7 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
           systemPrompt: providerConfig.systemPrompt,
           temperature: providerConfig.temperature,
           maxTokens: providerConfig.maxTokens,
+          baseUrl: providerConfig.baseUrl,
         },
         loopMessages,
         providerTools,

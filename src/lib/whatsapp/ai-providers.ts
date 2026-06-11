@@ -2,7 +2,7 @@
 // AI PROVIDERS - OpenAI, Claude, Gemini
 // =============================================
 
-export type AIProvider = 'openai' | 'anthropic' | 'gemini' | 'groq' | 'deepseek' | 'google';
+export type AIProvider = 'openai' | 'anthropic' | 'gemini' | 'groq' | 'deepseek' | 'google' | 'openrouter';
 
 interface AIConfig {
   provider: AIProvider;
@@ -11,6 +11,12 @@ interface AIConfig {
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
+  /**
+   * Endpoint base override. Util pra OpenAI-compat (OpenRouter / proxies
+   * privados). Se ausente, cada provider usa seu endpoint padrao.
+   * Aceita "https://x.y/v1" ou "https://x.y/v1/chat/completions".
+   */
+  baseUrl?: string;
 }
 
 interface AIMessage {
@@ -283,6 +289,56 @@ async function callGroq(config: AIConfig, messages: AIMessage[]): Promise<AIResp
 }
 
 // =============================================
+// OPENROUTER (compat OpenAI)
+// =============================================
+// OpenRouter usa o mesmo formato chat/completions da OpenAI. Aceita override
+// de baseUrl (default https://openrouter.ai/api/v1). Headers HTTP-Referer e
+// X-Title sao opcionais — mandamos quando NEXT_PUBLIC_APP_URL existir, util
+// pra ranking de uso no painel deles.
+function normalizeOpenAICompatUrl(base: string | undefined, fallback: string): string {
+  const root = (base || fallback).replace(/\/$/, '');
+  return root.endsWith('/chat/completions') ? root : `${root}/chat/completions`;
+}
+
+async function callOpenRouter(config: AIConfig, messages: AIMessage[]): Promise<AIResponse> {
+  const url = normalizeOpenAICompatUrl(config.baseUrl, 'https://openrouter.ai/api/v1');
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${config.apiKey}`,
+    'Content-Type': 'application/json',
+  };
+  const referer = process.env.NEXT_PUBLIC_APP_URL;
+  if (referer) {
+    headers['HTTP-Referer'] = referer;
+    headers['X-Title'] = 'Worder';
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: config.model || 'openai/gpt-4o-mini',
+      messages,
+      temperature: config.temperature ?? 0.7,
+      max_tokens: config.maxTokens ?? 1000,
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || 'OpenRouter API error');
+  }
+
+  return {
+    content: data.choices?.[0]?.message?.content || '',
+    usage: {
+      promptTokens: data.usage?.prompt_tokens || 0,
+      completionTokens: data.usage?.completion_tokens || 0,
+      totalTokens: data.usage?.total_tokens || 0,
+    },
+  };
+}
+
+// =============================================
 // FUNÇÃO PRINCIPAL - CHAMAR AI
 // =============================================
 export async function callAI(config: AIConfig, messages: AIMessage[]): Promise<AIResponse> {
@@ -303,6 +359,8 @@ export async function callAI(config: AIConfig, messages: AIMessage[]): Promise<A
       return callGroq(config, finalMessages);
     case 'deepseek':
       return callDeepSeek(config, finalMessages);
+    case 'openrouter':
+      return callOpenRouter(config, finalMessages);
     default:
       throw new Error(`Unknown AI provider: ${config.provider}`);
   }
@@ -604,6 +662,13 @@ export async function callAIWithTools(
     case 'deepseek':
       return callOpenAICompatWithTools(
         'https://api.deepseek.com/v1/chat/completions',
+        config,
+        messages,
+        tools,
+      );
+    case 'openrouter':
+      return callOpenAICompatWithTools(
+        normalizeOpenAICompatUrl(config.baseUrl, 'https://openrouter.ai/api/v1'),
         config,
         messages,
         tools,

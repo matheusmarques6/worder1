@@ -35,11 +35,13 @@ export class AIAgentEngine {
   private actionsEngine: ActionsEngine | null = null
   private promptBuilder: PromptBuilder
   private apiKey: string
+  private baseUrl?: string
 
   constructor(config: EngineConfig) {
     this.agent = config.agent
     this.organizationId = config.organizationId
     this.apiKey = config.apiKey
+    this.baseUrl = config.baseUrl
 
     // Usar cliente centralizado (lazy loaded)
     this.supabase = supabaseAdmin as unknown as SupabaseClient
@@ -157,6 +159,7 @@ export class AIAgentEngine {
             systemPrompt,
             temperature: this.agent.temperature,
             maxTokens: this.agent.max_tokens,
+            baseUrl: this.baseUrl,
           },
           messages: messages.map(m => ({
             role: (m.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
@@ -204,6 +207,7 @@ export class AIAgentEngine {
           systemPrompt,
           temperature: this.agent.temperature,
           maxTokens: this.agent.max_tokens,
+          baseUrl: this.baseUrl,
         },
         messages.map(m => ({ role: m.role as any, content: m.content }))
       )
@@ -456,15 +460,18 @@ export async function createAgentEngine(
     throw new Error('Agente não encontrado')
   }
 
-  // Buscar API key do provider
+  // Buscar API key do provider em organization_api_keys (tabela correta;
+  // 'api_keys' legacy era pra API keys do Worder, schema diferente).
   const { data: apiKeyData } = await supabase
-    .from('api_keys')
-    .select('api_key')
+    .from('organization_api_keys')
+    .select('api_key, base_url, is_active')
     .eq('organization_id', organizationId)
     .eq('provider', agent.provider)
-    .single()
+    .eq('is_active', true)
+    .maybeSingle()
 
   const apiKey = apiKeyData?.api_key || process.env.OPENAI_API_KEY || ''
+  const baseUrl = apiKeyData?.base_url || undefined
 
   if (!apiKey) {
     throw new Error(`API key não configurada para provider: ${agent.provider}`)
@@ -474,6 +481,7 @@ export async function createAgentEngine(
     agent,
     organizationId,
     apiKey,
+    baseUrl,
   })
 }
 

@@ -214,13 +214,16 @@ export async function maybeRunAgentForCloudConversation(
   }
 
   // ---------- BYO-key gracioso ----------
-  // Checa api_keys ANTES do createAgentEngine para evitar o fallback silencioso
-  // para process.env.OPENAI_API_KEY quando o provider do agente não é OpenAI.
+  // Checa organization_api_keys ANTES do createAgentEngine para evitar o fallback
+  // silencioso para process.env.OPENAI_API_KEY quando o provider do agente não
+  // é OpenAI. Tabela 'api_keys' (legacy) era pra API keys do Worder; chaves de
+  // provider LLM moram em 'organization_api_keys' (gravada pela UI Configurações).
   const { data: apiKeyRow } = await supabaseAdmin
-    .from('api_keys')
-    .select('api_key')
+    .from('organization_api_keys')
+    .select('api_key, base_url, is_active')
     .eq('organization_id', organizationId)
     .eq('provider', agent.provider)
+    .eq('is_active', true)
     .maybeSingle();
 
   if (!apiKeyRow?.api_key) {

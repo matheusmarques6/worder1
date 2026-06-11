@@ -227,6 +227,8 @@ export interface EngineConfig {
   agent: AIAgent
   organizationId: string
   apiKey: string
+  /** Endpoint base override (OpenRouter, proxy privado etc). */
+  baseUrl?: string
 }
 
 export interface EngineMessage {

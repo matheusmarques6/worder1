@@ -19,6 +19,9 @@ export const JUDGE_MODELS: Record<AIProvider, string> = {
   google: 'gemini-1.5-flash',
   groq: 'llama-3.1-8b-instant',
   deepseek: 'deepseek-chat',
+  // Quando o agente for OpenRouter, julgamos com modelo barato no proprio
+  // OpenRouter pra evitar exigir uma segunda chave/provider.
+  openrouter: 'openai/gpt-4o-mini',
 }
 
 import type { JudgeFlag, TranscriptLine } from './test-run-shared'
