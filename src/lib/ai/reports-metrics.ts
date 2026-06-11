@@ -4,10 +4,11 @@
 // Usadas por getReportSummary (proposals.ts) e testadas em unidade. Nenhuma
 // chamada de rede/LLM/DB aqui — só transformação de números.
 //
-// DECISÃO DE PRODUTO (travada): NÃO existe captura real de CSAT do cliente. A
-// satisfação é um PROXY ESTIMADO PELA IA — derivamos 1–5 estrelas das notas do
-// juiz/anotações via scoreToStars e a UI rotula o tile como
-// "Satisfação estimada (IA)". Estas funções NÃO inventam um CSAT real.
+// DECISÃO DE PRODUTO: quando há amostra suficiente (>= MIN_REAL_CSAT_SAMPLE)
+// de avaliações reais coletadas de clientes (whatsapp_csat_ratings), exibimos
+// o CSAT real (source:'real'). Caso contrário, caímos no proxy estimado pela IA
+// (source:'estimated') via scoreToStars sobre as notas do juiz. A UI discrimina
+// com badge "CSAT real · N respostas" ou "Estimado por IA".
 // =============================================
 
 /**
@@ -116,4 +117,45 @@ export function periodToRange(period: '7d' | '30d' | '90d'): { sinceISO: string 
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v))
+}
+
+/** Limiar mínimo de respostas reais para exibir CSAT real (senão, proxy IA). */
+export const MIN_REAL_CSAT_SAMPLE = 5
+
+export interface CsatSummary {
+  value: number
+  /** 'real' = média de whatsapp_csat_ratings; 'estimated' = proxy via juiz LLM */
+  source: 'real' | 'estimated'
+  /** real: nº de respostas de clientes; estimated: nº de notas de juiz usadas */
+  sampleSize: number
+}
+
+/**
+ * Decide entre CSAT REAL (ratings 1–5 coletados de clientes) e o PROXY
+ * estimado (estrelas derivadas das notas do juiz). Real só com amostra
+ * >= MIN_REAL_CSAT_SAMPLE. Devolve também a lista de estrelas que deve
+ * alimentar o histograma (coerente com a fonte escolhida).
+ */
+export function resolveCsat(
+  realRatings: number[],
+  proxyStars: number[]
+): { csat: CsatSummary; starsForDistribution: number[] } {
+  const valid = realRatings.filter(
+    (r) => typeof r === 'number' && Number.isFinite(r) && r >= 1 && r <= 5
+  )
+  if (valid.length >= MIN_REAL_CSAT_SAMPLE) {
+    const avg = valid.reduce((a, b) => a + b, 0) / valid.length
+    return {
+      csat: { value: Math.round(avg * 10) / 10, source: 'real', sampleSize: valid.length },
+      starsForDistribution: valid,
+    }
+  }
+  const value =
+    proxyStars.length > 0
+      ? Math.round((proxyStars.reduce((a, b) => a + b, 0) / proxyStars.length) * 10) / 10
+      : 0
+  return {
+    csat: { value, source: 'estimated', sampleSize: proxyStars.length },
+    starsForDistribution: proxyStars,
+  }
 }

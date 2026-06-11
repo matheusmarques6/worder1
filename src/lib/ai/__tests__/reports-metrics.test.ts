@@ -12,6 +12,8 @@ import {
   scoreToStars,
   buildDistribution,
   periodToRange,
+  resolveCsat,
+  MIN_REAL_CSAT_SAMPLE,
 } from '../reports-metrics'
 
 describe('computeQualityScore', () => {
@@ -148,4 +150,30 @@ describe('periodToRange', () => {
     expect(Number.isNaN(new Date(iso).getTime())).toBe(false)
     expect(iso).toMatch(/Z$/)
   })
+})
+
+describe('resolveCsat', () => {
+  it('>= MIN_REAL_CSAT_SAMPLE respostas reais → source real, média 1 decimal, distribuição das reais', () => {
+    const r = resolveCsat([5, 5, 4, 4, 3], [scoreToStars(10)])
+    expect(r.csat).toEqual({ value: 4.2, source: 'real', sampleSize: 5 })
+    expect(r.starsForDistribution).toEqual([5, 5, 4, 4, 3])
+  })
+
+  it('abaixo do limiar → proxy estimado (média das estrelas do juiz)', () => {
+    const r = resolveCsat([5], [4.0, 3.0])
+    expect(r.csat).toEqual({ value: 3.5, source: 'estimated', sampleSize: 2 })
+    expect(r.starsForDistribution).toEqual([4.0, 3.0])
+  })
+
+  it('sem nada → estimated com value 0 e sampleSize 0', () => {
+    expect(resolveCsat([], []).csat).toEqual({ value: 0, source: 'estimated', sampleSize: 0 })
+  })
+
+  it('ignora ratings fora de 1..5', () => {
+    const r = resolveCsat([5, 4, 0, 9, 5, 4, 3], [])
+    expect(r.csat.sampleSize).toBe(5)
+    expect(r.csat.source).toBe('real')
+  })
+
+  it('limiar é 5', () => expect(MIN_REAL_CSAT_SAMPLE).toBe(5))
 })
