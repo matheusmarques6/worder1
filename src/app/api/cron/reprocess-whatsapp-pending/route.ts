@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { enqueueWhatsAppWebhook } from '@/lib/queue';
+import { enqueueWhatsAppWebhook, enqueueWhatsAppAiRespond } from '@/lib/queue';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -56,10 +56,48 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ---------- Fase 2: IA pendente órfã (job QStash perdido / QStash off / retry agendado) ----------
+  // RPC criada em 20260619_whatsapp_ai_retry.sql. Janela 120s > debounce normal,
+  // então só pega casos realmente órfãos. O worker faz o claim atômico de
+  // ai_pending — re-enfileirar em duplicidade é no-op.
+  let aiScanned = 0;
+  let aiEnqueued = 0;
+  let aiFailed = 0;
+  const { data: aiPending, error: aiErr } = await supabaseAdmin.rpc(
+    'pending_whatsapp_ai_responses_for_reprocess',
+    { p_older_than_seconds: 120, p_limit: 50 }
+  );
+  if (aiErr) {
+    // Migration ainda não aplicada => degrade gracioso, fase 1 já rodou.
+    console.error('[reprocess-whatsapp-pending] ai sweep RPC error:', aiErr.message);
+  } else {
+    const rows = (aiPending as any[]) || [];
+    aiScanned = rows.length;
+    for (const row of rows) {
+      try {
+        await enqueueWhatsAppAiRespond(
+          {
+            conversationId: row.conversation_id,
+            accountId: row.account_id,
+            organizationId: row.organization_id,
+          },
+          0,
+        );
+        aiEnqueued++;
+      } catch (err) {
+        aiFailed++;
+        console.error('[reprocess-whatsapp-pending] ai enqueue failed for', row.conversation_id, err);
+      }
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     scanned: events.length,
     enqueued,
     failed,
+    ai_scanned: aiScanned,
+    ai_enqueued: aiEnqueued,
+    ai_failed: aiFailed,
   });
 }
