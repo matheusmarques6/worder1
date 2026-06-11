@@ -26,6 +26,8 @@ import {
   computeQualityScore,
   periodToRange,
   scoreToStars,
+  resolveCsat,
+  type CsatSummary,
 } from './reports-metrics'
 
 /** Cap duro: no máximo 3 propostas por geração, ≤20 traces de origem. */
@@ -40,8 +42,8 @@ export type ReportPeriod = '7d' | '30d' | '90d'
 
 export interface ReportSummary {
   quality: number
-  /** satisfação ESTIMADA pela IA (1–5★), não CSAT real */
-  csat: number
+  /** CSAT real (whatsapp_csat_ratings) quando amostra suficiente; senão proxy IA */
+  csat: CsatSummary
   conversations: number
   resolutionRate: number
 }
@@ -141,7 +143,7 @@ export async function getReportSummary(
   // --- conversas + resolução (whatsapp_cloud_conversations) no período ---
   const { data: convRows } = await supabase
     .from('whatsapp_cloud_conversations')
-    .select('ai_disabled_reason, created_at')
+    .select('id, ai_disabled_reason, created_at')
     .eq('ai_agent_id', agentId)
     .eq('organization_id', orgId)
     .gte('created_at', sinceISO)
@@ -157,13 +159,36 @@ export async function getReportSummary(
     resolutionRate: conversations > 0 ? resolutionRate : null,
   })
 
-  // --- satisfação estimada (IA): média de scoreToStars sobre as notas ---
-  const starsList = allScores.map((s) => scoreToStars(s))
-  const csat =
-    starsList.length > 0
-      ? Math.round((starsList.reduce((a, b) => a + b, 0) / starsList.length) * 10) / 10
-      : 0
-  const distribution = buildDistribution(starsList)
+  // --- CSAT real (whatsapp_csat_ratings) das conversas deste agente ---
+  // Vínculo honesto: conversation_id ∈ conversas com ai_agent_id = agente
+  // (cloud + legado). NUNCA via csat.agent_id — lá é o ATENDENTE HUMANO.
+  const { data: legacyConvRows } = await supabase
+    .from('whatsapp_conversations')
+    .select('id')
+    .eq('ai_agent_id', agentId)
+    .eq('organization_id', orgId)
+    .gte('created_at', sinceISO)
+    .limit(2000)
+  const agentConvIds = new Set<string>([
+    ...convs.map((c: any) => c.id),
+    ...(legacyConvRows ?? []).map((c) => c.id),
+  ])
+
+  const { data: csatRows } = await supabase
+    .from('whatsapp_csat_ratings')
+    .select('conversation_id, rating, created_at')
+    .eq('organization_id', orgId)
+    .gte('created_at', sinceISO)
+    .limit(2000)
+  const realRatings = (csatRows ?? [])
+    .filter((r) => agentConvIds.has(r.conversation_id))
+    .map((r) => r.rating)
+    .filter((r): r is number => typeof r === 'number')
+
+  // --- CSAT: real quando amostra >= limiar; senão proxy estimado (juiz) ---
+  const proxyStars = allScores.map((s) => scoreToStars(s))
+  const { csat, starsForDistribution } = resolveCsat(realRatings, proxyStars)
+  const distribution = buildDistribution(starsForDistribution)
 
   return {
     summary: { quality, csat, conversations, resolutionRate },
