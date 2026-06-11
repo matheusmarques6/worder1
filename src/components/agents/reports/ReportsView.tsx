@@ -37,7 +37,7 @@ const PERIODS: { id: Period; label: string }[] = [
 
 interface Summary {
   quality: number
-  csat: number
+  csat: { value: number; source: 'real' | 'estimated'; sampleSize: number }
   conversations: number
   resolutionRate: number
 }
@@ -245,24 +245,35 @@ export default function ReportsView({ organizationId }: ReportsViewProps) {
                   </div>
                 </Card>
 
-                {/* satisfação estimada (IA) */}
+                {/* satisfação (CSAT real ou estimada) */}
                 <Card style={{ padding: 18 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span className="stat-ico" style={{ background: 'var(--amber-tint)', color: 'var(--amber)' }}>
                       <ThumbsUp style={{ width: 16, height: 16 }} />
                     </span>
                     <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>
-                      Satisfação estimada (IA)
+                      Satisfação (CSAT)
                     </span>
+                    {s.csat.source === 'real' ? (
+                      <span className="chip chip-green" style={{ marginLeft: 'auto' }}>
+                        CSAT real · {s.csat.sampleSize} resposta{s.csat.sampleSize === 1 ? '' : 's'}
+                      </span>
+                    ) : (
+                      <span className="chip" style={{ marginLeft: 'auto' }}>
+                        Estimado por IA
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, margin: '12px 0 2px' }}>
                     <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--text)' }}>
-                      {s.csat.toFixed(1)}
+                      {s.csat.value.toFixed(1)}
                     </span>
-                    <RatingBar value={s.csat} />
+                    <RatingBar value={s.csat.value} />
                   </div>
                   <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 8px', lineHeight: 1.4 }}>
-                    Estimativa do modelo a partir das notas de avaliação — não é um CSAT coletado do cliente.
+                    {s.csat.source === 'real'
+                      ? `Média de ${s.csat.sampleSize} avaliações coletadas dos clientes no período.`
+                      : 'Estimativa do modelo a partir das notas de avaliação — não é um CSAT coletado do cliente.'}
                   </p>
                   {/* distribution bars (histograma de estrelas estimadas) */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
@@ -287,7 +298,7 @@ export default function ReportsView({ organizationId }: ReportsViewProps) {
               <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 24 }}>
                 <Tile icon={<MessageSquare />} tone="blue" label="Conversas" value={s.conversations.toLocaleString('pt-BR')} />
                 <Tile icon={<TrendingUp />} tone="green" label="Taxa de resolução" value={`${s.resolutionRate}%`} />
-                <Tile icon={<ThumbsUp />} tone="amber" label="Satisfação estimada" value={s.csat.toFixed(1)} />
+                <Tile icon={<ThumbsUp />} tone="amber" label={s.csat.source === 'real' ? 'CSAT real' : 'Satisfação estimada'} value={s.csat.value.toFixed(1)} />
               </div>
 
               {/* prompt-improvement proposals */}
