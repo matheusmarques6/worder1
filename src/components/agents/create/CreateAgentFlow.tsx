@@ -31,6 +31,7 @@ import {
   getTemplateDefaultsExtended,
   generatePromptFromTemplate,
 } from '@/lib/ai/templates';
+import { templateActionToAgentActionPayload } from '@/lib/ai/templates/action-adapter';
 import type { StoreAnalysis } from '@/types/store-analysis';
 
 interface CreateAgentFlowProps {
@@ -119,6 +120,7 @@ export function CreateAgentFlow({
   const [creating, setCreating] = useState(false);
   const [createdAgentId, setCreatedAgentId] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [actionsSeeded, setActionsSeeded] = useState(false);
 
   // Auto-load analysis if storeId provided
   useEffect(() => {
@@ -332,7 +334,10 @@ ${agentFunction.handoffRules}
             response_length: persona.responseLength,
             language: 'pt-BR',
             reply_delay: persona.replyDelay,
-            guidelines: agentFunction.mainTasks,
+            guidelines: [
+              ...(selectedTemplate?.defaultGuidelines || []),
+              ...agentFunction.mainTasks,
+            ],
           },
           settings: {
             channels: {
@@ -375,6 +380,29 @@ ${agentFunction.handoffRules}
     }
   };
 
+  // Best-effort: persiste as ações pré-configuradas do template no agente.
+  // Falhas NÃO bloqueiam a criação (o agente já existe e funciona sem ações).
+  const seedTemplateActions = async (agentId: string) => {
+    if (actionsSeeded || !selectedTemplate) return;
+    const enabled = (selectedTemplate.defaultActions || []).filter((a) => a.enabled);
+    if (enabled.length === 0) return;
+    setActionsSeeded(true);
+    for (const ta of enabled) {
+      try {
+        await fetch(`/api/ai/agents/${agentId}/actions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            organization_id: organizationId,
+            ...templateActionToAgentActionPayload(ta),
+          }),
+        });
+      } catch (err) {
+        console.error('Error seeding template action:', err);
+      }
+    }
+  };
+
   // Create/activate final agent
   const handleCreateAgent = async (activateNow: boolean, channelIds: string[]) => {
     if (!selectedTemplate) return;
@@ -400,7 +428,10 @@ ${agentFunction.handoffRules}
               response_length: persona.responseLength,
               language: 'pt-BR',
               reply_delay: persona.replyDelay,
-              guidelines: agentFunction.mainTasks,
+              guidelines: [
+                ...(selectedTemplate?.defaultGuidelines || []),
+                ...agentFunction.mainTasks,
+              ],
             },
             settings: {
               channels: {
@@ -427,14 +458,15 @@ ${agentFunction.handoffRules}
             },
           }),
         });
-        
+
         const data = await res.json();
-        
+
         if (!res.ok) {
           throw new Error(data.error || 'Erro ao atualizar agente');
         }
-        
+
         setCreatedAgentId(draftAgentId);
+        await seedTemplateActions(draftAgentId);
       } else {
         // Create new agent
         const res = await fetch('/api/ai/agents', {
@@ -456,7 +488,10 @@ ${agentFunction.handoffRules}
               response_length: persona.responseLength,
               language: 'pt-BR',
               reply_delay: persona.replyDelay,
-              guidelines: agentFunction.mainTasks,
+              guidelines: [
+                ...(selectedTemplate?.defaultGuidelines || []),
+                ...agentFunction.mainTasks,
+              ],
             },
             settings: {
               channels: {
@@ -491,8 +526,9 @@ ${agentFunction.handoffRules}
         }
         
         setCreatedAgentId(data.agent.id);
+        await seedTemplateActions(data.agent.id);
       }
-      
+
     } catch (err: any) {
       setCreateError(err.message);
     } finally {
