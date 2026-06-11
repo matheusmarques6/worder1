@@ -33,7 +33,12 @@ interface QStashResponse {
 
 class QStashClient {
   private token: string;
-  private baseUrl = 'https://qstash.upstash.io/v2';
+  // QStash da Upstash e regional (us-east-1, eu-central-1 etc). O endpoint
+  // global 'qstash.upstash.io' roteia via GeoDNS — quando a Vercel function
+  // roda em uma regiao diferente da do projeto QStash, retorna 404
+  // "user not found in this region". QSTASH_URL permite forcar a regiao certa,
+  // ex: https://qstash-us1.upstash.io/v2 (le do painel Upstash > QStash > Details).
+  private baseUrl = (process.env.QSTASH_URL || 'https://qstash.upstash.io/v2').replace(/\/$/, '');
 
   constructor(token: string) {
     this.token = token;
