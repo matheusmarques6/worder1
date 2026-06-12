@@ -209,6 +209,14 @@ export default function AIAgentEditor({
 
       if (!res.ok) {
         const data = await res.json()
+        // P1-1: ativacao bloqueada por falta de chave do provider — mensagem
+        // acionavel apontando pra aba API Keys.
+        if (data.error === 'provider_key_missing') {
+          throw new Error(
+            `O provedor "${data.provider}" não tem chave de API ativa. ` +
+              'Cadastre em Agentes IA → aba API Keys e salve de novo.',
+          )
+        }
         throw new Error(data.error || 'Erro ao salvar')
       }
 

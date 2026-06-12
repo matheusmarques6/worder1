@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { AIAgent, DEFAULT_PERSONA, DEFAULT_SETTINGS } from '@/lib/ai/types'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
+import { hasActiveProviderKey, providerKeyMissingResponse } from '@/lib/ai/provider-key-check';
 export const dynamic = 'force-dynamic';
 
 // =====================================================
@@ -121,6 +122,14 @@ export async function POST(request: NextRequest) {
       total_conversations: 0,
       total_tokens_used: 0,
       avg_response_time_ms: 0,
+    }
+
+    // P1-1: criar ja-ativo exige chave do provider (mesma regra do PUT/PATCH).
+    if (agentData.is_active === true) {
+      const hasKey = await hasActiveProviderKey(supabase, organizationId, agentData.provider)
+      if (!hasKey) {
+        return NextResponse.json(providerKeyMissingResponse(agentData.provider), { status: 400 })
+      }
     }
 
     // Inserir

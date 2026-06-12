@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
 import { snapshotIfChanged } from '@/lib/ai/versions';
+import { hasActiveProviderKey, providerKeyMissingResponse } from '@/lib/ai/provider-key-check';
 export const dynamic = 'force-dynamic';
 
 // =====================================================
@@ -89,13 +90,27 @@ export async function PUT(
     // Verificar se agente existe (estado pré-update usado pelo snapshot de versão)
     const { data: existing, error: checkError } = await supabase
       .from('ai_agents')
-      .select('id, system_prompt, persona, settings')
+      .select('id, system_prompt, persona, settings, provider, is_active')
       .eq('id', agentId)
       .eq('organization_id', organization_id)
       .single()
 
     if (checkError || !existing) {
       return NextResponse.json({ error: 'Agente não encontrado' }, { status: 404 })
+    }
+
+    // P1-1: preflight — quando a mudanca toca is_active/provider e o estado
+    // final e ativo, o provider precisa ter chave ativa. Evita o agente
+    // "ligado" que morre silenciosamente na 1a mensagem do cliente.
+    if (body.is_active !== undefined || body.provider !== undefined) {
+      const finalActive = body.is_active !== undefined ? body.is_active : existing.is_active
+      const finalProvider = body.provider !== undefined ? body.provider : existing.provider
+      if (finalActive === true && finalProvider) {
+        const hasKey = await hasActiveProviderKey(supabase, organization_id, finalProvider)
+        if (!hasKey) {
+          return NextResponse.json(providerKeyMissingResponse(finalProvider), { status: 400 })
+        }
+      }
     }
 
     // Snapshot de versão (Bloco F1) — não-fatal: o save continua mesmo se falhar
@@ -212,6 +227,28 @@ export async function PATCH(
     for (const field of allowedFields) {
       if (body[field] !== undefined) {
         updateData[field] = body[field]
+      }
+    }
+
+    // P1-1: preflight de ativacao (mesma regra do PUT). Busca o estado atual
+    // so quando a mudanca toca is_active/provider.
+    if (body.is_active !== undefined || body.provider !== undefined) {
+      const { data: existingAgent } = await supabase
+        .from('ai_agents')
+        .select('provider, is_active')
+        .eq('id', agentId)
+        .eq('organization_id', organization_id)
+        .single()
+
+      if (existingAgent) {
+        const finalActive = body.is_active !== undefined ? body.is_active : existingAgent.is_active
+        const finalProvider = body.provider !== undefined ? body.provider : existingAgent.provider
+        if (finalActive === true && finalProvider) {
+          const hasKey = await hasActiveProviderKey(supabase, organization_id, finalProvider)
+          if (!hasKey) {
+            return NextResponse.json(providerKeyMissingResponse(finalProvider), { status: 400 })
+          }
+        }
       }
     }
 
