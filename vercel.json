@@ -129,6 +129,10 @@
       "schedule": "0 6 * * *"
     },
     {
+      "path": "/api/cron/whatsapp-webhook-heartbeat",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/cron/send-scheduled-whatsapp-campaigns",
       "schedule": "* * * * *"
     },
