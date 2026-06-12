@@ -31,7 +31,7 @@ export class AIAgentEngine {
   private agent: AIAgent
   private organizationId: string
   private supabase: SupabaseClient
-  private ragService: RAGService
+  private ragService: RAGService | null
   private actionsEngine: ActionsEngine | null = null
   private promptBuilder: PromptBuilder
   private apiKey: string
@@ -45,7 +45,14 @@ export class AIAgentEngine {
 
     // Usar cliente centralizado (lazy loaded)
     this.supabase = supabaseAdmin as unknown as SupabaseClient
-    this.ragService = createRAGService()
+    // RAG é opcional: sem OPENAI_API_KEY (embeddings) o agente responde sem
+    // knowledge base em vez de quebrar no construtor.
+    try {
+      this.ragService = createRAGService()
+    } catch (e: any) {
+      console.warn(`[engine] RAG desabilitado (sem OPENAI_API_KEY): ${e?.message}`)
+      this.ragService = null
+    }
     this.promptBuilder = new PromptBuilder(this.agent)
   }
 
@@ -122,14 +129,26 @@ export class AIAgentEngine {
       // RAG CONDICIONAL: quando search_knowledge está ativa, NÃO pré-injetamos
       // o RAG (a IA busca sob demanda via tool). Caso contrário, mantemos a
       // pré-injeção (comportamento atual, não quebra agentes sem tools).
+      //
+      // RAG é NÃO-FATAL (Onda 13): embedding usa OPENAI_API_KEY (env) — se a
+      // chave estiver errada/ausente, a base de conhecimento fica indisponível
+      // mas a resposta SAI sem contexto. Antes, o throw subia pro runner, casava
+      // /api key/i e desligava a conversa com no_valid_api_key — culpando a
+      // chave do AGENTE por um erro da chave de EMBEDDING (incidente 12/06).
       let ragResults: Awaited<ReturnType<RAGService['search']>> = []
-      if (!hasSearchKnowledge) {
-        ragResults = await this.ragService.search({
-          agentId: this.agent.id,
-          query: currentMessage,
-          topK: 5,
-          threshold: 0.7,
-        })
+      if (!hasSearchKnowledge && this.ragService) {
+        try {
+          ragResults = await this.ragService.search({
+            agentId: this.agent.id,
+            query: currentMessage,
+            topK: 5,
+            threshold: 0.7,
+          })
+        } catch (ragErr: any) {
+          console.warn(
+            `[engine] RAG indisponível (seguindo sem contexto) — agent=${this.agent.id}: ${ragErr?.message}`,
+          )
+        }
       }
 
       const ragContext = ragResults.length > 0
