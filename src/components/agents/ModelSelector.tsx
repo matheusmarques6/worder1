@@ -23,6 +23,9 @@ export interface LLMModel {
   input_price?: number
   output_price?: number
   is_available?: boolean
+  /** $/1k tokens — vem da API /api/ai/models (DB ou catalogo OpenRouter). */
+  cost_per_1k_input?: number
+  cost_per_1k_output?: number
 }
 
 interface ModelSelectorProps {
@@ -85,7 +88,14 @@ export default function ModelSelector({
       const res = await fetch('/api/ai/models')
       if (res.ok) {
         const data = await res.json()
-        setModels(data.models || [])
+        // Normaliza: modelos do DB/fallback usam display_name; OpenRouter usa
+        // name. Sem isso, metade da lista renderia sem titulo.
+        setModels(
+          (data.models || []).map((m: any) => ({
+            ...m,
+            name: m.display_name || m.name || m.id,
+          })),
+        )
       }
     } catch (err) {
       console.error('Error fetching models:', err)
@@ -261,21 +271,29 @@ export default function ModelSelector({
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="menu absolute z-20 w-full mt-2 max-h-96 overflow-hidden flex flex-col"
+                  className="menu absolute z-20 w-full mt-2 max-h-[30rem] overflow-hidden flex flex-col"
                 >
                   {/* Search — util pra OpenRouter (300+ modelos) */}
                   {providerModelsBase.length > 10 && (
-                    <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: 'var(--border)' }}>
+                    <div
+                      className="flex items-center gap-2 px-3 py-2.5 border-b sticky top-0"
+                      style={{ borderColor: 'var(--border)', background: 'var(--surface, #fff)' }}
+                    >
                       <Search className="w-4 h-4" style={{ color: 'var(--text-3)' }} />
                       <input
                         type="text"
                         autoFocus
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder={`Buscar entre ${providerModelsBase.length} modelos...`}
+                        placeholder={`Buscar entre ${providerModelsBase.length} modelos (nome ou slug)...`}
                         className="flex-1 text-sm bg-transparent outline-none"
                         style={{ color: 'var(--text)' }}
                       />
+                      {search && (
+                        <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-3)' }}>
+                          {filteredProviderModels.length} resultado{filteredProviderModels.length === 1 ? '' : 's'}
+                        </span>
+                      )}
                     </div>
                   )}
 
@@ -285,37 +303,77 @@ export default function ModelSelector({
                         Nenhum modelo encontrado
                       </div>
                     ) : (
-                      filteredProviderModels.slice(0, 200).map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => {
-                            onModelChange(m.id)
-                            setShowDropdown(false)
-                          }}
-                          className="w-full flex items-center gap-3"
-                        >
-                          <Brain
-                            className="w-4 h-4 flex-shrink-0"
-                            style={{ color: model === m.id ? 'var(--brand)' : 'var(--text-4)' }}
-                          />
-                          <div className="flex-1 min-w-0 text-left">
-                            <p className="text-sm truncate" style={{ color: 'var(--text)' }}>{m.name}</p>
-                            <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>
-                              {m.description || m.id}
-                            </p>
-                          </div>
-                          {m.context_window && (
-                            <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-3)' }}>
-                              {m.context_window >= 1000
-                                ? `${(m.context_window / 1000).toFixed(0)}k`
-                                : m.context_window}
-                            </span>
-                          )}
-                          {model === m.id && (
-                            <Check className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--brand)' }} />
-                          )}
-                        </button>
-                      ))
+                      filteredProviderModels.slice(0, 200).map((m) => {
+                        const inPer1k = m.cost_per_1k_input
+                        const outPer1k = m.cost_per_1k_output
+                        const hasPrice = inPer1k !== undefined && inPer1k !== null
+                        const isFree = hasPrice && (inPer1k || 0) === 0 && (outPer1k || 0) === 0
+                        // Exibe em $/1M tokens (padrao da industria)
+                        const priceLabel = !hasPrice
+                          ? null
+                          : isFree
+                            ? 'grátis'
+                            : `$${((inPer1k || 0) * 1000).toFixed(2)} / $${((outPer1k || 0) * 1000).toFixed(2)} por 1M`
+                        const ctxLabel = m.context_window
+                          ? m.context_window >= 1_000_000
+                            ? `${(m.context_window / 1_000_000).toFixed(1).replace('.0', '')}M ctx`
+                            : `${Math.round(m.context_window / 1000)}k ctx`
+                          : null
+
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => {
+                              onModelChange(m.id)
+                              setShowDropdown(false)
+                            }}
+                            className="w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-black/[0.03] border-b"
+                            style={{
+                              borderColor: 'var(--border)',
+                              background: model === m.id ? 'var(--brand-tint, rgba(249,115,22,0.06))' : undefined,
+                            }}
+                          >
+                            <Brain
+                              className="w-4 h-4 mt-0.5 flex-shrink-0"
+                              style={{ color: model === m.id ? 'var(--brand)' : 'var(--text-4)' }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>
+                                {m.name}
+                              </p>
+                              <p
+                                className="text-[11px] truncate"
+                                style={{ color: 'var(--text-3)', fontFamily: 'var(--mono, ui-monospace, monospace)' }}
+                              >
+                                {m.id}
+                              </p>
+                              {m.description && (
+                                <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-3)' }}>
+                                  {m.description}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                              {model === m.id && (
+                                <Check className="w-4 h-4" style={{ color: 'var(--brand)' }} />
+                              )}
+                              {ctxLabel && (
+                                <span className="text-[11px] font-medium" style={{ color: 'var(--text-2)' }}>
+                                  {ctxLabel}
+                                </span>
+                              )}
+                              {priceLabel && (
+                                <span
+                                  className="text-[10px] whitespace-nowrap"
+                                  style={{ color: isFree ? 'var(--green, #16a34a)' : 'var(--text-3)' }}
+                                >
+                                  {priceLabel}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        )
+                      })
                     )}
                     {filteredProviderModels.length > 200 && (
                       <div className="px-3 py-2 text-center text-xs" style={{ color: 'var(--text-3)' }}>
