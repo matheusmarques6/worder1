@@ -285,6 +285,19 @@ export async function sendHumanizedReply(
     })
     .eq('id', conversation.id);
 
+  // Primeira resposta deste agente nesta conversa => conta +1 em
+  // ai_agents.total_conversations (dashboard de agentes). Best-effort:
+  // RPC ausente em prod nao pode quebrar o envio que ja aconteceu.
+  if (!conversation.ai_agent_id) {
+    try {
+      await supabaseAdmin.rpc('increment_agent_conversations', {
+        p_agent_id: agent.id,
+      });
+    } catch (e: any) {
+      console.warn('[cloud-sender] increment_agent_conversations falhou (best-effort):', e?.message);
+    }
+  }
+
   return {
     sent: true,
     messageId: messageIds[0],
