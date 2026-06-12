@@ -21,6 +21,7 @@ import { Search, RefreshCw, MessageSquare, AlertCircle } from 'lucide-react'
 import { ConversationList } from '@/components/whatsapp/inbox/ConversationList'
 import { ChatPanel } from '@/components/whatsapp/inbox/ChatPanel'
 import { ContactPanel } from '@/components/whatsapp/inbox/ContactPanel'
+import { ReactivateAiBanner } from '@/components/whatsapp/inbox/ReactivateAiBanner'
 import WhatsAppConnectionManager from '@/components/whatsapp/inbox/WhatsAppConnectionManager'
 import WhatsAppConnectUnified from '@/components/whatsapp/WhatsAppConnectUnified'
 
@@ -402,6 +403,9 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
             />
           </div>
         </div>
+
+        {/* Banner: religar IA pausada por causa automática (Onda 13) */}
+        <ReactivateAiBanner onReactivated={refreshConversations} />
 
         {/* Conversations List */}
         <div className="flex-1 overflow-y-auto">

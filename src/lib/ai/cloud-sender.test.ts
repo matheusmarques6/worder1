@@ -16,7 +16,7 @@ vi.mock('@/lib/whatsapp/opt-out-guard', () => ({
 }))
 
 vi.mock('@/lib/whatsapp/cloud-api', () => ({
-  createWhatsAppCloudClient: (...args: any[]) => mockCreateClient(...args),
+  createWhatsAppCloudClient: (...args: any[]) => (mockCreateClient as any)(...args),
 }))
 
 vi.mock('@/lib/whatsapp/account-loader', () => ({
