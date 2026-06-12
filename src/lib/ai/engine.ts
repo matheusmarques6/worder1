@@ -526,7 +526,10 @@ export async function createAgentEngine(
     .eq('is_active', true)
     .maybeSingle()
 
-  const apiKey = apiKeyData?.api_key || process.env.OPENAI_API_KEY || ''
+  // BYO total (Onda 13.6): nada de fallback pra process.env. Sem chave da org
+  // no provider do agente -> erro claro pro caller (cloud-runner ja trata
+  // disso via `no_valid_api_key` antes de chegar aqui).
+  const apiKey = apiKeyData?.api_key || ''
   const baseUrl = apiKeyData?.base_url || undefined
 
   if (!apiKey) {
