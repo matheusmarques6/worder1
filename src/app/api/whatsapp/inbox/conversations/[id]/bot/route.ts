@@ -84,7 +84,9 @@ export async function POST(
       
       if (!newAiEnabled) {
         updateData.ai_disabled_at = new Date().toISOString()
-        updateData.ai_disabled_reason = reason || 'Desativado manualmente'
+        // 'manual' e o valor canonico (disabled-reasons.ts) — fica fora da
+        // whitelist do bulk reactivate por construcao.
+        updateData.ai_disabled_reason = reason || 'manual'
       } else {
         updateData.ai_disabled_at = null
         updateData.ai_disabled_reason = null

@@ -110,7 +110,8 @@ export async function POST(
         .update({
           ai_enabled: false,
           ai_disabled_at: new Date().toISOString(),
-          ai_disabled_reason: reason || 'manual_pause',
+          // 'manual' e o valor canonico (disabled-reasons.ts).
+          ai_disabled_reason: reason || 'manual',
         })
         .eq('id', conversationId)
 

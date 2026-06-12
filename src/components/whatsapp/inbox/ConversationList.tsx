@@ -1,13 +1,15 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { 
-  Bot, 
-  MessageSquare, 
+import {
+  Bot,
+  PowerOff,
+  MessageSquare,
   Loader2,
   User,
 } from 'lucide-react'
 import type { InboxConversation } from '@/types/inbox'
+import { isAutoDisabledReason, getDisabledReasonLabel } from '@/lib/ai/disabled-reasons'
 
 interface ConversationListProps {
   conversations: InboxConversation[]
@@ -94,9 +96,21 @@ function ConversationItem({
         
         {/* Bot indicator */}
         {conversation.is_bot_active && (
-          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-primary-500 rounded-full 
+          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-primary-500 rounded-full
                           flex items-center justify-center border-2 border-gray-200">
             <Bot className="w-3 h-3 text-white" />
+          </div>
+        )}
+
+        {/* IA off por causa AUTOMATICA (Onda 13): problema a resolver, nao
+            escolha do atendente — overlay ambar chama atencao na lista. */}
+        {!conversation.is_bot_active && isAutoDisabledReason(conversation.ai_disabled_reason) && (
+          <div
+            title={getDisabledReasonLabel(conversation.ai_disabled_reason)}
+            className="absolute -bottom-1 -right-1 w-5 h-5 bg-amber-500 rounded-full
+                          flex items-center justify-center border-2 border-gray-200"
+          >
+            <PowerOff className="w-3 h-3 text-white" />
           </div>
         )}
       </div>

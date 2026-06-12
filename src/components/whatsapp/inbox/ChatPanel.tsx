@@ -9,8 +9,8 @@ import {
   KeyRound, Mic,
 } from 'lucide-react'
 import { AudioRecorder } from './AudioRecorder'
-import { AIToggleButton } from './AIToggleButton'
 import { ServiceWindowBar } from './ServiceWindowBar'
+import { getDisabledReasonLabel, isAutoDisabledReason } from '@/lib/ai/disabled-reasons'
 import { QuickRepliesPicker } from './QuickRepliesPicker'
 import { TemplatePickerModal, type SendTemplatePayload } from './TemplatePickerModal'
 import { CSATModal } from './modals/CSATModal'
@@ -551,7 +551,23 @@ export function ChatPanel({
         </div>
 
         <div className="flex items-center gap-2">
-          <AIToggleButton conversationId={conversation.id} initialEnabled={conversation.ai_enabled !== false} variant="default" />
+          {/* Badge de motivo (Onda 13): por que o bot esta off nesta conversa.
+              Diferencia escolha do atendente (manual) de problema do sistema. */}
+          {!conversation.is_bot_active && conversation.ai_disabled_reason && (
+            <span
+              title={conversation.ai_disabled_at
+                ? `Desde ${new Date(conversation.ai_disabled_at).toLocaleString('pt-BR')}`
+                : undefined}
+              className={`hidden md:inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border ${
+                isAutoDisabledReason(conversation.ai_disabled_reason)
+                  ? 'bg-amber-50 text-amber-700 border-amber-300'
+                  : 'bg-gray-100 text-gray-500 border-gray-200'
+              }`}
+            >
+              <AlertCircle className="w-3 h-3" />
+              {getDisabledReasonLabel(conversation.ai_disabled_reason)}
+            </span>
+          )}
 
           <button onClick={onToggleBot}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
