@@ -41,23 +41,8 @@ export {
 } from './test-run-shared'
 import { deriveRunStatus, type ScenarioStatus, type ScenarioResult } from './test-run-shared'
 
-// =============================================
-// HELPERS DE LOOKUP (espelham engine.ts)
-// =============================================
-
-async function resolveApiKey(
-  supabase: SupabaseClient,
-  organizationId: string,
-  provider: string
-): Promise<string> {
-  const { data } = await supabase
-    .from('api_keys')
-    .select('api_key')
-    .eq('organization_id', organizationId)
-    .eq('provider', provider)
-    .single()
-  return data?.api_key || process.env.OPENAI_API_KEY || ''
-}
+// Resolucao de chave do juiz agora vive em ./judge-key (BYO total, Onda 13.6).
+import { resolveJudgeKey } from './judge-key'
 
 /** version_id do run = versão 'produção' atual do agente, se existir. */
 async function resolveProductionVersionId(
@@ -149,10 +134,10 @@ export async function generateScenarios(
     return []
   }
 
-  const apiKey = await resolveApiKey(supabase, organizationId, agent.provider)
-  if (!apiKey) return []
-
-  const provider = agent.provider as AIProvider
+  const judge = await resolveJudgeKey(supabase, organizationId, agent.provider)
+  if (!judge) return []
+  const apiKey = judge.apiKey
+  const provider = judge.provider as AIProvider
   const personaDesc = agent.persona?.role_description || ''
   const userPrompt = [
     `Nome do agente: ${agent.name}`,
@@ -238,9 +223,10 @@ async function runSingleScenario(
   scenario: ScenarioRow,
   agent: AIAgent,
   organizationId: string,
-  apiKey: string
+  apiKey: string,
+  judgeProvider: AIProvider
 ): Promise<{ transcript: TranscriptLine[]; score: number; status: ScenarioStatus; note: string; tokens: number; judgeModel: string }> {
-  const provider = agent.provider as AIProvider
+  const provider = judgeProvider
   const judgeModel = JUDGE_MODELS[provider] || JUDGE_MODELS.openai
   const userTurns = normalizeUserTurns(scenario.user_turns)
 
@@ -336,12 +322,15 @@ export async function runScenarios(
   // Budget check: 402 via AiBudgetExceededError (caller/rota captura)
   await checkAiBudget(organizationId, { throwOnExceeded: true })
 
-  const apiKey = await resolveApiKey(supabase, organizationId, agent.provider)
+  const judge = await resolveJudgeKey(supabase, organizationId, agent.provider)
+  if (!judge) return []
+  const apiKey = judge.apiKey
+  const judgeProvider = judge.provider as AIProvider
   const versionId = await resolveProductionVersionId(supabase, agent.id, organizationId)
 
   const results: ScenarioResult[] = []
   for (const scenario of toRun) {
-    const run = await runSingleScenario(scenario, agent, organizationId, apiKey)
+    const run = await runSingleScenario(scenario, agent, organizationId, apiKey, judgeProvider)
 
     const { error: insertError } = await supabase.from('ai_scenario_runs').insert({
       organization_id: organizationId,

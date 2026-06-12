@@ -153,23 +153,8 @@ export function versionScores(
   })
 }
 
-// =============================================
-// HELPERS DE LOOKUP (espelham test-runner.ts)
-// =============================================
-
-async function resolveApiKey(
-  supabase: SupabaseClient,
-  organizationId: string,
-  provider: string
-): Promise<string> {
-  const { data } = await supabase
-    .from('api_keys')
-    .select('api_key')
-    .eq('organization_id', organizationId)
-    .eq('provider', provider)
-    .single()
-  return data?.api_key || process.env.OPENAI_API_KEY || ''
-}
+// Resolucao de chave do juiz agora vive em ./judge-key (BYO total, Onda 13.6).
+import { resolveJudgeKey } from './judge-key'
 
 async function resolveProductionVersionId(
   supabase: SupabaseClient,
@@ -423,9 +408,10 @@ export async function runEvaluation(
   // Budget check: 402 via AiBudgetExceededError (caller/rota captura)
   await checkAiBudget(orgId, { throwOnExceeded: true })
 
-  const apiKey = await resolveApiKey(supabase, orgId, agent.provider)
-  if (!apiKey) return
-  const provider = agent.provider as AIProvider
+  const judge = await resolveJudgeKey(supabase, orgId, agent.provider)
+  if (!judge) return
+  const apiKey = judge.apiKey
+  const provider = judge.provider as AIProvider
   const judgeModel = JUDGE_MODELS[provider] || JUDGE_MODELS.openai
   const versionId = await resolveProductionVersionId(supabase, agent.id, orgId)
 

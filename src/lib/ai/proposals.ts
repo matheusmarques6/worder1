@@ -17,6 +17,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AIAgent } from './types'
 import { callAI, type AIProvider } from '@/lib/whatsapp/ai-providers'
 import { JUDGE_MODELS } from './judge'
+import { resolveJudgeKey } from './judge-key'
 import { trackAiUsage } from './cost-tracker'
 import { checkAiBudget } from './budget'
 import { diffLines, type DiffLine } from './diff'
@@ -67,23 +68,7 @@ export interface ReportPayload {
   proposals: Proposal[]
 }
 
-// =============================================
-// HELPERS DE LOOKUP (espelham evals.ts/test-runner.ts)
-// =============================================
-
-async function resolveApiKey(
-  supabase: SupabaseClient,
-  organizationId: string,
-  provider: string
-): Promise<string> {
-  const { data } = await supabase
-    .from('api_keys')
-    .select('api_key')
-    .eq('organization_id', organizationId)
-    .eq('provider', provider)
-    .single()
-  return data?.api_key || process.env.OPENAI_API_KEY || ''
-}
+// Resolucao de chave do juiz agora vive em ./judge-key (BYO total, Onda 13.6).
 
 // =============================================
 // AGREGADOS (getReportSummary)
@@ -384,9 +369,10 @@ export async function generateProposals(
   // Budget check: 402 via AiBudgetExceededError (caller/rota captura)
   await checkAiBudget(orgId, { throwOnExceeded: true })
 
-  const apiKey = await resolveApiKey(supabase, orgId, agent.provider)
-  if (!apiKey) return
-  const provider = agent.provider as AIProvider
+  const judge = await resolveJudgeKey(supabase, orgId, agent.provider)
+  if (!judge) return
+  const provider = judge.provider as AIProvider
+  const apiKey = judge.apiKey
   const model = JUDGE_MODELS[provider] || JUDGE_MODELS.openai
 
   const userPrompt = [
