@@ -279,6 +279,9 @@ export async function sendHumanizedReply(
       last_message_at: new Date().toISOString(),
       last_message_preview: lastBubble.substring(0, 100),
       last_message_direction: 'outbound',
+      // Vincula a conversa ao agente que respondeu — o Relatorios conta
+      // conversas por ai_agent_id; sem isso ficava 0 pra sempre (Onda 13).
+      ai_agent_id: agent.id,
     })
     .eq('id', conversation.id);
 
