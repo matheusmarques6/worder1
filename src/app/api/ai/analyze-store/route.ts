@@ -142,9 +142,13 @@ export async function POST(request: NextRequest) {
 
     // Executar análise com IA
     console.log('Executando análise com IA...');
-    const analysis = await runFullAnalysis(collectedData, (step, total, message) => {
-      console.log(`[${step}/${total}] ${message}`);
-    });
+    const analysis = await runFullAnalysis(
+      collectedData,
+      { supabase, organizationId },
+      (step, total, message) => {
+        console.log(`[${step}/${total}] ${message}`);
+      }
+    );
 
     // Salvar análise no banco
     const { error: saveError } = await supabase

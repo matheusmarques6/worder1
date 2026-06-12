@@ -24,9 +24,14 @@ export class ActionsEngine {
   private openaiKey: string | null
   private supabase: SupabaseClient
 
-  constructor(actions: AgentAction[], openaiKey?: string) {
+  /**
+   * @param openaiKey chave OpenAI da org (intent/sentiment chamam direto api.openai.com).
+   *   Null/vazio -> intent/sentiment caem pro modo "simple" (heuristicas locais).
+   *   BYO total: NUNCA cai pra process.env (Onda 13.6).
+   */
+  constructor(actions: AgentAction[], openaiKey?: string | null) {
     this.actions = actions.filter(a => a.is_active).sort((a, b) => a.priority - b.priority)
-    this.openaiKey = openaiKey || process.env.OPENAI_API_KEY || null
+    this.openaiKey = openaiKey || null
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY

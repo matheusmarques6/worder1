@@ -5,76 +5,83 @@
 // Analisa dados da loja e gera configurações de agente
 // =====================================================
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   CollectedStoreData,
   CollectedProduct,
   StoreAnalysis,
   StoreScores,
 } from '@/types/store-analysis';
+import { resolveJudgeKey } from './judge-key';
 
 // =====================================================
-// CLIENTE DE IA
+// CLIENTE DE IA (BYO total, Onda 13.6)
 // =====================================================
 
-async function callAI(prompt: string): Promise<string> {
-  // Tentar Anthropic primeiro
-  if (process.env.ANTHROPIC_API_KEY) {
-    try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 2000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
+interface AnalyzerContext {
+  supabase: SupabaseClient;
+  organizationId: string;
+}
 
-      if (response.ok) {
-        const data = await response.json();
-        return data.content[0].text;
-      }
-    } catch (err) {
-      console.error('Anthropic error, falling back to OpenAI:', err);
-    }
+async function callAI(prompt: string, ctx: AnalyzerContext): Promise<string> {
+  // Prioriza chave Anthropic da org -> fallback openai da org. SEM env.
+  const judge = await resolveJudgeKey(ctx.supabase, ctx.organizationId, 'anthropic');
+  if (!judge) {
+    throw new Error(
+      'Nenhuma chave de IA configurada. Cadastre uma chave (OpenAI ou Anthropic) em Configurações > API Keys.'
+    );
   }
 
-  // Fallback para OpenAI
-  if (process.env.OPENAI_API_KEY) {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  if (judge.provider === 'anthropic') {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'x-api-key': judge.apiKey,
+        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 2000,
+        messages: [{ role: 'user', content: prompt }],
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI error: ${response.status}`);
+      throw new Error(`Anthropic error: ${response.status}`);
     }
-
     const data = await response.json();
-    return data.choices[0].message.content;
+    return data.content[0].text;
   }
 
-  throw new Error('No AI provider configured');
+  // openai
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${judge.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      max_tokens: 2000,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.choices[0].message.content;
 }
 
 // =====================================================
 // ANÁLISE DE NICHO
 // =====================================================
 
-async function analyzeNiche(data: CollectedStoreData): Promise<{
+async function analyzeNiche(data: CollectedStoreData, ctx: AnalyzerContext): Promise<{
   primaryNiche: string;
   secondaryNiche: string | null;
   templateId: string;
@@ -117,7 +124,7 @@ Responda APENAS em JSON com este formato exato:
   "buyingBehavior": "descrição breve do comportamento de compra"
 }`;
 
-  const response = await callAI(prompt);
+  const response = await callAI(prompt, ctx);
   return extractJSON(response);
 }
 
@@ -125,7 +132,7 @@ Responda APENAS em JSON com este formato exato:
 // ANÁLISE DE BRANDING
 // =====================================================
 
-async function analyzeBranding(data: CollectedStoreData): Promise<{
+async function analyzeBranding(data: CollectedStoreData, ctx: AnalyzerContext): Promise<{
   tone: 'casual' | 'friendly' | 'professional' | 'luxury';
   personality: string[];
   voiceDescription: string;
@@ -161,7 +168,7 @@ Responda APENAS em JSON com este formato:
   "suggestedDescription": "descrição sugerida para o agente"
 }`;
 
-  const response = await callAI(prompt);
+  const response = await callAI(prompt, ctx);
   return extractJSON(response);
 }
 
@@ -169,7 +176,7 @@ Responda APENAS em JSON com este formato:
 // GERAÇÃO DE FAQ
 // =====================================================
 
-async function generateFAQ(data: CollectedStoreData, niche: string): Promise<{
+async function generateFAQ(data: CollectedStoreData, niche: string, ctx: AnalyzerContext): Promise<{
   question: string;
   answer: string;
   category: string;
@@ -193,7 +200,7 @@ Responda APENAS em JSON com este formato:
   ]
 }`;
 
-  const response = await callAI(prompt);
+  const response = await callAI(prompt, ctx);
   const result = extractJSON(response);
   return result.items || [];
 }
@@ -202,7 +209,7 @@ Responda APENAS em JSON com este formato:
 // GERAÇÃO DE INSIGHTS
 // =====================================================
 
-async function generateInsights(data: CollectedStoreData, scores: StoreScores): Promise<{
+async function generateInsights(data: CollectedStoreData, scores: StoreScores, ctx: AnalyzerContext): Promise<{
   type: 'success' | 'warning' | 'error' | 'tip';
   title: string;
   description: string;
@@ -242,7 +249,7 @@ Responda APENAS em JSON:
   ]
 }`;
 
-  const response = await callAI(prompt);
+  const response = await callAI(prompt, ctx);
   const result = extractJSON(response);
   return result.items || [];
 }
@@ -376,6 +383,7 @@ ${data.policies.refund ? `**Trocas:** ${data.policies.refund.substring(0, 300)}`
 
 export async function runFullAnalysis(
   data: CollectedStoreData,
+  ctx: AnalyzerContext,
   onProgress?: (step: number, total: number, message: string) => void
 ): Promise<StoreAnalysis> {
   const totalSteps = 7;
@@ -389,19 +397,19 @@ export async function runFullAnalysis(
 
   // Step 2: Analisar nicho
   progress(2, 'Analisando nicho e público-alvo...');
-  const nicheAnalysis = await analyzeNiche(data);
+  const nicheAnalysis = await analyzeNiche(data, ctx);
 
   // Step 3: Analisar branding
   progress(3, 'Analisando branding e tom de voz...');
-  const brandingAnalysis = await analyzeBranding(data);
+  const brandingAnalysis = await analyzeBranding(data, ctx);
 
   // Step 4: Gerar FAQ
   progress(4, 'Gerando perguntas frequentes...');
-  const faq = await generateFAQ(data, nicheAnalysis.primaryNiche);
+  const faq = await generateFAQ(data, nicheAnalysis.primaryNiche, ctx);
 
   // Step 5: Gerar insights
   progress(5, 'Gerando insights e recomendações...');
-  const insights = await generateInsights(data, scores);
+  const insights = await generateInsights(data, scores, ctx);
 
   // Step 6: Gerar prompt
   progress(6, 'Gerando prompt do agente...');

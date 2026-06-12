@@ -78,10 +78,17 @@ export class AIAgentEngine {
       // 2b. Verificar budget mensal (lança AiBudgetExceededError se excedido)
       await checkAiBudget(this.organizationId, { throwOnExceeded: true })
 
-      // 3. Carregar ações e criar engine
+      // 3. Carregar ações e criar engine.
+      // Intent/sentiment do ActionsEngine chamam api.openai.com direto; se o
+      // provider do agente nao for openai (ex: openrouter), a chave nao serve.
+      // Resolvemos uma chave openai-da-org especifica (BYO total, Onda 13.6);
+      // sem ela, ActionsEngine cai pro modo "simple" (heuristica local).
       const actions = await this.loadActions()
       if (actions.length > 0) {
-        this.actionsEngine = new ActionsEngine(actions, this.apiKey)
+        const openaiKey = this.agent.provider === 'openai'
+          ? this.apiKey
+          : await this.resolveOpenaiKeyForActions()
+        this.actionsEngine = new ActionsEngine(actions, openaiKey)
       }
 
       // 4. Avaliar ações (When/Do)
@@ -339,6 +346,21 @@ export class AIAgentEngine {
     }
 
     return actions || []
+  }
+
+  /**
+   * Resolve a chave OpenAI da propria org (usada por intent/sentiment do
+   * ActionsEngine quando o provider do agente nao e openai). Null se nao tem.
+   */
+  private async resolveOpenaiKeyForActions(): Promise<string | null> {
+    const { data } = await this.supabase
+      .from('organization_api_keys')
+      .select('api_key')
+      .eq('organization_id', this.organizationId)
+      .eq('provider', 'openai')
+      .eq('is_active', true)
+      .maybeSingle()
+    return data?.api_key || null
   }
 
   /**
