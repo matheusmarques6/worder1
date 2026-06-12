@@ -14,6 +14,7 @@ import {
 import { AIAgent, AgentSettings } from '@/lib/ai/types'
 import { AccordionItem } from '../ui/primitives'
 import ModelSelector from '../ModelSelector'
+import { MaxTokensSlider } from '../MaxTokensSlider'
 import { authedFetch } from '@/lib/api/authed-fetch'
 import { useStoreStore } from '@/stores'
 
@@ -220,6 +221,14 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
               onTemperatureChange={(temperature) => onUpdate({ temperature })}
               showTemperature={true}
             />
+
+            {/* Tamanho da resposta — modelos com reasoning consomem max_tokens
+                pensando. Default abaixo de 2048 pode devolver resposta vazia. */}
+            <MaxTokensSlider
+              value={agent.max_tokens ?? 2048}
+              onChange={(max_tokens) => onUpdate({ max_tokens })}
+            />
+
             <div className="callout" style={{ marginTop: 16 }}>
               <Info className="w-4 h-4 flex-shrink-0" />
               <p>

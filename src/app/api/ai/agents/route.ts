@@ -108,7 +108,10 @@ export async function POST(request: NextRequest) {
       provider: provider || 'openai',
       model: model || 'gpt-4o-mini',
       temperature: body.temperature ?? 0.7,
-      max_tokens: body.max_tokens ?? 500,
+      // Default 2048: modelos com reasoning (Gemini 3.5+, o-series, R1)
+      // consomem max_tokens 'pensando' antes de escrever. 500 (default
+      // antigo) devolvia respostas vazias na 2a pergunta.
+      max_tokens: body.max_tokens ?? 2048,
       is_active: body.is_active ?? false,
       persona: {
         ...DEFAULT_PERSONA,
