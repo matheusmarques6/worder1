@@ -41,7 +41,25 @@ export async function GET(request: NextRequest) {
       throw error
     }
 
-    const conversations = (data || []).map((conv: any) => formatConversation(conv))
+    // Onda 13 — a view whatsapp_inbox_conversations NAO expoe ai_enabled/
+    // ai_disabled_*. Sem esse merge, todo objeto chegava na UI com
+    // is_bot_active=undefined: o botao mostrava 'Bot Off' SEMPRE e o polling
+    // de 5s sobrescrevia o toggle otimista ('ativa e volta pra off').
+    const cloudIds = (data || [])
+      .filter((c: any) => c.provider === 'cloud')
+      .map((c: any) => c.id)
+    const aiMap = new Map<string, any>()
+    if (cloudIds.length > 0) {
+      const { data: aiRows } = await supabase
+        .from('whatsapp_cloud_conversations')
+        .select('id, ai_enabled, ai_disabled_at, ai_disabled_reason')
+        .in('id', cloudIds)
+      for (const r of aiRows || []) aiMap.set(r.id, r)
+    }
+
+    const conversations = (data || []).map((conv: any) =>
+      formatConversation(conv, aiMap.get(conv.id)),
+    )
 
     let filteredConversations = conversations
     if (search) {
@@ -65,9 +83,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function formatConversation(conv: any) {
+function formatConversation(conv: any, ai?: any) {
   const phoneNumber = conv.phone_number || conv.contact_phone || ''
   const contactName = conv.contact_name || phoneNumber
+  // ai vem da tabela whatsapp_cloud_conversations (merge na GET) — a view
+  // unificada nao tem essas colunas. Legacy (evolution) assume IA ligada.
+  const aiEnabled = ai?.ai_enabled ?? true
 
   return {
     id: conv.id,
@@ -80,6 +101,11 @@ function formatConversation(conv: any) {
     phone_number: phoneNumber,
     chat_id: conv.chat_id,
     status: conv.status || 'open',
+
+    ai_enabled: aiEnabled,
+    is_bot_active: aiEnabled,
+    ai_disabled_at: ai?.ai_disabled_at ?? null,
+    ai_disabled_reason: ai?.ai_disabled_reason ?? null,
 
     is_window_open: conv.is_window_open ?? false,
     window_expires_at: conv.window_expires_at,
