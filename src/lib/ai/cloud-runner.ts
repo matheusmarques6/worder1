@@ -471,6 +471,19 @@ export async function maybeRunAgentForCloudConversation(
     skipDelays,
   });
 
+  // opted_out e skip terminal (Onda 13 / B2): retry nunca vai destravar um
+  // STOP do contato, entao nao marca failure (worker nao agenda retry).
+  if (!sendResult.sent && sendResult.reason === 'opted_out') {
+    return {
+      replied: false,
+      transferred: false,
+      response,
+      traceId,
+      agentId,
+      skipped: 'opted_out',
+    };
+  }
+
   return {
     replied: sendResult.sent,
     transferred: false,

@@ -28,6 +28,8 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
+import { requireOptIn } from '@/lib/whatsapp/opt-out-guard';
+import { wlog } from '@/lib/observability/whatsapp-logger';
 
 // ---- Caps de split ----
 const MAX_BUBBLES = 4;
@@ -141,6 +143,26 @@ export async function sendHumanizedReply(
       `[cloud-sender] sem telefone na conversa. conversation_id=${conversation.id}`,
     );
     return { sent: false, reason: 'no_phone' };
+  }
+
+  // --- Opt-out guard (Onda 13 / B2) ---
+  // Contato que deu STOP nao recebe auto-reply mesmo com janela aberta.
+  // IA so manda texto livre (sem template), entao sem categoria => opted_out
+  // sempre bloqueia. Skip silencioso: o STOP handler e a fonte de verdade,
+  // nao desabilitamos a conversa por isso.
+  const optCheck = await requireOptIn(
+    conversation.organization_id,
+    phone,
+    undefined,
+    { sender: 'ai.auto-reply' },
+  );
+  if (!optCheck.allowed) {
+    wlog.info('whatsapp.ai.skipped_opted_out', {
+      organization_id: conversation.organization_id,
+      conversation_id: conversation.id,
+      agent_id: agent.id,
+    });
+    return { sent: false, reason: 'opted_out' };
   }
 
   const bubbles = splitIntoBubbles(trimmed);
