@@ -278,14 +278,15 @@ async function handleProcess(body: any) {
 }
 
 async function handleTestRAG(body: any) {
-  const { agentId, query, topK = 5, threshold = 0.7 } = body
+  const { agentId, organizationId, query, topK = 5, threshold = 0.7 } = body
 
-  if (!agentId || !query) {
-    return NextResponse.json({ 
-      error: 'Campos obrigatórios: agentId, query',
+  if (!agentId || !organizationId || !query) {
+    return NextResponse.json({
+      error: 'Campos obrigatórios: agentId, organizationId, query',
       example: {
         action: 'test_rag',
         agentId: 'uuid-do-agente',
+        organizationId: 'uuid-da-organizacao',
         query: 'preço do produto',
         topK: 5,
         threshold: 0.7
@@ -296,8 +297,14 @@ async function handleTestRAG(body: any) {
   const startTime = Date.now()
 
   try {
-    const { createRAGService } = await import('@/lib/ai/rag')
-    const ragService = createRAGService()
+    const { createRAGServiceForOrg } = await import('@/lib/ai/rag')
+    const { supabaseAdmin } = await import('@/lib/supabase-admin')
+    const ragService = await createRAGServiceForOrg(supabaseAdmin as any, organizationId)
+    if (!ragService) {
+      return NextResponse.json({
+        error: 'Chave OpenAI nao cadastrada nesta org (Configurações > API Keys).',
+      }, { status: 400 })
+    }
 
     const results = await ragService.search({
       agentId,

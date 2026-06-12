@@ -14,7 +14,7 @@ import {
   EngineResponse,
   UsageLog,
 } from './types'
-import { RAGService, createRAGService } from './rag'
+import { RAGService, createRAGServiceForOrg } from './rag'
 import { ActionsEngine } from './actions-engine'
 import { PromptBuilder, formatRAGAsContext } from './prompt-builder'
 import { callAI, AIProvider } from '@/lib/whatsapp/ai-providers'
@@ -45,15 +45,26 @@ export class AIAgentEngine {
 
     // Usar cliente centralizado (lazy loaded)
     this.supabase = supabaseAdmin as unknown as SupabaseClient
-    // RAG é opcional: sem OPENAI_API_KEY (embeddings) o agente responde sem
-    // knowledge base em vez de quebrar no construtor.
-    try {
-      this.ragService = createRAGService()
-    } catch (e: any) {
-      console.warn(`[engine] RAG desabilitado (sem OPENAI_API_KEY): ${e?.message}`)
-      this.ragService = null
-    }
+    // RAG e opcional e BYO (Onda 13.6): a chave OpenAI vem de
+    // organization_api_keys, resolvida lazy no primeiro uso (getRagService).
+    this.ragService = null
     this.promptBuilder = new PromptBuilder(this.agent)
+  }
+
+  /**
+   * Lazy-loads RAG service na primeira chamada. Null se a org nao tem chave
+   * OpenAI cadastrada — caller (engine.processMessage) ja trata o fallback
+   * gracioso (responder sem knowledge base, Onda 13).
+   */
+  private async getRagService(): Promise<RAGService | null> {
+    if (this.ragService) return this.ragService
+    const rag = await createRAGServiceForOrg(this.supabase, this.organizationId)
+    if (!rag) {
+      console.warn('[engine] RAG desabilitado (sem chave OpenAI em organization_api_keys)')
+      return null
+    }
+    this.ragService = rag
+    return rag
   }
 
   /**
@@ -137,24 +148,28 @@ export class AIAgentEngine {
       // o RAG (a IA busca sob demanda via tool). Caso contrário, mantemos a
       // pré-injeção (comportamento atual, não quebra agentes sem tools).
       //
-      // RAG é NÃO-FATAL (Onda 13): embedding usa OPENAI_API_KEY (env) — se a
-      // chave estiver errada/ausente, a base de conhecimento fica indisponível
-      // mas a resposta SAI sem contexto. Antes, o throw subia pro runner, casava
-      // /api key/i e desligava a conversa com no_valid_api_key — culpando a
-      // chave do AGENTE por um erro da chave de EMBEDDING (incidente 12/06).
+      // RAG é NÃO-FATAL (Onda 13) e BYO (Onda 13.6): embedding usa a chave
+      // OpenAI da org (organization_api_keys). Sem chave OU erro na chamada,
+      // a base de conhecimento fica indisponível mas a resposta SAI sem
+      // contexto. Antes, o throw subia pro runner, casava /api key/i e
+      // desligava a conversa com no_valid_api_key — culpando a chave do
+      // AGENTE por um erro da chave de EMBEDDING (incidente 12/06).
       let ragResults: Awaited<ReturnType<RAGService['search']>> = []
-      if (!hasSearchKnowledge && this.ragService) {
-        try {
-          ragResults = await this.ragService.search({
-            agentId: this.agent.id,
-            query: currentMessage,
-            topK: 5,
-            threshold: 0.7,
-          })
-        } catch (ragErr: any) {
-          console.warn(
-            `[engine] RAG indisponível (seguindo sem contexto) — agent=${this.agent.id}: ${ragErr?.message}`,
-          )
+      if (!hasSearchKnowledge) {
+        const rag = await this.getRagService()
+        if (rag) {
+          try {
+            ragResults = await rag.search({
+              agentId: this.agent.id,
+              query: currentMessage,
+              topK: 5,
+              threshold: 0.7,
+            })
+          } catch (ragErr: any) {
+            console.warn(
+              `[engine] RAG indisponível (seguindo sem contexto) — agent=${this.agent.id}: ${ragErr?.message}`,
+            )
+          }
         }
       }
 

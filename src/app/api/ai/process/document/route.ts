@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chunkText, cleanTextForIndexing, extractTextMetadata } from '@/lib/ai/processors/text-processor'
 import { generateEmbeddingsBatch } from '@/lib/ai/embeddings'
+import { resolveEmbeddingKey } from '@/lib/ai/embedding-key'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { checkAiBudget } from '@/lib/ai/budget';
 import { extractTextFromFile } from '@/lib/ai/processors/file-extractor'
@@ -141,10 +142,12 @@ export async function POST(request: NextRequest) {
       throw new Error('Nenhum chunk gerado do texto')
     }
 
-    // Gerar embeddings
-    const openaiKey = process.env.OPENAI_API_KEY
+    // Gerar embeddings (BYO total, Onda 13.6: chave OpenAI da propria org).
+    const openaiKey = await resolveEmbeddingKey(supabase, organization_id)
     if (!openaiKey) {
-      throw new Error('OPENAI_API_KEY não configurada')
+      throw new Error(
+        'Chave OpenAI nao configurada na org. Cadastre em Configurações > API Keys para processar bases de conhecimento.'
+      )
     }
 
     const chunkTexts = chunks.map(c => c.content)

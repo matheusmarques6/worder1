@@ -7,7 +7,9 @@
 // -> RPC search_agent_knowledge), retornando trechos com a fonte.
 
 import type { Tool, ToolContext, ToolResultPayload } from '../types'
-import { createRAGService } from '../../rag'
+import { createRAGServiceForOrg } from '../../rag'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const searchKnowledgeTool: Tool = {
   name: 'search_knowledge',
@@ -34,7 +36,16 @@ export const searchKnowledgeTool: Tool = {
     }
 
     try {
-      const rag = createRAGService()
+      const rag = await createRAGServiceForOrg(
+        supabaseAdmin as unknown as SupabaseClient,
+        ctx.organizationId
+      )
+      if (!rag) {
+        return {
+          ok: false,
+          error: 'knowledge base indisponivel (chave OpenAI nao cadastrada na org)',
+        }
+      }
       const results = await rag.search({
         agentId: ctx.agentId,
         query,

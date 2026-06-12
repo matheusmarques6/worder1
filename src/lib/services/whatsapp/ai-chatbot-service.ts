@@ -215,8 +215,12 @@ export async function getCopilotSuggestion(
   const ragQuery = (lastMessage || '').trim()
   if (conversation.ai_agent_id && ragQuery) {
     try {
-      const { createRAGService } = await import('@/lib/ai/rag')
-      const rag = createRAGService()
+      const { createRAGServiceForOrg } = await import('@/lib/ai/rag')
+      const rag = await createRAGServiceForOrg(supabaseAdmin as any, organizationId)
+      if (!rag) {
+        // Org sem chave OpenAI cadastrada: copiloto segue sem contexto RAG.
+        throw new Error('chave OpenAI nao cadastrada')
+      }
       // MESMOS valores do handler search_knowledge (Fase 2b): topK=5, threshold=0.7
       const results = await rag.search({
         agentId: conversation.ai_agent_id,

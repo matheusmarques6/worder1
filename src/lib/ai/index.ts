@@ -10,7 +10,7 @@ export * from './types'
 export { AIAgentEngine, createAgentEngine, processWithAgent } from './engine'
 
 // RAG
-export { RAGService, createRAGService, ragSearch } from './rag'
+export { RAGService, createRAGServiceForOrg } from './rag'
 
 // Actions
 export { ActionsEngine, createActionsEngine } from './actions-engine'

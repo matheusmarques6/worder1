@@ -5,6 +5,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { generateEmbedding } from './embeddings'
+import { resolveEmbeddingKey } from './embedding-key'
 import { RAGSearchParams, RAGResult } from './types'
 
 // =====================================================
@@ -236,20 +237,15 @@ Use as informações acima para responder a pergunta do usuário. Se a informaç
 // =====================================================
 
 /**
- * Cria instância do RAG Service
+ * Cria instância do RAG Service pra uma org (BYO total, Onda 13.6).
+ * Le chave OpenAI de `organization_api_keys`. Retorna null se a org nao
+ * cadastrou chave — caller degrada graciosamente (sem knowledge base).
  */
-export function createRAGService(): RAGService {
-  const openaiKey = process.env.OPENAI_API_KEY
-  if (!openaiKey) {
-    throw new Error('OPENAI_API_KEY não configurada')
-  }
+export async function createRAGServiceForOrg(
+  supabase: SupabaseClient,
+  organizationId: string
+): Promise<RAGService | null> {
+  const openaiKey = await resolveEmbeddingKey(supabase, organizationId)
+  if (!openaiKey) return null
   return new RAGService(openaiKey)
-}
-
-/**
- * Busca rápida sem instanciar classe
- */
-export async function ragSearch(params: RAGSearchParams): Promise<RAGResult[]> {
-  const service = createRAGService()
-  return service.search(params)
 }
