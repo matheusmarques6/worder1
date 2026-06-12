@@ -455,7 +455,25 @@ export async function maybeRunAgentForCloudConversation(
   // ---------- Envio ----------
   const response = (result.response || '').trim();
   if (!response) {
-    return { replied: false, transferred: false, traceId, agentId };
+    // Resposta vazia NUNCA é ok silencioso (Onda 13): modelos com reasoning
+    // estouram max_tokens pensando e devolvem '' — antes isso virava bot mudo
+    // sem retry nem alerta. transient => worker re-tenta com backoff e, se
+    // persistir, dispara o alerta gave_up (visível no sino/Slack).
+    wlog.warn('whatsapp.ai.empty_response', {
+      organization_id: organizationId,
+      conversation_id: conversation.id,
+      agent_id: agentId,
+      model: agent.model,
+      stopped_by: result.stopped_by,
+    });
+    return {
+      replied: false,
+      transferred: false,
+      traceId,
+      agentId,
+      failure: 'transient',
+      error: 'empty_llm_response',
+    };
   }
 
   if (skipSend) {

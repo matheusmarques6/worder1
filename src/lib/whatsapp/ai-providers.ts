@@ -328,8 +328,22 @@ async function callOpenRouter(config: AIConfig, messages: AIMessage[]): Promise<
     throw new Error(data.error?.message || 'OpenRouter API error');
   }
 
+  const choice = data.choices?.[0];
+  const content = choice?.message?.content || '';
+
+  // Modelos com reasoning (Gemini 3.5+, o3, R1...) podem gastar todo o
+  // max_tokens "pensando" e devolver content vazio com finish_reason=length.
+  // Sem este throw, o vazio virava skip silencioso — bot mudo sem aviso.
+  if (!content.trim()) {
+    const fr = choice?.finish_reason || 'unknown';
+    throw new Error(
+      `empty content from model (finish_reason=${fr}) — ` +
+        `se finish_reason=length, aumente max_tokens do agente (modelos com reasoning consomem tokens pensando)`,
+    );
+  }
+
   return {
-    content: data.choices?.[0]?.message?.content || '',
+    content,
     usage: {
       promptTokens: data.usage?.prompt_tokens || 0,
       completionTokens: data.usage?.completion_tokens || 0,
