@@ -22,11 +22,40 @@ interface SendTemplateParams {
 }
 
 // =============================================
+// ERROR HELPER (Phase 0 / 0C)
+// =============================================
+// O catch da campanha (campaign-processor.ts) lê `error.code` para alimentar
+// rateLimiter.recordError(...) e a coluna error_code. Antes, o throw era um
+// `Error` simples sem `.code`, então recordError sempre recebia 'UNKNOWN' e o
+// throttle ladder nunca engatava. Aqui propagamos o `data.error.code` numérico
+// da Meta para dentro do Error lançado.
+interface MetaApiError extends Error {
+  code?: number;
+  metaError?: any;
+}
+
+function buildMetaError(data: any, fallbackMessage: string): MetaApiError {
+  const metaErr = data?.error;
+  const err: MetaApiError = new Error(metaErr?.message || fallbackMessage);
+  const rawCode = metaErr?.code;
+  if (rawCode !== undefined && rawCode !== null) {
+    const numeric = typeof rawCode === 'number' ? rawCode : parseInt(String(rawCode), 10);
+    if (!Number.isNaN(numeric)) {
+      err.code = numeric;
+    }
+  }
+  if (metaErr) {
+    err.metaError = metaErr;
+  }
+  return err;
+}
+
+// =============================================
 // ENVIAR MENSAGEM DE TEXTO
 // =============================================
 export async function sendTextMessage(params: SendMessageParams): Promise<any> {
   const { phoneNumberId, accessToken, to, content } = params;
-  
+
   const response = await fetch(`${META_BASE_URL}/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
@@ -38,7 +67,7 @@ export async function sendTextMessage(params: SendMessageParams): Promise<any> {
       recipient_type: 'individual',
       to: normalizePhone(to),
       type: 'text',
-      text: { 
+      text: {
         preview_url: true,
         body: typeof content === 'string' ? content : content.text?.body || content.body || ''
       }
@@ -46,11 +75,11 @@ export async function sendTextMessage(params: SendMessageParams): Promise<any> {
   });
 
   const data = await response.json();
-  
+
   if (!response.ok) {
-    throw new Error(data.error?.message || 'Failed to send message');
+    throw buildMetaError(data, 'Failed to send message');
   }
-  
+
   return data;
 }
 
@@ -59,7 +88,7 @@ export async function sendTextMessage(params: SendMessageParams): Promise<any> {
 // =============================================
 export async function sendMediaMessage(params: SendMessageParams & { mediaType: 'image' | 'video' | 'audio' | 'document' }): Promise<any> {
   const { phoneNumberId, accessToken, to, content, mediaType } = params;
-  
+
   const response = await fetch(`${META_BASE_URL}/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
@@ -79,11 +108,11 @@ export async function sendMediaMessage(params: SendMessageParams & { mediaType: 
   });
 
   const data = await response.json();
-  
+
   if (!response.ok) {
-    throw new Error(data.error?.message || 'Failed to send media');
+    throw buildMetaError(data, 'Failed to send media');
   }
-  
+
   return data;
 }
 
@@ -92,7 +121,7 @@ export async function sendMediaMessage(params: SendMessageParams & { mediaType: 
 // =============================================
 export async function sendTemplateMessage(params: SendTemplateParams): Promise<any> {
   const { phoneNumberId, accessToken, to, templateName, languageCode, components } = params;
-  
+
   const response = await fetch(`${META_BASE_URL}/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
@@ -113,11 +142,11 @@ export async function sendTemplateMessage(params: SendTemplateParams): Promise<a
   });
 
   const data = await response.json();
-  
+
   if (!response.ok) {
-    throw new Error(data.error?.message || 'Failed to send template');
+    throw buildMetaError(data, 'Failed to send template');
   }
-  
+
   return data;
 }
 
@@ -126,7 +155,7 @@ export async function sendTemplateMessage(params: SendTemplateParams): Promise<a
 // =============================================
 export async function sendInteractiveMessage(params: SendMessageParams & { interactiveType: 'button' | 'list' }): Promise<any> {
   const { phoneNumberId, accessToken, to, content, interactiveType } = params;
-  
+
   const response = await fetch(`${META_BASE_URL}/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
@@ -146,11 +175,11 @@ export async function sendInteractiveMessage(params: SendMessageParams & { inter
   });
 
   const data = await response.json();
-  
+
   if (!response.ok) {
-    throw new Error(data.error?.message || 'Failed to send interactive message');
+    throw buildMetaError(data, 'Failed to send interactive message');
   }
-  
+
   return data;
 }
 
@@ -159,7 +188,7 @@ export async function sendInteractiveMessage(params: SendMessageParams & { inter
 // =============================================
 export async function markAsRead(params: { phoneNumberId: string; accessToken: string; messageId: string }): Promise<any> {
   const { phoneNumberId, accessToken, messageId } = params;
-  
+
   const response = await fetch(`${META_BASE_URL}/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
@@ -181,7 +210,7 @@ export async function markAsRead(params: { phoneNumberId: string; accessToken: s
 // =============================================
 export async function getTemplates(params: { wabaId: string; accessToken: string }): Promise<any> {
   const { wabaId, accessToken } = params;
-  
+
   const response = await fetch(`${META_BASE_URL}/${wabaId}/message_templates?limit=100`, {
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -189,11 +218,11 @@ export async function getTemplates(params: { wabaId: string; accessToken: string
   });
 
   const data = await response.json();
-  
+
   if (!response.ok) {
-    throw new Error(data.error?.message || 'Failed to fetch templates');
+    throw buildMetaError(data, 'Failed to fetch templates');
   }
-  
+
   return data.data || [];
 }
 
@@ -209,7 +238,7 @@ export async function downloadMedia(params: { mediaId: string; accessToken: stri
   });
 
   const urlData = await urlResponse.json();
-  
+
   if (!urlData.url) {
     throw new Error('Media URL not found');
   }
@@ -223,7 +252,7 @@ export async function downloadMedia(params: { mediaId: string; accessToken: stri
 
   const buffer = await mediaResponse.arrayBuffer();
   const base64 = Buffer.from(buffer).toString('base64');
-  
+
   return `data:${urlData.mime_type};base64,${base64}`;
 }
 
@@ -241,7 +270,7 @@ export async function sendMessage(params: {
   components?: any[];
 }): Promise<any> {
   const { type, ...rest } = params;
-  
+
   switch (type) {
     case 'text':
       return sendTextMessage(rest);
@@ -267,17 +296,17 @@ export async function sendMessage(params: {
 // =============================================
 function normalizePhone(phone: string): string {
   let cleaned = phone.replace(/\D/g, '');
-  
+
   // Remover zero inicial
   if (cleaned.startsWith('0')) {
     cleaned = cleaned.substring(1);
   }
-  
+
   // Adicionar código do Brasil se necessário
   if (cleaned.length === 10 || cleaned.length === 11) {
     cleaned = '55' + cleaned;
   }
-  
+
   return cleaned;
 }
 

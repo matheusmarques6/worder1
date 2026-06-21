@@ -10,6 +10,7 @@ import { CircuitBreaker, getCircuitBreaker } from './circuit-breaker'
 import { withRetry, createWhatsAppRetry, sleep } from './backoff'
 import { sendTemplateMessage } from './meta-api'
 import { requireOptIn } from './opt-out-guard'
+import { claimRecipientForSend } from './recipient-claim'
 import { sendAlert } from './alerts'
 import { wlog } from '@/lib/observability/whatsapp-logger'
 import { ensureCampaignTemplateApproved } from './template-approval'
@@ -540,6 +541,17 @@ export class CampaignProcessor {
             result.skipped++
             continue
           }
+        }
+
+        // [Phase 0 / 0D] Pre-mark otimista pending|queued -> sending ANTES da
+        // chamada à Meta (sem idempotency key). Se outro processo já tem o
+        // recipient (re-drive / worker concorrente), o claim falha e pulamos —
+        // evita double-send. O write 'sent' abaixo permanece pós-Meta.
+        const claimed = await claimRecipientForSend(recipient.id)
+        if (!claimed) {
+          console.log(`⏭️ Recipient ${recipient.id} already claimed/sent; skipping`)
+          result.skipped++
+          continue
         }
 
         // Preparar componentes do template

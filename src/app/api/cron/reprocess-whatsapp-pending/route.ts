@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { enqueueWhatsAppWebhook, enqueueWhatsAppAiRespond } from '@/lib/queue';
+import { quarantineStuckSending } from '@/lib/whatsapp/recipient-claim';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -91,6 +92,18 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ---------- Phase 0 / 0D: quarentena de envios ambíguos ----------
+  // Flipa recipients presos em 'sending' há >10min para 'failed'
+  // (error_message='ambiguous_send_quarantine'). Viés anti-duplicata para
+  // marketing: o pre-mark otimista deixa um raro crash mid-send como 'sending';
+  // este sweep o sinaliza para revisão em vez de re-enviar.
+  let quarantined = 0;
+  try {
+    quarantined = await quarantineStuckSending();
+  } catch (err) {
+    console.error('[reprocess-whatsapp-pending] quarantine sweep error:', err);
+  }
+
   return NextResponse.json({
     ok: true,
     scanned: events.length,
@@ -99,5 +112,6 @@ export async function GET(req: NextRequest) {
     ai_scanned: aiScanned,
     ai_enqueued: aiEnqueued,
     ai_failed: aiFailed,
+    quarantined,
   });
 }
