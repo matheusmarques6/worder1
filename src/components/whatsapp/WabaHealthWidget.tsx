@@ -58,6 +58,10 @@ const QUALITY_MAP = {
   },
 }
 
+// `current` = tier index, canonical via MESSAGING_LIMIT_STRING_TO_TIER in
+// '@/config/whatsapp-tiers' ([FIX-C1]). Labels reflect Meta's messaging limit =
+// destinatários ÚNICOS / 24h (NOT total de mensagens) ([FIX-M2]). UNLIMITED renders
+// as "Ilimitado" — never the Infinity/sentinel raw value ([FIX-L2]).
 const TIER_MAP: Record<string, { label: string; max: number; current: number }> = {
   TIER_NOT_SET: { label: '250 / dia', max: 250, current: 0 },
   TIER_250:  { label: '250 / dia', max: 250, current: 0 },
@@ -196,7 +200,7 @@ export function WabaHealthWidget({
       {/* Messaging Tier Progress */}
       <div className="mb-3">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-xs text-gray-500">Limite de Mensagens</span>
+          <span className="text-xs text-gray-500">Destinatários únicos / 24h</span>
           <span className="text-xs font-medium text-gray-700">{tier.label}</span>
         </div>
         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">

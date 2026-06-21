@@ -5,6 +5,13 @@
 
 import { Redis } from '@upstash/redis'
 import { Ratelimit } from '@upstash/ratelimit'
+import {
+  MESSAGING_LIMIT_BY_TIER,
+  TIER_NAME,
+  TIER_CONFIG,
+  throughputMpsForTier,
+  UNLIMITED_SENTINEL,
+} from '@/config/whatsapp-tiers'
 
 // Inicializar Redis (lazy)
 let redis: Redis | null = null
@@ -22,15 +29,14 @@ function getRedis(): Redis {
   return redis
 }
 
-// Configuração por tier da Meta (Out 2025)
-// https://developers.facebook.com/docs/whatsapp/messaging-limits
-export const TIER_CONFIG: Record<number, { mps: number; daily: number; name: string }> = {
-  0: { mps: 10, daily: 250, name: 'Não verificado' },
-  1: { mps: 40, daily: 2000, name: 'Tier 1' },
-  2: { mps: 60, daily: 10000, name: 'Tier 2' },
-  3: { mps: 80, daily: 100000, name: 'Tier 3' },
-  4: { mps: 500, daily: Infinity, name: 'Unlimited' }, // Margem de 1000
-}
+// [Phase 4] Daily quota = UNIQUE business-initiated recipients per rolling 24h.
+// Numerics (MPS decoupled from tier, daily = unique recipients) live in the single
+// source of truth: src/config/whatsapp-tiers.ts (re-exported `TIER_CONFIG` for compat).
+export { TIER_CONFIG }
+
+// [Phase 4] Daily-recipient TTL: 48h so the yesterday day-key survives the two-day
+// rolling-window overlap (today + weighted-yesterday). [FIX-H2]
+const DAILY_RECIP_TTL = 172_800
 
 export type RateLimitBlockCode = 'throttled' | 'throughput' | 'pair_rate' | 'daily_quota'
 
@@ -62,16 +68,32 @@ export class WhatsAppRateLimiter {
   // [Phase 0 / Phase 2] Atomic single-eval canSend
   // Single custom Lua script: throttle short-circuit (read-only) ->
   // pair sliding-window (read-only on block) -> token-bucket throughput
-  // (HMSET state ONLY on grant) -> daily gate (INCR ONLY on grant).
-  // KEYS = [throttle, tb, pair, daily, pairSeq]
-  // ARGV = [now_ms, refill_per_sec, capacity, cost, pair_limit,
-  //         pair_window_ms, daily_ttl, daily_limit(-1 = no gate)]
+  // (HMSET state ONLY on grant) -> daily gate.
+  //
+  // [Phase 4] DAILY GATE = UNIQUE business-initiated recipients / rolling 24h.
+  // Replaces the per-send INCR with a recipient-keyed unique counter, gated and
+  // committed ATOMICALLY in this same eval (no SADD->SCARD->SREM across round-trips):
+  //  - tiers 0-2: EXACT SET (SADD/SCARD); over-limit add is rolled back via SREM
+  //    inside the eval (the new recipient is only kept if it stays within limit). [FIX-C2][FIX-H1]
+  //  - tier 3:    HyperLogLog (PFADD/PFCOUNT); gate at limit*0.99 (conservative,
+  //    PFADD is irreversible so we check effective count BEFORE committing). [FIX-H1]
+  //  - tier 4:    no daily gate.
+  // Window: two day-keys (today + yesterday) merged; yesterday weighted by
+  //   (1 - elapsedFractionOfTodayUtc) so there is no clean 2x reset at 00:00 UTC. [FIX-H2]
+  // Idempotency: a re-send to an already-present recipient (SADD->0) consumes
+  //   nothing and is always allowed.
+  //
+  // KEYS = [throttle, tb, pair, todayRecip, pairSeq, yesterdayRecip]
+  // ARGV = [now_ms, refill_per_sec, capacity, cost, pair_limit, pair_window_ms,
+  //         daily_ttl, daily_limit(-1=no gate), tier, recipient, yday_weight_bps]
+  //   yday_weight_bps = floor((1 - elapsedFractionOfTodayUtc) * 10000)  (basis points)
   // Returns cjson array [status, retryAfterSec, throughputRemaining, dailyCount]
   // status: 0=allowed 1=throttled 2=throughput 3=pair 4=daily
   // =============================================
   private static readonly LUA_CANSEND = `
--- KEYS: throttle, tb (token bucket), pair (sliding-window zset), daily (counter), pairSeq (monotonic seq)
--- ARGV: now_ms, refill_per_sec, capacity, cost, pair_limit, pair_window_ms, daily_ttl, daily_limit
+-- KEYS: throttle, tb (token bucket), pair (sliding-window zset), todayRecip, pairSeq, yesterdayRecip
+-- ARGV: now_ms, refill_per_sec, capacity, cost, pair_limit, pair_window_ms,
+--       daily_ttl, daily_limit, tier, recipient, yday_weight_bps
 local now      = tonumber(ARGV[1])
 local refill   = tonumber(ARGV[2])
 local capacity = tonumber(ARGV[3])
@@ -80,6 +102,9 @@ local pairLim  = tonumber(ARGV[5])
 local pairWin  = tonumber(ARGV[6])
 local dailyTtl = tonumber(ARGV[7])
 local dailyLim = tonumber(ARGV[8])   -- -1 => no daily gate
+local tier     = tonumber(ARGV[9])
+local recip    = ARGV[10]
+local ydayBps  = tonumber(ARGV[11])  -- (1 - elapsedFractionOfTodayUtc) * 10000
 
 -- 1) THROTTLE (read-only, cheapest, short-circuit; consume nothing)
 if redis.call('EXISTS', KEYS[1]) == 1 then
@@ -121,14 +146,50 @@ if tokens < cost then
   return cjson.encode({2, retry, math.floor(tokens), 0})
 end
 
--- 4) DAILY GATE — enforced inside the script BEFORE consuming anything. [FIX-H1]
-local daily = tonumber(redis.call('GET', KEYS[4])) or 0
-if dailyLim >= 0 and daily >= dailyLim then
-  -- BLOCK: no INCR, no token spend. retryAfter computed client-side (secondsUntilMidnight).
-  return cjson.encode({4, 0, math.floor(tokens), daily})
+-- 4) DAILY GATE — UNIQUE recipients / rolling 24h, atomic count-and-gate. [FIX-C2][FIX-H1][FIX-H2]
+--    Committed ONLY if (and after) it passes; rollback inside this eval otherwise.
+local dailyCount = 0
+if dailyLim >= 0 then
+  if tier >= 3 then
+    -- HyperLogLog (tier 3+). PFADD is irreversible, so gate on effective count
+    -- BEFORE committing, with a conservative limit*0.99 boundary. [FIX-H1]
+    local todayC = redis.call('PFCOUNT', KEYS[4])
+    local ydayC  = redis.call('PFCOUNT', KEYS[6])
+    local effective = todayC + math.floor(ydayC * ydayBps / 10000)
+    dailyCount = effective
+    local gate = math.floor(dailyLim * 0.99)
+    if effective >= gate then
+      -- BLOCK: no PFADD, no token spend. (A re-send to an existing recipient over
+      -- the gate is also blocked — HLL cannot test membership cheaply; conservative.)
+      return cjson.encode({4, 0, math.floor(tokens), effective})
+    end
+    redis.call('PFADD', KEYS[4], recip)
+    redis.call('EXPIRE', KEYS[4], dailyTtl)
+    dailyCount = effective + 1
+  else
+    -- EXACT SET (tiers 0-2). Atomic probe-and-rollback. [FIX-C2]
+    local added = redis.call('SADD', KEYS[4], recip)
+    if added == 1 then
+      local todayC = redis.call('SCARD', KEYS[4])
+      local ydayC  = redis.call('SCARD', KEYS[6])
+      local effective = todayC + math.floor(ydayC * ydayBps / 10000)
+      if effective > dailyLim then
+        -- ROLLBACK the just-added member within the same eval; no token spend. [FIX-C2]
+        redis.call('SREM', KEYS[4], recip)
+        return cjson.encode({4, 0, math.floor(tokens), effective - 1})
+      end
+      redis.call('EXPIRE', KEYS[4], dailyTtl)
+      dailyCount = effective
+    else
+      -- Idempotent re-send: already counted today. Consumes nothing, always allowed.
+      local todayC = redis.call('SCARD', KEYS[4])
+      local ydayC  = redis.call('SCARD', KEYS[6])
+      dailyCount = todayC + math.floor(ydayC * ydayBps / 10000)
+    end
+  end
 end
 
--- 5) ALLOWED — commit token spend, record pair send, INCR daily (only now). [FIX-C1][FIX-H1]
+-- 5) ALLOWED — commit token spend, record pair send. [FIX-C1]
 tokens = tokens - cost
 redis.call('HMSET', KEYS[2], 'tokens', tokens, 'ts', now)
 redis.call('PEXPIRE', KEYS[2], math.ceil((capacity / refill) * 1000) + 1000)
@@ -139,10 +200,7 @@ redis.call('PEXPIRE', KEYS[5], pairWin + 1000)
 redis.call('ZADD', KEYS[3], now, now .. ':' .. seq)
 redis.call('PEXPIRE', KEYS[3], pairWin + 1000)
 
-daily = redis.call('INCR', KEYS[4])
-if daily == 1 then redis.call('EXPIRE', KEYS[4], dailyTtl) end
-
-return cjson.encode({0, 0, math.floor(tokens), daily})
+return cjson.encode({0, 0, math.floor(tokens), dailyCount})
 `.trim()
 
   constructor(instanceId: string, tier: number = 1) {
@@ -152,8 +210,9 @@ return cjson.encode({0, 0, math.floor(tokens), daily})
 
   private getThroughputLimiter(): Ratelimit {
     if (!this.throughputLimiter) {
-      const config = TIER_CONFIG[this.tier]
-      const targetMPS = Math.floor(config.mps * 0.9) // 90% do limite (margem)
+      // [FIX-M3] Throughput is per-phone-number, NOT tier-derived (except tier-0 floor).
+      const mps = throughputMpsForTier(this.tier)
+      const targetMPS = Math.floor(mps * 0.9) // 90% do limite (margem)
 
       this.throughputLimiter = new Ratelimit({
         redis: getRedis(),
@@ -181,36 +240,46 @@ return cjson.encode({0, 0, math.floor(tokens), daily})
     return (h % 100) < pct
   }
 
+  /** Daily messaging limit (unique recipients/24h) for this tier; Infinity = unlimited. */
+  private dailyLimit(): number {
+    return MESSAGING_LIMIT_BY_TIER[this.tier]
+  }
+
   /**
    * Verificar se pode enviar mensagem (versão atômica — 1 round-trip).
    * Despacha por-instância para o caminho Lua atômico ([FIX-H2]); qualquer
    * anomalia de eval/parse cai para `canSendLegacy` (fail-CLOSED — [FIX-C2]).
    *
    * NOTE: this is a consuming check — on the ALLOW path it commits a throughput
-   * token + records the pair send + INCRs the daily counter. Use `peek()` for a
-   * non-consuming probe that mutates no daily/pair/throughput state.
+   * token + records the pair send + counts the unique recipient (idempotent per
+   * recipient). Use `peek()` for a non-consuming probe that mutates no state.
    */
   async canSend(toPhone: string): Promise<RateLimitResult> {
     if (!this.luaPathEnabledFor(this.instanceId)) return this.canSendLegacy(toPhone)
 
-    const config = TIER_CONFIG[this.tier]
+    const limit = this.dailyLimit()
+    const mps = throughputMpsForTier(this.tier)
     const now = Date.now()
     const args = [
       now,
-      Math.floor(config.mps * 0.9),                  // refill/sec
-      Math.floor(config.mps * 0.9),                  // capacity == targetMPS (no burst headroom)
-      1,                                             // cost
-      10,                                            // pair limit (Meta)
-      60_000,                                        // pair window ms
-      86_400,                                        // daily ttl
-      config.daily === Infinity ? -1 : config.daily, // [FIX-H1] daily limit (-1 = no gate)
+      Math.floor(mps * 0.9),                  // refill/sec
+      Math.floor(mps * 0.9),                  // capacity == targetMPS (no burst headroom)
+      1,                                      // cost
+      10,                                     // pair limit (Meta)
+      60_000,                                 // pair window ms
+      DAILY_RECIP_TTL,                        // daily ttl (48h, two-day rolling window)
+      limit === Infinity ? -1 : limit,        // [FIX-H1] daily limit (-1 = no gate)
+      this.tier,                              // tier (selects exact SET vs HLL)
+      toPhone,                                // recipient (unique-count member)
+      this.yesterdayWeightBps(),              // [FIX-H2] (1 - elapsedFractionOfTodayUtc) * 10000
     ]
     const keys = [
       `wa:throttle:${this.instanceId}`,
       `wa:tb:${this.instanceId}`,
       `wa:pair:${this.instanceId}:${toPhone}`,
-      `wa:daily:${this.instanceId}:${this.getTodayKey()}`,
+      `wa:dailyrecip:${this.instanceId}:${this.getTodayKey()}`,
       `wa:pairseq:${this.instanceId}:${toPhone}`,
+      `wa:dailyrecip:${this.instanceId}:${this.getYesterdayKey()}`,
     ]
 
     let status: number, retryAfter: number, tput: number, daily: number
@@ -234,7 +303,7 @@ return cjson.encode({0, 0, math.floor(tokens), daily})
 
     switch (status) {
       case 0:
-        return { allowed: true, remaining: config.daily === Infinity ? Infinity : Math.max(0, config.daily - daily) }
+        return { allowed: true, remaining: limit === Infinity ? Infinity : Math.max(0, limit - daily) }
       case 1:
         return { allowed: false, retryAfter: Math.max(retryAfter, 1), reason: 'Instance throttled due to rate limit errors' }
       case 2:
@@ -242,7 +311,7 @@ return cjson.encode({0, 0, math.floor(tokens), daily})
       case 3:
         return { allowed: false, retryAfter: Math.max(retryAfter, 6), reason: 'Pair rate limit exceeded (max 10 msg/min per recipient)' }
       case 4:
-        return { allowed: false, retryAfter: this.getSecondsUntilMidnight(), remaining: 0, reason: `Daily limit exceeded (${config.daily} messages)` }
+        return { allowed: false, retryAfter: this.getSecondsUntilMidnight(), remaining: 0, reason: 'Messaging limit exceeded (unique recipients/24h)' }
       default:
         // [FIX-C2] unknown status => fail CLOSED via legacy, never fail open.
         console.error(`⚠️ canSend Lua returned unknown status ${status} for ${this.instanceId}; falling back to legacy`)
@@ -252,7 +321,7 @@ return cjson.encode({0, 0, math.floor(tokens), daily})
 
   /**
    * Probe NÃO-consumidor: responde "posso enviar?" sem gastar token de
-   * throughput, sem registrar o pair, sem INCRementar o daily. O dispatcher
+   * throughput, sem registrar o pair, sem contar o destinatário. O dispatcher
    * (Phase 1) usa isto para decidir esperar sem queimar quota.
    *
    * Implementa as MESMAS verificações read-only do Lua (throttle -> pair ->
@@ -260,22 +329,26 @@ return cjson.encode({0, 0, math.floor(tokens), daily})
    * Em qualquer anomalia, fail-CLOSED: `{ allowed: false }` conservador.
    */
   async peek(toPhone: string): Promise<RateLimitResult> {
-    const config = TIER_CONFIG[this.tier]
+    const limit = this.dailyLimit()
+    const mps = throughputMpsForTier(this.tier)
     const now = Date.now()
     const args = [
       now,
-      Math.floor(config.mps * 0.9),                  // refill/sec
-      Math.floor(config.mps * 0.9),                  // capacity == targetMPS (no burst headroom)
-      1,                                             // cost
-      10,                                            // pair limit
-      60_000,                                        // pair window ms
-      config.daily === Infinity ? -1 : config.daily, // daily limit (-1 = no gate)
+      Math.floor(mps * 0.9),                  // refill/sec
+      Math.floor(mps * 0.9),                  // capacity == targetMPS (no burst headroom)
+      1,                                      // cost
+      10,                                     // pair limit
+      60_000,                                 // pair window ms
+      limit === Infinity ? -1 : limit,        // daily limit (-1 = no gate)
+      this.tier,                              // tier (selects exact SET vs HLL)
+      this.yesterdayWeightBps(),              // [FIX-H2] yesterday weight (basis points)
     ]
     const keys = [
       `wa:throttle:${this.instanceId}`,
       `wa:tb:${this.instanceId}`,
       `wa:pair:${this.instanceId}:${toPhone}`,
-      `wa:daily:${this.instanceId}:${this.getTodayKey()}`,
+      `wa:dailyrecip:${this.instanceId}:${this.getTodayKey()}`,
+      `wa:dailyrecip:${this.instanceId}:${this.getYesterdayKey()}`,
     ]
 
     let status: number, retryAfter: number, tput: number, daily: number
@@ -294,7 +367,7 @@ return cjson.encode({0, 0, math.floor(tokens), daily})
 
     switch (status) {
       case 0:
-        return { allowed: true, remaining: config.daily === Infinity ? Infinity : Math.max(0, config.daily - daily) }
+        return { allowed: true, remaining: limit === Infinity ? Infinity : Math.max(0, limit - daily) }
       case 1:
         return { allowed: false, retryAfter: Math.max(retryAfter, 1), reason: 'Instance throttled due to rate limit errors' }
       case 2:
@@ -302,22 +375,27 @@ return cjson.encode({0, 0, math.floor(tokens), daily})
       case 3:
         return { allowed: false, retryAfter: Math.max(retryAfter, 6), reason: 'Pair rate limit exceeded (max 10 msg/min per recipient)' }
       case 4:
-        return { allowed: false, retryAfter: this.getSecondsUntilMidnight(), remaining: 0, reason: `Daily limit exceeded (${config.daily} messages)` }
+        return { allowed: false, retryAfter: this.getSecondsUntilMidnight(), remaining: 0, reason: 'Messaging limit exceeded (unique recipients/24h)' }
       default:
         return { allowed: false, retryAfter: 1, reason: 'Rate limiter peek unavailable' }
     }
   }
 
   // =============================================
-  // [Phase 0] Non-consuming peek Lua (read-only mirror of LUA_CANSEND).
-  // NEVER mutates state: no HMSET, no ZADD, no INCR. Projects token refill and
-  // reads the daily counter to produce the SAME verdict canSend would, without
-  // spending anything. KEYS = [throttle, tb, pair, daily]; ARGV omits pair_seq
-  // and daily_ttl (no writes).
+  // [Phase 0 / Phase 4] Non-consuming peek Lua (read-only mirror of LUA_CANSEND).
+  // NEVER mutates state: no HMSET, no ZADD, no SADD/PFADD. Projects token refill
+  // and reads the unique-recipient daily counter (today + weighted-yesterday) to
+  // produce the SAME verdict canSend would, without spending anything.
+  // For exact tiers it checks membership read-only via SISMEMBER (already-counted
+  // recipients are always allowed); for HLL it gates on the conservative effective
+  // count. KEYS = [throttle, tb, pair, todayRecip, yesterdayRecip];
+  // ARGV = [now, refill, capacity, cost, pair_limit, pair_window_ms,
+  //         daily_limit, tier, recipient, yday_weight_bps].
   // =============================================
   private static readonly LUA_PEEK = `
--- KEYS: throttle, tb (token bucket), pair (sliding-window zset), daily (counter)
--- ARGV: now_ms, refill_per_sec, capacity, cost, pair_limit, pair_window_ms, daily_limit
+-- KEYS: throttle, tb (token bucket), pair (sliding-window zset), todayRecip, yesterdayRecip
+-- ARGV: now_ms, refill_per_sec, capacity, cost, pair_limit, pair_window_ms,
+--       daily_limit, tier, recipient, yday_weight_bps
 local now      = tonumber(ARGV[1])
 local refill   = tonumber(ARGV[2])
 local capacity = tonumber(ARGV[3])
@@ -325,6 +403,9 @@ local cost     = tonumber(ARGV[4])
 local pairLim  = tonumber(ARGV[5])
 local pairWin  = tonumber(ARGV[6])
 local dailyLim = tonumber(ARGV[7])   -- -1 => no daily gate
+local tier     = tonumber(ARGV[8])
+local recip    = ARGV[9]
+local ydayBps  = tonumber(ARGV[10])
 
 -- 1) THROTTLE (read-only)
 if redis.call('EXISTS', KEYS[1]) == 1 then
@@ -361,19 +442,40 @@ if tokens < cost then
   return cjson.encode({2, retry, math.floor(tokens), 0})
 end
 
--- 4) DAILY GATE (read-only)
-local daily = tonumber(redis.call('GET', KEYS[4])) or 0
-if dailyLim >= 0 and daily >= dailyLim then
-  return cjson.encode({4, 0, math.floor(tokens), daily})
+-- 4) DAILY GATE (read-only) — UNIQUE recipients / rolling 24h. [FIX-H1][FIX-H2]
+if dailyLim >= 0 then
+  if tier >= 3 then
+    local todayC = redis.call('PFCOUNT', KEYS[4])
+    local ydayC  = redis.call('PFCOUNT', KEYS[5])
+    local effective = todayC + math.floor(ydayC * ydayBps / 10000)
+    local gate = math.floor(dailyLim * 0.99)
+    if effective >= gate then
+      return cjson.encode({4, 0, math.floor(tokens), effective})
+    end
+    return cjson.encode({0, 0, math.floor(tokens), effective})
+  else
+    local todayC = redis.call('SCARD', KEYS[4])
+    local ydayC  = redis.call('SCARD', KEYS[5])
+    local effective = todayC + math.floor(ydayC * ydayBps / 10000)
+    -- Already-counted recipient is always allowed (idempotent re-send).
+    if redis.call('SISMEMBER', KEYS[4], recip) == 1 then
+      return cjson.encode({0, 0, math.floor(tokens), effective})
+    end
+    if effective >= dailyLim then
+      return cjson.encode({4, 0, math.floor(tokens), effective})
+    end
+    return cjson.encode({0, 0, math.floor(tokens), effective})
+  end
 end
 
-return cjson.encode({0, 0, math.floor(tokens), daily})
+return cjson.encode({0, 0, math.floor(tokens), 0})
 `.trim()
 
   /**
    * Verificar se pode enviar mensagem (LEGADO — caminho da biblioteca).
-   * Checa: throughput global, pair rate, daily quota.
-   * Mantido verbatim como fallback fail-CLOSED do caminho Lua atômico.
+   * Checa: throughput global, pair rate, daily quota (UNIQUE recipients/24h).
+   * Mantido como fallback fail-CLOSED do caminho Lua atômico; consistente com o
+   * novo modelo de destinatários únicos (não contradiz o Lua). [Phase 4]
    */
   private async canSendLegacy(toPhone: string): Promise<RateLimitResult> {
     const redis = getRedis()
@@ -422,32 +524,67 @@ return cjson.encode({0, 0, math.floor(tokens), daily})
       }
     }
 
-    // 4. Check daily quota
-    const dailyKey = `wa:daily:${this.instanceId}:${this.getTodayKey()}`
-    const dailyCount = await redis.incr(dailyKey)
+    // 4. Check daily quota — UNIQUE business-initiated recipients / rolling 24h.
+    // [Phase 4] Exact SET (tiers 0-2) / HLL (tier 3+); re-send to an already-counted
+    // recipient consumes nothing. Two-day rolling merge (today + weighted-yesterday).
+    const limit = this.dailyLimit()
+    if (limit !== Infinity) {
+      const todayKey = `wa:dailyrecip:${this.instanceId}:${this.getTodayKey()}`
+      const yesterdayKey = `wa:dailyrecip:${this.instanceId}:${this.getYesterdayKey()}`
+      const weight = this.yesterdayWeightBps() / 10000
 
-    // Set expiry se é primeira mensagem do dia
-    if (dailyCount === 1) {
-      await redis.expire(dailyKey, 86400) // 24h
-    }
-
-    const config = TIER_CONFIG[this.tier]
-    if (config.daily !== Infinity && dailyCount > config.daily) {
-      // Decrementar pois não vai enviar
-      await redis.decr(dailyKey)
-      return {
-        allowed: false,
-        retryAfter: this.getSecondsUntilMidnight(),
-        remaining: 0,
-        reason: `Daily limit exceeded (${config.daily} messages)`,
-        code: 'daily_quota',
+      if (this.tier >= 3) {
+        // HyperLogLog: gate conservatively at limit*0.99 BEFORE committing (PFADD irreversible).
+        const [todayC, ydayC] = await Promise.all([
+          redis.pfcount(todayKey),
+          redis.pfcount(yesterdayKey),
+        ])
+        const effective = (todayC as number) + Math.floor((ydayC as number) * weight)
+        if (effective >= Math.floor(limit * 0.99)) {
+          return {
+            allowed: false,
+            retryAfter: this.getSecondsUntilMidnight(),
+            remaining: 0,
+            reason: 'Messaging limit exceeded (unique recipients/24h)',
+            code: 'daily_quota',
+          }
+        }
+        await redis.pfadd(todayKey, toPhone)
+        await redis.expire(todayKey, DAILY_RECIP_TTL)
+        return { allowed: true, remaining: Math.max(0, limit - (effective + 1)) }
       }
+
+      // Exact SET: add, then check; rollback on over-limit.
+      const added = await redis.sadd(todayKey, toPhone)
+      if (added === 1) {
+        const [todayC, ydayC] = await Promise.all([
+          redis.scard(todayKey),
+          redis.scard(yesterdayKey),
+        ])
+        const effective = (todayC as number) + Math.floor((ydayC as number) * weight)
+        if (effective > limit) {
+          await redis.srem(todayKey, toPhone)
+          return {
+            allowed: false,
+            retryAfter: this.getSecondsUntilMidnight(),
+            remaining: 0,
+            reason: 'Messaging limit exceeded (unique recipients/24h)',
+            code: 'daily_quota',
+          }
+        }
+        await redis.expire(todayKey, DAILY_RECIP_TTL)
+        return { allowed: true, remaining: Math.max(0, limit - effective) }
+      }
+      // Idempotent re-send: already counted; consumes nothing.
+      const [todayC, ydayC] = await Promise.all([
+        redis.scard(todayKey),
+        redis.scard(yesterdayKey),
+      ])
+      const effective = (todayC as number) + Math.floor((ydayC as number) * weight)
+      return { allowed: true, remaining: Math.max(0, limit - effective) }
     }
 
-    return {
-      allowed: true,
-      remaining: config.daily === Infinity ? Infinity : config.daily - dailyCount,
-    }
+    return { allowed: true, remaining: Infinity }
   }
 
   /**
@@ -503,41 +640,72 @@ return cjson.encode({0, 0, math.floor(tokens), daily})
   }
 
   /**
-   * Obter estatísticas atuais
+   * Obter estatísticas atuais.
+   * [Phase 4] `dailySent` = destinatários ÚNICOS contados na janela de 24h
+   * (hoje + ontem ponderado), NÃO total de mensagens. `dailyLimit`/`dailyRemaining`
+   * usam o sentinela UNLIMITED_SENTINEL (-1) para tier ilimitado pois Infinity
+   * serializa para null em JSON. [FIX-L2][FIX-M2]
    */
   async getStats(): Promise<RateLimiterStats> {
     const redis = getRedis()
-    const today = this.getTodayKey()
+    const todayKey = `wa:dailyrecip:${this.instanceId}:${this.getTodayKey()}`
+    const yesterdayKey = `wa:dailyrecip:${this.instanceId}:${this.getYesterdayKey()}`
+    const limit = this.dailyLimit()
+    const weight = this.yesterdayWeightBps() / 10000
 
-    const [dailyCount, errors, isThrottled] = await Promise.all([
-      redis.get(`wa:daily:${this.instanceId}:${today}`),
-      redis.hgetall(`wa:errors:${this.instanceId}:${today}`),
-      this.isThrottled(),
-    ])
+    let sent = 0
+    let errors: Record<string, number> = {}
+    let isThrottled = false
 
-    const config = TIER_CONFIG[this.tier]
-    const sent = parseInt(dailyCount as string || '0')
+    if (limit === Infinity) {
+      // Sem gate diário — não há contador de destinatários únicos a ler.
+      const [errs, thr] = await Promise.all([
+        redis.hgetall(`wa:errors:${this.instanceId}:${this.getTodayKey()}`),
+        this.isThrottled(),
+      ])
+      errors = (errs as Record<string, number>) || {}
+      isThrottled = thr
+    } else if (this.tier >= 3) {
+      const [todayC, ydayC, errs, thr] = await Promise.all([
+        redis.pfcount(todayKey),
+        redis.pfcount(yesterdayKey),
+        redis.hgetall(`wa:errors:${this.instanceId}:${this.getTodayKey()}`),
+        this.isThrottled(),
+      ])
+      sent = (todayC as number) + Math.floor((ydayC as number) * weight)
+      errors = (errs as Record<string, number>) || {}
+      isThrottled = thr
+    } else {
+      const [todayC, ydayC, errs, thr] = await Promise.all([
+        redis.scard(todayKey),
+        redis.scard(yesterdayKey),
+        redis.hgetall(`wa:errors:${this.instanceId}:${this.getTodayKey()}`),
+        this.isThrottled(),
+      ])
+      sent = (todayC as number) + Math.floor((ydayC as number) * weight)
+      errors = (errs as Record<string, number>) || {}
+      isThrottled = thr
+    }
 
     return {
       dailySent: sent,
-      dailyLimit: config.daily,
-      dailyRemaining: config.daily === Infinity ? Infinity : Math.max(0, config.daily - sent),
-      errors: (errors as Record<string, number>) || {},
+      dailyLimit: limit === Infinity ? UNLIMITED_SENTINEL : limit,
+      dailyRemaining: limit === Infinity ? UNLIMITED_SENTINEL : Math.max(0, limit - sent),
+      errors,
       tier: this.tier,
-      tierName: config.name,
+      tierName: TIER_NAME[this.tier],
       isThrottled,
-      utilizationPercent: config.daily === Infinity ? 0 : (sent / config.daily) * 100,
+      utilizationPercent: limit === Infinity ? 0 : (sent / limit) * 100,
     }
   }
 
   /**
-   * Calcular delay recomendado entre mensagens
-   * Baseado no tier atual
+   * Calcular delay recomendado entre mensagens.
+   * [FIX-M3] Baseado no throughput (MPS) por número, NÃO derivado do tier de mensagens.
    */
   getRecommendedDelay(): number {
-    const config = TIER_CONFIG[this.tier]
     // Delay = 1000ms / (MPS * 0.8) para margem de segurança
-    return Math.ceil(1000 / (config.mps * 0.8))
+    return Math.ceil(1000 / (throughputMpsForTier(this.tier) * 0.8))
   }
 
   /**
@@ -545,17 +713,39 @@ return cjson.encode({0, 0, math.floor(tokens), daily})
    */
   async reset(): Promise<void> {
     const redis = getRedis()
-    const today = this.getTodayKey()
 
     await Promise.all([
-      redis.del(`wa:daily:${this.instanceId}:${today}`),
-      redis.del(`wa:errors:${this.instanceId}:${today}`),
+      redis.del(`wa:dailyrecip:${this.instanceId}:${this.getTodayKey()}`),
+      redis.del(`wa:dailyrecip:${this.instanceId}:${this.getYesterdayKey()}`),
+      redis.del(`wa:errors:${this.instanceId}:${this.getTodayKey()}`),
       redis.del(`wa:throttle:${this.instanceId}`),
     ])
   }
 
   private getTodayKey(): string {
     return new Date().toISOString().split('T')[0]
+  }
+
+  // [FIX-H2] Yesterday day-key (UTC) for the two-day rolling-window merge.
+  private getYesterdayKey(): string {
+    const d = new Date()
+    d.setUTCDate(d.getUTCDate() - 1)
+    return d.toISOString().split('T')[0]
+  }
+
+  /**
+   * [FIX-H2] Yesterday's weight as basis points (integer-safe for Lua):
+   * floor((1 - elapsedFractionOfTodayUtc) * 10000). At 00:00 UTC ≈ 10000 (≈100%);
+   * at 23:59 UTC ≈ 0. Softens the UTC-boundary reset — no clean 2x window.
+   *
+   * RESIDUAL: still a bounded approximation of Meta's true sliding 24h window.
+   */
+  private yesterdayWeightBps(): number {
+    const now = new Date()
+    const secondsSinceMidnightUtc =
+      now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds()
+    const elapsedFraction = secondsSinceMidnightUtc / 86_400
+    return Math.floor((1 - elapsedFraction) * 10_000)
   }
 
   private getSecondsUntilMidnight(): number {

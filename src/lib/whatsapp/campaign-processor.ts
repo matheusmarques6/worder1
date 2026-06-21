@@ -6,6 +6,7 @@
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { MessageQueue, campaignQueue, QueueJob } from './queue'
 import { WhatsAppRateLimiter, getRateLimiter } from './rate-limiter'
+import { tierFromMessagingLimit } from '@/config/whatsapp-tiers'
 import { CircuitBreaker, getCircuitBreaker } from './circuit-breaker'
 import { withRetry, createWhatsAppRetry, sleep } from './backoff'
 import { sendTemplateMessage } from './meta-api'
@@ -240,7 +241,14 @@ export class CampaignProcessor {
           id: instance.id,
           phoneNumberId: instance.phone_number_id,
           accessToken: instance.access_token,
-          tier: instance.messaging_tier || 1,
+          // [FIX-C1] Derive the rate-limiter tier from Meta's REAL synced source — the
+          // enum STRING `messaging_limit_tier` on whatsapp_instances (TIER_250/TIER_1K/…,
+          // synced from Meta in quality/route.ts) — NOT the numeric `messaging_tier`
+          // (never written; defaults to 1 = silently 1000/day) and NOT `messaging_limit`
+          // (that column lives on whatsapp_business_accounts, not on this `instance` row).
+          // `instance` is `select('*')`, so `messaging_limit_tier` is present; unsynced
+          // rows read 'UNKNOWN'/null → tier 0 (250/day), the safe conservative default.
+          tier: tierFromMessagingLimit(instance.messaging_limit_tier),
         },
         template: {
           name: campaign.template_name || campaign.template?.name,

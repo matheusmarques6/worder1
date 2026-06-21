@@ -27,6 +27,10 @@ export async function GET(request: NextRequest) {
     // Se instanceId fornecido, incluir stats de rate limit e circuit breaker
     if (instanceId) {
       try {
+        // [Phase 4] No tier string available here without a DB round-trip, so the
+        // default limiter (tier 1) is used purely for read-only stats. rateLimit.dailySent
+        // now means UNIQUE recipients / 24h; dailyLimit/dailyRemaining use the -1
+        // sentinel for unlimited (Infinity would JSON-serialize to null). [FIX-L2][FIX-M2]
         const rateLimiter = getRateLimiter(instanceId)
         const circuitBreaker = getCircuitBreaker(`wa:${instanceId}`)
 
