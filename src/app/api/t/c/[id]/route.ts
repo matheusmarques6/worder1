@@ -28,7 +28,14 @@ export async function GET(
   const emailSendId = params.id;
   const url = request.nextUrl.searchParams.get('url');
   if (!url) return NextResponse.json({ error: 'Missing url' }, { status: 400 });
-  const decodedUrl = decodeURIComponent(url);
+
+  // Normaliza: descodifica URI + entidades HTML residuais (`&amp;` etc.)
+  // que possam ter escapado em emails enviados ANTES do fix em
+  // rewriteUrlsForTracking (Onda 14). Sem isso, links antigos cairiam
+  // num path relativo (`/&amp;discount=…`) e quebrariam em 404.
+  let decodedUrl = decodeURIComponent(url)
+    .replace(/&amp;/g, '&')
+    .replace(/&#39;/g, "'");
 
   // Synchronous lookup so the redirect URL can carry attribution
   // params. Cost: one Supabase query (~50ms). Gain: every storefront
@@ -37,11 +44,71 @@ export async function GET(
   // the email.
   const attribution = await resolveAttribution(emailSendId);
 
+  // Defesa em profundidade: se o destino nao for http(s) (template
+  // quebrado, merge tag vazia, etc.), redireciona pro storefront da org
+  // em vez de bater num path relativo quebrado. Click ainda eh registrado
+  // pra que o merchant veja no painel que houve interesse.
+  if (!/^https?:\/\//i.test(decodedUrl)) {
+    const fallback = await resolveStoreFallback(emailSendId);
+    console.warn(
+      `[ClickTracker] destino invalido send=${emailSendId} url="${decodedUrl.slice(0, 80)}" -> fallback=${fallback}`
+    );
+    recordClick(emailSendId, decodedUrl, attribution).catch(() => {});
+    return NextResponse.redirect(fallback, 302);
+  }
+
   // Fire-and-forget the rest (event row, counters, touchpoint).
   recordClick(emailSendId, decodedUrl, attribution).catch(() => {});
 
   const stamped = stampDestination(decodedUrl, emailSendId, attribution);
   return NextResponse.redirect(stamped, 302);
+}
+
+/**
+ * Resolve a URL "casa" pra qual mandar o contato quando o destino do
+ * email esta quebrado (merge tag vazia, template malformado). Caminho:
+ * email_sends -> email_campaigns.store_id -> shopify_stores.domain.
+ * Fallback final: app.worder.com.br.
+ */
+async function resolveStoreFallback(emailSendId: string): Promise<string> {
+  try {
+    const { supabaseAdmin } = await import('@/lib/supabase-admin');
+    const { data: send } = await supabaseAdmin
+      .from('email_sends')
+      .select('campaign_id, organization_id')
+      .eq('id', emailSendId)
+      .maybeSingle();
+    if (send?.campaign_id) {
+      const { data: campaign } = await supabaseAdmin
+        .from('email_campaigns')
+        .select('store_id')
+        .eq('id', send.campaign_id)
+        .maybeSingle();
+      if (campaign?.store_id) {
+        const { data: store } = await supabaseAdmin
+          .from('shopify_stores')
+          .select('domain')
+          .eq('id', campaign.store_id)
+          .maybeSingle();
+        if (store?.domain) return `https://${store.domain}`;
+      }
+    }
+    // Sem store na campanha — tenta primeira loja ativa da org.
+    if (send?.organization_id) {
+      const { data: store } = await supabaseAdmin
+        .from('shopify_stores')
+        .select('domain')
+        .eq('organization_id', send.organization_id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (store?.domain) return `https://${store.domain}`;
+    }
+  } catch (err) {
+    console.error('[ClickTracker] resolveStoreFallback failed:', err);
+  }
+  return 'https://worder.com.br';
 }
 
 interface ClickAttribution {

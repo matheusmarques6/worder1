@@ -3,7 +3,7 @@
 // =============================================
 
 import { describe, it, expect } from 'vitest';
-import { renderMergeTags } from '../render';
+import { renderMergeTags, rewriteUrlsForTracking } from '../render';
 import { resolveTriggerSmartTags } from '../merge-tags';
 
 describe('renderMergeTags whitespace tolerance', () => {
@@ -124,5 +124,71 @@ describe('resolveTriggerSmartTags', () => {
     const out2 = resolveTriggerSmartTags('{{ trigger.OrderId }}', { OrderId: '1' });
     expect(out1).toBe('1');
     expect(out2).toBe('1');
+  });
+});
+
+describe('rewriteUrlsForTracking — Onda 14 hotfix', () => {
+  const SEND_ID = 'send-uuid';
+  const BASE = 'https://app.worder.com.br';
+
+  it('wraps a plain http(s) link', () => {
+    const html = '<a href="https://shop.com/p/123">buy</a>';
+    const out = rewriteUrlsForTracking(html, SEND_ID, BASE);
+    expect(out).toContain(`${BASE}/api/t/c/${SEND_ID}?url=`);
+    expect(out).toContain(encodeURIComponent('https://shop.com/p/123'));
+  });
+
+  it('decodes &amp; in href before encoding (no double-escape)', () => {
+    // HTML valido: atributo href com & precisa ser &amp;.
+    const html = '<a href="https://shop.com/cart?x=1&amp;y=2">buy</a>';
+    const out = rewriteUrlsForTracking(html, SEND_ID, BASE);
+    // o url= dentro do tracker deve ter o & UMA SO VEZ (decoded), nao %26amp%3B
+    expect(out).toContain(encodeURIComponent('https://shop.com/cart?x=1&y=2'));
+    expect(out).not.toContain('%26amp%3B');
+  });
+
+  it('does NOT wrap orphan suffix from broken merge tag (&suffix)', () => {
+    // Bug reproduzido: {{checkout_url}} resolvia vazio, sobrava &amp;discount=…
+    const html = '<a href="&amp;discount=DISCOUNT10">complete</a>';
+    const out = rewriteUrlsForTracking(html, SEND_ID, BASE);
+    // Mantem o href original — nao esconde o problema atras de um tracker.
+    expect(out).toBe(html);
+    expect(out).not.toContain('/api/t/c/');
+  });
+
+  it('does NOT wrap unresolved merge tags', () => {
+    const html = '<a href="{{checkout_url}}">x</a>';
+    const out = rewriteUrlsForTracking(html, SEND_ID, BASE);
+    expect(out).toBe(html);
+  });
+
+  it('does NOT wrap mailto/tel/anchor', () => {
+    const cases = [
+      '<a href="mailto:x@y.com">m</a>',
+      '<a href="tel:+5511999999999">t</a>',
+      '<a href="#section">a</a>',
+    ];
+    for (const html of cases) {
+      expect(rewriteUrlsForTracking(html, SEND_ID, BASE)).toBe(html);
+    }
+  });
+
+  it('skips already-wrapped tracking and unsubscribe links', () => {
+    const html = [
+      `<a href="${BASE}/api/t/c/x?url=y">tracker</a>`,
+      `<a href="${BASE}/api/unsubscribe/x">unsub</a>`,
+    ].join('');
+    expect(rewriteUrlsForTracking(html, SEND_ID, BASE)).toBe(html);
+  });
+
+  it('does not wrap relative or non-http schemes (javascript: data:)', () => {
+    const cases = [
+      '<a href="/loja">rel</a>',
+      '<a href="javascript:alert(1)">js</a>',
+      '<a href="data:text/html,x">d</a>',
+    ];
+    for (const html of cases) {
+      expect(rewriteUrlsForTracking(html, SEND_ID, BASE)).toBe(html);
+    }
   });
 });

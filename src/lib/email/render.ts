@@ -201,6 +201,22 @@ export function renderMergeTags(
 }
 
 /**
+ * Decodifica entidades HTML basicas. URLs em atributos HTML SAO escritas
+ * com `&amp;` (correto pra HTML valido), mas o tracker precisa do `&` cru
+ * antes de encodeURIComponent. Sem isso, o `&amp;` ia parar dentro do
+ * `?url=` codificado como `%26amp%3B`, e o `decodeURIComponent` no
+ * /api/t/c/[id] devolveria `&amp;` literal — destino quebrado.
+ */
+function decodeHtmlEntitiesInUrl(url: string): string {
+  return url
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+}
+
+/**
  * Rewrite all <a href="..."> URLs to go through the click tracker.
  * Excludes mailto:, tel:, #, and unsubscribe links.
  */
@@ -224,7 +240,26 @@ export function rewriteUrlsForTracking(
         return match;
       }
 
-      const encodedUrl = encodeURIComponent(url);
+      const decoded = decodeHtmlEntitiesInUrl(url);
+
+      // Destino invalido: merge tag nao resolvida ({{x}}), sufixo orfao
+      // (`&...`, `?...`) ou nao-http(s). Wrappear so esconde o problema —
+      // o tracker decodificaria e cairia no fallback storefront. Melhor
+      // deixar o link aparecer quebrado pro merchant notar do que esconder
+      // atras de um redirect silencioso.
+      if (
+        /\{\{|\}\}/.test(decoded) ||
+        decoded.startsWith('&') ||
+        decoded.startsWith('?') ||
+        !/^https?:\/\//i.test(decoded)
+      ) {
+        console.warn(
+          `[email/track] href nao trackavel — send=${emailSendId} href="${decoded.slice(0, 80)}"`
+        );
+        return match;
+      }
+
+      const encodedUrl = encodeURIComponent(decoded);
       const trackingUrl = `${baseUrl}/api/t/c/${emailSendId}?url=${encodedUrl}`;
       return `${prefix}${trackingUrl}${suffix}`;
     }

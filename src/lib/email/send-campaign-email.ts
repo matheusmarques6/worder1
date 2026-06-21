@@ -155,6 +155,21 @@ export async function sendCampaignEmail({
       } catch {} // Table may not exist
     }
 
+    // 2c. Fallback final: storefront da org. Sem recovery_url disponivel,
+    // melhor mandar o contato pra home da loja do que deixar `{{checkout_url}}`
+    // resolver pra string vazia e gerar links quebrados (Onda 14: o tracker
+    // tambem ja redireciona pro storefront nesses casos, mas evitar gerar o
+    // link ruim em primeiro lugar e melhor pra UX e pras metricas de clique).
+    if (!mergeData.checkout_url || mergeData.checkout_url === '{{checkout_url}}') {
+      if (mergeData.store_url) {
+        mergeData.checkout_url = mergeData.store_url
+        mergeData['checkout.url'] = mergeData.store_url
+        if (!mergeData['event.CheckoutURL']) {
+          mergeData['event.CheckoutURL'] = mergeData.store_url
+        }
+      }
+    }
+
     // 3. Resolve dynamic product blocks + cart blocks
     let htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, contactId, eventData);
     // Pass eventData so the cart block can adapt to the active trigger
