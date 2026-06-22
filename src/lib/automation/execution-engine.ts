@@ -378,6 +378,27 @@ export class ExecutionEngine {
             this.markSkippedBranches(workflow, node.id, result.branch, nodeResults);
           }
 
+          // Handle explicit exit ("Sair" node). The contact leaves the
+          // flow here: mark everything downstream of this node as skipped
+          // (defensive — the node is normally a leaf) and end the run with
+          // 'cancelled', the same outcome an exit-condition produces.
+          if (result.exit) {
+            const descendants = new Set<string>();
+            this.collectDescendants(workflow, node.id, descendants);
+            for (const id of descendants) {
+              if (!nodeResults[id]) {
+                nodeResults[id] = {
+                  status: 'skipped',
+                  output: { reason: 'Contato saiu do fluxo' },
+                  duration: 0,
+                };
+              }
+            }
+            return this.createResult(executionId, 'cancelled', startedAt, nodeResults, context, {
+              error: result.output?.reason || 'Contato saiu do fluxo (nó Sair)',
+            });
+          }
+
         } catch (nodeError: any) {
           const isTimeout = nodeError instanceof NodeTimeoutError;
           const isCircuitOpen = nodeError instanceof CircuitOpenError;

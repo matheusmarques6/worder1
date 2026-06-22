@@ -40,6 +40,7 @@ import {
   Target,
   Globe,
   Bot,
+  LogOut,
   type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -137,6 +138,7 @@ const LIBRARY_SECTIONS: SectionConfig[] = [
       { type: 'condition_field', label: 'Divisão Condicional', description: 'Divide caminho por condição', icon: GitBranch, category: 'condition', color: '#eab308' },
       { type: 'condition_whatsapp_keyword', label: 'Condição WhatsApp', description: 'Verifica keyword na resposta', icon: GitBranch, category: 'condition', color: '#f59e0b' },
       { type: 'logic_split', label: 'Teste A/B', description: 'Divide contatos aleatoriamente', icon: Shuffle, category: 'condition', color: '#6366f1' },
+      { type: 'control_exit', label: 'Sair do Fluxo', description: 'Remove o contato do fluxo (ex: ramo "Não")', icon: LogOut, category: 'control', color: '#ef4444', defaultConfig: { reason: '' } },
     ],
   },
   {

@@ -289,8 +289,17 @@ export async function GET(request: NextRequest) {
         // received zero requests).
         const isWaiting = result.status === 'waiting';
         const waitingAt = (result as any).waitingAt;
+        // 'cancelled' is a deliberate terminal outcome (exit condition or
+        // the "Sair" node), NOT a failure — map it through so exited
+        // contacts don't pollute the failure metrics.
         const updatePayload: Record<string, any> = {
-          status: isWaiting ? 'waiting' : (result.status === 'success' ? 'completed' : 'failed'),
+          status: isWaiting
+            ? 'waiting'
+            : result.status === 'success'
+              ? 'completed'
+              : result.status === 'cancelled'
+                ? 'cancelled'
+                : 'failed',
           completed_at: !isWaiting ? new Date().toISOString() : null,
           last_error: result.error || null,
           metadata: {

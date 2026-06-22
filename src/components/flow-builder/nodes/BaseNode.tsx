@@ -8,7 +8,7 @@ import {
   ArrowRight, Trophy, XCircle, Calendar, Users, Webhook, MessageSquare,
   Clock, Mail, Phone, Bell, Edit, GitBranch, Zap, Send, UserMinus,
   Eye, PlusCircle, Package, Truck, Smartphone, UserCog, List,
-  Shuffle, MessageCircle, FileText, MoreVertical, Activity,
+  Shuffle, MessageCircle, FileText, MoreVertical, Activity, LogOut,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -81,6 +81,7 @@ const nodeTypeLabels: Record<string, string> = {
   action_add_to_list: 'LISTA',
   action_remove_from_list: 'LISTA',
   action_move_deal: 'DEAL',
+  control_exit: 'SAIR',
 };
 
 // ============================================
@@ -116,6 +117,8 @@ function getNodeSummary(nodeType: string, config: Record<string, any>): string |
     case 'action_tag':
     case 'action_remove_tag':
       return config?.tagName || null;
+    case 'control_exit':
+      return config?.reason ? `Sair: ${config.reason}` : 'Contato sai do fluxo';
     default:
       return null;
   }
@@ -179,6 +182,7 @@ const nodeTypeIconFallback: Record<string, LucideIcon> = {
   action_add_to_list: List, action_remove_from_list: List,
   action_move_deal: ArrowRight,
   control_delay: Clock, condition_field: GitBranch, logic_split: Shuffle,
+  control_exit: LogOut,
 };
 
 function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
@@ -347,8 +351,9 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
         )}
       </div>
 
-      {/* Source handle(s) */}
-      {category === 'condition' ? (
+      {/* Source handle(s). The "Sair" node is terminal — the contact
+          leaves the flow there, so it gets no outgoing handle. */}
+      {nodeType === 'control_exit' ? null : category === 'condition' ? (
         <>
           <Handle
             type="source"

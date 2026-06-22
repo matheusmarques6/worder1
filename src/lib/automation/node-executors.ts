@@ -18,6 +18,14 @@ export interface NodeExecutionResult {
   duration?: number;
   branch?: string;
   waitUntil?: Date;
+  /**
+   * Set by the "Sair" (control_exit) node. When true the engine stops
+   * processing the run for this contact — they have left the flow. The
+   * node itself still reports status 'success' (it did its job); `exit`
+   * is the run-level signal, kept separate so the node renders green in
+   * the test panel.
+   */
+  exit?: boolean;
 }
 
 export interface NodeExecutorContext {
@@ -2189,6 +2197,24 @@ const controlExecutors: Record<string, NodeExecutor> = {
       return {
         status: 'success',
         output: { ended: true, reason: config.reason || 'Workflow completed' },
+      };
+    },
+  },
+
+  // Exit node ("Sair") — removes the contact from the flow at this point.
+  // Used on a condition branch (e.g. the "Não" path) to stop the journey
+  // for contacts that shouldn't continue. The engine reads `exit: true`
+  // and terminates the run after this node; downstream nodes are marked
+  // skipped.
+  control_exit: {
+    async execute({ config }) {
+      const reason =
+        (typeof config?.reason === 'string' && config.reason.trim()) ||
+        'Contato saiu do fluxo';
+      return {
+        status: 'success',
+        output: { exited: true, reason },
+        exit: true,
       };
     },
   },
