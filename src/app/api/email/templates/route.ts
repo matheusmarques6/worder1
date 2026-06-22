@@ -77,11 +77,44 @@ export async function POST(request: NextRequest) {
     }
     if (storeId) insertData.store_id = storeId;
 
-    const { data: template, error } = await supabaseAdmin
+    let { data: template, error } = await supabaseAdmin
       .from('email_templates')
       .insert(insertData)
       .select()
       .single();
+
+    // Graceful fallback for deployments that haven't run the
+    // 2026_06_22_text_based_email_templates.sql migration yet. PostgREST
+    // returns "Could not find the 'editor_type' column ... in the schema
+    // cache" (PGRST204). For visual templates we can safely retry without
+    // the column; for text-based we surface a clear error pointing at the
+    // missing migration so the user knows what to apply.
+    if (
+      error &&
+      /editor_type/i.test(error.message || '') &&
+      /schema cache|could not find/i.test(error.message || '')
+    ) {
+      if (editorType === 'text') {
+        console.error('[EmailTemplates] editor_type column missing — text templates require the 2026_06_22_text_based_email_templates.sql migration');
+        return NextResponse.json(
+          {
+            error:
+              'Banco desatualizado: rode a migration 2026_06_22_text_based_email_templates.sql no Supabase para habilitar templates de texto.',
+            code: 'MIGRATION_REQUIRED',
+            migration: '2026_06_22_text_based_email_templates.sql',
+          },
+          { status: 409 },
+        );
+      }
+      const { editor_type: _drop, ...legacyInsert } = insertData;
+      const retry = await supabaseAdmin
+        .from('email_templates')
+        .insert(legacyInsert)
+        .select()
+        .single();
+      template = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       console.error('[EmailTemplates] Insert error:', error.message);

@@ -95,15 +95,43 @@ export async function PUT(
       }
     }
 
-    const updateQuery = supabaseAdmin
-      .from('email_templates')
-      .update(updateData)
-      .eq('id', templateId)
-      .eq('organization_id', auth.user.organization_id);
+    const runUpdate = (payload: Record<string, any>) =>
+      supabaseAdmin
+        .from('email_templates')
+        .update(payload)
+        .eq('id', templateId)
+        .eq('organization_id', auth.user.organization_id)
+        .select()
+        .single();
 
-    const { data: template, error } = await updateQuery
-      .select()
-      .single();
+    let { data: template, error } = await runUpdate(updateData);
+
+    // Same migration-missing fallback as the POST endpoint: if the DB
+    // doesn't know about editor_type yet, retry without it so existing
+    // visual templates keep saving. Text-based saves are surfaced as a
+    // 409 so the user knows to apply the migration.
+    if (
+      error &&
+      updateData.editor_type !== undefined &&
+      /editor_type/i.test(error.message || '') &&
+      /schema cache|could not find/i.test(error.message || '')
+    ) {
+      if (updateData.editor_type === 'text') {
+        return NextResponse.json(
+          {
+            error:
+              'Banco desatualizado: rode a migration 2026_06_22_text_based_email_templates.sql no Supabase para habilitar templates de texto.',
+            code: 'MIGRATION_REQUIRED',
+            migration: '2026_06_22_text_based_email_templates.sql',
+          },
+          { status: 409 },
+        );
+      }
+      const { editor_type: _drop, ...legacyPayload } = updateData;
+      const retry = await runUpdate(legacyPayload);
+      template = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       console.error('[EmailTemplate] Update error:', error.message);
