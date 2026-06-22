@@ -59,9 +59,14 @@ import {
   Type,
   Undo2,
   Redo2,
+  Maximize2,
+  Minimize2,
+  History,
 } from 'lucide-react';
 
 import { MergeTag } from './MergeTagNode';
+import { useSlashMenu } from './SlashCommands';
+import { VersionHistoryModal } from './VersionHistoryModal';
 import { MERGE_TAGS, MERGE_TAG_CATEGORIES, type MergeTag as MergeTagDef } from '@/lib/email/merge-tags';
 import { renderTextEmailToHtml, renderTextEmailToPlain, type TextDoc } from '@/lib/email/text-render';
 import { useEmailAutosave } from '@/components/email-builder/hooks/useEmailAutosave';
@@ -144,6 +149,10 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
   const [showPreview, setShowPreview] = useState(false);
   const [showVarMenu, setShowVarMenu] = useState<'subject' | 'body' | null>(null);
   const [showSendTest, setShowSendTest] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  // Distraction-free writing: hides the sidebar + top chrome so the
+  // founder note is the only thing on screen. Toggled with ⌘/.
+  const [zenMode, setZenMode] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [didInit, setDidInit] = useState(false);
   const varAnchorRef = useRef<HTMLButtonElement | null>(null);
@@ -162,7 +171,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
         HTMLAttributes: { rel: 'noopener', target: '_blank' },
       }),
       Placeholder.configure({
-        placeholder: 'Escreva seu e-mail aqui — como se estivesse falando direto com seu cliente.\n\nDica: use o botão Variável (à direita) para inserir o nome do contato.',
+        placeholder: 'Escreva seu e-mail aqui — como se estivesse falando direto com seu cliente.\n\nDica: digite "/" para inserir títulos, listas e variáveis.',
       }),
       MergeTag,
     ],
@@ -236,6 +245,10 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
 
   useImperativeHandle(ref, () => ({ save: async () => { await flush(); } }), [flush]);
 
+  // Slash command menu. "/" at the start of a block opens a palette;
+  // selecting "Variável" defers to the existing body variable picker.
+  const slashMenu = useSlashMenu(editor, () => setShowVarMenu('body'));
+
   // Live preview HTML — re-renders only when the doc, preview text, or
   // device toggle change so we don't allocate a 5KB string on every
   // keystroke when the preview pane is open.
@@ -286,12 +299,15 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
     }).run();
   }, [editor]);
 
-  // Cmd/Ctrl+S → manual save
+  // Keyboard shortcuts: ⌘S saves, ⌘/ toggles distraction-free mode.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         flush();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        e.preventDefault();
+        setZenMode((v) => !v);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -302,6 +318,21 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
     try { await flush(); } catch {}
     onBack();
   }, [flush, onBack]);
+
+  // Apply a restored version (already persisted server-side) to the live
+  // editor: swap the doc and re-hydrate the metadata fields. We mark the
+  // editor clean afterwards since the server row is already up to date.
+  const applyRestored = useCallback((restoredTemplate: any) => {
+    const restored = coerceDesign(restoredTemplate?.design_json || restoredTemplate?.design);
+    if (editor && restored.doc) {
+      editor.commands.setContent(restored.doc, { emitUpdate: false });
+    }
+    setSubject(restored.subject || restoredTemplate?.subject || '');
+    setPreviewText(restored.previewText || restoredTemplate?.preview_text || '');
+    setSenderName(restored.senderName || '');
+    setSenderEmail(restored.senderEmail || '');
+    setIsDirty(false);
+  }, [editor]);
 
   // ---- Render -------------------------------------------------
 
@@ -389,6 +420,26 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
           Preview
         </button>
 
+        {templateId && (
+          <button
+            onClick={() => setShowHistory(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 rounded-md transition-colors"
+            title="Histórico de versões"
+          >
+            <History className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        <button
+          onClick={() => setZenMode((v) => !v)}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+            zenMode ? 'bg-zinc-900 text-white' : 'text-zinc-700 hover:bg-zinc-100'
+          }`}
+          title="Modo foco (⌘/)"
+        >
+          {zenMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+        </button>
+
         <button
           onClick={() => setShowSendTest(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 rounded-md transition-colors"
@@ -402,7 +453,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
       <div className="flex flex-1 min-h-0">
         {/* Canvas */}
         <main className="flex-1 overflow-auto bg-zinc-100">
-          <div className={`mx-auto my-8 transition-all ${device === 'mobile' ? 'max-w-[380px]' : 'max-w-[680px]'}`}>
+          <div className={`mx-auto transition-all ${zenMode ? 'my-12' : 'my-8'} ${device === 'mobile' ? 'max-w-[380px]' : zenMode ? 'max-w-[720px]' : 'max-w-[680px]'}`}>
             {/* Subject preview strip — mimics inbox header */}
             <div className="bg-white rounded-t-lg border border-b-0 border-zinc-200 px-6 py-4">
               <div className="flex items-baseline gap-2 mb-1">
@@ -536,8 +587,9 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
           </div>
         </main>
 
-        {/* Sidebar */}
-        <aside className="w-[340px] border-l border-zinc-200 bg-white flex flex-col overflow-hidden">
+        {/* Sidebar — hidden in distraction-free mode so the note is the
+            only thing on screen. */}
+        <aside className={`w-[340px] border-l border-zinc-200 bg-white flex-col overflow-hidden ${zenMode ? 'hidden' : 'flex'}`}>
           <div className="px-5 py-4 border-b border-zinc-200">
             <h3 className="text-xs font-semibold text-zinc-900 uppercase tracking-wider">Configurações do e-mail</h3>
           </div>
@@ -643,6 +695,19 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
           </div>
         </aside>
       </div>
+
+      {/* Slash command palette — rendered at the root so its fixed
+          positioning is relative to the viewport, not the canvas. */}
+      {slashMenu}
+
+      {/* Version history */}
+      {showHistory && templateId && (
+        <VersionHistoryModal
+          templateId={templateId}
+          onClose={() => setShowHistory(false)}
+          onRestored={applyRestored}
+        />
+      )}
 
       {/* Send test modal */}
       {showSendTest && (
