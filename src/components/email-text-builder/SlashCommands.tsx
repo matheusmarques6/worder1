@@ -17,7 +17,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Editor } from '@tiptap/react';
 import {
-  Heading1, Heading2, Heading3, List, ListOrdered, Quote, Minus, Image as ImageIcon, Tag, Type,
+  Heading1, Heading2, Heading3, List, ListOrdered, Quote, Minus, Tag, Type,
 } from 'lucide-react';
 
 export interface SlashCommand {
@@ -91,11 +91,6 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     run: (e) => e.chain().focus().toggleBlockquote().run() },
   { key: 'hr', label: 'Divisor', hint: 'Linha separadora', aliases: ['divisor', 'divider', 'hr', 'linha'], icon: Minus,
     run: (e) => e.chain().focus().setHorizontalRule().run() },
-  { key: 'image', label: 'Imagem', hint: 'Inserir imagem por URL', aliases: ['imagem', 'image', 'foto'], icon: ImageIcon,
-    run: (e) => {
-      const url = window.prompt('URL da imagem:');
-      if (url) e.chain().focus().insertContent({ type: 'image', attrs: { src: url, alt: '' } }).run();
-    } },
 ];
 
 /**
