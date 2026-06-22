@@ -68,6 +68,25 @@ describe('renderTextEmailToHtml', () => {
     expect(html).toContain('&lt;script&gt;');
     expect(html).not.toContain('<script>alert(1)</script>');
   });
+
+  it('drops dangerous URL schemes on links', () => {
+    const html = renderTextEmailToHtml(
+      buildDoc(p(t('clique', [{ type: 'link', attrs: { href: 'javascript:alert(1)' } }])))
+    );
+    expect(html).not.toContain('javascript:');
+    expect(html).toContain('href="#"');
+  });
+
+  it('keeps valid http links and merge-tag URLs', () => {
+    const html = renderTextEmailToHtml(
+      buildDoc(p(
+        t('a', [{ type: 'link', attrs: { href: 'https://loja.com' } }]),
+        t('b', [{ type: 'link', attrs: { href: '{{store_url}}' } }]),
+      ))
+    );
+    expect(html).toContain('href="https://loja.com"');
+    expect(html).toContain('{{store_url}}');
+  });
 });
 
 describe('renderTextEmailToPlain', () => {
@@ -105,6 +124,26 @@ describe('renderTextEmailToPlain', () => {
     );
     expect(text).toContain('- Um');
     expect(text).toContain('- Dois');
+  });
+
+  it('keeps nested list structure in HTML', () => {
+    const doc = buildDoc({
+      type: 'bulletList',
+      content: [
+        {
+          type: 'listItem',
+          content: [
+            p(t('Pai')),
+            { type: 'bulletList', content: [{ type: 'listItem', content: [p(t('Filho'))] }] },
+          ],
+        },
+      ],
+    });
+    const html = renderTextEmailToHtml(doc);
+    // Outer + inner <ul> both present → nesting preserved.
+    expect((html.match(/<ul/g) || []).length).toBe(2);
+    expect(html).toContain('Pai');
+    expect(html).toContain('Filho');
   });
 
   it('serializes merge-tag chips to {{tag|fallback}} for downstream resolution', () => {
