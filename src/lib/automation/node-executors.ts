@@ -541,11 +541,19 @@ const actionExecutors: Record<string, NodeExecutor> = {
         let html: string;
         let plainText: string | undefined;
         if (config.templateId && config.templateId !== 'none') {
-          const { data: template, error: tplErr } = await supabase
+          // Scope the lookup to the executing org so a tampered/stale
+          // templateId from another tenant can never be rendered into
+          // this org's send. organizationId is always present for real
+          // sends; in its absence (legacy test contexts) we fall back to
+          // the unscoped lookup the executor used before.
+          let tplQuery = supabase
             .from('email_templates')
             .select('design_json, html, name, editor_type')
-            .eq('id', config.templateId)
-            .single();
+            .eq('id', config.templateId);
+          if (organizationId) {
+            tplQuery = tplQuery.eq('organization_id', organizationId);
+          }
+          const { data: template, error: tplErr } = await tplQuery.single();
 
           if (tplErr || !template) {
             return { status: 'error', output: null, error: `Template ${config.templateId} not found` };
