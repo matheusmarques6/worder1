@@ -396,16 +396,34 @@ export async function POST(req: NextRequest) {
         // Escolhe template (variant B pode ter template_id próprio) ou usa o default
         let htmlSource = template.html
         let subjectSource = campaign.subject || ''
+        // Plain-text source defaults to the base template's; variant B with
+        // its own text-based template overrides it below so the two MIME
+        // halves never disagree for B recipients.
+        let plainSource = templatePlainSource
         if (useB) {
           if (variantB.subject) subjectSource = variantB.subject
           if (variantB.template_id && variantB.template_id !== template.id) {
             const { data: altTpl } = await supabaseAdmin
               .from('email_templates')
-              .select('html, design_json')
+              .select('html, design_json, editor_type')
               .eq('id', variantB.template_id)
               .eq('organization_id', organizationId)
               .maybeSingle()
             if (altTpl?.html) htmlSource = altTpl.html
+            // Re-derive the plain-text alternative from variant B's own
+            // design when it's a text-based template; otherwise B gets no
+            // text part (matching its visual nature).
+            if ((altTpl as any)?.editor_type === 'text' && altTpl?.design_json) {
+              try {
+                const { renderTextEmailToPlain } = await import('@/lib/email/text-render')
+                const altDoc = (altTpl.design_json as any)?.doc || altTpl.design_json
+                plainSource = renderTextEmailToPlain(altDoc)
+              } catch {
+                plainSource = ''
+              }
+            } else {
+              plainSource = ''
+            }
           }
         }
 
@@ -489,10 +507,10 @@ export async function POST(req: NextRequest) {
         // template is text-based; visual campaigns keep the html-only
         // payload they used to ship.
         let finalText: string | undefined
-        if (templatePlainSource) {
+        if (plainSource) {
           try {
             const { renderPlainWithMergeData } = await import('@/lib/email/text-render')
-            finalText = renderPlainWithMergeData(templatePlainSource, mergeData)
+            finalText = renderPlainWithMergeData(plainSource, mergeData)
             // Strip unresolved tags in the text part too — same hygiene
             // the HTML/subject already get above.
             if (finalText) finalText = finalText.replace(/\{\{[^}]+\}\}/g, '')

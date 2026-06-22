@@ -155,7 +155,6 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
   // founder note is the only thing on screen. Toggled with ⌘/.
   const [zenMode, setZenMode] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-  const [didInit, setDidInit] = useState(false);
   const varAnchorRef = useRef<HTMLButtonElement | null>(null);
 
   const editor = useEditor({
@@ -189,31 +188,30 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
     },
   });
 
-  // Track edits → dirty bit. Skip the first onUpdate that fires when the
-  // editor is constructed and seeded with initial content; otherwise
-  // every load would immediately autosave with the same content.
+  // Track body edits → dirty. Seeding `content` in useEditor does NOT
+  // emit an 'update', so every fired event is a genuine user edit — no
+  // need to swallow a "first" one (doing so dropped single-edit changes).
   useEffect(() => {
     if (!editor) return;
-    const handler = () => {
-      if (!didInit) {
-        setDidInit(true);
-        return;
-      }
-      setIsDirty(true);
-    };
+    const handler = () => setIsDirty(true);
     editor.on('update', handler);
     return () => {
       editor.off('update', handler);
     };
-  }, [editor, didInit]);
+  }, [editor]);
 
-  // Mark dirty on metadata changes (subject, preview, sender) — without
-  // this the autosave never fires when the user only tweaks the side
-  // panel.
+  // Mark dirty on metadata changes (subject, preview, sender) so the
+  // autosave fires even when the user only tweaks the side panel without
+  // touching the body. A ref skips the first run (initial mount values)
+  // so loading a template doesn't immediately mark it dirty.
+  const metaMounted = useRef(false);
   useEffect(() => {
-    if (!didInit) return;
+    if (!metaMounted.current) {
+      metaMounted.current = true;
+      return;
+    }
     setIsDirty(true);
-  }, [subject, previewText, senderName, senderEmail, didInit]);
+  }, [subject, previewText, senderName, senderEmail]);
 
   const buildDesign = useCallback((): TextEmailDesign => {
     const doc = editor ? (editor.getJSON() as TextDoc) : initial.doc;

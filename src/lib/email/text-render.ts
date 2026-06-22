@@ -62,6 +62,31 @@ function escapeAttr(s: string): string {
   return escapeHtml(s);
 }
 
+/**
+ * Allow only safe URL schemes in href/src attributes. Blocks
+ * `javascript:`, `data:`, `vbscript:` etc. that could execute in the
+ * in-app preview iframe. Permits http(s), mailto, tel, anchors,
+ * relative paths, and unresolved merge tags ({{...}}).
+ */
+function safeUrl(raw: string): string {
+  const url = String(raw || '').trim();
+  if (!url) return '#';
+  // Merge tags, relative paths and anchors are fine — they're resolved
+  // (or scoped) downstream.
+  if (url.startsWith('/') || url.startsWith('#') || url.includes('{{')) {
+    return url;
+  }
+  if (/^(https?:|mailto:|tel:)/i.test(url)) {
+    return url;
+  }
+  // A bare "www.foo.com" or "foo.com/x" with no scheme — treat as https.
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(\/|$)/i.test(url)) {
+    return `https://${url}`;
+  }
+  // Anything else (javascript:, data:, vbscript:, unknown scheme) is dropped.
+  return '#';
+}
+
 /** Wrap a string of inline content with the mark stack. Order matters:
  *  outer marks wrap inner marks so the HTML nests cleanly. */
 function applyMarks(
@@ -98,7 +123,7 @@ function applyMarks(
     }
   }
   for (const m of links) {
-    const href = String(m.attrs?.href || '#');
+    const href = safeUrl(String(m.attrs?.href || '#'));
     // color:inherit lets links pick up the surrounding text color but
     // we still underline so they read as links (default browser style
     // varies wildly between email clients).
@@ -142,6 +167,24 @@ function alignStyle(attrs?: Record<string, any>): string {
   return '';
 }
 
+/**
+ * Render a listItem's content. A listItem holds block nodes (usually one
+ * paragraph, optionally a nested list). We unwrap paragraphs to inline so
+ * the bullet sits on the same line as its text — but recurse into nested
+ * lists as blocks so multi-level lists keep their <ul>/<ol> structure.
+ */
+function renderListItem(li: TextNode, textColor: string): string {
+  return (li.content || [])
+    .map((child) => {
+      if (child.type === 'paragraph') {
+        return renderChildren(child.content);
+      }
+      // Nested list (or any other block) — render with the block renderer.
+      return renderBlock(child, textColor);
+    })
+    .join('');
+}
+
 /** Render a block-level node. */
 function renderBlock(node: TextNode, textColor: string): string {
   switch (node.type) {
@@ -163,19 +206,19 @@ function renderBlock(node: TextNode, textColor: string): string {
     }
     case 'bulletList': {
       const items = (node.content || [])
-        .map((li) => `<li style="margin:0 0 6px;">${renderChildren(li.content)}</li>`)
+        .map((li) => `<li style="margin:0 0 6px;">${renderListItem(li, textColor)}</li>`)
         .join('');
       return `<ul style="margin:0 0 16px;padding-left:24px;font-size:16px;line-height:1.6;color:${textColor};">${items}</ul>`;
     }
     case 'orderedList': {
       const items = (node.content || [])
-        .map((li) => `<li style="margin:0 0 6px;">${renderChildren(li.content)}</li>`)
+        .map((li) => `<li style="margin:0 0 6px;">${renderListItem(li, textColor)}</li>`)
         .join('');
       return `<ol style="margin:0 0 16px;padding-left:24px;font-size:16px;line-height:1.6;color:${textColor};">${items}</ol>`;
     }
     case 'listItem': {
       // Standalone listItem (shouldn't happen at block level but be safe).
-      return `<li style="margin:0 0 6px;">${renderChildren(node.content)}</li>`;
+      return `<li style="margin:0 0 6px;">${renderListItem(node, textColor)}</li>`;
     }
     case 'blockquote': {
       const inner = (node.content || []).map((c) => renderBlock(c, textColor)).join('');
@@ -185,9 +228,10 @@ function renderBlock(node: TextNode, textColor: string): string {
       return `<hr style="border:0;border-top:1px solid #e5e7eb;margin:24px 0;" />`;
     }
     case 'image': {
-      const src = String(node.attrs?.src || '');
+      const rawSrc = String(node.attrs?.src || '');
+      const src = safeUrl(rawSrc);
       const alt = String(node.attrs?.alt || '');
-      if (!src) return '';
+      if (!rawSrc || src === '#') return '';
       return `<p style="margin:0 0 16px;"><img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" style="display:block;max-width:100%;height:auto;border:0;" /></p>`;
     }
     case 'codeBlock': {
@@ -397,10 +441,12 @@ export function renderPlainWithMergeData(
   // independent of HTML escaping rules.
   if (!plain) return '';
   const now = new Date();
+  // Provide date helpers as defaults — don't clobber a value the caller
+  // already set for current_date/current_year.
   const dateData: Record<string, string> = {
-    ...mergeData,
     current_date: now.toLocaleDateString('pt-BR'),
     current_year: String(now.getFullYear()),
+    ...mergeData,
   };
   const resolve = (tag: string, fallback = ''): string => {
     if (tag.startsWith('custom.')) {
