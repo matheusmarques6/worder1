@@ -8,13 +8,32 @@
 //   - preheader is emitted as a hidden snippet
 // =============================================================
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   renderTextEmailToHtml,
   renderTextEmailToPlain,
   renderPlainWithMergeData,
   type TextDoc,
 } from '../text-render';
+
+// Regression guard: the text editor imports this module in the browser,
+// so it must never pull in a server-only module. supabase-admin throws
+// at import time when `window` is defined — re-importing text-render with
+// a faked window must NOT throw, which it would if './render' (and thus
+// supabase-admin) crept back into the import graph.
+describe('text-render client safety', () => {
+  it('imports cleanly when window is defined', async () => {
+    vi.resetModules();
+    (globalThis as any).window = {};
+    try {
+      const mod = await import('../text-render');
+      expect(typeof mod.renderTextEmailToHtml).toBe('function');
+    } finally {
+      delete (globalThis as any).window;
+      vi.resetModules();
+    }
+  });
+});
 
 const buildDoc = (...nodes: any[]): TextDoc => ({ type: 'doc', content: nodes });
 const p = (...children: any[]) => ({ type: 'paragraph', content: children });

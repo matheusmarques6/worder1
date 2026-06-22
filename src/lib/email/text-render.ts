@@ -14,9 +14,12 @@
 // engagement by looking like personal mail, so we resist the urge to add
 // branding chrome here. Headers/footers (logo, unsubscribe block) are
 // composed by prepareEmailHtml() downstream, same path visual emails use.
+//
+// IMPORTANT: this module is imported by the client-side text editor, so it
+// must stay free of server-only imports. It deliberately does NOT import
+// from './render' (which pulls in supabase-admin and throws in the
+// browser) — the plain-text merge pass below is self-contained.
 // =============================================================
-
-import { renderMergeTags } from './render';
 
 /** ProseMirror node shape we accept. Loose typing — the editor may
  *  ship custom node types (variable chips, dividers) we want to
@@ -465,8 +468,3 @@ export function renderPlainWithMergeData(
   );
   return out;
 }
-
-// Re-export the canonical HTML merge tag resolver so callers don't
-// need two import paths. The plain-text path uses its own renderer
-// above to skip HTML escaping.
-export { renderMergeTags };
