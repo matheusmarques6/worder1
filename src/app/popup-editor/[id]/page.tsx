@@ -2626,6 +2626,12 @@ export default function PopupEditorPage() {
   const activeStep = showSuccess ? design.successStep : design.steps[activeStepIdx]
   const selectedBlock = activeStep?.blocks.find(b => b.id === selectedBlockId) ?? null
 
+  // Drop-zone state for HTML5-drag from the block palette. dropIndicatorIdx
+  // is the insertion index inside the active step (0 = before first block,
+  // blocks.length = after last). null while no drag is hovering.
+  const [dropIndicatorIdx, setDropIndicatorIdx] = useState<number | null>(null)
+  const dragLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -2773,14 +2779,22 @@ export default function PopupEditorPage() {
   }
 
   const addBlock = (type: string) => {
-    // If adding an input and design has global fieldStyles, merge them as seed
+    insertBlockAt(type, activeStep.blocks.length)
+  }
+
+  // Insert at a specific index — used by the palette click (appends) and
+  // by the HTML5 drop handler on the canvas (drops between siblings).
+  const insertBlockAt = (type: string, index: number) => {
     const INPUT_TYPES = ['email', 'phone', 'name-input', 'text-input', 'date-input']
     const base = { ...(defaultProps[type] || {}) }
     if (INPUT_TYPES.includes(type) && design.fieldStyles) {
       Object.assign(base, design.fieldStyles)
     }
     const b: Block = { id: uid(), type, props: base }
-    updateBlocks([...activeStep.blocks, b])
+    const clamped = Math.max(0, Math.min(index, activeStep.blocks.length))
+    const next = [...activeStep.blocks]
+    next.splice(clamped, 0, b)
+    updateBlocks(next)
     setSelectedBlockId(b.id)
   }
 
@@ -3091,19 +3105,75 @@ export default function PopupEditorPage() {
               }} className="relative">
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={activeStep.blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-2 min-h-[100px]">
-                      {activeStep.blocks.map(block => (
-                        <SortablePopupBlock key={block.id} block={block} isSelected={selectedBlockId === block.id}
-                          onSelect={() => setSelectedBlockId(block.id)}
-                          onDelete={() => deleteBlock(block.id)}
-                          onDuplicate={() => duplicateBlock(block.id)}
-                          onContentChange={(k, v) => updateBlock({ ...block, props: { ...block.props, [k]: v } })}
-                          onPropChange={(k, v) => updateBlock({ ...block, props: { ...block.props, [k]: v } })} />
+                    {/* Outer drop zone — accepts native HTML5 drags from the
+                        block palette. dnd-kit's PointerSensor handles
+                        reordering of existing blocks; this layer handles
+                        the "drop a new block from the palette" path. */}
+                    <div
+                      className="space-y-2 min-h-[100px]"
+                      onDragOver={(e) => {
+                        if (!e.dataTransfer.types.includes('blockType')) return
+                        e.preventDefault()
+                        e.dataTransfer.dropEffect = 'copy'
+                        if (dragLeaveTimerRef.current) {
+                          clearTimeout(dragLeaveTimerRef.current)
+                          dragLeaveTimerRef.current = null
+                        }
+                        // Decide insertion index by comparing cursor Y to
+                        // each block's midpoint. Above midpoint → before,
+                        // below → after.
+                        const blockEls = Array.from(
+                          (e.currentTarget as HTMLElement).querySelectorAll('[data-popup-block]')
+                        ) as HTMLElement[]
+                        let idx = blockEls.length
+                        for (let i = 0; i < blockEls.length; i++) {
+                          const rect = blockEls[i].getBoundingClientRect()
+                          if (e.clientY < rect.top + rect.height / 2) { idx = i; break }
+                        }
+                        setDropIndicatorIdx(idx)
+                      }}
+                      onDragLeave={() => {
+                        // Debounce so moving between two child elements
+                        // doesn't flicker the indicator off.
+                        if (dragLeaveTimerRef.current) clearTimeout(dragLeaveTimerRef.current)
+                        dragLeaveTimerRef.current = setTimeout(() => setDropIndicatorIdx(null), 60)
+                      }}
+                      onDrop={(e) => {
+                        const type = e.dataTransfer.getData('blockType')
+                        if (!type) return
+                        e.preventDefault()
+                        const idx = dropIndicatorIdx ?? activeStep.blocks.length
+                        insertBlockAt(type, idx)
+                        setDropIndicatorIdx(null)
+                      }}
+                    >
+                      {activeStep.blocks.map((block, i) => (
+                        <div key={block.id}>
+                          {dropIndicatorIdx === i && (
+                            <div className="h-0.5 my-1 bg-blue-500 rounded-full" />
+                          )}
+                          <div data-popup-block>
+                            <SortablePopupBlock block={block} isSelected={selectedBlockId === block.id}
+                              onSelect={() => setSelectedBlockId(block.id)}
+                              onDelete={() => deleteBlock(block.id)}
+                              onDuplicate={() => duplicateBlock(block.id)}
+                              onContentChange={(k, v) => updateBlock({ ...block, props: { ...block.props, [k]: v } })}
+                              onPropChange={(k, v) => updateBlock({ ...block, props: { ...block.props, [k]: v } })} />
+                          </div>
+                        </div>
                       ))}
+                      {/* Trailing indicator — after the last block */}
+                      {dropIndicatorIdx === activeStep.blocks.length && activeStep.blocks.length > 0 && (
+                        <div className="h-0.5 my-1 bg-blue-500 rounded-full" />
+                      )}
                       {activeStep.blocks.length === 0 && (
-                        <div className="py-16 text-center border-2 border-dashed border-gray-200 rounded-xl">
-                          <Plus className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                          <p className="text-sm text-gray-400">Clique em um bloco na paleta</p>
+                        <div className={`py-16 text-center border-2 border-dashed rounded-xl transition-colors ${
+                          dropIndicatorIdx !== null ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                        }`}>
+                          <Plus className={`w-8 h-8 mx-auto mb-2 ${dropIndicatorIdx !== null ? 'text-blue-500' : 'text-gray-300'}`} />
+                          <p className={`text-sm ${dropIndicatorIdx !== null ? 'text-blue-600' : 'text-gray-400'}`}>
+                            {dropIndicatorIdx !== null ? 'Solte para adicionar' : 'Clique ou arraste um bloco da paleta'}
+                          </p>
                         </div>
                       )}
                     </div>
