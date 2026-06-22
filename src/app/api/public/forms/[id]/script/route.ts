@@ -399,10 +399,26 @@ function show(){
   var coxEnabled=isMob?cox.mobile!==false:cox.desktop!==false;
   if(coxEnabled&&(formType==="popup"||formType==="fullpage"))ov.addEventListener("click",function(e){if(e.target===ov)close()});
   var w=isMob?Math.min(st.width||480,window.innerWidth-32):(st.width||480);
+  // Validate the side-image URL once, up front. Two failure modes used
+  // to ship a half-transparent popup:
+  //   1. sideImage.enabled=true but src=""  — hasSide passed earlier
+  //      because the field was truthy in the editor's preview but
+  //      empty in production payload.
+  //   2. src present but rejected by the URL regex below.
+  // Either case left the content pane sized at 50% but no side <div>
+  // alongside it, so the popup looked half-empty and "uncentered" with
+  // the store's page bleeding through. Computing the validated URL
+  // BEFORE hasSide keeps layout and DOM in sync: no valid image →
+  // hasSide=false → content goes back to 100%, popup re-centers, no
+  // ghost column.
+  var rawSideUrl=(st.sideImage&&st.sideImage.src)?String(st.sideImage.src).trim():"";
+  // Accepts http(s), protocol-relative //cdn..., absolute paths /img,
+  // and data:image/* — anything else is dropped.
+  var sideUrlOk=rawSideUrl&&(/^(https?:|data:image\\/|\\/)/i.test(rawSideUrl));
   // hasSide = render the left/right hero column (Klaviyo / Omnisend
   // two-pane style). Mobile collapses to single column. Banner +
   // flyout are too narrow to host an image lane, so we skip them.
-  var hasSide=st.sideImage&&st.sideImage.enabled&&st.sideImage.src&&!isMob&&formType!=="banner"&&formType!=="flyout";
+  var hasSide=sideUrlOk&&st.sideImage.enabled&&!isMob&&formType!=="banner"&&formType!=="flyout";
   // CRITICAL: sideImage.width is a PERCENTAGE of the popup, NOT pixels.
   // The previous bug treated it as pixels in popW math (700+200=900px
   // popup) AND as a percentage in the side panel (width:200% → image
@@ -425,7 +441,12 @@ function show(){
   // viewport instead of staying inside its 50% column. box-sizing
   // pinned explicitly so a theme that sets * { box-sizing: content-box }
   // (rare but exists) does not desync the math.
-  var popStyle="box-sizing:border-box!important;position:relative!important;display:flex!important;flex-direction:row!important;overflow:hidden!important;animation:"+(st.animation==="slide-up"?"wfSlide":"wfFade")+" .3s ease;";
+  // background on the popup itself (not just on .content) is the safety
+  // net for any future regression that drops the side <div> without
+  // resetting hasSide: even then the popup stays opaque instead of
+  // showing the storefront through it.
+  var popBg=st.backgroundColor||"#fff";
+  var popStyle="box-sizing:border-box!important;position:relative!important;display:flex!important;flex-direction:row!important;overflow:hidden!important;background:"+popBg+"!important;animation:"+(st.animation==="slide-up"?"wfSlide":"wfFade")+" .3s ease;";
   if(formType==="banner"){
     popStyle+="width:100%!important;max-width:100%!important;border-radius:0;box-shadow:0 2px 8px rgba(0,0,0,0.08);";
   } else if(formType==="flyout"){
@@ -478,20 +499,24 @@ function show(){
   });
   pop.appendChild(content);
   if(hasSide){
-    var sideUrl=st.sideImage.src;
-    // Double-escape the slash so the template literal output ships
-    // a valid regex (\\/ in source becomes \/ in the emitted script).
-    if(sideUrl&&!/^(https?:|\\/)/i.test(sideUrl))sideUrl="";
-    if(sideUrl){
-      var side=document.createElement("div");
-      // Klaviyo/Omnisend pattern: side panel reserves a fixed slice
-      // of the popup (sidePct already clamped 20-80) via flex-basis,
-      // align-self stretch makes it match popup height even when
-      // content is short, background-size cover keeps the photo from
-      // distorting at any aspect ratio.
-      side.style.cssText="box-sizing:border-box!important;flex:0 0 "+sidePct+"%!important;width:"+sidePct+"%!important;max-width:"+sidePct+"%!important;align-self:stretch!important;background:url("+encodeURI(sideUrl)+") center/cover no-repeat;background-color:#F4F4F5";
-      if(st.sideImage.position==="left")pop.insertBefore(side,content);else pop.appendChild(side);
-    }
+    // Klaviyo/Omnisend two-pane: side panel reserves a fixed slice of
+    // the popup (sidePct already clamped 20-80) via flex-basis,
+    // align-self stretch makes it match popup height even when content
+    // is short. Using a real <img> instead of background:url() gives
+    // the browser a native onerror fallback if the asset 404s, plus
+    // avoids the double-encoding pitfall encodeURI used to hit on URLs
+    // that already had %-escapes in them (signed Supabase storage URLs).
+    var side=document.createElement("div");
+    side.style.cssText="box-sizing:border-box!important;flex:0 0 "+sidePct+"%!important;width:"+sidePct+"%!important;max-width:"+sidePct+"%!important;align-self:stretch!important;background-color:#F4F4F5;overflow:hidden;position:relative;";
+    var sideImg=document.createElement("img");
+    sideImg.src=rawSideUrl;
+    sideImg.alt="";
+    sideImg.style.cssText="display:block;width:100%;height:100%;object-fit:cover;object-position:center;";
+    // If the image 404s, swallow it silently — the cinza placeholder
+    // background underneath stays visible instead of a broken-image icon.
+    sideImg.onerror=function(){this.style.display="none"};
+    side.appendChild(sideImg);
+    if(st.sideImage.position==="left")pop.insertBefore(side,content);else pop.appendChild(side);
   }
   ov.appendChild(pop);
   if(formType==="embed"){
