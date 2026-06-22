@@ -52,14 +52,23 @@ export async function POST(request: NextRequest) {
 
     const storeId = body.store_id;
 
+    // editor_type discriminates between the visual drag-and-drop editor
+    // ('visual', default) and the founder-style text editor ('text').
+    // Anything else is rejected at the DB CHECK constraint, so we filter
+    // here too instead of trusting client input.
+    const editorType =
+      body.editor_type === 'text' || body.editorType === 'text' ? 'text' : 'visual';
+
     const insertData: Record<string, any> = {
       organization_id: auth.user.organization_id,
       name: body.name,
       subject: body.subject || '',
       html: body.html || '',
       category: body.category || 'marketing',
+      editor_type: editorType,
       created_by: auth.user.id,
     };
+    if (body.preview_text !== undefined) insertData.preview_text = body.preview_text;
     // Accept design_json / design so templates created from prebuilt
     // are loaded in the editor with real editable blocks.
     if (body.design_json || body.design) {

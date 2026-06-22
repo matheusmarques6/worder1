@@ -16,6 +16,17 @@ export interface SendCampaignEmailParams {
   contactEmail: string;
   mergeData: Record<string, string>;
   templateHtml: string;
+  /**
+   * Optional plain-text alternative. When present, ships as the
+   * text/plain half of a multipart/alternative MIME, which:
+   *   - satisfies SpamAssassin's MIME_HTML_NO_TEXT rule
+   *   - covers screen readers, smartwatches and text-only clients
+   *   - is the canonical body for the "text-based" editor flavor
+   * Merge tags inside this body get resolved per-recipient with the
+   * non-escaping plain-text renderer (HTML escaping would leak &amp;
+   * into the inbox preview).
+   */
+  templateText?: string;
   subject: string;
   fromEmail: string;
   senderName?: string;
@@ -31,6 +42,7 @@ export async function sendCampaignEmail({
   contactEmail,
   mergeData,
   templateHtml,
+  templateText,
   subject,
   fromEmail,
   senderName,
@@ -211,12 +223,28 @@ export async function sendCampaignEmail({
     const unsubUrl = buildUnsubscribeUrl(emailSendId, baseUrl, resolvedContactId || undefined, organizationId, campaignId || undefined);
     const listUnsubHeaders = buildListUnsubscribeHeaders(unsubUrl);
 
+    // Plain-text alternative — when caller supplied one (text-based
+    // editor flavor), resolve its merge tags WITHOUT html-escaping so
+    // the text body doesn't ship `&amp;` to inboxes. Nodemailer / Resend
+    // automatically wrap html + text in multipart/alternative.
+    let finalText: string | undefined;
+    if (templateText && templateText.trim().length > 0) {
+      try {
+        const { renderPlainWithMergeData } = await import('@/lib/email/text-render');
+        finalText = renderPlainWithMergeData(templateText, mergeData);
+      } catch {
+        // Defensive: never let a text-render hiccup block the HTML send.
+        finalText = templateText;
+      }
+    }
+
     const result = await provider.send({
       to: contactEmail,
       from: effectiveFrom,
       senderName: effectiveSenderName,
       subject: finalSubject,
       html: finalHtml,
+      text: finalText,
       replyTo,
       headers: listUnsubHeaders,
       tags: [

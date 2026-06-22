@@ -11,9 +11,12 @@ import {
   Megaphone,
   Bell,
   Palette,
+  Type,
+  LayoutGrid,
 } from 'lucide-react'
 import Link from 'next/link'
 import { DEFAULT_TEMPLATES } from '@/components/email-builder/config/default-templates'
+import { useStoreStore } from '@/stores'
 // Template creation
 
 const categories = [
@@ -49,8 +52,12 @@ const categories = [
 
 export default function NewTemplatePage() {
   const router = useRouter()
+  const { currentStore } = useStoreStore()
   const [name, setName] = useState('')
   const [category, setCategory] = useState('marketing')
+  // editorType drives which editor opens after creation. 'visual' is the
+  // default drag-and-drop; 'text' opens the founder-style editor.
+  const [editorType, setEditorType] = useState<'visual' | 'text'>('visual')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -67,6 +74,8 @@ export default function NewTemplatePage() {
           html: template.html,
           design: template.design,
           design_json: template.design,
+          editor_type: 'visual',
+          ...(currentStore?.id ? { store_id: currentStore.id } : {}),
         }),
       })
       if (!res.ok) {
@@ -100,6 +109,8 @@ export default function NewTemplatePage() {
         body: JSON.stringify({
           name: name.trim(),
           category,
+          editor_type: editorType,
+          ...(currentStore?.id ? { store_id: currentStore.id } : {}),
         }),
       })
 
@@ -170,6 +181,51 @@ export default function NewTemplatePage() {
         className="bg-white border border-gray-200 rounded-lg shadow-sm"
       >
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Editor type — visual vs text. Pick first because it
+              changes the editor that opens next; the rest of the form
+              applies to both flavors. */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Tipo de editor
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setEditorType('visual')}
+                className={`flex items-start gap-3 p-4 border rounded-lg text-left transition-all ${
+                  editorType === 'visual'
+                    ? 'border-brand-500 bg-brand-50/50 ring-2 ring-brand-500/20'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center border flex-shrink-0 text-indigo-600 bg-indigo-50 border-indigo-200">
+                  <LayoutGrid className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">Visual (drag-and-drop)</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Blocos arrastáveis, imagens, botões, produtos.</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditorType('text')}
+                className={`flex items-start gap-3 p-4 border rounded-lg text-left transition-all ${
+                  editorType === 'text'
+                    ? 'border-brand-500 bg-brand-50/50 ring-2 ring-brand-500/20'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center border flex-shrink-0 text-zinc-700 bg-zinc-100 border-zinc-200">
+                  <Type className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">Texto (estilo founder)</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Editor minimalista. Ideal para nota pessoal, recuperação, win-back.</p>
+                </div>
+              </button>
+            </div>
+          </div>
+
           {/* Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">

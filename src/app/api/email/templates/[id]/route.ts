@@ -69,6 +69,13 @@ export async function PUT(
     if (body.html !== undefined) updateData.html = body.html;
     if (body.thumbnail_url !== undefined) updateData.thumbnail_url = body.thumbnail_url;
     if (body.category !== undefined) updateData.category = body.category;
+    // Updates to editor_type are accepted only when the value is one
+    // of the known flavors. This lets the API double as a "convert"
+    // endpoint later without separate plumbing.
+    const editorType = body.editor_type ?? body.editorType;
+    if (editorType === 'text' || editorType === 'visual') {
+      updateData.editor_type = editorType;
+    }
 
     const designValue = body.design ?? body.design_json;
     if (designValue !== undefined) {
