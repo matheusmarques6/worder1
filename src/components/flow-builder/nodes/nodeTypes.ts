@@ -45,6 +45,7 @@ import {
   List,
   MessageCircle,
   Activity,
+  LogOut,
   LucideIcon,
 } from 'lucide-react';
 
@@ -623,6 +624,15 @@ export const controlTypes: NodeTypeDefinition[] = [
     color: '#6b7280',
     defaultConfig: { delayValue: 1, delayUnit: 'hours' },
   },
+  {
+    type: 'control_exit',
+    label: 'Sair do Fluxo',
+    description: 'Remove o contato do fluxo neste ponto (ex: ramo "Não" de uma condição)',
+    icon: LogOut,
+    category: 'control',
+    color: '#ef4444',
+    defaultConfig: { reason: '' },
+  },
 ];
 
 // ============================================
@@ -834,6 +844,11 @@ export function getNodeColor(color?: string): { solid: string; bg: string; text:
       solid: 'bg-orange-500',
       bg: 'bg-orange-500/10',
       text: 'text-orange-400',
+    },
+    '#ef4444': {
+      solid: 'bg-red-500',
+      bg: 'bg-red-500/10',
+      text: 'text-red-400',
     },
     // Named colors fallback
     'emerald': {

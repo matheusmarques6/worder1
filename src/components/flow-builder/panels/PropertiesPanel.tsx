@@ -771,6 +771,36 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
               </>
             )}
 
+            {/* EXIT / SAIR */}
+            {selectedNode.data.nodeType === 'control_exit' && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-500">Motivo (opcional)</label>
+                  <input
+                    type="text"
+                    value={selectedNode.data.config?.reason || ''}
+                    onChange={(e) => handleUpdate('reason', e.target.value)}
+                    placeholder="Ex: Já comprou, não precisa do lembrete"
+                    className={cn(
+                      'w-full px-3 py-2 rounded-lg',
+                      'bg-white border border-gray-200',
+                      'text-sm text-gray-700',
+                      'focus:outline-none focus:border-blue-500/50'
+                    )}
+                  />
+                  <p className="text-[10px] text-gray-400">
+                    Registrado no histórico da execução para você entender por que o contato saiu.
+                  </p>
+                </div>
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-[11px] text-red-700">
+                    O contato é removido do fluxo neste ponto. Nenhum passo abaixo é executado.
+                    Ideal para o ramo &quot;Não&quot; de uma condição.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* EMAIL ACTION */}
             {selectedNode.data.nodeType === 'action_email' && (
               <EmailActionConfig
