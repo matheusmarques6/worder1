@@ -774,6 +774,46 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
             </div>
           </div>
 
+          {/* Button — editable text/link/styling. The whole reason this
+              section exists: the canvas button ("Comprar agora") had no
+              property field, so it couldn't be renamed. Shown only when
+              the Botão checkbox above is on. */}
+          {p.showButton !== false && (
+            <details className="group border border-zinc-100 rounded-lg" open>
+              <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
+                Botão <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 group-open:rotate-180 transition-transform"><path d="M6 9l6 6 6-6"/></svg>
+              </summary>
+              <div className="px-3 pb-3 space-y-2.5">
+                <Field label="Texto do botão">
+                  <TextInput value={p.buttonText ?? 'Comprar agora'} onChange={v => onChange('buttonText', v)} placeholder="Comprar agora" />
+                </Field>
+                <Field label="Link">
+                  <TextInput value={p.buttonHref ?? '{{ trigger.link }}'} onChange={v => onChange('buttonHref', v)} placeholder="{{ trigger.link }}" />
+                </Field>
+                <p className="text-[10px] text-zinc-400 -mt-1">
+                  <code className="font-mono">{'{{ trigger.link }}'}</code> se adapta para checkout / produto / pedido conforme o gatilho.
+                </p>
+                <Field label="Alinhamento">
+                  <SelectInput value={p.buttonAlign || 'left'} onChange={v => onChange('buttonAlign', v)}
+                    options={[
+                      { value: 'left', label: 'Esquerda' },
+                      { value: 'center', label: 'Centro' },
+                      { value: 'right', label: 'Direita' },
+                      { value: 'full', label: 'Largura total' },
+                    ]} />
+                </Field>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Cor do botão"><ColorInput value={p.buttonColor || '#111827'} onChange={v => onChange('buttonColor', v)} /></Field>
+                  <Field label="Cor do texto"><ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} /></Field>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Arredondamento"><NumberInput value={p.buttonRadius ?? 4} onChange={v => onChange('buttonRadius', v)} min={0} max={40} /></Field>
+                  <Field label="Tamanho da fonte"><NumberInput value={p.buttonFontSize ?? 14} onChange={v => onChange('buttonFontSize', v)} min={10} max={28} /></Field>
+                </div>
+              </div>
+            </details>
+          )}
+
           {/* Display options */}
           <details className="group border border-zinc-100 rounded-lg">
             <summary className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-[12px] font-semibold text-zinc-800 hover:bg-zinc-50 rounded-lg transition-colors">
