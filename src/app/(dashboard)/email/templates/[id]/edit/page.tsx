@@ -7,6 +7,9 @@ import dynamic from 'next/dynamic'
 import { Loader2 } from 'lucide-react'
 
 const WorderEditor = dynamic(() => import('@/components/email-builder/WorderEmailEditor'), { ssr: false })
+// Text-based editor is dispatched at runtime so its bundle only loads
+// for templates that actually use it.
+const TextEmailEditor = dynamic(() => import('@/components/email-text-builder/TextEmailEditor'), { ssr: false })
 
 export default function EditTemplatePage() {
   const params = useParams()
@@ -32,12 +35,41 @@ export default function EditTemplatePage() {
 
   useEffect(() => { fetchTemplate() }, [fetchTemplate])
 
-  const handleSave = async (design: Record<string, any>, html: string) => {
+  const handleSaveVisual = async (design: Record<string, any>, html: string) => {
     try {
       const res = await fetch(`/api/email/templates/${templateId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ design, design_json: design, html }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        toast({ type: 'error', title: 'Erro ao salvar: ' + (err.error || 'Tente novamente') })
+        return false
+      }
+      return true
+    } catch (err: any) {
+      toast({ type: 'error', title: 'Erro ao salvar: ' + err.message })
+      return false
+    }
+  }
+
+  // Text-based save also persists subject / preview_text into their
+  // dedicated columns so flow worker / send pipeline can read them
+  // without parsing the design payload.
+  const handleSaveText = async (design: any, html: string) => {
+    try {
+      const res = await fetch(`/api/email/templates/${templateId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          design,
+          design_json: design,
+          html,
+          subject: design.subject,
+          preview_text: design.previewText,
+          editor_type: 'text',
+        }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -70,22 +102,42 @@ export default function EditTemplatePage() {
     )
   }
 
+  const handleRename = async (name: string) => {
+    try {
+      await fetch(`/api/email/templates/${templateId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      setTemplate((prev: any) => prev ? { ...prev, name } : prev)
+    } catch {}
+  }
+
+  // editor_type dispatch — defaults to 'visual' so legacy templates
+  // (created before the column existed) keep loading the drag-and-drop
+  // editor exactly as before.
+  if (template.editor_type === 'text') {
+    return (
+      <div className="fixed inset-0 z-50 bg-white">
+        <TextEmailEditor
+          templateName={template.name || 'Template'}
+          templateId={templateId}
+          design={template.design_json || template.design}
+          onSave={handleSaveText}
+          onRename={handleRename}
+          onBack={() => router.push('/email/templates')}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-white">
       <WorderEditor
         templateName={template.name || 'Template'}
         design={template.design_json || template.design}
-        onSave={handleSave}
-        onRename={async (name) => {
-          try {
-            await fetch(`/api/email/templates/${templateId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name }),
-            })
-            setTemplate((prev: any) => prev ? { ...prev, name } : prev)
-          } catch {}
-        }}
+        onSave={handleSaveVisual}
+        onRename={handleRename}
         onBack={() => router.push('/email/templates')}
       />
     </div>

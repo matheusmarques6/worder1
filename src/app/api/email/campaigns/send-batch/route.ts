@@ -109,6 +109,20 @@ export async function POST(req: NextRequest) {
       } catch (e) { console.error('[SendBatch] Failed to resolve saved blocks:', e) }
     }
 
+    // For text-based templates, derive the plain-text alternative once
+    // from the canonical Tiptap JSON. Per-recipient merge tag rendering
+    // happens later (the same place subject/html are personalized).
+    let templatePlainSource = ''
+    if ((template as any).editor_type === 'text' && template.design_json) {
+      try {
+        const { renderTextEmailToPlain } = await import('@/lib/email/text-render')
+        const docJson = (template.design_json as any)?.doc || template.design_json
+        templatePlainSource = renderTextEmailToPlain(docJson)
+      } catch (e) {
+        console.warn('[SendBatch] failed to render plain text alternative:', e)
+      }
+    }
+
     // Get contacts for this batch
     const { data: contacts, error: contactsError } = await supabaseAdmin
       .from('contacts')
@@ -470,6 +484,23 @@ export async function POST(req: NextRequest) {
           antiSpamHeaders['X-Campaign-Id'] = String(campaign_id);
         }
 
+        // Per-recipient plain text — uses the non-HTML-escaping renderer
+        // so `&` stays `&` in the inbox preview. Only emitted when the
+        // template is text-based; visual campaigns keep the html-only
+        // payload they used to ship.
+        let finalText: string | undefined
+        if (templatePlainSource) {
+          try {
+            const { renderPlainWithMergeData } = await import('@/lib/email/text-render')
+            finalText = renderPlainWithMergeData(templatePlainSource, mergeData)
+            // Strip unresolved tags in the text part too — same hygiene
+            // the HTML/subject already get above.
+            if (finalText) finalText = finalText.replace(/\{\{[^}]+\}\}/g, '')
+          } catch (e) {
+            console.warn('[SendBatch] plain-text merge failed:', e)
+          }
+        }
+
         prepped.push({
           contactId: contact.id,
           emailSendId: emailSend.id,
@@ -479,6 +510,7 @@ export async function POST(req: NextRequest) {
             to: [contact.email],
             subject: finalSubject,
             html: finalHtml,
+            ...(finalText ? { text: finalText } : {}),
             replyTo,
             headers: antiSpamHeaders,
             tags: [

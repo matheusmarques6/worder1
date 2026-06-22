@@ -536,12 +536,17 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
 
       try {
-        // 1. Resolve HTML content - fetch template if specified
+        // 1. Resolve HTML content - fetch template if specified.
+        // editor_type is selected here so text-based templates can also
+        // produce a true text/plain alternative (rendered downstream by
+        // sendCampaignEmail). Templates created before the column
+        // existed return null and fall through to the visual branch.
         let html: string;
+        let plainText: string | undefined;
         if (config.templateId && config.templateId !== 'none') {
           const { data: template, error: tplErr } = await supabase
             .from('email_templates')
-            .select('design_json, html, name')
+            .select('design_json, html, name, editor_type')
             .eq('id', config.templateId)
             .single();
 
@@ -553,6 +558,20 @@ const actionExecutors: Record<string, NodeExecutor> = {
           html = template.html || '';
           if (!html) {
             html = '<p>Template sem conteúdo HTML renderizado</p>';
+          }
+
+          // Generate the plain-text alternative for text-based templates
+          // straight from the Tiptap JSON. Stripping the HTML would
+          // produce noise (footer chrome, button labels) — walking the
+          // doc tree preserves the natural reading order.
+          if ((template as any).editor_type === 'text' && template.design_json) {
+            try {
+              const { renderTextEmailToPlain } = await import('@/lib/email/text-render');
+              const docJson = (template.design_json as any)?.doc || template.design_json;
+              plainText = renderTextEmailToPlain(docJson);
+            } catch (err) {
+              console.warn('[action_email] failed to derive plain text:', err);
+            }
           }
         } else {
           html = config.html || config.body || '<p>Email sem conteúdo</p>';
@@ -859,6 +878,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           contactEmail: email,
           mergeData,
           templateHtml: html,
+          templateText: plainText,
           subject,
           fromEmail: senderEmail,
           senderName,

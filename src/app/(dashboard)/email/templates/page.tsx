@@ -25,6 +25,8 @@ interface EmailTemplate {
   id: string
   name: string
   category: string
+  /** 'visual' = drag-and-drop builder; 'text' = founder-style text editor. */
+  editor_type?: 'visual' | 'text'
   subject?: string
   updated_at: string
   created_at: string
@@ -268,7 +270,7 @@ export default function EmailTemplatesPage() {
                     <h3 className="text-[13px] font-semibold text-zinc-900 truncate">
                       {template.name}
                     </h3>
-                    <div className="flex items-center gap-2 mt-1.5">
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <span
                         className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full ${
                           categoryColors[template.category] || categoryColors.custom
@@ -277,6 +279,11 @@ export default function EmailTemplatesPage() {
                         <Tag className="w-2.5 h-2.5" />
                         {categoryLabels[template.category] || template.category}
                       </span>
+                      {template.editor_type === 'text' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200">
+                          Texto
+                        </span>
+                      )}
                       <span className="text-[10px] text-zinc-400">
                         {new Date(template.updated_at).toLocaleDateString('pt-BR')}
                       </span>

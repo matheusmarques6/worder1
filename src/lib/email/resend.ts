@@ -188,6 +188,10 @@ export interface BatchEmail {
   to: string[];
   subject: string;
   html: string;
+  /** Optional plain-text alternative. Resend ships it as the
+   *  text/plain half of a multipart/alternative MIME — required for
+   *  the founder-style "text" editor flavor. */
+  text?: string;
   replyTo?: string;
   tags?: { name: string; value: string }[];
   headers?: Record<string, string>;

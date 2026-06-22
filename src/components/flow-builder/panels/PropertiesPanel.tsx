@@ -2194,7 +2194,7 @@ function WhatsAppActionConfig({ config, onUpdate, triggerType }: WhatsAppActionC
 // EMAIL ACTION CONFIG (template selector, not credentials)
 // ============================================
 function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organizationId, nodeId }: { config: Record<string, any>; onUpdate: (key: string, value: any) => void; onLabelChange?: (label: string) => void; triggerType: string; organizationId?: string; nodeId?: string }) {
-  const [templates, setTemplates] = useState<Array<{ id: string; name: string; thumbnail_url?: string }>>([])
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string; thumbnail_url?: string; editor_type?: 'visual' | 'text' }>>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [showSubjectEdit, setShowSubjectEdit] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -2241,7 +2241,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
   // Compute sibling email nodes for in-editor navigation
   const emailSiblings = useMemo(() => {
     return nodes
-      .filter(n => n.data?.nodeType === 'action_email' && n.data?.config?.templateId && n.data.config.templateId !== '__new__')
+      .filter(n => n.data?.nodeType === 'action_email' && n.data?.config?.templateId && n.data.config.templateId !== '__new__' && n.data.config.templateId !== '__new_text__')
       .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0))
       .map(n => ({
         templateId: n.data.config.templateId as string,
@@ -2454,34 +2454,47 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
 
       {/* === SECTION: Template (Klaviyo style) === */}
       <div className="py-5">
-        {/* Template selector */}
+        {/* Template selector. Text-based templates get a "· Texto" suffix
+            so users see at a glance which flavor they're picking — the
+            select control doesn't render badges, so the marker has to
+            live inline in the option label. */}
         <select value={config.templateId || ''} onChange={(e) => onUpdate('templateId', e.target.value)}
           className={cn(inputCls, 'mb-3')}>
           <option value="">Escolher template...</option>
-          <option value="__new__">+ Criar novo email</option>
-          {templates.map((t) => (<option key={t.id} value={t.id}>{t.name}</option>))}
+          <option value="__new__">+ Criar novo email (visual)</option>
+          <option value="__new_text__">+ Criar novo email de texto</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}{t.editor_type === 'text' ? '  · Texto' : ''}
+            </option>
+          ))}
         </select>
         {loadingTemplates && <p className="text-xs text-gray-400">Carregando...</p>}
 
         {/* Template preview with Desktop/Mobile + Edit */}
-        {config.templateId && config.templateId !== '__new__' && (
+        {config.templateId && config.templateId !== '__new__' && config.templateId !== '__new_text__' && (
           <EmailTemplatePreview
             templateId={config.templateId}
             onEdit={() => { setEditorTemplateId(null); setShowEmailEditor(true); }}
           />
         )}
 
-        {/* New email — create template then open editor */}
-        {config.templateId === '__new__' && (
+        {/* New email — create template then open editor. Branches on the
+            sentinel id (__new__ = visual, __new_text__ = text) so the
+            POST body declares the correct editor_type and the overlay
+            mounts the right editor on open. */}
+        {(config.templateId === '__new__' || config.templateId === '__new_text__') && (
           <div className="mt-3">
             <button
               onClick={async () => {
                 try {
+                  const isText = config.templateId === '__new_text__';
                   const res = await fetch('/api/email/templates', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      name: config.emailName || 'Novo Email',
+                      name: config.emailName || (isText ? 'Novo Email de Texto' : 'Novo Email'),
+                      editor_type: isText ? 'text' : 'visual',
                       ...(storeId ? { store_id: storeId } : {}),
                     }),
                   });
@@ -2490,6 +2503,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
                     const newId = data.template?.id;
                     if (newId) {
                       onUpdate('templateId', newId);
+                      await fetchTemplates();
                       setTimeout(() => setShowEmailEditor(true), 100);
                     }
                   }
@@ -2497,7 +2511,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
               }}
               className="w-full py-3 rounded-lg border-2 border-dashed border-gray-300 text-sm font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
             >
-              Abrir editor de email
+              {config.templateId === '__new_text__' ? 'Abrir editor de texto' : 'Abrir editor de email'}
             </button>
           </div>
         )}
@@ -2572,7 +2586,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
 
       {/* === Bottom actions === */}
       <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-        {config.templateId && config.templateId !== '__new__' && (
+        {config.templateId && config.templateId !== '__new__' && config.templateId !== '__new_text__' && (
           <button
             onClick={() => setShowPreviewMode(true)}
             className="px-4 py-2 rounded-md border border-blue-200 bg-blue-50 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
@@ -2601,7 +2615,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
       )}
 
       {/* Email Editor fullscreen (opens INSIDE the flow, not new tab) */}
-      {showEmailEditor && (editorTemplateId || config.templateId) && (editorTemplateId || config.templateId) !== '__new__' && (
+      {showEmailEditor && (editorTemplateId || config.templateId) && (editorTemplateId || config.templateId) !== '__new__' && (editorTemplateId || config.templateId) !== '__new_text__' && (
         <EmailEditorOverlay
           templateId={editorTemplateId || config.templateId}
           triggerType={triggerType}

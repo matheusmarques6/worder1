@@ -7,6 +7,9 @@ import type { WorderEmailEditorHandle } from '@/components/email-builder/WorderE
 import type { EmailSiblingItem } from '@/components/email-builder/modals/EmailSwitcher';
 
 const WorderEditor = dynamic(() => import('@/components/email-builder/WorderEmailEditor'), { ssr: false });
+// Loaded lazily — only the templates whose editor_type='text' pull this
+// chunk, so existing flows feel no bundle weight from the new editor.
+const TextEmailEditor = dynamic(() => import('@/components/email-text-builder/TextEmailEditor'), { ssr: false });
 
 export { type EmailSiblingItem as EmailSibling };
 
@@ -83,6 +86,33 @@ export function EmailEditorOverlay({
     }
   };
 
+  // Text-based save: persist subject/preview into top-level columns and
+  // mark editor_type explicitly so a later GET round-trips the same flavor.
+  const handleSaveText = async (design: any, html: string) => {
+    try {
+      const url = storeId
+        ? `/api/email/templates/${templateId}?storeId=${storeId}`
+        : `/api/email/templates/${templateId}`;
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          design,
+          design_json: design,
+          html,
+          subject: design.subject,
+          preview_text: design.previewText,
+          editor_type: 'text',
+          store_id: storeId,
+        }),
+      });
+      if (!res.ok) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const handleClose = useCallback(async () => {
     try { await editorRef.current?.save(); } catch {}
     onClose();
@@ -105,6 +135,28 @@ export function EmailEditorOverlay({
             Voltar ao flow
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // Dispatch by editor_type so the same overlay path serves both the
+  // drag-and-drop builder and the new founder-style text editor. Default
+  // keeps the legacy editor for any row created before this column existed.
+  if (template.editor_type === 'text') {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-white">
+        <TextEmailEditor
+          key={templateId}
+          templateName={template.name || 'Template'}
+          templateId={templateId}
+          design={template.design_json || template.design}
+          storeId={storeId}
+          organizationId={organizationId}
+          onSave={handleSaveText}
+          onRename={handleRename}
+          onBack={handleClose}
+          flowName={flowName}
+        />
       </div>
     );
   }
