@@ -28,9 +28,11 @@ import {
   useImperativeHandle,
 } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
+// StarterKit v3 already bundles Link and Underline, so they're
+// configured through it below rather than added as separate extensions
+// (which would register duplicates). Placeholder and TextAlign are NOT
+// in StarterKit, so they stay as standalone imports.
 import StarterKit from '@tiptap/starter-kit';
-import LinkExt from '@tiptap/extension-link';
-import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
 import TextAlign from '@tiptap/extension-text-align';
 import {
@@ -47,7 +49,6 @@ import {
   ListOrdered,
   Quote,
   Minus,
-  Image as ImageIcon,
   Tag,
   Send,
   Eye,
@@ -162,14 +163,15 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         codeBlock: false, // keep the toolbar lean — code is rare in marketing emails
+        // Link + Underline ship inside StarterKit v3 — configure here
+        // instead of registering separate extensions.
+        link: {
+          openOnClick: false,
+          autolink: true,
+          HTMLAttributes: { rel: 'noopener', target: '_blank' },
+        },
       }),
-      Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      LinkExt.configure({
-        openOnClick: false,
-        autolink: true,
-        HTMLAttributes: { rel: 'noopener', target: '_blank' },
-      }),
       Placeholder.configure({
         placeholder: 'Escreva seu e-mail aqui — como se estivesse falando direto com seu cliente.\n\nDica: digite "/" para inserir títulos, listas e variáveis.',
       }),
@@ -287,16 +289,6 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
     } else {
       editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
     }
-  }, [editor]);
-
-  const insertImage = useCallback(() => {
-    if (!editor) return;
-    const url = window.prompt('URL da imagem:');
-    if (!url) return;
-    editor.chain().focus().insertContent({
-      type: 'image',
-      attrs: { src: url, alt: '' },
-    }).run();
   }, [editor]);
 
   // Keyboard shortcuts: ⌘S saves, ⌘/ toggles distraction-free mode.
@@ -522,9 +514,6 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
                 <Divider />
                 <ToolBtn active={editor.isActive('link')} onClick={setLink} title="Link">
                   <LinkIcon className="w-4 h-4" />
-                </ToolBtn>
-                <ToolBtn onClick={insertImage} title="Imagem">
-                  <ImageIcon className="w-4 h-4" />
                 </ToolBtn>
                 <div className="relative">
                   <ToolBtn

@@ -17,8 +17,17 @@
 // prepareEmailHtml() can resolve it per-recipient.
 // =============================================================
 
-import { Node, mergeAttributes } from '@tiptap/core';
-import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
+// Import from @tiptap/react (a direct dependency) rather than
+// @tiptap/core — @tiptap/react re-exports all of core via `export *`,
+// and core is only a transitive dep, which pnpm's strict resolution on
+// Vercel won't resolve from a bare '@tiptap/core' specifier.
+import {
+  Node,
+  mergeAttributes,
+  ReactNodeViewRenderer,
+  NodeViewWrapper,
+  type NodeViewProps,
+} from '@tiptap/react';
 
 export interface MergeTagAttrs {
   tag: string;
