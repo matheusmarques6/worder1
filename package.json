@@ -49,6 +49,7 @@
     "exceljs": "^4.4.0",
     "framer-motion": "^10.16.16",
     "libphonenumber-js": "^1.13.4",
+    "lodash": "4.17.23",
     "lucide-react": "^0.294.0",
     "mammoth": "^1.12.0",
     "nanoid": "^5.1.7",
@@ -68,6 +69,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/lodash": "^4.17.24",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.0",
     "@types/pdf-parse": "^1.1.5",
