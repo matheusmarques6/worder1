@@ -232,8 +232,12 @@ function renderBlock(b){
   var p=b.props||{},h="";
   switch(b.type){
     case"text":{
-      var tag=p.tag||"p";
-      h='<'+tag+' style="font-size:'+(p.fontSize||16)+'px;color:'+(p.color||"#111827")+';font-weight:'+(p.fontWeight||"normal")+';font-style:'+(p.fontStyle||"normal")+';text-decoration:'+(p.textDecoration||"none")+';text-align:'+(p.align||"left")+';margin:0 0 8px;line-height:'+(p.lineHeight||1.4)+';font-family:'+(p.fontFamily||"inherit")+'">'+((p.content||""))+'</'+tag+'>';
+      // Whitelist the wrapper tag (config-controlled but defensive) and
+      // escape the content. The editor commits innerText (plain text),
+      // so escaping never drops formatting — it only neutralizes a
+      // stray "<" / "&" in copy that would otherwise break the markup.
+      var tag=({h1:1,h2:1,h3:1,h4:1,h5:1,h6:1,p:1,div:1,span:1})[p.tag]?p.tag:"p";
+      h='<'+tag+' style="font-size:'+(p.fontSize||16)+'px;color:'+(p.color||"#111827")+';font-weight:'+(p.fontWeight||"normal")+';font-style:'+(p.fontStyle||"normal")+';text-decoration:'+(p.textDecoration||"none")+';text-align:'+(p.align||"left")+';margin:0 0 8px;line-height:'+(p.lineHeight||1.4)+';font-family:'+(p.fontFamily||"inherit")+'">'+esc(p.content||"")+'</'+tag+'>';
       break;
     }
     case"image":{
@@ -265,7 +269,7 @@ function renderBlock(b){
       var ff=st.fontFamily||"inherit";
       var opts=(p.options||[]).map(function(o){return'<option value="'+esc(o)+'">'+esc(o)+'</option>'}).join("");
       var ddLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:4px;font-family:'+ff+'">'+esc(p.label)+'</label>':"";
-      h=ddLabel+'<select name="'+esc(ddName)+'" style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;box-sizing:border-box;margin:0 0 8px;font-family:'+ff+'"><option value="">'+(p.placeholder||"Escolha...")+'</option>'+opts+'</select>';
+      h=ddLabel+'<select name="'+esc(ddName)+'" style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;box-sizing:border-box;margin:0 0 8px;font-family:'+ff+'"><option value="">'+esc(p.placeholder||"Escolha...")+'</option>'+opts+'</select>';
       break;
     }
     case"radio":{
@@ -538,10 +542,14 @@ function show(){
   }
   // Track impression
   fetch(BU+"/api/public/forms/"+FID+"/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({_track:"impression"})}).catch(function(){});
-  // Form events
-  var form=document.getElementById("wf-form-"+FID);
-  if(form){
-    form.addEventListener("click",function(e){
+  // Form events. Delegate clicks on the CONTENT pane rather than the
+  // form element: content exists synchronously and survives step
+  // re-renders, whereas the form is rendered ASYNC by progressive
+  // profiling — getElementById here would return null for PP-enabled
+  // popups, silently dropping every data-action button (next-step /
+  // close / url / submit-fallback).
+  {
+    content.addEventListener("click",function(e){
       var btn=e.target.closest("[data-action]");
       if(!btn)return;
       var act=btn.getAttribute("data-action");
@@ -629,14 +637,17 @@ function show(){
         try{
           var idData={};
           var fullNameVal=allData.full_name||"";
-          var fn=allData.first_name||(fullNameVal?String(fullNameVal).trim().split(/\s+/)[0]:"");
-          var ln=allData.last_name||(fullNameVal?String(fullNameVal).trim().split(/\s+/).slice(1).join(" "):"");
+          // \\s+ survives the TS template literal as \s+ in the emitted
+          // script — a single \s would collapse to "s" and split names on
+          // the letter s ("Jose Silva" -> ["Jo","e ","ilva"]).
+          var fn=allData.first_name||(fullNameVal?String(fullNameVal).trim().split(/\\s+/)[0]:"");
+          var ln=allData.last_name||(fullNameVal?String(fullNameVal).trim().split(/\\s+/).slice(1).join(" "):"");
           if(allData.email)idData.email=allData.email;
           if(allData.phone)idData.phone=allData.phone;
           if(fn)idData.firstName=fn;
           if(ln)idData.lastName=ln;
           idData.source="popup_form";
-          idData.properties={form_id:FID,form_name:"${String(form.name || '').replace(/"/g, '\\"')}"};
+          idData.properties={form_id:FID,form_name:${JSON.stringify(String(form.name || ''))}};
           if(idData.email||idData.phone){
             if(window.worder&&typeof window.worder.identify==="function"){
               window.worder.identify(idData);

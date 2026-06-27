@@ -191,9 +191,12 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
   // Track body edits → dirty. Seeding `content` in useEditor does NOT
   // emit an 'update', so every fired event is a genuine user edit — no
   // need to swallow a "first" one (doing so dropped single-edit changes).
+  // Monotonic edit counter — lets the autosave hook detect edits that
+  // land while a save is in flight and re-save instead of losing them.
+  const revisionRef = useRef(0);
   useEffect(() => {
     if (!editor) return;
-    const handler = () => setIsDirty(true);
+    const handler = () => { revisionRef.current++; setIsDirty(true); };
     editor.on('update', handler);
     return () => {
       editor.off('update', handler);
@@ -210,6 +213,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
       metaMounted.current = true;
       return;
     }
+    revisionRef.current++;
     setIsDirty(true);
   }, [subject, previewText, senderName, senderEmail]);
 
@@ -241,6 +245,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
     isDirty,
     onSaved: () => setIsDirty(false),
     debounceMs: 1500,
+    getDirtyToken: () => revisionRef.current,
   });
 
   useImperativeHandle(ref, () => ({ save: async () => { await flush(); } }), [flush]);

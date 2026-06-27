@@ -739,7 +739,7 @@ export function BlockPreview({
                               borderRadius: p.buttonRadius ?? 4, fontSize: p.buttonFontSize || 14,
                               fontWeight: 600, textDecoration: 'none', textAlign: 'center',
                             }}>
-                              {p.buttonText || 'Shop now'}
+                              {p.buttonText || 'Comprar agora'}
                             </a>
                           </div>
                         )}

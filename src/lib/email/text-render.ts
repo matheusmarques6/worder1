@@ -367,13 +367,33 @@ export function renderTextEmailToPlain(doc: TextDoc | null | undefined): string 
         return `${'#'.repeat(level)} ${inner}`;
       }
       case 'bulletList':
+      case 'orderedList': {
+        // Put the item's first paragraph on the bullet line; render any
+        // nested list on its own following lines (indented) instead of
+        // concatenating its "- " prefix onto the parent bullet, which
+        // produced "- - item".
+        const ordered = node.type === 'orderedList';
+        const indent = '  '.repeat(depth);
         return (node.content || [])
-          .map((li) => `${'  '.repeat(depth)}- ${(li.content || []).map((c) => blockToText(c, depth + 1)).join('\n')}`)
+          .map((li, i) => {
+            const marker = ordered ? `${i + 1}. ` : '- ';
+            const parts: string[] = [];
+            let usedFirstPara = false;
+            for (const child of li.content || []) {
+              if (child.type === 'paragraph' && !usedFirstPara) {
+                usedFirstPara = true;
+                parts.push(`${indent}${marker}${blockToText(child, depth)}`);
+              } else if (child.type === 'bulletList' || child.type === 'orderedList') {
+                parts.push(blockToText(child, depth + 1));
+              } else {
+                parts.push(`${indent}  ${blockToText(child, depth)}`);
+              }
+            }
+            if (parts.length === 0) parts.push(`${indent}${marker}`);
+            return parts.join('\n');
+          })
           .join('\n');
-      case 'orderedList':
-        return (node.content || [])
-          .map((li, i) => `${'  '.repeat(depth)}${i + 1}. ${(li.content || []).map((c) => blockToText(c, depth + 1)).join('\n')}`)
-          .join('\n');
+      }
       case 'blockquote':
         return (node.content || [])
           .map((c) => blockToText(c, depth))

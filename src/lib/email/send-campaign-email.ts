@@ -230,8 +230,19 @@ export async function sendCampaignEmail({
     let finalText: string | undefined;
     if (templateText && templateText.trim().length > 0) {
       try {
+        let textSrc = templateText;
+        // Resolve {{ trigger.* }} smart tags (cart/checkout link, first
+        // item name/price, etc.) on the plain-text half too — the HTML
+        // half already gets them via resolveTriggerSmartTags above, so
+        // without this a text-based cart-recovery email ships an HTML
+        // body WITH the recovery link and a text body where the link was
+        // stripped as an unresolved tag.
+        if (eventData) {
+          const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
+          textSrc = resolveTriggerSmartTags(textSrc, eventData);
+        }
         const { renderPlainWithMergeData } = await import('@/lib/email/text-render');
-        finalText = renderPlainWithMergeData(templateText, mergeData);
+        finalText = renderPlainWithMergeData(textSrc, mergeData);
       } catch {
         // Defensive: never let a text-render hiccup block the HTML send.
         finalText = templateText;
