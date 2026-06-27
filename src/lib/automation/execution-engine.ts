@@ -173,9 +173,26 @@ export class ExecutionEngine {
     if (options.organizationId && !(context as any).custom) {
       try {
         const { getSupabaseAdmin } = await import('@/lib/supabase-admin');
-        // @ts-ignore — lodash types may not be installed
-        const lodashMod = await import('lodash');
-        const lodashGet = (lodashMod as any).get || (lodashMod as any).default?.get;
+        // Hand-rolled deep get instead of lodash. lodash is NOT a declared
+        // dependency, so `await import('lodash')` rejected in production
+        // (pnpm strict resolution) — the whole custom-variables feature
+        // silently fell into the catch below and never populated
+        // context.custom. This inline resolver handles the dot + [index]
+        // path syntax the custom_variables rows use (same approach as
+        // resolveTriggerSmartTags in merge-tags.ts).
+        const deepGet = (obj: any, path: string): any => {
+          if (obj == null || !path) return undefined;
+          const segments = String(path)
+            .replace(/\[(\d+)\]/g, '.$1')
+            .split('.')
+            .filter(Boolean);
+          let cur: any = obj;
+          for (const seg of segments) {
+            if (cur == null) return undefined;
+            cur = cur[seg];
+          }
+          return cur;
+        };
         const admin = getSupabaseAdmin();
         const { data: customVars } = await admin
           .from('custom_variables')
@@ -187,9 +204,9 @@ export class ExecutionEngine {
           const triggerType = (context.trigger as any)?.type;
           const apps = (v as any).applicable_triggers as string[] | null;
           if (Array.isArray(apps) && apps.length > 0 && triggerType && !apps.includes(triggerType)) continue;
-          let value: any = lodashGet(context, (v as any).path);
+          let value: any = deepGet(context, (v as any).path);
           if ((value === undefined || value === null || value === '') && (v as any).fallback_path) {
-            value = lodashGet(context, (v as any).fallback_path);
+            value = deepGet(context, (v as any).fallback_path);
           }
           if ((value === undefined || value === null || value === '') && (v as any).default_value !== null) {
             value = (v as any).default_value;
