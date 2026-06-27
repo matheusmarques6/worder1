@@ -94,6 +94,16 @@ export async function POST(
   };
   if (restoredHtml !== undefined) updatePayload.html = restoredHtml;
 
+  // Text templates mirror subject/preview_text into dedicated columns
+  // (the send pipeline + template list read them there). Restoring only
+  // design_json would leave those columns showing the pre-restore values,
+  // so sync them from the restored envelope.
+  if (ver.editor_type === 'text') {
+    const design = ver.design_json as any;
+    if (design?.subject !== undefined) updatePayload.subject = design.subject;
+    if (design?.previewText !== undefined) updatePayload.preview_text = design.previewText;
+  }
+
   const { data: updated, error } = await supabaseAdmin
     .from('email_templates')
     .update(updatePayload)

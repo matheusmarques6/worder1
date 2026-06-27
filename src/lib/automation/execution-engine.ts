@@ -182,10 +182,15 @@ export class ExecutionEngine {
         // resolveTriggerSmartTags in merge-tags.ts).
         const deepGet = (obj: any, path: string): any => {
           if (obj == null || !path) return undefined;
-          const segments = String(path)
-            .replace(/\[(\d+)\]/g, '.$1')
-            .split('.')
-            .filter(Boolean);
+          // Tokenize like lodash.toPath: dot segments, [0] indices, and
+          // quoted bracket keys ["a.b"] / ['a.b'] (which may contain dots
+          // and must stay a single segment).
+          const segments: string[] = [];
+          const re = /\[(?:"([^"]*)"|'([^']*)'|([^\]]*))\]|([^.[\]]+)/g;
+          let m: RegExpExecArray | null;
+          while ((m = re.exec(String(path)))) {
+            segments.push(m[1] ?? m[2] ?? m[3] ?? m[4]);
+          }
           let cur: any = obj;
           for (const seg of segments) {
             if (cur == null) return undefined;

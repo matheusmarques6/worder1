@@ -2782,6 +2782,17 @@ export default function PopupEditorPage() {
     insertBlockAt(type, activeStep.blocks.length)
   }
 
+  // Compute the insertion index for a native drag at viewport-Y `clientY`
+  // by comparing against each rendered block's vertical midpoint.
+  const computeDropIdx = (container: HTMLElement, clientY: number): number => {
+    const blockEls = Array.from(container.querySelectorAll('[data-popup-block]')) as HTMLElement[]
+    for (let i = 0; i < blockEls.length; i++) {
+      const rect = blockEls[i].getBoundingClientRect()
+      if (clientY < rect.top + rect.height / 2) return i
+    }
+    return blockEls.length
+  }
+
   // Insert at a specific index — used by the palette click (appends) and
   // by the HTML5 drop handler on the canvas (drops between siblings).
   const insertBlockAt = (type: string, index: number) => {
@@ -3119,22 +3130,14 @@ export default function PopupEditorPage() {
                           clearTimeout(dragLeaveTimerRef.current)
                           dragLeaveTimerRef.current = null
                         }
-                        // Decide insertion index by comparing cursor Y to
-                        // each block's midpoint. Above midpoint → before,
-                        // below → after.
-                        const blockEls = Array.from(
-                          (e.currentTarget as HTMLElement).querySelectorAll('[data-popup-block]')
-                        ) as HTMLElement[]
-                        let idx = blockEls.length
-                        for (let i = 0; i < blockEls.length; i++) {
-                          const rect = blockEls[i].getBoundingClientRect()
-                          if (e.clientY < rect.top + rect.height / 2) { idx = i; break }
-                        }
-                        setDropIndicatorIdx(idx)
+                        setDropIndicatorIdx(computeDropIdx(e.currentTarget as HTMLElement, e.clientY))
                       }}
-                      onDragLeave={() => {
-                        // Debounce so moving between two child elements
-                        // doesn't flicker the indicator off.
+                      onDragLeave={(e) => {
+                        // Ignore boundaries crossed between inner children —
+                        // only debounce-clear when the cursor actually left
+                        // the drop zone, otherwise the indicator flickers off
+                        // mid-list.
+                        if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return
                         if (dragLeaveTimerRef.current) clearTimeout(dragLeaveTimerRef.current)
                         dragLeaveTimerRef.current = setTimeout(() => setDropIndicatorIdx(null), 60)
                       }}
@@ -3142,7 +3145,14 @@ export default function PopupEditorPage() {
                         const type = e.dataTransfer.getData('blockType')
                         if (!type) return
                         e.preventDefault()
-                        const idx = dropIndicatorIdx ?? activeStep.blocks.length
+                        // Cancel any pending leave-clear and recompute the
+                        // index from the drop position — don't trust the
+                        // possibly-stale/null dropIndicatorIdx state.
+                        if (dragLeaveTimerRef.current) {
+                          clearTimeout(dragLeaveTimerRef.current)
+                          dragLeaveTimerRef.current = null
+                        }
+                        const idx = computeDropIdx(e.currentTarget as HTMLElement, e.clientY)
                         insertBlockAt(type, idx)
                         setDropIndicatorIdx(null)
                       }}

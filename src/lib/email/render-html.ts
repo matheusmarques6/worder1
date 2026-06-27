@@ -200,7 +200,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
         descFontSize: p.descFontSize || 13, descColor: p.descColor || '#6B7280',
         priceFontSize: p.priceFontSize || 14, priceColor: p.priceColor || '#111827', priceWeight: p.priceWeight || '600',
         oldPriceColor: p.oldPriceColor || '#9CA3AF',
-        buttonText: p.buttonText || 'Shop now', buttonHref: p.buttonHref || '{{checkout_url}}',
+        buttonText: p.buttonText || 'Comprar agora', buttonHref: p.buttonHref || '{{checkout_url}}',
         buttonColor: p.buttonColor || '#111827', buttonTextColor: p.buttonTextColor || '#FFFFFF',
         buttonRadius: p.buttonRadius ?? 4, buttonFontSize: p.buttonFontSize || 14,
         buttonAlign: p.buttonAlign || 'left',

@@ -106,6 +106,26 @@ describe('renderTextEmailToHtml', () => {
     expect(html).toContain('href="https://loja.com"');
     expect(html).toContain('{{store_url}}');
   });
+
+  it('renders nested lists in plain text without doubled bullets', () => {
+    const doc = buildDoc({
+      type: 'bulletList',
+      content: [
+        {
+          type: 'listItem',
+          content: [
+            p(t('Pai')),
+            { type: 'bulletList', content: [{ type: 'listItem', content: [p(t('Filho'))] }] },
+          ],
+        },
+      ],
+    });
+    const text = renderTextEmailToPlain(doc);
+    expect(text).toContain('- Pai');
+    expect(text).toContain('- Filho');
+    // The parent bullet must not absorb the nested list's marker.
+    expect(text).not.toContain('- - ');
+  });
 });
 
 describe('renderTextEmailToPlain', () => {
