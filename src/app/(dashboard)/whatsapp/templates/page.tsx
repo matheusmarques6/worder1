@@ -338,14 +338,14 @@ export default function WhatsAppTemplatesPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 overflow-y-auto"
-            onClick={closeBuilder}
           >
+            {/* Backdrop click does NOT close — only the X button does, so a
+                half-filled template isn't lost by an accidental outside click. */}
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               className="bg-white rounded-2xl w-full max-w-4xl my-8 max-h-[90vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between p-5 border-b border-gray-200">
                 <h2 className="text-xl font-semibold text-gray-900">
