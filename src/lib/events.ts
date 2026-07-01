@@ -9,6 +9,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { shouldIncludeAutomationForStore } from './automation/trigger-dispatcher';
 
 // ============================================
 // TIPOS DE EVENTOS
@@ -129,6 +130,21 @@ export interface EventPayload {
   timestamp?: string;
 }
 
+/**
+ * Pure: extrai o store id de um payload de evento do EventBus, olhando os
+ * locais conhecidos em ordem de precedência:
+ *   data.store_id / data.storeId  (eventos que carregam a loja no topo)
+ *   data._webhook_dispatch_meta.store_id  (eventos Shopify de outbound)
+ * Retorna null quando não há contexto de loja (eventos não-loja) → o match
+ * permanece org-wide (sem regressão). Exportado p/ teste unitário.
+ */
+export function extractEventPayloadStoreId(
+  data: Record<string, any> | null | undefined
+): string | null {
+  const d: any = data || {};
+  return d.store_id || d.storeId || d._webhook_dispatch_meta?.store_id || null;
+}
+
 export interface EmitResult {
   success: boolean;
   automationsTriggered: number;
@@ -246,12 +262,20 @@ class EventBusClass {
   private async logEvent(eventType: EventType, payload: EventPayload): Promise<void> {
     try {
       const supabase = this.getSupabase();
+      // Hoist o store id para o topo do payload logado. Para eventos Shopify
+      // ele vive em data._webhook_dispatch_meta.store_id; hoisting garante
+      // que, se este event_logs for (re)processado pelo event-processor / RPC,
+      // o store-scope engate corretamente (flows da loja OU org-wide).
+      const storeId = this.getPayloadStoreId(payload);
+      const loggedPayload = storeId
+        ? { ...(payload.data || {}), store_id: storeId, storeId }
+        : payload.data;
       await supabase.from('event_logs').insert({
         organization_id: payload.organization_id,
         event_type: eventType,
         contact_id: payload.contact_id || null,
         deal_id: payload.deal_id || null,
-        payload: payload.data,
+        payload: loggedPayload,
         source: payload.source || 'system',
         created_at: payload.timestamp || new Date().toISOString(),
       });
@@ -259,6 +283,19 @@ class EventBusClass {
       // Log silencioso - não falhar a emissão por erro de log
       console.warn('[EventBus] Failed to log event:', error);
     }
+  }
+
+  /**
+   * Extrai o store id de um EventPayload, olhando os locais conhecidos:
+   * data.store_id / data.storeId (eventos que já carregam a loja no topo,
+   * ex: cart.abandoned do cron) e data._webhook_dispatch_meta.store_id
+   * (eventos Shopify de checkout abandonado que carregam a loja na meta
+   * de outbound webhook). Retorna null quando não há contexto de loja
+   * (eventos não-loja: segment, deal, form sem loja, email events) — nesse
+   * caso o comportamento permanece org-wide (sem regressão).
+   */
+  private getPayloadStoreId(payload: EventPayload): string | null {
+    return extractEventPayloadStoreId(payload?.data);
   }
 
   /**
@@ -271,20 +308,35 @@ class EventBusClass {
   ): Promise<any[]> {
     const supabase = this.getSupabase();
 
-    // Buscar automações ativas com o trigger correspondente
-    const { data: automations, error } = await supabase
+    const payloadStoreId = this.getPayloadStoreId(payload);
+
+    // Buscar automações ativas com o trigger correspondente.
+    // Multi-tenant: quando o evento traz uma loja (payloadStoreId), escopar
+    // para flows DESSA loja OU flows org-wide (store_id NULL) — mesmo semântica
+    // do path moderno (shouldIncludeAutomationForStore). Sem isso, um checkout
+    // na loja Dr. Groot enrola o contato (compartilhado por org) em TODOS os
+    // funis de todas as lojas da org — vazamento cross-loja.
+    let query = supabase
       .from('automations')
       .select('*')
       .eq('organization_id', organizationId)
       .eq('trigger_type', triggerType)
       .eq('status', 'active');
+    if (payloadStoreId) {
+      query = query.or(`store_id.eq.${payloadStoreId},store_id.is.null`);
+    }
+    const { data: automations, error } = await query;
 
     if (error) {
       throw error;
     }
 
-    // Filtrar por condições adicionais do trigger_config
+    // Filtrar por condições adicionais do trigger_config + store-scope
+    // defense-in-depth em JS (no-op quando não há loja no evento).
     const matchingAutomations = (automations || []).filter((automation) => {
+      if (!shouldIncludeAutomationForStore(automation.store_id, payloadStoreId)) {
+        return false;
+      }
       return this.matchesTriggerConditions(automation, payload);
     });
 
@@ -348,13 +400,23 @@ class EventBusClass {
   private async createAutomationRun(automation: any, payload: EventPayload): Promise<string> {
     const supabase = this.getSupabase();
 
+    const payloadStoreId = this.getPayloadStoreId(payload);
+
     // Preparar contexto inicial
+    // NOTE: automation_runs não tem coluna store_id nesta schema, então o
+    // store id é atribuído via metadata.store_id (o run fica store-attributed
+    // sem mudança de schema). O gate anti-vazamento real acontece em
+    // findMatchingAutomations; isto é só atribuição/auditoria.
+    // KNOWN (fora do escopo desta correção): este path não aplica delay/
+    // idempotency/frequency como o dispatchTrigger moderno — divergência
+    // conhecida, tratada separadamente.
     const initialContext = {
       organization_id: payload.organization_id,
       automation_id: automation.id,
       contact_id: payload.contact_id,
       deal_id: payload.deal_id,
       order_id: payload.order_id,
+      store_id: payloadStoreId ?? null,
       email: payload.email,
       phone: payload.phone,
       trigger_type: automation.trigger_type,

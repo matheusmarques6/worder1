@@ -5,6 +5,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { enqueueAutomationRun, enqueueAutomationStep, calculateDelaySeconds } from '../queue';
+import { shouldIncludeAutomationForStore } from './trigger-dispatcher';
 
 // ============================================
 // TYPES
@@ -120,10 +121,20 @@ class EventProcessorClass {
 
       const triggerType = EVENT_TO_TRIGGER[event.event_type] || `trigger_${event.event_type}`;
 
+      // Multi-tenant: store id do evento (fica no payload — event_logs não
+      // tem coluna store dedicada). Quando presente, escopamos o match para
+      // flows dessa loja OU org-wide (store_id NULL) — mesma semântica do
+      // path moderno. Ausente → org-wide (eventos não-loja intactos).
+      const eventStoreId: string | null =
+        (event.payload?.storeId as string) || (event.payload?.store_id as string) || null;
+
       // Try RPC first, fallback to direct query
       let automations: Array<{ automation_id: string; automation_name: string; trigger_type: string }> | null = null;
 
       try {
+        // A RPC lê p_payload->>'storeId'/'store_id' e store-escopa pela coluna
+        // automations.store_id (ver migration 20260620_*). Passamos o payload
+        // do evento — que já carrega o store id (garantido pelos produtores).
         const { data: rpcResult, error: rpcError } = await supabase
           .rpc('find_matching_automations', {
             p_organization_id: event.organization_id,
@@ -140,23 +151,31 @@ class EventProcessorClass {
 
       if (!automations) {
         // Fallback: direct query for active automations with matching trigger type
-        const { data: directResult, error: directError } = await supabase
+        let directQuery = supabase
           .from('automations')
-          .select('id, name, trigger_type')
+          .select('id, name, trigger_type, store_id')
           .eq('organization_id', event.organization_id)
           .eq('status', 'active')
           .eq('trigger_type', triggerType);
+        if (eventStoreId) {
+          // store-específico OU org-wide (NULL) — espelha o path moderno.
+          directQuery = directQuery.or(`store_id.eq.${eventStoreId},store_id.is.null`);
+        }
+        const { data: directResult, error: directError } = await directQuery;
 
         if (directError) {
           console.error('[EventProcessor] Error finding automations:', directError);
           throw directError;
         }
 
-        automations = (directResult || []).map(a => ({
-          automation_id: a.id,
-          automation_name: a.name,
-          trigger_type: a.trigger_type,
-        }));
+        // Defense-in-depth em JS (no-op quando não há loja no evento).
+        automations = (directResult || [])
+          .filter(a => shouldIncludeAutomationForStore((a as any).store_id, eventStoreId))
+          .map(a => ({
+            automation_id: a.id,
+            automation_name: a.name,
+            trigger_type: a.trigger_type,
+          }));
       }
 
       // 2b. Filtrar automações por trigger_config (keyword match, segment match etc.)
@@ -292,12 +311,18 @@ class EventProcessorClass {
     }
 
     // Criar contexto inicial
+    // NOTE: automation_runs não tem coluna store_id nesta schema, então o
+    // store id é atribuído via metadata.store_id. O gate anti-vazamento real
+    // acontece no match acima; isto é só atribuição/auditoria.
+    const eventStoreId: string | null =
+      (event.payload?.storeId as string) || (event.payload?.store_id as string) || null;
     const initialContext = {
       organization_id: event.organization_id,
       automation_id: automationId,
       automation_name: automation.name,
       contact_id: event.contact_id,
       deal_id: event.deal_id,
+      store_id: eventStoreId,
       trigger_type: automation.trigger_type,
       trigger_data: event.payload,
       triggered_at: new Date().toISOString(),

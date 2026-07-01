@@ -231,11 +231,21 @@ export async function createEvent(input: CreateEventInput): Promise<EventRecord 
     const flowEventType = flowEventMap[input.event_type];
     if (flowEventType && input.contact_id) {
       try {
+        // Multi-tenant: injeta o store id no payload do event_logs para que
+        // o event-processor / RPC find_matching_automations consiga
+        // store-escopar o match (flows dessa loja OU org-wide). Sem isso, um
+        // evento de loja (checkout abandonado etc.) enrola o contato
+        // compartilhado em funis de OUTRAS lojas da mesma org.
         await supabase.from('event_logs').insert({
           organization_id: input.organization_id,
           event_type: flowEventType,
           contact_id: input.contact_id,
-          payload: input.properties || {},
+          payload: {
+            ...(input.properties || {}),
+            ...(input.store_id
+              ? { store_id: input.store_id, storeId: input.store_id }
+              : {}),
+          },
           status: 'pending',
           created_at: new Date().toISOString(),
         })

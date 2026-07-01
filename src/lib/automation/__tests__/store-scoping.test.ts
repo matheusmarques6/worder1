@@ -13,6 +13,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { shouldIncludeAutomationForStore } from '../trigger-dispatcher';
+import { extractEventPayloadStoreId } from '../../events';
 
 const STORE_A = 'store-a-uuid';
 const STORE_B = 'store-b-uuid';
@@ -37,5 +38,43 @@ describe('shouldIncludeAutomationForStore', () => {
     expect(shouldIncludeAutomationForStore(STORE_A, null)).toBe(true);
     expect(shouldIncludeAutomationForStore(STORE_B, undefined)).toBe(true);
     expect(shouldIncludeAutomationForStore(null, null)).toBe(true);
+  });
+});
+
+// =============================================================
+// Legacy EventBus path — store id extraction from the event payload.
+// The store id must reach findMatchingAutomations/createAutomationRun so
+// the store-scope actually engages on the legacy path too.
+// =============================================================
+describe('extractEventPayloadStoreId (legacy EventBus path)', () => {
+  it('reads a flat store_id', () => {
+    expect(extractEventPayloadStoreId({ store_id: STORE_A })).toBe(STORE_A);
+  });
+
+  it('reads a camelCase storeId', () => {
+    expect(extractEventPayloadStoreId({ storeId: STORE_A })).toBe(STORE_A);
+  });
+
+  it('reads store_id from the Shopify outbound dispatch meta', () => {
+    // Checkout-abandoned events carry the store under _webhook_dispatch_meta.
+    expect(
+      extractEventPayloadStoreId({ _webhook_dispatch_meta: { store_id: STORE_A } })
+    ).toBe(STORE_A);
+  });
+
+  it('returns null for non-store events (stays org-wide)', () => {
+    expect(extractEventPayloadStoreId({})).toBe(null);
+    expect(extractEventPayloadStoreId(null)).toBe(null);
+    expect(extractEventPayloadStoreId(undefined)).toBe(null);
+    expect(extractEventPayloadStoreId({ email: 'a@b.com' })).toBe(null);
+  });
+
+  it('prefers a top-level store_id over the dispatch meta', () => {
+    expect(
+      extractEventPayloadStoreId({
+        store_id: STORE_A,
+        _webhook_dispatch_meta: { store_id: STORE_B },
+      })
+    ).toBe(STORE_A);
   });
 });
