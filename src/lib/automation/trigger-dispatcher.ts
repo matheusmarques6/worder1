@@ -9,6 +9,31 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+/**
+ * Pure decision: should an automation row be included for a given event's store?
+ *
+ * Multi-tenant safety: one organization can host multiple Shopify stores that
+ * SHARE a single contact row per (organization_id, email). Store-triggered
+ * events (checkout abandoned, order placed, etc.) must only enroll the contact
+ * into flows belonging to THAT store — otherwise a checkout on "Dr. Groot"
+ * fans the shared contact into "Based"'s funnels (cross-store leak).
+ *
+ * Rules:
+ * - No event store (non-store triggers: segment, custom event, email events)
+ *   → include everything (org-wide behavior, unchanged).
+ * - Automation has NULL store_id → intentionally org-wide (or single-store org
+ *   whose flow predates store_id) → include (required, no regression).
+ * - Otherwise → include only when the automation's store matches the event's.
+ */
+export function shouldIncludeAutomationForStore(
+  automationStoreId: string | null | undefined,
+  eventStoreId: string | null | undefined
+): boolean {
+  if (!eventStoreId) return true
+  if (automationStoreId == null) return true
+  return automationStoreId === eventStoreId
+}
+
 export interface DispatchOptions {
   organizationId: string
   triggerType: string // ex: 'trigger_form_submitted', 'trigger_segment', etc
@@ -146,12 +171,22 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
   }
 
   // 2. Buscar automações com esse trigger
-  const { data: automations, error } = await supabaseAdmin
+  // Multi-tenant: quando o evento traz uma loja (storeId), escopar a busca
+  // para flows DESSA loja OU flows org-wide (store_id NULL). Sem isso, um
+  // checkout na loja Dr. Groot enrola o contato (compartilhado por org) em
+  // TODOS os funis de todas as lojas da org — vazamento cross-loja.
+  let automationsQuery = supabaseAdmin
     .from('automations')
-    .select('id, trigger_config, audience_filters, trigger_filters, frequency_config')
+    .select('id, trigger_config, audience_filters, trigger_filters, frequency_config, store_id')
     .eq('organization_id', organizationId)
     .eq('status', 'active')
     .eq('trigger_type', triggerType)
+  if (storeId) {
+    // store-específico OU org-wide (NULL). Preserva flows intencionalmente
+    // org-wide e orgs single-store cujos flows têm store_id NULL (sem regressão).
+    automationsQuery = automationsQuery.or(`store_id.eq.${storeId},store_id.is.null`)
+  }
+  const { data: automations, error } = await automationsQuery
 
   if (error) {
     console.error('[dispatchTrigger] fetch automations error:', error)
@@ -162,10 +197,17 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
     return { automationsMatched: 0, runsCreated: 0, runIds: [] }
   }
 
+  // 2b. Store-scope defense-in-depth: mirror the SQL .or() filter in JS so
+  // the store gate holds even if the query filter ever changes. No-op when
+  // there's no event store (non-store triggers stay org-wide).
+  const storeScoped = (automations as any[]).filter((a: any) =>
+    shouldIncludeAutomationForStore(a.store_id, storeId)
+  )
+
   // 3. Aplicar matchConfig se fornecido (ex: filtra por form_id, segment_id)
   let eligible: any[] = matchConfig
-    ? automations.filter((a: any) => matchConfig(a.trigger_config || {}))
-    : automations
+    ? storeScoped.filter((a: any) => matchConfig(a.trigger_config || {}))
+    : storeScoped
 
   // 3b. Apply audience_filters (per-contact filters configured in the
   // trigger node UI). The schema allows up to 5 rows of {field, operator,

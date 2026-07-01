@@ -248,6 +248,10 @@ export async function GET(request: NextRequest) {
           dealId: metadata.deal_id,
           context: previousContext || {
             organizationId: automation.organization_id,
+            // The flow's store — threaded so the email node resolves the
+            // STORE's sender identity (not the org default) and any
+            // store-scoped provider config. Null for org-wide flows.
+            storeId: automation.store_id || null,
             contact: contact ? {
               id: contact.id,
               email: contact.email,

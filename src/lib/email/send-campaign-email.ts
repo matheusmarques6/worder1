@@ -33,6 +33,9 @@ export interface SendCampaignEmailParams {
   replyTo?: string;
   baseUrl: string;
   organizationId: string;
+  /** Store the send belongs to — resolves the STORE's sender identity
+   *  (from / sender name / reply-to) instead of the org default. */
+  storeId?: string | null;
   eventData?: Record<string, any>;
 }
 
@@ -49,6 +52,7 @@ export async function sendCampaignEmail({
   replyTo,
   baseUrl,
   organizationId,
+  storeId,
   eventData,
 }: SendCampaignEmailParams): Promise<{ success: boolean; emailSendId?: string; error?: string }> {
   let emailSendId = '' as string;
@@ -209,7 +213,7 @@ export async function sendCampaignEmail({
 
     // 5. Send via the org's configured provider (defaults to Resend).
     // The factory caches per-org so we don't hit the DB on every send.
-    const { provider, config } = await getEmailProviderForOrg(organizationId);
+    const { provider, config } = await getEmailProviderForOrg(organizationId, storeId);
     const effectiveFrom = fromEmail || config.defaultFrom || 'onboarding@resend.dev';
     const effectiveSenderName = senderName || config.defaultSenderName;
 

@@ -745,7 +745,14 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
         // 3. Build sender info
         const senderName = config.senderName || (context as any).store?.name || 'Worder';
-        const senderEmail = config.senderEmail || credentials?.defaultFrom || 'noreply@example.com';
+        // When the node has no explicit sender AND the flow belongs to a
+        // store, defer the fallback to sendCampaignEmail so it resolves the
+        // STORE's identity (getEmailProviderForOrg(org, storeId)) rather than
+        // the org default here — this is the cross-store sender fix. Org-wide
+        // flows (no storeId) keep the previous org-default behavior.
+        const runStoreId = (context as any).storeId || null;
+        const senderEmail = config.senderEmail
+          || (runStoreId ? '' : (credentials?.defaultFrom || 'noreply@example.com'));
 
         // 4. Send via the full campaign pipeline so automation emails
         //    get the same tracking as campaigns (open pixel, click
@@ -898,6 +905,10 @@ const actionExecutors: Record<string, NodeExecutor> = {
           replyTo: undefined,
           baseUrl,
           organizationId: organizationId || '',
+          // Store-scope the sender: a blank node senderEmail then falls back
+          // to the STORE's identity (not the org default), so a Dr. Groot
+          // flow never sends from Based's address. Null for org-wide flows.
+          storeId: (context as any).storeId || null,
           eventData: context.trigger?.data,
         });
 

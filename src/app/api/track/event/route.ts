@@ -735,6 +735,9 @@ export async function POST(request: NextRequest) {
       import('@/lib/automation/trigger-dispatcher').then(({ dispatchTrigger }) =>
         dispatchTrigger({
           organizationId,
+          // Store-scope pixel-driven triggers so a shared (org-level) contact
+          // isn't enrolled into another store's funnels (cross-store leak).
+          storeId: store.id,
           triggerType,
           contactId,
           ...(pixelDelayMinutes ? { delayMinutes: pixelDelayMinutes } : {}),

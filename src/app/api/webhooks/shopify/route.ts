@@ -1039,6 +1039,7 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
       const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
       await dispatchTrigger({
         organizationId: store.organization_id,
+        storeId: store.id,
         triggerType: 'trigger_order',
         contactId: contact.id,
         triggerData: {
@@ -1135,6 +1136,7 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
 
         await dispatchTrigger({
           organizationId: store.organization_id,
+          storeId: store.id,
           triggerType: purchaseTrigger,
           contactId: contact.id,
           triggerData: {
@@ -1525,6 +1527,7 @@ async function processOrderFulfilled(store: ShopifyStoreConfig, order: any) {
         const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher');
         await dispatchTrigger({
           organizationId: store.organization_id,
+          storeId: store.id,
           triggerType: 'trigger_fulfilled_order',
           contactId: contact.id,
           triggerData: {
@@ -2079,12 +2082,16 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
         if (c?.id) dispatchContactId = c.id;
       }
 
+      // Store-scope the bucketing query so delay buckets only include THIS
+      // store's abandoned-checkout flows (+ org-wide NULL). Mirrors the
+      // dispatchTrigger match; without it, buckets fan out cross-store.
       const { data: matchingAutos } = await supabaseLocal
         .from('automations')
-        .select('id, trigger_config')
+        .select('id, trigger_config, store_id')
         .eq('organization_id', store.organization_id)
         .eq('trigger_type', 'trigger_checkout_abandoned')
-        .eq('status', 'active');
+        .eq('status', 'active')
+        .or(`store_id.eq.${store.id},store_id.is.null`);
 
       const buckets = new Map<number, string[]>();
       for (const a of (matchingAutos as any[]) || []) {
@@ -2156,6 +2163,7 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       if (buckets.size === 0) {
         await dispatchTrigger({
           organizationId: store.organization_id,
+          storeId: store.id,
           triggerType: 'trigger_checkout_abandoned',
           contactId: dispatchContactId,
           triggerData: { ...triggerData, CustomerEmail: dispatchEmail || triggerData.CustomerEmail },
@@ -2166,6 +2174,7 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
         for (const [delayMinutes] of buckets.entries()) {
           await dispatchTrigger({
             organizationId: store.organization_id,
+            storeId: store.id,
             triggerType: 'trigger_checkout_abandoned',
             contactId: contactId || null,
             triggerData,
@@ -2552,6 +2561,7 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
         for (const cid of uniqueContactIds) {
           await dispatchTrigger({
             organizationId: store.organization_id,
+            storeId: store.id,
             triggerType: 'trigger_price_drop',
             contactId: cid,
             triggerData: {
