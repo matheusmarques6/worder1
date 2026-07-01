@@ -52,12 +52,18 @@ export async function GET(request: NextRequest) {
     // Buscar runs que estão em 'waiting' e já passaram do tempo
     // JUNTO com a automação para verificar status
     const supabase = getSupabase();
+    // ORDER BY waiting_until ASC: sem ordenação, o LIMIT pegava um subconjunto
+    // arbitrário e, sob backlog sustentado (> throughput), alguns runs eram
+    // adiados indefinidamente (starvation) em vez de apenas atrasados. Ordenar
+    // pelos mais vencidos garante FIFO. Limite elevado de 50→200 (o dispatch é
+    // paralelo via Promise.allSettled) para dar vazão em volume alto.
     const { data: runs, error } = await supabase
       .from('automation_runs')
       .select('id, automation_id, current_node_id, waiting_until, automations!inner(id, status)')
       .eq('status', 'waiting')
       .lte('waiting_until', now)
-      .limit(50);
+      .order('waiting_until', { ascending: true })
+      .limit(200);
 
     if (error) {
       console.error('[Check Delayed] Error fetching runs:', error);
