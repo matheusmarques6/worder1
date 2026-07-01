@@ -163,6 +163,20 @@ export function renderMergeTags(
     'contact.email': data.email || data['contact.email'] || '',
     'contact.email_unsub': data.unsubscribe_url || data['contact.email_unsub'] || '',
     'contact.phone': data.phone || data['contact.phone'] || '',
+    // Aliases legados do editor de TEXTO (sintaxe pontilhada antiga) → chaves
+    // flat reais. Garante que templates de texto salvos antes da correção do
+    // painel de variáveis continuem resolvendo em vez de mostrar o literal.
+    'cart.url': data.checkout_url || data['cart.url'] || '',
+    'cart.total': data.cart_total || data['cart.total'] || '',
+    'cart.items_count': data.cart_item_count || data['cart.items_count'] || '',
+    'store.name': data.store_name || data['store.name'] || '',
+    'store.url': data.store_url || data['store.url'] || '',
+    'store.email': data.store_email || data['store.email'] || '',
+    'store.phone': data.store_phone || data['store.phone'] || '',
+    'order.number': data.order_number || data['order.number'] || '',
+    'order.total': data.order_total || data['order.total'] || '',
+    'order.status': data.order_status || data['order.status'] || '',
+    'order.tracking_url': data.tracking_url || data['order.tracking_url'] || '',
   }
 
   const resolve = (tag: string, fallback: string = ''): string => {
