@@ -169,6 +169,9 @@ async function processOrg(orgId: string, targetStores: Set<string>): Promise<num
         : '';
       await dispatchTrigger({
         organizationId: orgId,
+        // Store-scope: sem isso, um browse-abandoned de uma loja casava os
+        // funis de TODAS as lojas da org (mesmo vazamento cross-loja).
+        storeId: cand.store_id || null,
         triggerType: 'trigger_browse_abandoned',
         contactId: cand.contact_id,
         triggerData: {
