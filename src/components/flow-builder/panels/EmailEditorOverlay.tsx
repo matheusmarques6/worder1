@@ -152,6 +152,11 @@ export function EmailEditorOverlay({
           design={template.design_json || template.design}
           storeId={storeId}
           organizationId={organizationId}
+          flowContext={triggerType && organizationId ? {
+            templateId,
+            triggerType,
+            organizationId,
+          } : undefined}
           onSave={handleSaveText}
           onRename={handleRename}
           onBack={handleClose}

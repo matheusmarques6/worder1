@@ -11,11 +11,14 @@
 // sites.
 //
 // Surfaces (right-side panel):
-//   - Subject (with merge-tag inserter)
+//   - Subject (with merge-tag inserter — shared MergeTagPicker)
 //   - Preview text (rendered as the inbox preheader)
-//   - Sender name / sender email overrides
-//   - Variable picker (drops a chip at the cursor)
+//   - Variable picker (drops a chip at the cursor — shared MergeTagPicker)
 //   - "Send test" action — reuses the existing modal
+//
+// Sender identity is configured at send time (automation node /
+// PropertiesPanel or campaign), NOT on the template, so no sender fields
+// live here.
 // =============================================================
 
 import {
@@ -68,10 +71,15 @@ import {
 import { MergeTag } from './MergeTagNode';
 import { useSlashMenu } from './SlashCommands';
 import { VersionHistoryModal } from './VersionHistoryModal';
-import { MERGE_TAGS, MERGE_TAG_CATEGORIES, type MergeTag as MergeTagDef } from '@/lib/email/merge-tags';
-import { renderTextEmailToHtml, renderTextEmailToPlain, type TextDoc } from '@/lib/email/text-render';
+import { type TextDoc, renderTextEmailToHtml } from '@/lib/email/text-render';
 import { useEmailAutosave } from '@/components/email-builder/hooks/useEmailAutosave';
 import { SendTestModal } from '@/components/email-builder/modals/SendTestModal';
+// Shared merge-tag picker — the SAME component the drag-and-drop editor
+// uses, so both flavors offer identical canonical/trigger/custom tags.
+import { MergeTagPicker } from '@/components/email-builder/modals/MergeTagPicker';
+// Real-payload live preview (lead selection + resolved event data) — the
+// same panel the block editor opens from a flow.
+import { EmailPreviewMode } from '@/components/flow-builder/panels/EmailPreviewMode';
 
 // ---- Types ---------------------------------------------------
 
@@ -83,8 +91,6 @@ export interface TextEmailDesign {
    *  here lets the design payload round-trip cleanly. */
   subject?: string;
   previewText?: string;
-  senderName?: string;
-  senderEmail?: string;
   /** Container max width — exposed so a future "wider" preset can land
    *  without breaking the renderer signature. */
   maxWidth?: number;
@@ -100,6 +106,15 @@ interface TextEmailEditorProps {
   design?: TextEmailDesign | Record<string, any> | null;
   storeId?: string;
   organizationId?: string;
+  /** Automation context — mirrors the block editor. When present the merge
+   *  picker runs in 'automation' mode (trigger + custom tags) and the live
+   *  preview switches to real-payload EmailPreviewMode. Campaign mode
+   *  (standalone edit route) leaves this undefined. */
+  flowContext?: {
+    templateId: string;
+    triggerType: string;
+    organizationId: string;
+  };
   onSave: (design: TextEmailDesign, html: string) => Promise<boolean>;
   onBack: () => void;
   onRename?: (name: string) => Promise<void> | void;
@@ -127,8 +142,6 @@ function coerceDesign(input?: TextEmailDesign | Record<string, any> | null): Tex
     doc: (d.doc && (d.doc as any).type === 'doc') ? d.doc : JSON.parse(JSON.stringify(EMPTY_DOC)),
     subject: d.subject,
     previewText: d.previewText,
-    senderName: d.senderName,
-    senderEmail: d.senderEmail,
     maxWidth: d.maxWidth,
   };
 }
@@ -136,7 +149,7 @@ function coerceDesign(input?: TextEmailDesign | Record<string, any> | null): Tex
 // ---- Component -----------------------------------------------
 
 const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(function TextEmailEditor(
-  { templateName, templateId, design, storeId, organizationId, onSave, onBack, onRename, flowName },
+  { templateName, templateId, design, storeId, organizationId, flowContext, onSave, onBack, onRename, flowName },
   ref,
 ) {
   const initial = useMemo(() => coerceDesign(design), [design]);
@@ -144,18 +157,19 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
   const [editingName, setEditingName] = useState(false);
   const [subject, setSubject] = useState(initial.subject || '');
   const [previewText, setPreviewText] = useState(initial.previewText || '');
-  const [senderName, setSenderName] = useState(initial.senderName || '');
-  const [senderEmail, setSenderEmail] = useState(initial.senderEmail || '');
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [showPreview, setShowPreview] = useState(false);
-  const [showVarMenu, setShowVarMenu] = useState<'subject' | 'body' | null>(null);
+  // Which field the shared MergeTagPicker inserts into when a tag is
+  // chosen. null = picker closed.
+  const [pickerTarget, setPickerTarget] = useState<'subject' | 'body' | null>(null);
+  // Real-payload live preview (automation only).
+  const [showFlowPreview, setShowFlowPreview] = useState(false);
   const [showSendTest, setShowSendTest] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   // Distraction-free writing: hides the sidebar + top chrome so the
   // founder note is the only thing on screen. Toggled with ⌘/.
   const [zenMode, setZenMode] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-  const varAnchorRef = useRef<HTMLButtonElement | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -215,7 +229,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
     }
     revisionRef.current++;
     setIsDirty(true);
-  }, [subject, previewText, senderName, senderEmail]);
+  }, [subject, previewText]);
 
   const buildDesign = useCallback((): TextEmailDesign => {
     const doc = editor ? (editor.getJSON() as TextDoc) : initial.doc;
@@ -223,10 +237,8 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
       doc,
       subject,
       previewText,
-      senderName,
-      senderEmail,
     };
-  }, [editor, initial.doc, subject, previewText, senderName, senderEmail]);
+  }, [editor, initial.doc, subject, previewText]);
 
   const buildHtml = useCallback((d: TextEmailDesign): string => {
     return renderTextEmailToHtml(d.doc, {
@@ -251,8 +263,8 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
   useImperativeHandle(ref, () => ({ save: async () => { await flush(); } }), [flush]);
 
   // Slash command menu. "/" at the start of a block opens a palette;
-  // selecting "Variável" defers to the existing body variable picker.
-  const slashMenu = useSlashMenu(editor, () => setShowVarMenu('body'));
+  // selecting "Variável" defers to the shared MergeTagPicker (body target).
+  const slashMenu = useSlashMenu(editor, () => setPickerTarget('body'));
 
   // Live preview HTML — re-renders only when the doc, preview text, or
   // device toggle change so we don't allocate a 5KB string on every
@@ -264,22 +276,30 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor?.state.doc, previewText, showPreview]);
 
-  const insertMergeTag = useCallback(
-    (target: 'subject' | 'body', tag: MergeTagDef) => {
+  // Called by the shared MergeTagPicker with a full `{{ ... }}` string
+  // (e.g. "{{ CheckoutURL }}", "{{ trigger.foo }}", "{{ custom.segment }}").
+  // Subject → append the literal string (renderer substitutes it later; we
+  // don't render chips in plain inputs). Body → insert a MergeTagNode chip
+  // whose tag/label is the inner name parsed from the braces.
+  const handleTagSelect = useCallback(
+    (tagValue: string) => {
+      const target = pickerTarget;
       if (target === 'subject') {
-        // Drop the literal `{{tag}}` into the subject input — the merge
-        // tag renderer downstream substitutes it. We don't render chips
-        // in plain inputs.
-        setSubject((s) => `${s}{{${tag.tag}}}`);
-      } else if (editor) {
+        setSubject((s) => `${s}${tagValue}`);
+      } else if (target === 'body' && editor) {
+        // Parse the inner name (strip {{ }} and optional |fallback).
+        const inner = tagValue.replace(/^\{\{\s*/, '').replace(/\s*\}\}$/, '');
+        const [rawTag, fallback] = inner.split('|');
+        const tag = (rawTag || '').trim();
         (editor.chain() as any).insertMergeTag({
-          tag: tag.tag,
-          label: tag.label,
+          tag,
+          label: tag,
+          fallback: (fallback || '').trim(),
         }).run();
       }
-      setShowVarMenu(null);
+      setPickerTarget(null);
     },
-    [editor],
+    [editor, pickerTarget],
   );
 
   const setLink = useCallback(() => {
@@ -324,8 +344,6 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
     }
     setSubject(restored.subject || restoredTemplate?.subject || '');
     setPreviewText(restored.previewText || restoredTemplate?.preview_text || '');
-    setSenderName(restored.senderName || '');
-    setSenderEmail(restored.senderEmail || '');
     setIsDirty(false);
   }, [editor]);
 
@@ -405,15 +423,28 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
           </button>
         </div>
 
-        <button
-          onClick={() => setShowPreview((v) => !v)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-            showPreview ? 'bg-zinc-900 text-white' : 'text-zinc-700 hover:bg-zinc-100'
-          }`}
-        >
-          <Eye className="w-3.5 h-3.5" />
-          Preview
-        </button>
+        {/* In automation context, open the real-payload preview (lead
+            selection + resolved event data) — same as the block editor.
+            Campaign mode falls back to the inline static preview. */}
+        {flowContext ? (
+          <button
+            onClick={() => setShowFlowPreview(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors text-zinc-700 hover:bg-zinc-100"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Preview
+          </button>
+        ) : (
+          <button
+            onClick={() => setShowPreview((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              showPreview ? 'bg-zinc-900 text-white' : 'text-zinc-700 hover:bg-zinc-100'
+            }`}
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Preview
+          </button>
+        )}
 
         {templateId && (
           <button
@@ -451,13 +482,6 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
           <div className={`mx-auto transition-all ${zenMode ? 'my-12' : 'my-8'} ${device === 'mobile' ? 'max-w-[380px]' : zenMode ? 'max-w-[720px]' : 'max-w-[680px]'}`}>
             {/* Subject preview strip — mimics inbox header */}
             <div className="bg-white rounded-t-lg border border-b-0 border-zinc-200 px-6 py-4">
-              <div className="flex items-baseline gap-2 mb-1">
-                <span className="text-[11px] uppercase tracking-wider text-zinc-400 font-medium">De</span>
-                <span className="text-sm text-zinc-700">
-                  {senderName || (<span className="text-zinc-400 italic">Nome do remetente</span>)}
-                  {senderEmail && <span className="text-zinc-400"> &lt;{senderEmail}&gt;</span>}
-                </span>
-              </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-[11px] uppercase tracking-wider text-zinc-400 font-medium">Assunto</span>
                 <span className="text-sm font-medium text-zinc-900 truncate">
@@ -518,22 +542,13 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
                 <ToolBtn active={editor.isActive('link')} onClick={setLink} title="Link">
                   <LinkIcon className="w-4 h-4" />
                 </ToolBtn>
-                <div className="relative">
-                  <ToolBtn
-                    active={showVarMenu === 'body'}
-                    onClick={() => setShowVarMenu(showVarMenu === 'body' ? null : 'body')}
-                    title="Inserir variável"
-                    refProp={varAnchorRef}
-                  >
-                    <Tag className="w-4 h-4" />
-                  </ToolBtn>
-                  {showVarMenu === 'body' && (
-                    <VariableMenu
-                      onSelect={(t) => insertMergeTag('body', t)}
-                      onClose={() => setShowVarMenu(null)}
-                    />
-                  )}
-                </div>
+                <ToolBtn
+                  active={pickerTarget === 'body'}
+                  onClick={() => setPickerTarget('body')}
+                  title="Inserir variável"
+                >
+                  <Tag className="w-4 h-4" />
+                </ToolBtn>
               </div>
             )}
 
@@ -592,7 +607,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-medium text-zinc-700">Assunto</label>
                 <button
-                  onClick={() => setShowVarMenu(showVarMenu === 'subject' ? null : 'subject')}
+                  onClick={() => setPickerTarget('subject')}
                   className="text-[10px] text-blue-600 hover:text-blue-700 inline-flex items-center gap-1"
                 >
                   <Tag className="w-3 h-3" /> Variável
@@ -605,13 +620,6 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
                   placeholder="Ex: uma nota rápida"
                   className="w-full px-3 py-2 text-sm bg-white border border-zinc-200 rounded-md text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 />
-                {showVarMenu === 'subject' && (
-                  <VariableMenu
-                    onSelect={(t) => insertMergeTag('subject', t)}
-                    onClose={() => setShowVarMenu(null)}
-                    alignRight
-                  />
-                )}
               </div>
               <p className="text-[10px] text-zinc-400 mt-1">Mantenha curto. Lowercase performa melhor em estilo founder-note.</p>
             </div>
@@ -628,61 +636,21 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
               />
             </div>
 
-            {/* Sender */}
-            <div className="pt-4 border-t border-zinc-100 space-y-3">
-              <h4 className="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold">Remetente</h4>
-              <div>
-                <label className="block text-xs font-medium text-zinc-700 mb-1.5">Nome</label>
-                <input
-                  value={senderName}
-                  onChange={(e) => setSenderName(e.target.value)}
-                  placeholder="Ex: Maria da Loja"
-                  className="w-full px-3 py-2 text-sm bg-white border border-zinc-200 rounded-md text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
-                <p className="text-[10px] text-zinc-400 mt-1">Em branco usa o remetente padrão da loja.</p>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-700 mb-1.5">E-mail</label>
-                <input
-                  value={senderEmail}
-                  onChange={(e) => setSenderEmail(e.target.value)}
-                  placeholder="maria@minhaloja.com.br"
-                  type="email"
-                  className="w-full px-3 py-2 text-sm bg-white border border-zinc-200 rounded-md text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
-              </div>
-            </div>
-
-            {/* Variables list (always visible reference) */}
+            {/* Variables — opens the SHARED MergeTagPicker (same canonical /
+                trigger / custom tags as the drag-and-drop editor). */}
             <div className="pt-4 border-t border-zinc-100">
               <h4 className="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold mb-2">Variáveis disponíveis</h4>
-              <div className="space-y-2">
-                {MERGE_TAG_CATEGORIES.map((cat) => {
-                  const tags = MERGE_TAGS.filter((t) => t.category === cat.key);
-                  if (tags.length === 0) return null;
-                  return (
-                    <details key={cat.key} className="group">
-                      <summary className="text-xs font-medium text-zinc-700 cursor-pointer py-1 list-none flex items-center justify-between hover:text-zinc-900">
-                        <span>{cat.label}</span>
-                        <span className="text-zinc-400 text-[10px] group-open:rotate-90 transition-transform">▶</span>
-                      </summary>
-                      <div className="space-y-0.5 mt-1 pl-2">
-                        {tags.map((t) => (
-                          <button
-                            key={t.tag}
-                            onClick={() => insertMergeTag('body', t)}
-                            className="w-full text-left px-2 py-1 text-xs text-zinc-700 hover:bg-blue-50 hover:text-blue-700 rounded transition-colors flex items-center justify-between group/btn"
-                            title={t.description || `Inserir {{${t.tag}}}`}
-                          >
-                            <span className="truncate">{t.label}</span>
-                            <span className="text-[9px] text-zinc-400 font-mono opacity-0 group-hover/btn:opacity-100">{`{{${t.tag}}}`}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </details>
-                  );
-                })}
-              </div>
+              <button
+                onClick={() => setPickerTarget('body')}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md transition-colors"
+              >
+                <Tag className="w-3.5 h-3.5" />
+                Inserir variável
+              </button>
+              <p className="text-[10px] text-zinc-400 mt-2">
+                Abra o seletor para inserir tags canônicas ({`{{ CheckoutURL }}`}), do
+                gatilho e personalizadas. No corpo, digite “/” para o mesmo menu.
+              </p>
             </div>
           </div>
         </aside>
@@ -691,6 +659,29 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
       {/* Slash command palette — rendered at the root so its fixed
           positioning is relative to the viewport, not the canvas. */}
       {slashMenu}
+
+      {/* Shared merge-tag picker — identical tags in both editors. In
+          automation context it shows canonical + trigger + custom tags; in
+          campaign context, canonical + static catalog. onSelect routes to
+          the active target (subject input or body chip). */}
+      <MergeTagPicker
+        isOpen={pickerTarget !== null}
+        onClose={() => setPickerTarget(null)}
+        onSelect={handleTagSelect}
+        context={flowContext ? 'automation' : 'campaign'}
+        triggerType={flowContext?.triggerType}
+      />
+
+      {/* Real-payload live preview (automation only) — lead selection +
+          resolved event data, same as the block editor. */}
+      {showFlowPreview && flowContext && (
+        <EmailPreviewMode
+          templateId={flowContext.templateId}
+          triggerType={flowContext.triggerType}
+          organizationId={flowContext.organizationId}
+          onClose={() => setShowFlowPreview(false)}
+        />
+      )}
 
       {/* Version history */}
       {showHistory && templateId && (
@@ -752,61 +743,4 @@ function ToolBtn({
 
 function Divider() {
   return <div className="w-px h-5 bg-zinc-200 mx-0.5" />;
-}
-
-function VariableMenu({
-  onSelect, onClose, alignRight,
-}: {
-  onSelect: (tag: MergeTagDef) => void;
-  onClose: () => void;
-  alignRight?: boolean;
-}) {
-  // Close on outside click. We capture in the next tick so the click
-  // that opened the menu doesn't also close it.
-  useEffect(() => {
-    const handler = () => onClose();
-    const t = setTimeout(() => document.addEventListener('click', handler), 0);
-    return () => {
-      clearTimeout(t);
-      document.removeEventListener('click', handler);
-    };
-  }, [onClose]);
-
-  const [filter, setFilter] = useState('');
-  const filtered = MERGE_TAGS.filter((t) =>
-    !filter || t.label.toLowerCase().includes(filter.toLowerCase()) || t.tag.toLowerCase().includes(filter.toLowerCase()),
-  );
-
-  return (
-    <div
-      onClick={(e) => e.stopPropagation()}
-      className={`absolute top-full mt-1 ${alignRight ? 'right-0' : 'left-0'} z-50 w-72 bg-white border border-zinc-200 rounded-lg shadow-xl overflow-hidden`}
-    >
-      <div className="p-2 border-b border-zinc-100">
-        <input
-          autoFocus
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Buscar variável…"
-          className="w-full px-2 py-1.5 text-xs border border-zinc-200 rounded text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-blue-500"
-        />
-      </div>
-      <div className="max-h-72 overflow-auto py-1">
-        {filtered.length === 0 ? (
-          <div className="px-3 py-4 text-xs text-zinc-400 text-center">Nenhuma variável encontrada</div>
-        ) : (
-          filtered.map((t) => (
-            <button
-              key={t.tag}
-              onClick={() => onSelect(t)}
-              className="w-full px-3 py-1.5 text-xs text-left hover:bg-blue-50 hover:text-blue-700 flex items-center justify-between transition-colors"
-            >
-              <span className="text-zinc-700">{t.label}</span>
-              <span className="text-[10px] text-zinc-400 font-mono">{`{{${t.tag}}}`}</span>
-            </button>
-          ))
-        )}
-      </div>
-    </div>
-  );
 }

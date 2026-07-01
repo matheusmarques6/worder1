@@ -185,7 +185,9 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
   // editor or automation node config.
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   async function copyVarTag(path: string) {
-    const tag = `{{ trigger.${path} }}`;
+    // Clean namespace {{ event.<path> }} (o alias {{ trigger.<path> }} ainda
+    // resolve para templates criados antes desta mudança).
+    const tag = `{{ event.${path} }}`;
     try { await navigator.clipboard.writeText(tag); } catch {}
     setCopiedPath(path);
     setTimeout(() => setCopiedPath((v) => (v === path ? null : v)), 1500);
@@ -237,7 +239,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
                     type="button"
                     onClick={() => copyVarTag(itemPath)}
                     className="w-full flex items-center gap-2 py-0.5 hover:bg-zinc-50 rounded px-1 -mx-1 group/leaf text-left"
-                    title={`Copiar {{ trigger.${itemPath} }}`}
+                    title={`Copiar {{ event.${itemPath} }}`}
                   >
                     <span className="text-[11px] font-mono text-zinc-400">[{i}]</span>
                     <span className="text-[11px] text-zinc-700 font-mono break-all flex-1">{formatValue(item)}</span>
@@ -259,7 +261,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
           type="button"
           onClick={() => copyVarTag(path)}
           className="w-full flex gap-3 py-[3px] leading-tight hover:bg-zinc-50 rounded px-1 -mx-1 group/leaf text-left"
-          title={`Copiar {{ trigger.${path} }}`}
+          title={`Copiar {{ event.${path} }}`}
         >
           <span className="text-[11px] font-mono text-zinc-500 shrink-0 min-w-[110px]">{key}:</span>
           <span className="text-[11px] text-zinc-900 break-all font-medium flex-1">{formatValue(value)}</span>

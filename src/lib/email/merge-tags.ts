@@ -128,6 +128,46 @@ export const MERGE_TAG_CATEGORIES = [
 ] as const;
 
 // =============================================
+// CANONICAL_TRIGGER_PATHS
+// The 29 canonical merge-tag paths mirrored EXACTLY from the block
+// editor's picker spec (src/components/email-builder/modals/MergeTagPicker.tsx
+// canonicalGroup SPEC). These resolve un-prefixed ({{ CheckoutURL }}) AND
+// as the legacy alias ({{ trigger.CheckoutURL }}). Keep in sync with the
+// picker if the spec changes.
+// =============================================
+export const CANONICAL_TRIGGER_PATHS: string[] = [
+  'CheckoutURL',
+  'ProductURL',
+  'OrderStatusURL',
+  'TotalPrice',
+  'SubtotalPrice',
+  'Currency',
+  'ItemCount',
+  'OrderNumber',
+  'OrderID',
+  'CheckoutID',
+  'Customer.Email',
+  'Customer.FirstName',
+  'Customer.LastName',
+  'Customer.FullName',
+  'Customer.Phone',
+  'Customer.TotalOrders',
+  'Customer.TotalSpent',
+  'Items[0].ProductName',
+  'Items[0].ItemPrice',
+  'Items[0].ImageURL',
+  'Items[0].ProductURL',
+  'Items[0].Quantity',
+  'FinancialStatus',
+  'FulfillmentStatus',
+  'Tracking.Number',
+  'Tracking.URL',
+  'BillingAddress.City',
+  'ShippingAddress.City',
+  'DiscountCodes',
+];
+
+// =============================================
 // resolveTriggerSmartTags
 // Retrocompatibilidade: substitui {{ trigger.* }} legados por valores do
 // event_data. Mantido para templates antigos; o painel usa {{event.*}}.
@@ -208,6 +248,72 @@ export function resolveTriggerSmartTags(html: string, eventData: any, storeUrl?:
     return cur;
   }
 
+  // Resolve a canonical whitelist path from the event data. Shared by the
+  // un-prefixed ({{ CheckoutURL }}) and prefixed ({{ trigger.CheckoutURL }})
+  // resolvers so both forms yield identical values.
+  function resolveCanonicalPath(path: string): string | undefined {
+    const segments = path
+      .replace(/\[(\d+)\]/g, '.$1') // Items[0] -> Items.0
+      .split('.')
+      .filter(Boolean);
+    let value: any = getPath(ev, segments);
+    if (value === undefined || value === null) value = getPath(props, segments);
+    if (value === undefined || value === null) value = getPath(raw, segments);
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'object') return undefined;
+    return String(value);
+  }
+
+  // CANONICAL WHITELIST — the exact 29 paths the block editor's picker
+  // (MergeTagPicker canonicalGroup) offers as un-prefixed tags. Only these
+  // paths resolve WITHOUT the `trigger.` prefix; every other un-prefixed
+  // `{{ something }}` is left untouched so flat contact tags like
+  // {{ email }} / {{ first_name }} (resolved later by renderMergeTags from
+  // mergeData) are NOT clobbered. The whitelist is PascalCase/dotted and
+  // collision-free with the flat snake_case tags.
+  for (const path of CANONICAL_TRIGGER_PATHS) {
+    const value = resolveCanonicalPath(path);
+    if (value === undefined) continue;
+    const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match BOTH {{ Path }} and {{ trigger.Path }} (optional whitespace),
+    // e.g. {{CheckoutURL}}, {{ CheckoutURL }}, {{ trigger.CheckoutURL }}.
+    const re = new RegExp(`\\{\\{\\s*(?:trigger\\.)?${escapedPath}\\s*\\}\\}`, 'g');
+    result = result.replace(re, value);
+  }
+
+  // Clean namespace for auto-detected / raw event fields: {{ event.<path> }}.
+  // This is the CLEAN form the picker + preview now emit for every payload
+  // leaf (e.g. {{ event.raw.abandoned_checkout_url }}), replacing the
+  // {{ trigger.<path> }} form (which stays as an alias below).
+  //
+  // ⚠️ NON-CONSUMING on miss: if the path isn't present in THIS event, we
+  // leave the tag intact so renderMergeTags can still resolve the curated
+  // `event.*` subset that send-campaign-email flattens into mergeData
+  // (e.g. {{ event.ProductName }}). Otherwise we'd empty those tags.
+  result = result.replace(
+    /\{\{\s*event\.([a-zA-Z0-9_.\[\]]+)\s*\}\}/g,
+    (match, path: string) => {
+      try {
+        const segments = path
+          .replace(/\[(\d+)\]/g, '.$1')
+          .split('.')
+          .filter(Boolean);
+        let value: any = getPath(ev, segments);
+        if (value === undefined || value === null) value = getPath(props, segments);
+        if (value === undefined || value === null) value = getPath(raw, segments);
+        if (value === undefined || value === null) return match; // deixa p/ renderMergeTags
+        if (typeof value === 'object') return match;
+        return String(value);
+      } catch {
+        return match;
+      }
+    }
+  );
+
+  // Legacy alias: {{ trigger.<path> }} — resolve the same deep paths so
+  // every email already built with the trigger. prefix keeps working until
+  // users migrate to the clean {{ event.* }} / {{ CheckoutURL }} forms.
+  // Consuming on miss (historical behavior).
   result = result.replace(
     /\{\{\s*trigger\.([a-zA-Z0-9_.\[\]]+)\s*\}\}/g,
     (_match, path: string) => {

@@ -8,6 +8,43 @@ const MERGE_ICON_MAP: Record<string, LucideIcon> = {
   User, Store, Package, ShoppingCart, Tag, Link, Zap, ShoppingBag, Sparkles, Database,
 }
 
+// Canonical merge-tag spec — the STABLE cross-integration set. Clean form is
+// un-prefixed ({{ CheckoutURL }}); resolveTriggerSmartTags resolves these both
+// un-prefixed AND via the legacy {{ trigger.* }} alias. Kept at module scope so
+// the auto-discovered "Tags do Gatilho" group can dedup against it.
+const CANONICAL_SPEC: { tag: string; path: string; description: string }[] = [
+  { tag: 'CheckoutURL', path: 'CheckoutURL', description: 'Link de recuperação do checkout.' },
+  { tag: 'ProductURL', path: 'ProductURL', description: 'URL do produto.' },
+  { tag: 'OrderStatusURL', path: 'OrderStatusURL', description: 'Página de status do pedido.' },
+  { tag: 'TotalPrice', path: 'TotalPrice', description: 'Total do checkout/pedido.' },
+  { tag: 'SubtotalPrice', path: 'SubtotalPrice', description: 'Subtotal antes de taxas.' },
+  { tag: 'Currency', path: 'Currency', description: 'Moeda (BRL, USD, GBP).' },
+  { tag: 'ItemCount', path: 'ItemCount', description: 'Quantidade total de itens.' },
+  { tag: 'OrderNumber', path: 'OrderNumber', description: 'Número do pedido.' },
+  { tag: 'OrderID', path: 'OrderID', description: 'ID do pedido.' },
+  { tag: 'CheckoutID', path: 'CheckoutID', description: 'ID do checkout.' },
+  { tag: 'Customer.Email', path: 'Customer.Email', description: 'Email do cliente.' },
+  { tag: 'Customer.FirstName', path: 'Customer.FirstName', description: 'Primeiro nome.' },
+  { tag: 'Customer.LastName', path: 'Customer.LastName', description: 'Sobrenome.' },
+  { tag: 'Customer.FullName', path: 'Customer.FullName', description: 'Nome completo.' },
+  { tag: 'Customer.Phone', path: 'Customer.Phone', description: 'Telefone.' },
+  { tag: 'Customer.TotalOrders', path: 'Customer.TotalOrders', description: 'Total de pedidos do cliente.' },
+  { tag: 'Customer.TotalSpent', path: 'Customer.TotalSpent', description: 'Total gasto pelo cliente.' },
+  { tag: 'Items[0].ProductName', path: 'Items[0].ProductName', description: 'Nome do primeiro produto.' },
+  { tag: 'Items[0].ItemPrice', path: 'Items[0].ItemPrice', description: 'Preço do primeiro produto.' },
+  { tag: 'Items[0].ImageURL', path: 'Items[0].ImageURL', description: 'Imagem do primeiro produto.' },
+  { tag: 'Items[0].ProductURL', path: 'Items[0].ProductURL', description: 'Link do primeiro produto.' },
+  { tag: 'Items[0].Quantity', path: 'Items[0].Quantity', description: 'Quantidade do primeiro produto.' },
+  { tag: 'FinancialStatus', path: 'FinancialStatus', description: 'Status financeiro.' },
+  { tag: 'FulfillmentStatus', path: 'FulfillmentStatus', description: 'Status de envio.' },
+  { tag: 'Tracking.Number', path: 'Tracking.Number', description: 'Código de rastreio.' },
+  { tag: 'Tracking.URL', path: 'Tracking.URL', description: 'Link de rastreio.' },
+  { tag: 'BillingAddress.City', path: 'BillingAddress.City', description: 'Cidade de cobrança.' },
+  { tag: 'ShippingAddress.City', path: 'ShippingAddress.City', description: 'Cidade de entrega.' },
+  { tag: 'DiscountCodes', path: 'DiscountCodes', description: 'Cupons aplicados.' },
+]
+const CANONICAL_PATH_SET = new Set(CANONICAL_SPEC.map(s => s.path))
+
 interface MergeTagPickerProps {
   isOpen: boolean
   onClose: () => void
@@ -77,17 +114,23 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
   }, [isOpen, isAutomation, triggerType])
 
   // Build a virtual "Tags do Gatilho" group from auto-discovered paths.
-  // Each path becomes a {{ trigger.<path> }} merge tag — same syntax the
-  // event property tree in EmailPreviewMode copies, and the same syntax
-  // resolveTriggerSmartTags + the rendering pipeline understand.
+  // Clean namespace: each payload leaf becomes {{ event.<path> }} (the same
+  // syntax EmailPreviewMode's tree copies and resolveTriggerSmartTags
+  // resolves). The legacy {{ trigger.<path> }} form still resolves as an
+  // alias for templates built before this change. Paths already covered by
+  // the canonical group are de-duplicated out so each field appears once.
   const triggerGroup = useMemo(() => {
     if (!isAutomation || discovered.length === 0) return null
+    const cleaned = discovered
+      .map(d => ({ d, clean: d.path.replace(/^trigger\./, '') }))
+      .filter(({ clean }) => !CANONICAL_PATH_SET.has(clean))
+    if (cleaned.length === 0) return null
     return {
-      name: `Tags do Gatilho (${discovered.length})`,
+      name: `Tags do Gatilho (${cleaned.length})`,
       icon: 'Zap',
-      tags: discovered.map(d => ({
-        name: d.path.replace(/^trigger\./, ''),
-        value: `{{ ${d.path} }}`,
+      tags: cleaned.map(({ d, clean }) => ({
+        name: clean,
+        value: `{{ event.${clean} }}`,
         sample: d.sample === null
           ? 'null'
           : typeof d.sample === 'object'
@@ -118,44 +161,16 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
   // these names work forever without modification.
   const canonicalGroup = useMemo(() => {
     if (!isAutomation) return null
-    // Static import would create a cycle; we inline the spec here.
-    const SPEC: { tag: string; path: string; description: string }[] = [
-      { tag: 'CheckoutURL', path: 'CheckoutURL', description: 'Link de recuperação do checkout.' },
-      { tag: 'ProductURL', path: 'ProductURL', description: 'URL do produto.' },
-      { tag: 'OrderStatusURL', path: 'OrderStatusURL', description: 'Página de status do pedido.' },
-      { tag: 'TotalPrice', path: 'TotalPrice', description: 'Total do checkout/pedido.' },
-      { tag: 'SubtotalPrice', path: 'SubtotalPrice', description: 'Subtotal antes de taxas.' },
-      { tag: 'Currency', path: 'Currency', description: 'Moeda (BRL, USD, GBP).' },
-      { tag: 'ItemCount', path: 'ItemCount', description: 'Quantidade total de itens.' },
-      { tag: 'OrderNumber', path: 'OrderNumber', description: 'Número do pedido.' },
-      { tag: 'OrderID', path: 'OrderID', description: 'ID do pedido.' },
-      { tag: 'CheckoutID', path: 'CheckoutID', description: 'ID do checkout.' },
-      { tag: 'Customer.Email', path: 'Customer.Email', description: 'Email do cliente.' },
-      { tag: 'Customer.FirstName', path: 'Customer.FirstName', description: 'Primeiro nome.' },
-      { tag: 'Customer.LastName', path: 'Customer.LastName', description: 'Sobrenome.' },
-      { tag: 'Customer.FullName', path: 'Customer.FullName', description: 'Nome completo.' },
-      { tag: 'Customer.Phone', path: 'Customer.Phone', description: 'Telefone.' },
-      { tag: 'Customer.TotalOrders', path: 'Customer.TotalOrders', description: 'Total de pedidos do cliente.' },
-      { tag: 'Customer.TotalSpent', path: 'Customer.TotalSpent', description: 'Total gasto pelo cliente.' },
-      { tag: 'Items[0].ProductName', path: 'Items[0].ProductName', description: 'Nome do primeiro produto.' },
-      { tag: 'Items[0].ItemPrice', path: 'Items[0].ItemPrice', description: 'Preço do primeiro produto.' },
-      { tag: 'Items[0].ImageURL', path: 'Items[0].ImageURL', description: 'Imagem do primeiro produto.' },
-      { tag: 'Items[0].ProductURL', path: 'Items[0].ProductURL', description: 'Link do primeiro produto.' },
-      { tag: 'Items[0].Quantity', path: 'Items[0].Quantity', description: 'Quantidade do primeiro produto.' },
-      { tag: 'FinancialStatus', path: 'FinancialStatus', description: 'Status financeiro.' },
-      { tag: 'FulfillmentStatus', path: 'FulfillmentStatus', description: 'Status de envio.' },
-      { tag: 'Tracking.Number', path: 'Tracking.Number', description: 'Código de rastreio.' },
-      { tag: 'Tracking.URL', path: 'Tracking.URL', description: 'Link de rastreio.' },
-      { tag: 'BillingAddress.City', path: 'BillingAddress.City', description: 'Cidade de cobrança.' },
-      { tag: 'ShippingAddress.City', path: 'ShippingAddress.City', description: 'Cidade de entrega.' },
-      { tag: 'DiscountCodes', path: 'DiscountCodes', description: 'Cupons aplicados.' },
-    ]
     return {
-      name: `Tags Worder (canônicas) (${SPEC.length})`,
+      name: `Tags Worder (canônicas) (${CANONICAL_SPEC.length})`,
       icon: 'Zap',
-      tags: SPEC.map(s => ({
+      tags: CANONICAL_SPEC.map(s => ({
+        // Canonical form is un-prefixed ({{ CheckoutURL }}). The send
+        // pipeline (resolveTriggerSmartTags) resolves the whitelist both
+        // un-prefixed and via the legacy {{ trigger.* }} alias, so existing
+        // templates keep working while new ones stay clean/portable.
         name: s.tag,
-        value: `{{ trigger.${s.path} }}`,
+        value: `{{ ${s.path} }}`,
         sample: s.description,
         hint: 'sempre disponível',
       })),

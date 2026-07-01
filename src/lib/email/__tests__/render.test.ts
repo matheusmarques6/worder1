@@ -125,6 +125,47 @@ describe('resolveTriggerSmartTags', () => {
     expect(out1).toBe('1');
     expect(out2).toBe('1');
   });
+
+  // ── Canonical un-prefixed tags + trigger.* alias (product decision) ──
+  describe('canonical whitelist ({{ CheckoutURL }} + {{ trigger.CheckoutURL }} alias)', () => {
+    const ev = {
+      properties: {
+        CheckoutURL: 'https://shop.com/recover/xyz',
+        Customer: { Email: 'maria@email.com' },
+        Items: [{ ProductName: 'Camiseta Black' }],
+      },
+    };
+
+    it('resolves un-prefixed {{ CheckoutURL }}', () => {
+      expect(resolveTriggerSmartTags('Link: {{ CheckoutURL }}', ev)).toBe('Link: https://shop.com/recover/xyz');
+      // whitespace tolerance both ways
+      expect(resolveTriggerSmartTags('{{CheckoutURL}}', ev)).toBe('https://shop.com/recover/xyz');
+    });
+
+    it('keeps {{ trigger.CheckoutURL }} working as an alias', () => {
+      expect(resolveTriggerSmartTags('{{ trigger.CheckoutURL }}', ev)).toBe('https://shop.com/recover/xyz');
+    });
+
+    it('preserves a literal suffix appended to the tag', () => {
+      const out = resolveTriggerSmartTags('{{ CheckoutURL }}&discount=DISCOUNT10', ev);
+      expect(out).toBe('https://shop.com/recover/xyz&discount=DISCOUNT10');
+      // and the aliased form too
+      const out2 = resolveTriggerSmartTags('{{ trigger.CheckoutURL }}&discount=DISCOUNT10', ev);
+      expect(out2).toBe('https://shop.com/recover/xyz&discount=DISCOUNT10');
+    });
+
+    it('resolves dotted + indexed whitelist paths un-prefixed', () => {
+      expect(resolveTriggerSmartTags('{{ Customer.Email }}', ev)).toBe('maria@email.com');
+      expect(resolveTriggerSmartTags('{{ Items[0].ProductName }}', ev)).toBe('Camiseta Black');
+    });
+
+    it('leaves NON-whitelist un-prefixed tags UNTOUCHED (no clobber)', () => {
+      // Flat contact tags like {{ email }} / {{ first_name }} are resolved
+      // later by renderMergeTags from mergeData — resolveTriggerSmartTags
+      // must not empty them.
+      expect(resolveTriggerSmartTags('{{ email }} {{ first_name }}', ev)).toBe('{{ email }} {{ first_name }}');
+    });
+  });
 });
 
 describe('rewriteUrlsForTracking — Onda 14 hotfix', () => {
