@@ -355,6 +355,11 @@ async function handleExecuteRun(runId: string) {
       dealId: metadata.deal_id,
       context: previousContext || {
         organizationId,  // ← INCLUIR NO CONTEXTO
+        // Store-scope do remetente no path legado: o EventBus/event-processor
+        // grava a loja em metadata.store_id (automation_runs não tem coluna
+        // store_id). Sem isso, node-executors cai no remetente default da org
+        // em vez da identidade da loja (defesa-em-profundidade do fix cross-loja).
+        storeId: metadata.store_id || (automation as any)?.store_id || null,
         contact: contact ? {
           id: contact.id,
           email: contact.email,
