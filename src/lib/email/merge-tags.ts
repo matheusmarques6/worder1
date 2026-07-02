@@ -15,6 +15,8 @@
 //  o painel deve mostrar somente as tags reais/funcionais.)
 // =============================================
 
+import { normalizeHost, getShopDomain, absolutizeSiteUrl } from './trigger-cta';
+
 export interface MergeTag {
   tag: string;
   label: string;
@@ -324,11 +326,21 @@ export function resolveTriggerSmartTags(
   const props = ev.properties || ev;
   const raw = props.raw || ev.raw || {};
 
+  // Store host for absolutizing SITE-RELATIVE urls (e.g. ProductURL that came
+  // through as "/products/<handle>"). Prefer the explicit storeUrl passed by
+  // the caller (resolved from shopify_stores.shop_domain), else derive it from
+  // the event payload. Without a host, values are left untouched.
+  const shopHost = normalizeHost(storeUrl) || getShopDomain(eventData);
+  const isUrlLeaf = (path: string) => /url$/i.test(path.split(/[.\[]/).filter(Boolean).pop() || '');
+
   // Smart values come from computeSmartTagValue (single source shared with
   // the automation variable engine). This resolver applies the email-channel
   // defaults on a miss: link falls back to the store URL / '#', counts to
   // '0', everything else to '' (historical consuming behavior).
-  const link = computeSmartTagValue(eventData, 'trigger.link') ?? (storeUrl || '#');
+  const link = absolutizeSiteUrl(
+    computeSmartTagValue(eventData, 'trigger.link') ?? (storeUrl || '#'),
+    shopHost
+  );
   const firstImage = computeSmartTagValue(eventData, 'trigger.first_item_image') ?? '';
   const firstName = computeSmartTagValue(eventData, 'trigger.first_item_name') ?? '';
   const firstPrice = computeSmartTagValue(eventData, 'trigger.first_item_price') ?? '';
@@ -413,7 +425,10 @@ export function resolveTriggerSmartTags(
   // mergeData) are NOT clobbered. The whitelist is PascalCase/dotted and
   // collision-free with the flat snake_case tags.
   for (const path of CANONICAL_TRIGGER_PATHS) {
-    const value = resolveCanonicalPath(path);
+    let value = resolveCanonicalPath(path);
+    // Absolutize URL-typed canonical tags (…URL) so a relative "/products/x"
+    // becomes "https://<store>/products/x" instead of hitting the app domain.
+    if (value !== undefined && isUrlLeaf(path)) value = absolutizeSiteUrl(value, shopHost);
     const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // Match BOTH {{ Path }} and {{ trigger.Path }} (optional whitespace),
     // with an optional |fallback group, e.g. {{CheckoutURL}},
@@ -448,7 +463,9 @@ export function resolveTriggerSmartTags(
         if (value === undefined || value === null) value = getPath(raw, segments);
         if (value === undefined || value === null) return match; // deixa p/ renderMergeTags
         if (typeof value === 'object') return match;
-        return esc(String(value));
+        // Absolutize a site-relative value (e.g. {{ event.ProductURL }} =
+        // "/products/<handle>") so the link points at the store, not the app.
+        return esc(absolutizeSiteUrl(String(value), shopHost));
       } catch {
         return match;
       }
@@ -472,7 +489,7 @@ export function resolveTriggerSmartTags(
         if (value === undefined || value === null) value = getPath(raw, segments);
         if (value === undefined || value === null) return '';
         if (typeof value === 'object') return '';
-        return esc(String(value));
+        return esc(absolutizeSiteUrl(String(value), shopHost));
       } catch {
         return '';
       }

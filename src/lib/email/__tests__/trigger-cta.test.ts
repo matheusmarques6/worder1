@@ -8,6 +8,7 @@ import {
   getShopDomain,
   resolveTriggerCtaUrl,
   isManualCtaOverride,
+  absolutizeSiteUrl,
 } from '../trigger-cta'
 
 describe('triggerFamily', () => {
@@ -137,6 +138,34 @@ describe('resolveTriggerCtaUrl', () => {
     expect(resolveTriggerCtaUrl({ triggerType: 'trigger_added_to_cart', shopDomain, items: [] }))
       .toBe('https://shop.myshopify.com')
     expect(resolveTriggerCtaUrl({ triggerType: 'generic' })).toBe('')
+  })
+})
+
+describe('absolutizeSiteUrl', () => {
+  const host = 'drgroot.com.br'
+  it('prepends the store host to a site-relative /products path', () => {
+    expect(absolutizeSiteUrl('/products/dr-groot-shampoo', host))
+      .toBe('https://drgroot.com.br/products/dr-groot-shampoo')
+  })
+  it('leaves absolute URLs untouched', () => {
+    expect(absolutizeSiteUrl('https://loja.com/products/x', host)).toBe('https://loja.com/products/x')
+    expect(absolutizeSiteUrl('http://loja.com/x', host)).toBe('http://loja.com/x')
+  })
+  it('leaves mailto/tel/#/plain text untouched', () => {
+    expect(absolutizeSiteUrl('mailto:a@b.com', host)).toBe('mailto:a@b.com')
+    expect(absolutizeSiteUrl('#', host)).toBe('#')
+    expect(absolutizeSiteUrl('Camiseta Preta', host)).toBe('Camiseta Preta')
+  })
+  it('handles protocol-relative //', () => {
+    expect(absolutizeSiteUrl('//cdn.com/a.png', host)).toBe('https://cdn.com/a.png')
+  })
+  it('no-op when there is no host', () => {
+    expect(absolutizeSiteUrl('/products/x', '')).toBe('/products/x')
+    expect(absolutizeSiteUrl('/products/x', null)).toBe('/products/x')
+  })
+  it('empty stays empty', () => {
+    expect(absolutizeSiteUrl('', host)).toBe('')
+    expect(absolutizeSiteUrl(null, host)).toBe('')
   })
 })
 

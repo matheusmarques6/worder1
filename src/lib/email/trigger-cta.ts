@@ -131,6 +131,27 @@ export function getShopDomain(eventData?: Record<string, any> | null): string {
   )
 }
 
+/**
+ * Absolutize a SITE-RELATIVE url against the store host so email links never
+ * resolve against the Worder app domain (the cause of the 404 when
+ * {{ event.ProductURL }} came through as "/products/<handle>"). Leaves
+ * absolute URLs, mailto:/tel:/#, and plain non-path text untouched.
+ */
+export function absolutizeSiteUrl(value: string | null | undefined, host?: string | null): string {
+  const s = value == null ? '' : String(value)
+  if (!s) return s
+  const h = normalizeHost(host)
+  if (!h) return s
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s // already absolute (http(s)://, etc.)
+  if (/^(mailto:|tel:|sms:|#)/i.test(s)) return s
+  if (s.startsWith('//')) return `https:${s}` // protocol-relative
+  // site-relative path → prepend host. Require no whitespace: a real URL path
+  // never contains spaces, so a free-text value like "/ minha anotação" that a
+  // merchant happened to start with "/" is left untouched.
+  if (s.startsWith('/') && !/\s/.test(s)) return `${h}${s}`
+  return s // bare text (not a path) — leave as-is
+}
+
 export interface CtaInput {
   triggerType?: string | null
   family?: TriggerFamily

@@ -195,7 +195,7 @@ export async function sendCampaignEmail({
     let htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, contactId, eventData);
     // Pass eventData so the cart block can adapt to the active trigger
     // (cart vs checkout vs browse vs order) via trigger_auto feed type.
-    htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, contactId, eventData, triggerType);
+    htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, contactId, eventData, triggerType, mergeData.store_url);
     // Resolve {{ trigger.link }}, {{ trigger.first_item_image }} etc.
     // — smart tags that adapt the right URL/title/image to whichever
     // event fired the email.
@@ -204,7 +204,9 @@ export async function sendCampaignEmail({
       // escapeHtml: substituted values are HTML — escape & < > " ' (XSS).
       // URLs stay functional: render.ts's decodeHtmlEntitiesInUrl un-escapes
       // hrefs before the click-tracking encoding.
-      htmlWithProducts = resolveTriggerSmartTags(htmlWithProducts, eventData, undefined, { escapeHtml: true });
+      // store_url → absolutizes site-relative URLs (e.g. {{ event.ProductURL }}
+      // = "/products/x") against the store domain so links don't 404 on the app.
+      htmlWithProducts = resolveTriggerSmartTags(htmlWithProducts, eventData, mergeData.store_url, { escapeHtml: true });
     }
 
     // 3. Prepare HTML with merge tags, tracking, unsubscribe
@@ -222,7 +224,7 @@ export async function sendCampaignEmail({
     let subjectSrc = subject;
     if (eventData) {
       const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
-      subjectSrc = resolveTriggerSmartTags(subjectSrc, eventData);
+      subjectSrc = resolveTriggerSmartTags(subjectSrc, eventData, mergeData.store_url);
     }
     const { renderMergeTags } = await import('@/lib/email/render');
     // escape:false — the subject is text/plain: escaping would ship a
@@ -261,7 +263,7 @@ export async function sendCampaignEmail({
         // stripped as an unresolved tag.
         if (eventData) {
           const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
-          textSrc = resolveTriggerSmartTags(textSrc, eventData);
+          textSrc = resolveTriggerSmartTags(textSrc, eventData, mergeData.store_url);
         }
         const { renderPlainWithMergeData } = await import('@/lib/email/text-render');
         finalText = renderPlainWithMergeData(textSrc, mergeData);

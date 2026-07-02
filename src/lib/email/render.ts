@@ -526,9 +526,12 @@ export async function resolveCartBlocks(
    *  provided, the CTA link adapts to it (checkout recovery / cart permalink /
    *  product page / order status). When absent (campaign broadcast), the
    *  family is inferred from the event payload. */
-  triggerType?: string | null
+  triggerType?: string | null,
+  /** The store's public URL (e.g. https://drgroot.com.br) used to absolutize
+   *  site-relative product URLs so links never 404 on the app domain. */
+  storeUrl?: string | null
 ): Promise<string> {
-  const { triggerFamily, resolveTriggerCtaUrl, getShopDomain, isManualCtaOverride } =
+  const { triggerFamily, resolveTriggerCtaUrl, getShopDomain, isManualCtaOverride, absolutizeSiteUrl, normalizeHost } =
     await import('@/lib/email/trigger-cta')
   const regex = /<!-- WORDER_CART_BLOCK:([^ ]*?) -->/g
   let result = html
@@ -722,7 +725,7 @@ export async function resolveCartBlocks(
     //   permalink with ALL the items (/cart/variant:qty…); viewed/browse →
     //   the product page; order → order status. A manual buttonHref (that
     //   isn't one of the legacy auto placeholders) still wins as an override.
-    const shopDomain = getShopDomain(eventData)
+    const shopDomain = normalizeHost(storeUrl) || getShopDomain(eventData)
     const family = triggerFamily(triggerType)
     const permalinkItems = products.map((p: any) => ({ variant_id: p.variant_id, quantity: p.quantity }))
     const orderStatusUrl: string = props.OrderStatusURL || props.order_status_url || raw.order_status_url || ''
@@ -732,7 +735,7 @@ export async function resolveCartBlocks(
       eventCheckoutUrl,
       shopDomain,
       items: permalinkItems,
-      productUrl: (props.ProductURL || props.product_url || products[0]?.url || '') as string,
+      productUrl: absolutizeSiteUrl((props.ProductURL || props.product_url || products[0]?.url || '') as string, shopDomain),
       orderStatusUrl,
     })
 
@@ -759,7 +762,7 @@ export async function resolveCartBlocks(
         prod.product?.variant_images_url ||
         prod.product?.image?.src ||
         ''
-      const prodUrl = prod.url || (prod.handle ? `/products/${prod.handle}` : '#')
+      const prodUrl = absolutizeSiteUrl(prod.url || (prod.handle ? `/products/${prod.handle}` : '#'), shopDomain)
       // Button href, in priority order:
       //   1) manual override (a real custom link set by the user)
       //   2) an explicit per-product checkout/recovery URL on the item

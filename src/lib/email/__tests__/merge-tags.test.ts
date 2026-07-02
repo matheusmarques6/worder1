@@ -16,6 +16,34 @@ const eventData = {
   },
 };
 
+describe('resolveTriggerSmartTags — absolutização de URL do produto', () => {
+  // Regressão: {{ event.ProductURL }} vinha como "/products/<slug>" e o clique
+  // resolvia contra o domínio do app (404). Deve virar URL absoluta da loja.
+  const relEvent = { properties: { ProductURL: '/products/dr-groot-shampoo' } };
+
+  it('absolutiza {{ event.ProductURL }} relativo contra a loja (storeUrl)', () => {
+    expect(resolveTriggerSmartTags('{{ event.ProductURL }}', relEvent, 'https://drgroot.com.br'))
+      .toBe('https://drgroot.com.br/products/dr-groot-shampoo');
+  });
+
+  it('absolutiza a canônica {{ ProductURL }} relativa', () => {
+    expect(resolveTriggerSmartTags('{{ ProductURL }}', relEvent, 'https://drgroot.com.br'))
+      .toBe('https://drgroot.com.br/products/dr-groot-shampoo');
+  });
+
+  it('não altera uma ProductURL que já é absoluta', () => {
+    const abs = { properties: { ProductURL: 'https://loja.com/products/x' } };
+    expect(resolveTriggerSmartTags('{{ event.ProductURL }}', abs, 'https://drgroot.com.br'))
+      .toBe('https://loja.com/products/x');
+  });
+
+  it('deriva a loja do próprio evento quando storeUrl não é passado', () => {
+    const evWithStore = { properties: { ProductURL: '/products/x', StoreURL: 'https://minha-loja.com.br' } };
+    expect(resolveTriggerSmartTags('{{ event.ProductURL }}', evWithStore))
+      .toBe('https://minha-loja.com.br/products/x');
+  });
+});
+
 describe('resolveTriggerSmartTags — tags universais + aliases', () => {
   it('resolve a canônica SEM prefixo ({{ CheckoutURL }})', () => {
     expect(resolveTriggerSmartTags('{{ CheckoutURL }}', eventData)).toBe(
