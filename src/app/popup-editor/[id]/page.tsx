@@ -15,7 +15,12 @@ import {
   Bold, Italic, Underline, Link2, ExternalLink, Sparkles,
   SlidersHorizontal, Layers, Square, Sun, CornerDownRight,
   MoveHorizontal, MoveVertical, Check, MoreHorizontal, Pencil,
+  AlertTriangle,
 } from 'lucide-react'
+import {
+  type HistoryState, historySeed, historyPush, historyUndo, historyRedo, canUndo, canRedo,
+  isBlockTypeDrag, mergeBlockProps, repairDesignSteps, countdownValues,
+} from '../editor-utils'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Block { id: string; type: string; props: Record<string, any> }
@@ -108,6 +113,9 @@ interface PopupDesign {
     closeDelay: number
   }
   successMessage?: string
+  /** Merchant-configurable message shown by the runtime when the submit fails.
+   *  Empty → runtime falls back to a neutral default. */
+  errorMessage?: string
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
@@ -234,8 +242,8 @@ const defaultProps: Record<string, Record<string, any>> = {
   button: { text: 'QUERO MEU DESCONTO', bgColor: '#F97316', textColor: '#fff', fontSize: 15, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 14, paddingH: 28 },
   image: { src: '', alt: '', imgWidth: 100, maxHeight: 300, borderRadius: 0, align: 'center', padding: 0 },
   spacer: { height: 24 },
-  line: { color: '#E5E7EB', thickness: 1, style: 'solid' },
-  coupon: { code: 'DESCONTO10', description: 'Seu cupom de desconto:', bgColor: '#FFF7ED', borderColor: '#F97316', fontSize: 20 },
+  line: { color: '#E5E7EB', thickness: 1, style: 'solid', width: 100 },
+  coupon: { code: 'DESCONTO10', description: 'Seu cupom de desconto:', bgColor: '#FFF7ED', borderColor: '#F97316', borderStyle: 'dashed', fontSize: 20 },
   countdown: { endDate: '', style: 'dark', numberColor: '#FFFFFF', labelColor: '#9CA3AF', boxColor: '#1F2937', fontSize: 28, labels: { days: 'DIAS', hours: 'HORAS', minutes: 'MIN', seconds: 'SEG' } },
 }
 
@@ -285,7 +293,12 @@ const defaultDesign: PopupDesign = {
   },
   postSubmit: { action: 'show-success', redirectUrl: '', closeDelay: 4 },
   successMessage: '',
+  errorMessage: '',
 }
+
+// Render-safety fallback when design.steps is empty AND the active index is
+// stale (e.g. right after an undo that removed steps). Stable ID: hydration.
+const EMPTY_FALLBACK_STEP: Step = { id: 'empty-fallback-step', name: 'Etapa 1', blocks: [] }
 
 // ── Small helpers ──────────────────────────────────────────────────────────────
 function Section({ title, children, defaultOpen = false, noPadding = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean; noPadding?: boolean }) {
@@ -368,7 +381,9 @@ function buildInputStyle(p: any): React.CSSProperties {
     color: p.textColor || '#111827',
     fontFamily: p.fontFamily && p.fontFamily !== 'inherit' ? p.fontFamily : 'inherit',
     fontSize: p.fontSize || 14,
-    fontWeight: p.bold ? 700 : 400,
+    // `bold` (script-side prop) wins; otherwise honor the "Peso" select
+    // (inputFontWeight) so the preview reflects what the merchant picked.
+    fontWeight: p.bold ? 700 : (Number(p.inputFontWeight) || 400),
     fontStyle: p.italic ? 'italic' : 'normal',
     textDecoration: p.underline ? 'underline' : 'none',
     textAlign: (p.textAlign || 'left') as any,
@@ -665,19 +680,30 @@ function BlockPreview({ block, selected, onContentChange, onSelect }: { block: B
         {p.href ? <a href={p.href} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block' }}>{imgEl}</a> : imgEl}
       </div>
     }
-    case 'spacer': return <div style={{ ...blockStyle, height: p.height || 24 }} />
-    case 'line': return <div style={blockStyle}><hr style={{ border: 'none', borderTop: `${p.thickness || 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'}`, margin: 0 }} /></div>
+    // Legacy spacers without the prop render 16px on the storefront — match it.
+    // New inserts carry an explicit height: 24 in defaultProps.
+    case 'spacer': return <div style={{ ...blockStyle, height: p.height ?? 16 }} />
+    case 'line': return <div style={blockStyle}><hr style={{ border: 'none', borderTop: `${p.thickness || 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'}`, margin: '0 auto', width: `${p.width ?? 100}%` }} /></div>
     case 'coupon':
-      return <div style={{ ...blockStyle, padding: '16px', border: `2px dashed ${p.borderColor || '#F97316'}`, borderRadius: p.borderRadius ?? 8, textAlign: 'center', background: p.bgColor || '#FFF7ED' }}>
+      return <div style={{ ...blockStyle, padding: '16px', border: `2px ${p.borderStyle || 'dashed'} ${p.borderColor || '#F97316'}`, borderRadius: p.borderRadius ?? 8, textAlign: 'center', background: p.bgColor || '#FFF7ED' }}>
         <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 4px' }}>{p.description}</p>
         <p onClick={() => { navigator.clipboard?.writeText(p.code || ''); }}
           style={{ fontSize: p.fontSize || 20, fontWeight: 700, color: p.codeColor || '#F97316', letterSpacing: 2, margin: 0, cursor: 'pointer' }}
           title="Clique para copiar">{p.code}</p>
       </div>
     case 'countdown': {
-      const vals = ['03', '12', '45', '30']
+      // Real remaining time (what the storefront shows). No endDate → zeros +
+      // warning icon so the merchant sees the timer would render dead on site.
+      const vals = countdownValues(p.endDate)
       const lbls = p.labels || { days: 'DIAS', hours: 'HORAS', minutes: 'MIN', seconds: 'SEG' }
-      return <div style={{ ...blockStyle, textAlign: 'center', padding: '16px', backgroundColor: p.boxColor || '#1F2937', borderRadius: 8 }}><div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>{vals.map((v, i) => (<span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{i > 0 && <span style={{ color: p.labelColor || '#9CA3AF', fontSize: 20, fontWeight: 700 }}>:</span>}<span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}><span style={{ fontSize: p.fontSize || 28, fontWeight: 800, color: p.numberColor || '#FFFFFF', lineHeight: 1 }}>{v}</span><span style={{ fontSize: 9, color: p.labelColor || '#9CA3AF', marginTop: 4, letterSpacing: 1 }}>{[lbls.days, lbls.hours, lbls.minutes, lbls.seconds][i]}</span></span></span>))}</div></div>
+      return <div style={{ ...blockStyle, position: 'relative', textAlign: 'center', padding: '16px', backgroundColor: p.boxColor || '#1F2937', borderRadius: 8 }}>
+        {!p.endDate && (
+          <span title="Defina a data final — sem ela o cronômetro fica zerado no site" style={{ position: 'absolute', top: 6, right: 8 }}>
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+          </span>
+        )}
+        <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>{vals.map((v, i) => (<span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{i > 0 && <span style={{ color: p.labelColor || '#9CA3AF', fontSize: 20, fontWeight: 700 }}>:</span>}<span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}><span style={{ fontSize: p.fontSize || 28, fontWeight: 800, color: p.numberColor || '#FFFFFF', lineHeight: 1 }}>{v}</span><span style={{ fontSize: 9, color: p.labelColor || '#9CA3AF', marginTop: 4, letterSpacing: 1 }}>{[lbls.days, lbls.hours, lbls.minutes, lbls.seconds][i]}</span></span></span>))}</div>
+      </div>
     }
     case 'legal-consent':
       return <div style={blockStyle}><label className="flex items-start gap-2" style={{ fontSize: p.fontSize || 12, color: p.color || '#6B7280', lineHeight: p.lineHeight || 1.4 }}><input type="checkbox" className="mt-0.5 flex-shrink-0" /><span dangerouslySetInnerHTML={{ __html: (p.text || '').replace(/<a /g, `<a style="color:${p.linkColor || '#F97316'};text-decoration:underline;" `) }} /></label></div>
@@ -909,8 +935,8 @@ const TextFormat = ({ p, up, keyWeight = 'fontWeight', keyStyle = 'fontStyle', k
   </div>
 )
 
-const BorderStyleControl = ({ p, up }: { p: any; up: (k: string, v: any) => void }) => (
-  <Segmented value={p.borderStyle || 'solid'} onChange={v => up('borderStyle', v)} options={[
+const BorderStyleControl = ({ p, up, def = 'solid' }: { p: any; up: (k: string, v: any) => void; def?: string }) => (
+  <Segmented value={p.borderStyle || def} onChange={v => up('borderStyle', v)} options={[
     { value: 'solid', label: '───', title: 'Sólida' },
     { value: 'dashed', label: '╌╌╌', title: 'Tracejada' },
     { value: 'dotted', label: '· · ·', title: 'Pontilhada' },
@@ -919,7 +945,10 @@ const BorderStyleControl = ({ p, up }: { p: any; up: (k: string, v: any) => void
 
 // ── Block Props Editor (Klaviyo-style per-block panels) ──────────────────────
 function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void }) {
-  const up = (key: string, val: any) => onChange({ ...block, props: { ...block.props, [key]: val } })
+  const up = (key: string, val: any) => onChange(mergeBlockProps(block, { [key]: val }))
+  // Multi-key updates MUST go through a single onChange — two `up()` calls in
+  // a row both spread the same stale block.props and the 2nd reverts the 1st.
+  const upMany = (patch: Record<string, any>) => onChange(mergeBlockProps(block, patch))
   const p = block.props
   const [tab, setTab] = useState<'props' | 'fields' | 'layout'>('props')
   const isInputBlock = ['email', 'phone', 'name-input', 'text-input', 'date-input'].includes(block.type)
@@ -959,7 +988,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           </LabeledField>
 
           {block.type === 'phone' && (
-            <LabeledField label="Código do país padrão">
+            <LabeledField label="Código do país padrão" hint="O código é adicionado automaticamente ao número salvo (ex.: +55 11 99999-9999).">
               <select className={sel} value={p.countryCode || '+55'} onChange={e => up('countryCode', e.target.value)}>
                 <option value="+55">Brasil (+55)</option>
                 <option value="+1">EUA / Canadá (+1)</option>
@@ -988,12 +1017,12 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 
           <Toggle label="Campo obrigatório" hint={block.type === 'email' ? 'Email é sempre obrigatório.' : 'Impede o envio quando vazio.'} checked={block.type === 'email' ? true : !!p.required} onChange={v => { if (block.type !== 'email') up('required', v) }} />
           {(p.required || block.type === 'email') && (
-            <LabeledField label="Mensagem quando vazio" hint="Exibida quando o usuário não preenche o campo.">
+            <LabeledField label="Mensagem quando vazio" hint="Aparece abaixo do campo no site quando o visitante não preenche.">
               <input className={inp} value={p.requiredMsg || 'Este campo é obrigatório'} onChange={e => up('requiredMsg', e.target.value)} />
             </LabeledField>
           )}
           {(block.type === 'email' || block.type === 'phone') && (
-            <LabeledField label="Mensagem quando inválido" hint="Exibida quando o formato não corresponde ao esperado.">
+            <LabeledField label="Mensagem quando inválido" hint="Aparece abaixo do campo no site quando o formato não corresponde ao esperado.">
               <input className={inp} value={p.errorMsg || (block.type === 'email' ? 'Email inválido' : 'Telefone inválido')} onChange={e => up('errorMsg', e.target.value)} />
             </LabeledField>
           )}
@@ -1066,7 +1095,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 
           {p.inputStyle !== 'underline' && (
             <LabeledField label="Raio dos cantos">
-              <Slider value={p.cornerRadius ?? 8} onChange={v => { up('cornerRadius', v); up('corners', 'custom') }} min={0} max={50} unit="px" />
+              <Slider value={p.cornerRadius ?? 8} onChange={v => upMany({ cornerRadius: v, corners: 'custom' })} min={0} max={50} unit="px" />
             </LabeledField>
           )}
         </div>
@@ -1078,7 +1107,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           <ColorRow label="Texto digitado" value={p.textColor || '#111827'} onChange={v => up('textColor', v)} />
           <ColorRow label="Placeholder" value={p.placeholderColor || '#9CA3AF'} onChange={v => up('placeholderColor', v)} />
           <ColorRow label="Label" value={p.labelColor || '#374151'} onChange={v => up('labelColor', v)} />
-          <ColorRow label="Erro" hint="Cor usada ao exibir mensagens de validação." value={p.errorColor || '#EF4444'} onChange={v => up('errorColor', v)} />
+          <ColorRow label="Erro" hint="Cor das mensagens de validação exibidas abaixo do campo no site." value={p.errorColor || '#EF4444'} onChange={v => up('errorColor', v)} />
         </div>
 
         {/* Border */}
@@ -1190,10 +1219,11 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
             </LabeledField>
           </div>
 
-          {/* Colors — most edited after content */}
+          {/* Colors — most edited after content. No "Cor dos links" here: the
+              text block renders escaped innerText, links can't exist in it
+              (legal-consent keeps its own linkColor — that one supports HTML). */}
           <div className="pt-3 border-t border-gray-100 space-y-2.5">
             <ColorRow label="Cor do texto" value={p.color || '#111827'} onChange={v => up('color', v)} />
-            <ColorRow label="Cor dos links" value={p.linkColor || '#F97316'} onChange={v => up('linkColor', v)} />
           </div>
 
           {/* Padding — direct, visible */}
@@ -1602,7 +1632,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
               <Slider value={p.borderRadius ?? 8} onChange={v => up('borderRadius', v)} min={0} max={30} unit="px" />
             </LabeledField>
             <LabeledField label="Estilo da borda">
-              <BorderStyleControl p={p} up={up} />
+              <BorderStyleControl p={p} up={up} def="dashed" />
             </LabeledField>
           </div>
         </div>
@@ -1612,7 +1642,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           <div className="space-y-3">
             <SectionHeader title="Espaçador" icon={<MoveVertical className="w-3 h-3" />} />
             <LabeledField label="Altura" hint="Espaço em branco entre blocos.">
-              <Slider value={p.height || 24} onChange={v => up('height', v)} min={4} max={200} unit="px" />
+              <Slider value={p.height ?? 16} onChange={v => up('height', v)} min={4} max={200} unit="px" />
             </LabeledField>
             <div className="grid grid-cols-4 gap-2">
               {[8, 16, 24, 48].map(h => (
@@ -1654,6 +1684,12 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
             <LabeledField label="Data de término" hint="Popup exibe tempo restante até esta data.">
               <input type="datetime-local" className={inp} value={p.endDate || ''} onChange={e => up('endDate', e.target.value)} />
             </LabeledField>
+            {!p.endDate && (
+              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-100">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] text-amber-800 leading-snug">Defina a data final — sem ela o cronômetro fica zerado no site.</p>
+              </div>
+            )}
             <LabeledField label="Tamanho dos números">
               <Slider value={p.fontSize || 28} onChange={v => up('fontSize', v)} min={16} max={72} unit="px" />
             </LabeledField>
@@ -1827,7 +1863,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 }
 
 // ── Behavior Panel ─────────────────────────────────────────────────────────────
-function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, successMessage, onSuccessMessageChange, trackingIds, onTrackingIdsChange }: {
+function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, successMessage, onSuccessMessageChange, errorMessage, onErrorMessageChange, trackingIds, onTrackingIdsChange }: {
   beh: PopupDesign['behavior']
   onChange: (b: PopupDesign['behavior']) => void
   formId: string
@@ -1835,6 +1871,8 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
   onPostSubmitChange: (ps: NonNullable<PopupDesign['postSubmit']>) => void
   successMessage: string
   onSuccessMessageChange: (v: string) => void
+  errorMessage: string
+  onErrorMessageChange: (v: string) => void
   trackingIds: { facebook_pixel_id: string; google_ads_id: string; google_analytics_id: string }
   onTrackingIdsChange: React.Dispatch<React.SetStateAction<{ facebook_pixel_id: string; google_ads_id: string; google_analytics_id: string }>>
 }) {
@@ -1936,6 +1974,13 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 </Field>
               </div>
             )}
+          </Section>
+
+          <Section title="Mensagem de erro do envio" defaultOpen>
+            <Field label="Mensagem de erro do envio" hint="Mostrada ao visitante quando o envio falha. Deixe em branco para o padrão.">
+              <input className={inp} placeholder="Não foi possível enviar. Tente novamente."
+                value={errorMessage} onChange={e => onErrorMessageChange(e.target.value)} />
+            </Field>
           </Section>
 
           <Section title="Rastreamento (Pixels)">
@@ -2429,13 +2474,14 @@ function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: 'relative' }}
       onClick={e => { e.stopPropagation(); onSelect() }}
       className={`group relative rounded transition ${isSelected ? 'outline outline-2 outline-offset-1 outline-zinc-900/70' : 'hover:outline hover:outline-1 hover:outline-gray-300 cursor-pointer'}`}>
-      {/* Omnisend-style side toolbar — small, icon-only, sits to the LEFT of the
-          selected block. Drag, duplicate, delete. No scary buttons-on-top. */}
+      {/* Omnisend-style toolbar — small, icon-only. Rendered INSIDE the block
+          as a top-right overlay: the popup body has overflow-hidden, so a
+          toolbar hanging outside (-left-10) got clipped and was unusable. */}
       {isSelected && (
         <div
           onMouseDown={e => e.preventDefault()}
           onClick={e => e.stopPropagation()}
-          className="absolute -left-10 top-0 z-20 flex flex-col items-center gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5"
+          className="absolute top-1 right-1 z-20 flex items-center gap-0.5 bg-white border border-gray-200 rounded-lg shadow-md p-0.5"
         >
           <button {...attributes} {...listeners}
             className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded cursor-grab active:cursor-grabbing"
@@ -2591,8 +2637,23 @@ export default function PopupEditorPage() {
   useEffect(() => { setMounted(true) }, [])
 
   const [design, setDesign] = useState<PopupDesign>(defaultDesign)
+  // Mirror of `design` updated synchronously by commitDesign/undo/redo so
+  // functional updaters resolve against the latest value without putting
+  // side effects inside setState updaters (StrictMode double-invokes those).
+  const designRef = useRef<PopupDesign>(defaultDesign)
   const [loading, setLoading] = useState(true)
+  // Load failure = blocking error state. Rendering defaultDesign after a
+  // failed load and letting Ctrl+S through would OVERWRITE the merchant's
+  // real popup with the blank template.
+  const [loadError, setLoadError] = useState(false)
+  const [designLoaded, setDesignLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  // Unsaved-changes tracking: set by every design/name/tracking mutation,
+  // cleared on successful save. Guards beforeunload and the Back button.
+  const [dirty, setDirty] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [formStatus, setFormStatus] = useState<'draft' | 'published'>('draft')
   const [formName, setFormName] = useState('Popup sem título')
   // Tracking pixel IDs live on the crm_forms row (not in design_json) so
@@ -2618,12 +2679,14 @@ export default function PopupEditorPage() {
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
   const mediaCallbackRef = useRef<((url: string) => void) | null>(null)
-  // Undo/Redo
-  const [history, setHistory] = useState<string[]>([])
-  const [historyIdx, setHistoryIdx] = useState(-1)
+  // Undo/Redo — index-consistent history (seeded on load, trimmed with the
+  // index re-derived, all design mutations flow through commitDesign).
+  const [hist, setHist] = useState<HistoryState>({ stack: [], idx: -1 })
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
-  const activeStep = showSuccess ? design.successStep : design.steps[activeStepIdx]
+  // Guarded: a design with steps: [] (or a stale index after undo) must not
+  // crash the canvas. Steps are also repaired on load — this is the belt.
+  const activeStep: Step = (showSuccess ? design.successStep : (design.steps[activeStepIdx] ?? design.steps[0])) ?? EMPTY_FALLBACK_STEP
   const selectedBlock = activeStep?.blocks.find(b => b.id === selectedBlockId) ?? null
 
   // Drop-zone state for HTML5-drag from the block palette. dropIndicatorIdx
@@ -2632,7 +2695,7 @@ export default function PopupEditorPage() {
   const [dropIndicatorIdx, setDropIndicatorIdx] = useState<number | null>(null)
   const dragLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
     const blocks = activeStep.blocks
@@ -2640,27 +2703,62 @@ export default function PopupEditorPage() {
     const newIdx = blocks.findIndex(b => b.id === over.id)
     if (oldIdx === -1 || newIdx === -1) return
     updateBlocks(arrayMove(blocks, oldIdx, newIdx))
-  }, [activeStep])
+  }
 
-  const pushHistory = useCallback((d: PopupDesign) => {
-    const json = JSON.stringify(d)
-    setHistory(prev => [...prev.slice(0, historyIdx + 1), json].slice(-30))
-    setHistoryIdx(prev => prev + 1)
-  }, [historyIdx])
+  const showToast = useCallback((msg: string, type: 'error' | 'success' = 'error') => {
+    setToast({ msg, type })
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), type === 'error' ? 6000 : 2500)
+  }, [])
+
+  // Single choke-point for EVERY design mutation (blocks, styles, behavior,
+  // steps, post-submit). Pushes history AFTER resolving the next state —
+  // never inside the setState updater (StrictMode double-invokes those and
+  // produced duplicate history entries) — and marks the editor dirty.
+  const commitDesign = useCallback((next: PopupDesign | ((d: PopupDesign) => PopupDesign)) => {
+    const resolved = typeof next === 'function' ? next(designRef.current) : next
+    designRef.current = resolved
+    setDesign(resolved)
+    setHist(h => historyPush(h, JSON.stringify(resolved)))
+    setDirty(true)
+  }, [])
 
   const undo = useCallback(() => {
-    if (historyIdx > 0) { setHistoryIdx(prev => prev - 1); setDesign(JSON.parse(history[historyIdx - 1])) }
-  }, [history, historyIdx])
+    const res = historyUndo(hist)
+    if (!res) return
+    const parsed = JSON.parse(res.json) as PopupDesign
+    designRef.current = parsed
+    setDesign(parsed)
+    setHist(res.state)
+    setDirty(true)
+    setActiveStepIdx(i => Math.max(0, Math.min(i, parsed.steps.length - 1)))
+  }, [hist])
 
   const redo = useCallback(() => {
-    if (historyIdx < history.length - 1) { setHistoryIdx(prev => prev + 1); setDesign(JSON.parse(history[historyIdx + 1])) }
-  }, [history, historyIdx])
+    const res = historyRedo(hist)
+    if (!res) return
+    const parsed = JSON.parse(res.json) as PopupDesign
+    designRef.current = parsed
+    setDesign(parsed)
+    setHist(res.state)
+    setDirty(true)
+    setActiveStepIdx(i => Math.max(0, Math.min(i, parsed.steps.length - 1)))
+  }, [hist])
 
-  // Load
-  useEffect(() => {
-    fetch(`/api/forms/${formId}`).then(r => r.json()).then(data => {
+  // Load. Any failure (network, 401, 500, invalid JSON) puts the editor in a
+  // blocking error state instead of silently rendering defaultDesign — that
+  // silent fallback meant the next Ctrl+S overwrote the merchant's real
+  // popup with the blank template.
+  const loadForm = useCallback(async () => {
+    setLoading(true)
+    setLoadError(false)
+    try {
+      const r = await fetch(`/api/forms/${formId}`)
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const data = await r.json()
       const form = data.form || data
       if (form.name) setFormName(form.name)
+      let nextDesign: PopupDesign = defaultDesign
       if (form.design_json && Object.keys(form.design_json).length > 0) {
         // Deep-merge to preserve new default fields (styles/behavior sub-objects)
         const saved = form.design_json
@@ -2698,14 +2796,24 @@ export default function PopupEditorPage() {
           },
           postSubmit: { ...defaultDesign.postSubmit!, ...(saved.postSubmit || {}) },
           successMessage: saved.successMessage || form.success_message || '',
+          errorMessage: saved.errorMessage || '',
         }
         // Seed postSubmit.redirectUrl from top-level form.redirect_url if not already set
         if (!merged.postSubmit!.redirectUrl && form.redirect_url) {
           merged.postSubmit!.redirectUrl = form.redirect_url
           if (merged.postSubmit!.action === 'show-success') merged.postSubmit!.action = 'redirect'
         }
-        setDesign(merged)
+        nextDesign = merged
       }
+      // Repair malformed step data (steps: [], missing successStep, step
+      // without blocks) so the canvas never indexes into undefined.
+      nextDesign = repairDesignSteps(nextDesign, uid)
+      designRef.current = nextDesign
+      setDesign(nextDesign)
+      // Seed history with the loaded design so the first undo returns HERE,
+      // not to a broken empty stack.
+      setHist(historySeed(JSON.stringify(nextDesign)))
+      setDirty(false)
       if (form.status) setFormStatus(form.status === 'published' ? 'published' : 'draft')
       // Hydrate pixel IDs from top-level columns. Empty string is the
       // controlled-input-friendly default; null/undefined from the API
@@ -2715,14 +2823,24 @@ export default function PopupEditorPage() {
         google_ads_id: form.google_ads_id || '',
         google_analytics_id: form.google_analytics_id || '',
       })
-    }).catch(() => {}).finally(() => setLoading(false))
+      setDesignLoaded(true)
+    } catch {
+      setLoadError(true)
+    } finally {
+      setLoading(false)
+    }
   }, [formId])
 
-  // Save
+  useEffect(() => { loadForm() }, [loadForm])
+
+  // Save — checks res.ok (401/500 used to look like success), keeps the
+  // dirty flag on failure and surfaces the server's error message verbatim
+  // (e.g. the 400 "Selecione a loja do popup antes de publicar.").
   const handleSave = useCallback(async () => {
+    if (!designLoaded) return false // never save the blank template over a design that didn't load
     setSaving(true)
     try {
-      await fetch(`/api/forms/${formId}`, {
+      const res = await fetch(`/api/forms/${formId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2748,34 +2866,71 @@ export default function PopupEditorPage() {
           ...(currentStore?.id ? { store_id: currentStore.id } : {}),
         }),
       })
+      if (!res.ok) {
+        let msg = 'Não foi possível salvar — tente novamente'
+        try {
+          const d = await res.json()
+          if (typeof d?.error === 'string' && d.error) msg = d.error
+        } catch { /* body not JSON — keep generic message */ }
+        showToast(msg, 'error')
+        return false
+      }
+      setDirty(false)
+      showToast('Alterações salvas', 'success')
+      return true
+    } catch {
+      showToast('Não foi possível salvar — tente novamente', 'error')
+      return false
     } finally { setSaving(false) }
-  }, [formId, design, formStatus, formName, currentStore?.id, trackingIds])
+  }, [formId, design, formStatus, formName, currentStore?.id, trackingIds, designLoaded, showToast])
 
+  // Publish/unpublish — optimistic toggle WITH rollback: awaits the response
+  // and reverts + toasts on failure (e.g. the server pack's 400 when a visual
+  // popup has no store in a multi-store org).
   const handlePublish = useCallback(async () => {
-    const newStatus = formStatus === 'published' ? 'draft' : 'published'
+    if (!designLoaded || publishing) return
+    const prevStatus = formStatus
+    const newStatus = prevStatus === 'published' ? 'draft' : 'published'
     setFormStatus(newStatus)
-    await fetch(`/api/forms/${formId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        status: newStatus,
-        design_json: design,
-        form_type: design.formType,
-        behavior: design.behavior,
-        ...(currentStore?.id ? { store_id: currentStore.id } : {}),
-      }),
-    })
-  }, [formId, design, formStatus, currentStore?.id])
+    setPublishing(true)
+    try {
+      const res = await fetch(`/api/forms/${formId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: newStatus,
+          design_json: design,
+          form_type: design.formType,
+          behavior: design.behavior,
+          ...(currentStore?.id ? { store_id: currentStore.id } : {}),
+        }),
+      })
+      if (!res.ok) {
+        setFormStatus(prevStatus)
+        let msg = newStatus === 'published'
+          ? 'Não foi possível ativar o popup — tente novamente'
+          : 'Não foi possível desativar o popup — tente novamente'
+        try {
+          const d = await res.json()
+          if (typeof d?.error === 'string' && d.error) msg = d.error
+        } catch { /* body not JSON — keep generic message */ }
+        showToast(msg, 'error')
+        return
+      }
+      showToast(newStatus === 'published' ? 'Popup ativado' : 'Popup desativado', 'success')
+    } catch {
+      setFormStatus(prevStatus)
+      showToast('Não foi possível atualizar o status — tente novamente', 'error')
+    } finally { setPublishing(false) }
+  }, [formId, design, formStatus, currentStore?.id, designLoaded, publishing, showToast])
 
   const updateBlocks = (blocks: Block[]) => {
-    const updater = (d: PopupDesign) => {
-      const newDesign = showSuccess
-        ? { ...d, successStep: { ...d.successStep, blocks } }
-        : { ...d, steps: d.steps.map((s, i) => i === activeStepIdx ? { ...s, blocks } : s) }
-      pushHistory(newDesign)
-      return newDesign
-    }
-    setDesign(updater)
+    commitDesign(d => {
+      if (showSuccess) return { ...d, successStep: { ...d.successStep, blocks } }
+      if (d.steps.length === 0) return { ...d, steps: [{ id: uid(), name: 'Etapa 1', blocks }] }
+      const idx = Math.max(0, Math.min(activeStepIdx, d.steps.length - 1))
+      return { ...d, steps: d.steps.map((s, i) => i === idx ? { ...s, blocks } : s) }
+    })
   }
 
   const addBlock = (type: string) => {
@@ -2840,17 +2995,13 @@ export default function PopupEditorPage() {
     const patchBlocks = (blocks: Block[]) =>
       blocks.map(b => INPUT_TYPES.includes(b.type) ? { ...b, props: { ...b.props, ...stylePayload } } : b)
 
-    setDesign(d => {
-      const newDesign = {
-        ...d,
-        steps: d.steps.map(s => ({ ...s, blocks: patchBlocks(s.blocks) })),
-        successStep: { ...d.successStep, blocks: patchBlocks(d.successStep.blocks) },
-        fieldStyles: stylePayload, // store as global defaults for future inputs
-      }
-      pushHistory(newDesign)
-      return newDesign
-    })
-  }, [])
+    commitDesign(d => ({
+      ...d,
+      steps: d.steps.map(s => ({ ...s, blocks: patchBlocks(s.blocks) })),
+      successStep: { ...d.successStep, blocks: patchBlocks(d.successStep.blocks) },
+      fieldStyles: stylePayload, // store as global defaults for future inputs
+    }))
+  }, [commitDesign])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -2862,6 +3013,14 @@ export default function PopupEditorPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [undo, redo, handleSave])
 
+  // Warn before closing/refreshing the tab with unsaved changes.
+  useEffect(() => {
+    if (!dirty) return
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
+
   const openMediaLibrary = useCallback((callback: (url: string) => void) => {
     mediaCallbackRef.current = callback
     setShowMediaLibrary(true)
@@ -2869,8 +3028,9 @@ export default function PopupEditorPage() {
 
   const addStep = () => {
     const s: Step = { id: uid(), name: `Etapa ${design.steps.length + 1}`, blocks: [] }
-    setDesign(d => ({ ...d, steps: [...d.steps, s] }))
-    setActiveStepIdx(design.steps.length)
+    commitDesign(d => ({ ...d, steps: [...d.steps, s] }))
+    // designRef is updated synchronously by commitDesign
+    setActiveStepIdx(designRef.current.steps.length - 1)
     setShowSuccess(false)
   }
 
@@ -2884,6 +3044,32 @@ export default function PopupEditorPage() {
     return <div className="flex items-center justify-center h-screen"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
   }
 
+  // Blocking error state: with the load failed we do NOT render the editor
+  // over defaultDesign (saving from there would wipe the merchant's popup).
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen gap-4 bg-gray-50 px-6">
+        <AlertTriangle className="w-8 h-8 text-amber-500" />
+        <div className="text-center max-w-md">
+          <p className="text-[15px] font-semibold text-gray-900">Não foi possível carregar o popup</p>
+          <p className="text-[13px] text-gray-500 mt-1 leading-relaxed">
+            Para proteger o design salvo, a edição fica bloqueada até o popup carregar. Verifique sua conexão e tente novamente.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={loadForm}
+            className="px-4 py-2 text-[13px] font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-700 transition-colors">
+            Tentar novamente
+          </button>
+          <button onClick={() => router.back()}
+            className="px-4 py-2 text-[13px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors">
+            Voltar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const s = design.styles
 
   return (
@@ -2892,7 +3078,11 @@ export default function PopupEditorPage() {
       {/* Top bar — Omnisend-inspired with Worder identity */}
       <header className="flex items-center justify-between px-5 h-[52px] bg-zinc-900 shrink-0">
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <button onClick={() => router.back()} className="flex-shrink-0 p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors" title="Voltar">
+          <button
+            onClick={() => {
+              if (!dirty || window.confirm('Você tem alterações não salvas. Sair mesmo assim?')) router.back()
+            }}
+            className="flex-shrink-0 p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors" title="Voltar">
             <ArrowLeft className="w-[18px] h-[18px]" />
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2903,7 +3093,7 @@ export default function PopupEditorPage() {
               <input
                 autoFocus
                 value={formName}
-                onChange={e => setFormName(e.target.value)}
+                onChange={e => { setFormName(e.target.value); setDirty(true) }}
                 onBlur={() => setEditingName(false)}
                 onKeyDown={e => { if (e.key === 'Enter') setEditingName(false) }}
                 className="text-[14px] font-semibold text-white bg-zinc-700 border border-zinc-600 rounded px-2 py-0.5 outline-none min-w-[200px] max-w-[400px]"
@@ -2927,8 +3117,8 @@ export default function PopupEditorPage() {
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <button onClick={undo} disabled={historyIdx <= 0} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-md disabled:opacity-25 transition-colors" title="Desfazer"><Undo2 className="w-4 h-4" /></button>
-          <button onClick={redo} disabled={historyIdx >= history.length - 1} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-md disabled:opacity-25 transition-colors" title="Refazer"><Redo2 className="w-4 h-4" /></button>
+          <button onClick={undo} disabled={!canUndo(hist)} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-md disabled:opacity-25 transition-colors" title="Desfazer"><Undo2 className="w-4 h-4" /></button>
+          <button onClick={redo} disabled={!canRedo(hist)} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-md disabled:opacity-25 transition-colors" title="Refazer"><Redo2 className="w-4 h-4" /></button>
           <div className="h-5 w-px bg-zinc-700 mx-1" />
           <div className="flex items-center bg-zinc-800 rounded-lg p-0.5">
             <button onClick={() => setPreview('desktop')} className={`p-1.5 rounded-md transition-all ${preview === 'desktop' ? 'bg-zinc-600 text-white shadow-sm' : 'text-zinc-400 hover:text-white'}`} title="Desktop"><Monitor className="w-4 h-4" /></button>
@@ -2938,11 +3128,11 @@ export default function PopupEditorPage() {
           <button onClick={() => setShowPreview(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors">
             <Eye className="w-4 h-4" /> Preview
           </button>
-          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-white bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors disabled:opacity-50">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar
+          <button onClick={handleSave} disabled={saving || !designLoaded} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-white bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors disabled:opacity-50">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar{dirty ? ' •' : ''}
           </button>
-          <button onClick={handlePublish} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors ${formStatus === 'published' ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}>
-            <Power className="w-4 h-4" /> {formStatus === 'published' ? 'Desativar' : 'Ativar'}
+          <button onClick={handlePublish} disabled={publishing || !designLoaded} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors disabled:opacity-50 ${formStatus === 'published' ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}>
+            {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />} {formStatus === 'published' ? 'Desativar' : 'Ativar'}
           </button>
         </div>
       </header>
@@ -3049,20 +3239,22 @@ export default function PopupEditorPage() {
                 </div>
               ) : leftTab === 'styles' ? (
                 <div className="flex-1 overflow-y-auto">
-                  <ThemePanel design={design} onChange={setDesign} onOpenMedia={openMediaLibrary} />
+                  <ThemePanel design={design} onChange={commitDesign} onOpenMedia={openMediaLibrary} />
                 </div>
               ) : (
                 <div className="flex-1 overflow-y-auto">
                   <BehaviorPanel
                     beh={design.behavior}
-                    onChange={b => setDesign(d => ({ ...d, behavior: b }))}
+                    onChange={b => commitDesign(d => ({ ...d, behavior: b }))}
                     formId={formId}
                     postSubmit={design.postSubmit || defaultDesign.postSubmit!}
-                    onPostSubmitChange={ps => setDesign(d => ({ ...d, postSubmit: ps }))}
+                    onPostSubmitChange={ps => commitDesign(d => ({ ...d, postSubmit: ps }))}
                     successMessage={design.successMessage || ''}
-                    onSuccessMessageChange={v => setDesign(d => ({ ...d, successMessage: v }))}
+                    onSuccessMessageChange={v => commitDesign(d => ({ ...d, successMessage: v }))}
+                    errorMessage={design.errorMessage || ''}
+                    onErrorMessageChange={v => commitDesign(d => ({ ...d, errorMessage: v }))}
                     trackingIds={trackingIds}
-                    onTrackingIdsChange={setTrackingIds}
+                    onTrackingIdsChange={action => { setDirty(true); setTrackingIds(action) }}
                   />
                 </div>
               )}
@@ -3076,6 +3268,13 @@ export default function PopupEditorPage() {
           style={{
             backgroundColor: '#e8eaed',
           }}>
+          {showSuccess && (
+            <div className="w-full flex justify-center pt-4 -mb-6 relative z-10 pointer-events-none">
+              <p className="text-[11px] text-gray-600 bg-white/90 border border-gray-200 rounded-full px-3.5 py-1.5 shadow-sm">
+                Etapa de sucesso — o aviso de dupla confirmação (double opt-in) aparece automaticamente aqui quando ativado.
+              </p>
+            </div>
+          )}
           <div className="flex-1 flex items-center justify-center w-full p-8">
             {/* Popup container — total width stays s.width; when side image is
                 enabled the interior splits 50/50 (Omnisend-style) instead of
@@ -3123,7 +3322,11 @@ export default function PopupEditorPage() {
                     <div
                       className="space-y-2 min-h-[100px]"
                       onDragOver={(e) => {
-                        if (!e.dataTransfer.types.includes('blockType')) return
+                        // Case-insensitive: the HTML DnD spec lowercases custom
+                        // format names, so setData('blockType') shows up as
+                        // 'blocktype' in .types. A case-sensitive check made
+                        // this always false and killed palette drag-and-drop.
+                        if (!isBlockTypeDrag(e.dataTransfer.types)) return
                         e.preventDefault()
                         e.dataTransfer.dropEffect = 'copy'
                         if (dragLeaveTimerRef.current) {
@@ -3216,16 +3419,17 @@ export default function PopupEditorPage() {
             showSuccess={showSuccess}
             onSelectStep={i => { setActiveStepIdx(i); setShowSuccess(false); setSelectedBlockId(null) }}
             onSelectSuccess={() => { setShowSuccess(true); setSelectedBlockId(null) }}
-            onRenameStep={(i, name) => setDesign(d => ({ ...d, steps: d.steps.map((s, j) => j === i ? { ...s, name } : s) }))}
+            onRenameStep={(i, name) => commitDesign(d => ({ ...d, steps: d.steps.map((s, j) => j === i ? { ...s, name } : s) }))}
             onCloneStep={i => {
               const step = design.steps[i]
+              if (!step) return
               const clone: Step = { id: uid(), name: `${step.name} (cópia)`, blocks: JSON.parse(JSON.stringify(step.blocks)) }
-              setDesign(d => { const next = [...d.steps]; next.splice(i + 1, 0, clone); return { ...d, steps: next } })
+              commitDesign(d => { const next = [...d.steps]; next.splice(i + 1, 0, clone); return { ...d, steps: next } })
               setActiveStepIdx(i + 1)
             }}
             onDeleteStep={i => {
               if (design.steps.length <= 1) return
-              setDesign(d => ({ ...d, steps: d.steps.filter((_, j) => j !== i) }))
+              commitDesign(d => ({ ...d, steps: d.steps.filter((_, j) => j !== i) }))
               setActiveStepIdx(Math.max(0, i - 1))
             }}
             onAddStep={addStep}
@@ -3314,6 +3518,15 @@ export default function PopupEditorPage() {
           onSelect={(url) => { mediaCallbackRef.current?.(url); mediaCallbackRef.current = null }}
           onClose={() => { setShowMediaLibrary(false); mediaCallbackRef.current = null }}
         />
+      )}
+
+      {/* Toast — save/publish feedback (errors surface the server message verbatim) */}
+      {toast && (
+        <div role="status"
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-[13px] font-medium text-white ${toast.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'}`}>
+          {toast.type === 'error' && <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
+          {toast.msg}
+        </div>
       )}
     </div>
   )
