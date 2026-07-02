@@ -1,18 +1,18 @@
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthClient, authError } from '@/lib/api-utils'
 export const dynamic = 'force-dynamic';
 
 // GET - Buscar preferências do usuário
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
-    const userId = searchParams.get('user_id')
-    
-    if (!organizationId || !userId) {
-      return NextResponse.json({ error: 'organization_id and user_id are required' }, { status: 400 })
-    }
-    
+    // Derive identity from the SESSION — ignore any client-supplied ids.
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+
+    const organizationId = auth.user.organization_id
+    const userId = auth.user.id
+
     let { data: preferences, error } = await supabase
       .from('notification_preferences')
       .select('*')
@@ -44,13 +44,16 @@ export async function GET(request: NextRequest) {
 // PUT - Atualizar preferências
 export async function PUT(request: NextRequest) {
   try {
+    // Derive identity from the SESSION — drop any client-supplied ids.
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+
+    const organization_id = auth.user.organization_id
+    const user_id = auth.user.id
+
     const body = await request.json()
-    const { organization_id, user_id, ...updates } = body
-    
-    if (!organization_id || !user_id) {
-      return NextResponse.json({ error: 'organization_id and user_id are required' }, { status: 400 })
-    }
-    
+    const { organization_id: _ignoredOrg, user_id: _ignoredUser, ...updates } = body
+
     const allowedFields = [
       'mention_enabled', 'task_assigned_enabled', 'task_due_soon_enabled',
       'task_overdue_enabled', 'task_completed_enabled', 'comment_reply_enabled',

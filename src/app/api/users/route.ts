@@ -1,39 +1,22 @@
 // src/app/api/users/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { getAuthClient, authError } from '@/lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
+    // Require a session — org is derived from the caller, never the query.
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+
     const { searchParams } = new URL(request.url)
     const roleFilter = searchParams.get('role') // "agent,admin,owner"
-    
-    // Tentar pegar organization_id do usuário autenticado
-    let organizationId = searchParams.get('organization_id')
-    
-    if (!organizationId) {
-      try {
-        const supabaseClient = createRouteHandlerClient({ cookies })
-        const { data: { user } } = await supabaseClient.auth.getUser()
-        
-        if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('organization_id')
-            .eq('id', user.id)
-            .single()
-          
-          organizationId = profile?.organization_id
-        }
-      } catch (e) {
-        // Continuar sem organização
-      }
-    }
 
-    // Construir query
+    const organizationId = auth.user.organization_id
+
+    // Construir query — sempre escopada à org do chamador.
     let query = supabase
       .from('profiles')
       .select(`
@@ -46,12 +29,8 @@ export async function GET(request: NextRequest) {
         role,
         organization_id
       `)
+      .eq('organization_id', organizationId)
       .order('full_name', { ascending: true })
-
-    // Filtrar por organização
-    if (organizationId) {
-      query = query.eq('organization_id', organizationId)
-    }
 
     // Filtrar por roles
     if (roleFilter) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
-import { getAuthClient } from '@/lib/api-utils'
+import { getAuthClient, authError } from '@/lib/api-utils'
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -12,37 +12,25 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdmin()
   try {
+    // Require a session — scope is derived from the caller, never the query.
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+
     const { searchParams } = new URL(request.url)
-    let organization_id = searchParams.get('organization_id')
     const segment_id = searchParams.get('id')
     const include_count = searchParams.get('include_count') === 'true'
     const storeId = searchParams.get('store_id')
     const activeOnly = searchParams.get('active_only') === 'true'
 
-    // If no org_id provided, try to get from auth
-    if (!organization_id) {
-      const auth = await getAuthClient()
-      if (auth) {
-        organization_id = auth.user.organization_id
-      }
-    }
-
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id required' }, { status: 400 })
-    }
-
-    // Multi-org: get all orgs user has access to
-    const auth = await getAuthClient()
-    let orgIds = [organization_id]
-    if (auth) {
-      const { data: memberships } = await supabase
-        .from('organization_members')
-        .select('organization_id')
-        .eq('user_id', auth.user.id)
-      if (memberships?.length) {
-        orgIds = [...new Set([organization_id, ...memberships.map((m: any) => m.organization_id)])]
-      }
-    }
+    // Multi-org: all orgs the caller actually belongs to.
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', auth.user.id)
+    const orgIds = [...new Set([
+      auth.user.organization_id,
+      ...((memberships || []).map((m: any) => m.organization_id)),
+    ])]
 
     // Buscar segmento específico
     if (segment_id) {

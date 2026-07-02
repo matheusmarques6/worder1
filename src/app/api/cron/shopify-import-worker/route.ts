@@ -31,11 +31,25 @@ function jsonResponse(data: any, status = 200) {
   });
 }
 
+// Accepts Vercel Cron (x-vercel-cron header) OR Authorization: Bearer
+// CRON_SECRET. Fail-closed in production (CRON_SECRET unset → reject),
+// open in dev — matches the shared cron authorize pattern.
+function isAuthorized(req: NextRequest): boolean {
+  if (req.headers.get('x-vercel-cron')) return true;
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return process.env.NODE_ENV !== 'production';
+  return req.headers.get('authorization') === `Bearer ${secret}`;
+}
+
 // =============================================
 // GET/POST: Processar jobs pendentes
 // =============================================
 
 export async function GET(request: NextRequest) {
+  if (!isAuthorized(request)) {
+    return jsonResponse({ error: 'Unauthorized' }, 401);
+  }
+
   const startTime = Date.now();
   console.log('[ImportWorker] Starting...');
 

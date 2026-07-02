@@ -33,6 +33,12 @@ export async function POST(request: NextRequest) {
     const body = await request.text();
     const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
 
+    // FAIL-CLOSED em produção: sem secret configurado, rejeitar.
+    if (!webhookSecret && process.env.NODE_ENV === 'production') {
+      console.error('[ResendWebhook] RESEND_WEBHOOK_SECRET not set in production');
+      return NextResponse.json({ error: 'Webhook not configured' }, { status: 401 });
+    }
+
     // Verify signature if secret is configured
     if (webhookSecret) {
       const svixId = request.headers.get('svix-id');

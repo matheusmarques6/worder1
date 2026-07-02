@@ -18,11 +18,13 @@ export async function GET(request: NextRequest) {
   // dropped, and merchants saw no birthday emails despite the
   // trigger appearing fully wired.
   const isVercelCron = request.headers.get('x-vercel-cron') === '1';
-  const isInternal = request.headers.get('X-Internal-Request') === 'true';
   const isDev = process.env.NODE_ENV === 'development';
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = request.headers.get('authorization');
-  const isAuthorized = isVercelCron || isInternal || isDev ||
+  // X-Internal-Request was removed: it's client-settable and not stripped
+  // by Vercel, so it let any caller spoof authorization. Only Vercel Cron
+  // or Bearer CRON_SECRET (or dev) is accepted now.
+  const isAuthorized = isVercelCron || isDev ||
     (cronSecret && authHeader === `Bearer ${cronSecret}`);
 
   if (!isAuthorized) {

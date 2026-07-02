@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { getAuthClient, authError } from '@/lib/api-utils'
 import { randomBytes } from 'crypto'
 
 const META_API_VERSION = 'v19.0'
@@ -7,9 +8,12 @@ const META_API_VERSION = 'v19.0'
 // POST - Connect selected Instagram account
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organization_id = auth.user.organization_id
+
     const body = await request.json()
     const {
-      organization_id,
       store_id,
       page_id,
       page_access_token,
@@ -21,7 +25,7 @@ export async function POST(request: NextRequest) {
       token_expires_at,
     } = body
 
-    if (!organization_id || !page_id || !page_access_token || !instagram_business_id) {
+    if (!page_id || !page_access_token || !instagram_business_id) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 

@@ -13,12 +13,13 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function GET(request: NextRequest) {
   // Verificar autorização
+  // X-Internal-Request removed: client-settable and not stripped by
+  // Vercel, so it was spoofable. Only Vercel Cron or Bearer CRON_SECRET.
   const isVercelCron = request.headers.get('x-vercel-cron') === '1';
-  const isInternal = request.headers.get('X-Internal-Request') === 'true';
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
-  
-  const isAuthorized = isVercelCron || isInternal || 
+
+  const isAuthorized = isVercelCron ||
     (cronSecret && authHeader === `Bearer ${cronSecret}`);
 
   if (!isAuthorized) {

@@ -10,30 +10,42 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 // =============================================
-// Helper: Validar acesso ao ticket
+// Helper: Resolver as organizações do usuário a partir da SESSÃO
+// (org padrão + memberships). NUNCA confiar em organization_id do request.
 // =============================================
-async function validateTicketAccess(ticketId: string, organizationId: string) {
+async function getCallerOrgIds(userId: string, defaultOrgId: string): Promise<string[]> {
+  const { data: memberships } = await supabaseAdmin
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userId);
+  return [...new Set([defaultOrgId, ...(memberships?.map((m: any) => m.organization_id) || [])])];
+}
+
+// =============================================
+// Helper: Validar acesso ao ticket (org derivada da sessão)
+// =============================================
+async function validateTicketAccess(ticketId: string, orgIds: string[]) {
   const { data: ticket, error } = await supabaseAdmin
     .from('tickets')
     .select('id, organization_id')
     .eq('id', ticketId)
-    .eq('organization_id', organizationId) // ⚠️ CRÍTICO
     .single();
 
   if (error || !ticket) {
-    return { valid: false, ticket: null };
+    return { valid: false as const, ticket: null };
   }
 
-  // Verificação adicional de segurança
-  if (ticket.organization_id !== organizationId) {
-    console.error(`[SECURITY VIOLATION] Ticket ${ticketId} access denied for org ${organizationId}`);
-    return { valid: false, ticket: null };
+  // ⚠️ CRÍTICO: Verificar se pertence a uma organização do usuário
+  if (!orgIds.includes(ticket.organization_id)) {
+    console.error(`[SECURITY VIOLATION] Ticket ${ticketId} access denied for orgs ${orgIds.join(',')}`);
+    return { valid: false as const, ticket: null };
   }
 
-  return { valid: true, ticket };
+  return { valid: true as const, ticket };
 }
 
 // =============================================
@@ -45,19 +57,20 @@ export async function GET(
 ) {
   try {
     const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
     const includeInternal = searchParams.get('include_internal') !== 'false';
 
-    // ⚠️ CRÍTICO: organization_id é OBRIGATÓRIO
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
+    // ⚠️ SEGURANÇA: org derivada da SESSÃO, nunca do request
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const { user } = auth;
+    const orgIds = await getCallerOrgIds(user.id, user.organization_id);
 
     // ⚠️ SEGURANÇA: Validar acesso ao ticket primeiro
-    const validation = await validateTicketAccess(params.id, organizationId);
+    const validation = await validateTicketAccess(params.id, orgIds);
     if (!validation.valid) {
       return NextResponse.json({ error: 'Ticket não encontrado' }, { status: 404 });
     }
+    const organizationId = validation.ticket.organization_id;
 
     // ⚠️ SEGURANÇA: Buscar comentários FILTRADOS por organization_id
     let query = supabaseAdmin
@@ -93,9 +106,14 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    // ⚠️ SEGURANÇA: org derivada da SESSÃO, nunca do request
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const { user } = auth;
+    const orgIds = await getCallerOrgIds(user.id, user.organization_id);
+
     const body = await request.json();
     const {
-      organization_id, // ⚠️ OBRIGATÓRIO
       content,
       content_html,
       is_internal = false,
@@ -106,20 +124,16 @@ export async function POST(
       user_avatar_url,
     } = body;
 
-    // ⚠️ CRÍTICO: organization_id é OBRIGATÓRIO
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
-
     if (!content?.trim()) {
       return NextResponse.json({ error: 'content é obrigatório' }, { status: 400 });
     }
 
     // ⚠️ SEGURANÇA: Validar acesso ao ticket primeiro
-    const validation = await validateTicketAccess(params.id, organization_id);
+    const validation = await validateTicketAccess(params.id, orgIds);
     if (!validation.valid) {
       return NextResponse.json({ error: 'Ticket não encontrado' }, { status: 404 });
     }
+    const organization_id = validation.ticket.organization_id;
 
     // Buscar ticket para verificar first_response
     const { data: ticket } = await supabaseAdmin

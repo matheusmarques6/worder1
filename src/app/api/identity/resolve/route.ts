@@ -108,10 +108,18 @@ export async function POST(request: NextRequest) {
     const ua = request.headers.get('user-agent') || null;
     const ip = getClientIp(request) || null;
 
+    // The first-party visitor id the caller actually POSSESSES: the
+    // supplied clientVisitorId or the __worder_id cookie we set on a
+    // previous resolve. This is the only signal that proves the caller
+    // owns the identity — raw email/phone/shopifyCustomerId are all
+    // attacker-suppliable and must never, on their own, unlock a contact.
+    const cookieVisitorId = request.cookies.get('__worder_id')?.value || null;
+    const ownedVisitorId = (clientVisitorId as string | null) || cookieVisitorId;
+
     const result = await resolveIdentity({
       organizationId: organizationId!,
       storeId: resolvedStoreId,
-      clientVisitorId: clientVisitorId || null,
+      clientVisitorId: ownedVisitorId,
       fingerprintHash: fingerprintHash || null,
       userAgent: ua,
       ip,
@@ -121,11 +129,57 @@ export async function POST(request: NextRequest) {
       source: source || 'pixel',
     });
 
+    // ==========================================================
+    // SECURITY GATE — customer-enumeration oracle prevention
+    //
+    // This endpoint is PUBLIC (no auth) and cross-origin. Without this
+    // gate an unauthenticated caller could POST an arbitrary email/phone/
+    // shopifyCustomerId and, if it matched a contact, receive back
+    // contactId / matchSource / stitched:true — turning the endpoint into
+    // a customer-enumeration oracle.
+    //
+    // We only disclose identity linkage (contactId / matchSource /
+    // stitched) and only perform the contact-link write when the caller
+    // has PROVEN possession of the visitor id that owns the resolved
+    // identity. Proof = the resolution was reached via the caller's own
+    // visitor id (matchSource 'visitor_id'), the identity is brand new
+    // ('new', contactId is null anyway), or the caller's __worder_id /
+    // clientVisitorId already maps to the exact identity we resolved.
+    // A match found ONLY via raw email/phone/shopify_customer/fingerprint
+    // is treated as unproven → no disclosure, no link write.
+    // ==========================================================
+    let callerOwnsResolvedIdentity =
+      result.matchSource === 'visitor_id' || result.matchSource === 'new';
+    if (!callerOwnsResolvedIdentity && ownedVisitorId && result.identityId) {
+      const { data: ownCanon } = await supabase
+        .from('visitor_identities')
+        .select('id')
+        .eq('organization_id', organizationId)
+        .eq('worder_visitor_id', ownedVisitorId)
+        .eq('id', result.identityId)
+        .maybeSingle();
+      if (ownCanon) {
+        callerOwnsResolvedIdentity = true;
+      } else {
+        const { data: ownAlias } = await supabase
+          .from('visitor_id_aliases')
+          .select('identity_id')
+          .eq('organization_id', organizationId)
+          .eq('alias_visitor_id', ownedVisitorId)
+          .eq('identity_id', result.identityId)
+          .maybeSingle();
+        if (ownAlias) callerOwnsResolvedIdentity = true;
+      }
+    }
+
     // If caller provided email/phone (identification), look up or create
     // the contact and link it to the identity. The /track/identify route
     // does the heavier lifting; here we keep it minimal.
+    // Only runs for a caller-owned identity — otherwise this would both
+    // disclose contactId and pollute the identity graph (linking a
+    // looked-up contact to an identity the caller doesn't own).
     let contactId = result.contactId;
-    if (!contactId && (email || phone || shopifyCustomerId)) {
+    if (callerOwnsResolvedIdentity && !contactId && (email || phone || shopifyCustomerId)) {
       const lookups = [];
       if (email) {
         lookups.push(
@@ -151,13 +205,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // worderVisitorId is always safe to return — it's the caller's own
+    // (or a freshly minted) visitor id, not a customer identifier.
+    // contactId / matchSource / stitched are only disclosed when the
+    // caller proved possession of the visitor id owning this identity
+    // (see the SECURITY GATE above); otherwise they are nulled so a
+    // raw-PII probe can't confirm/enumerate contacts. No current pixel
+    // consumer reads these fields — only worderVisitorId.
     const response = NextResponse.json(
       {
         worderVisitorId: result.worderVisitorId,
-        contactId: result.contactId,
-        stitched: result.stitched,
-        matchSource: result.matchSource,
-        backfilledEvents: (result as any).backfilledEvents || 0,
+        contactId: callerOwnsResolvedIdentity ? result.contactId : null,
+        stitched: callerOwnsResolvedIdentity ? result.stitched : false,
+        matchSource: callerOwnsResolvedIdentity ? result.matchSource : null,
+        backfilledEvents: callerOwnsResolvedIdentity ? ((result as any).backfilledEvents || 0) : 0,
       },
       { status: 200, headers: CH }
     );

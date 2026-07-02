@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { getAuthClient } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 // Lazy initialize Supabase client
@@ -303,14 +304,25 @@ async function handleResetPassword(supabase: SupabaseClient, { email }: { email:
 async function handleUpdatePassword(
   supabase: SupabaseClient,
   {
-    accessToken,
     newPassword,
   }: {
-    accessToken: string;
+    accessToken?: string;
     newPassword: string;
   }
 ) {
-  const { error } = await supabase.auth.admin.updateUserById(accessToken, {
+  // ⚠️ SEGURANÇA: identidade vem SEMPRE da sessão. Qualquer id de
+  // usuário enviado no body é ignorado — só é permitido alterar a
+  // própria senha do usuário autenticado (evita account takeover).
+  const auth = await getAuthClient();
+  if (!auth) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+
+  if (!newPassword) {
+    return NextResponse.json({ error: 'newPassword is required' }, { status: 400 });
+  }
+
+  const { error } = await supabase.auth.admin.updateUserById(auth.user.id, {
     password: newPassword,
   });
 

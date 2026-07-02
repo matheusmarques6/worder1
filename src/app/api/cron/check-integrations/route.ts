@@ -10,14 +10,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { IntegrationHealthService, IntegrationType } from '@/lib/services/integration-health';
 
 function verifyCronAuth(request: NextRequest): boolean {
+  if (request.headers.get('x-vercel-cron')) return true;
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
-  
+
+  // Fail-closed in production: a missing CRON_SECRET must NOT open the
+  // endpoint in prod. Open only in dev (where the secret is often unset).
   if (!cronSecret) {
+    if (process.env.NODE_ENV === 'production') return false;
     console.log('⚠️  CRON_SECRET não configurado - rodando em modo dev');
     return true;
   }
-  
+
   return authHeader === `Bearer ${cronSecret}`;
 }
 

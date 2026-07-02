@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { getAuthClient, authError } from '@/lib/api-utils'
 import { randomBytes } from 'crypto'
 
 const META_APP_ID = process.env.META_APP_ID || ''
@@ -20,12 +21,9 @@ const INSTAGRAM_SCOPES = [
 // GET - Generate OAuth URL
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams
-    const organizationId = searchParams.get('organization_id')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organizationId = auth.user.organization_id
 
     // Generate state token for security
     const stateToken = randomBytes(32).toString('hex')

@@ -11,30 +11,42 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 // =============================================
-// Helper: Validar acesso ao contato
+// Helper: Resolver as orgs do chamador a partir da SESSÃO
 // =============================================
-async function validateContactAccess(contactId: string, organizationId: string) {
+async function resolveCallerOrgIds(userId: string, primaryOrgId: string): Promise<string[]> {
+  const { data: memberships } = await supabaseAdmin
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userId);
+  return [...new Set([primaryOrgId, ...((memberships || []).map((m: any) => m.organization_id))])];
+}
+
+// =============================================
+// Helper: Validar acesso ao contato
+// A org de confiança vem da SESSÃO (orgIds), nunca do request.
+// =============================================
+async function validateContactAccess(contactId: string, orgIds: string[]) {
   const { data, error } = await supabaseAdmin
     .from('whatsapp_contacts')
     .select('id, organization_id')
     .eq('id', contactId)
-    .eq('organization_id', organizationId) // ⚠️ CRÍTICO
     .single();
 
   if (error || !data) {
-    return { valid: false };
+    return { valid: false as const };
   }
 
-  // Verificação adicional de segurança
-  if (data.organization_id !== organizationId) {
-    console.error(`[SECURITY VIOLATION] Contact ${contactId} access denied for org ${organizationId}`);
-    return { valid: false };
+  // ⚠️ CRÍTICO: o contato deve pertencer a uma org do chamador
+  if (!orgIds.includes(data.organization_id)) {
+    console.error(`[SECURITY VIOLATION] Contact ${contactId} access denied for orgs ${orgIds.join(',')}`);
+    return { valid: false as const };
   }
 
-  return { valid: true, contact: data };
+  return { valid: true as const, contact: data, organizationId: data.organization_id as string };
 }
 
 // =============================================
@@ -45,21 +57,21 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+
     const contactId = params.id;
     const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
     const category = searchParams.get('category');
 
-    // ⚠️ CRÍTICO: organization_id é OBRIGATÓRIO
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
+    const orgIds = await resolveCallerOrgIds(auth.user.id, auth.user.organization_id);
 
-    // ⚠️ SEGURANÇA: Validar acesso ao contato primeiro
-    const validation = await validateContactAccess(contactId, organizationId);
+    // ⚠️ SEGURANÇA: Validar acesso ao contato (org vem da sessão)
+    const validation = await validateContactAccess(contactId, orgIds);
     if (!validation.valid) {
       return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 });
     }
+    const organizationId = validation.organizationId;
 
     // ⚠️ SEGURANÇA: Buscar anexos FILTRADOS por organization_id
     let query = supabaseAdmin
@@ -95,29 +107,29 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+
     const contactId = params.id;
     const formData = await request.formData();
-    
+
     const file = formData.get('file') as File;
     const description = formData.get('description') as string || '';
     const category = formData.get('category') as string || 'document';
-    const organizationId = formData.get('organization_id') as string;
     const uploadedByName = formData.get('uploaded_by_name') as string || 'Usuário';
-
-    // ⚠️ CRÍTICO: organization_id é OBRIGATÓRIO
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
 
     if (!file) {
       return NextResponse.json({ error: 'Arquivo é obrigatório' }, { status: 400 });
     }
 
-    // ⚠️ SEGURANÇA: Validar acesso ao contato primeiro
-    const validation = await validateContactAccess(contactId, organizationId);
+    const orgIds = await resolveCallerOrgIds(auth.user.id, auth.user.organization_id);
+
+    // ⚠️ SEGURANÇA: Validar acesso ao contato (org vem da sessão)
+    const validation = await validateContactAccess(contactId, orgIds);
     if (!validation.valid) {
       return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 });
     }
+    const organizationId = validation.organizationId;
 
     // Validar tamanho (máx 10MB)
     const maxSize = 10 * 1024 * 1024; // 10MB
@@ -216,25 +228,25 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+
     const contactId = params.id;
     const { searchParams } = new URL(request.url);
     const attachmentId = searchParams.get('attachment_id');
-    const organizationId = searchParams.get('organization_id');
-
-    // ⚠️ CRÍTICO: organization_id é OBRIGATÓRIO
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
 
     if (!attachmentId) {
       return NextResponse.json({ error: 'attachment_id é obrigatório' }, { status: 400 });
     }
 
-    // ⚠️ SEGURANÇA: Validar acesso ao contato primeiro
-    const validation = await validateContactAccess(contactId, organizationId);
+    const orgIds = await resolveCallerOrgIds(auth.user.id, auth.user.organization_id);
+
+    // ⚠️ SEGURANÇA: Validar acesso ao contato (org vem da sessão)
+    const validation = await validateContactAccess(contactId, orgIds);
     if (!validation.valid) {
       return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404 });
     }
+    const organizationId = validation.organizationId;
 
     // ⚠️ SEGURANÇA: Buscar anexo FILTRADO por organization_id
     const { data: attachment, error: fetchError } = await supabaseAdmin

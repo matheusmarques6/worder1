@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { getAuthClient, authError } from '@/lib/api-utils'
 import { createInstagramClient } from '@/lib/instagram/api'
 
 // GET - Get messages for a conversation
 export async function GET(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const { supabase, user } = auth
+    const organizationId = user.organization_id
+
     const searchParams = request.nextUrl.searchParams
     const conversationId = searchParams.get('conversation_id')
-    const organizationId = searchParams.get('organization_id')
     const limit = parseInt(searchParams.get('limit') || '50')
     const before = searchParams.get('before') // cursor for pagination
 
     if (!conversationId) {
       return NextResponse.json({ error: 'conversation_id is required' }, { status: 400 })
-    }
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
 
     // Verify conversation belongs to organization
@@ -69,15 +69,16 @@ export async function GET(request: NextRequest) {
 // POST - Send a message
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const { supabase, user } = auth
+    const organizationId = user.organization_id
+
     const body = await request.json()
-    const { conversation_id, organization_id, message_type = 'text', text, media_url } = body
+    const { conversation_id, message_type = 'text', text, media_url } = body
 
     if (!conversation_id) {
       return NextResponse.json({ error: 'conversation_id is required' }, { status: 400 })
-    }
-
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
 
     if (message_type === 'text' && !text) {
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
         account:instagram_accounts(*)
       `)
       .eq('id', conversation_id)
-      .eq('organization_id', organization_id)
+      .eq('organization_id', organizationId)
       .single()
 
     if (!conversation) {
@@ -174,7 +175,7 @@ export async function POST(request: NextRequest) {
     const { data: message, error: insertError } = await supabase
       .from('instagram_messages')
       .insert({
-        organization_id: organization_id,
+        organization_id: organizationId,
         store_id: conversation.store_id,
         account_id: account.id,
         conversation_id: conversation_id,

@@ -19,18 +19,19 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function GET(request: NextRequest) {
   // Verificar autorização
+  // X-Internal-Request was removed from the authorize check: it's
+  // client-settable and not stripped by Vercel, so any caller could spoof
+  // it. Only Vercel Cron or Bearer CRON_SECRET is accepted now.
   const isVercelCron = request.headers.get('x-vercel-cron') === '1';
-  const isInternal = request.headers.get('X-Internal-Request') === 'true';
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
-  
-  const isAuthorized = isVercelCron || isInternal || 
+
+  const isAuthorized = isVercelCron ||
     (cronSecret && authHeader === `Bearer ${cronSecret}`);
-  
+
   if (!isAuthorized) {
     console.log('[ProcessRuns] Unauthorized request - headers:', {
       'x-vercel-cron': request.headers.get('x-vercel-cron'),
-      'X-Internal-Request': request.headers.get('X-Internal-Request'),
       hasAuth: !!authHeader,
     });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

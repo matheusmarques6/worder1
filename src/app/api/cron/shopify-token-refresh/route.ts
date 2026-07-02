@@ -20,13 +20,20 @@ import { refreshStoreToken } from '@/lib/shopify/client-credentials';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+// Accepts Vercel Cron (x-vercel-cron header) OR Authorization: Bearer
+// CRON_SECRET. Fail-closed in production: when CRON_SECRET is unset we
+// reject in prod (open only in dev). Previously a missing secret skipped
+// the whole check, leaving the endpoint fully open in production.
+function isAuthorized(req: NextRequest): boolean {
+  if (req.headers.get('x-vercel-cron')) return true;
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return process.env.NODE_ENV !== 'production';
+  return req.headers.get('authorization') === `Bearer ${secret}`;
+}
+
 export async function GET(request: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const supabase = getSupabaseAdmin();

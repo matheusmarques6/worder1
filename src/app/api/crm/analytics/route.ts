@@ -1,27 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { getAuthClient, authError } from '@/lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy service-role client — created only when the handler runs so a
+// missing env var at build/import time doesn't throw.
+let _supabase: SupabaseClient | null = null
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+  }
+  return _supabase
+}
 
 // =============================================
 // GET - CRM Analytics Data
 // =============================================
 export async function GET(request: NextRequest) {
   try {
+    // Derive caller identity from the SESSION — never trust a
+    // client-supplied organization_id (cross-tenant leak).
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+
+    const supabase = getSupabase()
+    const organizationId = auth.user.organization_id
+
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
     const pipelineId = searchParams.get('pipeline_id')
     const period = searchParams.get('period') || '30d'
     const storeId = searchParams.get('store_id') || searchParams.get('storeId')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
 
     // deals/pipelines têm SÓ store_id (não organization_id), então
     // resolvo as stores da org pra escopar. Quando storeId é

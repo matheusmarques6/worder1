@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
+import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 
 // Vercel timeout configuration - Pro plan allows up to 300 seconds
@@ -124,35 +124,6 @@ async function klaviyoPost(apiKey: string, endpoint: string, body: any): Promise
     method: 'POST',
     body: JSON.stringify(body),
   });
-}
-
-/**
- * Get organization ID from existing store or create default
- */
-async function getOrganizationId(): Promise<string> {
-  const { data: store } = await supabase
-    .from('shopify_stores')
-    .select('organization_id')
-    .limit(1)
-    .single();
-
-  if (store?.organization_id) return store.organization_id;
-
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .limit(1)
-    .single();
-
-  if (org?.id) return org.id;
-
-  const { data: newOrg } = await supabase
-    .from('organizations')
-    .insert({ name: 'Default Organization', slug: 'default-org-' + Date.now() })
-    .select('id')
-    .single();
-
-  return newOrg?.id || crypto.randomUUID();
 }
 
 // ============================================
@@ -564,6 +535,11 @@ async function fetchProfileCount(apiKey: string): Promise<number> {
 // ============================================
 export async function POST(request: NextRequest) {
   try {
+    // ✅ AUTENTICAÇÃO: org sempre da sessão, nunca "primeira org"
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const organizationId = auth.user.organization_id;
+
     const { apiKey, publicKey } = await request.json();
 
     if (!apiKey) {
@@ -625,9 +601,6 @@ export async function POST(request: NextRequest) {
     const accountId = account.id;
 
     console.log(`[Klaviyo] Account verified: ${accountName} (${accountId})`);
-
-    // Get organization ID
-    const organizationId = await getOrganizationId();
 
     // Get initial stats
     let totalProfiles = 0;
@@ -710,11 +683,17 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const action = request.nextUrl.searchParams.get('action');
 
+  // ✅ AUTENTICAÇÃO: org sempre da sessão
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  const organizationId = auth.user.organization_id;
+
   try {
-    // Get Klaviyo account
+    // Get Klaviyo account (scoped to caller org)
     const { data: klaviyoAccounts } = await supabase
       .from('klaviyo_accounts')
       .select('*')
+      .eq('organization_id', organizationId)
       .eq('is_active', true)
       .limit(1);
 
@@ -2531,18 +2510,22 @@ async function syncKlaviyoData(
 // ============================================
 export async function DELETE(request: NextRequest) {
   try {
+    // ✅ AUTENTICAÇÃO: org sempre da sessão
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const orgId = auth.user.organization_id;
+
     const { data: account } = await supabase
       .from('klaviyo_accounts')
       .select('organization_id')
+      .eq('organization_id', orgId)
       .eq('is_active', true)
       .limit(1)
       .single();
-    
+
     if (!account?.organization_id) {
       return NextResponse.json({ error: 'Klaviyo não conectado' }, { status: 404 });
     }
-
-    const orgId = account.organization_id;
 
     // Delete all related data
     await Promise.all([

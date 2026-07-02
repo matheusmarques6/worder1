@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
+import { consumeOAuthState } from '@/lib/oauth-security';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
-  const state = searchParams.get('state'); // organizationId
+  const state = searchParams.get('state'); // signed OAuth state
   const error = searchParams.get('error');
 
   if (error) {
@@ -19,6 +20,16 @@ export async function GET(request: NextRequest) {
       `${process.env.NEXT_PUBLIC_APP_URL}/settings?tab=integrations&error=missing_params`
     );
   }
+
+  // VALIDAR STATE (assinado, single-use). O organization_id vem SEMPRE do
+  // resultado validado, nunca do state cru.
+  const stateData = await consumeOAuthState(state, 'google');
+  if (!stateData) {
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL}/settings?tab=integrations&error=invalid_state`
+    );
+  }
+  const organizationId = stateData.organizationId;
 
   try {
     // Exchange code for tokens
@@ -85,7 +96,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseClient();
 
     await supabase?.from('google_ads_accounts').upsert({
-      organization_id: state,
+      organization_id: organizationId,
       refresh_token: refresh_token,
       customer_id: customerId,
       customer_name: customerDetail.descriptiveName || `Account ${customerId}`,

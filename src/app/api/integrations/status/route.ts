@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
+import { getSupabaseClient, getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 export const dynamic = 'force-dynamic';
 
@@ -87,8 +87,21 @@ function getHealthStatus(connectionStatus: string | null): string {
 
 export async function GET(request: NextRequest) {
   try {
+    // ✅ AUTENTICAÇÃO: derivar org da sessão, nunca de params
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const organizationId = auth.user.organization_id;
+
     const searchParams = request.nextUrl.searchParams;
     const storeId = searchParams.get('storeId'); // ✅ NOVO: Filtrar por loja
+
+    // ✅ Se storeId fornecido, validar propriedade antes de usar
+    if (storeId) {
+      const validation = await validateStoreAccess(auth.supabase, organizationId, storeId, auth.user.id);
+      if (!validation.valid) {
+        return NextResponse.json({ error: validation.error }, { status: validation.status || 403 });
+      }
+    }
 
     // Check Shopify stores - ✅ MODIFICADO: Filtrar por storeId
     let shopifyQuery = supabase
@@ -105,10 +118,11 @@ export async function GET(request: NextRequest) {
         total_customers, 
         total_products, 
         total_revenue, 
-        last_sync_at, 
+        last_sync_at,
         created_at
-      `);
-    
+      `)
+      .eq('organization_id', organizationId);
+
     // ✅ NOVO: Se storeId fornecido, buscar apenas essa loja
     if (storeId) {
       shopifyQuery = shopifyQuery.eq('id', storeId);
@@ -124,8 +138,9 @@ export async function GET(request: NextRequest) {
       let klaviyoQuery = supabase
         .from('klaviyo_accounts')
         .select('*')
+        .eq('organization_id', organizationId)
         .eq('is_active', true);
-      
+
       // ✅ NOVO: Filtrar por store_id se fornecido
       if (storeId) {
         klaviyoQuery = klaviyoQuery.eq('store_id', storeId);
@@ -142,8 +157,9 @@ export async function GET(request: NextRequest) {
     let metaQuery = supabase
       .from('meta_ad_accounts')
       .select('id, account_name, is_active, last_sync_at')
+      .eq('organization_id', organizationId)
       .eq('is_active', true);
-    
+
     if (storeId) {
       metaQuery = metaQuery.eq('store_id', storeId);
     }
@@ -156,8 +172,9 @@ export async function GET(request: NextRequest) {
     let googleQuery = supabase
       .from('google_ad_accounts')
       .select('id, account_name, is_active, last_sync_at')
+      .eq('organization_id', organizationId)
       .eq('is_active', true);
-    
+
     if (storeId) {
       googleQuery = googleQuery.eq('store_id', storeId);
     }
@@ -170,8 +187,9 @@ export async function GET(request: NextRequest) {
     let tiktokQuery = supabase
       .from('tiktok_ad_accounts')
       .select('id, advertiser_name, is_active, last_sync_at')
+      .eq('organization_id', organizationId)
       .eq('is_active', true);
-    
+
     if (storeId) {
       tiktokQuery = tiktokQuery.eq('store_id', storeId);
     }
@@ -196,8 +214,9 @@ export async function GET(request: NextRequest) {
           health_checked_at,
           created_at
         `)
+        .eq('organization_id', organizationId)
         .eq('is_active', true);
-      
+
       // ✅ NOVO: Filtrar por store_id se fornecido
       if (storeId) {
         whatsappQuery = whatsappQuery.eq('store_id', storeId);
@@ -211,8 +230,9 @@ export async function GET(request: NextRequest) {
       let whatsappAccountsQuery = supabase
         .from('whatsapp_accounts')
         .select('id, phone_number, is_active, created_at')
+        .eq('organization_id', organizationId)
         .eq('is_active', true);
-      
+
       // ✅ NOVO: Filtrar por store_id se fornecido
       if (storeId) {
         whatsappAccountsQuery = whatsappAccountsQuery.eq('store_id', storeId);

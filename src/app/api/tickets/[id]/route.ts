@@ -10,12 +10,25 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 // =============================================
-// Helper: Validar acesso ao recurso
+// Helper: Resolver as organizações do usuário a partir da SESSÃO
+// (org padrão + memberships). NUNCA confiar em organization_id do request.
 // =============================================
-async function validateTicketAccess(ticketId: string, organizationId: string) {
+async function getCallerOrgIds(userId: string, defaultOrgId: string): Promise<string[]> {
+  const { data: memberships } = await supabaseAdmin
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userId);
+  return [...new Set([defaultOrgId, ...(memberships?.map((m: any) => m.organization_id) || [])])];
+}
+
+// =============================================
+// Helper: Validar acesso ao recurso (org derivada da sessão)
+// =============================================
+async function validateTicketAccess(ticketId: string, orgIds: string[]) {
   const { data: ticket, error } = await supabaseAdmin
     .from('tickets')
     .select('id, organization_id')
@@ -23,16 +36,16 @@ async function validateTicketAccess(ticketId: string, organizationId: string) {
     .single();
 
   if (error || !ticket) {
-    return { valid: false, error: 'Ticket não encontrado', status: 404 };
+    return { valid: false as const, error: 'Ticket não encontrado', status: 404 };
   }
 
-  // ⚠️ CRÍTICO: Verificar se pertence à organização
-  if (ticket.organization_id !== organizationId) {
-    console.error(`[SECURITY] Access denied to ticket ${ticketId} for org ${organizationId}`);
-    return { valid: false, error: 'Acesso negado a este recurso', status: 403 };
+  // ⚠️ CRÍTICO: Verificar se pertence a uma organização do usuário
+  if (!orgIds.includes(ticket.organization_id)) {
+    console.error(`[SECURITY] Access denied to ticket ${ticketId} for orgs ${orgIds.join(',')}`);
+    return { valid: false as const, error: 'Acesso negado a este recurso', status: 403 };
   }
 
-  return { valid: true, ticket };
+  return { valid: true as const, ticket };
 }
 
 // =============================================
@@ -43,13 +56,18 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
+    // ⚠️ SEGURANÇA: org derivada da SESSÃO, nunca do request
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const { user } = auth;
+    const orgIds = await getCallerOrgIds(user.id, user.organization_id);
 
-    // ⚠️ CRÍTICO: organization_id obrigatório
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
+    // ⚠️ SEGURANÇA: Validar acesso ao ticket (org da sessão)
+    const validation = await validateTicketAccess(params.id, orgIds);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status });
     }
+    const organizationId = validation.ticket.organization_id;
 
     // ⚠️ SEGURANÇA: Buscar ticket FILTRADO por organization_id
     const { data: ticket, error } = await supabaseAdmin
@@ -102,9 +120,14 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    // ⚠️ SEGURANÇA: org derivada da SESSÃO, nunca do request
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const { user } = auth;
+    const orgIds = await getCallerOrgIds(user.id, user.organization_id);
+
     const body = await request.json();
     const {
-      organization_id, // ⚠️ OBRIGATÓRIO para validação
       title,
       description,
       category,
@@ -126,16 +149,12 @@ export async function PUT(
       updated_by_name,
     } = body;
 
-    // ⚠️ CRÍTICO: organization_id obrigatório
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
-
-    // ⚠️ SEGURANÇA: Validar acesso antes de atualizar
-    const validation = await validateTicketAccess(params.id, organization_id);
+    // ⚠️ SEGURANÇA: Validar acesso antes de atualizar (org da sessão)
+    const validation = await validateTicketAccess(params.id, orgIds);
     if (!validation.valid) {
       return NextResponse.json({ error: validation.error }, { status: validation.status });
     }
+    const organization_id = validation.ticket.organization_id;
 
     // Buscar ticket atual para comparações
     const { data: existing } = await supabaseAdmin
@@ -227,19 +246,18 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
+    // ⚠️ SEGURANÇA: org derivada da SESSÃO, nunca do request
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const { user } = auth;
+    const orgIds = await getCallerOrgIds(user.id, user.organization_id);
 
-    // ⚠️ CRÍTICO: organization_id obrigatório
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
-
-    // ⚠️ SEGURANÇA: Validar acesso antes de deletar
-    const validation = await validateTicketAccess(params.id, organizationId);
+    // ⚠️ SEGURANÇA: Validar acesso antes de deletar (org da sessão)
+    const validation = await validateTicketAccess(params.id, orgIds);
     if (!validation.valid) {
       return NextResponse.json({ error: validation.error }, { status: validation.status });
     }
+    const organizationId = validation.ticket.organization_id;
 
     // ⚠️ SEGURANÇA: Delete com filtro de organization_id
     // Comentários e histórico são deletados automaticamente por CASCADE

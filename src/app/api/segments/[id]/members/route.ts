@@ -15,6 +15,16 @@ export async function GET(
   const supabase = getSupabaseAdmin();
   const segmentId = params.id;
 
+  // Multi-org: the orgs the caller actually belongs to.
+  const { data: memberships } = await supabase
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', auth.user.id);
+  const orgIds = [...new Set([
+    auth.user.organization_id,
+    ...((memberships || []).map((m: any) => m.organization_id)),
+  ])];
+
   // Get segment with rules
   const { data: segment, error: segErr } = await supabase
     .from('customer_segments')
@@ -24,6 +34,11 @@ export async function GET(
 
   if (segErr || !segment) {
     return NextResponse.json({ error: 'Segment not found' }, { status: 404 });
+  }
+
+  // ⚠️ SEGURANÇA: o segmento deve pertencer a uma org do chamador.
+  if (!orgIds.includes(segment.organization_id)) {
+    return authError('Forbidden', 403);
   }
 
   const { searchParams } = new URL(request.url);

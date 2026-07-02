@@ -103,16 +103,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true, skipped: true, reason: 'store_inactive' });
     }
 
-    // 5. Verificar HMAC (segurança)
-    if (store.api_secret && hmacHeader) {
-      const isValid = verifyShopifyWebhook(rawBody, hmacHeader, store.api_secret);
+    // 5. Verificar HMAC (segurança) — FAIL-CLOSED.
+    //    Quando existe secret (por loja ou env-fallback), o header é
+    //    OBRIGATÓRIO e a assinatura precisa ser válida. Header ausente
+    //    ou inválido => 401. Mantém consistência com
+    //    /api/tracking/shopify-webhook.
+    const secret = store.api_secret || process.env.SHOPIFY_API_SECRET || '';
+    if (secret) {
+      const isValid = !!hmacHeader && verifyShopifyWebhook(rawBody, hmacHeader, secret);
       if (!isValid) {
-        console.error(`Invalid HMAC signature for ${shopDomain}`);
+        console.error(`Invalid or missing HMAC signature for ${shopDomain}`);
         return NextResponse.json(
           { error: 'Invalid signature' },
           { status: 401 }
         );
       }
+    } else if (process.env.NODE_ENV === 'production') {
+      console.error(`No webhook secret configured for ${shopDomain}`);
+      return NextResponse.json(
+        { error: 'Webhook not configured' },
+        { status: 500 }
+      );
     }
 
     // 6. Verificar se evento está habilitado

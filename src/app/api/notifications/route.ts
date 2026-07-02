@@ -19,32 +19,14 @@ export async function GET(request: NextRequest) {
     // CORREÇÃO: Resolver contexto do token PRIMEIRO
     // =====================================================
     const auth = await getAuthClient()
-    
-    let userId: string | null = null
-    let organizationId: string | null = null
-    
-    if (auth) {
-      userId = auth.user.id
-      organizationId = auth.user.organization_id
-    }
-    
-    // Query params como fallback/override (para compatibilidade)
+    if (!auth) return authError()
+
+    // Always derive identity from the SESSION — never from query params.
+    const userId = auth.user.id
+    const organizationId = auth.user.organization_id
+
     const { searchParams } = new URL(request.url)
-    const queryOrgId = searchParams.get('organization_id') || searchParams.get('organizationId')
-    const queryUserId = searchParams.get('user_id') || searchParams.get('userId')
-    
-    // Usar query params se fornecidos (para admin ou testes)
-    if (queryOrgId) organizationId = queryOrgId
-    if (queryUserId) userId = queryUserId
-    
-    // Validar
-    if (!organizationId || !userId) {
-      return NextResponse.json({ 
-        error: 'Authentication required. Please login.',
-        hint: 'organization_id and user_id could not be resolved from token'
-      }, { status: 401 })
-    }
-    
+
     // Parâmetros de filtro
     const unreadOnly = searchParams.get('unread_only') === 'true'
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)

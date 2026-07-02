@@ -142,8 +142,19 @@ export async function resolveIdentity(input: ResolveInput): Promise<ResolveOutpu
     updates.updated_at = new Date().toISOString();
     await supabase.from('visitor_identities').update(updates).eq('id', working.id);
 
-    // Record the alias if this client_visitor_id is new for this identity
-    if (input.clientVisitorId && input.clientVisitorId !== working.worder_visitor_id) {
+    // Record the alias if this client_visitor_id is new for this identity.
+    // SECURITY: only do this when the match came from same-browser evidence
+    // (visitor_id or fingerprint) or the new-identity path — NOT from a raw
+    // email/phone/shopify_customer lookup. Otherwise an unauthenticated
+    // caller could supply a victim's email plus an arbitrary visitor id and
+    // permanently graft that visitor id onto the victim's identity
+    // (identity pollution / event mis-attribution). PII the caller merely
+    // typed is not proof they own the visitor id.
+    const isPiiMatch =
+      matchSource === 'email' ||
+      matchSource === 'phone' ||
+      matchSource === 'shopify_customer';
+    if (!isPiiMatch && input.clientVisitorId && input.clientVisitorId !== working.worder_visitor_id) {
       await supabase
         .from('visitor_id_aliases')
         .insert({

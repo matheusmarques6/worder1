@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
+import { getAuthClient, authError } from '@/lib/api-utils'
 
 // GET - List conversations
 export async function GET(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const { supabase, user } = auth
+    const organizationId = user.organization_id
+
     const searchParams = request.nextUrl.searchParams
-    const organizationId = searchParams.get('organization_id')
     const accountId = searchParams.get('account_id')
     const status = searchParams.get('status') || 'open'
     const assignedTo = searchParams.get('assigned_to')
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
     const search = searchParams.get('search')
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
 
     let query = supabase
       .from('instagram_conversations')
@@ -71,15 +71,16 @@ export async function GET(request: NextRequest) {
 // PATCH - Update conversation (assign, close, etc)
 export async function PATCH(request: NextRequest) {
   try {
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const { supabase, user } = auth
+    const organizationId = user.organization_id
+
     const body = await request.json()
-    const { conversation_id, organization_id, ...updates } = body
+    const { conversation_id, organization_id: _ignoredOrg, ...updates } = body
 
     if (!conversation_id) {
       return NextResponse.json({ error: 'conversation_id is required' }, { status: 400 })
-    }
-
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
     }
 
     // Verify conversation belongs to organization
@@ -87,7 +88,7 @@ export async function PATCH(request: NextRequest) {
       .from('instagram_conversations')
       .select('id')
       .eq('id', conversation_id)
-      .eq('organization_id', organization_id)
+      .eq('organization_id', organizationId)
       .single()
 
     if (!conversation) {
@@ -110,6 +111,7 @@ export async function PATCH(request: NextRequest) {
       .from('instagram_conversations')
       .update(allowedUpdates)
       .eq('id', conversation_id)
+      .eq('organization_id', organizationId)
       .select()
       .single()
 

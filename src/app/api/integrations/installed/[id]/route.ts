@@ -1,26 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseClient } from '@/lib/api-utils'
+import { getAuthClient, authError } from '@/lib/api-utils'
 export const dynamic = 'force-dynamic';
+
+// Safe columns to return — NEVER expose secret columns like
+// credentials_encrypted, oauth_access_token or webhook_token.
+const SAFE_INSTALLED_COLUMNS = `
+  id,
+  organization_id,
+  store_id,
+  integration_id,
+  status,
+  configuration,
+  default_pipeline_id,
+  default_stage_id,
+  auto_tags,
+  field_mapping,
+  last_sync_at,
+  created_at,
+  updated_at,
+  integration:integrations(*)
+`;
 
 // GET - Get single installed integration
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = getSupabaseClient()
-
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
+  const auth = await getAuthClient()
+  if (!auth) return authError()
+  const { supabase, user } = auth
 
   try {
     const { data: installed, error } = await supabase
       .from('installed_integrations')
-      .select(`
-        *,
-        integration:integrations(*)
-      `)
+      .select(SAFE_INSTALLED_COLUMNS)
       .eq('id', params.id)
+      .eq('organization_id', user.organization_id)
       .single()
 
     if (error) throw error
@@ -37,11 +52,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = getSupabaseClient()
-
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
+  const auth = await getAuthClient()
+  if (!auth) return authError()
+  const { supabase, user } = auth
 
   try {
     const body = await request.json()
@@ -73,10 +86,8 @@ export async function PATCH(
       .from('installed_integrations')
       .update(updateData)
       .eq('id', params.id)
-      .select(`
-        *,
-        integration:integrations(*)
-      `)
+      .eq('organization_id', user.organization_id)
+      .select(SAFE_INSTALLED_COLUMNS)
       .single()
 
     if (error) throw error
@@ -93,17 +104,16 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = getSupabaseClient()
-
-  if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
+  const auth = await getAuthClient()
+  if (!auth) return authError()
+  const { supabase, user } = auth
 
   try {
     const { error } = await supabase
       .from('installed_integrations')
       .delete()
       .eq('id', params.id)
+      .eq('organization_id', user.organization_id)
 
     if (error) throw error
 

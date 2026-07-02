@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
+import { generateOAuthState } from '@/lib/oauth-security';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
@@ -45,9 +46,13 @@ export async function POST(request: NextRequest) {
       const clientId = process.env.GOOGLE_CLIENT_ID;
       const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/google/callback`;
       const scope = 'https://www.googleapis.com/auth/adwords';
-      
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${organizationId}`;
-      
+
+      // GERAR STATE SEGURO (assinado, single-use e com expiracao) — nunca
+      // enviar o organizationId em texto puro no state.
+      const state = generateOAuthState(organizationId, auth.user.id, 'google');
+
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
+
       return NextResponse.json({ authUrl });
     }
 

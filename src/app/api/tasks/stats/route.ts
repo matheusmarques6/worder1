@@ -6,18 +6,24 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
     const assignedTo = searchParams.get('assigned_to');
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
+    // ⚠️ SEGURANÇA: org derivada da SESSÃO, nunca do request
+    const auth = await getAuthClient();
+    if (!auth) return authError();
+    const { user } = auth;
+    const { data: memberships } = await supabaseAdmin
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id);
+    const orgIds = [...new Set([user.organization_id, ...(memberships?.map((m: any) => m.organization_id) || [])])];
 
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
@@ -27,7 +33,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('tasks')
       .select('id, status, due_date, priority, type')
-      .eq('organization_id', organizationId);
+      .in('organization_id', orgIds);
 
     if (assignedTo) {
       query = query.eq('assigned_to', assignedTo);

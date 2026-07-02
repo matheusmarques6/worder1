@@ -1,20 +1,36 @@
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthClient, authError } from '@/lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
 // GET - Buscar usuários para menção
 export async function GET(request: NextRequest) {
   try {
+    // Require a session — enumeration is scoped to the caller's orgs.
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id') || searchParams.get('org')
     const query = searchParams.get('q') || ''
     const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50)
-    
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
-    
+
+    // Requested org is honored only if the caller belongs to it;
+    // otherwise fall back to the caller's primary org. Never trust
+    // an arbitrary client-supplied organization_id.
+    const requestedOrg = searchParams.get('organization_id') || searchParams.get('org')
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', auth.user.id)
+    const orgIds = [...new Set([
+      auth.user.organization_id,
+      ...((memberships || []).map((m: any) => m.organization_id)),
+    ])]
+    const organizationId = requestedOrg && orgIds.includes(requestedOrg)
+      ? requestedOrg
+      : auth.user.organization_id
+
     // Tentar buscar de organization_members com join em profiles
     const { data: members, error: membersError } = await supabase
       .from('organization_members')

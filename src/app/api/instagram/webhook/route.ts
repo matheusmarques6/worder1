@@ -64,13 +64,19 @@ export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
 
-    // Verificar assinatura
+    // Verificar assinatura — FAIL-CLOSED: rejeitar se header ausente,
+    // secret nao configurado ou assinatura invalida, ANTES de qualquer
+    // mutacao no banco.
     const signature = request.headers.get('x-hub-signature-256');
-    if (signature && process.env.META_APP_SECRET) {
-      const isValid = await verifyInstagramWebhookSignature(rawBody, signature, process.env.META_APP_SECRET);
-      if (!isValid) {
-        console.warn('[Instagram Webhook] Invalid signature');
-      }
+    const appSecret = process.env.META_APP_SECRET;
+    if (!signature || !appSecret) {
+      console.warn('[Instagram Webhook] Missing signature or app secret');
+      return new NextResponse('unauthorized', { status: 401 });
+    }
+    const isValid = await verifyInstagramWebhookSignature(rawBody, signature, appSecret);
+    if (!isValid) {
+      console.warn('[Instagram Webhook] Invalid signature');
+      return new NextResponse('unauthorized', { status: 401 });
     }
 
     const body = JSON.parse(rawBody);

@@ -167,14 +167,14 @@ export async function POST(request: NextRequest) {
     const signature = request.headers.get('x-klaviyo-signature') ||
                      request.headers.get('x-signature');
     
-    if (webhookSecret) {
-      if (!verifyKlaviyoSignature(rawBody, signature, webhookSecret)) {
-        logWebhookAttempt(request, false, 'Invalid signature', { account_id });
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-      }
-    } else {
-      // Warning se não tem secret configurado
-      console.warn(`[Klaviyo Webhook] WARNING: Account ${account_id} has no webhook_secret configured!`);
+    // DEFAULT-DENY: sem webhook_secret configurado NÃO aceitamos o evento.
+    if (!webhookSecret) {
+      logWebhookAttempt(request, false, 'No webhook secret configured', { account_id });
+      return NextResponse.json({ error: 'Webhook not configured' }, { status: 401 });
+    }
+    if (!verifyKlaviyoSignature(rawBody, signature, webhookSecret)) {
+      logWebhookAttempt(request, false, 'Invalid signature', { account_id });
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
     // 6. Processar eventos
