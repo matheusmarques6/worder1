@@ -2,10 +2,18 @@
 // PUBLIC FORM SUBMIT API
 // Handles: Lead creation, pipeline entry, ad events
 // =============================================
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 import { META_BASE_URL } from '@/lib/whatsapp/api-version'
+import { corsJson, corsError, corsPreflight } from '@/lib/forms/public-cors'
+import {
+  normalizeEmail,
+  normalizePhone,
+  validateSubmitPayloadCaps,
+  buildCapiUserData,
+  isVisualPopupForm,
+} from '@/lib/forms/submit-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +22,15 @@ const KNOWN_CONTACT_COLUMNS = new Set([
   'first_name', 'last_name', 'full_name', 'email', 'phone', 'whatsapp',
   'birthday', 'gender', 'company', 'position',
   'city', 'state', 'country', 'zip', 'address',
+])
+
+// Block types whose answers map into the contact/custom fields.
+// Choice blocks (dropdown/radio/checkbox) were missing before — their
+// answers never reached the contact. legal-consent is intentionally
+// NOT here: it's a consent signal (answers.consent), handled separately.
+const INPUT_BLOCK_TYPES = new Set([
+  'email', 'phone', 'name-input', 'text-input', 'date-input',
+  'dropdown', 'radio', 'checkbox',
 ])
 
 // Helper: Extract contact data from answers based on field mappings
@@ -25,15 +42,32 @@ function extractContactData(answers: Record<string, any>, fields: any[], designB
   // ── 1. NEW: Design JSON blocks with mapTo property ──
   for (const block of designBlocks) {
     const p = block?.props || {}
-    if (!['email', 'phone', 'name-input', 'text-input', 'date-input'].includes(block.type)) continue
+    if (!INPUT_BLOCK_TYPES.has(block.type)) continue
 
-    // Resolve input name (matches the public script)
+    // Resolve input name (matches the public script — see script/route.ts
+    // renderBlock for email/phone/name/text/date, dropdown, radio, checkbox)
+    const typeFallback =
+      block.type === 'dropdown' ? 'select'
+      : block.type === 'radio' ? 'radio'
+      : block.type === 'checkbox' ? 'check'
+      : 'field'
+    const fallbackName =
+      block.type === 'email' ? 'email'
+      : block.type === 'phone' ? 'phone'
+      : block.type === 'name-input' ? 'first_name'
+      : ['dropdown', 'radio', 'checkbox'].includes(block.type) ? (p.label || typeFallback)
+      : 'field'
     const mapTo = p.mapTo === 'custom'
-      ? `custom:${p.mapToCustom || p.label || 'field'}`
-      : (p.mapTo || (block.type === 'email' ? 'email' : block.type === 'phone' ? 'phone' : block.type === 'name-input' ? 'first_name' : 'field'))
+      ? `custom:${p.mapToCustom || p.label || typeFallback}`
+      : (p.mapTo || fallbackName)
 
-    const value = answers[mapTo]
+    let value = answers[mapTo]
     if (value === undefined || value === null || value === '') continue
+    // Progressive profiling can mark a field as "known" with a boolean
+    // true (no value). Never write booleans into contact columns.
+    if (typeof value === 'boolean') continue
+    // Checkbox groups may arrive as arrays → comma-joined string
+    if (Array.isArray(value)) value = value.map((v) => String(v)).join(',')
 
     // Custom field → put in custom_fields
     if (String(mapTo).startsWith('custom:')) {
@@ -86,6 +120,13 @@ function extractContactData(answers: Record<string, any>, fields: any[], designB
     if (!contactData.company && (label.includes('empresa') || label.includes('company'))) contactData.company = value
   }
 
+  // Normalize identifiers once, here, so every downstream consumer
+  // (lookup, insert, CAPI hashing, identity graph) sees the same value.
+  // E-mail lowercase is an invariant of contacts_org_email_unique.
+  if (contactData.email !== undefined) contactData.email = normalizeEmail(contactData.email)
+  if (contactData.phone !== undefined) contactData.phone = normalizePhone(contactData.phone)
+  if (contactData.whatsapp !== undefined) contactData.whatsapp = normalizePhone(contactData.whatsapp)
+
   // Attach custom fields (if any)
   if (Object.keys(customFields).length > 0) {
     contactData.custom_fields = customFields
@@ -131,7 +172,10 @@ function evaluateConditions(conditions: any[], answers: Record<string, any>): bo
   })
 }
 
-// Helper: Build Facebook CAPI event payload
+// Helper: Build Facebook CAPI event payload.
+// user_data is SHA-256 hashed per Meta's spec (plaintext em/ph gets the
+// event rejected / the pixel flagged): em = lowercased+trimmed e-mail,
+// ph = digits only, fn/ln = lowercased first/last name.
 function buildFacebookEvent(
   eventName: string,
   eventValue: number | null,
@@ -146,14 +190,18 @@ function buildFacebookEvent(
     event_id: submissionId,
     action_source: 'website',
     event_source_url: request.headers.get('referer') || '',
-    user_data: {
-      em: contactData.email ? [contactData.email.toLowerCase()] : undefined,
-      ph: contactData.phone ? [contactData.phone.replace(/\D/g, '')] : undefined,
-      fn: contactData.name ? [contactData.name.split(' ')[0]?.toLowerCase()] : undefined,
-      ln: contactData.name ? [contactData.name.split(' ').slice(1).join(' ')?.toLowerCase()] : undefined,
-      client_ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '',
-      client_user_agent: request.headers.get('user-agent') || '',
-    },
+    user_data: buildCapiUserData(
+      {
+        email: contactData.email,
+        phone: contactData.phone,
+        first_name: contactData.first_name,
+        last_name: contactData.last_name,
+      },
+      {
+        ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '',
+        userAgent: request.headers.get('user-agent') || '',
+      }
+    ),
     custom_data: eventValue ? {
       value: eventValue,
       currency: currency,
@@ -186,6 +234,97 @@ async function sendFacebookEvent(
   }
 }
 
+// Helper: atomic counter bump on crm_forms via the
+// increment_crm_form_counter RPC (2026_07_02 migration). Falls back to
+// read-then-write when the RPC hasn't been applied yet, so counters
+// keep moving (just without atomicity) on older databases.
+async function bumpFormCounters(supabase: any, formId: string, columns: string[]) {
+  for (const column of columns) {
+    const { error } = await supabase.rpc('increment_crm_form_counter', {
+      p_form_id: formId,
+      p_column: column,
+    })
+    if (error) {
+      try {
+        const { data: cur } = await supabase
+          .from('crm_forms')
+          .select(column)
+          .eq('id', formId)
+          .maybeSingle()
+        await supabase
+          .from('crm_forms')
+          .update({ [column]: ((cur as any)?.[column] || 0) + 1 })
+          .eq('id', formId)
+      } catch { /* counters are best-effort */ }
+    }
+  }
+}
+
+// Helper: write marketing e-mail consent on the contact.
+//
+// SCHEMA NOTE (email_consent): the repo migration
+// 20260330_shopify_graphql_cdp.sql declares contacts.email_consent as
+// BOOLEAN, and every other writer (Shopify sync, unsubscribe, bounce
+// webhooks, send-batch guard `=== false`) uses booleans. Only the DOI
+// popup path wrote strings ('pending'/'subscribed') — on a BOOLEAN
+// column those writes fail silently. A comment in preview-allowed
+// claims prod is TEXT with a string vocabulary. To be safe on BOTH
+// schemas: consent granted writes boolean `true` (PostgREST casts it
+// to 'true' on a TEXT column, and every reader accepts true/'true'/
+// 'subscribed'); DOI-pending tries the string 'pending' first (only
+// representable on TEXT) and falls back to boolean `false` plus an
+// `awaiting_doi` source marker on BOOLEAN schemas. All writes are
+// error-checked — the old code never was, which is how consent
+// silently never landed.
+async function writeEmailConsent(
+  supabase: any,
+  contactId: string,
+  state: 'granted' | 'pending',
+  source: string
+): Promise<void> {
+  if (state === 'granted') {
+    const payload = {
+      email_consent: true,
+      email_consent_at: new Date().toISOString(),
+      email_consent_source: source,
+    }
+    const { error } = await supabase.from('contacts').update(payload).eq('id', contactId)
+    if (error) {
+      // Exotic schema (e.g. TEXT + CHECK vocabulary) — retry with the
+      // legacy string vocabulary before giving up.
+      const { error: retryErr } = await supabase
+        .from('contacts')
+        .update({ ...payload, email_consent: 'subscribed' })
+        .eq('id', contactId)
+      if (retryErr) {
+        console.error('[Form Submit] email_consent grant failed:', error.message, '| retry:', retryErr.message)
+      }
+    }
+    return
+  }
+
+  // state === 'pending' (double opt-in awaiting confirmation)
+  const { error } = await supabase
+    .from('contacts')
+    .update({
+      email_consent: 'pending',
+      email_consent_source: source,
+    })
+    .eq('id', contactId)
+  if (error) {
+    const { error: retryErr } = await supabase
+      .from('contacts')
+      .update({
+        email_consent: false,
+        email_consent_source: `${source}:awaiting_doi`,
+      })
+      .eq('id', contactId)
+    if (retryErr) {
+      console.error('[Form Submit] email_consent pending failed:', error.message, '| retry:', retryErr.message)
+    }
+  }
+}
+
 // POST - Submit form
 export async function POST(
   request: NextRequest,
@@ -195,34 +334,29 @@ export async function POST(
     const ip = getClientIp(request)
     const formId = params.id
 
-    // Impression tracking: lightweight path, no rate-limit, just increments counter
     const rawBody = await request.json().catch(() => ({}))
+
+    // Impression tracking: lightweight beacon path. Rate-limited on its
+    // own bucket (it used to run BEFORE the limiter — free amplification
+    // for counter inflation) and incremented atomically via RPC.
     if (rawBody && rawBody._track === 'impression') {
+      const rlImp = await checkRateLimit(`form:impression:${formId}:${ip}`, {
+        limit: 30,
+        windowSec: 60,
+      })
+      if (!rlImp.allowed) {
+        return corsError('Muitas tentativas. Aguarde e tente novamente.', 429, 'rate_limited')
+      }
       try {
         const sb = getSupabaseClient()
         if (sb) {
           // Bump BOTH impressions_count and views_count. The dashboard
           // card reads views_count; impressions_count is the legacy
-          // name kept around for old analytics queries. Without
-          // mirroring both, the merchant saw views=0 even after the
-          // popup loaded for thousands of visitors.
-          const { data: current } = await sb
-            .from('crm_forms')
-            .select('impressions_count, views_count')
-            .eq('id', formId)
-            .maybeSingle()
-          await sb
-            .from('crm_forms')
-            .update({
-              impressions_count: (current?.impressions_count || 0) + 1,
-              views_count: (current?.views_count || 0) + 1,
-            })
-            .eq('id', formId)
+          // name kept around for old analytics queries.
+          await bumpFormCounters(sb, formId, ['impressions_count', 'views_count'])
         }
       } catch {}
-      const r = NextResponse.json({ ok: true })
-      r.headers.set('Access-Control-Allow-Origin', '*')
-      return r
+      return corsJson({ ok: true })
     }
 
     // ---- Rate limit anti-spam ----
@@ -232,10 +366,7 @@ export async function POST(
       windowSec: 60,
     })
     if (!rl.allowed) {
-      return NextResponse.json(
-        { error: 'Muitas tentativas. Aguarde e tente novamente.' },
-        { status: 429 }
-      )
+      return corsError('Muitas tentativas. Aguarde e tente novamente.', 429, 'rate_limited')
     }
     // Limite global por IP (caso alguém tente múltiplos forms)
     const rlGlobal = await checkRateLimit(`form:global:${ip}`, {
@@ -243,15 +374,12 @@ export async function POST(
       windowSec: 60,
     })
     if (!rlGlobal.allowed) {
-      return NextResponse.json(
-        { error: 'Muitas tentativas. Aguarde e tente novamente.' },
-        { status: 429 }
-      )
+      return corsError('Muitas tentativas. Aguarde e tente novamente.', 429, 'rate_limited')
     }
 
     const supabase = getSupabaseClient()
     if (!supabase) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+      return corsError('Database not configured', 503, 'db_unavailable')
     }
 
     const body = rawBody
@@ -263,8 +391,16 @@ export async function POST(
     const sessionId = (body as any)?.session_id || (body as any)?.sessionId || null
     const fingerprintHash = (body as any)?.fingerprint_hash || (body as any)?.fingerprintHash || null
 
-    if (!answers || typeof answers !== 'object') {
-      return NextResponse.json({ error: 'answers é obrigatório' }, { status: 400 })
+    if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
+      return corsError('answers é obrigatório', 400, 'invalid_payload')
+    }
+
+    // Payload caps: 50 answer keys máx, 1000 chars por valor, 500 por UTM.
+    const capError = validateSubmitPayloadCaps(answers, {
+      utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+    })
+    if (capError) {
+      return corsError(capError, 400, 'payload_too_large')
     }
 
     // 1. Buscar formulário com campos e eventos
@@ -280,33 +416,55 @@ export async function POST(
       .single()
 
     if (formError || !form) {
-      return NextResponse.json({ error: 'Formulário não encontrado ou não publicado' }, { status: 404 })
+      return corsError('Formulário não encontrado ou não publicado', 404, 'not_found')
     }
 
-    // 2. Validar campos obrigatórios
-    const requiredFields = (form.fields || []).filter((f: any) => f.required)
-    for (const field of requiredFields) {
-      if (!answers[field.id] || String(answers[field.id]).trim() === '') {
-        return NextResponse.json(
-          { error: `Campo "${field.label}" é obrigatório`, field_id: field.id },
-          { status: 400 }
-        )
+    const designJson = form.design_json || {}
+    const isVisualForm = isVisualPopupForm(form.form_type, designJson)
+
+    // 2. Validar campos obrigatórios (APENAS formulários clássicos).
+    // Popups visuais nunca usam crm_form_fields — a rota de criação
+    // semeava name/email/phone required=true para TODO formulário, e as
+    // answers de popup são chaveadas por mapTo (não por field.id), então
+    // o primeiro campo legado derrubava TODA submissão de popup com 400.
+    if (!isVisualForm) {
+      const requiredFields = (form.fields || []).filter((f: any) => f.required)
+      for (const field of requiredFields) {
+        if (!answers[field.id] || String(answers[field.id]).trim() === '') {
+          return corsError(`Campo "${field.label}" é obrigatório`, 400, 'missing_required_field', { field_id: field.id })
+        }
       }
     }
 
     // 3. Extrair dados de contato
     // Collect all blocks from design_json (steps[].blocks[]) to read mapTo
     const designBlocks: any[] = []
-    const designJson = form.design_json || {}
     if (Array.isArray(designJson.steps)) {
       for (const step of designJson.steps) {
         if (Array.isArray(step?.blocks)) designBlocks.push(...step.blocks)
       }
     }
-    const contactData = extractContactData(answers, form.fields || [], designBlocks)
+    const contactData = extractContactData(answers, isVisualForm ? [] : (form.fields || []), designBlocks)
+
+    // Legal consent (LGPD): the script renders the legal-consent block
+    // as <input type="checkbox" name="consent"> — checked posts
+    // answers.consent='on', unchecked omits the key entirely. When the
+    // design HAS a legal-consent block and the visitor did NOT check it,
+    // we still save the contact + submission but never grant marketing
+    // e-mail consent (and skip the DOI e-mail).
+    const hasLegalConsentBlock = designBlocks.some((b: any) => b?.type === 'legal-consent')
+    const consentRaw = (answers as any)?.consent
+    const consentChecked =
+      consentRaw !== undefined && consentRaw !== null &&
+      String(consentRaw) !== '' &&
+      String(consentRaw).toLowerCase() !== 'false' &&
+      String(consentRaw) !== '0'
+    const marketingConsentDenied = hasLegalConsentBlock && !consentChecked
 
     // UTM data for contact profile (if behavior.utm.storeOnConsent is true)
     const popupBehavior = (form.behavior as any) || (designJson.behavior as any) || {}
+    const audienceCfg: any = (popupBehavior as any)?.audience || {}
+    const doubleOptInEnabled = !!audienceCfg.doubleOptIn
     const storeUtmOnConsent = popupBehavior?.utm?.storeOnConsent === true
     const utmPayload: Record<string, any> = {}
     if (storeUtmOnConsent) {
@@ -328,32 +486,53 @@ export async function POST(
     console.log('[Form Submit] Contact data extracted:', contactData)
     console.log('[Form Submit] Pipeline ID:', form.pipeline_id)
 
+    // Update an existing contact merging custom_fields (new keys win)
+    // and keeping utm_data FIRST-touch: the original utm_data is
+    // preserved and the new capture goes under last_utm inside the
+    // same JSONB. Replaces the old wholesale JSONB overwrite.
+    const applyContactUpdate = async (existing: any): Promise<string> => {
+      const id = existing.id as string
+      const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() }
+      const fields = ['first_name','last_name','phone','whatsapp','birthday','gender','company','position','city','state','country','zip','address']
+      for (const f of fields) {
+        if (contactData[f] !== undefined && contactData[f] !== null) updatePayload[f] = contactData[f]
+      }
+      if (contactData.custom_fields) {
+        const existingCustom = (existing.custom_fields && typeof existing.custom_fields === 'object') ? existing.custom_fields : {}
+        updatePayload.custom_fields = { ...existingCustom, ...contactData.custom_fields }
+      }
+      if (storeUtmOnConsent && Object.keys(utmPayload).length > 0) {
+        const existingUtm = (existing.utm_data && typeof existing.utm_data === 'object') ? existing.utm_data : null
+        const hasFirstTouch = existingUtm && Object.keys(existingUtm).some((k) => k.startsWith('utm_'))
+        if (!hasFirstTouch) {
+          // First touch — set it (preserving any non-utm keys already there)
+          updatePayload.utm_data = { ...(existingUtm || {}), ...utmPayload }
+        } else {
+          // Keep first-touch untouched; record this capture as last_utm
+          updatePayload.utm_data = { ...existingUtm, last_utm: utmPayload }
+        }
+      }
+      const { error: updErr } = await supabase.from('contacts').update(updatePayload).eq('id', id)
+      if (updErr) console.error('[Form Submit] Error updating contact:', updErr)
+      else console.log('[Form Submit] Updated existing contact:', id)
+      return id
+    }
+
+    const CONTACT_SELECT = 'id, custom_fields, utm_data'
+
     if (hasContactData) {
-      // Tentar encontrar contato existente por email
+      // Tentar encontrar contato existente por email (já normalizado
+      // lowercase em extractContactData — invariante do índice único)
       if (contactData.email) {
         const { data: existingContact } = await supabase
           .from('contacts')
-          .select('id')
+          .select(CONTACT_SELECT)
           .eq('organization_id', form.organization_id)
           .eq('email', contactData.email)
           .maybeSingle()
 
         if (existingContact) {
-          contactId = existingContact.id
-          // Atualizar contato com novos dados
-          const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() }
-          const fields = ['first_name','last_name','phone','whatsapp','birthday','gender','company','position','city','state','country','zip','address']
-          for (const f of fields) {
-            if (contactData[f] !== undefined) updatePayload[f] = contactData[f]
-          }
-          if (contactData.custom_fields) {
-            updatePayload.custom_fields = contactData.custom_fields
-          }
-          if (storeUtmOnConsent && Object.keys(utmPayload).length > 0) {
-            updatePayload.utm_data = utmPayload
-          }
-          await supabase.from('contacts').update(updatePayload).eq('id', contactId)
-          console.log('[Form Submit] Updated existing contact:', contactId)
+          contactId = await applyContactUpdate(existingContact)
         }
       }
 
@@ -388,31 +567,50 @@ export async function POST(
           .single()
 
         if (contactError) {
-          console.error('[Form Submit] Error creating contact:', contactError)
+          // Unique violation on contacts_org_email_unique — a concurrent
+          // submit (double-click) created the row between our lookup and
+          // this insert. Re-fetch and fall back to the update path so the
+          // submission is never dropped. (Plain .upsert can't be used:
+          // the unique index is partial (WHERE email IS NOT NULL) and
+          // PostgREST's ON CONFLICT inference doesn't carry the index
+          // predicate, so onConflict:'organization_id,email' errors.)
+          if (contactData.email && (contactError.code === '23505' || /duplicate|unique/i.test(contactError.message || ''))) {
+            const { data: raced } = await supabase
+              .from('contacts')
+              .select(CONTACT_SELECT)
+              .eq('organization_id', form.organization_id)
+              .eq('email', contactData.email)
+              .maybeSingle()
+            if (raced) {
+              contactId = await applyContactUpdate(raced)
+            } else {
+              console.error('[Form Submit] Unique violation but re-fetch found nothing:', contactError)
+            }
+          } else {
+            console.error('[Form Submit] Error creating contact:', contactError)
+          }
         } else {
           contactId = newContact?.id || null
           console.log('[Form Submit] Created new contact:', contactId)
         }
       }
     } else {
-      // Sem dados de contato extraídos - criar contato genérico para não perder o lead
-      const { data: newContact, error: contactError } = await supabase
-        .from('contacts')
-        .insert({
-          organization_id: form.organization_id,
-          store_id: form.store_id || null,
-          first_name: 'Lead do formulário',
-          source: 'form',
-        })
-        .select('id')
-        .single()
+      // Sem email E sem telefone (nem nome): não criar mais o contato
+      // fantasma "Lead do formulário" — poluía a base com linhas sem
+      // nenhum identificador. A submissão em si continua sendo salva
+      // logo abaixo (contact_id = null).
+      console.log('[Form Submit] No contact data extracted — skipping placeholder contact')
+    }
 
-      if (contactError) {
-        console.error('[Form Submit] Error creating generic contact:', contactError)
-      } else {
-        contactId = newContact?.id || null
-        console.log('[Form Submit] Created generic contact:', contactId)
-      }
+    // 4.5. Consentimento de e-mail (single opt-in). Antes desta correção
+    // NENHUM caminho gravava email_consent no submit — o guard de
+    // consentimento das automações via o contato sem consentimento e o
+    // welcome flow pulava o nó de e-mail para todo inscrito de popup.
+    // DOI (double opt-in) grava 'pending' e só vira true no clique de
+    // confirmação (confirm-opt-in). Consentimento negado no bloco
+    // legal-consent → não grava nada de marketing.
+    if (contactId && contactData.email && !marketingConsentDenied && !doubleOptInEnabled) {
+      await writeEmailConsent(supabase, contactId, 'granted', `popup_form:${form.id}`)
     }
 
     // 5. Criar deal no pipeline (se configurado)
@@ -558,32 +756,15 @@ export async function POST(
 
     if (subError) {
       console.error('[Form Submit] Error creating submission:', subError)
-      return NextResponse.json({ error: subError.message }, { status: 500 })
+      return corsError(subError.message, 500, 'server_error')
     }
 
     // Bump the form's submissions_count + views_count so the /forms
-    // dashboard card reflects reality. Fire-and-forget — a failure
-    // here mustn't break the submit response. Mirrors the impression
-    // tracker above (which also writes both columns).
-    supabase
-      .from('crm_forms')
-      .select('submissions_count, views_count')
-      .eq('id', formId)
-      .maybeSingle()
-      .then(({ data: cur }: any) => {
-        supabase
-          .from('crm_forms')
-          .update({
-            submissions_count: ((cur?.submissions_count as number) || 0) + 1,
-            // Some merchants land on the popup AND submit before our
-            // impression beacon makes it through (Beacon API can drop on
-            // slow connections). Guarantee views >= submits by also
-            // bumping views_count here.
-            views_count: ((cur?.views_count as number) || 0) + 1,
-          })
-          .eq('id', formId)
-          .then(() => {}, () => {})
-      }, () => {})
+    // dashboard card reflects reality. Atomic via RPC (fire-and-forget —
+    // a failure here mustn't break the submit response). views_count is
+    // also bumped because the impression beacon can drop on slow
+    // connections; this guarantees views >= submits.
+    bumpFormCounters(supabase, formId, ['submissions_count', 'views_count']).catch(() => {})
 
     // 7. Processar eventos de ads
     const eventsFired: any[] = []
@@ -680,7 +861,6 @@ export async function POST(
     // 8.4. Aplicar audiencia (tags + listId) do formulario no contato
     if (contactId) {
       try {
-        const audienceCfg: any = (popupBehavior as any)?.audience || {}
         const audienceTags: string[] = Array.isArray(audienceCfg.tags) ? audienceCfg.tags.filter(Boolean) : (Array.isArray(form.tags) ? form.tags : [])
         const audienceListId: string | null = audienceCfg.listId || form.list_id || null
 
@@ -731,65 +911,59 @@ export async function POST(
     // 8.4b. Double opt-in. When audience.doubleOptIn=true the form
     // shouldn't grant marketing consent on submit — that requires a
     // confirmation click from the subscriber's inbox. Flip the
-    // contact's email_consent to 'pending' and send a transactional
+    // contact's email_consent to pending and send a transactional
     // confirmation email with a signed token link. Same shape as
     // Klaviyo's "double opt-in" toggle on subscription forms.
+    // Skipped entirely when the visitor left the legal-consent
+    // checkbox unchecked.
     let doubleOptInSent = false
-    if (contactId && contactData.email) {
+    if (contactId && contactData.email && doubleOptInEnabled && !marketingConsentDenied) {
       try {
-        const audienceCfg: any = (popupBehavior as any)?.audience || {}
-        if (audienceCfg.doubleOptIn) {
-          // Park the contact in 'pending' so the consent guard in
-          // automations / campaigns short-circuits until confirmation.
-          await supabase
-            .from('contacts')
-            .update({
-              email_consent: 'pending',
-              email_consent_source: `popup_form:${form.id}:awaiting_doi`,
-            })
-            .eq('id', contactId)
+        // Park the contact in 'pending' so the consent guard in
+        // automations / campaigns short-circuits until confirmation.
+        // (Error-checked + schema-tolerant — see writeEmailConsent.)
+        await writeEmailConsent(supabase, contactId, 'pending', `popup_form:${form.id}`)
 
-          const { signOptInToken } = await import('@/lib/email/optin-token')
-          const token = signOptInToken({
-            contactId,
-            orgId: form.organization_id,
-            formId: form.id,
+        const { signOptInToken } = await import('@/lib/email/optin-token')
+        const token = signOptInToken({
+          contactId,
+          orgId: form.organization_id,
+          formId: form.id,
+        })
+        const { getAppBaseUrl } = await import('@/lib/app-url')
+        const baseUrl = getAppBaseUrl()
+        const confirmUrl = `${baseUrl}/api/public/confirm-opt-in?token=${encodeURIComponent(token)}`
+
+        const { getEmailProviderForOrg } = await import('@/lib/email/providers')
+        const { provider, config } = await getEmailProviderForOrg(form.organization_id)
+        const fromEmail = config.defaultFrom || 'onboarding@resend.dev'
+        const senderName = config.defaultSenderName || 'Worder'
+        const subject = `Confirme sua inscrição`
+        const greeting = contactData.first_name ? `Olá ${contactData.first_name},` : 'Olá,'
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#FAFAFA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+          <div style="max-width:520px;margin:48px auto;padding:32px;background:#FFFFFF;border:1px solid #E5E7EB;border-radius:16px;">
+            <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 16px;letter-spacing:-0.02em;">Confirme sua inscrição</h1>
+            <p style="font-size:15px;color:#6B7280;line-height:1.5;margin:0 0 24px;">${greeting} obrigado por se inscrever. Para confirmar sua inscrição e começar a receber nossos emails, clique no botão abaixo.</p>
+            <a href="${confirmUrl}" style="display:inline-block;background:#F97316;color:#FFFFFF;font-weight:700;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:15px;">Confirmar inscrição</a>
+            <p style="font-size:12px;color:#9CA3AF;margin:24px 0 0;line-height:1.5;">Se você não pediu para se inscrever, pode ignorar este email. O link expira em 14 dias.</p>
+          </div>
+        </body></html>`
+
+        try {
+          await provider.send({
+            to: contactData.email,
+            from: fromEmail,
+            senderName,
+            subject,
+            html,
+            tags: [
+              { name: 'kind', value: 'double_optin' },
+              { name: 'form_id', value: form.id },
+            ],
           })
-          const { getAppBaseUrl } = await import('@/lib/app-url')
-          const baseUrl = getAppBaseUrl()
-          const confirmUrl = `${baseUrl}/api/public/confirm-opt-in?token=${encodeURIComponent(token)}`
-
-          const { getEmailProviderForOrg } = await import('@/lib/email/providers')
-          const { provider, config } = await getEmailProviderForOrg(form.organization_id)
-          const fromEmail = config.defaultFrom || 'onboarding@resend.dev'
-          const senderName = config.defaultSenderName || 'Worder'
-          const subject = `Confirme sua inscrição`
-          const greeting = contactData.first_name ? `Olá ${contactData.first_name},` : 'Olá,'
-          const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#FAFAFA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-            <div style="max-width:520px;margin:48px auto;padding:32px;background:#FFFFFF;border:1px solid #E5E7EB;border-radius:16px;">
-              <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 16px;letter-spacing:-0.02em;">Confirme sua inscrição</h1>
-              <p style="font-size:15px;color:#6B7280;line-height:1.5;margin:0 0 24px;">${greeting} obrigado por se inscrever. Para confirmar sua inscrição e começar a receber nossos emails, clique no botão abaixo.</p>
-              <a href="${confirmUrl}" style="display:inline-block;background:#F97316;color:#FFFFFF;font-weight:700;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:15px;">Confirmar inscrição</a>
-              <p style="font-size:12px;color:#9CA3AF;margin:24px 0 0;line-height:1.5;">Se você não pediu para se inscrever, pode ignorar este email. O link expira em 14 dias.</p>
-            </div>
-          </body></html>`
-
-          try {
-            await provider.send({
-              to: contactData.email,
-              from: fromEmail,
-              senderName,
-              subject,
-              html,
-              tags: [
-                { name: 'kind', value: 'double_optin' },
-                { name: 'form_id', value: form.id },
-              ],
-            })
-            doubleOptInSent = true
-          } catch (sendErr: any) {
-            console.warn('[Form Submit] doubleOptIn email send failed:', sendErr?.message)
-          }
+          doubleOptInSent = true
+        } catch (sendErr: any) {
+          console.warn('[Form Submit] doubleOptIn email send failed:', sendErr?.message)
         }
       } catch (e: any) {
         console.warn('[Form Submit] doubleOptIn block failed:', e?.message)
@@ -812,8 +986,8 @@ export async function POST(
           fingerprintHash,
           userAgent: ua,
           ip,
-          email: contactData.email || answers.email || null,
-          phone: contactData.phone || answers.phone || null,
+          email: contactData.email || normalizeEmail(answers.email) || null,
+          phone: contactData.phone || normalizePhone(answers.phone) || null,
           source: 'form',
         })
         await linkContactToIdentity(identity.identityId, contactId, form.organization_id)
@@ -845,6 +1019,14 @@ export async function POST(
       } catch { /* silent */ }
     }
 
+    // Idempotency scope for automation triggers: per FORM + CONTACT (not
+    // per submission id). A per-submission key made every resubmit a
+    // "new" event — double-click or returning visitor re-fired the
+    // welcome flow. The dispatcher dedups identical keys inside a 24h
+    // window; resubmits beyond 24h still re-enroll (frequency_config on
+    // the automation governs from there).
+    const dispatchContactKey = contactId || contactData.email || submission.id
+
     // 8.6. Disparar automações com trigger_form_submitted
     try {
       const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
@@ -873,7 +1055,7 @@ export async function POST(
           if (cfg?.form_id && cfg.form_id !== formId) return false
           return true
         },
-        idempotencyKey: `form_submit:${submission.id}`,
+        idempotencyKey: `form_submit:${formId}:${dispatchContactKey}`,
       })
     } catch (e: any) {
       console.warn('[Form Submit] automation dispatch failed:', e?.message)
@@ -916,9 +1098,10 @@ export async function POST(
             if (cfg?.form_id && cfg.form_id !== formId) return false
             return true
           },
-          // Per-submission so the same lead resubmitting the popup
-          // doesn't kick off the welcome flow twice in a row.
-          idempotencyKey: `popup_subscribed:${submission.id}`,
+          // Per form+contact so the same lead resubmitting the popup
+          // doesn't kick off the welcome flow twice within the
+          // dispatcher's 24h dedup window.
+          idempotencyKey: `popup_subscribed:${formId}:${dispatchContactKey}`,
         })
       } catch (e: any) {
         console.warn('[Form Submit] popup_subscribed dispatch failed:', e?.message)
@@ -977,7 +1160,7 @@ export async function POST(
     }
 
     // 9. Return success with tracking data for client-side pixels
-    const response = NextResponse.json({
+    return corsJson({
       success: true,
       submission_id: submission.id,
       contact_id: contactId,
@@ -1009,22 +1192,13 @@ export async function POST(
           })),
       },
     })
-
-    response.headers.set('Access-Control-Allow-Origin', '*')
-    response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type')
-    return response
   } catch (error: any) {
     console.error('[Form Submit] Error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return corsError(error.message || 'Erro interno', 500, 'server_error')
   }
 }
 
 // OPTIONS - CORS preflight
 export async function OPTIONS() {
-  const response = new NextResponse(null, { status: 204 })
-  response.headers.set('Access-Control-Allow-Origin', '*')
-  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type')
-  return response
+  return corsPreflight()
 }

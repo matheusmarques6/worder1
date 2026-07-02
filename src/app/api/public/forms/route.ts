@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { sanitizeDomain } from '@/lib/forms/submit-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,19 +12,36 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get('status') || 'published'
     const type = searchParams.get('type')
 
-    if (!domain) {
+    // Sanitize before it ever touches a PostgREST filter: the previous
+    // .or(`shop_domain.eq.${domain},...`) let a crafted domain like
+    // "x,id.not.is.null" inject extra filter clauses and enumerate every
+    // org's published forms. Only [a-z0-9.-] survives.
+    const cleanDomain = sanitizeDomain(domain)
+    if (!cleanDomain) {
       return NextResponse.json({ forms: [] })
     }
 
-    // Find store by domain
-    const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '')
-    const { data: store } = await supabaseAdmin
+    // Find store by domain: exact match first, then suffix match (covers
+    // "www."-prefixed hosts). The sanitized value can't contain %/_/,
+    // so no LIKE-wildcard or filter injection is possible.
+    let { data: store } = await supabaseAdmin
       .from('shopify_stores')
       .select('id, organization_id')
-      .or(`shop_domain.eq.${cleanDomain},shop_domain.ilike.%${cleanDomain}%`)
+      .eq('shop_domain', cleanDomain)
       .eq('is_active', true)
       .limit(1)
       .maybeSingle()
+
+    if (!store) {
+      const { data: suffixStore } = await supabaseAdmin
+        .from('shopify_stores')
+        .select('id, organization_id')
+        .ilike('shop_domain', `%${cleanDomain}`)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle()
+      store = suffixStore
+    }
 
     if (!store) {
       return NextResponse.json({ forms: [] })

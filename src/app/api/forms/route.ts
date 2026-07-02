@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { isVisualPopupForm } from '@/lib/forms/submit-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -144,6 +145,24 @@ export async function POST(request: NextRequest) {
     // client bypasses RLS; isolation is preserved by the explicit
     // organization_id field below.
     const admin = getSupabaseAdmin()
+
+    // store_id must belong to the authed org. Because we insert with the
+    // admin client (bypassing RLS), an arbitrary UUID in the body would
+    // otherwise bind this popup to ANOTHER tenant's store.
+    if (store_id) {
+      const { data: storeRow } = await admin
+        .from('shopify_stores')
+        .select('id')
+        .eq('id', store_id)
+        .eq('organization_id', user.organization_id)
+        .maybeSingle()
+      if (!storeRow) {
+        return NextResponse.json(
+          { error: 'Loja inválida: selecione uma loja da sua organização.' },
+          { status: 400 }
+        )
+      }
+    }
     const { data: form, error } = await admin
       .from('crm_forms')
       .insert({
@@ -177,16 +196,24 @@ export async function POST(request: NextRequest) {
       design_json_steps: form.design_json?.steps?.length,
     })
 
-    // Criar campos padrão
-    const defaultFields = [
-      { field_type: 'text', label: 'Nome completo', placeholder: 'Seu nome', required: true, position: 0, map_to_contact_field: 'name' },
-      { field_type: 'email', label: 'E-mail', placeholder: 'seu@email.com', required: true, position: 1, map_to_contact_field: 'email' },
-      { field_type: 'phone', label: 'Telefone', placeholder: '(11) 99999-9999', required: true, position: 2, map_to_contact_field: 'phone' },
-    ]
+    // Criar campos padrão — SOMENTE para formulários clássicos (embed
+    // sem design visual). Popups visuais (popup/flyout/banner/fullpage)
+    // são renderizados a partir de design_json.steps e o editor de popup
+    // NUNCA gerencia crm_form_fields: semear name/email/phone com
+    // required=true aqui fazia a validação legada do submit devolver 400
+    // para TODA submissão de popup (as answers são chaveadas por mapTo,
+    // não por field.id).
+    if (!isVisualPopupForm(form.form_type, form.design_json)) {
+      const defaultFields = [
+        { field_type: 'text', label: 'Nome completo', placeholder: 'Seu nome', required: true, position: 0, map_to_contact_field: 'name' },
+        { field_type: 'email', label: 'E-mail', placeholder: 'seu@email.com', required: true, position: 1, map_to_contact_field: 'email' },
+        { field_type: 'phone', label: 'Telefone', placeholder: '(11) 99999-9999', required: true, position: 2, map_to_contact_field: 'phone' },
+      ]
 
-    await admin
-      .from('crm_form_fields')
-      .insert(defaultFields.map(f => ({ ...f, form_id: form.id })))
+      await admin
+        .from('crm_form_fields')
+        .insert(defaultFields.map(f => ({ ...f, form_id: form.id })))
+    }
 
     // Criar evento padrão de Lead
     await admin

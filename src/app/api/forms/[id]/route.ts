@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { isVisualPopupForm } from '@/lib/forms/submit-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -117,6 +118,60 @@ export async function PUT(
     // Same admin-client switch as POST/GET. RLS on crm_forms was silently
     // stripping the design_json column on writes; admin bypasses it.
     const admin = getSupabaseAdmin()
+
+    // store_id must belong to the authed org (admin client bypasses RLS,
+    // so an arbitrary UUID would bind the popup to another tenant's store).
+    if (store_id) {
+      const { data: storeRow } = await admin
+        .from('shopify_stores')
+        .select('id')
+        .eq('id', store_id)
+        .eq('organization_id', user.organization_id)
+        .maybeSingle()
+      if (!storeRow) {
+        return NextResponse.json(
+          { error: 'Loja inválida: selecione uma loja da sua organização.' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Publish gate: a visual popup with store_id NULL renders on EVERY
+    // storefront of the org (cross-store fan-out). Multi-store orgs must
+    // pick a store before publishing; single-store orgs get it
+    // auto-filled with their only active store.
+    if (status === 'published') {
+      const { data: current } = await admin
+        .from('crm_forms')
+        .select('store_id, form_type, design_json')
+        .eq('id', formId)
+        .eq('organization_id', user.organization_id)
+        .maybeSingle()
+
+      const effectiveStoreId = store_id !== undefined ? store_id : current?.store_id
+      const effectiveFormType = form_type !== undefined ? form_type : current?.form_type
+      const effectiveDesign = design_json !== undefined ? design_json : current?.design_json
+
+      if (!effectiveStoreId && isVisualPopupForm(effectiveFormType, effectiveDesign)) {
+        const { data: activeStores } = await admin
+          .from('shopify_stores')
+          .select('id')
+          .eq('organization_id', user.organization_id)
+          .eq('is_active', true)
+
+        if ((activeStores?.length || 0) > 1) {
+          return NextResponse.json(
+            { error: 'Selecione a loja do popup antes de publicar.' },
+            { status: 400 }
+          )
+        }
+        if (activeStores?.length === 1) {
+          updates.store_id = activeStores[0].id
+        }
+        // 0 lojas ativas: publica sem loja (nada onde renderizar ainda).
+      }
+    }
+
     const { data: form, error } = await admin
       .from('crm_forms')
       .update(updates)

@@ -23,6 +23,8 @@ interface Form {
   slug: string
   description: string | null
   status: 'draft' | 'published' | 'archived'
+  form_type?: string | null
+  store_id?: string | null
   submissions_count: number
   views_count: number
   theme: any
@@ -265,14 +267,31 @@ export default function FormsPage() {
 
   const duplicateForm = async (form: Form) => {
     try {
+      // The list payload only carries metadata — fetch the FULL form so
+      // the copy keeps the actual popup: design_json (blocks/steps),
+      // behavior (triggers/segmentação), audience, tags, lista e loja.
+      // Antes a cópia nascia vazia (só nome + tema) e o lojista perdia
+      // o popup inteiro ao duplicar.
+      const fullRes = await fetch(`/api/forms/${form.id}`)
+      const fullData = fullRes.ok ? await fullRes.json() : null
+      const full = fullData?.form || form
+
       const res = await fetch('/api/forms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: `${form.name} (copia)`,
-          description: form.description,
-          theme: form.theme,
-          store_id: currentStore?.id || null,
+          name: `${full.name} (copia)`,
+          description: full.description,
+          theme: full.theme,
+          form_type: full.form_type,
+          design_json: full.design_json || {},
+          behavior: full.behavior || {},
+          audience: full.audience || {},
+          tags: full.tags || [],
+          list_id: full.list_id || null,
+          pipeline_id: full.pipeline_id || null,
+          stage_id: full.stage_id || null,
+          store_id: full.store_id || currentStore?.id || null,
         }),
       })
       if (res.ok) {
@@ -333,8 +352,15 @@ export default function FormsPage() {
 
   const copyEmbedCode = (form: Form) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    const script = `<script src="${origin}/api/forms/${form.id}/embed" async></script>`
-    navigator.clipboard.writeText(script)
+    // /api/public/forms/{id}/script é o renderer VIVO dos popups visuais
+    // (o antigo /api/forms/{id}/embed lê a tabela legada `forms` e não
+    // renderiza nada para popups). Para form_type=embed o script procura
+    // o host <div data-worder-form="{id}"> e renderiza inline.
+    const scriptTag = `<script src="${origin}/api/public/forms/${form.id}/script" async></script>`
+    const snippet = form.form_type === 'embed'
+      ? `<div data-worder-form="${form.id}"></div>\n${scriptTag}`
+      : scriptTag
+    navigator.clipboard.writeText(snippet)
     setCopiedEmbed(form.id)
     setTimeout(() => setCopiedEmbed(null), 2000)
   }

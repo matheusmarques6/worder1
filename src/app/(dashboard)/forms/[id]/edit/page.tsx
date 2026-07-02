@@ -101,7 +101,10 @@ export default function PopupBuilderPage() {
   }
 
   const copyEmbed = () => {
-    const script = `<script src="${window.location.origin}/api/forms/${formId}/embed" async></script>`
+    // /api/public/forms/{id}/script é o renderer vivo dos popups — o
+    // antigo /api/forms/{id}/embed lê a tabela legada `forms` e não
+    // renderiza popups do editor visual.
+    const script = `<script src="${window.location.origin}/api/public/forms/${formId}/script" async></script>`
     navigator.clipboard?.writeText(script)
     setEmbedCopied(true)
     setTimeout(() => setEmbedCopied(false), 2000)

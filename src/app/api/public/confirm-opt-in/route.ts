@@ -89,18 +89,38 @@ export async function GET(req: NextRequest) {
     }
 
     const alreadySubscribed =
-      contact.email_consent === 'subscribed' || contact.email_consent === 'true'
+      contact.email_consent === true ||
+      contact.email_consent === 'subscribed' ||
+      contact.email_consent === 'true'
 
     if (!alreadySubscribed) {
-      await supabaseAdmin
+      // SCHEMA NOTE: migrations declare contacts.email_consent BOOLEAN
+      // (20260330_shopify_graphql_cdp.sql) and every other writer uses
+      // booleans; the old string write ('subscribed') failed silently on
+      // a BOOLEAN column — DOI subscribers never got confirmed. Boolean
+      // `true` survives both schemas (PostgREST casts it to 'true' on a
+      // TEXT column, and every reader accepts true/'true'/'subscribed').
+      // Error-checked with a legacy-string retry for exotic schemas.
+      const updatePayload = {
+        email_consent: true as boolean | string,
+        email_consent_at: new Date().toISOString(),
+        email_consent_source: `popup_form:${payload.formId}:double_optin`,
+        status: 'qualified',
+      }
+      const { error: consentErr } = await supabaseAdmin
         .from('contacts')
-        .update({
-          email_consent: 'subscribed',
-          email_consent_at: new Date().toISOString(),
-          email_consent_source: `popup_form:${payload.formId}:double_optin`,
-          status: 'qualified',
-        })
+        .update(updatePayload)
         .eq('id', contact.id)
+      if (consentErr) {
+        const { error: retryErr } = await supabaseAdmin
+          .from('contacts')
+          .update({ ...updatePayload, email_consent: 'subscribed' })
+          .eq('id', contact.id)
+        if (retryErr) {
+          console.error('[confirm-opt-in] consent write failed:', consentErr.message, '| retry:', retryErr.message)
+          throw retryErr
+        }
+      }
     }
 
     return new Response(

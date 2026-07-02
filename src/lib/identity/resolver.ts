@@ -398,6 +398,26 @@ export async function linkContactToIdentity(
 ): Promise<{ eventsLinked: number }> {
   const supabase = getSupabaseAdmin();
 
+  // 0. Refuse to re-point an identity that's already linked to a
+  //    DIFFERENT contact — mirrors the refusal in
+  //    linkContactToIdentityByContactInfo above. Silently stealing the
+  //    identity would re-attribute the other contact's entire event
+  //    history (shared devices, typo'd e-mails). Same contact or
+  //    unlinked → proceed. Merges are resolved from the contact UI.
+  const { data: existing } = await supabase
+    .from('visitor_identities')
+    .select('contact_id')
+    .eq('id', identityId)
+    .maybeSingle();
+  if (existing?.contact_id && existing.contact_id !== contactId) {
+    console.warn('[Identity] linkContactToIdentity: identity already linked to a different contact, refusing to re-point', {
+      identityId,
+      existingContactId: existing.contact_id,
+      requestedContactId: contactId,
+    });
+    return { eventsLinked: 0 };
+  }
+
   // 1. Save contact_id on the identity row
   await supabase
     .from('visitor_identities')

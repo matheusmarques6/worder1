@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { sanitizeDomain } from '@/lib/forms/submit-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,23 +66,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const rawDomain = String(body.shopDomain || body.domain || '').trim().toLowerCase();
-    if (!rawDomain) {
+    // Normalize + sanitize: strip scheme/path and keep only [a-z0-9.-].
+    // The previous interpolation into .or(...) let a crafted domain
+    // inject extra PostgREST filter clauses (cross-org enumeration).
+    const domain = sanitizeDomain(body.shopDomain || body.domain || '');
+    if (!domain) {
       return NextResponse.json({ received: true, matched: false }, { headers });
     }
 
-    // Normalize: strip scheme + trailing slash. Some themes pass the
-    // raw `window.location.host` (which can be a custom domain), so we
-    // match either against shop_domain or its aliases.
-    const domain = rawDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-
-    const { data: store } = await supabaseAdmin
+    // Exact match first, then suffix match (custom domains / www.
+    // prefixes). Sanitized value can't contain %/_/, so no wildcard or
+    // filter injection is possible.
+    let { data: store } = await supabaseAdmin
       .from('shopify_stores')
       .select('id, embed_installed, embed_installed_at')
-      .or(`shop_domain.eq.${domain},shop_domain.ilike.%${domain}%`)
+      .eq('shop_domain', domain)
       .eq('is_active', true)
       .limit(1)
       .maybeSingle();
+
+    if (!store) {
+      const { data: suffixStore } = await supabaseAdmin
+        .from('shopify_stores')
+        .select('id, embed_installed, embed_installed_at')
+        .ilike('shop_domain', `%${domain}`)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      store = suffixStore;
+    }
 
     if (!store) {
       return NextResponse.json({ received: true, matched: false }, { headers });

@@ -1,9 +1,10 @@
 // =============================================
 // PUBLIC FORM EVENT API - Fire events (thank you page, stage change)
 // =============================================
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
 import { META_BASE_URL } from '@/lib/whatsapp/api-version'
+import { corsJson, corsError, corsPreflight } from '@/lib/forms/public-cors'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,7 @@ export async function POST(
   try {
     const supabase = getSupabaseClient()
     if (!supabase) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+      return corsError('Database not configured', 503, 'db_unavailable')
     }
 
     const formId = params.id
@@ -23,10 +24,7 @@ export async function POST(
     const { submission_id, event_type } = body
 
     if (!submission_id || !event_type) {
-      return NextResponse.json(
-        { error: 'submission_id e event_type são obrigatórios' },
-        { status: 400 }
-      )
+      return corsError('submission_id e event_type são obrigatórios', 400, 'invalid_payload')
     }
 
     // Buscar submission
@@ -38,7 +36,7 @@ export async function POST(
       .single()
 
     if (!submission) {
-      return NextResponse.json({ error: 'Submission não encontrada' }, { status: 404 })
+      return corsError('Submission não encontrada', 404, 'not_found')
     }
 
     // Buscar eventos que correspondam ao trigger
@@ -50,7 +48,7 @@ export async function POST(
       .eq('trigger_type', event_type === 'page_view' ? 'on_page_view' : 'on_stage_change')
 
     if (!events || events.length === 0) {
-      return NextResponse.json({ events_fired: [] })
+      return corsJson({ events_fired: [] })
     }
 
     const eventsFired: any[] = []
@@ -138,19 +136,13 @@ export async function POST(
       }
     }
 
-    const response = NextResponse.json({ events_fired: eventsFired })
-    response.headers.set('Access-Control-Allow-Origin', '*')
-    return response
+    return corsJson({ events_fired: eventsFired })
   } catch (error: any) {
     console.error('[Form Event] Error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return corsError(error.message || 'Erro interno', 500, 'server_error')
   }
 }
 
 export async function OPTIONS() {
-  const response = new NextResponse(null, { status: 204 })
-  response.headers.set('Access-Control-Allow-Origin', '*')
-  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type')
-  return response
+  return corsPreflight()
 }
