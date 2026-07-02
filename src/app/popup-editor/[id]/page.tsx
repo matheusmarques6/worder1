@@ -2798,10 +2798,12 @@ export default function PopupEditorPage() {
           successMessage: saved.successMessage || form.success_message || '',
           errorMessage: saved.errorMessage || '',
         }
-        // Seed postSubmit.redirectUrl from top-level form.redirect_url if not already set
+        // Seed postSubmit.redirectUrl da coluna legada form.redirect_url apenas
+        // para EXIBIÇÃO — NÃO auto-flipar action p/ 'redirect'. O runtime só
+        // redireciona quando action==='redirect', então flipar aqui alteraria
+        // silenciosamente (no 1º save) um popup que hoje mostra o success step.
         if (!merged.postSubmit!.redirectUrl && form.redirect_url) {
           merged.postSubmit!.redirectUrl = form.redirect_url
-          if (merged.postSubmit!.action === 'show-success') merged.postSubmit!.action = 'redirect'
         }
         nextDesign = merged
       }
