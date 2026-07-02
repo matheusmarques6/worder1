@@ -43,11 +43,28 @@ export interface MergeTagAttrs {
   fallback?: string;
 }
 
+// The chip serializes to the literal `{{tag|fallback}}` — `{`, `}` and `|`
+// inside the fallback (or the custom-field path) would break that syntax
+// (renderMergeTags' fallback regex stops at the first `}`), so strip them
+// at input time.
+function sanitizeFallbackValue(value: string): string {
+  return value.replace(/[{}|]/g, '');
+}
+
+function sanitizeCustomField(value: string): string {
+  return value.replace(/[{}|\s]/g, '');
+}
+
 function MergeTagChip({ node, updateAttributes, deleteNode }: NodeViewProps) {
   const tag = (node.attrs.tag as string) || '';
   const label = (node.attrs.label as string) || tag;
   const fallback = (node.attrs.fallback as string) || '';
   const rawTag = fallback ? `{{${tag}|${fallback}}}` : `{{${tag}}}`;
+  // Custom-field chips ({{custom.<campo>}}) expose the path after `custom.`
+  // as an editable "Campo" input — the picker copy promises "troque
+  // nome_do_campo pelo seu campo" and this is where that happens.
+  const isCustom = tag.startsWith('custom.');
+  const customField = isCustom ? tag.slice('custom.'.length) : '';
 
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLElement | null>(null);
@@ -167,12 +184,42 @@ function MergeTagChip({ node, updateAttributes, deleteNode }: NodeViewProps) {
           >
             {rawTag}
           </code>
+          {isCustom && (
+            <>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#3f3f46', marginBottom: 4 }}>
+                Campo
+              </label>
+              <input
+                value={customField}
+                onChange={(e) => {
+                  const field = sanitizeCustomField(e.target.value);
+                  updateAttributes({
+                    tag: `custom.${field}`,
+                    label: field ? `custom.${field}` : 'Campo Custom',
+                  });
+                }}
+                placeholder="Ex: nome_do_campo"
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  fontSize: 12,
+                  padding: '5px 8px',
+                  border: '1px solid #d4d4d8',
+                  borderRadius: 6,
+                  outline: 'none',
+                  marginBottom: 10,
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                }}
+              />
+            </>
+          )}
           <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#3f3f46', marginBottom: 4 }}>
             Valor padrão (se vazio)
           </label>
           <input
             value={fallback}
-            onChange={(e) => updateAttributes({ fallback: e.target.value })}
+            onChange={(e) => updateAttributes({ fallback: sanitizeFallbackValue(e.target.value) })}
             placeholder="Ex: Cliente"
             style={{
               display: 'block',

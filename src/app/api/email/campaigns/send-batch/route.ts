@@ -464,7 +464,8 @@ export async function POST(req: NextRequest) {
           orgId: organizationId,
           campaignId: campaign_id,
         });
-        let finalSubject = renderMergeTags(subjectSource, mergeData);
+        // escape:false — subject is text/plain (no &amp; in the inbox).
+        let finalSubject = renderMergeTags(subjectSource, mergeData, { escape: false });
 
         // Strip any unresolved merge tags so customers never see raw
         // {{template_syntax}} in their inbox. Log a warning so the

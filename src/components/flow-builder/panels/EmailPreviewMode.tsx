@@ -46,18 +46,18 @@ function formatValue(v: any): string {
 
 // Profile fields to display in a curated order, with PT-BR labels.
 const PROFILE_FIELDS: [string, string][] = [
-  ['email', 'Email'],
-  ['first_name', 'First Name'],
-  ['last_name', 'Last Name'],
-  ['phone', 'Phone'],
-  ['city', 'City'],
-  ['state', 'State'],
-  ['country', 'Country'],
-  ['company', 'Company'],
+  ['email', 'E-mail'],
+  ['first_name', 'Primeiro nome'],
+  ['last_name', 'Sobrenome'],
+  ['phone', 'Telefone'],
+  ['city', 'Cidade'],
+  ['state', 'Estado'],
+  ['country', 'País'],
+  ['company', 'Empresa'],
   ['tags', 'Tags'],
-  ['total_orders', 'Total Orders'],
-  ['total_spent', 'Total Spent'],
-  ['created_at', 'Created At'],
+  ['total_orders', 'Total de pedidos'],
+  ['total_spent', 'Total gasto'],
+  ['created_at', 'Criado em'],
 ];
 
 interface EmailPreviewModeProps {
@@ -634,7 +634,7 @@ ${html}
       // scrollHeight via postMessage. allow-scripts: required for the
       // tiny size-reporter snippet above.
       sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
-      title="Email preview"
+      title="Pré-visualização do e-mail"
       className={cn('w-full border-0 block', viewMode === 'mobile' ? 'bg-white' : '')}
       style={{ height: `${height}px` }}
     />

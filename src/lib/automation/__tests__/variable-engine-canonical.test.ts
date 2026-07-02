@@ -91,18 +91,143 @@ describe('variable engine — flat email tags and custom fields stay intact', ()
   });
 });
 
-describe('variable engine — smart trigger tags stay intact for resolveTriggerSmartTags', () => {
-  it('leaves the 6 smart-tag paths literal on miss (resolved downstream in email)', () => {
+describe('variable engine — smart trigger tags resolve IN the engine (WhatsApp/SMS parity)', () => {
+  it('resolves {{ trigger.link }} from CheckoutURL via the shared helper', () => {
+    expect(variableEngine.process('{{ trigger.link }}', context)).toBe(
+      'https://loja.myshopify.com/checkouts/recover/abc?key=1&discount=DISCOUNT10'
+    );
+  });
+
+  it('resolves first-item smart tags and counts', () => {
+    expect(variableEngine.process('{{ trigger.first_item_name }}', context)).toBe('Camiseta Premium');
+    expect(variableEngine.process('{{ trigger.first_item_price }}', context)).toBe('89.9');
+    expect(variableEngine.process('{{ trigger.items_count }}', context)).toBe('1');
+  });
+
+  it('leaves the smart-tag paths literal on a MISS (email pipeline resolves with storeUrl)', () => {
+    const emptyCtx: any = { trigger: { type: 't', data: {}, timestamp: '' }, nodes: {} };
     for (const tag of [
       'trigger.link',
       'trigger.first_item_image',
       'trigger.first_item_name',
       'trigger.first_item_price',
       'trigger.total',
-      'trigger.items_count',
     ]) {
-      expect(variableEngine.process(`{{ ${tag} }}`, context)).toBe(`{{ ${tag} }}`);
+      expect(variableEngine.process(`{{ ${tag} }}`, emptyCtx)).toBe(`{{ ${tag} }}`);
     }
+  });
+});
+
+describe('variable engine — canonical array normalization ({{ DiscountCodes }})', () => {
+  const ctx: any = {
+    trigger: {
+      type: 'trigger_order',
+      data: {
+        DiscountCodes: ['CUPOM10', 'EXTRA5'],
+        Customer: { FirstName: 'Maria' },
+      },
+      timestamp: '',
+    },
+    nodes: {},
+  };
+
+  it('joins scalar arrays like the email resolver (no JSON)', () => {
+    expect(variableEngine.process('{{ DiscountCodes }}', ctx)).toBe('CUPOM10, EXTRA5');
+  });
+
+  it('joins Shopify { code } object arrays by their codes', () => {
+    const shopifyCtx: any = {
+      trigger: {
+        type: 't',
+        data: { DiscountCodes: [{ code: 'BEMVINDO10', amount: '10.0', type: 'percentage' }] },
+        timestamp: '',
+      },
+      nodes: {},
+    };
+    expect(variableEngine.process('{{ DiscountCodes }}', shopifyCtx)).toBe('BEMVINDO10');
+  });
+
+  it('treats other object shapes as a MISS (non-consuming, literal stays)', () => {
+    const weirdCtx: any = {
+      trigger: { type: 't', data: { DiscountCodes: [{ foo: 'bar' }] }, timestamp: '' },
+      nodes: {},
+    };
+    expect(variableEngine.process('{{ DiscountCodes }}', weirdCtx)).toBe('{{ DiscountCodes }}');
+  });
+});
+
+describe('variable engine — escapeHtml option (email HTML body parity)', () => {
+  const xssCtx: any = {
+    trigger: {
+      type: 't',
+      data: { Customer: { FirstName: '<b>Maria & Co</b>' } },
+      timestamp: '',
+    },
+    nodes: {},
+  };
+
+  it('escapes substituted values when escapeHtml is on', () => {
+    expect(
+      variableEngine.process('Oi {{ Customer.FirstName }}!', xssCtx, { escapeHtml: true })
+    ).toBe('Oi &lt;b&gt;Maria &amp; Co&lt;/b&gt;!');
+  });
+
+  it('does NOT escape by default (subjects / WhatsApp / SMS)', () => {
+    expect(variableEngine.process('Oi {{ Customer.FirstName }}!', xssCtx)).toBe(
+      'Oi <b>Maria & Co</b>!'
+    );
+  });
+
+  it('never escapes the returned literal on a non-consuming miss', () => {
+    expect(variableEngine.process('{{ first_name }}', xssCtx, { escapeHtml: true })).toBe(
+      '{{ first_name }}'
+    );
+  });
+
+  it('escapes & in URLs (valid in href; render.ts un-escapes before tracking)', () => {
+    expect(variableEngine.process('{{ CheckoutURL }}', context, { escapeHtml: true })).toBe(
+      'https://loja.myshopify.com/checkouts/recover/abc?key=1&amp;discount=DISCOUNT10'
+    );
+  });
+});
+
+describe('variable engine — consumeUnresolved option (WhatsApp/SMS: never ship literals)', () => {
+  const opts = { consumeUnresolved: true };
+
+  it("canonical miss → '' instead of the literal", () => {
+    expect(variableEngine.process('{{ Tracking.Number }}', context, opts)).toBe('');
+  });
+
+  it("flat email tag miss → ''", () => {
+    expect(variableEngine.process('Oi {{ first_name }}!', context, opts)).toBe('Oi !');
+  });
+
+  it("custom.* miss → ''", () => {
+    expect(variableEngine.process('{{ custom.x }}', context, opts)).toBe('');
+  });
+
+  it("smart-tag miss → ''", () => {
+    const emptyCtx: any = { trigger: { type: 't', data: {}, timestamp: '' }, nodes: {} };
+    expect(variableEngine.process('{{ trigger.link }}', emptyCtx, opts)).toBe('');
+  });
+
+  it('resolves {{tag|fallback}} syntax in the engine: fallback on miss', () => {
+    expect(variableEngine.process('{{ custom.campo|valor padrão }}', context, opts)).toBe(
+      'valor padrão'
+    );
+  });
+
+  it('resolves {{tag|fallback}} syntax in the engine: value when present', () => {
+    expect(variableEngine.process('{{ Customer.FirstName|Cliente }}', context, opts)).toBe('Maria');
+  });
+
+  it('still RESOLVES canonical + smart tags normally', () => {
+    expect(variableEngine.process('{{ CheckoutURL }}', context, opts)).toBe(
+      'https://loja.myshopify.com/checkouts/recover/abc?key=1&discount=DISCOUNT10'
+    );
+    expect(variableEngine.process('{{ trigger.first_item_name }}', context, opts)).toBe(
+      'Camiseta Premium'
+    );
   });
 });
 

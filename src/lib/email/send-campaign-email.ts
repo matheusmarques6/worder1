@@ -220,7 +220,9 @@ export async function sendCampaignEmail({
       subjectSrc = resolveTriggerSmartTags(subjectSrc, eventData);
     }
     const { renderMergeTags } = await import('@/lib/email/render');
-    const finalSubject = renderMergeTags(subjectSrc, mergeData);
+    // escape:false — the subject is text/plain: escaping would ship a
+    // literal `&amp;` to the inbox ("Zé & Cia" → "Zé &amp; Cia").
+    const finalSubject = renderMergeTags(subjectSrc, mergeData, { escape: false });
 
     // 5. Send via the org's configured provider (defaults to Resend).
     // The factory caches per-org so we don't hit the DB on every send.

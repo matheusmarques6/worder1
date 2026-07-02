@@ -125,7 +125,8 @@ export async function POST(req: NextRequest) {
 
     try {
       const { renderMergeTags } = await import('@/lib/email/render')
-      finalSubject = renderMergeTags(finalSubject, mergeData)
+      // escape:false — subject is text/plain (no &amp; in the inbox).
+      finalSubject = renderMergeTags(finalSubject, mergeData, { escape: false })
     } catch { /* non-blocking */ }
 
     // Full prepare pipeline = renderMergeTags ([[var]] normalised),

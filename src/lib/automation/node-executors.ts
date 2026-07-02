@@ -605,7 +605,14 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
         try {
           const { variableEngine } = await import('./variable-engine');
-          resolvedHtml = variableEngine.process(html, context);
+          // HTML body: escape substituted values (& < > " ') — the engine
+          // resolves canonical/trigger/contact values BEFORE the escaped
+          // downstream resolvers, so without this a Customer.FirstName of
+          // "<b>Maria & Co</b>" landed raw in automation HTML (it was
+          // escaped in preview/test). URLs stay functional: &amp; in href
+          // is valid and render.ts un-escapes before click-tracking.
+          resolvedHtml = variableEngine.process(html, context, { escapeHtml: true });
+          // Subject is plain text — NO html-escaping (no &amp; in inbox).
           resolvedSubject = variableEngine.process(resolvedSubject, context);
         } catch {
           // Fallback: simple regex replacement

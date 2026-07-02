@@ -122,16 +122,29 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, '&#39;')
 }
 
+export interface RenderMergeTagsOptions {
+  /**
+   * HTML-escape substituted values (default TRUE — XSS prevention for HTML
+   * bodies). Pass `escape: false` at PLAIN-TEXT call sites — subject lines
+   * and preheaders — where escaping is meaningless and ships literal
+   * `&amp;` to the inbox ("Zé & Cia" → "Zé &amp; Cia").
+   */
+  escape?: boolean;
+}
+
 /**
  * Replace {{tag}} and {{tag|fallback}} in HTML with data values.
  *
  * IMPORTANTE: valores são HTML-escaped por padrão (prevenção XSS).
  * Para injetar HTML confiável use a prefix tag `raw.`, ex: `{{raw.html_block}}`.
+ * Para contexto de TEXTO (assunto/preheader) use options.escape = false.
  */
 export function renderMergeTags(
   html: string,
-  data: Record<string, string>
+  data: Record<string, string>,
+  options?: RenderMergeTagsOptions
 ): string {
+  const shouldEscape = options?.escape !== false;
   // Normalize bracket-style placeholders to the Worder canonical syntax.
   // Merchants routinely import HTML from Klaviyo / Omnisend / Mailchimp,
   // whose footers ship with [[account.name]] / [[contact.email]] tags.
@@ -192,7 +205,7 @@ export function renderMergeTags(
     }
 
     const final = value ?? fallback
-    return rawMode ? final : escapeHtml(final)
+    return rawMode || !shouldEscape ? final : escapeHtml(final)
   }
 
   // Replace {{tag|fallback}} first (with fallback). Allows optional

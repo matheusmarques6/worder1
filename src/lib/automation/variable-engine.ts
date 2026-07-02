@@ -15,7 +15,14 @@
 import { get, set, has } from 'lodash';
 // Client-safe, dependency-free module — no import cycle (merge-tags.ts has
 // zero imports of its own).
-import { CANONICAL_TRIGGER_PATHS, MERGE_TAGS } from '@/lib/email/merge-tags';
+import {
+  CANONICAL_TRIGGER_PATHS,
+  MERGE_TAGS,
+  SMART_TRIGGER_TAG_NAMES,
+  computeSmartTagValue,
+  normalizeCanonicalValue,
+  escapeHtmlValue,
+} from '@/lib/email/merge-tags';
 
 // The 29 canonical un-prefixed tags ({{ CheckoutURL }}, {{ Customer.Email }},
 // {{ Items[0].ProductName }}, ...). The engine resolves these against
@@ -33,20 +40,14 @@ const FLAT_EMAIL_TAG_SET = new Set(
   MERGE_TAGS.map((t) => t.tag).filter((tag) => !tag.includes('.'))
 );
 
-// Smart tags ({{ trigger.link }}, {{ trigger.first_item_* }}, ...) that
-// resolveTriggerSmartTags resolves DOWNSTREAM in the email pipeline with
+// Smart tags ({{ trigger.link }}, {{ trigger.first_item_* }}, ...) with
 // multi-source fallbacks (CheckoutURL > AbandonedCheckoutURL > ProductURL
-// > ... > store URL). The engine can't reproduce that logic — on a miss it
-// must leave the literal intact instead of consuming it to ''. Every OTHER
-// trigger.* miss keeps the ''-on-miss behavior.
-const SMART_TRIGGER_TAG_SET = new Set([
-  'trigger.link',
-  'trigger.first_item_image',
-  'trigger.first_item_name',
-  'trigger.first_item_price',
-  'trigger.total',
-  'trigger.items_count',
-]);
+// > ...). The engine resolves them via computeSmartTagValue — the SAME
+// helper resolveTriggerSmartTags uses — so {{ trigger.link }} works in
+// WhatsApp/SMS too. On a miss the engine leaves the literal intact so the
+// email pipeline (which also knows the store URL) still gets its shot;
+// consume-channels turn misses into '' via consumeUnresolved.
+const SMART_TRIGGER_TAG_SET = new Set<string>(SMART_TRIGGER_TAG_NAMES);
 
 // ============================================
 // TYPES
@@ -161,6 +162,31 @@ export interface VariableSuggestion {
 }
 
 export type FilterFunction = (value: any, ...args: any[]) => any;
+
+/**
+ * Per-call processing options — the CHANNEL decides how substitution
+ * behaves, the engine stays channel-agnostic.
+ */
+export interface ProcessOptions {
+  /**
+   * HTML-escape substituted VALUES (& < > " '). Enable ONLY for HTML email
+   * bodies (node-executors' email node) so `Customer.FirstName = "<b>X</b>"`
+   * can't inject markup — parity with the escaped downstream resolvers.
+   * Keep OFF for subjects, WhatsApp, SMS and any other plain-text surface.
+   * Escaping URLs is safe: `&amp;` inside href is valid HTML and render.ts's
+   * decodeHtmlEntitiesInUrl normalizes it before click-tracking encoding.
+   */
+  escapeHtml?: boolean;
+  /**
+   * When true, EVERY unresolved tag is consumed to '' — including the
+   * canonical/flat/custom/smart paths that are normally left intact for the
+   * downstream email resolvers. Enable for channels with NO downstream
+   * resolver (WhatsApp, SMS) so customers never see a literal {{ ... }}.
+   * For those channels, `{{tag|fallback}}` syntax (unknown "filter") is
+   * resolved here too: value if present, fallback text otherwise.
+   */
+  consumeUnresolved?: boolean;
+}
 
 // ============================================
 // BUILT-IN FILTERS
@@ -395,17 +421,17 @@ export class VariableEngine {
   /**
    * Process a template string, replacing variables with values
    */
-  process(template: string, context: Partial<VariableContext>): string {
+  process(template: string, context: Partial<VariableContext>, options?: ProcessOptions): string {
     if (!template || typeof template !== 'string') {
       return String(template ?? '');
     }
 
     // Match {{variable}} or {{variable | filter}} or {{variable | filter:arg1:arg2}}
     const regex = /\{\{([^}]+)\}\}/g;
-    
+
     return template.replace(regex, (match, expression) => {
       try {
-        return this.evaluateExpression(expression.trim(), context, match);
+        return this.evaluateExpression(expression.trim(), context, match, options);
       } catch (error) {
         console.warn(`Variable engine error for "${expression}":`, error);
         return match; // Return original if error
@@ -416,7 +442,11 @@ export class VariableEngine {
   /**
    * Process an object recursively, replacing variables in all string values
    */
-  processObject<T extends Record<string, any>>(obj: T, context: Partial<VariableContext>): T {
+  processObject<T extends Record<string, any>>(
+    obj: T,
+    context: Partial<VariableContext>,
+    options?: ProcessOptions
+  ): T {
     if (typeof obj !== 'object' || obj === null) {
       return obj;
     }
@@ -424,27 +454,27 @@ export class VariableEngine {
     if (Array.isArray(obj)) {
       return obj.map(item => {
         if (typeof item === 'string') {
-          return this.process(item, context);
+          return this.process(item, context, options);
         }
         if (typeof item === 'object' && item !== null) {
-          return this.processObject(item, context);
+          return this.processObject(item, context, options);
         }
         return item;
       }) as unknown as T;
     }
 
     const result: Record<string, any> = {};
-    
+
     for (const [key, value] of Object.entries(obj)) {
       if (typeof value === 'string') {
-        result[key] = this.process(value, context);
+        result[key] = this.process(value, context, options);
       } else if (typeof value === 'object' && value !== null) {
-        result[key] = this.processObject(value, context);
+        result[key] = this.processObject(value, context, options);
       } else {
         result[key] = value;
       }
     }
-    
+
     return result as T;
   }
 
@@ -462,43 +492,62 @@ export class VariableEngine {
   private evaluateExpression(
     expression: string,
     context: Partial<VariableContext>,
-    originalMatch?: string
+    originalMatch?: string,
+    options?: ProcessOptions
   ): string {
     const original = originalMatch ?? `{{${expression}}}`;
+    // Escape only SUBSTITUTED values — never the returned original literal
+    // (that would corrupt the tag for the downstream resolvers).
+    const finalize = (v: string): string => (options?.escapeHtml ? escapeHtmlValue(v) : v);
 
     // Split by | for filters, but be careful with || in expressions
     const parts = expression.split(/\s*\|\s*(?![|])/);
     const path = parts[0].trim();
     const filterExpressions = parts.slice(1).map((f) => f.trim());
 
-    // Unknown-filter safety: `{{ custom.campo|valor padrão }}` parses as
-    // filter "valor padrão" — not a registered filter. That tag is NOT
-    // engine-owned: leave it untouched so renderMergeTags (which supports
-    // {{tag|fallback}} natively) resolves it downstream.
+    const knownFilters: string[] = [];
+    const unknownFilters: string[] = [];
     for (const filterExpr of filterExpressions) {
       const colonIndex = filterExpr.indexOf(':');
       const filterName = colonIndex === -1 ? filterExpr : filterExpr.substring(0, colonIndex);
-      if (!this.filters[filterName]) {
-        return original;
-      }
+      (this.filters[filterName] ? knownFilters : unknownFilters).push(filterExpr);
+    }
+
+    // Unknown-filter safety / DELIBERATE trade-off — do NOT "fix" this back
+    // to consuming: the `|` after a path is an OVERLOADED syntax. The email
+    // renderer (renderMergeTags) owns `{{tag|fallback}}` — a fallback VALUE,
+    // not a filter. So `{{ custom.campo|valor padrão }}` parses here as the
+    // unregistered filter "valor padrão"; that tag is NOT engine-owned and
+    // must be returned as the literal so renderMergeTags can resolve
+    // tag-or-fallback downstream. Consuming it (to '' or to a half-applied
+    // value) silently breaks every fallback the merchant configured in the
+    // editor. Channels with no downstream resolver (consumeUnresolved)
+    // instead resolve the fallback semantics right here, below.
+    if (unknownFilters.length > 0 && !options?.consumeUnresolved) {
+      return original;
     }
 
     // Get the value from context
     let value = this.getValue(path, context);
 
-    // Apply filters
-    for (const filterExpr of filterExpressions) {
+    // Apply (known) filters. When unknown "filters" exist we're on the
+    // consumeUnresolved path and they are treated as fallback text instead.
+    for (const filterExpr of knownFilters) {
       value = this.applyFilter(value, filterExpr);
     }
 
     // Convert to string for template replacement
     if (value === null || value === undefined) {
+      // Consume-channels (WhatsApp/SMS): never ship a literal {{ ... }} —
+      // use the {{tag|fallback}} fallback text when present, '' otherwise.
+      if (options?.consumeUnresolved) {
+        return unknownFilters.length > 0 ? finalize(unknownFilters[0]) : '';
+      }
       // Non-consuming for downstream namespaces: canonical whitelist tags,
       // flat email tags, custom.* fields and the trigger.* SMART tags get
       // resolved later in the email pipeline (resolveTriggerSmartTags +
       // renderMergeTags with the full mergeData). Everything else (incl.
-      // other trigger.*/event.* misses) keeps the ''-on-miss behavior
-      // WhatsApp/SMS rely on.
+      // other trigger.*/event.* misses) keeps the ''-on-miss behavior.
       if (
         CANONICAL_PATH_SET.has(path) ||
         FLAT_EMAIL_TAG_SET.has(path) ||
@@ -511,10 +560,10 @@ export class VariableEngine {
     }
 
     if (typeof value === 'object') {
-      return JSON.stringify(value);
+      return finalize(JSON.stringify(value));
     }
 
-    return String(value);
+    return finalize(String(value));
   }
 
   /**
@@ -539,7 +588,23 @@ export class VariableEngine {
       let value: any = get(data, normalized);
       if (value === undefined || value === null) value = get(raw, normalized);
       if (value === undefined || value === null) value = get(props, normalized);
-      return value === null ? undefined : value;
+      // Same join/miss semantics as the email resolver (scalar arrays →
+      // 'a, b', discount-code objects → codes, other objects → miss) so
+      // {{ DiscountCodes }} never renders as JSON in engine channels.
+      return normalizeCanonicalValue(value);
+    }
+
+    // Smart trigger tags ({{ trigger.link }}, {{ trigger.first_item_* }},
+    // {{ trigger.total }}, {{ trigger.items_count }}) — resolved with the
+    // exact multi-source fallback chains resolveTriggerSmartTags uses
+    // (shared helper), so they work in WhatsApp/SMS too. On a chain miss we
+    // FALL THROUGH to the generic trigger.* alias below (a payload may
+    // carry a literal `link` / `total` field); a full miss then reaches
+    // evaluateExpression, which decides (non-consuming for email, '' for
+    // consume-channels).
+    if (SMART_TRIGGER_TAG_SET.has(path)) {
+      const smart = computeSmartTagValue((context as any)?.trigger?.data, path);
+      if (smart !== undefined) return smart;
     }
 
     // Alias: event.X → trigger.data.X (matches merge tag picker format)
@@ -811,15 +876,20 @@ export const variableEngine = new VariableEngine();
 // HELPER FUNCTIONS
 // ============================================
 
-export function processTemplate(template: string, context: Partial<VariableContext>): string {
-  return variableEngine.process(template, context);
+export function processTemplate(
+  template: string,
+  context: Partial<VariableContext>,
+  options?: ProcessOptions
+): string {
+  return variableEngine.process(template, context, options);
 }
 
 export function processConfig<T extends Record<string, any>>(
-  config: T, 
-  context: Partial<VariableContext>
+  config: T,
+  context: Partial<VariableContext>,
+  options?: ProcessOptions
 ): T {
-  return variableEngine.processObject(config, context);
+  return variableEngine.processObject(config, context, options);
 }
 
 export function createExecutionContext(options: {

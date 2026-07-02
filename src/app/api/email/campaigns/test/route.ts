@@ -58,7 +58,8 @@ export async function POST(request: NextRequest) {
       baseUrl,
     });
 
-    const finalSubject = `[TESTE] ${renderMergeTags(campaign.subject, sampleData)}`;
+    // escape:false — subject is text/plain (no &amp; in the inbox).
+    const finalSubject = `[TESTE] ${renderMergeTags(campaign.subject, sampleData, { escape: false })}`;
 
     await sendEmail({
       to: testEmail,

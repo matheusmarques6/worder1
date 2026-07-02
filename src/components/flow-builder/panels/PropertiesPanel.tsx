@@ -2257,27 +2257,41 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
   // Where the auto-filled sender came from — drives the helper text next
   // to the fields ("Padrão da loja" vs "Padrão da organização"). Stays
   // null when the values were already set (user-typed or persisted).
-  const [senderSource, setSenderSource] = useState<'store' | 'org' | null>(null);
+  // 'mixed' = one field came from the store, the other from the org.
+  const [senderSource, setSenderSource] = useState<'store' | 'org' | 'mixed' | null>(null);
 
   // Auto-populate sender if empty (Klaviyo-style). When the flow is bound
   // to a store, the STORE's sender default wins — auto-filling the ORG
   // default here used to re-introduce the sibling-store identity the
   // per-store sender fix (/api/settings/store-email) exists to prevent.
-  // Org default is only the fallback when the flow has no store or the
-  // store has no email settings yet.
+  // The fill is PER FIELD: a store that only sets default_sender_name
+  // must not block the org fallback for the still-empty senderEmail
+  // (required field) — each field falls through independently. Non-empty
+  // values are never overwritten.
   useEffect(() => {
     if (config.senderName && config.senderEmail) return; // already filled
     let cancelled = false;
-    const apply = (s: any, source: 'store' | 'org') => {
-      if (cancelled) return false;
-      const hasAny = !!(s?.default_sender_name || s?.default_sender_email);
-      if (!hasAny) return false;
-      if (!config.senderName && s.default_sender_name) onUpdate('senderName', s.default_sender_name);
-      if (!config.senderEmail && s.default_sender_email) onUpdate('senderEmail', s.default_sender_email);
-      setSenderSource(source);
-      return true;
-    };
     (async () => {
+      // Track emptiness locally — `config` from props is stale inside this
+      // one-shot effect after the first onUpdate.
+      const need = {
+        senderName: !config.senderName,
+        senderEmail: !config.senderEmail,
+      };
+      const usedSources = new Set<'store' | 'org'>();
+      const fillFrom = (s: any, source: 'store' | 'org') => {
+        if (cancelled || !s) return;
+        if (need.senderName && s.default_sender_name) {
+          onUpdate('senderName', s.default_sender_name);
+          need.senderName = false;
+          usedSources.add(source);
+        }
+        if (need.senderEmail && s.default_sender_email) {
+          onUpdate('senderEmail', s.default_sender_email);
+          need.senderEmail = false;
+          usedSources.add(source);
+        }
+      };
       // 1) Store-scoped default (GET /api/settings/store-email?storeId=…
       //    → { email_settings: { default_sender_name, default_sender_email, default_reply_to } })
       if (storeId) {
@@ -2285,20 +2299,32 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
           const r = await fetch(`/api/settings/store-email?storeId=${encodeURIComponent(storeId)}`);
           if (r.ok) {
             const d = await r.json();
-            if (apply(d?.email_settings, 'store')) return;
+            fillFrom(d?.email_settings, 'store');
           }
         } catch { /* non-blocking — fall through to org default */ }
       }
-      // 2) Org-level fallback
-      try {
-        const r = await fetch('/api/settings/organization');
-        const d = await r.json();
-        apply(d?.organization?.email_settings, 'org');
-      } catch { /* non-blocking */ }
+      // 2) Org-level fallback for whatever is STILL empty
+      if (need.senderName || need.senderEmail) {
+        try {
+          const r = await fetch('/api/settings/organization');
+          const d = await r.json();
+          fillFrom(d?.organization?.email_settings, 'org');
+        } catch { /* non-blocking */ }
+      }
+      if (!cancelled && usedSources.size > 0) {
+        setSenderSource(usedSources.size > 1 ? 'mixed' : (usedSources.has('store') ? 'store' : 'org'));
+      }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const senderSourceLabel =
+    senderSource === 'store'
+      ? 'Padrão da loja'
+      : senderSource === 'mixed'
+        ? 'Padrão da loja/organização'
+        : 'Padrão da organização';
 
   // Compute sibling email nodes for in-editor navigation
   const emailSiblings = useMemo(() => {
@@ -2468,7 +2494,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
                 <label className="text-sm font-medium text-gray-700">Nome do remetente</label>
                 {config.senderName && senderSource && (
                   <span className="text-[10px] text-zinc-400">
-                    {senderSource === 'store' ? 'Padrão da loja' : 'Padrão da organização'}
+                    {senderSourceLabel}
                   </span>
                 )}
               </div>
@@ -2480,7 +2506,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
                 <label className="text-sm font-medium text-gray-700">Email do remetente <span className="text-red-500">*</span></label>
                 {config.senderEmail && senderSource && (
                   <span className="text-[10px] text-zinc-400">
-                    {senderSource === 'store' ? 'Padrão da loja' : 'Padrão da organização'}
+                    {senderSourceLabel}
                   </span>
                 )}
               </div>

@@ -83,8 +83,9 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json({
-    subject: renderMergeTags(finalSubject, merge),
-    preheader: renderMergeTags(finalPreheader, merge),
+    // escape:false — subject/preheader are text/plain surfaces (no &amp;).
+    subject: renderMergeTags(finalSubject, merge, { escape: false }),
+    preheader: renderMergeTags(finalPreheader, merge, { escape: false }),
     html: processedHtml,
     sampleMergeData: merge,
   })

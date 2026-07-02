@@ -144,13 +144,18 @@ export function extractEventPayloadStoreId(
   data: Record<string, any> | null | undefined
 ): string | null {
   const d: any = data || {};
-  const candidate = d.store_id || d.storeId || d._webhook_dispatch_meta?.store_id || null;
   // uuid guard: o id extraído vai interpolado num .or() do PostgREST contra
   // a coluna uuid automations.store_id — um valor malformado/legado geraria
   // 22P02 (invalid input syntax for type uuid) e derrubaria o trigger path
-  // inteiro. Não-uuid → trata como sem loja (org-wide).
-  if (typeof candidate !== 'string' || !UUID_RE.test(candidate)) return null;
-  return candidate;
+  // inteiro. Cada candidato é testado NA ORDEM e o primeiro uuid válido
+  // vence — um store_id legado malformado no topo não pode mais mascarar
+  // um storeId/_webhook_dispatch_meta válido logo abaixo. Nenhum uuid →
+  // trata como sem loja (org-wide).
+  const candidates = [d.store_id, d.storeId, d._webhook_dispatch_meta?.store_id];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && UUID_RE.test(candidate)) return candidate;
+  }
+  return null;
 }
 
 export interface EmitResult {

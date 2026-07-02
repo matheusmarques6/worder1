@@ -192,13 +192,119 @@ export interface ResolveTriggerSmartTagsOptions {
 }
 
 // Tiny local escape — keep this module client-safe (no server imports).
-function escapeHtmlValue(value: string): string {
+// Exported so the automation variable engine can apply the SAME escaping
+// to values it substitutes into HTML email bodies (XSS parity with the
+// downstream resolvers).
+export function escapeHtmlValue(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/**
+ * Normalize a canonical-tag value to the string that should reach the
+ * customer. SINGLE SOURCE for resolveCanonicalPath (below) AND the
+ * automation variable engine's canonical-alias branch — without sharing
+ * this, the engine JSON.stringify'd arrays and {{ DiscountCodes }} showed
+ * `["CUPOM10"]` in automation emails/WhatsApp while previews showed
+ * `CUPOM10`.
+ *
+ *   - array of scalars           → join(', ')            (['CUPOM10'] → 'CUPOM10')
+ *   - array of { code: string }  → join the .code fields (Shopify discount shape)
+ *   - other arrays / objects     → undefined (treated as a miss)
+ *   - null / undefined           → undefined
+ *   - scalar                     → String(value)
+ */
+export function normalizeCanonicalValue(value: any): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (Array.isArray(value)) {
+    const scalars = value.filter((v) => v !== null && v !== undefined);
+    if (scalars.every((v) => typeof v !== 'object')) {
+      return scalars.map((v) => String(v)).join(', ');
+    }
+    if (scalars.length > 0 && scalars.every((v) => typeof v === 'object' && typeof (v as any).code === 'string')) {
+      return scalars.map((v) => String((v as any).code)).join(', ');
+    }
+    return undefined;
+  }
+  if (typeof value === 'object') return undefined;
+  return String(value);
+}
+
+// The 6 "smart" trigger tags with multi-source fallback chains. Exported
+// so the variable engine can whitelist them by name.
+export const SMART_TRIGGER_TAG_NAMES = [
+  'trigger.link',
+  'trigger.first_item_image',
+  'trigger.first_item_name',
+  'trigger.first_item_price',
+  'trigger.total',
+  'trigger.items_count',
+] as const;
+
+/**
+ * Compute the value of one of the 6 smart trigger tags from an event
+ * payload. SINGLE SOURCE for resolveTriggerSmartTags (email pipeline)
+ * AND the automation variable engine (WhatsApp/SMS channels) — the exact
+ * fallback chains (CheckoutURL > checkout_url > AbandonedCheckoutURL >
+ * ProductURL > ... for trigger.link, etc.) live only here.
+ *
+ * Returns undefined on a genuine miss so each caller can apply its own
+ * channel default (email: storeUrl/'#'/'' — engine: non-consuming or '').
+ */
+export function computeSmartTagValue(eventData: any, name: string): string | undefined {
+  const ev = eventData || {};
+  const props = ev.properties || ev;
+  const raw = props.raw || ev.raw || {};
+
+  const items = props.Items || props.line_items || raw.line_items || [];
+  const first = Array.isArray(items) && items.length > 0 ? items[0] : null;
+
+  switch (name) {
+    case 'trigger.link': {
+      // Smart link — first non-empty wins. Canonical fields tried FIRST so
+      // future integrations work without changing this resolver.
+      const link =
+        props.CheckoutURL ||                   // canonical
+        props.checkout_url ||                  // legacy lowercase
+        props.AbandonedCheckoutURL ||
+        props.ProductURL ||                    // canonical (single-product events)
+        props.OrderStatusURL ||                // canonical
+        raw.abandoned_checkout_url ||
+        raw.recovery_url ||
+        props.product_url ||
+        (Array.isArray(props.Items) && props.Items[0]?.ProductURL) ||
+        raw.order_status_url ||
+        '';
+      return link ? String(link) : undefined;
+    }
+    case 'trigger.first_item_image': {
+      const v = first?.ImageURL || first?.image_url || first?.product?.image?.src || '';
+      return v ? String(v) : undefined;
+    }
+    case 'trigger.first_item_name': {
+      const v = first?.ProductName || first?.title || first?.name || '';
+      return v ? String(v) : undefined;
+    }
+    case 'trigger.first_item_price': {
+      const v = first?.ItemPrice ?? first?.price ?? null;
+      return v != null ? String(v) : undefined;
+    }
+    case 'trigger.total': {
+      const v = props.TotalPrice ?? props.$value ?? props.total_price ?? raw.total_price ?? null;
+      return v != null ? String(v) : undefined;
+    }
+    case 'trigger.items_count': {
+      if (props.ItemCount != null) return String(props.ItemCount);
+      const arr = props.Items || props.line_items || raw.line_items;
+      return Array.isArray(arr) ? String(arr.length) : undefined;
+    }
+    default:
+      return undefined;
+  }
 }
 
 export function resolveTriggerSmartTags(
@@ -218,35 +324,16 @@ export function resolveTriggerSmartTags(
   const props = ev.properties || ev;
   const raw = props.raw || ev.raw || {};
 
-  // Smart link — first non-empty wins. Canonical fields tried FIRST so
-  // future integrations work without changing this resolver.
-  const link =
-    props.CheckoutURL ||                   // canonical
-    props.checkout_url ||                  // legacy lowercase
-    props.AbandonedCheckoutURL ||
-    props.ProductURL ||                    // canonical (single-product events)
-    props.OrderStatusURL ||                // canonical
-    raw.abandoned_checkout_url ||
-    raw.recovery_url ||
-    props.product_url ||
-    (Array.isArray(props.Items) && props.Items[0]?.ProductURL) ||
-    raw.order_status_url ||
-    storeUrl ||
-    '#';
-
-  const items =
-    props.Items ||
-    props.line_items ||
-    raw.line_items ||
-    [];
-  const first = Array.isArray(items) && items.length > 0 ? items[0] : null;
-
-  const firstName = first?.ProductName || first?.title || first?.name || '';
-  const firstImage = first?.ImageURL || first?.image_url || first?.product?.image?.src || '';
-  const firstPrice = first?.ItemPrice ?? first?.price ?? null;
-
-  const total = props.TotalPrice ?? props.$value ?? props.total_price ?? raw.total_price ?? null;
-  const itemsCount = props.ItemCount ?? (Array.isArray(items) ? items.length : 0);
+  // Smart values come from computeSmartTagValue (single source shared with
+  // the automation variable engine). This resolver applies the email-channel
+  // defaults on a miss: link falls back to the store URL / '#', counts to
+  // '0', everything else to '' (historical consuming behavior).
+  const link = computeSmartTagValue(eventData, 'trigger.link') ?? (storeUrl || '#');
+  const firstImage = computeSmartTagValue(eventData, 'trigger.first_item_image') ?? '';
+  const firstName = computeSmartTagValue(eventData, 'trigger.first_item_name') ?? '';
+  const firstPrice = computeSmartTagValue(eventData, 'trigger.first_item_price') ?? '';
+  const total = computeSmartTagValue(eventData, 'trigger.total') ?? '';
+  const itemsCount = computeSmartTagValue(eventData, 'trigger.items_count') ?? '0';
 
   // Smart-tag map — whitespace-tolerant regexes ({{trigger.link}},
   // {{ trigger.link }}, {{  trigger.link  }} all match) and FUNCTION
@@ -254,11 +341,11 @@ export function resolveTriggerSmartTags(
   // never get interpreted as regex replacement patterns.
   const smartReplacements: Array<[RegExp, string]> = [
     [/\{\{\s*trigger\.link\s*\}\}/g, String(link)],
-    [/\{\{\s*trigger\.first_item_image\s*\}\}/g, String(firstImage || '')],
-    [/\{\{\s*trigger\.first_item_name\s*\}\}/g, String(firstName || '')],
-    [/\{\{\s*trigger\.first_item_price\s*\}\}/g, firstPrice != null ? String(firstPrice) : ''],
-    [/\{\{\s*trigger\.total\s*\}\}/g, total != null ? String(total) : ''],
-    [/\{\{\s*trigger\.items_count\s*\}\}/g, String(itemsCount)],
+    [/\{\{\s*trigger\.first_item_image\s*\}\}/g, firstImage],
+    [/\{\{\s*trigger\.first_item_name\s*\}\}/g, firstName],
+    [/\{\{\s*trigger\.first_item_price\s*\}\}/g, firstPrice],
+    [/\{\{\s*trigger\.total\s*\}\}/g, total],
+    [/\{\{\s*trigger\.items_count\s*\}\}/g, itemsCount],
   ];
 
   let result = html;
@@ -310,22 +397,12 @@ export function resolveTriggerSmartTags(
     if (value === undefined || value === null) value = getPathCI(ev, segments);
     if (value === undefined || value === null) value = getPathCI(props, segments);
     if (value === undefined || value === null) value = getPathCI(raw, segments);
-    if (value === undefined || value === null) return undefined;
-    if (Array.isArray(value)) {
-      // Array of scalars → human-readable join (fixes {{ DiscountCodes }}
-      // when codes come as ['CUPOM10']). Shopify also ships discount codes
-      // as [{ code, amount, type }] — join the .code fields in that case.
-      const scalars = value.filter((v) => v !== null && v !== undefined);
-      if (scalars.every((v) => typeof v !== 'object')) {
-        return scalars.map((v) => String(v)).join(', ');
-      }
-      if (scalars.length > 0 && scalars.every((v) => typeof v === 'object' && typeof (v as any).code === 'string')) {
-        return scalars.map((v) => String((v as any).code)).join(', ');
-      }
-      return undefined;
-    }
-    if (typeof value === 'object') return undefined;
-    return String(value);
+    // Array of scalars → human-readable join (fixes {{ DiscountCodes }}
+    // when codes come as ['CUPOM10']). Shopify also ships discount codes
+    // as [{ code, amount, type }] — join the .code fields in that case.
+    // Shared with the variable engine via normalizeCanonicalValue so the
+    // channels can't drift.
+    return normalizeCanonicalValue(value);
   }
 
   // CANONICAL WHITELIST — the exact 29 paths the block editor's picker

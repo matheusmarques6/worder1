@@ -491,6 +491,12 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
       trigger_type: triggerType,
     }
     if (idempotencyKey) metadata.idempotency_key = idempotencyKey
+    // Stamp the event's store on the run so process-runs' fallback
+    // ((metadata).store_id || automation.store_id) engages for org-wide
+    // flows too — without this, a run created by a store event on a
+    // store_id=NULL automation loses the store context entirely (wrong
+    // sender identity downstream).
+    if (storeId) metadata.store_id = storeId
 
     const fullInsert: Record<string, any> = {
       organization_id: organizationId,

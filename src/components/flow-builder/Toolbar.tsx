@@ -16,6 +16,7 @@ import {
   ChevronDown,
   FastForward,
   Trash2,
+  Store,
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -57,6 +58,27 @@ export function Toolbar({ onSave, onTest, onBack, organizationId, automations, c
   const canRedo = () => futureLength > 0;
   const showAnalytics = useFlowStore((state) => state.showAnalytics);
   const toggleAnalytics = useFlowStore((state) => state.toggleAnalytics);
+  // Store scope of the flow — automationConfig.storeId is a LIVE matching
+  // gate (events from other stores never enroll), so it must be visible in
+  // the builder. null/undefined = org-wide flow.
+  const flowStoreId = useFlowStore((state) => state.automationConfig?.storeId);
+  const [flowStoreName, setFlowStoreName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!flowStoreId) { setFlowStoreName(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        // /api/stores already returns the org's shopify_stores (id +
+        // shop_name/shop_domain) — no dedicated endpoint needed.
+        const r = await fetch('/api/stores');
+        const d = await r.json();
+        const s = (d?.stores || []).find((st: any) => st?.id === flowStoreId);
+        if (!cancelled) setFlowStoreName(s?.shop_name || s?.shop_domain || null);
+      } catch { /* non-blocking — badge falls back to a generic label */ }
+    })();
+    return () => { cancelled = true; };
+  }, [flowStoreId]);
 
   const { valid, errors } = useIsValidFlow();
 
@@ -201,6 +223,21 @@ export function Toolbar({ onSave, onTest, onBack, organizationId, automations, c
               {savedAgo}
             </span>
           ) : null}
+
+          {/* Store scope badge (non-interactive) */}
+          <span
+            className="hidden md:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-800/80 ring-1 ring-inset ring-zinc-700 text-[11px] font-medium text-zinc-300 flex-shrink-0 ml-1 max-w-[180px]"
+            title={
+              flowStoreId
+                ? `Este flow dispara apenas para eventos da loja ${flowStoreName || 'vinculada'}`
+                : 'Este flow dispara para eventos de todas as lojas da organização'
+            }
+          >
+            <Store className="w-3 h-3 flex-shrink-0" strokeWidth={2} />
+            <span className="truncate">
+              {flowStoreId ? (flowStoreName || 'Loja vinculada') : 'Todas as lojas'}
+            </span>
+          </span>
 
           {automations && currentAutomationId && onSwitchAutomation && (
             <AutomationSwitcher

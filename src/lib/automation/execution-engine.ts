@@ -338,8 +338,34 @@ export class ExecutionEngine {
             continue;
           }
 
-          // Process config with variables
-          const processedConfig = variableEngine.processObject(node.data.config, context);
+          // Process config with variables. Channel-controlled consumption:
+          // WhatsApp/SMS/catalog messages have NO downstream resolver — an
+          // unresolved tag left intact would ship a literal `{{ ... }}` to
+          // the customer, so those channels consume every miss to '' (and
+          // resolve `{{tag|fallback}}` fallback text in the engine itself).
+          // Email keeps the non-consuming default: its pipeline
+          // (sendCampaignEmail → resolveTriggerSmartTags → renderMergeTags)
+          // resolves the remaining namespaces with the full mergeData.
+          const consumingChannel =
+            nodeType === 'action_whatsapp' ||
+            nodeType === 'action_sms' ||
+            nodeType === 'action_whatsapp_catalog';
+          const processedConfig = variableEngine.processObject(node.data.config, context, {
+            consumeUnresolved: consumingChannel,
+          });
+          if (nodeType === 'action_email') {
+            // The email executor is the SINGLE substitution point for the
+            // customer-visible email fields: it re-runs the engine with
+            // escapeHtml on the HTML body (XSS parity with preview/test)
+            // and plain on the subject. Restore the raw strings here so
+            // the generic pre-pass above (which doesn't escape) can't
+            // resolve them first and leave raw `<b>` from contact/trigger
+            // data in the HTML.
+            for (const key of ['html', 'body', 'subject']) {
+              const raw = (node.data.config as any)?.[key];
+              if (typeof raw === 'string') (processedConfig as any)[key] = raw;
+            }
+          }
 
           // Get credentials if needed
           let credentials = options.credentials?.[node.data.credentialId || ''];

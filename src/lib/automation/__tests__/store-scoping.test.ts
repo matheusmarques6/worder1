@@ -80,6 +80,21 @@ describe('extractEventPayloadStoreId (legacy EventBus path)', () => {
     ).toBe(STORE_A);
   });
 
+  it('falls through to the NEXT candidate when an earlier one is malformed', () => {
+    // A legacy non-uuid store_id at the top must not mask a valid uuid in
+    // storeId or in the dispatch meta — each candidate is tried in order.
+    expect(
+      extractEventPayloadStoreId({ store_id: 'my-shop.myshopify.com', storeId: STORE_B })
+    ).toBe(STORE_B);
+    expect(
+      extractEventPayloadStoreId({
+        store_id: 'oops',
+        storeId: 12345 as any,
+        _webhook_dispatch_meta: { store_id: STORE_A },
+      })
+    ).toBe(STORE_A);
+  });
+
   it('treats a MALFORMED payload store id as null (org-wide) instead of 22P02', () => {
     // Non-uuid values would be interpolated into the .or() filter against
     // the uuid column automations.store_id and blow up the query.

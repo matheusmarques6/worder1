@@ -44,6 +44,26 @@ describe('renderMergeTags whitespace tolerance', () => {
   });
 });
 
+describe('renderMergeTags escape option (subject/preheader = text/plain)', () => {
+  it('escapes by default (HTML body context)', () => {
+    expect(renderMergeTags('{{ store_name }}', { store_name: 'Zé & Cia' })).toBe(
+      'Zé &amp; Cia'
+    );
+  });
+
+  it('escape:false keeps values raw — no &amp; in the inbox subject', () => {
+    expect(
+      renderMergeTags('Oferta da {{ store_name }}', { store_name: 'Zé & Cia' }, { escape: false })
+    ).toBe('Oferta da Zé & Cia');
+  });
+
+  it('escape:false also applies to fallbacks', () => {
+    expect(
+      renderMergeTags('{{ nada | A & B }}', {}, { escape: false })
+    ).toBe('A & B');
+  });
+});
+
 describe('resolveTriggerSmartTags', () => {
   it('resolves {{ trigger.link }} to CheckoutURL when present', () => {
     const html = '<a href="{{ trigger.link }}">recover</a>';
