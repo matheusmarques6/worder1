@@ -34,6 +34,19 @@ import type {
 import { FIELD_INDEX } from './catalog';
 import { isUuid } from './validate';
 
+// Split a (potentially unbounded) id list into batches small enough that
+// a `.in('col', batch)` filter stays under PostgREST's URI length limit.
+// A UUID + separators is ~40 bytes; 500 ids ≈ 20KB of query string, well
+// under the ~8KB-per-header-ish practical ceiling once other params are
+// added — 500 is the same conservative batch size used elsewhere.
+const ID_BATCH = 500;
+function chunkIds(ids: string[]): string[][] {
+  if (ids.length <= ID_BATCH) return [ids];
+  const out: string[][] = [];
+  for (let i = 0; i < ids.length; i += ID_BATCH) out.push(ids.slice(i, i + ID_BATCH));
+  return out;
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Top-level entry
 // ─────────────────────────────────────────────────────────────────────
@@ -71,18 +84,6 @@ export async function resolveSegmentV2(
   const referencedColumns = collectReferencedColumns(rule);
   const selectCols = ['id', 'organization_id', 'store_id', ...referencedColumns].join(', ');
 
-  let q: any = supabase
-    .from('contacts')
-    .select(selectCols)
-    .eq('organization_id', opts.orgId);
-
-  // Targeted resolution: only pull the listed contacts. This is the
-  // hot path for the real-time worker — without it we'd scan the
-  // whole org on every queue tick.
-  if (opts.contactIds && opts.contactIds.length > 0) {
-    q = q.in('id', opts.contactIds);
-  }
-
   if (opts.storeId) {
     // Defensively re-check UUID shape before interpolating into a
     // PostgREST filter string — even though callers should pass a
@@ -92,16 +93,45 @@ export async function resolveSegmentV2(
     if (!isUuid(opts.storeId)) {
       throw new Error(`invalid storeId: ${opts.storeId}`);
     }
-    // Include contacts pinned to this store OR not yet assigned to
-    // any store (the customer-sync backfill stamps store_id on every
-    // touch, so the null bucket shrinks over time). The org filter
-    // applied above (line 76) already prevents cross-org leakage —
-    // this OR only controls cross-store visibility within the org.
-    q = q.or(`store_id.eq.${opts.storeId},store_id.is.null`);
   }
-  const { data: contacts, error: contactsErr } = await q;
-  if (contactsErr) throw new Error(`contacts query failed: ${contactsErr.message}`);
-  const universe = (contacts ?? []) as Array<Record<string, any>>;
+
+  // Pull the contact universe PAGINATED in chunks of 1000. A single
+  // unbounded .select() silently truncates at PostgREST's default row
+  // cap, so large orgs would lose every contact past row 1000 —
+  // segments (and the campaigns built on them) would miss recipients.
+  // We accumulate all pages ordered by id until a short page signals
+  // the end.
+  const PAGE = 1000;
+  const universe: Array<Record<string, any>> = [];
+  for (let offset = 0; ; offset += PAGE) {
+    let q: any = supabase
+      .from('contacts')
+      .select(selectCols)
+      .eq('organization_id', opts.orgId);
+
+    // Targeted resolution: only pull the listed contacts. This is the
+    // hot path for the real-time worker — without it we'd scan the
+    // whole org on every queue tick.
+    if (opts.contactIds && opts.contactIds.length > 0) {
+      q = q.in('id', opts.contactIds);
+    }
+
+    if (opts.storeId) {
+      // Include contacts pinned to this store OR not yet assigned to
+      // any store (the customer-sync backfill stamps store_id on every
+      // touch, so the null bucket shrinks over time). The org filter
+      // applied above already prevents cross-org leakage — this OR
+      // only controls cross-store visibility within the org.
+      q = q.or(`store_id.eq.${opts.storeId},store_id.is.null`);
+    }
+
+    q = q.order('id', { ascending: true }).range(offset, offset + PAGE - 1);
+    const { data: page, error: contactsErr } = await q;
+    if (contactsErr) throw new Error(`contacts query failed: ${contactsErr.message}`);
+    if (!page || page.length === 0) break;
+    universe.push(...(page as Array<Record<string, any>>));
+    if (page.length < PAGE) break; // last page
+  }
 
   if (universe.length === 0) {
     return { contactIds: [], truncated: false, evaluatedAt: new Date().toISOString(), durationMs: Date.now() - startedAt };
@@ -162,26 +192,42 @@ async function loadEventIndex(
   const out = new Map<string, Map<string, EventOccurrence[]>>();
   if (contactIds.length === 0) return out;
 
-  // Single query, filtered both by org and contact set, no JS-side cap.
-  // PostgREST will chunk if needed; we rely on it returning all rows.
-  // Note: 'limit' from the client is intentionally absent here — v1
-  // had a 50k cap which broke segments on large stores.
-  const { data, error } = await supabase
-    .from('contact_events')
-    .select('contact_id, event_type, occurred_at, properties, monetary_value')
-    .eq('organization_id', orgId)
-    .in('event_type', eventTypes)
-    .in('contact_id', contactIds);
-
-  if (error) throw new Error(`contact_events query failed: ${error.message}`);
-
-  for (const row of (data || []) as Array<{
+  // Paginate in chunks of 1000. contact_events blows past the
+  // PostgREST default row cap easily on any active store; a single
+  // unbounded select would silently truncate the event index and make
+  // event-based rules evaluate against partial history. We page by id
+  // until a short page signals the end. No JS-side cap — v1 had a 50k
+  // limit which broke segments on large stores.
+  //
+  // The input `contactIds` is the full (now unbounded) universe, so we
+  // ALSO chunk it: a single `.in('contact_id', [thousands])` serializes
+  // into a URL that exceeds PostgREST's URI limit (414) on large orgs.
+  const PAGE = 1000;
+  const rows: Array<{
     contact_id: string;
     event_type: string;
     occurred_at: string;
     properties: any;
     monetary_value: number | null;
-  }>) {
+  }> = [];
+  for (const idChunk of chunkIds(contactIds)) {
+    for (let offset = 0; ; offset += PAGE) {
+      const { data, error } = await supabase
+        .from('contact_events')
+        .select('contact_id, event_type, occurred_at, properties, monetary_value')
+        .eq('organization_id', orgId)
+        .in('event_type', eventTypes)
+        .in('contact_id', idChunk)
+        .order('id', { ascending: true })
+        .range(offset, offset + PAGE - 1);
+      if (error) throw new Error(`contact_events query failed: ${error.message}`);
+      if (!data || data.length === 0) break;
+      rows.push(...(data as typeof rows));
+      if (data.length < PAGE) break; // last page for this chunk
+    }
+  }
+
+  for (const row of rows) {
     if (!row.contact_id) continue;
     const byContact = out.get(row.contact_id) || new Map<string, EventOccurrence[]>();
     const arr = byContact.get(row.event_type) || [];
@@ -203,15 +249,29 @@ async function loadListMembership(
 ): Promise<Map<string, Set<string>>> {
   const out = new Map<string, Set<string>>();
   if (contactIds.length === 0 || listIds.length === 0) return out;
-  const { data } = await supabase
-    .from('contact_list_members')
-    .select('list_id, contact_id')
-    .in('list_id', listIds)
-    .in('contact_id', contactIds);
-  for (const row of (data || []) as Array<{ list_id: string; contact_id: string }>) {
-    const s = out.get(row.contact_id) || new Set<string>();
-    s.add(row.list_id);
-    out.set(row.contact_id, s);
+  // Paginate in chunks of 1000 so a large membership set isn't
+  // silently truncated at PostgREST's default row cap. Order by the
+  // full (list_id, contact_id) primary key for a stable page window
+  // (this table has no surrogate id column).
+  const PAGE = 1000;
+  for (const idChunk of chunkIds(contactIds)) {
+    for (let offset = 0; ; offset += PAGE) {
+      const { data } = await supabase
+        .from('contact_list_members')
+        .select('list_id, contact_id')
+        .in('list_id', listIds)
+        .in('contact_id', idChunk)
+        .order('list_id', { ascending: true })
+        .order('contact_id', { ascending: true })
+        .range(offset, offset + PAGE - 1);
+      if (!data || data.length === 0) break;
+      for (const row of data as Array<{ list_id: string; contact_id: string }>) {
+        const s = out.get(row.contact_id) || new Set<string>();
+        s.add(row.list_id);
+        out.set(row.contact_id, s);
+      }
+      if (data.length < PAGE) break; // last page for this chunk
+    }
   }
   return out;
 }
@@ -223,15 +283,29 @@ async function loadSegmentMembership(
 ): Promise<Map<string, Set<string>>> {
   const out = new Map<string, Set<string>>();
   if (contactIds.length === 0 || segmentIds.length === 0) return out;
-  const { data } = await supabase
-    .from('segment_member_cache')
-    .select('segment_id, contact_id')
-    .in('segment_id', segmentIds)
-    .in('contact_id', contactIds);
-  for (const row of (data || []) as Array<{ segment_id: string; contact_id: string }>) {
-    const s = out.get(row.contact_id) || new Set<string>();
-    s.add(row.segment_id);
-    out.set(row.contact_id, s);
+  // Paginate in chunks of 1000 so a large membership set isn't
+  // silently truncated at PostgREST's default row cap. Order by the
+  // full (segment_id, contact_id) primary key for a stable page window
+  // (this table has no surrogate id column).
+  const PAGE = 1000;
+  for (const idChunk of chunkIds(contactIds)) {
+    for (let offset = 0; ; offset += PAGE) {
+      const { data } = await supabase
+        .from('segment_member_cache')
+        .select('segment_id, contact_id')
+        .in('segment_id', segmentIds)
+        .in('contact_id', idChunk)
+        .order('segment_id', { ascending: true })
+        .order('contact_id', { ascending: true })
+        .range(offset, offset + PAGE - 1);
+      if (!data || data.length === 0) break;
+      for (const row of data as Array<{ segment_id: string; contact_id: string }>) {
+        const s = out.get(row.contact_id) || new Set<string>();
+        s.add(row.segment_id);
+        out.set(row.contact_id, s);
+      }
+      if (data.length < PAGE) break; // last page for this chunk
+    }
   }
   return out;
 }

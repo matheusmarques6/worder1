@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { resolveSegment } from '@/lib/segments';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,53 +47,59 @@ export async function GET(
   const limit = parseInt(searchParams.get('limit') || '50');
   const offset = (page - 1) * limit;
 
-  // Build query based on segment rules
-  let query: any = supabase
-    .from('contacts')
-    .select('*', { count: 'exact' })
-    .eq('organization_id', segment.organization_id)
-    .not('store_id', 'is', null) // Only contacts linked to a store
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+  // Resolve membership through the canonical entrypoint (index.ts): it
+  // detects rule_version, runs the v1→v2 adapter, and evaluates the
+  // full rule tree (nested groups, events, dates, etc.). This replaces
+  // the old flat-array evaluation that ignored a v2 `rules` blob
+  // ({version,root}) entirely — applying NO filter and returning the
+  // whole org. Store scoping is handled inside the resolver from the
+  // segment's own store_id.
+  let allIds: string[] = [];
+  try {
+    const resolved = await resolveSegment(supabase, segmentId, segment.organization_id);
+    allIds = resolved.contactIds;
+  } catch (e: any) {
+    console.error('[Segment Members] Resolve error:', e?.message || e);
+    return NextResponse.json({ error: 'Failed to resolve segment members' }, { status: 500 });
+  }
 
-  // Apply dynamic rules
-  if (segment.segment_type === 'dynamic' && segment.rules?.length) {
-    for (const rule of segment.rules) {
-      const { field, operator, value } = rule;
-      switch (operator) {
-        case 'equals': query = query.eq(field, value); break;
-        case 'not_equals': query = query.neq(field, value); break;
-        case 'contains': query = query.ilike(field, `%${value}%`); break;
-        case 'greater_than': query = query.gt(field, value); break;
-        case 'less_than': query = query.lt(field, value); break;
-        case 'is_null': query = query.is(field, null); break;
-        case 'is_not_null': query = query.not(field, 'is', null); break;
-      }
+  const total = allIds.length;
+
+  // Page the resolved id list, then fetch just this page's contacts.
+  const pageIds = allIds.slice(offset, offset + limit);
+  let contacts: any[] = [];
+  if (pageIds.length > 0) {
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*')
+      .in('id', pageIds);
+
+    if (error) {
+      console.error('[Segment Members] Error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Preserve the resolved order — an .in() fetch doesn't guarantee it.
+    const byId = new Map((data || []).map((c: any) => [c.id, c]));
+    contacts = pageIds.map((id) => byId.get(id)).filter(Boolean);
   }
 
-  const { data: contacts, error, count } = await query;
-
-  if (error) {
-    console.error('[Segment Members] Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // Update segment contact_count
-  if (count !== null && count !== segment.contact_count) {
+  // Persist the CORRECT resolved count (not the org-wide count the old
+  // code wrote when it failed to apply v2 rules).
+  if (total !== segment.contact_count) {
     await supabase
       .from('customer_segments')
-      .update({ contact_count: count, last_count_at: new Date().toISOString() })
+      .update({ contact_count: total, last_count_at: new Date().toISOString() })
       .eq('id', segmentId);
   }
 
   return NextResponse.json({
-    contacts: contacts || [],
+    contacts,
     pagination: {
-      total: count || 0,
+      total,
       page,
       limit,
-      totalPages: Math.ceil((count || 0) / limit),
+      totalPages: Math.ceil(total / limit),
     },
   });
 }

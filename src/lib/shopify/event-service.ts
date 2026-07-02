@@ -249,7 +249,12 @@ export async function createEvent(input: CreateEventInput): Promise<EventRecord 
           status: 'pending',
           created_at: new Date().toISOString(),
         })
-      } catch {} // Don't fail the main event if flow bridge fails
+      } catch (err) {
+        // Don't fail the main event if the flow bridge fails — but DO log.
+        // This event_logs insert is what enrolls a contact into automations/
+        // flows; swallowing it silently dropped enrollments with no trace.
+        console.error('[event-service] flow bridge insert failed', err)
+      }
     }
   } catch {
     // Silently ignore - flow bridge is non-critical

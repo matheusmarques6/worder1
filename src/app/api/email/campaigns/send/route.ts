@@ -143,8 +143,12 @@ export async function POST(request: NextRequest) {
     let contactsError: any = null
 
     if (campaign.segment_id) {
-      const { resolveSegment } = await import('@/lib/segments/resolver')
-      const ids = await resolveSegment(supabaseAdmin, campaign.segment_id, organizationId)
+      // Route through the canonical entrypoint (index.ts) so v1 and v2
+      // segments both resolve correctly — it detects rule_version and
+      // runs the v1→v2 adapter, fixing the date-NaN and unreadable-v2
+      // rules bugs in the legacy resolver. Returns { contactIds, ... }.
+      const { resolveSegment } = await import('@/lib/segments')
+      const { contactIds: ids } = await resolveSegment(supabaseAdmin, campaign.segment_id, organizationId)
       if (ids.length > 0) {
         let q: any = supabaseAdmin
           .from('contacts')

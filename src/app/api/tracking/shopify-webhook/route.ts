@@ -173,7 +173,7 @@ async function handleOrder(ctx: Ctx, data: any, event_type: string) {
     shopify_customer_id: customer.id?.toString(),
   })
 
-  await supabase.from('contact_events').insert({
+  const { error: eventInsertErr } = await supabase.from('contact_events').insert({
     organization_id: ctx.org_id,
     store_id: ctx.store_id,
     contact_id,
@@ -202,7 +202,20 @@ async function handleOrder(ctx: Ctx, data: any, event_type: string) {
     idempotency_key: orderId ? `${event_type}:${ctx.org_id}:${orderId}` : null,
   })
 
-  if (event_type === 'purchase' && contact_id) {
+  // Idempotency guard: só incrementa receita/orders se o evento acima
+  // foi gravado como NOVO. O Shopify reenvia webhooks em retry; o índice
+  // único parcial em contact_events(idempotency_key) faz o insert
+  // duplicado falhar com 23505. Sem este guard, cada retry contava a
+  // receita de novo (double count). Qualquer erro no insert (duplicata
+  // 23505 ou outro) significa que o evento não é novo/confiável, então
+  // pulamos o incremento — mantendo o fallback manual atrás do mesmo guard.
+  const isDuplicateEvent =
+    !!eventInsertErr && String((eventInsertErr as any).code) === '23505'
+  if (eventInsertErr && !isDuplicateEvent) {
+    console.error('[Shopify Webhook] contact_events insert failed (purchase):', eventInsertErr)
+  }
+
+  if (event_type === 'purchase' && contact_id && !eventInsertErr) {
     const { error: rpcErr } = await supabase.rpc('increment_contact_revenue', {
       p_contact_id: contact_id,
       p_amount: orderTotal,

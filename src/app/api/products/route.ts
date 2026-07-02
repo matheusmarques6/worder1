@@ -78,7 +78,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('storeId');
     const search = searchParams.get('search');
-    const withCosts = searchParams.get('withCosts') === 'true';
+    // Gate on the RAW param, not a coerced boolean. Previously this was
+    // `=== 'true'` (a boolean), so the later `withCosts !== undefined`
+    // check was ALWAYS true and, with no param, filtered to only
+    // `!p.has_cost` — silently hiding every costed product in the default
+    // view. Now: absent param → no filter; 'true' → only costed;
+    // 'false' → only uncosted.
+    const withCostsParam = searchParams.get('withCosts');
 
     // Multi-org safe lookup
     let storesQuery = supabase
@@ -228,9 +234,10 @@ export async function GET(request: NextRequest) {
           };
         });
 
-        // Filtro de custo
-        const filteredProducts = withCosts !== undefined
-          ? products.filter((p: any) => withCosts ? p.has_cost : !p.has_cost)
+        // Filtro de custo — só filtra quando o param foi passado
+        // explicitamente. Sem param → retorna todos os produtos.
+        const filteredProducts = withCostsParam !== null
+          ? products.filter((p: any) => withCostsParam === 'true' ? p.has_cost : !p.has_cost)
           : products;
 
         allProducts.push(...filteredProducts);

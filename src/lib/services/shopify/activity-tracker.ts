@@ -246,25 +246,33 @@ export async function enrichContactFromOrder(
       order.createdAt
     );
     
-    // Calcular frequência de pedidos
-    const totalOrders = (contact.total_orders || 0) + 1;
+    // Calcular frequência de pedidos.
+    // IMPORTANTE (fix de double-count): updateContactOrderStats() é o
+    // ÚNICO writer de total_orders / total_spent / average_order_value.
+    // Ele SEMPRE roda antes desta função no fluxo de order_created
+    // (route.ts chama updateContactOrderStats na ~614 e enrichContactFromOrder
+    // na ~889), então contact.total_orders JÁ reflete o total correto
+    // (incrementado uma vez por pedido). Antes, esta função relia o valor
+    // já incrementado e somava +1/+orderValue de novo, dobrando os totais
+    // de todo contato. Não somamos mais +1 aqui — usamos a contagem real
+    // como divisor da frequência.
+    const totalOrders = contact.total_orders || 0;
     const firstOrderAt = contact.first_order_at || order.createdAt;
     let orderFrequencyDays = null;
-    
+
     if (totalOrders > 1 && firstOrderAt) {
       const daysSinceFirst = Math.max(1, Math.floor(
         (order.createdAt.getTime() - new Date(firstOrderAt).getTime()) / (1000 * 60 * 60 * 24)
       ));
       orderFrequencyDays = daysSinceFirst / (totalOrders - 1);
     }
-    
-    // Atualizar contato
+
+    // Atualizar contato — enriquecimento apenas. NÃO escrevemos
+    // total_orders / total_spent / average_order_value aqui (ver comentário
+    // acima); esses três campos pertencem exclusivamente a updateContactOrderStats.
     const { error } = await supabase
       .from('contacts')
       .update({
-        total_orders: totalOrders,
-        total_spent: (parseFloat(contact.total_spent) || 0) + order.totalPrice,
-        average_order_value: ((parseFloat(contact.total_spent) || 0) + order.totalPrice) / totalOrders,
         last_order_at: order.createdAt,
         last_order_id: order.id,
         last_order_value: order.totalPrice,

@@ -130,8 +130,13 @@ export async function GET(req: NextRequest) {
         let allContactIds: string[] = []
 
         if (camp.segment_id) {
-          const { resolveSegment } = await import('@/lib/segments/resolver')
-          allContactIds = await resolveSegment(supabaseAdmin, camp.segment_id, camp.organization_id)
+          // Route through the canonical entrypoint (index.ts) so v1 and
+          // v2 segments both resolve correctly — it detects rule_version
+          // and runs the v1→v2 adapter, fixing the date-NaN and
+          // unreadable-v2 rules bugs in the legacy resolver.
+          const { resolveSegment } = await import('@/lib/segments')
+          const resolved = await resolveSegment(supabaseAdmin, camp.segment_id, camp.organization_id)
+          allContactIds = resolved.contactIds
         } else {
           let q: any = supabaseAdmin
             .from('contacts')

@@ -26,6 +26,15 @@ import { scheduleRecomputeStoreTotals } from '@/lib/services/shopify/store-total
 import { scheduleSegmentReeval } from '@/lib/segments/realtime';
 export const dynamic = 'force-dynamic';
 
+// Escape LIKE/ILIKE wildcards so a customer email containing `_` or `%`
+// (e.g. john_doe@gmail.com — `_` is a valid, common local-part char)
+// matches literally instead of as a single-char / any-run wildcard.
+// Preserves null/undefined so the caller's existing behavior is unchanged.
+function escapeLike(value: string | null | undefined): string | null | undefined {
+  if (typeof value !== 'string') return value;
+  return value.replace(/([\\%_])/g, '\\$1');
+}
+
 // ============================================
 // HELPERS
 // ============================================
@@ -613,107 +622,13 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   const orderValue = parseFloat(order.total_price || '0');
   await updateContactOrderStats(contact.id, orderValue);
 
-  // ---- Revenue attribution: vincular receita à campanha de email ----
-  // Se o contato clicou/abriu um email dentro da janela de atribuição
-  // configurada, atribuir a receita do pedido àquela campanha.
-  // Respeita: window days, model (last_touch/first_touch), count_opens,
-  // e exclude_mpp_opens — tudo configurável em Settings > Atribuição.
-  try {
-    const attrSettings = await getAttributionSettings(store.organization_id);
-    const windowDays = attrSettings.email_window_days;
-    const windowDate = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
-
-    // Build list of qualifying event types based on engagement settings
-    const eventTypes: string[] = ['email_clicked'];
-    if (attrSettings.count_opens) {
-      eventTypes.push('email_opened');
-      // When excluding Apple MPP auto-opens, filter out events flagged
-      // as machine-generated. If exclude_mpp_opens is off, all opens
-      // qualify (including MPP).
-    }
-
-    // Query direction depends on the attribution model:
-    //   last_touch  → most recent engagement first (ascending: false)
-    //   first_touch → earliest engagement first (ascending: true)
-    const ascending = attrSettings.model === 'first_touch';
-
-    let query = supabase
-      .from('contact_events')
-      .select('properties')
-      .eq('contact_id', contact.id)
-      .eq('organization_id', store.organization_id)
-      .in('event_type', eventTypes)
-      .gte('occurred_at', windowDate)
-      .order('occurred_at', { ascending })
-      .limit(1);
-
-    // When count_opens is on and exclude_mpp_opens is on, filter out
-    // Apple MPP opens (flagged via properties->is_mpp = true).
-    // We can't filter JSONB booleans via PostgREST easily, so we fetch
-    // a small batch and filter in JS when MPP exclusion is active.
-    let matchedEvent: any = null;
-    if (attrSettings.count_opens && attrSettings.exclude_mpp_opens) {
-      // Fetch a small batch so we can skip MPP-flagged opens
-      const { data: candidates } = await supabase
-        .from('contact_events')
-        .select('properties, event_type')
-        .eq('contact_id', contact.id)
-        .eq('organization_id', store.organization_id)
-        .in('event_type', eventTypes)
-        .gte('occurred_at', windowDate)
-        .order('occurred_at', { ascending })
-        .limit(10);
-
-      matchedEvent = (candidates || []).find((e: any) => {
-        // Clicks always qualify
-        if (e.event_type === 'email_clicked') return true;
-        // Opens qualify only if not flagged as MPP
-        if (e.properties?.is_mpp) return false;
-        return true;
-      }) || null;
-    } else {
-      const { data } = await query.maybeSingle();
-      matchedEvent = data;
-    }
-
-    if (matchedEvent?.properties?.CampaignId) {
-      const campaignId = matchedEvent.properties.CampaignId;
-      // Incrementar attributed_revenue na campanha
-      const { data: currentCamp } = await supabase
-        .from('email_campaigns')
-        .select('attributed_revenue, conversions')
-        .eq('id', campaignId)
-        .maybeSingle();
-      if (currentCamp) {
-        await supabase.from('email_campaigns').update({
-          attributed_revenue: (currentCamp.attributed_revenue || 0) + orderValue,
-          conversions: (currentCamp.conversions || 0) + 1,
-        }).eq('id', campaignId);
-      }
-      // Gravar CDP event de conversion
-      await supabase.from('contact_events').insert({
-        organization_id: store.organization_id,
-        contact_id: contact.id,
-        store_id: store.id,
-        event_type: 'email_conversion',
-        event_source: 'worder_email',
-        properties: {
-          CampaignId: campaignId,
-          order_id: order.id || order.order_number,
-          order_value: orderValue,
-          currency: order.currency || 'BRL',
-          attribution_window_days: windowDays,
-          attribution_model: attrSettings.model,
-        },
-        monetary_value: orderValue,
-        currency: order.currency || 'BRL',
-        occurred_at: new Date().toISOString(),
-        idempotency_key: `email_conv:${campaignId}:${order.id || order.order_number}`,
-      }).select().maybeSingle();
-    }
-  } catch (attrErr) {
-    console.warn('[Shopify] Revenue attribution failed (non-critical):', attrErr);
-  }
+  // ---- Revenue attribution (email) ----
+  // Removido o bloco inline legado que creditava email_campaigns.attributed_revenue
+  // e inseria um evento email_conversion aqui. Ele NÃO era idempotente e
+  // duplicava a receita de email, porque attributeAcrossChannels() (mais abaixo)
+  // já atribui a receita de email via a RPC attribute_email_conversion, que é
+  // idempotente por (organization_id, order_id). A atribuição de email agora é
+  // feita EXCLUSIVAMENTE por attributeAcrossChannels.
 
   // Salvar pedido no banco
   const { error: orderUpsertErr } = await supabase.from('shopify_orders').upsert({
@@ -1260,7 +1175,7 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
     .from('contacts')
     .select('id')
     .eq('organization_id', store.organization_id)
-    .eq('email', order.email)
+    .ilike('email', escapeLike(order.email) as string)
     .maybeSingle();
   
   if (contact) {
@@ -1424,7 +1339,7 @@ async function processOrderFulfilled(store: ShopifyStoreConfig, order: any) {
     .from('contacts')
     .select('id')
     .eq('organization_id', store.organization_id)
-    .eq('email', order.email)
+    .ilike('email', escapeLike(order.email) as string)
     .maybeSingle();
   
   if (contact) {
@@ -1598,7 +1513,7 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
     .from('contacts')
     .select('id')
     .eq('organization_id', store.organization_id)
-    .eq('email', order.email)
+    .ilike('email', escapeLike(order.email) as string)
     .maybeSingle();
   
   if (contact) {
