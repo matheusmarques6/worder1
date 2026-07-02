@@ -1,5 +1,6 @@
 'use client'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/Toast'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -25,6 +26,7 @@ interface ConnectedStore {
 
 export default function IntegrationsPage() {
   const { confirm } = useConfirm()
+  const toast = useToast()
   const router = useRouter()
   const { user } = useAuthStore()
   const { stores, currentStore } = useStoreStore()
@@ -135,6 +137,12 @@ export default function IntegrationsPage() {
         body: JSON.stringify({ store_id: storeId, syncType: 'all', historical: true }),
       })
       const syncData = await syncRes.json().catch(() => ({}))
+      if (!syncRes.ok) {
+        toast.error('Falha ao iniciar sincronização', syncData.error || 'Tente novamente em instantes.')
+        setSyncing(null)
+        return
+      }
+      toast.success('Sincronização iniciada', 'Os dados serão atualizados em segundo plano.')
       // Step 2: Pull lifetime financial metrics into contacts (revenue, AOV, last_order_at)
       try {
         await fetch(`/api/shopify/sync-financials?store_id=${storeId}`, { method: 'POST' })
@@ -182,6 +190,7 @@ export default function IntegrationsPage() {
       }
     } catch (e) {
       console.error('Sync failed:', e)
+      toast.error('Falha na sincronização', 'Verifique sua conexão e tente novamente.')
     }
     setSyncing(null)
   }
@@ -190,10 +199,17 @@ export default function IntegrationsPage() {
     const ok = await confirm({ title: 'Desconectar loja?', description: 'Os dados sincronizados serão mantidos.', confirmLabel: 'Desconectar' }); if (!ok) return
     setDisconnecting(storeId)
     try {
-      await fetch(`/api/integrations/shopify/${storeId}/disconnect`, { method: 'POST' })
-      setConnectedStores(prev => prev.filter(s => s.id !== storeId))
+      const res = await fetch(`/api/integrations/shopify/${storeId}/disconnect`, { method: 'POST' })
+      if (res.ok) {
+        setConnectedStores(prev => prev.filter(s => s.id !== storeId))
+        toast.success('Loja desconectada')
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error('Falha ao desconectar loja', data.error || 'Tente novamente em instantes.')
+      }
     } catch (e) {
       console.error('Disconnect failed:', e)
+      toast.error('Falha ao desconectar loja', 'Verifique sua conexão e tente novamente.')
     }
     setDisconnecting(null)
   }

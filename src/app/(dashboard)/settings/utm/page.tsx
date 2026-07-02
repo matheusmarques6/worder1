@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { Link2, Save, Loader2, Eye } from 'lucide-react';
 import { useAuthStore } from '@/stores';
+import { useToast } from '@/components/ui/Toast';
 
 export default function UTMSettingsPage() {
+  const toast = useToast();
   const [utmSource, setUtmSource] = useState('worder');
   const [utmMedium, setUtmMedium] = useState('email');
   const [autoAdd, setAutoAdd] = useState(true);
@@ -30,16 +32,22 @@ export default function UTMSettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await fetch('/api/settings/organization', {
+      const res = await fetch('/api/settings/organization', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email_settings: { utm_source: utmSource, utm_medium: utmMedium, utm_auto_add: autoAdd },
         }),
       });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch {}
+      if (res.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } else {
+        toast.error('Erro ao salvar', 'Não foi possível salvar os parâmetros UTM. Tente novamente.');
+      }
+    } catch {
+      toast.error('Erro ao salvar', 'Não foi possível salvar os parâmetros UTM. Tente novamente.');
+    }
     setSaving(false);
   };
 

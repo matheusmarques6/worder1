@@ -12,7 +12,14 @@ const tabs = [
   { title: 'Dados & LGPD', href: '/settings/lgpd' },
   { title: 'Uso de IA', href: '/settings/ai-usage' },
   { title: 'API', href: '/settings/api' },
+  { title: 'Credenciais', href: '/settings/credentials' },
   { title: 'Webhooks', href: '/settings/webhooks' },
+  { title: 'Entregabilidade', href: '/settings/deliverability' },
+  { title: 'Regras de envio', href: '/settings/sending-rules' },
+  { title: 'Taxas', href: '/settings/taxes' },
+  { title: 'UTM', href: '/settings/utm' },
+  { title: 'Variáveis', href: '/settings/variables' },
+  { title: 'Equipe', href: '/settings/users' },
   { title: 'Segurança', href: '/settings/security' },
 ]
 

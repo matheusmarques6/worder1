@@ -244,7 +244,7 @@ function IntegrationCard({
           </button>
           
           <a
-            href={`/settings/integrations/${integration.integration_type}`}
+            href={`/integrations/${integration.integration_type}`}
             className="p-2 rounded-lg bg-gray-500/10 hover:bg-gray-500/20 border border-gray-500/20 text-gray-400 transition-all"
           >
             <Settings className="w-4 h-4" />

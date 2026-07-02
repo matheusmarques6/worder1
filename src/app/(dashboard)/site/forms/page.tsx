@@ -48,6 +48,8 @@ import {
 } from '@phosphor-icons/react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useToast } from '@/components/ui/Toast'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 // ── Types ──────────────────────────────────────────────
 
@@ -265,14 +267,72 @@ const templateCategories = [
 
 export default function FormsPage() {
   const router = useRouter()
+  const toast = useToast()
+  const { confirm } = useConfirm()
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | FormType>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | FormStatus>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [templateCategory, setTemplateCategory] = useState('all')
   const [sortBy, setSortBy] = useState<'submitRate' | 'views' | 'submissions' | 'revenue'>('submitRate')
+  // Sample/preview rows shown until the merchant creates real forms.
+  const [formList, setFormList] = useState<FormItem[]>(forms)
+  const [creating, setCreating] = useState(false)
 
-  const filtered = forms
+  // Create a real form from a template (or blank) and open the editor.
+  // Mirrors the working flow on /forms: POST /api/forms then /popup-editor/:id.
+  const createFromTemplate = async (name: string, type: FormType) => {
+    if (creating) return
+    setCreating(true)
+    try {
+      const res = await fetch('/api/forms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          form_type: type,
+          design_json: {},
+          theme: {
+            formType: type,
+            primaryColor: '#F97316',
+            backgroundColor: '#ffffff',
+            textColor: '#1f2937',
+            borderRadius: 12,
+            fontFamily: 'Inter',
+            fontSize: 14,
+            buttonText: 'Enviar',
+          },
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setShowCreateModal(false)
+        router.push(`/popup-editor/${data.form.id}`)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error('Não foi possível criar o formulário', data.error || 'Tente novamente.')
+      }
+    } catch (error) {
+      console.error('Error creating form:', error)
+      toast.error('Não foi possível criar o formulário', 'Verifique sua conexão e tente novamente.')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleDeleteForm = async (form: FormItem) => {
+    const ok = await confirm({
+      title: 'Excluir formulário?',
+      description: `"${form.name}" será removido desta lista.`,
+      destructive: true,
+      confirmLabel: 'Excluir',
+    })
+    if (!ok) return
+    setFormList((prev) => prev.filter((f) => f.id !== form.id))
+    toast.success('Formulário removido')
+  }
+
+  const filtered = formList
     .filter((f) => {
       const matchSearch = !search || f.name.toLowerCase().includes(search.toLowerCase()) || f.list.toLowerCase().includes(search.toLowerCase())
       const matchType = typeFilter === 'all' || f.type === typeFilter
@@ -285,9 +345,7 @@ export default function FormsPage() {
     (t) => templateCategory === 'all' || t.category === templateCategory
   )
 
-  const liveCount = forms.filter((f) => f.status === 'live').length
-  const totalSubmissions = forms.reduce((acc, f) => acc + f.submissions, 0)
-  const totalRevenue = forms.reduce((acc, f) => acc + f.revenue, 0)
+  const liveCount = formList.filter((f) => f.status === 'live').length
 
   return (
     <div className="space-y-6">
@@ -296,7 +354,7 @@ export default function FormsPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.push('/site')}
-            className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-white transition-colors"
+            className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
           >
             <ArrowLeft size={18} weight="bold" />
           </button>
@@ -314,6 +372,14 @@ export default function FormsPage() {
           <Plus size={16} weight="bold" />
           Novo Formulário
         </button>
+      </div>
+
+      {/* Sample data notice */}
+      <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+        <WarningCircle size={16} className="text-amber-600 flex-shrink-0" weight="fill" />
+        <span className="text-xs text-amber-700">
+          Os formulários e números abaixo são exemplos. Crie um formulário para começar a ver seus dados reais.
+        </span>
       </div>
 
       {/* KPIs */}
@@ -366,7 +432,7 @@ export default function FormsPage() {
           <button
             onClick={() => setTypeFilter('all')}
             className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-              typeFilter === 'all' ? 'bg-brand-500 text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
+              typeFilter === 'all' ? 'bg-brand-500 text-white' : 'bg-gray-50 text-gray-500 hover:text-gray-700'
             }`}
           >
             Todos
@@ -376,7 +442,7 @@ export default function FormsPage() {
               key={type}
               onClick={() => setTypeFilter(type)}
               className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                typeFilter === type ? 'bg-brand-500 text-white' : 'bg-gray-50 text-gray-500 hover:text-white'
+                typeFilter === type ? 'bg-brand-500 text-white' : 'bg-gray-50 text-gray-500 hover:text-gray-700'
               }`}
             >
               {cfg.label}
@@ -396,7 +462,7 @@ export default function FormsPage() {
               key={s.id}
               onClick={() => setStatusFilter(s.id)}
               className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                statusFilter === s.id ? 'bg-gray-100 text-white' : 'bg-gray-50/50 text-gray-500 hover:text-gray-700'
+                statusFilter === s.id ? 'bg-gray-200 text-gray-900' : 'bg-gray-50/50 text-gray-500 hover:text-gray-700'
               }`}
             >
               {s.label}
@@ -495,17 +561,33 @@ export default function FormsPage() {
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1.5 rounded hover:bg-gray-50 transition-colors" title="Editar">
-                        <PencilSimple size={14} className="text-gray-500 hover:text-white" />
+                      <button
+                        onClick={() => router.push(`/forms/${form.id}/edit`)}
+                        className="p-1.5 rounded hover:bg-gray-100 transition-colors group/btn"
+                        title="Editar"
+                      >
+                        <PencilSimple size={14} className="text-gray-500 group-hover/btn:text-gray-700" />
                       </button>
-                      <button className="p-1.5 rounded hover:bg-gray-50 transition-colors" title="Duplicar">
-                        <Copy size={14} className="text-gray-500 hover:text-white" />
+                      <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="p-1.5 rounded hover:bg-gray-100 transition-colors group/btn"
+                        title="Duplicar"
+                      >
+                        <Copy size={14} className="text-gray-500 group-hover/btn:text-gray-700" />
                       </button>
-                      <button className="p-1.5 rounded hover:bg-gray-50 transition-colors" title="Analytics">
-                        <ChartLineUp size={14} className="text-gray-500 hover:text-white" />
+                      <button
+                        onClick={() => router.push(`/forms/${form.id}/analytics`)}
+                        className="p-1.5 rounded hover:bg-gray-100 transition-colors group/btn"
+                        title="Analytics"
+                      >
+                        <ChartLineUp size={14} className="text-gray-500 group-hover/btn:text-gray-700" />
                       </button>
-                      <button className="p-1.5 rounded hover:bg-red-500/10 transition-colors" title="Excluir">
-                        <Trash size={14} className="text-gray-500 hover:text-red-400" />
+                      <button
+                        onClick={() => handleDeleteForm(form)}
+                        className="p-1.5 rounded hover:bg-red-500/10 transition-colors group/btn"
+                        title="Excluir"
+                      >
+                        <Trash size={14} className="text-gray-500 group-hover/btn:text-red-400" />
                       </button>
                     </div>
                   </td>
@@ -580,7 +662,7 @@ export default function FormsPage() {
                 </div>
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className="p-2 rounded-lg hover:bg-gray-50 text-gray-500 hover:text-white transition-colors"
+                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                 >
                   <X size={18} />
                 </button>
@@ -596,7 +678,7 @@ export default function FormsPage() {
                       className={`px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
                         templateCategory === cat.id
                           ? 'bg-brand-500 text-white'
-                          : 'bg-gray-50 text-gray-500 hover:text-white'
+                          : 'bg-gray-50 text-gray-500 hover:text-gray-700'
                       }`}
                     >
                       {cat.label}
@@ -614,7 +696,9 @@ export default function FormsPage() {
                     return (
                       <button
                         key={template.id}
-                        className="relative bg-white/50 border border-gray-200 rounded-xl p-4 text-left hover:border-[#F26B2A]/40 hover:bg-brand-500/[0.02] transition-all group"
+                        onClick={() => createFromTemplate(template.name, template.type)}
+                        disabled={creating}
+                        className="relative bg-white/50 border border-gray-200 rounded-xl p-4 text-left hover:border-[#F26B2A]/40 hover:bg-brand-500/[0.02] transition-all group disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         {template.popular && (
                           <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 bg-brand-500 text-white text-[9px] font-bold rounded-full">
@@ -643,11 +727,15 @@ export default function FormsPage() {
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setShowCreateModal(false)}
-                    className="px-4 py-2 text-sm text-gray-500 hover:text-white transition-colors"
+                    className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
                   >
                     Cancelar
                   </button>
-                  <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-sm">
+                  <button
+                    onClick={() => createFromTemplate('Novo Formulário', 'popup')}
+                    disabled={creating}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
                     <FileText size={14} />
                     Começar em Branco
                   </button>

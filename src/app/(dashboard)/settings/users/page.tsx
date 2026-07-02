@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, Plus, Loader2, X, Send, AlertCircle } from 'lucide-react';
+import { Users, Plus, Loader2, X, Send, AlertCircle, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Member {
   id: string;
@@ -17,10 +19,16 @@ interface Member {
 }
 
 const ROLE_LABELS: Record<string, { label: string; className: string }> = {
-  admin: { label: 'Admin', className: 'bg-purple-100 text-purple-700' },
+  admin: { label: 'Administrador', className: 'bg-purple-100 text-purple-700' },
   editor: { label: 'Editor', className: 'bg-blue-100 text-blue-700' },
-  viewer: { label: 'Viewer', className: 'bg-gray-100 text-gray-600' },
+  viewer: { label: 'Leitor', className: 'bg-gray-100 text-gray-600' },
 };
+
+const ROLE_OPTIONS: { value: 'admin' | 'editor' | 'viewer'; label: string }[] = [
+  { value: 'admin', label: 'Administrador' },
+  { value: 'editor', label: 'Editor' },
+  { value: 'viewer', label: 'Leitor' },
+];
 
 function getInitials(name?: string, email?: string): string {
   const source = name || email || '?';
@@ -43,8 +51,11 @@ function formatDate(dateStr: string) {
 }
 
 export default function UsersSettingsPage() {
+  const toast = useToast();
+  const { confirm } = useConfirm();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'editor' | 'viewer'>('editor');
@@ -101,6 +112,60 @@ export default function UsersSettingsPage() {
     }
   }
 
+  async function handleChangeRole(member: Member, role: 'admin' | 'editor' | 'viewer') {
+    if (role === member.role) return;
+    setUpdatingId(member.id);
+    try {
+      const res = await fetch('/api/settings/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: member.id, role }),
+      });
+      if (res.ok) {
+        setMembers(prev => prev.map(m => (m.id === member.id ? { ...m, role } : m)));
+        toast.success('Função atualizada');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error('Erro ao alterar função', data.error || 'Tente novamente.');
+      }
+    } catch {
+      toast.error('Erro ao alterar função', 'Tente novamente.');
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  async function handleRemove(member: Member) {
+    const email = member.email || member.profiles?.email || 'este membro';
+    const ok = await confirm({
+      title: `Remover ${email}?`,
+      description: 'O membro perderá o acesso à organização imediatamente.',
+      confirmLabel: 'Remover',
+      cancelLabel: 'Cancelar',
+      destructive: true,
+    });
+    if (!ok) return;
+    setUpdatingId(member.id);
+    try {
+      const res = await fetch('/api/settings/users', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: member.id }),
+      });
+      if (res.ok) {
+        setMembers(prev => prev.filter(m => m.id !== member.id));
+        toast.success('Membro removido');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error('Erro ao remover', data.error || 'Tente novamente.');
+      }
+    } catch {
+      toast.error('Erro ao remover', 'Tente novamente.');
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   return (
     <div className="p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-6">
@@ -146,9 +211,9 @@ export default function UsersSettingsPage() {
                   onChange={e => setInviteRole(e.target.value as any)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                 >
-                  <option value="admin">Admin — acesso total</option>
+                  <option value="admin">Administrador — acesso total</option>
                   <option value="editor">Editor — pode editar</option>
-                  <option value="viewer">Viewer — somente leitura</option>
+                  <option value="viewer">Leitor — somente leitura</option>
                 </select>
               </div>
               {inviteError && (
@@ -201,6 +266,7 @@ export default function UsersSettingsPage() {
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Função</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Entrou em</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -237,6 +303,37 @@ export default function UsersSettingsPage() {
                       >
                         {member.status === 'active' ? 'Ativo' : 'Convidado'}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <select
+                          aria-label="Alterar função"
+                          value={member.role}
+                          disabled={updatingId === member.id}
+                          onChange={e => handleChangeRole(member, e.target.value as 'admin' | 'editor' | 'viewer')}
+                          className="px-2 py-1 border border-gray-200 rounded-lg text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                        >
+                          {ROLE_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          aria-label="Remover membro"
+                          title="Remover membro"
+                          disabled={updatingId === member.id}
+                          onClick={() => handleRemove(member)}
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {updatingId === member.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

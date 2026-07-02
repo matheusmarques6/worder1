@@ -4,8 +4,12 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import WebhookForm from '@/components/webhooks/WebhookForm';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 export default function EditWebhookPage() {
+  const toast = useToast();
+  const { confirm } = useConfirm();
   const params = useParams();
   const id = params?.id as string;
   const [sub, setSub] = useState<any | null>(null);
@@ -23,7 +27,13 @@ export default function EditWebhookPage() {
   }, [id]);
 
   const rotateSecret = async () => {
-    if (!confirm('Rotacionar o secret? O secret antigo fica válido por 24h pra dual-signing.')) return;
+    const ok = await confirm({
+      title: 'Rotacionar o secret?',
+      description: 'O secret antigo continua válido por 24h para assinatura dupla.',
+      confirmLabel: 'Rotacionar',
+      cancelLabel: 'Cancelar',
+    });
+    if (!ok) return;
     setRotating(true);
     try {
       const res = await fetch(`/api/webhooks-admin/subscriptions/${id}`, {
@@ -32,8 +42,12 @@ export default function EditWebhookPage() {
         body: JSON.stringify({ regenerate_secret: true }),
       });
       const data = await res.json();
-      if (res.ok) setNewSecret(data.secret);
-      else alert(data.error ?? 'falha');
+      if (res.ok) {
+        setNewSecret(data.secret);
+        toast.success('Secret rotacionado');
+      } else {
+        toast.error('Falha ao rotacionar', data.error ?? 'Tente novamente.');
+      }
     } finally {
       setRotating(false);
     }

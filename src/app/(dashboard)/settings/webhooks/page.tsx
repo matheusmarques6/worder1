@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Plus, Webhook as WebhookIcon, Loader2, FileText, Pencil, Trash2 } from 'lucide-react';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Subscription {
   id: string;
@@ -28,6 +30,8 @@ const STATUS_COLOR: Record<Subscription['status'], string> = {
 };
 
 export default function WebhooksListPage() {
+  const toast = useToast();
+  const { confirm } = useConfirm();
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -45,10 +49,21 @@ export default function WebhooksListPage() {
   }, []);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Remover este webhook? Entregas passadas ficam no histórico.')) return;
+    const ok = await confirm({
+      title: 'Remover este webhook?',
+      description: 'Entregas passadas ficam no histórico.',
+      confirmLabel: 'Remover',
+      cancelLabel: 'Cancelar',
+      destructive: true,
+    });
+    if (!ok) return;
     const res = await fetch(`/api/webhooks-admin/subscriptions/${id}`, { method: 'DELETE' });
-    if (res.ok) setSubs((prev) => prev.filter((s) => s.id !== id));
-    else alert('Falha ao remover');
+    if (res.ok) {
+      setSubs((prev) => prev.filter((s) => s.id !== id));
+      toast.success('Webhook removido');
+    } else {
+      toast.error('Falha ao remover', 'Não foi possível remover o webhook. Tente novamente.');
+    }
   };
 
   return (

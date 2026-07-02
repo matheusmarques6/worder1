@@ -13,7 +13,6 @@ import {
   ChartLineUp,
   Cookie,
   ShieldCheck,
-  CheckCircle,
   ArrowRight,
   Lightning,
 } from '@phosphor-icons/react'
@@ -21,10 +20,10 @@ import { motion } from 'framer-motion'
 import Link from 'next/link'
 
 const kpis = [
-  { title: 'Visitantes (30d)', value: '24.5K', change: '+8%', icon: Eye, color: 'text-blue-400' },
-  { title: 'Leads Capturados', value: '1.842', change: '+22%', icon: UsersThree, color: 'text-emerald-400' },
-  { title: 'Taxa de Conversão', value: '7.5%', change: '+1.2%', icon: TrendUp, color: 'text-[#F26B2A]' },
-  { title: 'Cliques em Pop-ups', value: '3.1K', change: '+15%', icon: CursorClick, color: 'text-purple-400' },
+  { title: 'Visitantes (30d)', value: '—', change: null, icon: Eye, color: 'text-blue-400' },
+  { title: 'Leads Capturados', value: '—', change: null, icon: UsersThree, color: 'text-emerald-400' },
+  { title: 'Taxa de Conversão', value: '—', change: null, icon: TrendUp, color: 'text-[#F26B2A]' },
+  { title: 'Cliques em Pop-ups', value: '—', change: null, icon: CursorClick, color: 'text-purple-400' },
 ]
 
 const features = [
@@ -33,39 +32,35 @@ const features = [
     description: 'Pop-ups, flyouts e formulários inline para captura de leads no seu site',
     icon: FileText,
     href: '/site/forms',
-    stats: '6 ativos · 1.2K conversões',
-    status: 'active',
+    stats: 'Criar e gerenciar formulários',
   },
   {
     title: 'Chat Widget',
     description: 'Widget de chat com IA para atendimento e vendas direto no site',
     icon: ChatCircleDots,
     href: '/site/chat-widget',
-    stats: '1 ativo · 340 conversas/mês',
-    status: 'active',
+    stats: 'Configurar widget',
   },
   {
     title: 'Pixel de Tracking',
     description: 'Rastreie visitantes, carrinhos abandonados e eventos de conversão',
     icon: Code,
-    href: '/settings',
-    stats: 'Instalado · 24.5K eventos/mês',
-    status: 'active',
+    href: '/settings/tracking/install',
+    stats: 'Instalar código de tracking',
   },
   {
     title: 'Analytics do Site',
     description: 'Visualize funil de conversão, páginas mais visitadas e comportamento',
     icon: ChartLineUp,
     href: '/analytics',
-    stats: '7.5% conversão geral',
-    status: 'active',
+    stats: 'Ver relatórios',
   },
 ]
 
 const quickActions = [
   { title: 'Criar Pop-up', description: 'Capture leads com pop-ups inteligentes', icon: Plus, href: '/site/forms' },
   { title: 'Configurar Chat', description: 'Ative atendimento IA no site', icon: ChatCircleDots, href: '/site/chat-widget' },
-  { title: 'Ver Pixel', description: 'Instale o código de tracking', icon: Code, href: '/settings' },
+  { title: 'Ver Pixel', description: 'Instale o código de tracking', icon: Code, href: '/settings/tracking/install' },
   { title: 'Banner LGPD', description: 'Configure o banner de cookies', icon: Cookie, href: '/settings/lgpd' },
 ]
 
@@ -83,10 +78,13 @@ export default function SitePage() {
             <p className="text-sm text-gray-500 mt-0.5">Formulários, chat widget, tracking e otimização</p>
           </div>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity">
+        <Link
+          href="/site/forms"
+          className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
+        >
           <Plus size={16} weight="bold" />
           Novo Formulário
-        </button>
+        </Link>
       </div>
 
       {/* KPIs */}
@@ -106,10 +104,14 @@ export default function SitePage() {
                 <span className="text-xs text-gray-500">{kpi.title}</span>
               </div>
               <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
-              <div className="flex items-center gap-1 mt-1">
-                <TrendUp size={12} className="text-emerald-400" weight="bold" />
-                <span className="text-xs text-emerald-400">{kpi.change}</span>
-              </div>
+              {kpi.change ? (
+                <div className="flex items-center gap-1 mt-1">
+                  <TrendUp size={12} className="text-emerald-400" weight="bold" />
+                  <span className="text-xs text-emerald-400">{kpi.change}</span>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 mt-1">Sem dados ainda</p>
+              )}
             </motion.div>
           )
         })}
@@ -138,7 +140,7 @@ export default function SitePage() {
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{feature.description}</p>
                     <div className="flex items-center gap-2 mt-3">
-                      <CheckCircle size={12} className="text-emerald-400" weight="fill" />
+                      <ArrowRight size={12} className="text-gray-400" weight="bold" />
                       <span className="text-xs text-gray-500">{feature.stats}</span>
                     </div>
                   </div>
@@ -176,19 +178,19 @@ export default function SitePage() {
       {/* Pixel Status */}
       <div className="bg-white/50 border border-gray-200 rounded-xl p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Code size={20} className="text-emerald-400" />
+          <Code size={20} className="text-gray-400" />
           <div>
             <p className="text-sm text-gray-700 font-medium">Worder Pixel</p>
-            <p className="text-xs text-gray-500">Instalado e rastreando eventos em minhaloja.com.br</p>
+            <p className="text-xs text-gray-500">Instale o pixel para começar a rastrear eventos do seu site</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs text-emerald-400">Online</span>
-          </div>
-          <span className="text-xs text-gray-500">Último evento: 2 min atrás</span>
-        </div>
+        <Link
+          href="/settings/tracking/install"
+          className="flex items-center gap-2 px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-medium rounded-lg transition-colors"
+        >
+          Instalar pixel
+          <ArrowRight size={14} weight="bold" />
+        </Link>
       </div>
     </div>
   )

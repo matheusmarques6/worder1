@@ -135,6 +135,26 @@ function formatPct(v: number, digits = 1): string {
   return `${v.toFixed(digits)}%`
 }
 
+// Translate raw campaign/automation status enums to PT-BR for merchants.
+const STATUS_PT: Record<string, string> = {
+  sent: 'Enviada',
+  sending: 'Enviando',
+  draft: 'Rascunho',
+  scheduled: 'Agendada',
+  active: 'Ativa',
+  paused: 'Pausada',
+  completed: 'Concluída',
+  archived: 'Arquivada',
+  failed: 'Falhou',
+  cancelled: 'Cancelada',
+  canceled: 'Cancelada',
+}
+
+function translateStatus(status?: string): string {
+  if (!status) return '—'
+  return STATUS_PT[status.toLowerCase()] || status
+}
+
 function timeAgoShort(date: Date): string {
   const mins = Math.floor((Date.now() - date.getTime()) / 60000)
   if (mins < 1) return 'agora mesmo'
@@ -218,6 +238,9 @@ export default function DashboardPage() {
   const [lastFetch, setLastFetch] = useState<Date>(new Date())
   const [, setNow] = useState<Date>(new Date())
   const [toast, setToast] = useState<string | null>(null)
+  // "Como calculamos as vendas" popover — real click-to-open explanation
+  // instead of a button that looked interactive but did nothing.
+  const [showCalcInfo, setShowCalcInfo] = useState(false)
 
   // "Atualizado há N min" tick
   useEffect(() => {
@@ -414,13 +437,39 @@ export default function DashboardPage() {
             <h2 className="text-[20px] font-bold text-[#18181B] leading-tight" style={{ letterSpacing: '-0.02em' }}>
               Desempenho de vendas
             </h2>
-            <button
-              className="inline-flex items-center gap-1 text-[13px] text-[#71717A] hover:text-[#3F3F46] mt-1 transition-colors"
-              title="Receita atribuída: pedidos realizados dentro da janela de atribuição após clique em email, WhatsApp ou SMS enviados pela Worder."
-            >
-              <Info className="w-3.5 h-3.5" />
-              Como calculamos as vendas
-            </button>
+            <div className="relative inline-block">
+              <button
+                onClick={() => setShowCalcInfo((v) => !v)}
+                aria-expanded={showCalcInfo}
+                className="inline-flex items-center gap-1 text-[13px] text-[#71717A] hover:text-[#3F3F46] mt-1 transition-colors"
+              >
+                <Info className="w-3.5 h-3.5" />
+                Como calculamos as vendas
+              </button>
+              {showCalcInfo && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowCalcInfo(false)} />
+                  <div
+                    className="absolute left-0 top-full mt-2 z-20 w-[320px] rounded-[12px] bg-white p-4 text-[13px] leading-relaxed text-[#52525B] shadow-lg"
+                    style={{ border: '1px solid #E4E4E7' }}
+                    role="dialog"
+                  >
+                    <div className="font-semibold text-[#18181B] mb-1.5">Receita atribuída</div>
+                    <p>
+                      Contamos como &quot;via Worder&quot; os pedidos realizados dentro da janela de
+                      atribuição após um clique em email, WhatsApp ou SMS enviados pela Worder.
+                    </p>
+                    <p className="mt-2">
+                      Você pode ajustar a janela e o modelo de atribuição em{' '}
+                      <Link href="/settings/attribution" className="text-[#18181B] underline underline-offset-2">
+                        Configurações de atribuição
+                      </Link>
+                      .
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
@@ -947,7 +996,7 @@ function RankingCard<T extends { id: string; name: string; status: string; reven
                   className="text-[11.5px] font-semibold text-[#52525B] px-[10px] py-[2px] rounded-full shrink-0"
                   style={{ background: '#F4F4F5' }}
                 >
-                  {item.status}
+                  {translateStatus(item.status)}
                 </span>
               </div>
               <div className="text-[16px] font-bold text-[#18181B] mt-[5px]" style={{ fontVariantNumeric: 'tabular-nums' }}>

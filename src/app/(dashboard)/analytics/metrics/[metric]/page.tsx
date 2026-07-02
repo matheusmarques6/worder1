@@ -19,21 +19,30 @@ const ICON_MAP: Record<string, any> = {
 }
 
 const METRIC_INFO: Record<string, { label: string; icon: string; integration: string }> = {
-  added_to_cart: { label: 'Added to Cart', icon: 'ShoppingCart', integration: 'shopify' },
-  checkout_started: { label: 'Checkout Started', icon: 'CreditCard', integration: 'shopify' },
-  checkout_completed: { label: 'Checkout Completed', icon: 'CheckCircle', integration: 'shopify' },
-  placed_order: { label: 'Placed Order', icon: 'Package', integration: 'shopify' },
-  ordered_product: { label: 'Ordered Product', icon: 'Box', integration: 'shopify' },
-  fulfilled_order: { label: 'Fulfilled Order', icon: 'Truck', integration: 'shopify' },
-  cancelled_order: { label: 'Cancelled Order', icon: 'XCircle', integration: 'shopify' },
-  refunded_order: { label: 'Refunded Order', icon: 'RotateCcw', integration: 'shopify' },
-  viewed_product: { label: 'Viewed Product', icon: 'Eye', integration: 'shopify' },
-  active_on_site: { label: 'Active on Site', icon: 'Activity', integration: 'shopify' },
-  email_received: { label: 'Email Received', icon: 'Mail', integration: 'worder' },
-  email_opened: { label: 'Email Opened', icon: 'MailOpen', integration: 'worder' },
-  email_clicked: { label: 'Email Clicked', icon: 'MousePointerClick', integration: 'worder' },
-  email_bounced: { label: 'Email Bounced', icon: 'MailX', integration: 'worder' },
-  email_unsubscribed: { label: 'Unsubscribed', icon: 'UserMinus', integration: 'worder' },
+  added_to_cart: { label: 'Adicionado ao carrinho', icon: 'ShoppingCart', integration: 'shopify' },
+  checkout_started: { label: 'Checkout iniciado', icon: 'CreditCard', integration: 'shopify' },
+  checkout_completed: { label: 'Checkout concluído', icon: 'CheckCircle', integration: 'shopify' },
+  placed_order: { label: 'Pedido realizado', icon: 'Package', integration: 'shopify' },
+  ordered_product: { label: 'Produto pedido', icon: 'Box', integration: 'shopify' },
+  fulfilled_order: { label: 'Pedido enviado', icon: 'Truck', integration: 'shopify' },
+  cancelled_order: { label: 'Pedido cancelado', icon: 'XCircle', integration: 'shopify' },
+  refunded_order: { label: 'Pedido reembolsado', icon: 'RotateCcw', integration: 'shopify' },
+  viewed_product: { label: 'Produto visualizado', icon: 'Eye', integration: 'shopify' },
+  active_on_site: { label: 'Ativo no site', icon: 'Activity', integration: 'shopify' },
+  email_received: { label: 'E-mail recebido', icon: 'Mail', integration: 'worder' },
+  email_opened: { label: 'E-mail aberto', icon: 'MailOpen', integration: 'worder' },
+  email_clicked: { label: 'E-mail clicado', icon: 'MousePointerClick', integration: 'worder' },
+  email_bounced: { label: 'E-mail retornado', icon: 'MailX', integration: 'worder' },
+  email_unsubscribed: { label: 'Descadastrado', icon: 'UserMinus', integration: 'worder' },
+}
+
+// Fallback for keys not in METRIC_INFO: turn the raw enum (e.g. "added_to_cart")
+// into a readable label ("Added to cart") instead of showing the raw key to
+// the merchant.
+function humanizeMetricKey(key: string): string {
+  const words = key.replace(/[_-]+/g, ' ').trim()
+  if (!words) return key
+  return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
 interface ChartPoint {
@@ -189,7 +198,7 @@ export default function MetricDetailPage() {
   const { currentStore } = useStoreStore()
   const params = useParams()
   const metricKey = params.metric as string
-  const info = METRIC_INFO[metricKey] || { label: metricKey, icon: 'Activity', integration: 'shopify' }
+  const info = METRIC_INFO[metricKey] || { label: humanizeMetricKey(metricKey), icon: 'Activity', integration: 'shopify' }
   const Icon = ICON_MAP[info.icon] || Activity
   const isShopify = info.integration === 'shopify'
 
@@ -240,14 +249,35 @@ export default function MetricDetailPage() {
   }, [metricKey, currentStore?.id])
 
   useEffect(() => {
+    // No store: stop the spinner (fetchChart/fetchFeed early-return without
+    // clearing loading, which otherwise leaves an infinite spinner).
+    if (!currentStore?.id) {
+      setLoading(false)
+      return
+    }
     if (tab === 'chart') {
       fetchChart()
     } else {
       fetchFeed(page)
     }
-  }, [tab, days, page, fetchChart, fetchFeed])
+  }, [tab, days, page, currentStore?.id, fetchChart, fetchFeed])
 
   const totalPages = Math.ceil(feedTotal / limit)
+
+  if (!currentStore?.id) {
+    return (
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        <Link href="/analytics/metrics" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors">
+          <ArrowLeft className="w-4 h-4" />
+          Métricas
+        </Link>
+        <div className="text-center py-20 text-sm text-gray-500">
+          <p className="font-medium text-gray-700">Conecte sua loja para ver esta métrica</p>
+          <p className="mt-1 text-gray-400">Vincule uma loja Shopify para acompanhar os eventos dos seus contatos.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Key,
@@ -177,6 +177,27 @@ export default function CredentialsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Set<string>>(new Set());
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Fechar o menu de ações ao clicar fora ou pressionar Escape
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handlePointer = (e: MouseEvent) => {
+      if (menuContainerRef.current && !menuContainerRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMenuId(null);
+    };
+    document.addEventListener('mousedown', handlePointer);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handlePointer);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [openMenuId]);
 
   // ============================================
   // FETCH CREDENTIALS
@@ -428,43 +449,55 @@ export default function CredentialsPage() {
                     </div>
                     <div>
                       <h3 className="font-medium text-gray-900">{credential.name}</h3>
-                      <p className="text-xs text-gray-600/40">{typeConfig?.name || credential.type}</p>
+                      <p className="text-xs text-gray-600">{typeConfig?.name || credential.type}</p>
                     </div>
                   </div>
 
                   {/* Actions Menu */}
-                  <div className="relative group">
-                    <button className="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white">
+                  <div className="relative" ref={openMenuId === credential.id ? menuContainerRef : undefined}>
+                    <button
+                      type="button"
+                      aria-haspopup="menu"
+                      aria-expanded={openMenuId === credential.id}
+                      aria-label="Ações da credencial"
+                      onClick={() => setOpenMenuId((prev) => (prev === credential.id ? null : credential.id))}
+                      className="p-1 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                    >
                       <MoreVertical className="w-4 h-4" />
                     </button>
-                    <div className="absolute right-0 top-full mt-1 py-1 bg-white rounded-lg border border-gray-200 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 min-w-[140px]">
-                      <button
-                        onClick={() => openEditModal(credential)}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700/70 hover:text-white hover:bg-gray-50"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => handleTest(credential.id)}
-                        disabled={testingId === credential.id}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700/70 hover:text-white hover:bg-gray-50"
-                      >
-                        {testingId === credential.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <RefreshCw className="w-4 h-4" />
-                        )}
-                        Testar
-                      </button>
-                      <button
-                        onClick={() => handleDelete(credential.id)}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Excluir
-                      </button>
-                    </div>
+                    {openMenuId === credential.id && (
+                      <div role="menu" className="absolute right-0 top-full mt-1 py-1 bg-white rounded-lg border border-gray-200 shadow-xl transition-all z-10 min-w-[140px]">
+                        <button
+                          role="menuitem"
+                          onClick={() => { setOpenMenuId(null); openEditModal(credential); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                          Editar
+                        </button>
+                        <button
+                          role="menuitem"
+                          onClick={() => { setOpenMenuId(null); handleTest(credential.id); }}
+                          disabled={testingId === credential.id}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          {testingId === credential.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-4 h-4" />
+                          )}
+                          Testar
+                        </button>
+                        <button
+                          role="menuitem"
+                          onClick={() => { setOpenMenuId(null); handleDelete(credential.id); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Excluir
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -491,7 +524,7 @@ export default function CredentialsPage() {
 
                 {/* Last Used */}
                 {credential.last_used_at && (
-                  <p className="text-xs text-gray-600/30 mt-2">
+                  <p className="text-xs text-gray-500 mt-2">
                     Último uso: {new Date(credential.last_used_at).toLocaleString('pt-BR')}
                   </p>
                 )}
@@ -525,7 +558,7 @@ export default function CredentialsPage() {
                 </h2>
                 <button
                   onClick={closeModal}
-                  className="p-2 rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-colors"
+                  className="p-2 rounded-lg hover:bg-gray-50 text-gray-500 hover:text-gray-600 transition-colors"
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
@@ -553,7 +586,7 @@ export default function CredentialsPage() {
                             </div>
                             <div>
                               <p className="font-medium text-gray-900">{type.name}</p>
-                              <p className="text-xs text-gray-600/40">{type.description}</p>
+                              <p className="text-xs text-gray-600">{type.description}</p>
                             </div>
                           </button>
                         );
@@ -567,7 +600,7 @@ export default function CredentialsPage() {
                     {!editingCredential && (
                       <button
                         onClick={() => setSelectedType(null)}
-                        className="text-sm text-gray-700/60 hover:text-white"
+                        className="text-sm text-gray-700 hover:text-gray-900"
                       >
                         ← Voltar
                       </button>
@@ -586,7 +619,7 @@ export default function CredentialsPage() {
                         className={cn(
                           'w-full px-3 py-2 rounded-lg',
                           'bg-white border border-gray-200 text-gray-900',
-                          'placeholder-white/30',
+                          'placeholder-gray-400',
                           'focus:outline-none focus:border-blue-500/50'
                         )}
                       />
@@ -607,7 +640,7 @@ export default function CredentialsPage() {
                             className={cn(
                               'w-full px-3 py-2 rounded-lg pr-10',
                               'bg-white border border-gray-200 text-gray-900',
-                              'placeholder-white/30',
+                              'placeholder-gray-400',
                               'focus:outline-none focus:border-blue-500/50'
                             )}
                           />
@@ -615,7 +648,7 @@ export default function CredentialsPage() {
                             <button
                               type="button"
                               onClick={() => toggleShowPassword(field.name)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-white"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
                             >
                               {showPasswords.has(field.name) ? (
                                 <EyeOff className="w-4 h-4" />
@@ -626,7 +659,7 @@ export default function CredentialsPage() {
                           )}
                         </div>
                         {field.help && (
-                          <p className="mt-1 text-xs text-gray-600/40">{field.help}</p>
+                          <p className="mt-1 text-xs text-gray-600">{field.help}</p>
                         )}
                       </div>
                     ))}
@@ -639,7 +672,7 @@ export default function CredentialsPage() {
                 <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200">
                   <button
                     onClick={closeModal}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-gray-900/60 hover:bg-white/10 hover:text-white transition-colors"
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                   >
                     Cancelar
                   </button>

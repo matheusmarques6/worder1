@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Key, Plus, Trash2, Copy, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '@/stores';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface ApiKey {
   id: string;
@@ -14,6 +16,8 @@ interface ApiKey {
 
 export default function ApiSettingsPage() {
   const { user } = useAuthStore();
+  const toast = useToast();
+  const { confirm } = useConfirm();
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -47,27 +51,59 @@ export default function ApiSettingsPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setCreatedKey(data.key || data.api_key || 'wrd_' + Math.random().toString(36).slice(2));
-        fetchKeys();
-        setNewKeyName('');
+        const realKey = data.key || data.api_key;
+        if (!realKey) {
+          toast.error('Chave não retornada', 'A chave foi criada mas não foi retornada pelo servidor. Verifique na lista ou tente novamente.');
+          fetchKeys();
+          setNewKeyName('');
+        } else {
+          setCreatedKey(realKey);
+          fetchKeys();
+          setNewKeyName('');
+        }
+      } else {
+        toast.error('Erro ao criar chave', 'Não foi possível criar a chave de API. Tente novamente.');
       }
-    } catch {}
+    } catch {
+      toast.error('Erro ao criar chave', 'Não foi possível criar a chave de API. Tente novamente.');
+    }
     setCreating(false);
   };
 
   const deleteKey = async (id: string) => {
+    const target = keys.find(k => k.id === id);
+    const ok = await confirm({
+      title: `Excluir a chave ${target?.name || ''}?`.trim(),
+      description: 'Integrações que a usam vão parar de funcionar.',
+      confirmLabel: 'Excluir',
+      cancelLabel: 'Cancelar',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
-      await fetch('/api/settings/api-keys', {
+      const res = await fetch('/api/settings/api-keys', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       });
-      setKeys(keys.filter(k => k.id !== id));
-    } catch {}
+      if (res.ok) {
+        setKeys(keys.filter(k => k.id !== id));
+        toast.success('Chave excluída');
+      } else {
+        toast.error('Erro ao excluir', 'Não foi possível excluir a chave. Tente novamente.');
+      }
+    } catch {
+      toast.error('Erro ao excluir', 'Não foi possível excluir a chave. Tente novamente.');
+    }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copiado', 'Chave copiada para a área de transferência.');
+    } catch {
+      toast.error('Não foi possível copiar', 'Copie manualmente a chave exibida.');
+    }
   };
 
   return (

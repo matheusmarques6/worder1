@@ -56,15 +56,31 @@ export default function DeliverabilityPage() {
   const [period, setPeriod] = useState('30d')
   const [data, setData] = useState<DeliverabilityData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hasStore, setHasStore] = useState(true)
 
   useEffect(() => {
-    if (!currentStore?.id) return
+    // No store selected: stop the spinner and show a "connect your store"
+    // state instead of leaving loading=true forever.
+    if (!currentStore?.id) {
+      setHasStore(false)
+      setLoading(false)
+      return
+    }
+    setHasStore(true)
     const days = period === '7d' ? 7 : period === '90d' ? 90 : 30
     setLoading(true)
     fetch(`/api/analytics/deliverability?days=${days}&storeId=${currentStore.id}`)
-      .then(r => r.json())
-      .then(setData)
-      .catch(console.error)
+      .then(async (r) => {
+        // Guard against error bodies. Without checking res.ok / the shape,
+        // an error response (e.g. { error: '...' }) has no `kpis` and the
+        // render below throws a TypeError = white screen.
+        if (!r.ok) return null
+        const json = await r.json().catch(() => null)
+        if (!json || !json.kpis) return null
+        return json as DeliverabilityData
+      })
+      .then((json) => setData(json))
+      .catch(() => setData(null))
       .finally(() => setLoading(false))
   }, [period, currentStore?.id])
 
@@ -103,6 +119,16 @@ export default function DeliverabilityPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Spinner size={32} className="text-gray-400 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!hasStore) {
+    return (
+      <div className="text-center py-20 text-gray-500">
+        <EnvelopeSimple size={40} className="text-gray-300 mx-auto mb-4" />
+        <p className="font-medium text-gray-700">Conecte sua loja para ver a entregabilidade</p>
+        <p className="text-sm mt-1">Vincule uma loja Shopify para acompanhar a saúde dos seus envios.</p>
       </div>
     )
   }

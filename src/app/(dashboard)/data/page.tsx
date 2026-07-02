@@ -1,112 +1,117 @@
 'use client'
 
-import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import {
   Database,
-  Code,
   Crosshair,
   UsersThree,
-  TrendUp,
-  ArrowsClockwise,
-  Eye,
-  CursorClick,
-  ShoppingCart,
-  Star,
-  Lightning,
-  Copy,
   CheckCircle,
-  Globe,
-  Cookie,
-  ToggleRight,
-  ToggleLeft,
-  ChartLineUp,
-  UserCirclePlus,
-  MagnifyingGlass,
+  Warning,
+  ArrowSquareOut,
+  Spinner,
 } from '@phosphor-icons/react'
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts'
+import { useStoreStore } from '@/stores'
 
-const cdpKpis = [
-  { title: 'Perfis Unificados', value: '24.500', change: '+820 esta semana', positive: true, icon: UsersThree },
-  { title: 'Eventos Rastreados/Dia', value: '145.200', change: '+12%', positive: true, icon: Crosshair },
-  { title: 'Score Médio', value: '64.2', change: '+3.8', positive: true, icon: Star },
-  { title: 'CLV Médio Predito', value: 'R$ 342', change: '+8%', positive: true, icon: ChartLineUp },
-]
+// Real per-store event metric (from /api/analytics/metrics)
+interface EventMetric {
+  key: string
+  label: string
+  icon: string
+  count: number
+  integration: string
+}
 
-const trackingEvents = [
-  { event: 'page_view', count: 82400, label: 'Visualização de Página' },
-  { event: 'product_view', count: 34200, label: 'Visualização de Produto' },
-  { event: 'add_to_cart', count: 8900, label: 'Adicionar ao Carrinho' },
-  { event: 'checkout_started', count: 4200, label: 'Início de Checkout' },
-  { event: 'purchase', count: 1542, label: 'Compra Realizada' },
-  { event: 'search', count: 12800, label: 'Busca no Site' },
-]
-
-const eventTrend = [
-  { date: '01 Mar', events: 128000 },
-  { date: '03 Mar', events: 135000 },
-  { date: '05 Mar', events: 122000 },
-  { date: '07 Mar', events: 148000 },
-  { date: '09 Mar', events: 140000 },
-  { date: '11 Mar', events: 156000 },
-  { date: '13 Mar', events: 145200 },
-]
-
-const scoringRules = [
-  { action: 'Abriu e-mail', points: 5, icon: Eye },
-  { action: 'Clicou em link', points: 10, icon: CursorClick },
-  { action: 'Visitou produto', points: 15, icon: ShoppingCart },
-  { action: 'Adicionou ao carrinho', points: 25, icon: ShoppingCart },
-  { action: 'Realizou compra', points: 50, icon: Star },
-  { action: 'Inatividade 30d', points: -20, icon: ArrowsClockwise },
-]
-
-const scoringDistribution = [
-  { range: '0-20', label: 'Frio', count: 4200, color: '#3B82F6' },
-  { range: '21-40', label: 'Morno', count: 6800, color: '#F59E0B' },
-  { range: '41-60', label: 'Quente', count: 7200, color: '#F26B2A' },
-  { range: '61-80', label: 'Muito Quente', count: 4100, color: '#EF4444' },
-  { range: '81-100', label: 'On Fire', count: 2200, color: '#10B981' },
-]
-
-const pixelCode = `<!-- Worder Tracking Pixel -->
-<script>
-  (function(w,o,r,d,e,r2){
-    w['WorderObject']=e;w[e]=w[e]||function(){
-    (w[e].q=w[e].q||[]).push(arguments)};
-    w[e].l=1*new Date();r2=o.createElement(r);
-    var s=o.getElementsByTagName(r)[0];
-    r2.async=1;r2.src=d;
-    s.parentNode.insertBefore(r2,s);
-  })(window,document,'script',
-  'https://cdn.worder.com.br/pixel.js','wdr');
-  wdr('init', 'WDR-XXXX-XXXX');
-  wdr('track', 'PageView');
-</script>`
+// Real pixel/connection state (from /api/integrations/shopify/status)
+interface PixelState {
+  connected: boolean
+  pixelInstalled: boolean
+  shopDomain: string | null
+}
 
 export default function DataPage() {
-  const [copied, setCopied] = useState(false)
-  const [trackingEnabled, setTrackingEnabled] = useState({
-    pageViews: true,
-    productViews: true,
-    addToCart: true,
-    checkout: true,
-    purchase: true,
-    search: true,
-  })
+  const { currentStore } = useStoreStore()
+  const hasHydrated = useStoreStore((s) => s._hasHydrated)
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(pixelCode)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const [loading, setLoading] = useState(true)
+  const [hasStore, setHasStore] = useState(true)
+  const [events, setEvents] = useState<EventMetric[]>([])
+  const [profiles, setProfiles] = useState<number | null>(null)
+  const [pixel, setPixel] = useState<PixelState | null>(null)
+
+  useEffect(() => {
+    if (!hasHydrated) return
+    const storeId = currentStore?.id
+    if (!storeId) {
+      setHasStore(false)
+      setLoading(false)
+      return
+    }
+    setHasStore(true)
+    setLoading(true)
+
+    Promise.all([
+      // Real event counts over the last 30 days for this store.
+      fetch(`/api/analytics/metrics?storeId=${storeId}&days=30`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+      // Real profile (contact) count for this store.
+      fetch(`/api/contacts/count?store_id=${storeId}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+      // Real pixel / connection state for this store.
+      fetch(`/api/integrations/shopify/status?store_id=${storeId}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    ])
+      .then(([metricsRes, countRes, statusRes]) => {
+        const metrics: EventMetric[] = Array.isArray(metricsRes?.metrics) ? metricsRes.metrics : []
+        setEvents(metrics)
+        setProfiles(typeof countRes?.count === 'number' ? countRes.count : null)
+        setPixel({
+          connected: !!statusRes?.connected,
+          pixelInstalled: !!statusRes?.store?.pixelInstalled,
+          shopDomain: statusRes?.store?.shopDomain || null,
+        })
+      })
+      .finally(() => setLoading(false))
+  }, [currentStore?.id, hasHydrated])
+
+  // Only events with real activity, ordered by volume.
+  const activeEvents = events
+    .filter((e) => e.count > 0)
+    .sort((a, b) => b.count - a.count)
+  const totalEvents = activeEvents.reduce((sum, e) => sum + e.count, 0)
+
+  const pixelActive = !!pixel?.connected && !!pixel?.pixelInstalled
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Spinner size={32} className="text-gray-400 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!hasStore) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-brand-500 flex items-center justify-center">
+            <Database size={22} className="text-white" weight="fill" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold font-display text-gray-900">Worder Data</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Rastreamento de eventos e perfis dos seus contatos</p>
+          </div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-12 text-center text-gray-500">
+          <UsersThree size={40} className="text-gray-300 mx-auto mb-4" />
+          <p className="font-medium text-gray-700">Conecte sua loja para ver seus dados</p>
+          <p className="text-sm mt-1">Vincule uma loja Shopify para começar a rastrear eventos e unificar perfis.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -114,170 +119,112 @@ export default function DataPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-brand-500 flex items-center justify-center">
-          <Database size={22} className="text-brand-500" weight="fill" />
+          <Database size={22} className="text-white" weight="fill" />
         </div>
         <div>
           <h1 className="text-2xl font-bold font-display text-gray-900">Worder Data</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Customer Data Platform — Rastreamento, scoring e perfis unificados</p>
+          <p className="text-sm text-gray-500 mt-0.5">Rastreamento de eventos e perfis dos seus contatos</p>
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {cdpKpis.map((kpi, i) => {
-          const Icon = kpi.icon
-          return (
-            <motion.div
-              key={kpi.title}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="bg-white/50 border border-gray-200 rounded-xl p-4"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <Icon size={16} className="text-gray-500" />
-                <span className="text-xs text-gray-500">{kpi.title}</span>
-              </div>
-              <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
-              <span className="text-xs text-emerald-400">{kpi.change}</span>
-            </motion.div>
-          )
-        })}
+      {/* KPIs — real values only */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <UsersThree size={16} className="text-gray-500" />
+            <span className="text-xs text-gray-500">Perfis</span>
+          </div>
+          <p className="text-xl font-bold text-gray-900">
+            {profiles !== null ? profiles.toLocaleString('pt-BR') : '—'}
+          </p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Crosshair size={16} className="text-gray-500" />
+            <span className="text-xs text-gray-500">Eventos rastreados (30 dias)</span>
+          </div>
+          <p className="text-xl font-bold text-gray-900">{totalEvents.toLocaleString('pt-BR')}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Database size={16} className="text-gray-500" />
+            <span className="text-xs text-gray-500">Tipos de evento ativos</span>
+          </div>
+          <p className="text-xl font-bold text-gray-900">{activeEvents.length.toLocaleString('pt-BR')}</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Tracking Pixel */}
-        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Code size={16} className="text-brand-600" />
-            Pixel de Rastreamento
-          </h3>
-          <div className="relative">
-            <pre className="bg-zinc-950 border border-gray-200 rounded-lg p-4 text-xs text-gray-500 overflow-x-auto">
-              {pixelCode}
-            </pre>
-            <button
-              onClick={handleCopy}
-              className="absolute top-3 right-3 p-1.5 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
-            >
-              {copied ? (
-                <CheckCircle size={14} className="text-emerald-400" />
-              ) : (
-                <Copy size={14} className="text-gray-500" />
-              )}
-            </button>
-          </div>
-          <div className="mt-4 flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-            <CheckCircle size={16} className="text-emerald-400" />
-            <span className="text-xs text-emerald-400">Pixel instalado e ativo — recebendo dados</span>
-          </div>
-        </div>
-
-        {/* Event Tracking Config */}
-        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        {/* Pixel status — derived from real connection/event state */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Crosshair size={16} className="text-brand-600" />
-            Eventos Rastreados
+            Pixel de Rastreamento
           </h3>
-          <div className="space-y-3">
-            {trackingEvents.map((ev) => (
-              <div key={ev.event} className="flex items-center justify-between py-2 border-b border-gray-200/50 last:border-0">
-                <div>
-                  <span className="text-sm text-gray-700">{ev.label}</span>
-                  <span className="text-xs text-gray-500 ml-2 font-mono">{ev.event}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500">{ev.count.toLocaleString('pt-BR')}/dia</span>
-                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                </div>
+          {pixelActive ? (
+            <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <CheckCircle size={16} className="text-emerald-500" weight="fill" />
+              <span className="text-xs text-emerald-700">
+                Pixel ativo{pixel?.shopDomain ? ` em ${pixel.shopDomain}` : ''} — recebendo dados
+              </span>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                <Warning size={16} className="text-amber-500" weight="fill" />
+                <span className="text-xs text-amber-700">
+                  {pixel?.connected
+                    ? 'Nenhum evento do pixel detectado ainda nesta loja.'
+                    : 'Pixel ainda não instalado nesta loja.'}
+                </span>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Events Trend */}
-      <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Eventos Rastreados — Últimos 14 dias</h3>
-        <ResponsiveContainer width="100%" height={250}>
-          <AreaChart data={eventTrend}>
-            <defs>
-              <linearGradient id="gradEvents" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#F26B2A" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#F26B2A" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-            <XAxis dataKey="date" stroke="#71717a" fontSize={12} />
-            <YAxis stroke="#71717a" fontSize={12} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#18181b', border: '1px solid #3f3f46', borderRadius: '8px' }}
-              labelStyle={{ color: '#fff' }}
-              formatter={(value: number) => [value.toLocaleString('pt-BR'), 'Eventos']}
-            />
-            <Area type="monotone" dataKey="events" stroke="#F26B2A" fill="url(#gradEvents)" strokeWidth={2} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Lead Scoring Rules */}
-        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Star size={16} className="text-brand-600" />
-            Regras de Scoring
-          </h3>
-          <div className="space-y-2">
-            {scoringRules.map((rule) => {
-              const Icon = rule.icon
-              return (
-                <div key={rule.action} className="flex items-center justify-between py-2 border-b border-gray-200/50 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <Icon size={16} className="text-gray-500" />
-                    <span className="text-sm text-gray-700">{rule.action}</span>
-                  </div>
-                  <span className={`text-sm font-medium ${rule.points > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {rule.points > 0 ? '+' : ''}{rule.points} pts
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+              <Link
+                href="/settings/tracking/install"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+              >
+                Instalar pixel
+                <ArrowSquareOut size={14} />
+              </Link>
+            </div>
+          )}
+          <p className="text-xs text-gray-400 mt-4">
+            Veja instruções de instalação e o código do pixel em{' '}
+            <Link href="/settings/tracking/install" className="text-brand-600 hover:underline">
+              Configurações → Instalar pixel
+            </Link>
+            .
+          </p>
         </div>
 
-        {/* Scoring Distribution */}
-        <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
+        {/* Event tracking — real counts */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Lightning size={16} className="text-brand-600" />
-            Distribuição de Scores
+            <Crosshair size={16} className="text-brand-600" />
+            Eventos Rastreados (últimos 30 dias)
           </h3>
-          <div className="space-y-3">
-            {scoringDistribution.map((seg) => {
-              const total = scoringDistribution.reduce((a, b) => a + b.count, 0)
-              const pct = ((seg.count / total) * 100).toFixed(1)
-              return (
-                <div key={seg.range}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: seg.color }} />
-                      <span className="text-sm text-gray-700">{seg.label}</span>
-                      <span className="text-xs text-gray-500">({seg.range})</span>
-                    </div>
-                    <span className="text-xs text-gray-500">{seg.count.toLocaleString('pt-BR')} ({pct}%)</span>
+          {activeEvents.length === 0 ? (
+            <div className="py-8 text-center">
+              <p className="text-sm text-gray-500">Nenhum evento rastreado ainda.</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Os eventos aparecem aqui assim que o pixel começar a receber dados.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {activeEvents.map((ev) => (
+                <div
+                  key={ev.key}
+                  className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0"
+                >
+                  <div>
+                    <span className="text-sm text-gray-700">{ev.label}</span>
+                    <span className="text-xs text-gray-400 ml-2 font-mono">{ev.key}</span>
                   </div>
-                  <div className="w-full h-2 bg-gray-50 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${pct}%` }}
-                      transition={{ delay: 0.3, duration: 0.8 }}
-                      className="h-full rounded-full"
-                      style={{ backgroundColor: seg.color }}
-                    />
-                  </div>
+                  <span className="text-sm text-gray-600">{ev.count.toLocaleString('pt-BR')}</span>
                 </div>
-              )
-            })}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

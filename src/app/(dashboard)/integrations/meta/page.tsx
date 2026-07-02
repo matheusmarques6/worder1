@@ -1,7 +1,7 @@
 'use client'
 
 import { toast } from '@/components/ui/Toast'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   MessageCircle,
@@ -70,31 +70,31 @@ export default function MetaIntegrationsPage() {
   const [showTokens, setShowTokens] = useState(false)
 
   // Fetch accounts
-  useEffect(() => {
-    const fetchAccounts = async () => {
-      try {
-        // Fetch WhatsApp accounts
-        const waRes = await fetch('/api/whatsapp/cloud/accounts')
-        if (waRes.ok) {
-          const waData = await waRes.json()
-          setWhatsappAccounts(waData.accounts || [])
-        }
-
-        // Fetch Instagram accounts
-        const igRes = await fetch('/api/instagram/accounts')
-        if (igRes.ok) {
-          const igData = await igRes.json()
-          setInstagramAccounts(igData.accounts || [])
-        }
-      } catch (error) {
-        console.error('Error fetching accounts:', error)
-      } finally {
-        setLoading(false)
+  const fetchAccounts = useCallback(async () => {
+    try {
+      // Fetch WhatsApp accounts
+      const waRes = await fetch('/api/whatsapp/cloud/accounts')
+      if (waRes.ok) {
+        const waData = await waRes.json()
+        setWhatsappAccounts(waData.accounts || [])
       }
-    }
 
-    fetchAccounts()
+      // Fetch Instagram accounts
+      const igRes = await fetch('/api/instagram/accounts')
+      if (igRes.ok) {
+        const igData = await igRes.json()
+        setInstagramAccounts(igData.accounts || [])
+      }
+    } catch (error) {
+      console.error('Error fetching accounts:', error)
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    fetchAccounts()
+  }, [fetchAccounts])
 
   const webhookUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/${activeTab === 'whatsapp' ? 'whatsapp/cloud' : 'instagram'}/webhook`
@@ -280,7 +280,8 @@ WEBHOOK_VERIFY_TOKEN=your_global_verify_token`}
           onClose={() => setShowAddModal(false)}
           onSuccess={() => {
             setShowAddModal(false)
-            // Refresh accounts
+            // Refresh accounts so the newly connected one appears
+            fetchAccounts()
           }}
         />
       )}
@@ -372,9 +373,6 @@ function WhatsAppAccountRow({ account }: { account: WhatsAppAccount }) {
               <AlertTriangle className="w-5 h-5 text-amber-400" />
             </span>
           )}
-          <button className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-100 transition-colors">
-            <Settings className="w-5 h-5" />
-          </button>
         </div>
       </div>
     </div>
@@ -433,9 +431,6 @@ function InstagramAccountRow({ account }: { account: InstagramAccount }) {
               <AlertTriangle className="w-5 h-5 text-amber-400" />
             </span>
           )}
-          <button className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-gray-100 transition-colors">
-            <Settings className="w-5 h-5" />
-          </button>
         </div>
       </div>
     </div>

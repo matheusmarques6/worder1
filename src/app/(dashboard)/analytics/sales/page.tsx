@@ -292,13 +292,13 @@ function PipelineSelector({
                 <div className="flex gap-2">
                   <button
                     onClick={selectAll}
-                    className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-white bg-gray-100 rounded-lg transition-colors"
+                    className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 bg-gray-100 rounded-lg transition-colors"
                   >
                     Todos
                   </button>
                   <button
                     onClick={selectNone}
-                    className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-white bg-gray-100 rounded-lg transition-colors"
+                    className="flex-1 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 bg-gray-100 rounded-lg transition-colors"
                   >
                     Nenhum
                   </button>
@@ -375,7 +375,7 @@ function CommitLevelSection({ data }: { data: CommitLevel[] }) {
                 }}
               />
             </div>
-            <span className="text-xs text-gray-400">{level.dealCount} deals</span>
+            <span className="text-xs text-gray-400">{level.dealCount} negócios</span>
           </div>
         </motion.div>
       ))}
@@ -412,10 +412,10 @@ function PipelineComparisonTable({ data }: { data: PipelineMetrics[] }) {
             <tr className="border-b border-gray-200">
               <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase">Pipeline</th>
               <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Valor Total</th>
-              <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Win Rate</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Taxa de ganho</th>
               <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Ciclo</th>
               <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Ticket</th>
-              <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Deals</th>
+              <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Negócios</th>
             </tr>
           </thead>
           <tbody>
@@ -514,7 +514,7 @@ function PipelineCharts({ data }: { data: PipelineMetrics[] }) {
 
       {/* Pie Chart - Deals by Pipeline */}
       <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Deals por Pipeline</h3>
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Negócios por Pipeline</h3>
         <ResponsiveContainer width="100%" height={200}>
           <RechartsPieChart>
             <Pie
@@ -602,7 +602,7 @@ function TimelineChart({ data }: { data: any[] }) {
 
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Evolução de Deals e Valor</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Evolução de Negócios e Valor</h3>
       <ResponsiveContainer width="100%" height={250}>
         <AreaChart data={data}>
           <defs>
@@ -697,10 +697,10 @@ function DealsSection({ topDeals, dealsAtRisk }: { topDeals: TopDeal[]; dealsAtR
       <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <Award className="w-5 h-5 text-amber-400" />
-          <h3 className="text-lg font-semibold text-gray-900">Top 5 Deals</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Top 5 Negócios</h3>
         </div>
         {topDeals.length === 0 ? (
-          <div className="text-center text-gray-500 py-6 text-sm">Nenhum deal em aberto</div>
+          <div className="text-center text-gray-500 py-6 text-sm">Nenhum negócio em aberto</div>
         ) : (
           <div className="space-y-3">
             {topDeals.map((deal, index) => (
@@ -726,11 +726,11 @@ function DealsSection({ topDeals, dealsAtRisk }: { topDeals: TopDeal[]; dealsAtR
       <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <AlertTriangle className="w-5 h-5 text-red-400" />
-          <h3 className="text-lg font-semibold text-gray-900">Deals em Risco</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Negócios em Risco</h3>
         </div>
         {dealsAtRisk.length === 0 ? (
           <div className="text-center text-gray-500 py-6 text-sm">
-            <span className="text-green-400">✓</span> Nenhum deal parado
+            <span className="text-green-400">✓</span> Nenhum negócio parado
           </div>
         ) : (
           <div className="space-y-3">
@@ -918,7 +918,7 @@ export default function AnalyticsPage() {
                         className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
                           period === p.value
                             ? 'bg-brand-100 text-brand-600'
-                            : 'text-white hover:bg-gray-100'
+                            : 'text-gray-700 hover:bg-gray-100'
                         }`}
                       >
                         {p.label}
@@ -934,7 +934,7 @@ export default function AnalyticsPage() {
           <button
             onClick={fetchData}
             disabled={loading}
-            className="p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 hover:text-white hover:bg-white transition-colors disabled:opacity-50"
+            className="p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-white transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -964,12 +964,12 @@ export default function AnalyticsPage() {
               icon={DollarSign}
               label="Pipeline Total"
               value={data.kpis.pipelineTotal}
-              subtext={`${data.kpis.openDeals} deals abertos`}
+              subtext={`${data.kpis.openDeals} negócios abertos`}
               color="primary"
             />
             <KPICard
               icon={Target}
-              label="Pipeline Ponderado"
+              label="Pipeline ponderado"
               value={data.kpis.weightedTotal}
               subtext="Valor × Probabilidade"
               color="blue"
@@ -978,13 +978,13 @@ export default function AnalyticsPage() {
               icon={TrendingUp}
               label={`Ganhos (${data.periodLabel})`}
               value={data.kpis.wonValue}
-              subtext={`${data.kpis.wonDeals} deals ganhos`}
+              subtext={`${data.kpis.wonDeals} negócios ganhos`}
               variation={data.kpis.variations.wonValue}
               color="green"
             />
             <KPICard
               icon={Percent}
-              label="Win Rate"
+              label="Taxa de ganho"
               value={data.kpis.winRate}
               subtext={`${data.kpis.wonDeals} ganhos / ${data.kpis.wonDeals + data.kpis.lostDeals} fechados`}
               variation={data.kpis.variations.winRate}
@@ -1015,12 +1015,12 @@ export default function AnalyticsPage() {
               icon={TrendingDown}
               label="Valor Perdido"
               value={data.kpis.lostValue}
-              subtext={`${data.kpis.lostDeals} deals perdidos`}
+              subtext={`${data.kpis.lostDeals} negócios perdidos`}
               color="red"
             />
             <KPICard
               icon={Users}
-              label="Total de Deals"
+              label="Total de Negócios"
               value={data.kpis.totalDeals}
               format="number"
               color="primary"

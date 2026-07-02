@@ -1,4 +1,10 @@
+'use client'
+
+import { useRouter } from 'next/navigation'
+
 export default function FacebookAdsAnalyticsPage() {
+  const router = useRouter()
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -11,7 +17,10 @@ export default function FacebookAdsAnalyticsPage() {
         <p className="text-gray-500 mt-2 max-w-md mx-auto">
           Integre sua conta do Facebook Ads para visualizar métricas de campanhas, conjuntos de anúncios e anúncios em tempo real.
         </p>
-        <button className="mt-6 px-6 py-2.5 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-medium">
+        <button
+          onClick={() => router.push('/integrations/meta')}
+          className="mt-6 px-6 py-2.5 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-medium"
+        >
           Conectar Facebook Ads
         </button>
       </div>

@@ -60,6 +60,24 @@ interface AnalyticsData {
   campaigns: Campaign[]
 }
 
+// Translate raw campaign status enums to PT-BR for merchants.
+const CAMPAIGN_STATUS_PT: Record<string, string> = {
+  sent: 'Enviada',
+  sending: 'Enviando',
+  completed: 'Concluída',
+  draft: 'Rascunho',
+  scheduled: 'Agendada',
+  paused: 'Pausada',
+  failed: 'Falhou',
+  cancelled: 'Cancelada',
+  canceled: 'Cancelada',
+}
+
+function translateCampaignStatus(status?: string): string {
+  if (!status) return 'N/A'
+  return CAMPAIGN_STATUS_PT[status.toLowerCase()] || status
+}
+
 // KPI Card
 function KPICard({
   icon: Icon,
@@ -240,21 +258,21 @@ export default function EmailAnalyticsPage() {
         />
         <KPICard
           icon={Eye}
-          label="Open Rate"
+          label="Taxa de Abertura"
           value={`${metrics.openRate}%`}
           sub={`${metrics.opened.toLocaleString('pt-BR')} abertos`}
           color="blue"
         />
         <KPICard
           icon={MousePointer}
-          label="Click Rate"
+          label="Taxa de Cliques"
           value={`${metrics.clickRate}%`}
           sub={`${metrics.clicked.toLocaleString('pt-BR')} cliques`}
           color="green"
         />
         <KPICard
           icon={AlertTriangle}
-          label="Bounce Rate"
+          label="Taxa de Bounce"
           value={`${metrics.bounceRate}%`}
           sub={`${metrics.bounced.toLocaleString('pt-BR')} bounces`}
           color="red"
@@ -340,8 +358,8 @@ export default function EmailAnalyticsPage() {
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Campanha</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Enviados</th>
-                  <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Open Rate</th>
-                  <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Click Rate</th>
+                  <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Taxa de Abertura</th>
+                  <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Taxa de Cliques</th>
                   <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Data</th>
                 </tr>
               </thead>
@@ -367,7 +385,7 @@ export default function EmailAnalyticsPage() {
                           ? 'bg-blue-50 text-blue-700'
                           : 'bg-orange-50 text-orange-700'
                       }`}>
-                        {campaign.status || 'N/A'}
+                        {translateCampaignStatus(campaign.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right text-sm text-gray-700 font-medium">

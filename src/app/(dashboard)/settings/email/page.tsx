@@ -363,15 +363,22 @@ export default function SettingsEmailPage() {
                         onClick={async () => {
                           const newVal = !d.warmup_enabled
                           try {
-                            await fetch('/api/email/domains/warmup', {
+                            const res = await fetch('/api/email/domains/warmup', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ domain_id: d.id, enabled: newVal }),
                             })
-                            setDomains(prev => prev.map(dom =>
-                              dom.id === d.id ? { ...dom, warmup_enabled: newVal, warmup_day: newVal ? 1 : 0, warmup_daily_limit: 200 } : dom
-                            ))
-                          } catch {}
+                            if (res.ok) {
+                              setDomains(prev => prev.map(dom =>
+                                dom.id === d.id ? { ...dom, warmup_enabled: newVal, warmup_day: newVal ? 1 : 0, warmup_daily_limit: 200 } : dom
+                              ))
+                              showToast(newVal ? 'Warm-up ativado' : 'Warm-up desativado', 'success')
+                            } else {
+                              showToast('Não foi possível atualizar o warm-up. Tente novamente.', 'error')
+                            }
+                          } catch {
+                            showToast('Não foi possível atualizar o warm-up. Tente novamente.', 'error')
+                          }
                         }}
                         className={`relative w-10 h-6 rounded-full transition-colors ${d.warmup_enabled ? 'bg-amber-500' : 'bg-gray-200'}`}
                       >

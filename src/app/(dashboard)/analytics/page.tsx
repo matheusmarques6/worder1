@@ -108,6 +108,26 @@ function fmtPercent(v: number): string {
   return `${v.toFixed(1)}%`
 }
 
+// Translate raw campaign/automation status enums to PT-BR for merchants.
+const STATUS_PT: Record<string, string> = {
+  sent: 'Enviada',
+  sending: 'Enviando',
+  draft: 'Rascunho',
+  scheduled: 'Agendada',
+  active: 'Ativa',
+  paused: 'Pausada',
+  completed: 'Concluída',
+  archived: 'Arquivada',
+  failed: 'Falhou',
+  cancelled: 'Cancelada',
+  canceled: 'Cancelada',
+}
+
+function translateStatus(status?: string): string {
+  if (!status) return '—'
+  return STATUS_PT[status.toLowerCase()] || status
+}
+
 // ── Loading skeleton ──
 
 function KpiSkeleton() {
@@ -190,7 +210,7 @@ export default function AnalyticsPage() {
         fetch(`/api/dashboard/overview?range=${range}${storeParam}`).then((r) =>
           r.ok ? r.json() : null
         ).catch(() => null),
-        fetch(`/api/analytics`).then((r) =>
+        fetch(`/api/analytics?range=${range}${storeParam}`).then((r) =>
           r.ok ? r.json() : null
         ).catch(() => null),
         fetch(`/api/analytics/email-dashboard?days=${days}`).then((r) =>
@@ -311,7 +331,7 @@ export default function AnalyticsPage() {
                 key={p}
                 onClick={() => setPeriod(p)}
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  period === p ? 'bg-brand-500 text-white' : 'text-gray-500 hover:text-white'
+                  period === p ? 'bg-brand-500 text-white' : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
                 {p}
@@ -520,7 +540,7 @@ export default function AnalyticsPage() {
                 {recentCampaigns.map((camp) => (
                   <tr key={camp.id} className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors">
                     <td className="py-3 text-sm text-gray-700">{camp.name}</td>
-                    <td className="py-3 text-sm text-gray-500">{camp.status}</td>
+                    <td className="py-3 text-sm text-gray-500">{translateStatus(camp.status)}</td>
                     <td className="py-3 text-sm text-gray-500 text-right">{fmtNumber(camp.sends)}</td>
                     <td className="py-3 text-sm text-gray-500 text-right">{fmtPercent(camp.openRate)}</td>
                     <td className="py-3 text-sm text-gray-500 text-right">{fmtPercent(camp.clickRate)}</td>
@@ -557,7 +577,7 @@ export default function AnalyticsPage() {
                 {overview.topAutomations.map((auto) => (
                   <tr key={auto.id} className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors">
                     <td className="py-3 text-sm text-gray-700">{auto.name}</td>
-                    <td className="py-3 text-sm text-gray-500">{auto.status}</td>
+                    <td className="py-3 text-sm text-gray-500">{translateStatus(auto.status)}</td>
                     <td className="py-3 text-sm text-gray-500 text-right">{fmtNumber(auto.sends)}</td>
                     <td className="py-3 text-sm text-gray-500 text-right">{fmtPercent(auto.conversionRate)}</td>
                     <td className="py-3 text-sm text-emerald-500 font-medium text-right">{fmt(auto.revenue)}</td>

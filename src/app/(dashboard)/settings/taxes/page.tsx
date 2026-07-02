@@ -17,6 +17,8 @@ import {
   AlertCircle,
   Info,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 interface TaxSettings {
   default_cost_percentage: number
@@ -239,6 +241,8 @@ const CustomFeeModal = ({
 }
 
 export default function TaxSettingsPage() {
+  const toast = useToast()
+  const { confirm } = useConfirm()
   const [settings, setSettings] = useState<TaxSettings>({
     default_cost_percentage: 35,
     default_cost_currency: 'BRL',
@@ -289,9 +293,13 @@ export default function TaxSettingsPage() {
       if (response.ok) {
         setSaved(true)
         setTimeout(() => setSaved(false), 3000)
+        toast.success('Configurações salvas')
+      } else {
+        toast.error('Erro ao salvar', 'Não foi possível salvar as configurações de custos. Tente novamente.')
       }
     } catch (error) {
       console.error('Error saving settings:', error)
+      toast.error('Erro ao salvar', 'Não foi possível salvar as configurações de custos. Tente novamente.')
     } finally {
       setIsSaving(false)
     }
@@ -317,14 +325,25 @@ export default function TaxSettingsPage() {
         }
         setShowFeeModal(false)
         setEditingFee(null)
+        toast.success('Taxa salva')
+      } else {
+        toast.error('Erro ao salvar taxa', 'Não foi possível salvar a taxa. Tente novamente.')
       }
     } catch (error) {
       console.error('Error saving custom fee:', error)
+      toast.error('Erro ao salvar taxa', 'Não foi possível salvar a taxa. Tente novamente.')
     }
   }
 
   const deleteCustomFee = async (feeId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta taxa?')) return
+    const ok = await confirm({
+      title: 'Excluir esta taxa?',
+      description: 'Esta taxa deixará de ser aplicada nos cálculos de custo.',
+      confirmLabel: 'Excluir',
+      cancelLabel: 'Cancelar',
+      destructive: true,
+    })
+    if (!ok) return
 
     try {
       const response = await fetch('/api/settings/taxes', {
@@ -338,9 +357,13 @@ export default function TaxSettingsPage() {
 
       if (response.ok) {
         setCustomFees(prev => prev.filter(f => f.id !== feeId))
+        toast.success('Taxa excluída')
+      } else {
+        toast.error('Erro ao excluir', 'Não foi possível excluir a taxa. Tente novamente.')
       }
     } catch (error) {
       console.error('Error deleting custom fee:', error)
+      toast.error('Erro ao excluir', 'Não foi possível excluir a taxa. Tente novamente.')
     }
   }
 
@@ -525,7 +548,7 @@ export default function TaxSettingsPage() {
 
           <button
             onClick={() => { setEditingFee(null); setShowFeeModal(true); }}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-white rounded-xl text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
             Adicionar Taxa
@@ -559,7 +582,7 @@ export default function TaxSettingsPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => { setEditingFee(fee); setShowFeeModal(true); }}
-                    className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-white transition-colors"
+                    className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-900 transition-colors"
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>

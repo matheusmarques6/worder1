@@ -5,8 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search,
   Send,
-  Paperclip,
-  MoreVertical,
   Phone,
   User,
   Clock,
@@ -27,6 +25,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
 import { useAgentPermissions } from '@/hooks/useAgentPermissions'
+import { useToast } from '@/components/ui/Toast'
 
 // =====================================================
 // TYPES
@@ -61,9 +60,13 @@ interface Message {
 export default function AgentInboxPage() {
   const { user } = useAuthStore()
   const { isAgent, permissions, canAccessNumber, canSendMessages, isLoading: permissionsLoading } = useAgentPermissions()
-  
+  const toast = useToast()
+
   const organizationId = user?.organization_id || user?.user_metadata?.organization_id
   const agentId = user?.user_metadata?.agent_id
+  // Admin/owner has no agent_id in metadata; fall back to the user id so
+  // they can still assume/resolve conversations from the inbox.
+  const effectiveAgentId = agentId || user?.id
   
   // State
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -75,8 +78,7 @@ export default function AgentInboxPage() {
   const [sending, setSending] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'mine' | 'queue'>('all')
-  const [showTransferModal, setShowTransferModal] = useState(false)
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   
   // Scroll to bottom of messages
@@ -157,24 +159,27 @@ export default function AgentInboxPage() {
     
     setSending(true)
     try {
-      const res = await fetch('/api/whatsapp/messages/send', {
+      const res = await fetch('/api/whatsapp/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          organization_id: organizationId,
           conversation_id: selectedConversation.id,
           content: newMessage,
           type: 'text',
         }),
       })
-      
+
       if (res.ok) {
         setNewMessage('')
         // Refresh messages
         fetchMessages(selectedConversation.id)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error('Falha ao enviar mensagem', data.error || 'Tente novamente em instantes.')
       }
     } catch (error) {
       console.error('Error sending message:', error)
+      toast.error('Falha ao enviar mensagem', 'Verifique sua conexão e tente novamente.')
     } finally {
       setSending(false)
     }
@@ -182,23 +187,30 @@ export default function AgentInboxPage() {
   
   // Assume conversation
   const handleAssumeConversation = async (conversation: Conversation) => {
-    if (!agentId || !organizationId) return
-    
+    if (!effectiveAgentId || !organizationId) return
+
     try {
-      await fetch('/api/whatsapp/agents', {
+      const res = await fetch('/api/whatsapp/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'assign',
           organization_id: organizationId,
           conversation_id: conversation.id,
-          agent_id: agentId,
+          agent_id: effectiveAgentId,
         }),
       })
-      
-      fetchConversations()
+
+      if (res.ok) {
+        toast.success('Conversa assumida')
+        fetchConversations()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error('Falha ao assumir conversa', data.error || 'Tente novamente.')
+      }
     } catch (error) {
       console.error('Error assuming conversation:', error)
+      toast.error('Falha ao assumir conversa', 'Verifique sua conexão e tente novamente.')
     }
   }
   
@@ -207,7 +219,7 @@ export default function AgentInboxPage() {
     if (!selectedConversation || !organizationId) return
     
     try {
-      await fetch('/api/whatsapp/agents', {
+      const res = await fetch('/api/whatsapp/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -216,11 +228,18 @@ export default function AgentInboxPage() {
           conversation_id: selectedConversation.id,
         }),
       })
-      
-      setSelectedConversation(null)
-      fetchConversations()
+
+      if (res.ok) {
+        toast.success('Conversa resolvida')
+        setSelectedConversation(null)
+        fetchConversations()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error('Falha ao resolver conversa', data.error || 'Tente novamente.')
+      }
     } catch (error) {
       console.error('Error resolving conversation:', error)
+      toast.error('Falha ao resolver conversa', 'Verifique sua conexão e tente novamente.')
     }
   }
   
@@ -237,7 +256,7 @@ export default function AgentInboxPage() {
     
     // Tab filter
     if (filter === 'mine') {
-      return conv.assigned_agent_id === agentId
+      return conv.assigned_agent_id === effectiveAgentId
     }
     if (filter === 'queue') {
       return !conv.assigned_agent_id && conv.status === 'open'
@@ -249,7 +268,7 @@ export default function AgentInboxPage() {
   // Stats
   const stats = {
     queue: conversations.filter(c => !c.assigned_agent_id && c.status === 'open').length,
-    mine: conversations.filter(c => c.assigned_agent_id === agentId).length,
+    mine: conversations.filter(c => c.assigned_agent_id === effectiveAgentId).length,
     total: conversations.length,
   }
   
@@ -327,7 +346,7 @@ export default function AgentInboxPage() {
               className={`flex-1 py-2.5 text-sm font-medium transition-colors relative ${
                 filter === tab.id
                   ? 'text-brand-600 border-b-2 border-primary-500'
-                  : 'text-gray-500 hover:text-white'
+                  : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               {tab.label}
@@ -386,7 +405,7 @@ export default function AgentInboxPage() {
                         Na fila
                       </span>
                     )}
-                    {conv.assigned_agent_id === agentId && (
+                    {conv.assigned_agent_id === effectiveAgentId && (
                       <span className="text-xs bg-brand-100 text-brand-600 px-1.5 py-0.5 rounded">
                         Minha
                       </span>
@@ -408,7 +427,7 @@ export default function AgentInboxPage() {
           <button
             onClick={fetchConversations}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-2 text-sm text-gray-500 hover:text-white hover:bg-white rounded-lg transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Atualizar
@@ -447,7 +466,7 @@ export default function AgentInboxPage() {
                 )}
                 
                 {/* Resolve */}
-                {selectedConversation.assigned_agent_id === agentId && (
+                {selectedConversation.assigned_agent_id === effectiveAgentId && (
                   <button
                     onClick={handleResolveConversation}
                     className="flex items-center gap-2 px-3 py-1.5 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-sm transition-colors"
@@ -456,11 +475,6 @@ export default function AgentInboxPage() {
                     Resolver
                   </button>
                 )}
-                
-                {/* More options */}
-                <button className="p-2 text-gray-500 hover:text-white hover:bg-white rounded-lg transition-colors">
-                  <MoreVertical className="w-5 h-5" />
-                </button>
               </div>
             </div>
             
@@ -508,13 +522,9 @@ export default function AgentInboxPage() {
             </div>
             
             {/* Input */}
-            {canSendMessages && selectedConversation.assigned_agent_id === agentId ? (
+            {canSendMessages && selectedConversation.assigned_agent_id === effectiveAgentId ? (
               <div className="p-4 border-t border-gray-200 bg-white">
                 <div className="flex items-end gap-3">
-                  <button className="p-2 text-gray-500 hover:text-white hover:bg-white rounded-lg transition-colors">
-                    <Paperclip className="w-5 h-5" />
-                  </button>
-                  
                   <div className="flex-1 relative">
                     <textarea
                       value={newMessage}

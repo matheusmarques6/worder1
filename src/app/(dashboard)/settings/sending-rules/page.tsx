@@ -102,8 +102,8 @@ export default function SendingRulesPage() {
       <header>
         <h1 className="text-2xl font-semibold text-gray-900">Regras de envio</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Configurações globais que protegem deliverability — Quiet Hours, Frequency Cap e
-          Skip Contacts. Aplicam-se a todos os emails enviados por automações.
+          Configurações globais que protegem a entregabilidade — Horário de silêncio, Limite de
+          frequência e Pular contatos em fluxos ativos. Aplicam-se a todos os emails enviados por automações.
         </p>
       </header>
 
@@ -112,9 +112,9 @@ export default function SendingRulesPage() {
         <div className="flex items-start gap-3">
           <Moon className="w-5 h-5 text-indigo-500 mt-0.5" />
           <div className="flex-1">
-            <h2 className="font-medium text-gray-900">Quiet Hours</h2>
+            <h2 className="font-medium text-gray-900">Horário de silêncio</h2>
             <p className="text-sm text-gray-500">
-              Não envia emails dentro da janela. Runs caem em <code>waiting</code> e retomam
+              Não envia emails dentro da janela definida. As mensagens ficam em espera e retomam
               automaticamente quando a janela fecha.
             </p>
           </div>
@@ -173,10 +173,10 @@ export default function SendingRulesPage() {
         <div className="flex items-start gap-3">
           <Hash className="w-5 h-5 text-emerald-500 mt-0.5" />
           <div className="flex-1">
-            <h2 className="font-medium text-gray-900">Frequency Cap</h2>
+            <h2 className="font-medium text-gray-900">Limite de frequência</h2>
             <p className="text-sm text-gray-500">
-              Máximo de mensagens por contato em 24h. Por canal — <code>0</code> ou vazio = sem limite específico do canal.
-              Padrão Omnisend: 3 SMS/dia.
+              Máximo de mensagens por contato em 24h. Por canal — 0 ou vazio significa sem limite específico do canal.
+              Sugestão: 3 SMS/dia.
             </p>
           </div>
         </div>
@@ -238,10 +238,10 @@ export default function SendingRulesPage() {
         <div className="flex items-start gap-3">
           <Layers className="w-5 h-5 text-purple-500 mt-0.5" />
           <div className="flex-1">
-            <h2 className="font-medium text-gray-900">Skip Contacts em flows ativos</h2>
+            <h2 className="font-medium text-gray-900">Pular contatos em fluxos ativos</h2>
             <p className="text-sm text-gray-500">
-              Quando um contato já tem um run em <code>waiting</code>/<code>pending</code>/<code>running</code>{' '}
-              em outra automação, novos triggers são descartados (Omnisend "Skip Contacts").
+              Quando um contato já está em espera, pendente ou em andamento em outra automação,
+              novos disparos para ele são descartados.
             </p>
           </div>
           <label className="inline-flex items-center cursor-pointer">

@@ -29,6 +29,14 @@ const STATUS_COLOR: Record<Delivery['status'], string> = {
   retrying: 'bg-yellow-100 text-yellow-700',
 };
 
+const STATUS_LABEL: Record<Delivery['status'], string> = {
+  pending: 'Pendente',
+  in_flight: 'Em andamento',
+  delivered: 'Entregue',
+  failed: 'Falha',
+  retrying: 'Reentregando',
+};
+
 const STATUS_FILTERS: Array<{ value: string; label: string }> = [
   { value: '', label: 'Todos' },
   { value: 'delivered', label: 'Entregues' },
@@ -163,7 +171,7 @@ export default function DeliveriesPage() {
                   <td className="px-3 py-2 font-mono text-xs">{d.event_type}</td>
                   <td className="px-3 py-2">
                     <span className={`text-xs px-2 py-1 rounded-full ${STATUS_COLOR[d.status]}`}>
-                      {d.status}
+                      {STATUS_LABEL[d.status] ?? d.status}
                     </span>
                   </td>
                   <td className="px-3 py-2">{d.response_code ?? '—'}</td>

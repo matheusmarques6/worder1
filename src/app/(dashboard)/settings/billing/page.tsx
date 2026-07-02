@@ -10,7 +10,6 @@ import {
   Download,
   Mail,
   Users,
-  MessageCircle,
   AlertTriangle,
   ExternalLink,
 } from 'lucide-react'
@@ -296,14 +295,8 @@ export default function BillingPage() {
               label="Contatos cadastrados"
               icon={Users}
             />
-            {data.limits.whatsappMonth > 0 && (
-              <UsageBar
-                used={0}
-                total={data.limits.whatsappMonth}
-                label="Mensagens WhatsApp este mês"
-                icon={MessageCircle}
-              />
-            )}
+            {/* Barra de uso de WhatsApp oculta: a API ainda não expõe o consumo real (usage.whatsappMonth).
+                Exibir used={0} induziria o lojista a erro. Reexibir quando a API fornecer o valor real. */}
           </div>
 
           {data.hasStripeCustomer && (
@@ -434,7 +427,15 @@ export default function BillingPage() {
                       (inv.status === 'void' || inv.status === 'uncollectible') && 'bg-gray-50 text-gray-600'
                     )}
                   >
-                    {inv.status === 'paid' ? 'Paga' : inv.status}
+                    {inv.status === 'paid'
+                      ? 'Paga'
+                      : inv.status === 'open'
+                      ? 'Em aberto'
+                      : inv.status === 'void'
+                      ? 'Anulada'
+                      : inv.status === 'uncollectible'
+                      ? 'Não recebível'
+                      : inv.status}
                   </span>
                   {inv.hosted_invoice_url && (
                     <a

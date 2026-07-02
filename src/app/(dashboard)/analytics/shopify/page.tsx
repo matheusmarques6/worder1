@@ -83,12 +83,16 @@ interface ShopifyAnalytics {
 
 const COLORS = ['#f97316', '#22c55e', '#3b82f6', '#eab308', '#ec4899', '#8b5cf6']
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 2,
-  }).format(value)
+const formatCurrency = (value: number, currency = 'BRL') => {
+  try {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+    }).format(value)
+  } catch {
+    return `${currency} ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+  }
 }
 
 const formatNumber = (value: number) => {
@@ -116,9 +120,10 @@ const MetricCard = ({
   format?: 'currency' | 'number' | 'percent'
   small?: boolean
 }) => {
-  const formattedValue = format === 'currency' 
-    ? formatCurrency(value) 
-    : format === 'percent' 
+  const currency = (useStoreStore((s) => s.currentStore?.currency) || 'BRL').toUpperCase()
+  const formattedValue = format === 'currency'
+    ? formatCurrency(value, currency)
+    : format === 'percent'
       ? `${value.toFixed(2)}%`
       : formatNumber(value)
 
@@ -156,12 +161,14 @@ const DetailRow = ({
   value: number
   change?: number
   isNegative?: boolean
-}) => (
+}) => {
+  const currency = (useStoreStore((s) => s.currentStore?.currency) || 'BRL').toUpperCase()
+  return (
   <div className="flex items-center justify-between py-3 border-b border-gray-200/30 last:border-0">
     <span className={`text-sm ${isNegative ? 'text-red-400' : 'text-gray-600'}`}>{label}</span>
     <div className="flex items-center gap-3">
       <span className={`font-medium ${isNegative ? 'text-red-400' : 'text-gray-900'}`}>
-        {isNegative ? '-' : ''}{formatCurrency(Math.abs(value))}
+        {isNegative ? '-' : ''}{formatCurrency(Math.abs(value), currency)}
       </span>
       {change !== undefined && (
         <span className={`text-xs px-2 py-0.5 rounded ${change >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
@@ -170,11 +177,22 @@ const DetailRow = ({
       )}
     </div>
   </div>
-)
+  )
+}
 
 export default function ShopifyAnalyticsPage() {
   const { currentStore } = useStoreStore() // ✅ NOVO
   const storeId = currentStore?.id // ✅ NOVO
+  // Honor the connected store's currency instead of hardcoding BRL / "R$".
+  const currency = (currentStore?.currency || 'BRL').toUpperCase()
+  const currencySymbol = (() => {
+    try {
+      const parts = new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).formatToParts(0)
+      return parts.find((p) => p.type === 'currency')?.value || currency
+    } catch {
+      return currency
+    }
+  })()
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedPeriod, setSelectedPeriod] = useState('7d')
@@ -203,14 +221,7 @@ export default function ShopifyAnalyticsPage() {
       // Fetch data directly from Shopify API - ✅ MODIFICADO: Incluir storeId
       const response = await fetch(`/api/analytics/shopify?period=${selectedPeriod}&storeId=${storeId}`)
       const result = await response.json()
-      
-      // 🔍 DEBUG: Ver o que a API retorna
-      console.log('[DEBUG] API Response:', {
-        success: result.success,
-        produtos: result.data?.vendasPorProduto?.slice(0, 3),
-        periodo: selectedPeriod,
-      })
-      
+
       if (result.success) {
         setHasStore(true)
         setData(result.data)
@@ -302,7 +313,7 @@ export default function ShopifyAnalyticsPage() {
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
                   selectedPeriod === period.id
                     ? 'bg-gray-100 text-gray-900'
-                    : 'text-gray-500 hover:text-white'
+                    : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
                 {period.label}
@@ -320,15 +331,11 @@ export default function ShopifyAnalyticsPage() {
                 const params = new URLSearchParams()
                 params.append('period', selectedPeriod)
                 if (storeId) params.append('storeId', storeId)
-                
-                console.log('[PDF] Chamando API:', `/api/reports/shopify?${params.toString()}`)
+
                 const response = await fetch(`/api/reports/shopify?${params.toString()}`)
-                
-                console.log('[PDF] Response status:', response.status)
-                
+
                 if (response.ok) {
                   const blob = await response.blob()
-                  console.log('[PDF] Blob size:', blob.size)
                   const url = window.URL.createObjectURL(blob)
                   const a = document.createElement('a')
                   a.href = url
@@ -338,20 +345,17 @@ export default function ShopifyAnalyticsPage() {
                   document.body.removeChild(a)
                   window.URL.revokeObjectURL(url)
                 } else {
-                  const errorText = await response.text()
-                  console.error('[PDF] Erro da API:', errorText)
                   toast({ type: 'error', title: `Erro ao gerar PDF: ${response.status}` })
                 }
               } catch (error) {
-                console.error('[PDF] Erro ao exportar:', error)
-                toast({ type: 'error', title: 'Erro ao exportar PDF. Veja o console.' })
+                toast({ type: 'error', title: 'Erro ao exportar PDF. Tente novamente.' })
               } finally {
                 const btn = document.getElementById('export-pdf-btn')
                 if (btn) btn.textContent = 'Exportar PDF'
               }
             }}
             id="export-pdf-btn"
-            className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-white rounded-xl font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -414,7 +418,7 @@ export default function ShopifyAnalyticsPage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Total de vendas ao longo do tempo</h3>
               <p className="text-2xl font-bold text-brand-600 mt-1">
-                {formatCurrency(data?.totalVendas || 0)}
+                {formatCurrency(data?.totalVendas || 0, currency)}
                 {data?.totalVendasChange !== undefined && (
                   <span className={`text-sm ml-2 ${data.totalVendasChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                     {formatPercent(data.totalVendasChange)}
@@ -439,14 +443,14 @@ export default function ShopifyAnalyticsPage() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="label" stroke="#6b7280" fontSize={12} />
-                <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(v: number) => `R$ ${(v/1000).toFixed(0)}k`} />
+                <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(v: number) => `${currencySymbol} ${(v/1000).toFixed(0)}k`} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: '#1f2937',
                     border: '1px solid #374151',
                     borderRadius: '12px',
                   }}
-                  formatter={(value: number) => formatCurrency(value)}
+                  formatter={(value: number) => formatCurrency(value, currency)}
                 />
                 <Area
                   type="monotone"
@@ -517,7 +521,7 @@ export default function ShopifyAnalyticsPage() {
                     border: '1px solid #374151',
                     borderRadius: '8px',
                   }}
-                  formatter={(value: number) => formatCurrency(value)}
+                  formatter={(value: number) => formatCurrency(value, currency)}
                 />
               </RechartsPieChart>
             </ResponsiveContainer>
@@ -530,7 +534,7 @@ export default function ShopifyAnalyticsPage() {
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                   <span className="text-gray-600">{canal.nome}</span>
                 </div>
-                <span className="text-gray-900 font-medium">{formatCurrency(canal.vendas)}</span>
+                <span className="text-gray-900 font-medium">{formatCurrency(canal.vendas, currency)}</span>
               </div>
             ))}
           </div>
@@ -544,7 +548,7 @@ export default function ShopifyAnalyticsPage() {
         >
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Valor médio do pedido</h3>
           <div className="flex items-baseline gap-2">
-            <p className="text-3xl font-bold text-gray-900">{formatCurrency(data?.valorMedioPedido || 0)}</p>
+            <p className="text-3xl font-bold text-gray-900">{formatCurrency(data?.valorMedioPedido || 0, currency)}</p>
             {data?.valorMedioPedidoChange !== undefined && (
               <span className={`text-sm ${data.valorMedioPedidoChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {formatPercent(data.valorMedioPedidoChange)}
@@ -584,7 +588,7 @@ export default function ShopifyAnalyticsPage() {
                         style={{ width: `${(produto.vendas / (data?.vendasPorProduto?.[0]?.vendas || 1)) * 100}%` }}
                       />
                     </div>
-                    <span className="text-xs text-gray-500">{formatCurrency(produto.vendas)}</span>
+                    <span className="text-xs text-gray-500">{formatCurrency(produto.vendas, currency)}</span>
                   </div>
                 </div>
                 {produto.change !== undefined && (

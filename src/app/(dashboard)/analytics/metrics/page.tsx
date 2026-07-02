@@ -21,10 +21,19 @@ export default function MetricsPage() {
   const [search, setSearch] = useState('')
   const [integration, setIntegration] = useState('all')
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [hasStore, setHasStore] = useState(true)
   const { currentStore } = useStoreStore()
 
   useEffect(() => {
-    if (!currentStore?.id) return
+    // No store: stop the spinner and show a "connect your store" state
+    // instead of leaving loading=true forever.
+    if (!currentStore?.id) {
+      setHasStore(false)
+      setLoading(false)
+      setMetrics([])
+      return
+    }
+    setHasStore(true)
     setLoading(true)
     const params = new URLSearchParams({ integration })
     if (currentStore?.id) params.set('storeId', currentStore.id)
@@ -101,7 +110,12 @@ export default function MetricsPage() {
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Métrica ↑</p>
         </div>
 
-        {loading ? (
+        {!hasStore ? (
+          <div className="text-center py-20 text-sm text-gray-500">
+            <p className="font-medium text-gray-700">Conecte sua loja para ver as métricas</p>
+            <p className="mt-1 text-gray-400">Vincule uma loja Shopify para acompanhar os eventos dos seus contatos.</p>
+          </div>
+        ) : loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
           </div>

@@ -21,23 +21,33 @@ export async function GET(request: NextRequest) {
   try {
     const period = searchParams.get('period') || '7d';
     const type = searchParams.get('type') || 'overview';
+    // Scope by store when provided so these base metrics line up with the
+    // other store-scoped cards on the analytics page instead of summing the
+    // whole organization.
+    const storeId = searchParams.get('storeId') || searchParams.get('store_id');
 
     // Get basic counts
-    const { count: totalContacts } = await supabase
+    let contactsQuery = supabase
       .from('contacts')
       .select('*', { count: 'exact', head: true })
       .eq('organization_id', organizationId);
+    if (storeId) contactsQuery = contactsQuery.eq('store_id', storeId);
+    const { count: totalContacts } = await contactsQuery;
 
-    const { count: totalDeals } = await supabase
+    let dealsQuery = supabase
       .from('deals')
       .select('*', { count: 'exact', head: true })
       .eq('organization_id', organizationId);
+    if (storeId) dealsQuery = dealsQuery.eq('store_id', storeId);
+    const { count: totalDeals } = await dealsQuery;
 
-    const { data: wonDeals } = await supabase
+    let wonDealsQuery = supabase
       .from('deals')
       .select('value')
       .eq('organization_id', organizationId)
       .eq('status', 'won');
+    if (storeId) wonDealsQuery = wonDealsQuery.eq('store_id', storeId);
+    const { data: wonDeals } = await wonDealsQuery;
 
     const totalRevenue = wonDeals?.reduce((sum, d) => sum + (d.value || 0), 0) || 0;
 
