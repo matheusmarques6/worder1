@@ -213,7 +213,7 @@ function inputStyleStr(p){
   s+="padding:"+nv(p.inputPadTop,12)+"px "+nv(p.inputPadRight,16)+"px "+nv(p.inputPadBottom,12)+"px "+nv(p.inputPadLeft,16)+"px;";
   s+="background:"+bg+";color:"+sv(p.textColor,"#111827")+";";
   s+="font-family:"+fam+";font-size:"+nv(p.fontSize,14)+"px;";
-  s+="font-weight:"+(p.bold?"700":"400")+";font-style:"+(p.italic?"italic":"normal")+";text-decoration:"+(p.underline?"underline":"none")+";";
+  s+="font-weight:"+(p.bold?"700":nv(p.inputFontWeight,400))+";font-style:"+(p.italic?"italic":"normal")+";text-decoration:"+(p.underline?"underline":"none")+";";
   s+="text-align:"+sv(p.textAlign,"left")+";";
   if(und){s+="border:none;border-bottom:"+bw+"px "+bs+" "+bc+";border-radius:0;"}
   else{s+="border:"+bw+"px "+bs+" "+bc+";border-radius:"+r+"px;"}
@@ -402,7 +402,7 @@ function visibleBlocks(bs){
     if(!m&&pp.hideOnDesktop){dlog("hide block "+b.type+"#"+b.id+" (hideOnDesktop)");return false;}
     if(_ppHide&&isInputBlock(b.type)){
       var mapTo=pp.mapTo||(b.type==="email"?"email":b.type==="phone"?"phone":b.type==="name-input"?"first_name":"");
-      if(mapTo&&_knownFields[mapTo]===true){
+      if(mapTo&&_knownFields[mapTo]){
         dlog("progressive: hiding "+b.type+" ("+mapTo+" already known)");
         return false;
       }
@@ -499,13 +499,13 @@ function renderBlock(b){
       break;
     }
     case"spacer":h='<div style="'+blockStyleStr(p)+'height:'+nv(p.height,24)+'px"></div>';break;
-    case"line":h='<div style="'+blockStyleStr(p)+'"><hr style="border:none;border-top:'+nv(p.thickness,1)+'px '+sv(p.style,"solid")+' '+sv(p.color,"#E5E7EB")+';margin:0 auto;width:'+Math.min(Math.max(nv(p.widthPct,100),1),100)+'%" /></div>';break;
+    case"line":h='<div style="'+blockStyleStr(p)+'"><hr style="border:none;border-top:'+nv(p.thickness,1)+'px '+sv(p.style,"solid")+' '+sv(p.color,"#E5E7EB")+';margin:0 auto;width:'+Math.min(Math.max(nv(p.width!=null?p.width:p.widthPct,100),1),100)+'%" /></div>';break;
     case"coupon":{
       var couponCode=p.code||"CODIGO";
       if(p.mode==="dynamic"&&window.__wfDynCoupon&&window.__wfDynCoupon[FID]){
         couponCode=window.__wfDynCoupon[FID];
       }
-      h='<div style="'+blockStyleStr(p,true)+'padding:12px 16px;border:2px dashed '+sv(p.borderColor,"#F97316")+';border-radius:'+nv(p.borderRadius,8)+'px;text-align:center;background:'+sv(p.bgColor,"#FFF7ED")+'"><p style="font-size:11px;color:#6B7280;margin:0 0 4px">'+esc(p.description||"")+'</p><p style="font-size:'+nv(p.fontSize,20)+'px;font-weight:bold;color:'+sv(p.codeColor,"#F97316")+';letter-spacing:2px;margin:0;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent)">'+esc(couponCode)+'</p></div>';
+      h='<div style="'+blockStyleStr(p,true)+'padding:12px 16px;border:2px '+sv(p.borderStyle,"dashed")+' '+sv(p.borderColor,"#F97316")+';border-radius:'+nv(p.borderRadius,8)+'px;text-align:center;background:'+sv(p.bgColor,"#FFF7ED")+'"><p style="font-size:11px;color:#6B7280;margin:0 0 4px">'+esc(p.description||"")+'</p><p style="font-size:'+nv(p.fontSize,20)+'px;font-weight:bold;color:'+sv(p.codeColor,"#F97316")+';letter-spacing:2px;margin:0;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent)">'+esc(couponCode)+'</p></div>';
       break;
     }
     case"countdown":{
