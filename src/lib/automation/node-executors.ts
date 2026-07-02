@@ -902,6 +902,24 @@ const actionExecutors: Record<string, NodeExecutor> = {
           }
         }
 
+        // Absolutize any SITE-RELATIVE flat merge value (e.g. event.ProductURL
+        // extracted from Items[0] as "/products/<handle>") against the store
+        // host, so renderMergeTags fallbacks don't ship a relative link that
+        // 404s on the app domain. Only touches leading-slash, space-free
+        // values — non-URL fields are untouched.
+        try {
+          const { normalizeHost, getShopDomain, absolutizeSiteUrl } = await import('@/lib/email/trigger-cta');
+          const mergeStoreHost = normalizeHost((context as any)?.store?.domain) || getShopDomain(triggerData);
+          if (mergeStoreHost) {
+            for (const k of Object.keys(mergeData)) {
+              const v = mergeData[k];
+              if (typeof v === 'string' && v.startsWith('/') && !/\s/.test(v)) {
+                mergeData[k] = absolutizeSiteUrl(v, mergeStoreHost);
+              }
+            }
+          }
+        } catch {}
+
         const { getAppBaseUrl } = await import('@/lib/app-url');
         const baseUrl = getAppBaseUrl();
 

@@ -114,21 +114,32 @@ export function getShopDomain(eventData?: Record<string, any> | null): string {
     ev.shop_domain ||
     ''
   if (direct) return normalizeHost(String(direct))
-  // else pull the host out of any URL we have
-  return hostFromUrl(
-    props.StoreURL ||
-      props.store_url ||
-      props.CheckoutURL ||
-      props.checkout_url ||
-      props.AbandonedCheckoutURL ||
-      props.ProductURL ||
-      raw.abandoned_checkout_url ||
-      raw.recovery_url ||
-      raw.order_status_url ||
-      raw.landing_site ||
-      raw.referring_site ||
-      ''
-  )
+  // else pull the host out of the FIRST candidate that is an ABSOLUTE URL.
+  // We must try each candidate (not `a || b || …`), because a RELATIVE value
+  // like ProductURL="/products/x" is truthy but yields no host — the || chain
+  // would stop there and miss the absolute page url that follows. Candidates
+  // include the pixel's own page URL (props.url / page_url / referrer), which
+  // for a viewed_product / browse event is the storefront page itself and is
+  // the most reliably-present absolute host signal (the exact bug case).
+  const firstItem =
+    (Array.isArray(props.Items) && props.Items[0]) ||
+    (Array.isArray(raw.line_items) && raw.line_items[0]) ||
+    {}
+  const candidates = [
+    props.StoreURL, props.store_url,
+    props.CheckoutURL, props.checkout_url, props.AbandonedCheckoutURL,
+    props.ProductURL,
+    props.url, props.page_url, props.PageURL, props.pageUrl,
+    props.referrer, props.referring_site,
+    raw.abandoned_checkout_url, raw.recovery_url, raw.order_status_url,
+    raw.url, raw.landing_site, raw.referring_site,
+    firstItem.ProductURL, firstItem.product_url, firstItem.url,
+  ]
+  for (const c of candidates) {
+    const h = hostFromUrl(c)
+    if (h) return h
+  }
+  return ''
 }
 
 /**

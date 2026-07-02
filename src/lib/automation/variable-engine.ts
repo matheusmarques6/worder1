@@ -23,6 +23,7 @@ import {
   normalizeCanonicalValue,
   escapeHtmlValue,
 } from '@/lib/email/merge-tags';
+import { normalizeHost, getShopDomain, absolutizeSiteUrl } from '@/lib/email/trigger-cta';
 
 // The 29 canonical un-prefixed tags ({{ CheckoutURL }}, {{ Customer.Email }},
 // {{ Items[0].ProductName }}, ...). The engine resolves these against
@@ -584,6 +585,20 @@ export class VariableEngine {
       return context.now?.iso || new Date().toISOString();
     }
 
+    // Store host for absolutizing SITE-RELATIVE urls (e.g. a ProductURL that
+    // came through as "/products/<handle>"). This is the channel-agnostic
+    // twin of the fix in resolveTriggerSmartTags — WhatsApp/SMS AND the
+    // automation email node resolve tags THROUGH this engine, so without
+    // this a relative product link goes out with no domain (broken link /
+    // app-domain 404). Prefer context.store.domain, else derive from the
+    // event payload. `abs` only rewrites leading-slash, whitespace-free
+    // values, so non-URL fields are never touched.
+    const storeHost =
+      normalizeHost((context as any)?.store?.domain) ||
+      getShopDomain((context as any)?.trigger?.data);
+    const abs = (v: any): any => (typeof v === 'string' ? absolutizeSiteUrl(v, storeHost) : v);
+    const isUrlLeaf = (p: string) => /url$/i.test(p.split(/[.\[]/).filter(Boolean).pop() || '');
+
     // Alias: canonical un-prefixed whitelist ({{ CheckoutURL }},
     // {{ Customer.Email }}, {{ Items[0].ProductName }}, ...) → resolve
     // against trigger.data, then trigger.data.raw / trigger.data.properties
@@ -603,7 +618,9 @@ export class VariableEngine {
       // Same join/miss semantics as the email resolver (scalar arrays →
       // 'a, b', discount-code objects → codes, other objects → miss) so
       // {{ DiscountCodes }} never renders as JSON in engine channels.
-      return normalizeCanonicalValue(value);
+      const canonVal = normalizeCanonicalValue(value);
+      // Absolutize URL-typed canonical tags (…URL) against the store host.
+      return isUrlLeaf(path) ? abs(canonVal) : canonVal;
     }
 
     // Smart trigger tags ({{ trigger.link }}, {{ trigger.first_item_* }},
@@ -616,13 +633,14 @@ export class VariableEngine {
     // consume-channels).
     if (SMART_TRIGGER_TAG_SET.has(path)) {
       const smart = computeSmartTagValue((context as any)?.trigger?.data, path);
-      if (smart !== undefined) return smart;
+      // trigger.link is a URL — absolutize a relative value.
+      if (smart !== undefined) return abs(smart);
     }
 
     // Alias: event.X → trigger.data.X (matches merge tag picker format)
     if (path.startsWith('event.')) {
       const eventPath = 'trigger.data.' + path.slice(6);
-      return get(context, eventPath);
+      return abs(get(context, eventPath));
     }
 
     // Alias: trigger.<X> → trigger.data.<X> when X is not a direct
@@ -638,12 +656,12 @@ export class VariableEngine {
     // into a redirect to the store home page.
     if (path.startsWith('trigger.') && !/^trigger\.(type|data|timestamp|source)\b/.test(path)) {
       const direct = get(context, path);
-      if (direct !== undefined && direct !== null && direct !== '') return direct;
+      if (direct !== undefined && direct !== null && direct !== '') return abs(direct);
       const aliased = get(context, 'trigger.data.' + path.slice(8));
-      if (aliased !== undefined && aliased !== null) return aliased;
+      if (aliased !== undefined && aliased !== null) return abs(aliased);
       // Last-chance fallback for raw Shopify payloads where the
       // canonical field sits one level deeper under .raw
-      return get(context, 'trigger.data.raw.' + path.slice(8));
+      return abs(get(context, 'trigger.data.raw.' + path.slice(8)));
     }
 
     // Use lodash get for nested paths

@@ -87,6 +87,16 @@ describe('getShopDomain', () => {
   it('empty when nothing usable', () => {
     expect(getShopDomain({})).toBe('')
   })
+  it('deriva o host da URL da PÁGINA do pixel (props.url) — caso real viewed_product', () => {
+    // Evento de produto visualizado do pixel: SEM shop_domain/StoreURL, ProductURL
+    // relativa, mas a url da página é absoluta e é da loja.
+    const ev = { properties: { url: 'https://drgroot.com.br/products/x', ProductURL: '/products/x' } }
+    expect(getShopDomain(ev)).toBe('https://drgroot.com.br')
+  })
+  it('deriva o host do ProductURL do primeiro item quando absoluto', () => {
+    const ev = { properties: { Items: [{ ProductURL: 'https://loja.com/products/y' }] } }
+    expect(getShopDomain(ev)).toBe('https://loja.com')
+  })
 })
 
 describe('resolveTriggerCtaUrl', () => {

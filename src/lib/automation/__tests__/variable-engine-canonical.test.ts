@@ -32,6 +32,45 @@ const context: any = {
   nodes: {},
 };
 
+describe('variable engine — absolutização de URL relativa (produto visualizado)', () => {
+  // Regressão do bug reportado: no gatilho de produto visualizado a automação
+  // resolve {{ event.ProductURL }} PELO ENGINE (antes do sendCampaignEmail).
+  // Se vier relativo (/products/<slug>), o clique caía em app.worder.com.br → 404.
+  const viewCtx: any = {
+    store: { domain: 'drgroot.com.br' },
+    trigger: { type: 'trigger_viewed_product', data: { ProductURL: '/products/dr-groot-shampoo' } },
+    nodes: {},
+  };
+  it('absolutiza {{ event.ProductURL }} relativo no engine', () => {
+    expect(variableEngine.process('{{ event.ProductURL }}', viewCtx)).toBe(
+      'https://drgroot.com.br/products/dr-groot-shampoo'
+    );
+  });
+  it('absolutiza a canônica {{ ProductURL }} relativa', () => {
+    expect(variableEngine.process('{{ ProductURL }}', viewCtx)).toBe(
+      'https://drgroot.com.br/products/dr-groot-shampoo'
+    );
+  });
+  it('não altera URL já absoluta', () => {
+    const abs: any = { store: { domain: 'drgroot.com.br' }, trigger: { data: { ProductURL: 'https://loja.com/products/x' } }, nodes: {} };
+    expect(variableEngine.process('{{ event.ProductURL }}', abs)).toBe('https://loja.com/products/x');
+  });
+  it('deriva a loja do evento quando store.domain não existe', () => {
+    const evOnly: any = { trigger: { data: { ProductURL: '/products/x', StoreURL: 'https://minha.com.br' } }, nodes: {} };
+    expect(variableEngine.process('{{ event.ProductURL }}', evOnly)).toBe('https://minha.com.br/products/x');
+  });
+  it('caso REAL de produção: sem context.store e sem StoreURL, deriva da url da página do pixel', () => {
+    // process-runs NÃO popula context.store; o evento do pixel traz a url da
+    // página (absoluta, da loja) + ProductURL relativa. Deve absolutizar usando
+    // a url da página como host.
+    const prodShape: any = {
+      trigger: { type: 'trigger_viewed_product', data: { ProductURL: '/products/x', url: 'https://drgroot.com.br/products/x' } },
+      nodes: {},
+    };
+    expect(variableEngine.process('{{ event.ProductURL }}', prodShape)).toBe('https://drgroot.com.br/products/x');
+  });
+});
+
 describe('variable engine — canonical un-prefixed tags', () => {
   it('resolves {{ CheckoutURL }} from context.trigger.data', () => {
     expect(variableEngine.process('{{ CheckoutURL }}', context)).toBe(
