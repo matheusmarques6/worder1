@@ -13,6 +13,25 @@
 
 // @ts-ignore - lodash types might not be installed
 import { get, set, has } from 'lodash';
+// Client-safe, dependency-free module — no import cycle (merge-tags.ts has
+// zero imports of its own).
+import { CANONICAL_TRIGGER_PATHS, MERGE_TAGS } from '@/lib/email/merge-tags';
+
+// The 29 canonical un-prefixed tags ({{ CheckoutURL }}, {{ Customer.Email }},
+// {{ Items[0].ProductName }}, ...). The engine resolves these against
+// trigger.data (then .raw / .properties) so they work in EVERY channel the
+// engine powers — email, WhatsApp, SMS. This is the product's universal-tags
+// goal: one tag vocabulary, all channels.
+const CANONICAL_PATH_SET = new Set(CANONICAL_TRIGGER_PATHS);
+
+// Flat email tags ({{ first_name }}, {{ checkout_url }}, {{ store_name }},
+// ...) that renderMergeTags resolves DOWNSTREAM from the full mergeData
+// (contact flat fields, store, custom). The engine's context can't resolve
+// these — leave them intact instead of consuming to '' so the email
+// pipeline still gets its shot.
+const FLAT_EMAIL_TAG_SET = new Set(
+  MERGE_TAGS.map((t) => t.tag).filter((tag) => !tag.includes('.'))
+);
 
 // ============================================
 // TYPES
@@ -371,7 +390,7 @@ export class VariableEngine {
     
     return template.replace(regex, (match, expression) => {
       try {
-        return this.evaluateExpression(expression.trim(), context);
+        return this.evaluateExpression(expression.trim(), context, match);
       } catch (error) {
         console.warn(`Variable engine error for "${expression}":`, error);
         return match; // Return original if error
@@ -415,31 +434,69 @@ export class VariableEngine {
   }
 
   /**
-   * Evaluate a single expression (path with optional filters)
+   * Evaluate a single expression (path with optional filters).
+   *
+   * `originalMatch` is the full `{{ ... }}` source text. The engine runs
+   * FIRST in the automation pipeline (before sendCampaignEmail →
+   * resolveTriggerSmartTags → renderMergeTags), so for tags it doesn't own
+   * or can't resolve it must return the ORIGINAL tag instead of '' —
+   * otherwise the downstream email resolvers never see them (that bug
+   * blanked {{ CheckoutURL }} / {{ first_name }} / {{ custom.x }} in every
+   * real automation send while previews worked).
    */
-  private evaluateExpression(expression: string, context: Partial<VariableContext>): string {
+  private evaluateExpression(
+    expression: string,
+    context: Partial<VariableContext>,
+    originalMatch?: string
+  ): string {
+    const original = originalMatch ?? `{{${expression}}}`;
+
     // Split by | for filters, but be careful with || in expressions
     const parts = expression.split(/\s*\|\s*(?![|])/);
     const path = parts[0].trim();
-    const filterExpressions = parts.slice(1);
+    const filterExpressions = parts.slice(1).map((f) => f.trim());
+
+    // Unknown-filter safety: `{{ custom.campo|valor padrão }}` parses as
+    // filter "valor padrão" — not a registered filter. That tag is NOT
+    // engine-owned: leave it untouched so renderMergeTags (which supports
+    // {{tag|fallback}} natively) resolves it downstream.
+    for (const filterExpr of filterExpressions) {
+      const colonIndex = filterExpr.indexOf(':');
+      const filterName = colonIndex === -1 ? filterExpr : filterExpr.substring(0, colonIndex);
+      if (!this.filters[filterName]) {
+        return original;
+      }
+    }
 
     // Get the value from context
     let value = this.getValue(path, context);
 
     // Apply filters
     for (const filterExpr of filterExpressions) {
-      value = this.applyFilter(value, filterExpr.trim());
+      value = this.applyFilter(value, filterExpr);
     }
 
     // Convert to string for template replacement
     if (value === null || value === undefined) {
+      // Non-consuming for downstream namespaces: canonical whitelist tags,
+      // flat email tags and custom.* fields get resolved later in the email
+      // pipeline (resolveTriggerSmartTags + renderMergeTags with the full
+      // mergeData). Everything else (incl. trigger.*/event.* misses) keeps
+      // the ''-on-miss behavior WhatsApp/SMS rely on.
+      if (
+        CANONICAL_PATH_SET.has(path) ||
+        FLAT_EMAIL_TAG_SET.has(path) ||
+        path.startsWith('custom.')
+      ) {
+        return original;
+      }
       return '';
     }
-    
+
     if (typeof value === 'object') {
       return JSON.stringify(value);
     }
-    
+
     return String(value);
   }
 
@@ -450,6 +507,22 @@ export class VariableEngine {
     // Handle special paths
     if (path === 'now') {
       return context.now?.iso || new Date().toISOString();
+    }
+
+    // Alias: canonical un-prefixed whitelist ({{ CheckoutURL }},
+    // {{ Customer.Email }}, {{ Items[0].ProductName }}, ...) → resolve
+    // against trigger.data, then trigger.data.raw / trigger.data.properties
+    // — mirroring resolveTriggerSmartTags' ev/props/raw order so email,
+    // WhatsApp and SMS all agree on the value.
+    if (CANONICAL_PATH_SET.has(path)) {
+      const data: any = (context as any)?.trigger?.data || {};
+      const props: any = data.properties || data;
+      const raw: any = props.raw || data.raw || {};
+      const normalized = path.replace(/\[(\d+)\]/g, '.$1'); // Items[0] → Items.0
+      let value: any = get(data, normalized);
+      if (value === undefined || value === null) value = get(raw, normalized);
+      if (value === undefined || value === null) value = get(props, normalized);
+      return value === null ? undefined : value;
     }
 
     // Alias: event.X → trigger.data.X (matches merge tag picker format)

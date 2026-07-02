@@ -15,8 +15,10 @@ import { describe, it, expect } from 'vitest';
 import { shouldIncludeAutomationForStore } from '../trigger-dispatcher';
 import { extractEventPayloadStoreId } from '../../events';
 
-const STORE_A = 'store-a-uuid';
-const STORE_B = 'store-b-uuid';
+// Valid uuids — extractEventPayloadStoreId now rejects non-uuid values
+// (they'd 22P02 the PostgREST .or() filter on automations.store_id).
+const STORE_A = '11111111-1111-4111-8111-111111111111';
+const STORE_B = '22222222-2222-4222-8222-222222222222';
 
 describe('shouldIncludeAutomationForStore', () => {
   it('includes an automation of the SAME store as the event', () => {
@@ -76,5 +78,16 @@ describe('extractEventPayloadStoreId (legacy EventBus path)', () => {
         _webhook_dispatch_meta: { store_id: STORE_B },
       })
     ).toBe(STORE_A);
+  });
+
+  it('treats a MALFORMED payload store id as null (org-wide) instead of 22P02', () => {
+    // Non-uuid values would be interpolated into the .or() filter against
+    // the uuid column automations.store_id and blow up the query.
+    expect(extractEventPayloadStoreId({ store_id: 'store-a-uuid' })).toBe(null);
+    expect(extractEventPayloadStoreId({ store_id: 'my-shop.myshopify.com' })).toBe(null);
+    expect(extractEventPayloadStoreId({ storeId: 12345 as any })).toBe(null);
+    expect(
+      extractEventPayloadStoreId({ _webhook_dispatch_meta: { store_id: 'oops' } })
+    ).toBe(null);
   });
 });

@@ -55,6 +55,8 @@ export interface EmailProviderConfig {
   /** Default from-address override (provider-agnostic) */
   defaultFrom?: string;
   defaultSenderName?: string;
+  /** Store-level reply-to (shopify_stores.settings.email_settings.default_reply_to) */
+  defaultReplyTo?: string;
   /** Provider-specific blob */
   resend?: { apiKey?: string };
   smtp?: {

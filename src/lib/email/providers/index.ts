@@ -72,7 +72,7 @@ export async function getEmailProviderForOrg(
         config.defaultFrom = storeEmailSettings.default_sender_email;
       }
       if (storeEmailSettings.default_reply_to) {
-        (config as any).defaultReplyTo = storeEmailSettings.default_reply_to;
+        config.defaultReplyTo = storeEmailSettings.default_reply_to;
       }
     }
   }

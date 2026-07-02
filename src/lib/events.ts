@@ -138,11 +138,19 @@ export interface EventPayload {
  * Retorna null quando não há contexto de loja (eventos não-loja) → o match
  * permanece org-wide (sem regressão). Exportado p/ teste unitário.
  */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function extractEventPayloadStoreId(
   data: Record<string, any> | null | undefined
 ): string | null {
   const d: any = data || {};
-  return d.store_id || d.storeId || d._webhook_dispatch_meta?.store_id || null;
+  const candidate = d.store_id || d.storeId || d._webhook_dispatch_meta?.store_id || null;
+  // uuid guard: o id extraído vai interpolado num .or() do PostgREST contra
+  // a coluna uuid automations.store_id — um valor malformado/legado geraria
+  // 22P02 (invalid input syntax for type uuid) e derrubaria o trigger path
+  // inteiro. Não-uuid → trata como sem loja (org-wide).
+  if (typeof candidate !== 'string' || !UUID_RE.test(candidate)) return null;
+  return candidate;
 }
 
 export interface EmitResult {

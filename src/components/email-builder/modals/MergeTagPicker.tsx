@@ -3,46 +3,17 @@
 import { useState, useMemo, useEffect } from 'react'
 import { X, Search, User, Store, Package, ShoppingCart, Tag, Link, Zap, ShoppingBag, AlertCircle, Sparkles, Database, Loader2, type LucideIcon } from 'lucide-react'
 import { MERGE_TAGS } from '../config/merge-tags'
+// Canonical merge-tag spec — the STABLE cross-integration set, imported from
+// the SINGLE SOURCE in src/lib/email/merge-tags.ts (client-safe module).
+// Clean form is un-prefixed ({{ CheckoutURL }}); resolveTriggerSmartTags +
+// the automation variable engine resolve these both un-prefixed AND via the
+// legacy {{ trigger.* }} alias.
+import { CANONICAL_SPEC } from '@/lib/email/merge-tags'
 
 const MERGE_ICON_MAP: Record<string, LucideIcon> = {
   User, Store, Package, ShoppingCart, Tag, Link, Zap, ShoppingBag, Sparkles, Database,
 }
 
-// Canonical merge-tag spec — the STABLE cross-integration set. Clean form is
-// un-prefixed ({{ CheckoutURL }}); resolveTriggerSmartTags resolves these both
-// un-prefixed AND via the legacy {{ trigger.* }} alias. Kept at module scope so
-// the auto-discovered "Tags do Gatilho" group can dedup against it.
-const CANONICAL_SPEC: { tag: string; path: string; description: string }[] = [
-  { tag: 'CheckoutURL', path: 'CheckoutURL', description: 'Link de recuperação do checkout.' },
-  { tag: 'ProductURL', path: 'ProductURL', description: 'URL do produto.' },
-  { tag: 'OrderStatusURL', path: 'OrderStatusURL', description: 'Página de status do pedido.' },
-  { tag: 'TotalPrice', path: 'TotalPrice', description: 'Total do checkout/pedido.' },
-  { tag: 'SubtotalPrice', path: 'SubtotalPrice', description: 'Subtotal antes de taxas.' },
-  { tag: 'Currency', path: 'Currency', description: 'Moeda (BRL, USD, GBP).' },
-  { tag: 'ItemCount', path: 'ItemCount', description: 'Quantidade total de itens.' },
-  { tag: 'OrderNumber', path: 'OrderNumber', description: 'Número do pedido.' },
-  { tag: 'OrderID', path: 'OrderID', description: 'ID do pedido.' },
-  { tag: 'CheckoutID', path: 'CheckoutID', description: 'ID do checkout.' },
-  { tag: 'Customer.Email', path: 'Customer.Email', description: 'Email do cliente.' },
-  { tag: 'Customer.FirstName', path: 'Customer.FirstName', description: 'Primeiro nome.' },
-  { tag: 'Customer.LastName', path: 'Customer.LastName', description: 'Sobrenome.' },
-  { tag: 'Customer.FullName', path: 'Customer.FullName', description: 'Nome completo.' },
-  { tag: 'Customer.Phone', path: 'Customer.Phone', description: 'Telefone.' },
-  { tag: 'Customer.TotalOrders', path: 'Customer.TotalOrders', description: 'Total de pedidos do cliente.' },
-  { tag: 'Customer.TotalSpent', path: 'Customer.TotalSpent', description: 'Total gasto pelo cliente.' },
-  { tag: 'Items[0].ProductName', path: 'Items[0].ProductName', description: 'Nome do primeiro produto.' },
-  { tag: 'Items[0].ItemPrice', path: 'Items[0].ItemPrice', description: 'Preço do primeiro produto.' },
-  { tag: 'Items[0].ImageURL', path: 'Items[0].ImageURL', description: 'Imagem do primeiro produto.' },
-  { tag: 'Items[0].ProductURL', path: 'Items[0].ProductURL', description: 'Link do primeiro produto.' },
-  { tag: 'Items[0].Quantity', path: 'Items[0].Quantity', description: 'Quantidade do primeiro produto.' },
-  { tag: 'FinancialStatus', path: 'FinancialStatus', description: 'Status financeiro.' },
-  { tag: 'FulfillmentStatus', path: 'FulfillmentStatus', description: 'Status de envio.' },
-  { tag: 'Tracking.Number', path: 'Tracking.Number', description: 'Código de rastreio.' },
-  { tag: 'Tracking.URL', path: 'Tracking.URL', description: 'Link de rastreio.' },
-  { tag: 'BillingAddress.City', path: 'BillingAddress.City', description: 'Cidade de cobrança.' },
-  { tag: 'ShippingAddress.City', path: 'ShippingAddress.City', description: 'Cidade de entrega.' },
-  { tag: 'DiscountCodes', path: 'DiscountCodes', description: 'Cupons aplicados.' },
-]
 const CANONICAL_PATH_SET = new Set(CANONICAL_SPEC.map(s => s.path))
 
 interface MergeTagPickerProps {

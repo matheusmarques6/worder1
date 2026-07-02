@@ -2093,12 +2093,19 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
         .eq('status', 'active')
         .or(`store_id.eq.${store.id},store_id.is.null`);
 
+      // Single source of the per-automation abandon delay. Used by BOTH the
+      // bucketing loop and each bucket's dispatchTrigger matchConfig below so
+      // the two can never diverge (divergence = flow enrolled at the wrong
+      // delay).
+      const abandonDelayMinutes = (cfg: Record<string, any>): number =>
+        cfg.abandonUnit === 'hours'
+          ? (cfg.abandonTime || 1) * 60
+          : (cfg.abandonTime || 5);
+
       const buckets = new Map<number, string[]>();
       for (const a of (matchingAutos as any[]) || []) {
         const cfg = a.trigger_config || {};
-        const minutes = cfg.abandonUnit === 'hours'
-          ? (cfg.abandonTime || 1) * 60
-          : (cfg.abandonTime || 5);
+        const minutes = abandonDelayMinutes(cfg);
         if (!buckets.has(minutes)) buckets.set(minutes, []);
         buckets.get(minutes)!.push(a.id);
       }
@@ -2179,6 +2186,12 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
             contactId: contactId || null,
             triggerData,
             delayMinutes,
+            // Only enroll the flows whose configured delay matches THIS
+            // bucket. Without this, the first bucket dispatched enrolled
+            // ALL matching flows at its delay and the idempotency key then
+            // blocked the correct buckets — multiple same-store flows all
+            // fired at whichever delay happened to be processed first.
+            matchConfig: (cfg) => abandonDelayMinutes(cfg || {}) === delayMinutes,
             idempotencyKey: `trigger:checkout_abandoned:${checkout.id || checkout.token}:${delayMinutes}`,
           });
         }

@@ -744,13 +744,17 @@ const actionExecutors: Record<string, NodeExecutor> = {
         }
 
         // 3. Build sender info
-        const senderName = config.senderName || (context as any).store?.name || 'Worder';
         // When the node has no explicit sender AND the flow belongs to a
         // store, defer the fallback to sendCampaignEmail so it resolves the
         // STORE's identity (getEmailProviderForOrg(org, storeId)) rather than
         // the org default here — this is the cross-store sender fix. Org-wide
         // flows (no storeId) keep the previous org-default behavior.
+        // Mirrors the senderEmail deferral for the sender NAME too: a blank
+        // '' lets sendCampaignEmail fall back to config.defaultSenderName
+        // (the store's name), not the generic context store / 'Worder'.
         const runStoreId = (context as any).storeId || null;
+        const senderName = config.senderName
+          || (runStoreId ? '' : ((context as any).store?.name || 'Worder'));
         const senderEmail = config.senderEmail
           || (runStoreId ? '' : (credentials?.defaultFrom || 'noreply@example.com'));
 
@@ -902,7 +906,10 @@ const actionExecutors: Record<string, NodeExecutor> = {
           subject,
           fromEmail: senderEmail,
           senderName,
-          replyTo: undefined,
+          // Node-level reply-to when configured; otherwise undefined so
+          // sendCampaignEmail falls back to the STORE's default_reply_to
+          // (config.defaultReplyTo from getEmailProviderForOrg).
+          replyTo: config.replyTo || undefined,
           baseUrl,
           organizationId: organizationId || '',
           // Store-scope the sender: a blank node senderEmail then falls back

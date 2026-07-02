@@ -125,8 +125,16 @@ class EventProcessorClass {
       // tem coluna store dedicada). Quando presente, escopamos o match para
       // flows dessa loja OU org-wide (store_id NULL) — mesma semântica do
       // path moderno. Ausente → org-wide (eventos não-loja intactos).
-      const eventStoreId: string | null =
+      const eventStoreIdRaw =
         (event.payload?.storeId as string) || (event.payload?.store_id as string) || null;
+      // uuid guard: o id vai interpolado num .or() contra a coluna uuid
+      // automations.store_id — valor malformado geraria 22P02 e derrubaria
+      // o processamento do evento. Não-uuid → trata como org-wide (null).
+      const eventStoreId: string | null =
+        typeof eventStoreIdRaw === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventStoreIdRaw)
+          ? eventStoreIdRaw
+          : null;
 
       // Try RPC first, fallback to direct query
       let automations: Array<{ automation_id: string; automation_name: string; trigger_type: string }> | null = null;

@@ -250,8 +250,11 @@ export async function GET(request: NextRequest) {
             organizationId: automation.organization_id,
             // The flow's store — threaded so the email node resolves the
             // STORE's sender identity (not the org default) and any
-            // store-scoped provider config. Null for org-wide flows.
-            storeId: automation.store_id || null,
+            // store-scoped provider config. Prefer the store captured on
+            // the run itself (event's store, set by the dispatcher) so an
+            // org-wide automation still sends with the identity of the
+            // store where the event happened. Null for org-wide flows.
+            storeId: (metadata as any).store_id || automation.store_id || null,
             contact: contact ? {
               id: contact.id,
               email: contact.email,

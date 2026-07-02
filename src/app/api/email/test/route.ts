@@ -44,8 +44,12 @@ export async function POST(req: NextRequest) {
     // Sample merge data so {{ first_name }}, {{ store_name }} etc.
     // resolve in the test instead of leaking into the inbox as raw
     // tags. Mirrors the keys send-campaign-email builds for real
-    // sends so the test email shape matches production.
+    // sends so the test email shape matches production. Seeded with the
+    // full sample set (flat + event.* + canonical un-prefixed tags),
+    // then overridden with the route-specific values below.
+    const { getSampleMergeData } = await import('@/lib/email/merge-tags')
     const mergeData: Record<string, string> = {
+      ...getSampleMergeData(),
       first_name: 'Cliente',
       last_name: 'Teste',
       full_name: 'Cliente Teste',
@@ -68,24 +72,60 @@ export async function POST(req: NextRequest) {
     }
 
     let finalHtml = html || '<h1>Email de teste</h1><p>Este é um email de teste enviado pelo Worder.</p>'
+    let finalSubject = subject || 'Email de teste'
 
-    // Mock trigger payload so {{ trigger.* }} smart tags resolve
-    // (CheckoutURL, link, first_item_*, etc). The resolver expects
-    // the same shape produced by the Shopify webhook handler.
+    // Mock trigger payload so {{ trigger.* }} smart tags AND the canonical
+    // un-prefixed tags ({{ CheckoutURL }}, {{ Customer.Email }},
+    // {{ Tracking.Number }}, ...) resolve. The resolver expects the same
+    // shape produced by the Shopify webhook handler.
     try {
       const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags')
-      finalHtml = resolveTriggerSmartTags(finalHtml, {
+      const mockEvent = {
         CheckoutURL: 'https://example.com/checkout/abc',
+        CheckoutID: '987654',
+        OrderNumber: '1001',
+        OrderID: '4567890',
+        OrderStatusURL: 'https://example.com/orders/abc',
         Items: [{
           ProductName: 'Produto Demo',
           ProductURL: 'https://example.com/produto',
           ImageURL: 'https://via.placeholder.com/300',
           ItemPrice: 99.9,
+          Quantity: 1,
         }],
         Currency: 'BRL',
         TotalPrice: 99.9,
+        SubtotalPrice: 89.9,
         ItemCount: 1,
-      })
+        FinancialStatus: 'paid',
+        FulfillmentStatus: 'fulfilled',
+        DiscountCodes: ['TESTE10'],
+        Customer: {
+          Email: testEmail,
+          FirstName: 'Cliente',
+          LastName: 'Teste',
+          FullName: 'Cliente Teste',
+          Phone: '+5531999999999',
+          TotalOrders: 5,
+          TotalSpent: 1250,
+        },
+        Tracking: {
+          Number: 'BR123456789',
+          URL: 'https://rastreio.correios.com.br/BR123456789',
+        },
+        BillingAddress: { City: 'São Paulo' },
+        ShippingAddress: { City: 'São Paulo' },
+      }
+      // HTML context → escape substituted values (XSS parity with prod).
+      finalHtml = resolveTriggerSmartTags(finalHtml, mockEvent, undefined, { escapeHtml: true })
+      // SUBJECT goes through the same pipeline as production sends
+      // (resolveTriggerSmartTags + renderMergeTags below) instead of raw.
+      finalSubject = resolveTriggerSmartTags(finalSubject, mockEvent)
+    } catch { /* non-blocking */ }
+
+    try {
+      const { renderMergeTags } = await import('@/lib/email/render')
+      finalSubject = renderMergeTags(finalSubject, mergeData)
     } catch { /* non-blocking */ }
 
     // Full prepare pipeline = renderMergeTags ([[var]] normalised),
@@ -114,7 +154,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await resend.emails.send({
       from,
       to: [testEmail],
-      subject: `[TESTE] ${subject || 'Email de teste'}`,
+      subject: `[TESTE] ${finalSubject}`,
       html: finalHtml,
       headers: listUnsubHeaders,
     })

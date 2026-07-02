@@ -46,15 +46,22 @@ export async function GET(req: NextRequest) {
 
     // 2. Agrupa por product_id/variant para minimizar queries ao estoque
     const productIds = Array.from(new Set(interests.map((i) => i.product_id).filter(Boolean)))
+    // Multi-tenant: Shopify product ids são globais por LOJA, não por org —
+    // duas orgs podem ter o mesmo shopify_product_id. Sem o filtro de org e
+    // sem a chave composta org:product, um produto da org A sobrescrevia o
+    // stock/store da org B (storeId errado → flows store-scoped param de
+    // casar silenciosamente).
+    const orgIds = Array.from(new Set(interests.map((i) => i.organization_id).filter(Boolean)))
 
     // 3. Busca produtos em estoque (shopify_products.inventory_quantity > 0 OR variants contém em estoque)
     const { data: products } = await supabaseAdmin
       .from('shopify_products')
       .select('shopify_product_id, inventory_quantity, variants, organization_id, store_id')
       .in('shopify_product_id', productIds as string[])
+      .in('organization_id', orgIds as string[])
 
     const stockMap = new Map<string, boolean>()
-    // Map product → store so back-in-stock dispatches are store-scoped
+    // Map (org, product) → store so back-in-stock dispatches are store-scoped
     // (the interest row itself has no store_id column; the product does).
     const productStoreMap = new Map<string, string | null>()
     for (const p of products || []) {
@@ -62,8 +69,9 @@ export async function GET(req: NextRequest) {
       if (!inStock && Array.isArray(p.variants)) {
         inStock = p.variants.some((v: any) => (v.inventory_quantity || 0) > 0)
       }
-      stockMap.set(String(p.shopify_product_id), inStock)
-      productStoreMap.set(String(p.shopify_product_id), (p as any).store_id || null)
+      const key = `${(p as any).organization_id}:${p.shopify_product_id}`
+      stockMap.set(key, inStock)
+      productStoreMap.set(key, (p as any).store_id || null)
     }
 
     // 4. Dispatch via dispatchTrigger so trigger_filters / audience_filters
@@ -75,12 +83,13 @@ export async function GET(req: NextRequest) {
     let notified = 0
     for (const interest of interests) {
       if (!interest.product_id) continue
-      if (!stockMap.get(String(interest.product_id))) continue
+      const interestKey = `${interest.organization_id}:${interest.product_id}`
+      if (!stockMap.get(interestKey)) continue
 
       await dispatchTrigger({
         organizationId: interest.organization_id,
         // Store-scope from the product's store (interest row has no store_id).
-        storeId: productStoreMap.get(String(interest.product_id)) || null,
+        storeId: productStoreMap.get(interestKey) || null,
         triggerType: 'trigger_back_in_stock',
         contactId: interest.contact_id,
         triggerData: {

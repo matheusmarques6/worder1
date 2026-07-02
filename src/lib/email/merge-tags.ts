@@ -128,44 +128,46 @@ export const MERGE_TAG_CATEGORIES = [
 ] as const;
 
 // =============================================
-// CANONICAL_TRIGGER_PATHS
-// The 29 canonical merge-tag paths mirrored EXACTLY from the block
-// editor's picker spec (src/components/email-builder/modals/MergeTagPicker.tsx
-// canonicalGroup SPEC). These resolve un-prefixed ({{ CheckoutURL }}) AND
-// as the legacy alias ({{ trigger.CheckoutURL }}). Keep in sync with the
-// picker if the spec changes.
+// CANONICAL_SPEC — SINGLE SOURCE of the canonical merge-tag list.
+// The 29 canonical paths the block editor's picker (MergeTagPicker
+// canonicalGroup) offers as un-prefixed tags. These resolve un-prefixed
+// ({{ CheckoutURL }}) AND as the legacy alias ({{ trigger.CheckoutURL }}).
+// The picker imports this spec (tag === path for every entry), and
+// CANONICAL_TRIGGER_PATHS below is derived from it — edit HERE only.
 // =============================================
-export const CANONICAL_TRIGGER_PATHS: string[] = [
-  'CheckoutURL',
-  'ProductURL',
-  'OrderStatusURL',
-  'TotalPrice',
-  'SubtotalPrice',
-  'Currency',
-  'ItemCount',
-  'OrderNumber',
-  'OrderID',
-  'CheckoutID',
-  'Customer.Email',
-  'Customer.FirstName',
-  'Customer.LastName',
-  'Customer.FullName',
-  'Customer.Phone',
-  'Customer.TotalOrders',
-  'Customer.TotalSpent',
-  'Items[0].ProductName',
-  'Items[0].ItemPrice',
-  'Items[0].ImageURL',
-  'Items[0].ProductURL',
-  'Items[0].Quantity',
-  'FinancialStatus',
-  'FulfillmentStatus',
-  'Tracking.Number',
-  'Tracking.URL',
-  'BillingAddress.City',
-  'ShippingAddress.City',
-  'DiscountCodes',
+export const CANONICAL_SPEC: { tag: string; path: string; description: string; sampleValue: string }[] = [
+  { tag: 'CheckoutURL', path: 'CheckoutURL', description: 'Link de recuperação do checkout.', sampleValue: 'https://loja.myshopify.com/checkouts/recover/abc123' },
+  { tag: 'ProductURL', path: 'ProductURL', description: 'URL do produto.', sampleValue: 'https://loja.com/products/camiseta-premium' },
+  { tag: 'OrderStatusURL', path: 'OrderStatusURL', description: 'Página de status do pedido.', sampleValue: 'https://loja.com/orders/abc123' },
+  { tag: 'TotalPrice', path: 'TotalPrice', description: 'Total do checkout/pedido.', sampleValue: '199.90' },
+  { tag: 'SubtotalPrice', path: 'SubtotalPrice', description: 'Subtotal antes de taxas.', sampleValue: '189.90' },
+  { tag: 'Currency', path: 'Currency', description: 'Moeda (BRL, USD, GBP).', sampleValue: 'BRL' },
+  { tag: 'ItemCount', path: 'ItemCount', description: 'Quantidade total de itens.', sampleValue: '3' },
+  { tag: 'OrderNumber', path: 'OrderNumber', description: 'Número do pedido.', sampleValue: '1234' },
+  { tag: 'OrderID', path: 'OrderID', description: 'ID do pedido.', sampleValue: '4567890' },
+  { tag: 'CheckoutID', path: 'CheckoutID', description: 'ID do checkout.', sampleValue: '987654' },
+  { tag: 'Customer.Email', path: 'Customer.Email', description: 'Email do cliente.', sampleValue: 'maria@email.com' },
+  { tag: 'Customer.FirstName', path: 'Customer.FirstName', description: 'Primeiro nome.', sampleValue: 'Maria' },
+  { tag: 'Customer.LastName', path: 'Customer.LastName', description: 'Sobrenome.', sampleValue: 'Silva' },
+  { tag: 'Customer.FullName', path: 'Customer.FullName', description: 'Nome completo.', sampleValue: 'Maria Silva' },
+  { tag: 'Customer.Phone', path: 'Customer.Phone', description: 'Telefone.', sampleValue: '+5531999999999' },
+  { tag: 'Customer.TotalOrders', path: 'Customer.TotalOrders', description: 'Total de pedidos do cliente.', sampleValue: '5' },
+  { tag: 'Customer.TotalSpent', path: 'Customer.TotalSpent', description: 'Total gasto pelo cliente.', sampleValue: '1250.00' },
+  { tag: 'Items[0].ProductName', path: 'Items[0].ProductName', description: 'Nome do primeiro produto.', sampleValue: 'Camiseta Premium' },
+  { tag: 'Items[0].ItemPrice', path: 'Items[0].ItemPrice', description: 'Preço do primeiro produto.', sampleValue: '89.90' },
+  { tag: 'Items[0].ImageURL', path: 'Items[0].ImageURL', description: 'Imagem do primeiro produto.', sampleValue: 'https://cdn.shopify.com/produto.jpg' },
+  { tag: 'Items[0].ProductURL', path: 'Items[0].ProductURL', description: 'Link do primeiro produto.', sampleValue: 'https://loja.com/products/camiseta-premium' },
+  { tag: 'Items[0].Quantity', path: 'Items[0].Quantity', description: 'Quantidade do primeiro produto.', sampleValue: '1' },
+  { tag: 'FinancialStatus', path: 'FinancialStatus', description: 'Status financeiro.', sampleValue: 'paid' },
+  { tag: 'FulfillmentStatus', path: 'FulfillmentStatus', description: 'Status de envio.', sampleValue: 'fulfilled' },
+  { tag: 'Tracking.Number', path: 'Tracking.Number', description: 'Código de rastreio.', sampleValue: 'BR123456789' },
+  { tag: 'Tracking.URL', path: 'Tracking.URL', description: 'Link de rastreio.', sampleValue: 'https://rastreio.correios.com.br/BR123456789' },
+  { tag: 'BillingAddress.City', path: 'BillingAddress.City', description: 'Cidade de cobrança.', sampleValue: 'São Paulo' },
+  { tag: 'ShippingAddress.City', path: 'ShippingAddress.City', description: 'Cidade de entrega.', sampleValue: 'São Paulo' },
+  { tag: 'DiscountCodes', path: 'DiscountCodes', description: 'Cupons aplicados.', sampleValue: 'BEMVINDO10' },
 ];
+
+export const CANONICAL_TRIGGER_PATHS: string[] = CANONICAL_SPEC.map((s) => s.path);
 
 // =============================================
 // resolveTriggerSmartTags
@@ -177,9 +179,40 @@ export const CANONICAL_TRIGGER_PATHS: string[] = [
 //   - trigger.total / items_count → top-level e fallback bruto
 // =============================================
 
-export function resolveTriggerSmartTags(html: string, eventData: any, storeUrl?: string): string {
+export interface ResolveTriggerSmartTagsOptions {
+  /**
+   * When true, substituted VALUES are HTML-escaped (& < > " ') before being
+   * interpolated. Enable at HTML call sites (send-campaign-email html half,
+   * preview, test send); keep OFF for the text/plain half so the inbox
+   * preview doesn't show `&amp;`. Note: hrefs stay functional because
+   * render.ts's decodeHtmlEntitiesInUrl un-escapes URLs before the
+   * click-tracking encoding.
+   */
+  escapeHtml?: boolean;
+}
+
+// Tiny local escape — keep this module client-safe (no server imports).
+function escapeHtmlValue(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export function resolveTriggerSmartTags(
+  html: string,
+  eventData: any,
+  storeUrl?: string,
+  options?: ResolveTriggerSmartTagsOptions
+): string {
   if (!html) return html;
   if (!eventData && !storeUrl) return html;
+
+  const esc = options?.escapeHtml
+    ? (v: string) => escapeHtmlValue(v)
+    : (v: string) => v;
 
   const ev = eventData || {};
   const props = ev.properties || ev;
@@ -215,26 +248,22 @@ export function resolveTriggerSmartTags(html: string, eventData: any, storeUrl?:
   const total = props.TotalPrice ?? props.$value ?? props.total_price ?? raw.total_price ?? null;
   const itemsCount = props.ItemCount ?? (Array.isArray(items) ? items.length : 0);
 
-  const replacements: Record<string, string> = {
-    '{{ trigger.link }}': String(link),
-    '{{trigger.link}}': String(link),
-    '{{ trigger.first_item_image }}': String(firstImage || ''),
-    '{{trigger.first_item_image}}': String(firstImage || ''),
-    '{{ trigger.first_item_name }}': String(firstName || ''),
-    '{{trigger.first_item_name}}': String(firstName || ''),
-    '{{ trigger.first_item_price }}': firstPrice != null ? String(firstPrice) : '',
-    '{{trigger.first_item_price}}': firstPrice != null ? String(firstPrice) : '',
-    '{{ trigger.total }}': total != null ? String(total) : '',
-    '{{trigger.total}}': total != null ? String(total) : '',
-    '{{ trigger.items_count }}': String(itemsCount),
-    '{{trigger.items_count}}': String(itemsCount),
-  };
+  // Smart-tag map — whitespace-tolerant regexes ({{trigger.link}},
+  // {{ trigger.link }}, {{  trigger.link  }} all match) and FUNCTION
+  // replacers so `$` sequences in values ($&, $1, prices like R$ 10)
+  // never get interpreted as regex replacement patterns.
+  const smartReplacements: Array<[RegExp, string]> = [
+    [/\{\{\s*trigger\.link\s*\}\}/g, String(link)],
+    [/\{\{\s*trigger\.first_item_image\s*\}\}/g, String(firstImage || '')],
+    [/\{\{\s*trigger\.first_item_name\s*\}\}/g, String(firstName || '')],
+    [/\{\{\s*trigger\.first_item_price\s*\}\}/g, firstPrice != null ? String(firstPrice) : ''],
+    [/\{\{\s*trigger\.total\s*\}\}/g, total != null ? String(total) : ''],
+    [/\{\{\s*trigger\.items_count\s*\}\}/g, String(itemsCount)],
+  ];
 
   let result = html;
-  for (const [tag, value] of Object.entries(replacements)) {
-    // Escape regex special chars in the tag for safe global replace
-    const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    result = result.replace(new RegExp(escaped, 'g'), value);
+  for (const [re, value] of smartReplacements) {
+    result = result.replace(re, () => esc(value));
   }
 
   // Generic deep-path resolver for any other {{ trigger.<path> }} the
@@ -244,6 +273,24 @@ export function resolveTriggerSmartTags(html: string, eventData: any, storeUrl?:
     for (const seg of segments) {
       if (cur === null || cur === undefined) return undefined;
       cur = cur[seg];
+    }
+    return cur;
+  }
+
+  // Case-tolerant variant: when an exact segment lookup misses, retry the
+  // segment with a case-insensitive key scan (legacy payloads say OrderId
+  // while the canonical spec says OrderID).
+  function getPathCI(root: any, segments: string[]): any {
+    let cur: any = root;
+    for (const seg of segments) {
+      if (cur === null || cur === undefined) return undefined;
+      let next = cur[seg];
+      if (next === undefined && typeof cur === 'object') {
+        const lower = seg.toLowerCase();
+        const key = Object.keys(cur).find((k) => k.toLowerCase() === lower);
+        if (key !== undefined) next = cur[key];
+      }
+      cur = next;
     }
     return cur;
   }
@@ -259,7 +306,24 @@ export function resolveTriggerSmartTags(html: string, eventData: any, storeUrl?:
     let value: any = getPath(ev, segments);
     if (value === undefined || value === null) value = getPath(props, segments);
     if (value === undefined || value === null) value = getPath(raw, segments);
+    // Exact miss → retry case-insensitively (OrderID vs OrderId etc.)
+    if (value === undefined || value === null) value = getPathCI(ev, segments);
+    if (value === undefined || value === null) value = getPathCI(props, segments);
+    if (value === undefined || value === null) value = getPathCI(raw, segments);
     if (value === undefined || value === null) return undefined;
+    if (Array.isArray(value)) {
+      // Array of scalars → human-readable join (fixes {{ DiscountCodes }}
+      // when codes come as ['CUPOM10']). Shopify also ships discount codes
+      // as [{ code, amount, type }] — join the .code fields in that case.
+      const scalars = value.filter((v) => v !== null && v !== undefined);
+      if (scalars.every((v) => typeof v !== 'object')) {
+        return scalars.map((v) => String(v)).join(', ');
+      }
+      if (scalars.length > 0 && scalars.every((v) => typeof v === 'object' && typeof (v as any).code === 'string')) {
+        return scalars.map((v) => String((v as any).code)).join(', ');
+      }
+      return undefined;
+    }
     if (typeof value === 'object') return undefined;
     return String(value);
   }
@@ -273,12 +337,16 @@ export function resolveTriggerSmartTags(html: string, eventData: any, storeUrl?:
   // collision-free with the flat snake_case tags.
   for (const path of CANONICAL_TRIGGER_PATHS) {
     const value = resolveCanonicalPath(path);
-    if (value === undefined) continue;
     const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // Match BOTH {{ Path }} and {{ trigger.Path }} (optional whitespace),
-    // e.g. {{CheckoutURL}}, {{ CheckoutURL }}, {{ trigger.CheckoutURL }}.
-    const re = new RegExp(`\\{\\{\\s*(?:trigger\\.)?${escapedPath}\\s*\\}\\}`, 'g');
-    result = result.replace(re, value);
+    // with an optional |fallback group, e.g. {{CheckoutURL}},
+    // {{ CheckoutURL }}, {{ trigger.CheckoutURL }}, {{ CheckoutURL | https://loja.com }}.
+    const re = new RegExp(`\\{\\{\\s*(?:trigger\\.)?${escapedPath}\\s*(?:\\|([^}]*))?\\}\\}`, 'g');
+    result = result.replace(re, (match, fallback?: string) => {
+      if (value !== undefined) return esc(value);
+      if (fallback !== undefined) return esc(fallback.trim());
+      return match; // no value + no fallback → leave intact
+    });
   }
 
   // Clean namespace for auto-detected / raw event fields: {{ event.<path> }}.
@@ -303,7 +371,7 @@ export function resolveTriggerSmartTags(html: string, eventData: any, storeUrl?:
         if (value === undefined || value === null) value = getPath(raw, segments);
         if (value === undefined || value === null) return match; // deixa p/ renderMergeTags
         if (typeof value === 'object') return match;
-        return String(value);
+        return esc(String(value));
       } catch {
         return match;
       }
@@ -327,7 +395,7 @@ export function resolveTriggerSmartTags(html: string, eventData: any, storeUrl?:
         if (value === undefined || value === null) value = getPath(raw, segments);
         if (value === undefined || value === null) return '';
         if (typeof value === 'object') return '';
-        return String(value);
+        return esc(String(value));
       } catch {
         return '';
       }
@@ -344,6 +412,11 @@ export function getSampleMergeData(): Record<string, string> {
   const data: Record<string, string> = {};
   for (const tag of MERGE_TAGS) {
     data[tag.tag] = tag.sampleValue;
+  }
+  // Canonical un-prefixed tags ({{ CheckoutURL }}, {{ Customer.Email }}, ...)
+  // so test sends / previews resolve them like real sends do.
+  for (const spec of CANONICAL_SPEC) {
+    data[spec.tag] = spec.sampleValue;
   }
   return data;
 }

@@ -196,7 +196,10 @@ export async function sendCampaignEmail({
     // event fired the email.
     if (eventData) {
       const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
-      htmlWithProducts = resolveTriggerSmartTags(htmlWithProducts, eventData);
+      // escapeHtml: substituted values are HTML — escape & < > " ' (XSS).
+      // URLs stay functional: render.ts's decodeHtmlEntitiesInUrl un-escapes
+      // hrefs before the click-tracking encoding.
+      htmlWithProducts = resolveTriggerSmartTags(htmlWithProducts, eventData, undefined, { escapeHtml: true });
     }
 
     // 3. Prepare HTML with merge tags, tracking, unsubscribe
@@ -207,9 +210,17 @@ export async function sendCampaignEmail({
       baseUrl,
     });
 
-    // 4. Render subject merge tags
+    // 4. Render subject merge tags — the subject must go through the SAME
+    // trigger resolvers as the body, otherwise {{ CheckoutURL }} /
+    // {{ trigger.* }} / {{ event.* }} tags in the subject line reach the
+    // inbox unresolved. Plain-text context: NO html-escaping here.
+    let subjectSrc = subject;
+    if (eventData) {
+      const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
+      subjectSrc = resolveTriggerSmartTags(subjectSrc, eventData);
+    }
     const { renderMergeTags } = await import('@/lib/email/render');
-    const finalSubject = renderMergeTags(subject, mergeData);
+    const finalSubject = renderMergeTags(subjectSrc, mergeData);
 
     // 5. Send via the org's configured provider (defaults to Resend).
     // The factory caches per-org so we don't hit the DB on every send.
@@ -260,7 +271,10 @@ export async function sendCampaignEmail({
       subject: finalSubject,
       html: finalHtml,
       text: finalText,
-      replyTo,
+      // Store-threaded reply-to: providers/index.ts writes the store's
+      // default_reply_to into config.defaultReplyTo — honor it whenever the
+      // caller didn't set an explicit replyTo.
+      replyTo: replyTo ?? config.defaultReplyTo,
       headers: listUnsubHeaders,
       tags: [
         { name: 'campaign_id', value: campaignId || 'flow' },

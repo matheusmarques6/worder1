@@ -255,7 +255,8 @@ export async function POST(request: NextRequest) {
       }
       try {
         const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
-        html = resolveTriggerSmartTags(html, testEvent);
+        // HTML context → escape substituted values (XSS parity with prod).
+        html = resolveTriggerSmartTags(html, testEvent, undefined, { escapeHtml: true });
       } catch { /* best-effort */ }
       html = renderMergeTags(html, buildMergeData(testContact, testEvent, testStore));
 
@@ -475,7 +476,8 @@ export async function POST(request: NextRequest) {
     // checkout/product/order URL based on the active event.
     try {
       const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
-      processedHtml = resolveTriggerSmartTags(processedHtml, eventData);
+      // HTML context → escape substituted values (XSS parity with prod).
+      processedHtml = resolveTriggerSmartTags(processedHtml, eventData, undefined, { escapeHtml: true });
     } catch { /* best-effort */ }
 
     // 6. Resolve merge tags using the production engine — covers {{first_name}},
