@@ -201,7 +201,9 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       const cartConfig = {
         type: 'abandoned-cart',
         layoutType: p.layoutType || 'image-left',
-        maxItems: p.maxItems || 2,
+        // 0 = todos os produtos do gatilho (resolvido em resolveCartBlocks).
+        // `?? 0`, não `|| 2`: 0 é falsy e `|| 2` reintroduziria o teto de 2.
+        maxItems: p.maxItems ?? 0,
         showImage: p.showImage !== false,
         showName: p.showName !== false,
         showDescription: p.showDescription !== false,

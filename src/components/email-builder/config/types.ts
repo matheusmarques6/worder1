@@ -239,7 +239,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     defaultProps: {
       // Layout
       layoutType: 'image-left' as 'image-left' | 'image-right' | 'vertical',
-      maxItems: 2,
+      maxItems: 0,
       // Source: 'trigger_auto' adapts to the active trigger; 'cart_items'
       // forces "last recovery cart" lookup regardless of trigger.
       feedType: 'trigger_auto' as 'trigger_auto' | 'cart_items' | 'trigger_cart' | 'trigger_viewed_product' | 'trigger_order',
@@ -262,7 +262,7 @@ export const BLOCK_DEFS: BlockDef[] = [
       // resolves to checkout URL / product URL / order status URL based
       // on the active trigger. Falls back to {{checkout_url}} for legacy.
       buttonText: 'Comprar agora',
-      buttonHref: '{{ trigger.link }}',
+      buttonHref: '',
       buttonColor: '#111827', buttonTextColor: '#FFFFFF',
       buttonRadius: 4, buttonFontSize: 14,
       buttonAlign: 'left' as 'left' | 'center' | 'right' | 'full',

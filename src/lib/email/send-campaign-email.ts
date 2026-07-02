@@ -37,6 +37,10 @@ export interface SendCampaignEmailParams {
    *  (from / sender name / reply-to) instead of the org default. */
   storeId?: string | null;
   eventData?: Record<string, any>;
+  /** Automation trigger type (e.g. 'trigger_checkout_abandoned') so the
+   *  "Produtos do Gatilho" block builds the correct CTA link. Omitted for
+   *  plain campaign broadcasts (link family inferred from the event). */
+  triggerType?: string | null;
 }
 
 export async function sendCampaignEmail({
@@ -54,6 +58,7 @@ export async function sendCampaignEmail({
   organizationId,
   storeId,
   eventData,
+  triggerType,
 }: SendCampaignEmailParams): Promise<{ success: boolean; emailSendId?: string; error?: string }> {
   let emailSendId = '' as string;
   // Hoisted so the catch block can flip email_consent on the contact
@@ -190,7 +195,7 @@ export async function sendCampaignEmail({
     let htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, contactId, eventData);
     // Pass eventData so the cart block can adapt to the active trigger
     // (cart vs checkout vs browse vs order) via trigger_auto feed type.
-    htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, contactId, eventData);
+    htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, contactId, eventData, triggerType);
     // Resolve {{ trigger.link }}, {{ trigger.first_item_image }} etc.
     // — smart tags that adapt the right URL/title/image to whichever
     // event fired the email.

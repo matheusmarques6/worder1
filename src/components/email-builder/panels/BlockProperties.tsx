@@ -7,6 +7,7 @@ import { ViewFeedsModal, CreateFeedModal } from '../modals/ProductFeedModal'
 import { BrowseProductsModal, StaticProductsEditor } from '../modals/BrowseProductsModal'
 import { MediaLibraryModal } from '@/components/shared/MediaLibraryModal'
 import { ColorPicker } from '../ui/ColorPicker'
+import { triggerCtaLabel } from '@/lib/email/trigger-cta'
 
 const RichTextEditor = dynamic(() => import('../blocks/RichTextEditor').then(m => ({ default: m.RichTextEditor })), { ssr: false, loading: () => <div className="h-20 bg-gray-50 rounded-lg animate-pulse" /> })
 
@@ -16,6 +17,7 @@ interface BlockPropertiesProps {
   onSaveAsReusable?: () => void
   selectedSubElement?: string | null
   onSelectSubElement?: (subEl: string | null) => void
+  triggerType?: string
 }
 
 /* ─── Reusable Field Components ─── */
@@ -136,10 +138,11 @@ const ALIGN_OPTIONS = [
 
 /* ─── Main Component ─── */
 
-export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSubElement, onSelectSubElement }: BlockPropertiesProps) {
+export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSubElement, onSelectSubElement, triggerType }: BlockPropertiesProps) {
   const p = block.props
   const [showConditions, setShowConditions] = useState(!!p._condition_enabled)
   const [showMediaLib, setShowMediaLib] = useState(false)
+  const [showCtaAdvanced, setShowCtaAdvanced] = useState(false)
   // IMPORTANT: hooks must always be called unconditionally at the top of the
   // component — moving this into a switch case caused React error #300
   // (rendered fewer/more hooks than expected) every time the user switched
@@ -753,6 +756,14 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
             </div>
           </div>
 
+          {/* Product count limit */}
+          <div>
+            <Field label="Máx. de produtos (0 = todos)">
+              <NumberInput value={p.maxItems ?? 0} onChange={v => onChange('maxItems', Number(v))} min={0} max={20} />
+            </Field>
+            <p className="text-[10px] text-zinc-400 mt-1">Empilha todos os produtos do gatilho. Use 0 para não limitar.</p>
+          </div>
+
           {/* Product details checkboxes */}
           <div>
             <p className="text-[12px] font-medium text-zinc-700 mb-2">Detalhes do produto</p>
@@ -789,9 +800,28 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                   <TextInput value={p.buttonText ?? 'Comprar agora'} onChange={v => onChange('buttonText', v)} placeholder="Comprar agora" />
                 </Field>
                 <Field label="Link do botão">
-                  <TextInput value={p.buttonHref ?? '{{ trigger.link }}'} onChange={v => onChange('buttonHref', v)} placeholder="{{ CheckoutURL }}" />
-                  <p className="text-[10px] text-zinc-400 mt-1">Use <code className="font-mono">{'{{ CheckoutURL }}'}</code> para o link de recuperação do checkout. O valor padrão se adapta ao gatilho automaticamente.</p>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 border border-zinc-200 rounded-md bg-zinc-50 text-[13px] text-zinc-700">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" className="flex-shrink-0"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    <span>Automático: <span className="font-medium">{triggerCtaLabel(triggerType)}</span></span>
+                  </div>
+                  <p className="text-[10px] text-zinc-400 mt-1">O link se adapta ao gatilho do funil (recuperação de checkout, carrinho com os itens, ou página do produto).</p>
                 </Field>
+                {/* Avançado — manual override for power users */}
+                <div className="border-t border-zinc-100 pt-2">
+                  <button type="button" onClick={() => setShowCtaAdvanced(v => !v)}
+                    className="flex items-center gap-1 text-[11px] font-medium text-zinc-500 hover:text-zinc-700 transition-colors">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform ${showCtaAdvanced ? 'rotate-90' : ''}`}><path d="M9 18l6-6-6-6"/></svg>
+                    Avançado
+                  </button>
+                  {showCtaAdvanced && (
+                    <div className="mt-2">
+                      <Field label="Link personalizado (sobrescreve o automático)">
+                        <TextInput value={p.buttonHref ?? ''} onChange={v => onChange('buttonHref', v)} placeholder="{{ CheckoutURL }}" />
+                        <p className="text-[10px] text-zinc-400 mt-1">Deixe em branco para usar o link automático. Use <code className="font-mono">{'{{ CheckoutURL }}'}</code> para o link de recuperação do checkout.</p>
+                      </Field>
+                    </div>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <Field label="Cor de fundo"><ColorInput value={p.buttonColor || '#111827'} onChange={v => onChange('buttonColor', v)} /></Field>
                   <Field label="Cor do texto"><ColorInput value={p.buttonTextColor || '#FFFFFF'} onChange={v => onChange('buttonTextColor', v)} /></Field>

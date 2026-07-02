@@ -650,7 +650,9 @@ export function BlockPreview({
 
       // ── Abandoned Cart ──
       case 'abandoned-cart': {
-        const maxItems = p.maxItems || 2
+        const maxItems = p.maxItems ?? 0
+        // maxItems 0 = "todos" — render a representative stack in the editor.
+        const previewCount = maxItems && maxItems > 0 ? Math.min(maxItems, 6) : 3
         const layout = p.layoutType || 'image-left'
         const isVertical = layout === 'vertical'
         const imgW = p.imageWidth || 200
@@ -674,7 +676,7 @@ export function BlockPreview({
         return (
           <div style={{ ...pad, backgroundColor: p.backgroundColor || undefined }}>
             <div>
-              {Array.from({ length: maxItems }).map((_, i) => {
+              {Array.from({ length: previewCount }).map((_, i) => {
                 const prod = sampleProducts[i % sampleProducts.length]
                 return (
                   <div key={i}>
@@ -745,13 +747,19 @@ export function BlockPreview({
                         )}
                       </div>
                     </div>
-                    {p.separator !== false && i < maxItems - 1 && (
+                    {p.separator !== false && i < previewCount - 1 && (
                       <hr style={{ border: 'none', borderTop: `1px solid ${p.separatorColor || '#E5E7EB'}`, margin: 0 }} />
                     )}
                   </div>
                 )
               })}
             </div>
+            {/* Editor-only note (not exported) — shown when stacking all items. */}
+            {(!maxItems || maxItems <= 0) && (
+              <p style={{ margin: '8px 0 0', fontSize: 11, color: '#9CA3AF', fontStyle: 'italic', textAlign: 'center' }}>
+                Todos os produtos do gatilho serão empilhados aqui
+              </p>
+            )}
           </div>
         )
       }

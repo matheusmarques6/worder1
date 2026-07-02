@@ -1715,6 +1715,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
               <div className="flex-1 overflow-y-auto p-3">
                 <BlockProperties
                   block={selectedBlock}
+                  triggerType={flowContext?.triggerType}
                   onChange={(key, value) => updateProp(selectedBlock.id, key, value)}
                   onSaveAsReusable={() => {
                     setSaveBlockName('')

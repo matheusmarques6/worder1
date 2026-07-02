@@ -933,6 +933,9 @@ const actionExecutors: Record<string, NodeExecutor> = {
           // flow never sends from Based's address. Null for org-wide flows.
           storeId: (context as any).storeId || null,
           eventData: context.trigger?.data,
+          // Trigger type so the "Produtos do Gatilho" block builds the
+          // correct CTA link (checkout recovery / cart permalink / product).
+          triggerType: (context as any).trigger?.type || null,
         });
 
         if (!result.success) {

@@ -521,8 +521,15 @@ export async function resolveCartBlocks(
   html: string,
   orgId: string,
   contactId?: string,
-  eventData?: Record<string, any>
+  eventData?: Record<string, any>,
+  /** The automation's trigger type (e.g. 'trigger_checkout_abandoned'). When
+   *  provided, the CTA link adapts to it (checkout recovery / cart permalink /
+   *  product page / order status). When absent (campaign broadcast), the
+   *  family is inferred from the event payload. */
+  triggerType?: string | null
 ): Promise<string> {
+  const { triggerFamily, resolveTriggerCtaUrl, getShopDomain, isManualCtaOverride } =
+    await import('@/lib/email/trigger-cta')
   const regex = /<!-- WORDER_CART_BLOCK:([^ ]*?) -->/g
   let result = html
   const matches: RegExpExecArray[] = []
@@ -614,6 +621,12 @@ export async function resolveCartBlocks(
     // cart" behavior for blocks that explicitly want it.
     const feedType = cfg.feedType || 'trigger_auto'
 
+    // Product cap. maxItems === 0 (or unset) means "todos os produtos do
+    // gatilho" — stack them all. We keep a generous safety ceiling so a
+    // pathological cart can't produce a monstrous email.
+    const MAX_STACK = 50
+    const itemCap = cfg.maxItems && Number(cfg.maxItems) > 0 ? Number(cfg.maxItems) : MAX_STACK
+
     let products: any[] = []
     try {
       const { resolveProductFeed } = await import('@/lib/email/product-feeds')
@@ -621,7 +634,7 @@ export async function resolveCartBlocks(
         orgId,
         feedType,
         contactId,
-        maxProducts: cfg.maxItems || 2,
+        maxProducts: itemCap,
         eventData,
       })
     } catch {}
@@ -638,7 +651,7 @@ export async function resolveCartBlocks(
         ev.raw?.line_items ||
         []
       if (Array.isArray(fallbackItems) && fallbackItems.length > 0) {
-        products = fallbackItems.slice(0, cfg.maxItems || 2).map((it: any) => {
+        products = fallbackItems.slice(0, itemCap).map((it: any) => {
           const productObj = it.product || it.Product || {}
           const variant = it.variant || it.Variant || {}
           // Same cascade the canonical normalizer uses — every shape any
@@ -664,6 +677,7 @@ export async function resolveCartBlocks(
             null
           return {
             product_id: it.product_id || it.productId || it.ProductID || productObj.id || null,
+            variant_id: it.VariantID || it.variant_id || it.variantId || variant.id || null,
             title: it.ProductName || it.title || it.name || it.product_title || productObj.title || it.presentment_title || 'Produto',
             price: parseFloat(
               it.ItemPrice ||
@@ -702,6 +716,26 @@ export async function resolveCartBlocks(
     const btnDisplay = btnAlign === 'full' ? 'display:block;width:100%;text-align:center;' : `display:inline-block;`
     const sepHtml = cfg.separator ? `<tr><td style="border-top:1px solid ${cfg.separatorColor || '#E5E7EB'};font-size:1px;line-height:1px;" colspan="2">&nbsp;</td></tr>` : ''
 
+    // ── Trigger-aware CTA link ──────────────────────────────────────────
+    // The button adapts to the automation's trigger (like Omnisend):
+    //   checkout abandoned → recovery URL; add-to-cart/cart → a Shopify cart
+    //   permalink with ALL the items (/cart/variant:qty…); viewed/browse →
+    //   the product page; order → order status. A manual buttonHref (that
+    //   isn't one of the legacy auto placeholders) still wins as an override.
+    const shopDomain = getShopDomain(eventData)
+    const family = triggerFamily(triggerType)
+    const permalinkItems = products.map((p: any) => ({ variant_id: p.variant_id, quantity: p.quantity }))
+    const orderStatusUrl: string = props.OrderStatusURL || props.order_status_url || raw.order_status_url || ''
+    const manualOverride = isManualCtaOverride(cfg.buttonHref) ? String(cfg.buttonHref) : ''
+    const aggregateCtaUrl = resolveTriggerCtaUrl({
+      family,
+      eventCheckoutUrl,
+      shopDomain,
+      items: permalinkItems,
+      productUrl: (props.ProductURL || props.product_url || products[0]?.url || '') as string,
+      orderStatusUrl,
+    })
+
     let cartHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:${font};">`
 
     products.forEach((prod: any, i: number) => {
@@ -726,13 +760,20 @@ export async function resolveCartBlocks(
         prod.product?.image?.src ||
         ''
       const prodUrl = prod.url || (prod.handle ? `/products/${prod.handle}` : '#')
-      // Button href: explicit per-product url > eventCheckoutUrl from event >
-      // configured buttonHref > merge-tag placeholder. The placeholder
-      // gets resolved later by buildMergeData; eventCheckoutUrl wins so
-      // that the URL is GUARANTEED present in preview + send, not
-      // dependent on a downstream resolver step.
+      // Button href, in priority order:
+      //   1) manual override (a real custom link set by the user)
+      //   2) an explicit per-product checkout/recovery URL on the item
+      //   3) trigger-aware link: for product-family triggers each card links
+      //      to ITS OWN product page; otherwise the aggregate cart/checkout/
+      //      order link (so every button recovers the whole cart/checkout)
+      //   4) legacy merge-tag placeholder (resolved downstream)
       const productCheckoutUrl: string = prod.checkout_url || prod.recovery_url || ''
-      const checkoutUrl = productCheckoutUrl || eventCheckoutUrl || cfg.buttonHref || '{{checkout_url}}'
+      const perProductAuto =
+        family === 'product'
+          ? (prodUrl && prodUrl !== '#' ? prodUrl : aggregateCtaUrl)
+          : aggregateCtaUrl
+      const checkoutUrl =
+        manualOverride || productCheckoutUrl || perProductAuto || eventCheckoutUrl || '{{checkout_url}}'
 
       // Image cell — uses CSS `aspect-ratio` to keep a square frame and
       // `object-fit: cover` so the image fills without distortion.

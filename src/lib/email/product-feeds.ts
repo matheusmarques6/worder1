@@ -57,8 +57,18 @@ function mapTriggerItem(it: any) {
     it.product?.id ||
     it.variant?.product?.id ||
     null
+  // Variant id — needed to build the Shopify cart permalink (/cart/variant:qty)
+  // for add-to-cart triggers. Covers pixel/webhook/canonical/raw shapes.
+  const variantId =
+    it.VariantID ||
+    it.variant_id ||
+    it.variantId ||
+    it.variant?.id ||
+    it.Variant?.id ||
+    null
   return {
     product_id: productId,
+    variant_id: variantId,
     title: it.ProductName || it.title || it.name || it.product?.title || 'Product',
     price: parseFloat(
       it.ItemPrice ||

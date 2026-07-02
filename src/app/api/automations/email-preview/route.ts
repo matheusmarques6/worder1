@@ -249,7 +249,7 @@ export async function POST(request: NextRequest) {
       try {
         const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render');
         html = await resolveProductBlocks(html, organizationId, contactId, testEvent);
-        html = await resolveCartBlocks(html, organizationId, contactId, testEvent);
+        html = await resolveCartBlocks(html, organizationId, contactId, testEvent, triggerType);
       } catch (e: any) {
         console.warn('[email-preview send_test] dynamic block resolve failed:', e?.message);
       }
@@ -467,7 +467,7 @@ export async function POST(request: NextRequest) {
     try {
       const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render');
       processedHtml = await resolveProductBlocks(processedHtml, organizationId, contactId, eventData);
-      processedHtml = await resolveCartBlocks(processedHtml, organizationId, contactId, eventData);
+      processedHtml = await resolveCartBlocks(processedHtml, organizationId, contactId, eventData, triggerType);
     } catch (e: any) {
       console.warn('[email-preview] dynamic block resolve failed:', e?.message);
     }
