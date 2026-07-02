@@ -52,7 +52,10 @@ function sanitizeFallbackValue(value: string): string {
 }
 
 function sanitizeCustomField(value: string): string {
-  return value.replace(/[{}|\s]/g, '');
+  // Whitelist alinhada ao regex de tags do renderMergeTags
+  // ([a-zA-Z0-9_.]) — caracteres fora dele (acentos, `!`, etc.) fariam a
+  // tag nunca casar e o literal {{custom.João!}} vazar no e-mail.
+  return value.replace(/[^a-zA-Z0-9_.]/g, '');
 }
 
 function MergeTagChip({ node, updateAttributes, deleteNode }: NodeViewProps) {

@@ -72,6 +72,7 @@ export function Toolbar({ onSave, onTest, onBack, organizationId, automations, c
         // /api/stores already returns the org's shopify_stores (id +
         // shop_name/shop_domain) — no dedicated endpoint needed.
         const r = await fetch('/api/stores');
+        if (!r.ok) return; // badge cai no rótulo genérico "Loja vinculada"
         const d = await r.json();
         const s = (d?.stores || []).find((st: any) => st?.id === flowStoreId);
         if (!cancelled) setFlowStoreName(s?.shop_name || s?.shop_domain || null);

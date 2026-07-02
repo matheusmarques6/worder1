@@ -527,8 +527,10 @@ export class VariableEngine {
       return original;
     }
 
-    // Get the value from context
-    let value = this.getValue(path, context);
+    // Get the value from context. Com filtros conhecidos, o valor canônico
+    // vem CRU (arrays intactos) para `| first`/`| length` etc. operarem no
+    // dado real — a normalização (join) acontece na estringificação abaixo.
+    let value = this.getValue(path, context, knownFilters.length > 0);
 
     // Apply (known) filters. When unknown "filters" exist we're on the
     // consumeUnresolved path and they are treated as fallback text instead.
@@ -560,6 +562,13 @@ export class VariableEngine {
     }
 
     if (typeof value === 'object') {
+      // Canônicas que atravessaram filtros ainda como array/objeto (ex.:
+      // {{ DiscountCodes | sort }}) — nunca enviar JSON ao cliente; aplica
+      // o mesmo join/miss do resolver de e-mail.
+      if (CANONICAL_PATH_SET.has(path)) {
+        const normalized = normalizeCanonicalValue(value);
+        return finalize(normalized ?? '');
+      }
       return finalize(JSON.stringify(value));
     }
 
@@ -569,7 +578,7 @@ export class VariableEngine {
   /**
    * Get a value from context using dot notation path
    */
-  private getValue(path: string, context: Partial<VariableContext>): any {
+  private getValue(path: string, context: Partial<VariableContext>, rawForFilters = false): any {
     // Handle special paths
     if (path === 'now') {
       return context.now?.iso || new Date().toISOString();
@@ -588,6 +597,9 @@ export class VariableEngine {
       let value: any = get(data, normalized);
       if (value === undefined || value === null) value = get(raw, normalized);
       if (value === undefined || value === null) value = get(props, normalized);
+      // Com filtros a jusante, devolve o valor CRU (array/objeto) para os
+      // filtros operarem no dado real; a estringificação final normaliza.
+      if (rawForFilters) return value;
       // Same join/miss semantics as the email resolver (scalar arrays →
       // 'a, b', discount-code objects → codes, other objects → miss) so
       // {{ DiscountCodes }} never renders as JSON in engine channels.

@@ -112,6 +112,7 @@ describe('variable engine — smart trigger tags resolve IN the engine (WhatsApp
       'trigger.first_item_name',
       'trigger.first_item_price',
       'trigger.total',
+      'trigger.items_count',
     ]) {
       expect(variableEngine.process(`{{ ${tag} }}`, emptyCtx)).toBe(`{{ ${tag} }}`);
     }
@@ -153,6 +154,18 @@ describe('variable engine — canonical array normalization ({{ DiscountCodes }}
       nodes: {},
     };
     expect(variableEngine.process('{{ DiscountCodes }}', weirdCtx)).toBe('{{ DiscountCodes }}');
+  });
+
+  it('filtros operam no array CRU, não na string joinada', () => {
+    // regressão da revisão: normalize rodava ANTES dos filtros e
+    // {{ DiscountCodes | first }} virava a string inteira joinada.
+    expect(variableEngine.process('{{ DiscountCodes | first }}', ctx)).toBe('CUPOM10');
+    expect(variableEngine.process('{{ DiscountCodes | last }}', ctx)).toBe('EXTRA5');
+  });
+
+  it('canônica que sai de filtro ainda como array é normalizada (nunca JSON)', () => {
+    // ex.: filtro que preserva array — a estringificação final faz o join.
+    expect(variableEngine.process('{{ DiscountCodes | sort }}', ctx)).toBe('CUPOM10, EXTRA5');
   });
 });
 

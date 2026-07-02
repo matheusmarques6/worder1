@@ -31,6 +31,7 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
   const selectedNode = useSelectedNode();
   const selectNode = useFlowStore((state) => state.selectNode);
   const updateNode = useFlowStore((state) => state.updateNode);
+  const updateNodeConfig = useFlowStore((state) => state.updateNodeConfig);
   const removeNode = useFlowStore((state) => state.removeNode);
   const showPanel = useFlowStore((state) => state.showPropertiesPanel);
   const nodes = useFlowStore((state) => state.nodes);
@@ -79,9 +80,11 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
   const Icon = definition?.icon || Settings;
 
   const handleUpdate = (key: string, value: any) => {
-    updateNode(selectedNode.id, {
-      config: { ...selectedNode.data.config, [key]: value },
-    });
+    // updateNodeConfig faz merge no config ATUAL do store. Espalhar
+    // selectedNode.data.config aqui usava um snapshot stale do render —
+    // dois updates em sequência (ex.: auto-fill de remetente loja→org)
+    // sobrescreviam um ao outro e reverteram campos digitados no meio.
+    updateNodeConfig(selectedNode.id, { [key]: value });
   };
 
   const handleLabelChange = (label: string) => {
