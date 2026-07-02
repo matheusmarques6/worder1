@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
+import { getSupabaseClient, getAuthClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 
 let _supabase: SupabaseClient | null = null;
@@ -587,19 +587,28 @@ async function scheduleDelayedContinuation(
 // API ROUTES
 // =====================================================
 
+// ✅ FAIL-CLOSED: aceita (a) Vercel Cron, (b) Bearer INTERNAL_API_KEY, ou
+// (c) uma SESSÃO autenticada do dashboard — o único caller real é o botão
+// "processar fila" (ExecutionHistory.tsx), um fetch same-origin do navegador
+// que não tem como enviar o header de cron nem conhecer a INTERNAL_API_KEY.
+// Sem a sessão, o botão morreria em produção. Se a env var não estiver
+// configurada e não houver sessão, rejeita em produção (libera só em dev).
+async function isAuthorized(request: NextRequest): Promise<boolean> {
+  if (request.headers.get('x-vercel-cron')) return true;
+  const apiKey = process.env.INTERNAL_API_KEY;
+  if (apiKey && request.headers.get('authorization') === `Bearer ${apiKey}`) return true;
+  // Sessão autenticada (trigger manual pelo dashboard)
+  const auth = await getAuthClient();
+  if (auth) return true;
+  if (!apiKey) return process.env.NODE_ENV !== 'production';
+  return false;
+}
+
 // POST: Processar fila (chamado por cron ou webhook)
 export async function POST(request: NextRequest) {
   try {
-    // Validar API key (segurança básica)
-    const authHeader = request.headers.get('authorization');
-    const apiKey = process.env.INTERNAL_API_KEY;
-    
-    if (apiKey && authHeader !== `Bearer ${apiKey}`) {
-      // Se tem API key configurada, valida
-      // Se não tem, permite (dev mode)
-      if (apiKey) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
+    if (!(await isAuthorized(request))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json().catch(() => ({}));
@@ -681,6 +690,11 @@ export async function POST(request: NextRequest) {
 // GET: Status da fila
 export async function GET(request: NextRequest) {
   try {
+    // ✅ Mesmo gate do POST — expõe estado global da fila
+    if (!(await isAuthorized(request))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const organizationId = searchParams.get('organizationId');
 

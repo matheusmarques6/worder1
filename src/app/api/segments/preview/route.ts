@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getAuthClient } from '@/lib/api-utils'
+import { getAuthClient, authError } from '@/lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,8 +15,8 @@ interface Rule {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    let {
-      organization_id,
+    const {
+      organization_id: bodyOrgId,
       store_id,
       rules = [],
       rules_logic = 'AND',
@@ -27,10 +27,14 @@ export async function POST(req: NextRequest) {
       rules_logic: 'AND' | 'OR'
     } = body
 
-    if (!organization_id) {
-      const auth = await getAuthClient()
-      if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      organization_id = auth.user.organization_id
+    // ✅ SEMPRE derivar org da sessão — nunca confiar no org do body
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organization_id = auth.user.organization_id
+
+    // Se o cliente passar um organization_id diferente do da sessão, rejeitar
+    if (bodyOrgId && bodyOrgId !== organization_id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     if (!Array.isArray(rules)) {

@@ -32,6 +32,20 @@ export async function GET(req: NextRequest) {
     )
   }
 
+  // ✅ Token válido por 72h (conforme informado no email). Rejeita se expirado.
+  const createdAt = request.created_at ? new Date(request.created_at).getTime() : 0
+  const ageMs = Date.now() - createdAt
+  const SEVENTY_TWO_HOURS_MS = 72 * 60 * 60 * 1000
+  if (!createdAt || ageMs > SEVENTY_TWO_HOURS_MS) {
+    return new NextResponse(
+      `<!doctype html><html><body style="font-family:sans-serif;max-width:500px;margin:40px auto;padding:20px;">
+       <h1>Link expirado</h1>
+       <p>Este link de confirmação era válido por 72 horas. Por favor, solicite um novo pedido LGPD.</p>
+       </body></html>`,
+      { status: 410, headers: { 'Content-Type': 'text/html' } }
+    )
+  }
+
   if (request.verified_at) {
     return new NextResponse(
       `<!doctype html><html><body style="font-family:sans-serif;max-width:500px;margin:40px auto;padding:20px;">

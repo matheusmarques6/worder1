@@ -10,28 +10,59 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getClientIp } from '@/lib/rate-limit'
+import { verifyUnsubscribeToken } from '@/lib/email/unsubscribe-token'
 
 export const dynamic = 'force-dynamic'
 
 const CONSENT_TYPES = ['marketing', 'analytics', 'tracking', 'profiling', 'data_sharing', 'cookies']
 
 /**
- * POST público (sem auth) — registro de consentimento no banner do cliente
+ * POST — registro de consentimento.
  * body: {
  *   organization_id, consents: { [type]: boolean },
- *   contact_id?, visitor_id?, source?
+ *   contact_id?, visitor_id?, source?, token?
  * }
+ *
+ * ✅ Requer autorização: OU uma sessão válida (dashboard, org da sessão), OU um
+ * token assinado de unsubscribe/preference-center. Sem isso, retorna 401 — caso
+ * contrário qualquer um poderia virar as flags de consentimento de um contato
+ * apenas conhecendo contact_id + organization_id.
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { organization_id, contact_id, visitor_id, consents, source } = body
+    const { organization_id, contact_id, visitor_id, consents, source, token } = body
 
     if (!organization_id) {
       return NextResponse.json({ error: 'organization_id required' }, { status: 400 })
     }
     if (!consents || typeof consents !== 'object') {
       return NextResponse.json({ error: 'consents object required' }, { status: 400 })
+    }
+
+    // ✅ Autorização: sessão OU token assinado.
+    let authorized = false
+    const auth = await getAuthClient()
+    if (auth) {
+      // Sessão só pode registrar consentimentos para a própria organização.
+      if (auth.user.organization_id !== organization_id) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+      authorized = true
+    } else if (token) {
+      const verified = verifyUnsubscribeToken(String(token))
+      // Token precisa bater com a org e (se informado) com o contato alvo.
+      if (
+        verified &&
+        verified.orgId === organization_id &&
+        (!contact_id || verified.contactId === contact_id)
+      ) {
+        authorized = true
+      }
+    }
+
+    if (!authorized) {
+      return authError()
     }
 
     const ip = getClientIp(req)

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
+// Papéis seguros que podem ser atribuídos a um membro. `owner` e qualquer
+// outro papel privilegiado NUNCA podem ser definidos via API de convite/edição.
+const VALID_ROLES = ['admin', 'editor', 'viewer'];
+
 export async function GET() {
   const auth = await getAuthClient();
   if (!auth) return authError();
@@ -24,6 +28,13 @@ export async function POST(request: NextRequest) {
   if (!auth) return authError();
   const orgId = auth.user.organization_id;
   const body = await request.json();
+  // ✅ Um convidado nunca pode se tornar owner nem receber papel privilegiado.
+  // Restringe o role ao conjunto seguro; rejeita qualquer valor fora dele.
+  const requestedRole = body.role;
+  if (requestedRole !== undefined && !VALID_ROLES.includes(requestedRole)) {
+    return NextResponse.json({ error: 'role inválido' }, { status: 400 });
+  }
+  const role = requestedRole || 'viewer';
   try {
     const supabase = getSupabaseClient();
     if (!supabase) return NextResponse.json({ error: 'DB not configured' }, { status: 503 });
@@ -32,7 +43,7 @@ export async function POST(request: NextRequest) {
       .insert({
         organization_id: orgId,
         email: body.email,
-        role: body.role || 'viewer',
+        role,
         status: 'invited',
       })
       .select()
@@ -43,8 +54,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
-
-const VALID_ROLES = ['admin', 'editor', 'viewer'];
 
 export async function PATCH(request: NextRequest) {
   const auth = await getAuthClient();

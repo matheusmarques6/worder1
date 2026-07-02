@@ -184,10 +184,12 @@ export async function consumeOAuthState(
     
     return data;
   } catch (error) {
-    // Se tabela não existe, apenas valida sem persistir
-    // (fallback para ambientes sem a tabela)
-    console.warn('[OAuth] Tabela oauth_states não disponível, usando validação sem replay protection');
-    return data;
+    // ✅ FAIL-CLOSED: se não conseguimos consultar/marcar o state (tabela
+    // indisponível, erro de rede, etc.), REJEITAMOS o state. Retornar `data`
+    // aqui abriria um buraco de replay: um atacante poderia reutilizar um
+    // state válido sempre que o storage estivesse indisponível.
+    console.error('[OAuth] Erro ao consumir state — rejeitando (fail-closed):', error);
+    return null;
   }
 }
 

@@ -32,6 +32,34 @@ interface DataRequest {
   reason: string | null
 }
 
+interface ConsentRecord {
+  id: string
+  consent_type: string
+  granted: boolean
+  source: string | null
+  contact_id: string | null
+  visitor_id: string | null
+  granted_at: string | null
+  revoked_at: string | null
+}
+
+// Rótulos amigáveis para os tipos de consentimento (linguagem do lojista)
+const CONSENT_TYPE_LABELS: Record<string, { label: string; description: string }> = {
+  marketing: { label: 'Email marketing', description: 'Permissão para receber campanhas e novidades por email.' },
+  tracking: { label: 'Rastreamento de comportamento', description: 'Permissão para acompanhar a navegação no site.' },
+  analytics: { label: 'Análises', description: 'Uso de dados para métricas e relatórios.' },
+  cookies: { label: 'Cookies', description: 'Uso de cookies durante a navegação.' },
+  profiling: { label: 'Personalização', description: 'Uso de dados para personalizar a experiência.' },
+  data_sharing: { label: 'Compartilhamento de dados', description: 'Permissão para compartilhar dados com parceiros.' },
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  banner: 'Banner de cookies',
+  form: 'Formulário',
+  checkout: 'Checkout',
+  import: 'Importação',
+}
+
 const REQUEST_TYPE_LABELS: Record<string, { label: string; icon: any }> = {
   export: { label: 'Exportar dados', icon: Download },
   portability: { label: 'Portabilidade', icon: Download },
@@ -59,6 +87,9 @@ export default function LgpdSettingsPage() {
   const [tab, setTab] = useState<'requests' | 'retention' | 'consents'>('requests')
   const [requests, setRequests] = useState<DataRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [consents, setConsents] = useState<ConsentRecord[]>([])
+  const [consentsLoading, setConsentsLoading] = useState(false)
+  const [consentsLoaded, setConsentsLoaded] = useState(false)
   const [showNewRequest, setShowNewRequest] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
@@ -84,7 +115,31 @@ export default function LgpdSettingsPage() {
     }
   }
 
+  const loadConsents = async () => {
+    setConsentsLoading(true)
+    try {
+      const res = await fetch('/api/lgpd/consents')
+      if (res.ok) {
+        const d = await res.json()
+        setConsents(Array.isArray(d.consents) ? d.consents : [])
+      } else {
+        setConsents([])
+      }
+    } catch {
+      setConsents([])
+    } finally {
+      setConsentsLoading(false)
+      setConsentsLoaded(true)
+    }
+  }
+
   useEffect(() => { load() }, [])
+
+  // Carrega os consentimentos reais na primeira vez que a aba é aberta
+  useEffect(() => {
+    if (tab === 'consents' && !consentsLoaded) loadConsents()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, consentsLoaded])
 
   return (
     <div className="p-8 max-w-5xl">
@@ -156,8 +211,8 @@ export default function LgpdSettingsPage() {
             <div className="bg-white border border-dashed border-gray-200 rounded-xl p-12 text-center">
               <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
               <p className="text-sm text-gray-500">Nenhum pedido recebido ainda.</p>
-              <p className="text-xs text-gray-400 mt-1">
-                Seus contatos podem solicitar via <code className="font-mono bg-gray-50 px-1.5 py-0.5 rounded">POST /api/lgpd/data-requests</code>
+              <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
+                Quando um contato pedir para exportar, corrigir ou excluir os dados dele, o pedido aparece aqui. Você também pode registrar um pedido manualmente em "Novo pedido".
               </p>
             </div>
           ) : (
@@ -233,29 +288,85 @@ export default function LgpdSettingsPage() {
       )}
 
       {tab === 'consents' && (
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h3 className="text-base font-semibold text-gray-900 mb-2">Consentimentos coletados</h3>
-          <p className="text-sm text-gray-500 mb-4">
-            Cada consentimento é registrado com IP + User Agent para auditoria.
-          </p>
-          <div className="text-xs text-gray-500 font-mono bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-2">
-            <div>
-              <strong>Endpoint público:</strong> <code>POST /api/lgpd/consents</code>
-            </div>
-            <div>
-              <strong>Body:</strong>
-              <pre className="mt-1 text-[11px] overflow-x-auto">{JSON.stringify({
-                organization_id: 'uuid',
-                contact_id: 'uuid (opcional)',
-                visitor_id: 'string (opcional)',
-                consents: { marketing: true, tracking: false, analytics: true },
-                source: 'banner',
-              }, null, 2)}</pre>
+        <div className="space-y-4">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start gap-3">
+            <ShieldCheck size={16} className="text-emerald-500 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-emerald-900">
+              Aqui você acompanha as permissões que seus contatos deram — como aceitar receber
+              <strong> email marketing</strong> ou permitir o <strong>rastreamento no site</strong>.
+              Cada permissão fica registrada com data e origem para comprovar a LGPD, caso um contato
+              pergunte ou você precise apresentar em uma auditoria.
             </div>
           </div>
-          <p className="text-xs text-gray-400 mt-4">
-            Tipos válidos: <code className="font-mono">marketing</code>, <code className="font-mono">analytics</code>, <code className="font-mono">tracking</code>, <code className="font-mono">profiling</code>, <code className="font-mono">data_sharing</code>, <code className="font-mono">cookies</code>.
-          </p>
+
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h3 className="text-base font-semibold text-gray-900">Permissões registradas</h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                As permissões são coletadas automaticamente pelo banner de cookies e formulários da sua loja.
+              </p>
+            </div>
+
+            {consentsLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              </div>
+            ) : consents.length === 0 ? (
+              <div className="p-12 text-center">
+                <ShieldCheck className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-500">Nenhum registro ainda.</p>
+                <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
+                  Assim que seus contatos aceitarem ou recusarem permissões no banner de cookies ou nos
+                  formulários da loja, cada escolha aparece aqui automaticamente.
+                </p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Permissão</th>
+                    <th className="text-left px-4 py-3 text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Situação</th>
+                    <th className="text-left px-4 py-3 text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Origem</th>
+                    <th className="text-left px-4 py-3 text-[11px] uppercase tracking-wide text-gray-500 font-semibold">Data</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {consents.map((c) => {
+                    const meta = CONSENT_TYPE_LABELS[c.consent_type] || { label: c.consent_type, description: '' }
+                    const when = c.granted ? c.granted_at : c.revoked_at
+                    return (
+                      <tr key={c.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-medium text-gray-900">{meta.label}</p>
+                          {meta.description && (
+                            <p className="text-xs text-gray-500 mt-0.5">{meta.description}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={cn(
+                            'text-[10px] font-semibold px-2 py-0.5 rounded-full',
+                            c.granted
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-gray-100 text-gray-500'
+                          )}>
+                            {c.granted ? 'Aceitou' : 'Recusou'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {SOURCE_LABELS[c.source || ''] || c.source || '—'}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {when
+                            ? new Date(when).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
 

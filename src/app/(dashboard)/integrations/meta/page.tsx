@@ -22,6 +22,7 @@ import {
   Key,
   Globe,
   Shield,
+  ChevronDown,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
 
@@ -68,6 +69,7 @@ export default function MetaIntegrationsPage() {
 
   const [showAddModal, setShowAddModal] = useState(false)
   const [showTokens, setShowTokens] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   // Fetch accounts
   const fetchAccounts = useCallback(async () => {
@@ -100,9 +102,14 @@ export default function MetaIntegrationsPage() {
     ? `${window.location.origin}/api/${activeTab === 'whatsapp' ? 'whatsapp/cloud' : 'instagram'}/webhook`
     : ''
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    // Toast notification could be added here
+  const copyToClipboard = async (text: string) => {
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+      toast({ type: 'success', title: 'Copiado' })
+    } catch {
+      toast({ type: 'error', title: 'Não foi possível copiar' })
+    }
   }
 
   return (
@@ -148,67 +155,6 @@ export default function MetaIntegrationsPage() {
         </button>
       </div>
 
-      {/* Setup Instructions */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Settings className="w-5 h-5 text-primary-400" />
-          Configuracao do Webhook
-        </h2>
-
-        <div className="space-y-4">
-          {/* Webhook URL */}
-          <div>
-            <label className="text-sm text-gray-500 mb-2 block">Webhook URL</label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-3 text-gray-900 font-mono text-sm">
-                {webhookUrl}
-              </div>
-              <button
-                onClick={() => copyToClipboard(webhookUrl)}
-                className="p-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-500 hover:text-white transition-colors"
-              >
-                <Copy className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Verify Token */}
-          <div>
-            <label className="text-sm text-gray-500 mb-2 block">Verify Token (use no Meta Developer)</label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-3 text-gray-900 font-mono text-sm flex items-center justify-between">
-                <span>{showTokens ? (process.env.NEXT_PUBLIC_WEBHOOK_VERIFY_TOKEN || 'Defina WEBHOOK_VERIFY_TOKEN no .env') : '••••••••••••••••'}</span>
-                <button
-                  onClick={() => setShowTokens(!showTokens)}
-                  className="text-gray-500 hover:text-white"
-                >
-                  {showTokens ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              <button
-                onClick={() => copyToClipboard(process.env.NEXT_PUBLIC_WEBHOOK_VERIFY_TOKEN || '')}
-                className="p-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-500 hover:text-white transition-colors"
-              >
-                <Copy className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Instructions */}
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mt-4">
-            <h3 className="text-sm font-medium text-blue-400 mb-2">Instrucoes de Configuracao</h3>
-            <ol className="text-sm text-gray-600 space-y-2 list-decimal list-inside">
-              <li>Acesse o <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Meta for Developers</a></li>
-              <li>Crie ou selecione seu App</li>
-              <li>Adicione os produtos <strong>WhatsApp</strong> e/ou <strong>Instagram</strong></li>
-              <li>Configure o Webhook usando a URL e o Token acima</li>
-              <li>Inscreva-se nos campos: <code className="bg-gray-100 px-1 rounded">messages</code>, <code className="bg-gray-100 px-1 rounded">messaging_postbacks</code></li>
-              <li>Gere um Access Token permanente e adicione abaixo</li>
-            </ol>
-          </div>
-        </div>
-      </div>
-
       {/* Accounts List */}
       <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
@@ -244,15 +190,99 @@ export default function MetaIntegrationsPage() {
         )}
       </div>
 
-      {/* Environment Variables Info */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Key className="w-5 h-5 text-amber-400" />
-          Variaveis de Ambiente Necessarias
-        </h2>
+      {/* Advanced configuration (hidden by default — for developers) */}
+      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+        <button
+          onClick={() => setShowAdvanced((v) => !v)}
+          className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+          aria-expanded={showAdvanced}
+        >
+          <div className="flex items-center gap-2">
+            <Settings className="w-5 h-5 text-gray-400" />
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Configuração avançada</h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Webhook e variáveis de ambiente. Necessário apenas para quem faz a configuração técnica.
+              </p>
+            </div>
+          </div>
+          <ChevronDown
+            className={`w-5 h-5 text-gray-400 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
+          />
+        </button>
 
-        <div className="bg-white rounded-xl p-4 font-mono text-sm">
-          <pre className="text-gray-600 whitespace-pre-wrap">
+        {showAdvanced && (
+          <div className="border-t border-gray-200 p-6 space-y-6">
+            {/* Webhook configuration */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Settings className="w-4 h-4 text-primary-400" />
+                Configuracao do Webhook
+              </h3>
+
+              <div className="space-y-4">
+                {/* Webhook URL */}
+                <div>
+                  <label className="text-sm text-gray-500 mb-2 block">Webhook URL</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-3 text-gray-900 font-mono text-sm">
+                      {webhookUrl}
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard(webhookUrl)}
+                      className="p-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-500 hover:text-white transition-colors"
+                    >
+                      <Copy className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Verify Token */}
+                <div>
+                  <label className="text-sm text-gray-500 mb-2 block">Verify Token (use no Meta Developer)</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-3 text-gray-900 font-mono text-sm flex items-center justify-between">
+                      <span>{showTokens ? (process.env.NEXT_PUBLIC_WEBHOOK_VERIFY_TOKEN || 'Defina WEBHOOK_VERIFY_TOKEN no .env') : '••••••••••••••••'}</span>
+                      <button
+                        onClick={() => setShowTokens(!showTokens)}
+                        className="text-gray-500 hover:text-white"
+                      >
+                        {showTokens ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard(process.env.NEXT_PUBLIC_WEBHOOK_VERIFY_TOKEN || '')}
+                      className="p-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-500 hover:text-white transition-colors"
+                    >
+                      <Copy className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Instructions */}
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mt-4">
+                  <h4 className="text-sm font-medium text-blue-400 mb-2">Instrucoes de Configuracao</h4>
+                  <ol className="text-sm text-gray-600 space-y-2 list-decimal list-inside">
+                    <li>Acesse o <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Meta for Developers</a></li>
+                    <li>Crie ou selecione seu App</li>
+                    <li>Adicione os produtos <strong>WhatsApp</strong> e/ou <strong>Instagram</strong></li>
+                    <li>Configure o Webhook usando a URL e o Token acima</li>
+                    <li>Inscreva-se nos campos: <code className="bg-gray-100 px-1 rounded">messages</code>, <code className="bg-gray-100 px-1 rounded">messaging_postbacks</code></li>
+                    <li>Gere um Access Token permanente e adicione abaixo</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* Environment Variables Info */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Key className="w-4 h-4 text-amber-400" />
+                Variaveis de Ambiente Necessarias
+              </h3>
+
+              <div className="bg-white border border-gray-100 rounded-xl p-4 font-mono text-sm">
+                <pre className="text-gray-600 whitespace-pre-wrap">
 {`# Meta App Configuration
 META_APP_ID=your_app_id
 META_APP_SECRET=your_app_secret
@@ -269,8 +299,11 @@ INSTAGRAM_WEBHOOK_VERIFY_TOKEN=your_verify_token
 
 # Optional: Global webhook verify token
 WEBHOOK_VERIFY_TOKEN=your_global_verify_token`}
-          </pre>
-        </div>
+                </pre>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add Account Modal */}

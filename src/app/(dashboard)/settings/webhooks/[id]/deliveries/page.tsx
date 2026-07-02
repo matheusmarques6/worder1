@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Loader2, RefreshCw } from 'lucide-react';
 import DeliveryDetailDrawer from '@/components/webhooks/DeliveryDetailDrawer';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Delivery {
   id: string;
@@ -50,6 +52,8 @@ const MAX_REPLAY_ALL = 50;
 export default function DeliveriesPage() {
   const params = useParams();
   const id = params?.id as string;
+  const toast = useToast();
+  const { confirm } = useConfirm();
 
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,8 +79,17 @@ export default function DeliveriesPage() {
 
   const replayAllFailed = async () => {
     const failed = deliveries.filter((d) => d.status === 'failed').slice(0, MAX_REPLAY_ALL);
-    if (failed.length === 0) return alert('Nenhuma falha pra reenviar.');
-    if (!confirm(`Reenviar ${failed.length} entrega(s) falhadas?`)) return;
+    if (failed.length === 0) {
+      toast.info('Nenhuma falha para reenviar');
+      return;
+    }
+    const confirmed = await confirm({
+      title: `Reenviar ${failed.length} entrega(s) falhada(s)?`,
+      description: 'As entregas serão colocadas novamente na fila de envio.',
+      confirmLabel: 'Reenviar',
+      cancelLabel: 'Cancelar',
+    });
+    if (!confirmed) return;
 
     setReplayingAll(true);
     let ok = 0;
@@ -89,7 +102,11 @@ export default function DeliveriesPage() {
       } catch {}
     }
     setReplayingAll(false);
-    alert(`${ok}/${failed.length} reenviadas.`);
+    if (ok === failed.length) {
+      toast.success(`${ok} de ${failed.length} entrega(s) reenviada(s)`);
+    } else {
+      toast.warning(`${ok} de ${failed.length} entrega(s) reenviada(s)`, 'Algumas entregas não puderam ser reenviadas. Tente novamente.');
+    }
     fetchDeliveries();
   };
 

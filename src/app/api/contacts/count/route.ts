@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getAuthClient } from '@/lib/api-utils'
+import { getAuthClient, authError } from '@/lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    let organizationId = searchParams.get('organization_id')
     const storeId = searchParams.get('store_id')
     const subscribedOnly = searchParams.get('subscribed_only') === 'true'
 
-    if (!organizationId) {
-      const auth = await getAuthClient()
-      if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      organizationId = auth.user.organization_id
+    // ✅ SEMPRE derivar org da sessão — nunca confiar no query param
+    const auth = await getAuthClient()
+    if (!auth) return authError()
+    const organizationId = auth.user.organization_id
+
+    // Se o cliente passar um organization_id diferente do da sessão, rejeitar
+    const requestedOrg = searchParams.get('organization_id')
+    if (requestedOrg && requestedOrg !== organizationId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     let q: any = supabaseAdmin
