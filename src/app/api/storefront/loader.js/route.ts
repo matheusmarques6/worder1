@@ -31,6 +31,12 @@ export async function GET(_request: NextRequest) {
   if (window.__worderLoaded) return;
   window.__worderLoaded = true;
 
+  // One-popup-at-a-time arbitration (R11): every popup script consults this
+  // global mutex before opening (embedded forms are exempt — they are page
+  // content). Initialized here so it exists before any popup script runs;
+  // the popup scripts set it to their form id on open and clear it on close.
+  window.__wfOpenPopup = window.__wfOpenPopup || null;
+
   var APP_URL = ${JSON.stringify(appUrl)};
 
   // Detect shop domain. Shopify exposes 'Shopify.shop' as a global on every
