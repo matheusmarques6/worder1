@@ -94,7 +94,7 @@ export const MERGE_TAGS: MergeTagGroup[] = [
   {
     name: 'Personalizado', icon: 'Tag',
     tags: [
-      { name: 'Campo Custom', value: '{{custom.nome_do_campo|valor padrão}}', sample: 'valor padrão', hint: 'Use | para definir fallback' },
+      { name: 'Campo Custom', value: '{{custom.nome_do_campo}}', sample: 'Troque nome_do_campo pelo seu campo', hint: 'Fallback: clique na variável inserida (editor de texto) ou use |valor' },
     ],
   },
   {

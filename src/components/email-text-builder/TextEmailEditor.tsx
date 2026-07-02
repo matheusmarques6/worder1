@@ -72,6 +72,9 @@ import { MergeTag } from './MergeTagNode';
 import { useSlashMenu } from './SlashCommands';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import { type TextDoc, renderTextEmailToHtml } from '@/lib/email/text-render';
+// Client-safe sample values for the static (campaign) preview — resolves
+// {{tags}} to the same examples the catalogs advertise.
+import { getSampleMergeData } from '@/lib/email/merge-tags';
 import { useEmailAutosave } from '@/components/email-builder/hooks/useEmailAutosave';
 import { SendTestModal } from '@/components/email-builder/modals/SendTestModal';
 // Shared merge-tag picker — the SAME component the drag-and-drop editor
@@ -167,9 +170,19 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
   const [showSendTest, setShowSendTest] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   // Distraction-free writing: hides the sidebar + top chrome so the
-  // founder note is the only thing on screen. Toggled with ⌘/.
+  // founder note is the only thing on screen. Toggled with ⌘/ (Ctrl+/ on
+  // Windows/Linux).
   const [zenMode, setZenMode] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  // Platform-aware modifier label for keyboard hints. Handlers accept
+  // both metaKey and ctrlKey; only the DISPLAYED hint changes. Set in an
+  // effect (default ⌘) to avoid SSR/hydration mismatches.
+  const [modKey, setModKey] = useState('⌘');
+  useEffect(() => {
+    const platform =
+      (navigator as any).userAgentData?.platform || navigator.platform || '';
+    if (!/Mac|iPhone|iPad|iPod/i.test(platform)) setModKey('Ctrl+');
+  }, []);
 
   const editor = useEditor({
     extensions: [
@@ -268,24 +281,64 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
 
   // Live preview HTML — re-renders only when the doc, preview text, or
   // device toggle change so we don't allocate a 5KB string on every
-  // keystroke when the preview pane is open.
+  // keystroke when the preview pane is open. In campaign/static mode
+  // (no flowContext) {{tags}} are substituted with SAMPLE values so the
+  // merchant never stares at raw braces; unknown tags stay literal.
   const previewHtml = useMemo(() => {
     if (!editor) return '';
     const doc = editor.getJSON() as TextDoc;
-    return renderTextEmailToHtml(doc, { preheader: previewText || undefined });
+    let html = renderTextEmailToHtml(doc, { preheader: previewText || undefined });
+    if (!flowContext) {
+      const samples = getSampleMergeData();
+      html = html.replace(
+        /\{\{\s*([^}|]+?)\s*(?:\|([^}]*))?\}\}/g,
+        (match, tag: string, fallback?: string) => {
+          const key = tag.trim();
+          if (samples[key] !== undefined) return samples[key];
+          if (fallback !== undefined && fallback.trim()) return fallback.trim();
+          return match; // unknown tag, no fallback → keep literal
+        },
+      );
+    }
+    return html;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor?.state.doc, previewText, showPreview]);
+  }, [editor?.state.doc, previewText, showPreview, flowContext]);
+
+  // Subject input ref + the selection captured when the picker opened for
+  // the subject — lets the chosen tag land at the cursor instead of always
+  // being appended to the end.
+  const subjectInputRef = useRef<HTMLInputElement | null>(null);
+  const subjectSelectionRef = useRef<{ start: number; end: number } | null>(null);
+  const openSubjectPicker = useCallback(() => {
+    const el = subjectInputRef.current;
+    subjectSelectionRef.current = el
+      ? {
+          start: el.selectionStart ?? el.value.length,
+          end: el.selectionEnd ?? el.value.length,
+        }
+      : null;
+    setPickerTarget('subject');
+  }, []);
 
   // Called by the shared MergeTagPicker with a full `{{ ... }}` string
-  // (e.g. "{{ CheckoutURL }}", "{{ trigger.foo }}", "{{ custom.segment }}").
-  // Subject → append the literal string (renderer substitutes it later; we
-  // don't render chips in plain inputs). Body → insert a MergeTagNode chip
-  // whose tag/label is the inner name parsed from the braces.
+  // (e.g. "{{ CheckoutURL }}", "{{ trigger.foo }}", "{{ custom.segment }}")
+  // plus, when the catalog knows it, the human-friendly name.
+  // Subject → splice the literal string at the captured cursor position
+  // (renderer substitutes it later; we don't render chips in plain inputs).
+  // Body → insert a MergeTagNode chip labeled with the friendly name
+  // (falling back to the raw path when absent).
   const handleTagSelect = useCallback(
-    (tagValue: string) => {
+    (tagValue: string, label?: string) => {
       const target = pickerTarget;
       if (target === 'subject') {
-        setSubject((s) => `${s}${tagValue}`);
+        setSubject((s) => {
+          const sel = subjectSelectionRef.current;
+          if (sel && sel.start >= 0 && sel.start <= s.length && sel.end <= s.length) {
+            return s.slice(0, sel.start) + tagValue + s.slice(sel.end);
+          }
+          return `${s}${tagValue}`;
+        });
+        subjectSelectionRef.current = null;
       } else if (target === 'body' && editor) {
         // Parse the inner name (strip {{ }} and optional |fallback).
         const inner = tagValue.replace(/^\{\{\s*/, '').replace(/\s*\}\}$/, '');
@@ -293,7 +346,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
         const tag = (rawTag || '').trim();
         (editor.chain() as any).insertMergeTag({
           tag,
-          label: tag,
+          label: (label || '').trim() || tag,
           fallback: (fallback || '').trim(),
         }).run();
       }
@@ -333,6 +386,22 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
     try { await flush(); } catch {}
     onBack();
   }, [flush, onBack]);
+
+  // Flush the pending autosave debounce BEFORE opening the real-payload
+  // preview or the send-test modal — both should reflect what the user
+  // just typed, not the last persisted snapshot (autosave debounces at
+  // ~1.5s, so "type → preview" raced the save). `flush()` cancels the
+  // pending timer and awaits the save when dirty; a failure is non-fatal
+  // (the surface still opens, matching handleBack's behavior).
+  const openFlowPreview = useCallback(async () => {
+    try { await flush(); } catch {}
+    setShowFlowPreview(true);
+  }, [flush]);
+
+  const openSendTest = useCallback(async () => {
+    try { await flush(); } catch {}
+    setShowSendTest(true);
+  }, [flush]);
 
   // Apply a restored version (already persisted server-side) to the live
   // editor: swap the doc and re-hydrate the metadata fields. We mark the
@@ -428,7 +497,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
             Campaign mode falls back to the inline static preview. */}
         {flowContext ? (
           <button
-            onClick={() => setShowFlowPreview(true)}
+            onClick={openFlowPreview}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors text-zinc-700 hover:bg-zinc-100"
           >
             <Eye className="w-3.5 h-3.5" />
@@ -461,13 +530,13 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
           className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
             zenMode ? 'bg-zinc-900 text-white' : 'text-zinc-700 hover:bg-zinc-100'
           }`}
-          title="Modo foco (⌘/)"
+          title={`Modo foco (${modKey}/)`}
         >
           {zenMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
         </button>
 
         <button
-          onClick={() => setShowSendTest(true)}
+          onClick={openSendTest}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 rounded-md transition-colors"
         >
           <Send className="w-3.5 h-3.5" />
@@ -513,13 +582,13 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
                   <Heading3 className="w-4 h-4" />
                 </ToolBtn>
                 <Divider />
-                <ToolBtn active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} title="Negrito (⌘B)">
+                <ToolBtn active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} title={`Negrito (${modKey}B)`}>
                   <Bold className="w-4 h-4" />
                 </ToolBtn>
-                <ToolBtn active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} title="Itálico (⌘I)">
+                <ToolBtn active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} title={`Itálico (${modKey}I)`}>
                   <Italic className="w-4 h-4" />
                 </ToolBtn>
-                <ToolBtn active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Sublinhado (⌘U)">
+                <ToolBtn active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()} title={`Sublinhado (${modKey}U)`}>
                   <UnderlineIcon className="w-4 h-4" />
                 </ToolBtn>
                 <ToolBtn active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()} title="Tachado">
@@ -555,6 +624,11 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
             {/* Body — editor or preview */}
             {showPreview ? (
               <div className="bg-white border border-zinc-200 rounded-b-lg overflow-hidden">
+                {!flowContext && (
+                  <div className="px-4 py-1.5 bg-zinc-50 border-b border-zinc-100 text-[10px] text-zinc-400">
+                    Valores de exemplo — as variáveis são substituídas pelos dados reais no envio.
+                  </div>
+                )}
                 <iframe
                   title="Preview"
                   srcDoc={previewHtml}
@@ -607,7 +681,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-medium text-zinc-700">Assunto</label>
                 <button
-                  onClick={() => setPickerTarget('subject')}
+                  onClick={openSubjectPicker}
                   className="text-[10px] text-blue-600 hover:text-blue-700 inline-flex items-center gap-1"
                 >
                   <Tag className="w-3 h-3" /> Variável
@@ -615,13 +689,17 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
               </div>
               <div className="relative">
                 <input
+                  ref={subjectInputRef}
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="Ex: uma nota rápida"
                   className="w-full px-3 py-2 text-sm bg-white border border-zinc-200 rounded-md text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 />
               </div>
-              <p className="text-[10px] text-zinc-400 mt-1">Mantenha curto. Lowercase performa melhor em estilo founder-note.</p>
+              <p className="text-[10px] text-zinc-400 mt-1">Dica: assuntos curtos e em letras minúsculas parecem mais pessoais.</p>
+              {flowContext && (
+                <p className="text-[10px] text-zinc-400 mt-1">Se o nó do flow definir um assunto, ele tem prioridade.</p>
+              )}
             </div>
 
             {/* Preview text */}
@@ -648,8 +726,17 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
                 Inserir variável
               </button>
               <p className="text-[10px] text-zinc-400 mt-2">
-                Abra o seletor para inserir tags canônicas ({`{{ CheckoutURL }}`}), do
-                gatilho e personalizadas. No corpo, digite “/” para o mesmo menu.
+                {flowContext ? (
+                  <>
+                    Abra o seletor para inserir tags canônicas ({`{{ CheckoutURL }}`}), do
+                    gatilho e personalizadas. No corpo, digite “/” para o mesmo menu.
+                  </>
+                ) : (
+                  <>
+                    Abra o seletor para inserir tags de contato, compras, loja e
+                    sistema. No corpo, digite “/” para o mesmo menu.
+                  </>
+                )}
               </p>
             </div>
           </div>

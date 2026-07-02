@@ -107,7 +107,7 @@ export function useSlashMenu(
   // The "Variável" entry needs the parent's var picker, so it's appended
   // here rather than in the static list.
   const variableCommand: SlashCommand = {
-    key: 'variable', label: 'Variável', hint: 'Inserir {{contato}}', aliases: ['variavel', 'variable', 'merge', 'tag'], icon: Tag,
+    key: 'variable', label: 'Variável', hint: 'Inserir variável', aliases: ['variavel', 'variable', 'merge', 'tag'], icon: Tag,
     run: () => onPickVariable(),
   };
   const allCommands = [...SLASH_COMMANDS, variableCommand];

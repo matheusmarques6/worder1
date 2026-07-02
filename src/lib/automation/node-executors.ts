@@ -548,6 +548,11 @@ const actionExecutors: Record<string, NodeExecutor> = {
         // existed return null and fall through to the visual branch.
         let html: string;
         let plainText: string | undefined;
+        // Subject saved ON the template (the text editor persists
+        // email_templates.subject). Used as the fallback when the flow
+        // node doesn't define its own subject — before this, the
+        // template's Assunto was silently ignored by automations.
+        let templateSubject = '';
         if (config.templateId && config.templateId !== 'none') {
           // Scope the lookup to the executing org so a tampered/stale
           // templateId from another tenant can never be rendered into
@@ -556,7 +561,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           // the unscoped lookup the executor used before.
           let tplQuery = supabase
             .from('email_templates')
-            .select('design_json, html, name, editor_type')
+            .select('design_json, html, name, editor_type, subject')
             .eq('id', config.templateId);
           if (organizationId) {
             tplQuery = tplQuery.eq('organization_id', organizationId);
@@ -566,6 +571,8 @@ const actionExecutors: Record<string, NodeExecutor> = {
           if (tplErr || !template) {
             return { status: 'error', output: null, error: `Template ${config.templateId} not found` };
           }
+
+          templateSubject = (template as any).subject || '';
 
           // Use pre-rendered HTML from template
           html = template.html || '';
@@ -590,9 +597,11 @@ const actionExecutors: Record<string, NodeExecutor> = {
           html = config.html || config.body || '<p>Email sem conteúdo</p>';
         }
 
-        // 2. Resolve merge tags using the variable engine
+        // 2. Resolve merge tags using the variable engine.
+        // Subject priority: flow-node config wins, then the subject saved
+        // on the template itself (text editor's "Assunto" field).
         let resolvedHtml = html;
-        let resolvedSubject = config.subject || '';
+        let resolvedSubject = config.subject || templateSubject || '';
 
         try {
           const { variableEngine } = await import('./variable-engine');

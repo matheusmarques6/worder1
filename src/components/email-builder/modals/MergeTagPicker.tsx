@@ -16,10 +16,42 @@ const MERGE_ICON_MAP: Record<string, LucideIcon> = {
 
 const CANONICAL_PATH_SET = new Set(CANONICAL_SPEC.map(s => s.path))
 
+// Human labels for the internal trigger ids shown in the automation banner
+// (mirrors the labels in flow-builder/Sidebar.tsx TRIGGER_OPTIONS — kept as a
+// small local map so the email-builder doesn't import the whole sidebar).
+// Unknown ids fall back to stripping "trigger_" and underscores.
+const TRIGGER_TYPE_LABELS: Record<string, string> = {
+  trigger_abandon: 'Carrinho abandonado',
+  trigger_checkout_abandoned: 'Checkout abandonado',
+  trigger_order: 'Pedido realizado',
+  trigger_order_paid: 'Pedido pago',
+  trigger_fulfilled_order: 'Pedido enviado',
+  trigger_cancelled_order: 'Pedido cancelado',
+  trigger_browse_abandoned: 'Navegação abandonada',
+  trigger_back_in_stock: 'Produto voltou ao estoque',
+  trigger_price_drop: 'Queda de preço',
+  trigger_viewed_product: 'Produto visualizado',
+  trigger_added_to_cart: 'Produto adicionado ao carrinho',
+  trigger_first_purchase: 'Primeira compra',
+  trigger_repeat_purchase: 'Compra recorrente',
+  trigger_signup: 'Contato criado',
+  trigger_form_submitted: 'Formulário enviado',
+  trigger_popup_subscribed: 'Inscrito via popup',
+}
+
+function humanTriggerLabel(triggerType?: string): string {
+  if (!triggerType) return ''
+  return TRIGGER_TYPE_LABELS[triggerType] || triggerType.replace(/^trigger_/, '').replace(/_/g, ' ')
+}
+
 interface MergeTagPickerProps {
   isOpen: boolean
   onClose: () => void
-  onSelect: (tagValue: string) => void
+  /** Called with the full tag value ("{{ CheckoutURL }}") and, when the
+   *  catalog knows it, the human-friendly name ("Link de Recuperação") so
+   *  callers (text editor chip) can show a readable label. Existing
+   *  single-arg callers keep working — the extra arg is optional. */
+  onSelect: (tagValue: string, label?: string) => void
   context?: 'campaign' | 'automation'
   triggerType?: string
 }
@@ -175,8 +207,8 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
     })).filter(g => g.tags.length > 0)
   }, [search, isAutomation, triggerGroup, customGroup, canonicalGroup])
 
-  const handleSelect = (value: string) => {
-    onSelect(value)
+  const handleSelect = (value: string, label?: string) => {
+    onSelect(value, label)
     navigator.clipboard.writeText(value).catch(() => {})
     setCopiedTag(value)
     setTimeout(() => setCopiedTag(''), 1500)
@@ -216,7 +248,7 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
             <Zap className="w-3.5 h-3.5 text-violet-500 mt-0.5 flex-shrink-0" />
             <p className="text-[11px] text-violet-700">
               <strong>Tags do Gatilho</strong> são auto-detectadas dos eventos recentes
-              {triggerType ? ` de ${triggerType}` : ''} — todas as propriedades disponíveis no payload aparecem aqui em tempo real.
+              {triggerType ? ` de “${humanTriggerLabel(triggerType)}”` : ''} — todas as propriedades disponíveis no payload aparecem aqui em tempo real.
               {loadingDynamic && <Loader2 className="w-3 h-3 inline-block ml-1 animate-spin" />}
             </p>
           </div>
@@ -230,8 +262,23 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
             </div>
           ) : (
             <div className="space-y-4">
-              {availableGroups.map(group => (
+              {availableGroups.map((group, groupIdx) => (
                 <div key={group.name}>
+                  {/* Empty trigger state — no events discovered yet for this
+                      trigger. Rendered where the "Tags do Gatilho" group
+                      would appear (right after the canonical group) so the
+                      merchant understands WHY it's missing and what to use
+                      meanwhile. */}
+                  {isAutomation && !loadingDynamic && discovered.length === 0 && !search.trim() && groupIdx === 1 && (
+                    <div className="mb-4 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                      <p className="text-[11px] text-amber-800">
+                        Ainda não recebemos eventos deste gatilho. Assim que o primeiro
+                        evento chegar, as variáveis reais aparecem aqui. Enquanto isso,
+                        use as <strong>Tags Worder</strong> — funcionam sempre.
+                      </p>
+                    </div>
+                  )}
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.06em] mb-2 flex items-center gap-1">
                     {(() => { const MIcon = MERGE_ICON_MAP[group.icon]; return MIcon ? <MIcon className="w-3 h-3 text-gray-400" /> : null })()}{group.name}
                   </p>
@@ -239,7 +286,7 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
                     {group.tags.map((tag: any) => (
                       <button
                         key={tag.value}
-                        onClick={() => handleSelect(tag.value)}
+                        onClick={() => handleSelect(tag.value, tag.name)}
                         className="w-full flex items-center justify-between p-2.5 bg-white border border-gray-200 rounded-lg hover:border-brand-400 hover:bg-brand-50/30 transition-all text-left group"
                       >
                         <div className="min-w-0 flex-1">
@@ -257,7 +304,7 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
                           </div>
                         </div>
                         <span className="text-[10px] text-gray-300 group-hover:text-brand-500 flex-shrink-0 ml-2 transition-colors font-medium">
-                          {copiedTag === tag.value ? '✓ copiado' : 'inserir'}
+                          {copiedTag === tag.value ? '✓ inserido' : 'inserir'}
                         </span>
                       </button>
                     ))}

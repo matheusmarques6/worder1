@@ -2254,17 +2254,49 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
 
   const nodeMetrics = nodeId ? analyticsData[nodeId] : undefined;
 
-  // Fetch org defaults once and auto-populate sender if empty (Klaviyo-style)
+  // Where the auto-filled sender came from — drives the helper text next
+  // to the fields ("Padrão da loja" vs "Padrão da organização"). Stays
+  // null when the values were already set (user-typed or persisted).
+  const [senderSource, setSenderSource] = useState<'store' | 'org' | null>(null);
+
+  // Auto-populate sender if empty (Klaviyo-style). When the flow is bound
+  // to a store, the STORE's sender default wins — auto-filling the ORG
+  // default here used to re-introduce the sibling-store identity the
+  // per-store sender fix (/api/settings/store-email) exists to prevent.
+  // Org default is only the fallback when the flow has no store or the
+  // store has no email settings yet.
   useEffect(() => {
     if (config.senderName && config.senderEmail) return; // already filled
-    fetch('/api/settings/organization')
-      .then(r => r.json())
-      .then(d => {
-        const s = d?.organization?.email_settings || {};
-        if (!config.senderName && s.default_sender_name) onUpdate('senderName', s.default_sender_name);
-        if (!config.senderEmail && s.default_sender_email) onUpdate('senderEmail', s.default_sender_email);
-      })
-      .catch(() => { /* non-blocking */ });
+    let cancelled = false;
+    const apply = (s: any, source: 'store' | 'org') => {
+      if (cancelled) return false;
+      const hasAny = !!(s?.default_sender_name || s?.default_sender_email);
+      if (!hasAny) return false;
+      if (!config.senderName && s.default_sender_name) onUpdate('senderName', s.default_sender_name);
+      if (!config.senderEmail && s.default_sender_email) onUpdate('senderEmail', s.default_sender_email);
+      setSenderSource(source);
+      return true;
+    };
+    (async () => {
+      // 1) Store-scoped default (GET /api/settings/store-email?storeId=…
+      //    → { email_settings: { default_sender_name, default_sender_email, default_reply_to } })
+      if (storeId) {
+        try {
+          const r = await fetch(`/api/settings/store-email?storeId=${encodeURIComponent(storeId)}`);
+          if (r.ok) {
+            const d = await r.json();
+            if (apply(d?.email_settings, 'store')) return;
+          }
+        } catch { /* non-blocking — fall through to org default */ }
+      }
+      // 2) Org-level fallback
+      try {
+        const r = await fetch('/api/settings/organization');
+        const d = await r.json();
+        apply(d?.organization?.email_settings, 'org');
+      } catch { /* non-blocking */ }
+    })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2434,8 +2466,10 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-700">Nome do remetente</label>
-                {config.senderName && (
-                  <span className="text-[10px] text-zinc-400">Carregado das configurações</span>
+                {config.senderName && senderSource && (
+                  <span className="text-[10px] text-zinc-400">
+                    {senderSource === 'store' ? 'Padrão da loja' : 'Padrão da organização'}
+                  </span>
                 )}
               </div>
               <input type="text" value={config.senderName || ''} onChange={(e) => onUpdate('senderName', e.target.value)}
@@ -2444,8 +2478,10 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-700">Email do remetente <span className="text-red-500">*</span></label>
-                {config.senderEmail && (
-                  <span className="text-[10px] text-zinc-400">Carregado das configurações</span>
+                {config.senderEmail && senderSource && (
+                  <span className="text-[10px] text-zinc-400">
+                    {senderSource === 'store' ? 'Padrão da loja' : 'Padrão da organização'}
+                  </span>
                 )}
               </div>
               <input type="email" value={config.senderEmail || ''} onChange={(e) => onUpdate('senderEmail', e.target.value)}

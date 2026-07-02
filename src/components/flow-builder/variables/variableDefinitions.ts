@@ -41,35 +41,42 @@ export const CONTACT_VARIABLES: Variable[] = [
 // EVENT VARIABLES (Per trigger type)
 // ============================================
 
+// NOTE: event-scoped keys below use the CANONICAL merge-tag vocabulary
+// (CANONICAL_SPEC in src/lib/email/merge-tags.ts — {{ CheckoutURL }},
+// {{ Items[0].ProductName }}, ...). The previous snake_case paths
+// (event.cart_url, event.items[0].name, ...) did NOT match real payloads
+// and resolved to ''. Canonical tags resolve in the variable engine (all
+// channels) AND in resolveTriggerSmartTags (email). Keys with no canonical
+// equivalent were left as-is; contact.* keys resolve via the engine.
 export const ABANDONED_CART_VARIABLES: Variable[] = [
-  { key: 'event.cart_id', label: 'ID do Carrinho', description: 'Identificador único do carrinho', example: 'cart_123', category: 'event' },
-  { key: 'event.cart_url', label: 'URL do Carrinho', description: 'Link de recuperação do carrinho', example: 'https://loja.com/cart/abc', category: 'event' },
-  { key: 'event.total_value', label: 'Valor Total', description: 'Valor total do carrinho', example: 'R$ 299,90', category: 'event' },
-  { key: 'event.total_items', label: 'Total de Itens', description: 'Quantidade de itens no carrinho', example: '3', category: 'event' },
-  { key: 'event.currency', label: 'Moeda', description: 'Moeda do carrinho', example: 'BRL', category: 'event' },
+  { key: 'CheckoutID', label: 'ID do Checkout', description: 'Identificador único do checkout', example: '987654', category: 'event' },
+  { key: 'CheckoutURL', label: 'Link de Recuperação', description: 'Link de recuperação do checkout', example: 'https://loja.com/checkouts/recover/abc', category: 'event' },
+  { key: 'TotalPrice', label: 'Valor Total', description: 'Valor total do carrinho', example: '299.90', category: 'event' },
+  { key: 'ItemCount', label: 'Total de Itens', description: 'Quantidade de itens no carrinho', example: '3', category: 'event' },
+  { key: 'Currency', label: 'Moeda', description: 'Moeda do carrinho', example: 'BRL', category: 'event' },
   { key: 'event.abandoned_at', label: 'Data do Abandono', description: 'Data/hora do abandono', example: '22/01/2025 14:30', category: 'event' },
-  { key: 'event.items[0].name', label: 'Nome do 1º Produto', description: 'Nome do primeiro produto', example: 'Camiseta Azul', category: 'event' },
-  { key: 'event.items[0].price', label: 'Preço do 1º Produto', description: 'Preço do primeiro produto', example: 'R$ 99,90', category: 'event' },
-  { key: 'event.items[0].quantity', label: 'Qtd do 1º Produto', description: 'Quantidade do primeiro produto', example: '2', category: 'event' },
-  { key: 'event.items[0].image_url', label: 'Imagem do 1º Produto', description: 'URL da imagem do primeiro produto', example: 'https://...', category: 'event' },
-  { key: 'event.items[0].url', label: 'URL do 1º Produto', description: 'Link do primeiro produto', example: 'https://loja.com/produto', category: 'event' },
+  { key: 'Items[0].ProductName', label: 'Nome do 1º Produto', description: 'Nome do primeiro produto', example: 'Camiseta Azul', category: 'event' },
+  { key: 'Items[0].ItemPrice', label: 'Preço do 1º Produto', description: 'Preço do primeiro produto', example: '99.90', category: 'event' },
+  { key: 'Items[0].Quantity', label: 'Qtd do 1º Produto', description: 'Quantidade do primeiro produto', example: '2', category: 'event' },
+  { key: 'Items[0].ImageURL', label: 'Imagem do 1º Produto', description: 'URL da imagem do primeiro produto', example: 'https://...', category: 'event' },
+  { key: 'Items[0].ProductURL', label: 'URL do 1º Produto', description: 'Link do primeiro produto', example: 'https://loja.com/produto', category: 'event' },
 ];
 
 export const ORDER_VARIABLES: Variable[] = [
-  { key: 'event.order_id', label: 'Número do Pedido', description: 'Número identificador do pedido', example: '#12345', category: 'event' },
-  { key: 'event.order_status', label: 'Status do Pedido', description: 'Status atual do pedido', example: 'Aprovado', category: 'event' },
-  { key: 'event.total_value', label: 'Valor Total', description: 'Valor total do pedido', example: 'R$ 499,90', category: 'event' },
-  { key: 'event.subtotal', label: 'Subtotal', description: 'Subtotal do pedido', example: 'R$ 450,00', category: 'event' },
+  { key: 'OrderNumber', label: 'Número do Pedido', description: 'Número identificador do pedido', example: '1234', category: 'event' },
+  { key: 'FinancialStatus', label: 'Status do Pedido', description: 'Status financeiro do pedido', example: 'paid', category: 'event' },
+  { key: 'TotalPrice', label: 'Valor Total', description: 'Valor total do pedido', example: '499.90', category: 'event' },
+  { key: 'SubtotalPrice', label: 'Subtotal', description: 'Subtotal do pedido', example: '450.00', category: 'event' },
   { key: 'event.shipping_value', label: 'Valor do Frete', description: 'Valor do frete', example: 'R$ 49,90', category: 'event' },
   { key: 'event.discount_value', label: 'Valor do Desconto', description: 'Valor do desconto aplicado', example: 'R$ 50,00', category: 'event' },
-  { key: 'event.coupon_code', label: 'Cupom Usado', description: 'Código do cupom utilizado', example: 'PROMO10', category: 'event' },
+  { key: 'DiscountCodes', label: 'Cupom Usado', description: 'Cupons aplicados no pedido', example: 'PROMO10', category: 'event' },
   { key: 'event.payment_method', label: 'Forma de Pagamento', description: 'Método de pagamento usado', example: 'Cartão de Crédito', category: 'event' },
-  { key: 'event.tracking_code', label: 'Código de Rastreio', description: 'Código de rastreamento', example: 'BR123456789', category: 'event' },
-  { key: 'event.tracking_url', label: 'URL de Rastreio', description: 'Link para rastrear pedido', example: 'https://...', category: 'event' },
+  { key: 'Tracking.Number', label: 'Código de Rastreio', description: 'Código de rastreamento', example: 'BR123456789', category: 'event' },
+  { key: 'Tracking.URL', label: 'URL de Rastreio', description: 'Link para rastrear pedido', example: 'https://...', category: 'event' },
   { key: 'event.created_at', label: 'Data do Pedido', description: 'Data/hora da criação', example: '22/01/2025 14:30', category: 'event' },
-  { key: 'event.items[0].name', label: 'Nome do 1º Produto', description: 'Nome do primeiro produto', example: 'Camiseta Azul', category: 'event' },
-  { key: 'event.items[0].price', label: 'Preço do 1º Produto', description: 'Preço do primeiro produto', example: 'R$ 99,90', category: 'event' },
-  { key: 'event.items[0].quantity', label: 'Qtd do 1º Produto', description: 'Quantidade do primeiro produto', example: '2', category: 'event' },
+  { key: 'Items[0].ProductName', label: 'Nome do 1º Produto', description: 'Nome do primeiro produto', example: 'Camiseta Azul', category: 'event' },
+  { key: 'Items[0].ItemPrice', label: 'Preço do 1º Produto', description: 'Preço do primeiro produto', example: '99.90', category: 'event' },
+  { key: 'Items[0].Quantity', label: 'Qtd do 1º Produto', description: 'Quantidade do primeiro produto', example: '2', category: 'event' },
   { key: 'event.items[0].sku', label: 'SKU do 1º Produto', description: 'SKU do primeiro produto', example: 'CAM-AZU-M', category: 'event' },
 ];
 
@@ -207,39 +214,39 @@ export function getVariablesByTriggerType(triggerType: string): VariableCategory
       break;
     case 'trigger_viewed_product':
       eventVariables = [
-        { key: 'event.product_title', label: 'Nome do Produto', description: 'Titulo do produto visualizado', example: 'Camiseta Azul', category: 'event' },
+        { key: 'Items[0].ProductName', label: 'Nome do Produto', description: 'Titulo do produto visualizado', example: 'Camiseta Azul', category: 'event' },
         { key: 'event.product_id', label: 'ID do Produto', description: 'ID do produto', example: 'prod_123', category: 'event' },
-        { key: 'event.price', label: 'Preco', description: 'Preco do produto', example: 'R$ 99,90', category: 'event' },
-        { key: 'event.image_url', label: 'Imagem', description: 'URL da imagem', example: 'https://...', category: 'event' },
-        { key: 'event.product_url', label: 'URL do Produto', description: 'Link do produto', example: 'https://loja.com/produto', category: 'event' },
+        { key: 'Items[0].ItemPrice', label: 'Preco', description: 'Preco do produto', example: '99.90', category: 'event' },
+        { key: 'Items[0].ImageURL', label: 'Imagem', description: 'URL da imagem', example: 'https://...', category: 'event' },
+        { key: 'ProductURL', label: 'URL do Produto', description: 'Link do produto', example: 'https://loja.com/produto', category: 'event' },
         { key: 'event.collection', label: 'Colecao', description: 'Colecao do produto', example: 'Verao 2025', category: 'event' },
       ];
       eventLabel = 'Produto Visualizado';
       break;
     case 'trigger_added_to_cart':
       eventVariables = [
-        { key: 'event.product_title', label: 'Nome do Produto', description: 'Produto adicionado', example: 'Camiseta Azul', category: 'event' },
+        { key: 'Items[0].ProductName', label: 'Nome do Produto', description: 'Produto adicionado', example: 'Camiseta Azul', category: 'event' },
         { key: 'event.product_id', label: 'ID do Produto', description: 'ID do produto', example: 'prod_123', category: 'event' },
-        { key: 'event.price', label: 'Preco', description: 'Preco unitario', example: 'R$ 99,90', category: 'event' },
-        { key: 'event.quantity', label: 'Quantidade', description: 'Quantidade adicionada', example: '2', category: 'event' },
-        { key: 'event.image_url', label: 'Imagem', description: 'URL da imagem', example: 'https://...', category: 'event' },
+        { key: 'Items[0].ItemPrice', label: 'Preco', description: 'Preco unitario', example: '99.90', category: 'event' },
+        { key: 'Items[0].Quantity', label: 'Quantidade', description: 'Quantidade adicionada', example: '2', category: 'event' },
+        { key: 'Items[0].ImageURL', label: 'Imagem', description: 'URL da imagem', example: 'https://...', category: 'event' },
       ];
       eventLabel = 'Adicionado ao Carrinho';
       break;
     case 'trigger_fulfilled_order':
       eventVariables = [
-        { key: 'event.order_id', label: 'Numero do Pedido', description: 'ID do pedido', example: '#12345', category: 'event' },
-        { key: 'event.total_price', label: 'Valor Total', description: 'Valor do pedido', example: 'R$ 299,90', category: 'event' },
-        { key: 'event.tracking_number', label: 'Codigo de Rastreio', description: 'Rastreio do envio', example: 'BR123456', category: 'event' },
-        { key: 'event.tracking_url', label: 'URL de Rastreio', description: 'Link de rastreio', example: 'https://...', category: 'event' },
+        { key: 'OrderNumber', label: 'Numero do Pedido', description: 'Numero do pedido', example: '1234', category: 'event' },
+        { key: 'TotalPrice', label: 'Valor Total', description: 'Valor do pedido', example: '299.90', category: 'event' },
+        { key: 'Tracking.Number', label: 'Codigo de Rastreio', description: 'Rastreio do envio', example: 'BR123456', category: 'event' },
+        { key: 'Tracking.URL', label: 'URL de Rastreio', description: 'Link de rastreio', example: 'https://...', category: 'event' },
         { key: 'event.tracking_company', label: 'Transportadora', description: 'Nome da transportadora', example: 'Correios', category: 'event' },
       ];
       eventLabel = 'Pedido Enviado';
       break;
     case 'trigger_cancelled_order':
       eventVariables = [
-        { key: 'event.order_id', label: 'Numero do Pedido', description: 'ID do pedido cancelado', example: '#12345', category: 'event' },
-        { key: 'event.total_price', label: 'Valor Total', description: 'Valor do pedido', example: 'R$ 299,90', category: 'event' },
+        { key: 'OrderNumber', label: 'Numero do Pedido', description: 'Numero do pedido cancelado', example: '1234', category: 'event' },
+        { key: 'TotalPrice', label: 'Valor Total', description: 'Valor do pedido', example: '299.90', category: 'event' },
         { key: 'event.cancel_reason', label: 'Motivo', description: 'Motivo do cancelamento', example: 'Cliente desistiu', category: 'event' },
       ];
       eventLabel = 'Pedido Cancelado';

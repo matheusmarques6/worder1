@@ -108,11 +108,11 @@ export const MERGE_TAGS: MergeTag[] = [
 
   // Personalizado
   {
-    tag: 'custom.nome_do_campo|valor padrão',
+    tag: 'custom.nome_do_campo',
     label: 'Campo Custom',
     category: 'custom',
-    sampleValue: 'valor padrão',
-    description: 'Troque "nome_do_campo" pelo seu campo. Use | para o valor padrão (fallback).',
+    sampleValue: 'valor do campo',
+    description: 'Troque nome_do_campo pelo seu campo. Defina o valor padrão clicando na variável inserida.',
   },
 ];
 

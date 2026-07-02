@@ -91,6 +91,21 @@ describe('variable engine — flat email tags and custom fields stay intact', ()
   });
 });
 
+describe('variable engine — smart trigger tags stay intact for resolveTriggerSmartTags', () => {
+  it('leaves the 6 smart-tag paths literal on miss (resolved downstream in email)', () => {
+    for (const tag of [
+      'trigger.link',
+      'trigger.first_item_image',
+      'trigger.first_item_name',
+      'trigger.first_item_price',
+      'trigger.total',
+      'trigger.items_count',
+    ]) {
+      expect(variableEngine.process(`{{ ${tag} }}`, context)).toBe(`{{ ${tag} }}`);
+    }
+  });
+});
+
 describe('variable engine — unchanged consuming behavior for engine-owned misses', () => {
   it("random {{ unknown_thing }} still resolves to ''", () => {
     expect(variableEngine.process('{{ unknown_thing }}', context)).toBe('');

@@ -33,6 +33,21 @@ const FLAT_EMAIL_TAG_SET = new Set(
   MERGE_TAGS.map((t) => t.tag).filter((tag) => !tag.includes('.'))
 );
 
+// Smart tags ({{ trigger.link }}, {{ trigger.first_item_* }}, ...) that
+// resolveTriggerSmartTags resolves DOWNSTREAM in the email pipeline with
+// multi-source fallbacks (CheckoutURL > AbandonedCheckoutURL > ProductURL
+// > ... > store URL). The engine can't reproduce that logic — on a miss it
+// must leave the literal intact instead of consuming it to ''. Every OTHER
+// trigger.* miss keeps the ''-on-miss behavior.
+const SMART_TRIGGER_TAG_SET = new Set([
+  'trigger.link',
+  'trigger.first_item_image',
+  'trigger.first_item_name',
+  'trigger.first_item_price',
+  'trigger.total',
+  'trigger.items_count',
+]);
+
 // ============================================
 // TYPES
 // ============================================
@@ -479,13 +494,15 @@ export class VariableEngine {
     // Convert to string for template replacement
     if (value === null || value === undefined) {
       // Non-consuming for downstream namespaces: canonical whitelist tags,
-      // flat email tags and custom.* fields get resolved later in the email
-      // pipeline (resolveTriggerSmartTags + renderMergeTags with the full
-      // mergeData). Everything else (incl. trigger.*/event.* misses) keeps
-      // the ''-on-miss behavior WhatsApp/SMS rely on.
+      // flat email tags, custom.* fields and the trigger.* SMART tags get
+      // resolved later in the email pipeline (resolveTriggerSmartTags +
+      // renderMergeTags with the full mergeData). Everything else (incl.
+      // other trigger.*/event.* misses) keeps the ''-on-miss behavior
+      // WhatsApp/SMS rely on.
       if (
         CANONICAL_PATH_SET.has(path) ||
         FLAT_EMAIL_TAG_SET.has(path) ||
+        SMART_TRIGGER_TAG_SET.has(path) ||
         path.startsWith('custom.')
       ) {
         return original;

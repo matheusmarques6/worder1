@@ -7,23 +7,23 @@ import { cn } from '@/lib/utils';
 
 // ── Event-type labels (clean, muted style — no heavy coloring) ────────────
 const EVENT_LABELS: Record<string, string> = {
-  placed_order:        'Placed Order',
-  order_paid:          'Order Paid',
-  fulfilled_order:     'Fulfilled Order',
-  cancelled_order:     'Cancelled Order',
-  refunded_order:      'Refunded Order',
-  checkout_started:    'Checkout Started',
-  checkout_abandoned:  'Checkout Abandoned',
-  checkout_completed:  'Checkout Completed',
-  abandoned_cart:      'Abandoned Cart',
-  added_to_cart:       'Added to Cart',
-  viewed_product:      'Viewed Product',
-  viewed_collection:   'Viewed Collection',
-  profile_created:     'Profile Created',
-  profile_updated:     'Profile Updated',
-  subscribed_email:    'Subscribed',
-  customer_created:    'Customer Created',
-  form_submitted:      'Form Submitted',
+  placed_order:        'Pedido realizado',
+  order_paid:          'Pedido pago',
+  fulfilled_order:     'Pedido enviado',
+  cancelled_order:     'Pedido cancelado',
+  refunded_order:      'Pedido reembolsado',
+  checkout_started:    'Checkout iniciado',
+  checkout_abandoned:  'Checkout abandonado',
+  checkout_completed:  'Checkout concluído',
+  abandoned_cart:      'Carrinho abandonado',
+  added_to_cart:       'Adicionado ao carrinho',
+  viewed_product:      'Produto visualizado',
+  viewed_collection:   'Coleção visualizada',
+  profile_created:     'Perfil criado',
+  profile_updated:     'Perfil atualizado',
+  subscribed_email:    'Inscrito por e-mail',
+  customer_created:    'Cliente criado',
+  form_submitted:      'Formulário enviado',
 };
 
 function eventLabel(type: string): string {
@@ -282,7 +282,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
       {/* ── Header ───────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-6 h-14 border-b border-zinc-200 bg-white">
         <div className="flex items-center gap-7">
-          <h1 className="text-[15px] font-semibold text-zinc-900 tracking-tight">Preview mode</h1>
+          <h1 className="text-[15px] font-semibold text-zinc-900 tracking-tight">Modo de visualização</h1>
           <div className="flex gap-0.5 bg-zinc-100 rounded-lg p-0.5">
             <button
               onClick={() => setActiveTab('preview')}
@@ -483,7 +483,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
                     {Object.keys(eventProps).length > 0 ? (
                       <>
                         <p className="text-[10.5px] text-zinc-400 mb-2 leading-snug">
-                          Clique em qualquer campo para copiar a variável <code className="font-mono">{`{{ trigger.<path> }}`}</code> e colar no editor.
+                          Clique em qualquer campo para copiar a variável <code className="font-mono">{`{{ event.<path> }}`}</code> e colar no editor.
                         </p>
                         <div className="space-y-0">{renderTree(eventProps)}</div>
                       </>

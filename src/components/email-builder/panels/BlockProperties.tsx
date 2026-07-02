@@ -732,7 +732,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                 <li>Pedido pago / cancelado → itens do pedido</li>
                 <li>Voltou em estoque → o produto que voltou</li>
               </ul>
-              <p className="text-[10px] text-zinc-400 mt-1.5">O botão usa <code className="font-mono">{'{{ trigger.link }}'}</code> que se adapta para checkout/produto/pedido. Clique nos elementos no canvas para editar individualmente.</p>
+              <p className="text-[10px] text-zinc-400 mt-1.5">O botão adapta o link automaticamente ao gatilho (checkout/produto/pedido). Para personalizar, use a tag canônica <code className="font-mono">{'{{ CheckoutURL }}'}</code>. Clique nos elementos no canvas para editar individualmente.</p>
             </div>
           </div>
 
@@ -789,8 +789,8 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                   <TextInput value={p.buttonText ?? 'Comprar agora'} onChange={v => onChange('buttonText', v)} placeholder="Comprar agora" />
                 </Field>
                 <Field label="Link do botão">
-                  <TextInput value={p.buttonHref ?? '{{ trigger.link }}'} onChange={v => onChange('buttonHref', v)} placeholder="{{ trigger.link }}" />
-                  <p className="text-[10px] text-zinc-400 mt-1">Use <code className="font-mono">{'{{ trigger.link }}'}</code> para adaptar ao gatilho.</p>
+                  <TextInput value={p.buttonHref ?? '{{ trigger.link }}'} onChange={v => onChange('buttonHref', v)} placeholder="{{ CheckoutURL }}" />
+                  <p className="text-[10px] text-zinc-400 mt-1">Use <code className="font-mono">{'{{ CheckoutURL }}'}</code> para o link de recuperação do checkout. O valor padrão se adapta ao gatilho automaticamente.</p>
                 </Field>
                 <div className="grid grid-cols-2 gap-2">
                   <Field label="Cor de fundo"><ColorInput value={p.buttonColor || '#111827'} onChange={v => onChange('buttonColor', v)} /></Field>
