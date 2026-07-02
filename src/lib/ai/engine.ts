@@ -22,6 +22,7 @@ import { getActiveTools } from './tools/registry'
 import { runToolLoop } from './tools/loop'
 import { trackAiUsage } from './cost-tracker'
 import { checkAiBudget, AiBudgetExceededError } from './budget'
+import { decodeProviderKey } from './provider-key-codec'
 
 // =====================================================
 // AI AGENT ENGINE CLASS
@@ -375,7 +376,7 @@ export class AIAgentEngine {
       .eq('provider', 'openai')
       .eq('is_active', true)
       .maybeSingle()
-    return data?.api_key || null
+    return data?.api_key ? decodeProviderKey(data.api_key) : null
   }
 
   /**
@@ -529,7 +530,7 @@ export async function createAgentEngine(
   // BYO total (Onda 13.6): nada de fallback pra process.env. Sem chave da org
   // no provider do agente -> erro claro pro caller (cloud-runner ja trata
   // disso via `no_valid_api_key` antes de chegar aqui).
-  const apiKey = apiKeyData?.api_key || ''
+  const apiKey = apiKeyData?.api_key ? decodeProviderKey(apiKeyData.api_key) : ''
   const baseUrl = apiKeyData?.base_url || undefined
 
   if (!apiKey) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
+import { decodeProviderKey } from '@/lib/ai/provider-key-codec'
 export const dynamic = 'force-dynamic';
 
 async function getOrgId(supabase: any) {
@@ -96,6 +97,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Decripta a chave armazenada (rows legadas em plaintext passam direto)
+    const providerApiKey = decodeProviderKey(apiKeyData.api_key)
+
     // Montar mensagens
     const messages = [
       { role: 'system', content: aiConfig.system_prompt },
@@ -113,25 +117,25 @@ export async function POST(request: NextRequest) {
 
     switch (aiConfig.provider) {
       case 'openai':
-        const openaiResult = await callOpenAI(apiKeyData.api_key, aiConfig.model, messages, aiConfig.temperature, aiConfig.max_tokens)
+        const openaiResult = await callOpenAI(providerApiKey, aiConfig.model, messages, aiConfig.temperature, aiConfig.max_tokens)
         response = openaiResult.content
         tokensUsed = openaiResult.tokens
         break
 
       case 'anthropic':
-        const anthropicResult = await callAnthropic(apiKeyData.api_key, aiConfig.model, messages, aiConfig.temperature, aiConfig.max_tokens)
+        const anthropicResult = await callAnthropic(providerApiKey, aiConfig.model, messages, aiConfig.temperature, aiConfig.max_tokens)
         response = anthropicResult.content
         tokensUsed = anthropicResult.tokens
         break
 
       case 'google':
-        const googleResult = await callGoogle(apiKeyData.api_key, aiConfig.model, messages, aiConfig.temperature, aiConfig.max_tokens)
+        const googleResult = await callGoogle(providerApiKey, aiConfig.model, messages, aiConfig.temperature, aiConfig.max_tokens)
         response = googleResult.content
         tokensUsed = googleResult.tokens
         break
 
       case 'groq':
-        const groqResult = await callGroq(apiKeyData.api_key, aiConfig.model, messages, aiConfig.temperature, aiConfig.max_tokens)
+        const groqResult = await callGroq(providerApiKey, aiConfig.model, messages, aiConfig.temperature, aiConfig.max_tokens)
         response = groqResult.content
         tokensUsed = groqResult.tokens
         break
@@ -139,7 +143,7 @@ export async function POST(request: NextRequest) {
       default:
         // Fallback para OpenAI-compatible
         const defaultResult = await callOpenAICompatible(
-          apiKeyData.api_key,
+          providerApiKey,
           aiConfig.model,
           messages,
           aiConfig.temperature,

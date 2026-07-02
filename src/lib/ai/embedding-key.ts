@@ -10,6 +10,7 @@
 // =====================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { decodeProviderKey } from './provider-key-codec'
 
 export async function resolveEmbeddingKey(
   supabase: SupabaseClient,
@@ -22,5 +23,5 @@ export async function resolveEmbeddingKey(
     .eq('provider', 'openai')
     .eq('is_active', true)
     .maybeSingle()
-  return data?.api_key || null
+  return data?.api_key ? decodeProviderKey(data.api_key) : null
 }

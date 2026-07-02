@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
+import { encodeProviderKey } from '@/lib/ai/provider-key-codec'
 export const dynamic = 'force-dynamic';
 
 // ✅ MIGRADO PARA RLS - Apenas admins podem gerenciar API keys
@@ -82,8 +83,8 @@ export async function POST(request: NextRequest) {
       .upsert({
         organization_id: user.organization_id, // Usa org do usuário autenticado
         provider,
-        api_key,
-        api_key_hint: maskApiKey(api_key),
+        api_key: encodeProviderKey(api_key), // Criptografado at-rest (AES-256-GCM v2)
+        api_key_hint: maskApiKey(api_key), // Hint derivado do PLAINTEXT
         base_url: base_url || null,
         is_active: true,
         is_valid: validation.valid,

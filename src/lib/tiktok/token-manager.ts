@@ -12,7 +12,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
+import { encryptSecret, decryptSecret, isEncryptedSecret } from '@/lib/crypto/secret-box';
 
 // ==========================================
 // CONSTANTS
@@ -62,34 +62,11 @@ export interface TikTokApiError extends Error {
 // ENCRYPTION UTILITIES
 // ==========================================
 
-const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
-const IV_LENGTH = 16;
-
-function getEncryptionKey(): Buffer {
-  const key = process.env.ENCRYPTION_KEY;
-  if (!key || key.length < 32) {
-    // Em desenvolvimento, usa uma chave padrão (NÃO USAR EM PRODUÇÃO)
-    if (process.env.NODE_ENV === 'development') {
-      return scryptSync('dev-key-not-for-production-use!', 'salt', 32);
-    }
-    throw new Error('ENCRYPTION_KEY must be at least 32 characters');
-  }
-  return scryptSync(key, 'salt', 32);
-}
-
 export function encryptToken(token: string): string {
   try {
-    const key = getEncryptionKey();
-    const iv = randomBytes(IV_LENGTH);
-    const cipher = createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
-    
-    let encrypted = cipher.update(token, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    
-    const authTag = cipher.getAuthTag();
-    
-    // Format: iv:authTag:encryptedData
-    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+    // Delega para o secret-box canonico (AES-256-GCM, salt aleatorio por
+    // segredo — formato v2). Tokens legados iv:tag:cipher continuam legiveis.
+    return encryptSecret(token);
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.error('[TikTok] Encryption error:', error);
@@ -100,29 +77,11 @@ export function encryptToken(token: string): string {
 
 export function decryptToken(encryptedToken: string): string {
   try {
-    // Se não está encriptado (legado), retorna como está
-    if (!encryptedToken.includes(':')) {
+    // Token legado em texto plano (sem envelope) → retorna como esta.
+    if (!isEncryptedSecret(encryptedToken)) {
       return encryptedToken;
     }
-    
-    const parts = encryptedToken.split(':');
-    if (parts.length !== 3) {
-      return encryptedToken;
-    }
-    
-    const [ivHex, authTagHex, encrypted] = parts;
-    
-    const key = getEncryptionKey();
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
-    
-    const decipher = createDecipheriv(ENCRYPTION_ALGORITHM, key, iv);
-    decipher.setAuthTag(authTag);
-    
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    
-    return decrypted;
+    return decryptSecret(encryptedToken);
   } catch {
     // Fallback para token não encriptado (legado)
     return encryptedToken;

@@ -12,7 +12,8 @@ describe('token-encryption', () => {
       'EAAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
     const cipher = encryptToken(token);
     expect(cipher).not.toBe(token);
-    expect(cipher.split(':').length).toBe(3);
+    expect(cipher.split(':').length).toBe(5); // v2:salt:iv:tag:cipher
+    expect(cipher.split(':')[0]).toBe('v2');
     expect(decryptToken(cipher)).toBe(token);
   });
 

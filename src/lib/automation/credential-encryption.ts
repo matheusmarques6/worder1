@@ -3,7 +3,8 @@
  * AES-256-GCM encryption for secure credential storage
  */
 
-import crypto, { CipherGCM, DecipherGCM } from 'crypto';
+import crypto from 'crypto';
+import { encryptSecret, decryptSecret } from '@/lib/crypto/secret-box';
 
 // ============================================
 // TYPES
@@ -21,22 +22,20 @@ export interface EncryptedData {
 
 class CredentialEncryption {
   private static instance: CredentialEncryption;
-  private key: Buffer;
-  private algorithm = 'aes-256-gcm' as const;
 
   private constructor() {
+    // encrypt()/decrypt() delegam para o secret-box canonico (que valida
+    // ENCRYPTION_KEY em produção e tem fallback de dev). Mantemos apenas a
+    // validação em produção aqui por defesa; a derivação de chave saiu daqui.
     const encryptionKey = process.env.ENCRYPTION_KEY;
-    
-    if (!encryptionKey) {
-      throw new Error('ENCRYPTION_KEY environment variable is required');
+    if (process.env.NODE_ENV === 'production') {
+      if (!encryptionKey) {
+        throw new Error('ENCRYPTION_KEY environment variable is required');
+      }
+      if (encryptionKey.length < 32) {
+        throw new Error('ENCRYPTION_KEY must be at least 32 characters');
+      }
     }
-    
-    if (encryptionKey.length < 32) {
-      throw new Error('ENCRYPTION_KEY must be at least 32 characters');
-    }
-    
-    // Create a 32-byte key from the environment variable
-    this.key = crypto.scryptSync(encryptionKey, 'salt', 32);
   }
 
   public static getInstance(): CredentialEncryption {
@@ -47,43 +46,20 @@ class CredentialEncryption {
   }
 
   /**
-   * Encrypt plaintext data
+   * Encrypt plaintext data.
+   * Delega para o secret-box canonico (AES-256-GCM, salt aleatorio por
+   * segredo — formato v2). Valores legados `iv:tag:cipher` (salt estatico)
+   * continuam legiveis em decrypt() porque a chave derivada e a mesma.
    */
   public encrypt(plaintext: string): string {
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(this.algorithm, this.key, iv) as CipherGCM;
-    
-    let encrypted = cipher.update(plaintext, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    
-    const authTag = cipher.getAuthTag();
-    
-    // Format: iv:authTag:encryptedData (all hex encoded)
-    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+    return encryptSecret(plaintext);
   }
 
   /**
-   * Decrypt encrypted data
+   * Decrypt encrypted data (aceita v2 e legado 3-partes).
    */
   public decrypt(ciphertext: string): string {
-    const parts = ciphertext.split(':');
-    
-    if (parts.length !== 3) {
-      throw new Error('Invalid encrypted data format');
-    }
-    
-    const [ivHex, authTagHex, encryptedData] = parts;
-    
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
-    
-    const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv) as DecipherGCM;
-    decipher.setAuthTag(authTag);
-    
-    let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    
-    return decrypted;
+    return decryptSecret(ciphertext);
   }
 
   /**

@@ -10,6 +10,7 @@
 // =====================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { decodeProviderKey } from './provider-key-codec'
 
 export interface JudgeKeyResolved {
   apiKey: string
@@ -31,7 +32,7 @@ async function tryOne(
     .eq('is_active', true)
     .maybeSingle()
   if (!data?.api_key) return null
-  return { apiKey: data.api_key, baseUrl: data.base_url ?? undefined, provider }
+  return { apiKey: decodeProviderKey(data.api_key), baseUrl: data.base_url ?? undefined, provider }
 }
 
 export async function resolveJudgeKey(
