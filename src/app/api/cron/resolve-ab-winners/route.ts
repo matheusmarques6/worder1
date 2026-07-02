@@ -115,17 +115,16 @@ export async function GET(req: NextRequest) {
 
       const winner: 'a' | 'b' = rate('b') > rate('a') ? 'b' : 'a'
 
-      await supabaseAdmin
-        .from('email_campaigns')
-        .update({
-          ab_winner: winner,
-          ab_resolved_at: new Date().toISOString(),
-        })
-        .eq('id', camp.id)
+      // NOTE: ab_winner is intentionally NOT set here. It must be marked ONLY
+      // AFTER the winner broadcast below completes successfully — otherwise the
+      // `.is('ab_winner', null)` guard would exclude this campaign on the next
+      // run and the rest of the audience would never receive the winner if a
+      // send-batch fetch failed. See the "Mark resolved" block after the loop.
 
       // ── Send winner to remaining contacts ──
       // Resolve full contact list and subtract already-sent
       let remainingContactIds: string[] = []
+      let resolveFailed = false
       try {
         let allContactIds: string[] = []
 
@@ -151,13 +150,20 @@ export async function GET(req: NextRequest) {
 
         remainingContactIds = allContactIds.filter(id => !alreadySentContactIds.has(id))
       } catch (e: any) {
+        resolveFailed = true
         console.error(`[AB-Winner] Failed to resolve remaining contacts for ${camp.id}:`, e?.message)
       }
 
+      // If we couldn't even resolve the audience, do NOT mark resolved — leave
+      // ab_winner null so the next cron run retries.
+      if (resolveFailed) {
+        console.warn(`[AB] Campaign ${camp.id} — audience resolution failed, leaving unresolved for retry`)
+        continue
+      }
+
       let remainingSent = 0
+      let broadcastFailed = false
       if (remainingContactIds.length > 0) {
-        // Force winner variant for all remaining contacts
-        const winnerVariants = remainingContactIds.map(id => ({ id, variant: winner }))
         const BATCH_SIZE = 50
         const batches = []
         for (let i = 0; i < remainingContactIds.length; i += BATCH_SIZE) {
@@ -166,7 +172,7 @@ export async function GET(req: NextRequest) {
 
         for (let i = 0; i < batches.length; i++) {
           try {
-            await fetch(`${baseUrl}/api/email/campaigns/send-batch`, {
+            const resp = await fetch(`${baseUrl}/api/email/campaigns/send-batch`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'X-Internal': 'true' },
               body: JSON.stringify({
@@ -178,14 +184,40 @@ export async function GET(req: NextRequest) {
                 organizationId: camp.organization_id,
               }),
             })
+            // fetch() does not throw on HTTP 4xx/5xx — must inspect resp.ok.
+            if (!resp.ok) {
+              broadcastFailed = true
+              console.error(`[AB-Winner] Batch ${i + 1} HTTP ${resp.status} for ${camp.id}`)
+              continue
+            }
             remainingSent += batches[i].length
           } catch (e: any) {
+            broadcastFailed = true
             console.error(`[AB-Winner] Batch ${i + 1} failed for ${camp.id}:`, e?.message)
           }
         }
 
         console.log(`[AB-Winner] Sent winner '${winner}' to ${remainingSent} remaining contacts for campaign ${camp.id}`)
       }
+
+      // If any batch failed, leave ab_winner null so the next cron run retries.
+      // Contacts already sent the winner are excluded via alreadySentContactIds
+      // (recomputed from email_sends each run), so retries do NOT double-send.
+      if (broadcastFailed) {
+        console.warn(`[AB] Campaign ${camp.id} — broadcast incomplete (sent ${remainingSent}), leaving unresolved for retry`)
+        continue
+      }
+
+      // ── Mark resolved ── (exactly once, only after a fully successful
+      // broadcast — or when there was nothing left to send). This is what makes
+      // the next run's `.is('ab_winner', null)` guard skip the campaign.
+      await supabaseAdmin
+        .from('email_campaigns')
+        .update({
+          ab_winner: winner,
+          ab_resolved_at: new Date().toISOString(),
+        })
+        .eq('id', camp.id)
 
       resolved.push({
         campaign_id: camp.id,

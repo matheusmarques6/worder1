@@ -36,6 +36,11 @@ export async function GET(request: NextRequest) {
       .from('customer_segments')
       .select('id, organization_id, rules, rules_logic, rfm_segments, segment_type')
       .in('segment_type', ['dynamic', 'rfm'])
+      // Drain the stalest (and never-counted) segments first so the bounded
+      // batch rotates across ALL segments run-over-run. Without an explicit
+      // order the DB returns an arbitrary (effectively head-of-table) 500 set
+      // every run, permanently starving the tail's member_count/last_count_at.
+      .order('last_count_at', { ascending: true, nullsFirst: true })
       .limit(500);
 
     if (error) {

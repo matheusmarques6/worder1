@@ -97,9 +97,10 @@ export async function getKlaviyoMetrics(
     // Buscar campanhas com filtro de data
     const campaignsUrl = `${baseUrl}/campaigns?filter=and(equals(messages.channel,'email'),greater-or-equal(send_time,${startIso}T00:00:00Z),less-or-equal(send_time,${endIso}T23:59:59Z))`
     
-    const campaignsResponse = await fetch(campaignsUrl, { 
+    const campaignsResponse = await fetch(campaignsUrl, {
       headers,
-      next: { revalidate: 300 } // Cache por 5 minutos
+      next: { revalidate: 300 }, // Cache por 5 minutos
+      signal: AbortSignal.timeout(10000),
     })
 
     if (!campaignsResponse.ok) {

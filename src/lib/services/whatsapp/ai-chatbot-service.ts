@@ -374,6 +374,7 @@ async function callOpenAI(
       temperature,
       max_tokens: maxTokens,
     }),
+    signal: AbortSignal.timeout(15000),
   })
 
   if (!response.ok) {

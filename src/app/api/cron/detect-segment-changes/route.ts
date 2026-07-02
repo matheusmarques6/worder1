@@ -35,6 +35,13 @@ export async function GET(req: NextRequest) {
       .from('customer_segments')
       .select('id, organization_id, rules, rules_logic, rfm_segments, segment_type')
       .in('segment_type', ['dynamic', 'rfm'])
+      // Rotate through ALL segments run-over-run instead of always re-checking
+      // the arbitrary first 200. last_evaluated_at is the "least recently
+      // evaluated" timestamp maintained on customer_segments (segments_v2
+      // foundation migration); ordering ascending nullsFirst drains the
+      // never-evaluated and stalest segments first so entry/exit detection
+      // eventually reaches every segment.
+      .order('last_evaluated_at', { ascending: true, nullsFirst: true })
       .limit(200)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { getAuthClient, authError } from '@/lib/api-utils'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy service-role client — created only when the handler runs so a
+// missing env var at build/import time doesn't throw.
+let _supabase: SupabaseClient | null = null
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+  }
+  return _supabase
+}
 
 // =============================================
 // GET - List NPS Surveys
@@ -14,6 +22,7 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()
+    const supabase = getSupabase()
     const organizationId = auth.user.organization_id
 
     const { searchParams } = new URL(request.url)
@@ -106,6 +115,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()
+    const supabase = getSupabase()
     const organization_id = auth.user.organization_id
 
     const body = await request.json()
@@ -244,6 +254,7 @@ export async function PUT(request: NextRequest) {
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()
+    const supabase = getSupabase()
     const organizationId = auth.user.organization_id
 
     // Multi-org PUT: user can edit surveys from any org they belong
@@ -294,6 +305,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()
+    const supabase = getSupabase()
     const organizationId = auth.user.organization_id
 
     const { data: memberships } = await supabase

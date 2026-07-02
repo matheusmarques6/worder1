@@ -44,7 +44,22 @@ export async function GET(req: NextRequest) {
     let dispatched = 0
     const dayKey = new Date().toISOString().slice(0, 10)
 
-    for (const auto of automations) {
+    // Wall-clock budget: stop starting new work with margin under
+    // maxDuration=60s so the handler returns cleanly instead of being
+    // killed mid-dispatch. Date.now() is fine to use in a route handler.
+    const TIME_BUDGET_MS = 55_000
+    const PAGE_SIZE = 500
+    let budgetExhausted = false
+    let remainingAutomations = 0
+
+    for (let ai = 0; ai < automations.length; ai++) {
+      if (Date.now() - start > TIME_BUDGET_MS) {
+        budgetExhausted = true
+        remainingAutomations = automations.length - ai
+        break
+      }
+
+      const auto = automations[ai]
       const days = Number(auto.trigger_config?.days ?? 30)
       if (!days || days < 1) continue
 
@@ -55,42 +70,77 @@ export async function GET(req: NextRequest) {
       // por loja — sem isso o flow do Dr. Melaxin disparava re-
       // engagement em contatos do Based também. Inclui contatos com
       // store_id IS NULL (legacy backfill pending).
-      let contactsQuery = supabaseAdmin
-        .from('contacts')
-        .select('id, last_active_at, store_id')
-        .eq('organization_id', auto.organization_id)
-        .lte('last_active_at', threshold)
-        .eq('is_active', true)
-        .limit(500)
-      if (auto.store_id) {
-        contactsQuery = contactsQuery.or(`store_id.eq.${auto.store_id},store_id.is.null`)
-      }
-      const { data: contacts } = await contactsQuery
+      //
+      // Paginate by last_active_at ascending (oldest-inactive first) in
+      // PAGE_SIZE .range() chunks until the matching set is exhausted. An
+      // org with >500 inactive contacts previously only ever dispatched an
+      // arbitrary 500 per run; the idempotencyKey dedups already-dispatched
+      // contacts, so draining oldest-first across runs eventually reaches
+      // everyone without needing a cursor column.
+      let from = 0
+      let orgExhausted = false
+      while (!orgExhausted) {
+        if (Date.now() - start > TIME_BUDGET_MS) {
+          budgetExhausted = true
+          remainingAutomations = automations.length - ai
+          break
+        }
 
-      for (const c of contacts || []) {
-        await dispatchTrigger({
-          organizationId: auto.organization_id,
-          // Propaga store da automation (com fallback pro do contato)
-          // pra que runs criados aqui sejam visíveis em views
-          // store-scoped.
-          storeId: auto.store_id || c.store_id || null,
-          triggerType: 'trigger_inactivity',
-          contactId: c.id,
-          triggerData: {
-            inactive_days: days,
-            last_active_at: c.last_active_at,
-          },
-          matchConfig: () => true,
-          idempotencyKey: `inactivity:${auto.id}:${c.id}:${dayKey}`,
-        })
-        dispatched++
+        let contactsQuery = supabaseAdmin
+          .from('contacts')
+          .select('id, last_active_at, store_id')
+          .eq('organization_id', auto.organization_id)
+          .lte('last_active_at', threshold)
+          .eq('is_active', true)
+          .order('last_active_at', { ascending: true, nullsFirst: true })
+          .range(from, from + PAGE_SIZE - 1)
+        if (auto.store_id) {
+          contactsQuery = contactsQuery.or(`store_id.eq.${auto.store_id},store_id.is.null`)
+        }
+        const { data: contacts } = await contactsQuery
+        const batch = contacts || []
+
+        for (const c of batch) {
+          await dispatchTrigger({
+            organizationId: auto.organization_id,
+            // Propaga store da automation (com fallback pro do contato)
+            // pra que runs criados aqui sejam visíveis em views
+            // store-scoped.
+            storeId: auto.store_id || c.store_id || null,
+            triggerType: 'trigger_inactivity',
+            contactId: c.id,
+            triggerData: {
+              inactive_days: days,
+              last_active_at: c.last_active_at,
+            },
+            matchConfig: () => true,
+            idempotencyKey: `inactivity:${auto.id}:${c.id}:${dayKey}`,
+          })
+          dispatched++
+        }
+
+        // Fewer than a full page → this org's inactive set is drained.
+        if (batch.length < PAGE_SIZE) orgExhausted = true
+        else from += PAGE_SIZE
       }
+
+      if (budgetExhausted) break
+    }
+
+    if (budgetExhausted) {
+      console.warn(
+        `[check-inactivity] time budget hit after ${Date.now() - start}ms; ` +
+          `${remainingAutomations} automation(s) not started this run — ` +
+          `they resume next run (oldest-inactive contacts are processed first).`
+      )
     }
 
     return NextResponse.json({
       success: true,
       automations: automations.length,
       dispatched,
+      budgetExhausted,
+      remainingAutomations,
       durationMs: Date.now() - start,
     })
   } catch (err: any) {

@@ -90,13 +90,27 @@ export async function GET(req: NextRequest) {
       updated += results.filter((r) => r.status === 'fulfilled').length
     }
 
-    // Decay engagement for contacts with no opens in 90 days
+    // Decay engagement for contacts with no recent engagement.
+    // Previously this excluded the engaged set with
+    //   .not('id','in', Array.from(contactHours.keys()).slice(0, 1000))
+    // which was wrong two ways: (a) the .slice(0,1000) truncated the exclusion
+    // set, so in an org with >1000 engaged contacts everyone past index 1000 was
+    // wrongly decayed to 10; and (b) an untruncated NOT IN with tens of thousands
+    // of UUIDs would blow the request URL length limit.
+    // Fix: invert to a POSITIVE predicate instead of "NOT IN the engaged set".
+    // `last_active_at` is bumped on every email open/click and tracked event
+    // (see /api/t/o, /api/t/c, /api/track/*), so a contact is "engaged" iff its
+    // last_active_at is recent. We decay only contacts whose last_active_at is
+    // stale (or never set) AND who haven't been emailed in 90 days. This is a
+    // superset-safe keep-set (never decays a recently-active contact) and is
+    // correct for ANY number of engaged contacts, with no URL-length risk.
+    const decayThreshold = new Date(Date.now() - 90 * 86400000).toISOString()
     const { count: decayed } = await supabaseAdmin
       .from('contacts')
-      .update({ engagement_score: 10 })
+      .update({ engagement_score: 10 }, { count: 'exact' })
       .gt('engagement_score', 10)
-      .not('id', 'in', `(${Array.from(contactHours.keys()).slice(0, 1000).join(',')})`)
-      .lt('last_email_sent_at', new Date(Date.now() - 90 * 86400000).toISOString())
+      .lt('last_email_sent_at', decayThreshold)
+      .or(`last_active_at.is.null,last_active_at.lt.${decayThreshold}`)
 
     return NextResponse.json({
       updated,

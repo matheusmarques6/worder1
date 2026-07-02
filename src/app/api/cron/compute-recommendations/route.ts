@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const startedAt = Date.now();
   const admin = getSupabaseAdmin();
   const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
@@ -64,18 +65,80 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: 'No organizations to process' });
   }
 
+  // Order orgs stalest-first so the wall-clock budget below rotates through
+  // ALL tenants across nightly runs instead of always starving the same tail.
+  // Every product_recommendations row for an org carries the computed_at stamp
+  // from that org's last successful rebuild, so MAX(computed_at) is the org's
+  // freshness; never-computed orgs (null) sort first. This is the rotation
+  // mechanism: once an org is rebuilt its computed_at becomes newest and it
+  // sinks to the back, letting skipped orgs rise to the front next run. Cheap
+  // to derive — one indexed limit-1 lookup per org, run in parallel.
+  // Bounded concurrency: an unbounded Promise.all over every org floods the
+  // connection pool on large installs, and a single rejected lookup would fail
+  // the whole cron. Run in small batches and treat any lookup failure as
+  // "never computed" (null → sorts first, so a transient error just nudges that
+  // org toward the front rather than aborting the run).
+  const freshness: Array<{ id: string; lastComputedAt: string | null }> = [];
+  const FRESHNESS_CONCURRENCY = 5;
+  for (let i = 0; i < orgs.length; i += FRESHNESS_CONCURRENCY) {
+    const batch = orgs.slice(i, i + FRESHNESS_CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(async (o) => {
+        try {
+          const { data: latest } = await admin
+            .from('product_recommendations')
+            .select('computed_at')
+            .eq('organization_id', o.id)
+            .order('computed_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          return { id: o.id, lastComputedAt: (latest?.computed_at as string | null) ?? null };
+        } catch {
+          return { id: o.id, lastComputedAt: null };
+        }
+      })
+    );
+    freshness.push(...results);
+  }
+  freshness.sort((a, b) => {
+    if (a.lastComputedAt === b.lastComputedAt) return 0;
+    if (a.lastComputedAt === null) return -1; // never computed → first
+    if (b.lastComputedAt === null) return 1;
+    return a.lastComputedAt < b.lastComputedAt ? -1 : 1; // oldest computed first
+  });
+
+  // Wall-clock budget: stop STARTING new orgs well before maxDuration=300s so
+  // the handler returns cleanly instead of being killed mid-rebuild. Because
+  // the delete-then-reinsert happens inside computeForOrg, any org we never
+  // start keeps its PREVIOUS recommendations intact (no destructive partial).
+  const TIME_BUDGET_MS = 250_000;
+
   const summary: any[] = [];
-  for (const org of orgs) {
+  let orgsSkipped = 0;
+  for (let i = 0; i < freshness.length; i++) {
+    if (Date.now() - startedAt > TIME_BUDGET_MS) {
+      orgsSkipped = freshness.length - i;
+      break;
+    }
+    const orgId = freshness[i].id;
     try {
-      const orgSummary = await computeForOrg(admin, org.id, since);
-      summary.push({ organization_id: org.id, ...orgSummary });
+      const orgSummary = await computeForOrg(admin, orgId, since);
+      summary.push({ organization_id: orgId, ...orgSummary });
     } catch (err: any) {
-      console.error(`[Recs cron] org ${org.id} failed:`, err?.message);
-      summary.push({ organization_id: org.id, error: err?.message });
+      console.error(`[Recs cron] org ${orgId} failed:`, err?.message);
+      summary.push({ organization_id: orgId, error: err?.message });
     }
   }
 
-  return NextResponse.json({ success: true, organizations: summary });
+  if (orgsSkipped > 0) {
+    console.warn(
+      `[Recs cron] time budget hit after ${Date.now() - startedAt}ms; ` +
+        `skipped ${orgsSkipped} org(s) this run — they keep prior ` +
+        `recommendations and sort stalest-first next run.`
+    );
+  }
+
+  return NextResponse.json({ success: true, orgsSkipped, organizations: summary });
 }
 
 // Allow GET so Vercel cron (which uses GET by default) can hit the

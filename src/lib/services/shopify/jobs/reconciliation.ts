@@ -354,9 +354,10 @@ export async function checkWebhookHealth(): Promise<{
           headers: {
             'X-Shopify-Access-Token': store.access_token,
           },
+          signal: AbortSignal.timeout(15000),
         }
       );
-      
+
       if (!listResponse.ok) {
         const errorText = await listResponse.text();
         console.error(`   ❌ Erro ao listar webhooks (${listResponse.status}):`, errorText);
@@ -391,6 +392,7 @@ export async function checkWebhookHealth(): Promise<{
               headers: {
                 'X-Shopify-Access-Token': store.access_token,
               },
+              signal: AbortSignal.timeout(15000),
             }
           );
           
@@ -436,6 +438,7 @@ export async function checkWebhookHealth(): Promise<{
                 format: 'json',
               },
             }),
+            signal: AbortSignal.timeout(15000),
           }
         );
         

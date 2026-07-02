@@ -120,6 +120,7 @@ export async function generateAIResponse(
         temperature: agent.temperature || 0.7,
         max_tokens: agent.max_tokens || 500,
       }),
+      signal: AbortSignal.timeout(15000),
     })
 
     if (!response.ok) {
@@ -227,6 +228,7 @@ Nao fale como se voce fosse o atendente. Sugira a mensagem pronta.`
         temperature: 0.5,
         max_tokens: 300,
       }),
+      signal: AbortSignal.timeout(15000),
     })
 
     if (!response.ok) {

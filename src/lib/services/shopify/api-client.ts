@@ -116,6 +116,7 @@ export class ShopifyAPIClient {
         'X-Shopify-Access-Token': this.accessToken,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(10000),
     });
 
     // Parse rate limit

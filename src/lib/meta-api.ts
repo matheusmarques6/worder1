@@ -111,7 +111,9 @@ export class MetaApiClient {
       url.searchParams.set(key, value);
     });
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), {
+      signal: AbortSignal.timeout(10000),
+    });
     const data = await response.json();
 
     if (data.error) {
@@ -135,6 +137,7 @@ export class MetaApiClient {
         ...body,
         access_token: this.accessToken,
       }),
+      signal: AbortSignal.timeout(10000),
     });
 
     const data = await response.json();

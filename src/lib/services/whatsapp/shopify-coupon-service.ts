@@ -97,6 +97,7 @@ export async function generateShopifyCoupon(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(priceRulePayload),
+        signal: AbortSignal.timeout(10000),
       }
     )
 
@@ -124,6 +125,7 @@ export async function generateShopifyCoupon(
         body: JSON.stringify({
           discount_code: { code },
         }),
+        signal: AbortSignal.timeout(10000),
       }
     )
 

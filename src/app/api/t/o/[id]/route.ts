@@ -77,7 +77,15 @@ async function recordOpen(emailSendId: string, headers: Headers) {
         occurred_at: now,
         idempotency_key: `email_opened:${send.campaign_id}:${send.contact_id}:${day}`,
       }).select().maybeSingle();
+    }
 
+    // Bump last_active_at on ANY human open with a contact — not only
+    // campaign opens. The engagement-decay cron treats a stale/null
+    // last_active_at as "não engajado"; gating this on orgId (unresolved
+    // for flow/transactional sends) let real opens go unrecorded and the
+    // contact could be wrongly decayed. contact_events above stays
+    // org-gated (it needs organization_id); this bump does not.
+    if (send.contact_id && !mpp.isMpp) {
       await supabaseAdmin.from('contacts')
         .update({ last_active_at: now, last_event_type: 'email_opened' })
         .eq('id', send.contact_id);

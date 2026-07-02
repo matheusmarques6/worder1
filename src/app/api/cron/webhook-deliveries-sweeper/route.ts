@@ -23,12 +23,15 @@ export async function GET(req: NextRequest) {
     .eq('status', 'in_flight')
     .lt('in_flight_until', now);
 
-  // Busca entregas presas: pending/retrying sem tentativa ou sem atividade há >5min
+  // Busca entregas presas: pending/retrying sem tentativa ou sem atividade há >5min.
+  // Também respeita o backoff: só re-enfileira se next_retry_at já passou (ou é null),
+  // pra não martelar endpoints falhando a cada ciclo do sweeper.
   const { data: stuck } = await supabaseAdmin
     .from('webhook_deliveries')
     .select('id')
     .in('status', ['pending', 'retrying'])
     .or(`last_attempt_at.is.null,last_attempt_at.lt.${fiveMinAgo}`)
+    .or(`next_retry_at.is.null,next_retry_at.lte.${now}`)
     .limit(500);
 
   let reenqueued = 0;

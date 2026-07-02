@@ -23,6 +23,13 @@ const SHOPIFY_API_VERSION = '2026-04';
 const CUSTOMERS_PER_PAGE = 250;
 const MAX_PAGES_PER_RUN = 6; // ~1500 clientes por execução
 const MAX_EXECUTION_TIME_MS = 50000; // 50 segundos máximo
+// Lease window for claiming a job. A 'running' job whose last heartbeat
+// (updated_at, bumped by the updated_at trigger on every write) is newer than
+// this is considered ACTIVELY owned by another worker and must not be re-claimed
+// — that is what prevents two overlapping invocations from re-importing the same
+// Shopify page (duplicate contacts/deals). It is deliberately longer than a
+// single run's maxDuration (55s) so a worker mid-run never loses its lease.
+const JOB_LEASE_MS = 90000; // 90 segundos
 
 function jsonResponse(data: any, status = 200) {
   return new NextResponse(JSON.stringify(data), {
@@ -56,11 +63,18 @@ export async function GET(request: NextRequest) {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    // Buscar job pendente ou em andamento (mais antigo primeiro)
+    // Selecionar o job reivindicável mais antigo (mais antigo primeiro).
+    // Claimable = 'pending' OU 'running' com lease EXPIRADO (updated_at antigo,
+    // i.e. o worker anterior terminou o lote ou morreu). Um 'running' com lease
+    // ativo (updated_at recente) está sendo processado agora por outro worker e
+    // NÃO é reivindicável — evita que duas invocações sobrepostas reimportem a
+    // mesma página. Manter 'running' expirado como reivindicável preserva a
+    // retomada de imports multi-run (100k+ clientes ao longo de várias execuções).
+    const leaseCutoff = new Date(Date.now() - JOB_LEASE_MS).toISOString();
     const { data: job, error: jobError } = await supabase
       .from('shopify_import_jobs')
       .select('*')
-      .in('status', ['pending', 'running'])
+      .or(`status.eq.pending,and(status.eq.running,updated_at.lt.${leaseCutoff})`)
       .order('created_at', { ascending: true })
       .limit(1)
       .single();
@@ -69,6 +83,35 @@ export async function GET(request: NextRequest) {
       return jsonResponse({
         success: true,
         message: 'No pending jobs',
+        duration: Date.now() - startTime,
+      });
+    }
+
+    // ── Reivindicação ATÔMICA ──
+    // Transição condicionada: só assumimos o job se a linha ainda satisfazia a
+    // condição de reivindicação NO MOMENTO do UPDATE (Postgres serializa via lock
+    // de linha). O guard reevaluado após o lock garante que apenas UMA invocação
+    // vence: um segundo worker vê status='running' + updated_at recente (renovado
+    // pela reivindicação vencedora) → 0 linhas → aborta. `.select()` retorna a
+    // linha só para o vencedor; se vier vazio, outro worker já reivindicou.
+    const claimNow = new Date().toISOString();
+    const { data: claimed } = await supabase
+      .from('shopify_import_jobs')
+      .update({
+        status: 'running',
+        started_at: job.started_at || claimNow,
+        last_processed_at: claimNow, // heartbeat: renova o lease ao reivindicar
+      })
+      .eq('id', job.id)
+      .or(`status.eq.pending,updated_at.lt.${leaseCutoff}`)
+      .select('id');
+
+    if (!claimed || claimed.length === 0) {
+      // Outro worker venceu a reivindicação / está processando este job agora.
+      console.log(`[ImportWorker] Job ${job.id} already claimed by another worker, skipping`);
+      return jsonResponse({
+        success: true,
+        message: 'Job already claimed by another worker',
         duration: Date.now() - startTime,
       });
     }
@@ -85,17 +128,6 @@ export async function GET(request: NextRequest) {
     if (storeError || !store?.access_token) {
       await markJobFailed(supabase, job.id, 'Store não encontrada ou sem acesso');
       return jsonResponse({ success: false, error: 'Store not found' }, 404);
-    }
-
-    // Marcar como running
-    if (job.status === 'pending') {
-      await supabase
-        .from('shopify_import_jobs')
-        .update({ 
-          status: 'running',
-          started_at: new Date().toISOString(),
-        })
-        .eq('id', job.id);
     }
 
     // Processar lotes
@@ -117,6 +149,13 @@ export async function GET(request: NextRequest) {
     if (result.isComplete) {
       updateData.status = 'completed';
       updateData.completed_at = new Date().toISOString();
+    } else {
+      // Volta para 'pending' ao fim do lote (job ainda tem páginas). Assim o
+      // próximo tick (60s) reivindica imediatamente, em vez de esperar o lease
+      // de 90s expirar — restaura a cadência de retomada de 60s sem reabrir a
+      // corrida: enquanto ESTE worker processa, updated_at está fresco e o guard
+      // atômico bloqueia qualquer outro; só liberamos ao gravar 'pending' aqui.
+      updateData.status = 'pending';
     }
 
     // Log de execução

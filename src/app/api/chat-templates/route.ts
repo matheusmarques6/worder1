@@ -1,16 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy service-role client — created only when the handler runs so a
+// missing env var at build/import time doesn't throw.
+let _supabase: SupabaseClient | null = null
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+  }
+  return _supabase
+}
 
 // =============================================
 // GET - List Chat Templates
 // =============================================
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabase()
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organization_id')
     const storeId = searchParams.get('store_id')
@@ -82,6 +91,7 @@ export async function GET(request: NextRequest) {
 // =============================================
 export async function POST(request: NextRequest) {
   try {
+    const supabase = getSupabase()
     const body = await request.json()
     const {
       organization_id,
@@ -142,6 +152,7 @@ export async function POST(request: NextRequest) {
 // =============================================
 export async function PUT(request: NextRequest) {
   try {
+    const supabase = getSupabase()
     const body = await request.json()
     const { id, ...updates } = body
 
@@ -182,6 +193,7 @@ export async function PUT(request: NextRequest) {
 // =============================================
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = getSupabase()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
