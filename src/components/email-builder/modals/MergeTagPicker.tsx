@@ -44,6 +44,38 @@ function humanTriggerLabel(triggerType?: string): string {
   return TRIGGER_TYPE_LABELS[triggerType] || triggerType.replace(/^trigger_/, '').replace(/_/g, ' ')
 }
 
+// Which canonical tags MAKE SENSE for each trigger — so the picker can put a
+// curated "Recomendadas para este gatilho" group at the top instead of dumping
+// all 29 canonical tags (offering CheckoutURL/tracking on a viewed-product
+// funnel, where they never resolve). Paths reference CANONICAL_SPEC only, so
+// each recommended tag carries its PT-BR meaning. Unknown triggers → no group
+// (falls back to the full list).
+const RECOMMENDED_PATHS_BY_TRIGGER: Record<string, string[]> = {
+  // Produto / navegação → link do PRODUTO
+  trigger_viewed_product: ['ProductURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].ImageURL', 'Customer.FirstName'],
+  trigger_browse_abandoned: ['ProductURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].ImageURL', 'Customer.FirstName'],
+  trigger_back_in_stock: ['ProductURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].ImageURL', 'Customer.FirstName'],
+  trigger_price_drop: ['ProductURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].ImageURL', 'Customer.FirstName'],
+  trigger_viewed_collection: ['ProductURL', 'Items[0].ProductName', 'Items[0].ImageURL', 'Customer.FirstName'],
+  // Carrinho / checkout → link de RECUPERAÇÃO + itens
+  trigger_added_to_cart: ['CheckoutURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].ImageURL', 'Items[0].Quantity', 'ItemCount', 'TotalPrice', 'Customer.FirstName'],
+  trigger_abandon: ['CheckoutURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].ImageURL', 'ItemCount', 'TotalPrice', 'DiscountCodes', 'Customer.FirstName'],
+  trigger_checkout_abandoned: ['CheckoutURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].ImageURL', 'ItemCount', 'TotalPrice', 'DiscountCodes', 'Customer.FirstName'],
+  // Pedido → status do pedido
+  trigger_order: ['OrderNumber', 'TotalPrice', 'OrderStatusURL', 'Items[0].ProductName', 'Customer.FirstName'],
+  trigger_order_paid: ['OrderNumber', 'TotalPrice', 'OrderStatusURL', 'Items[0].ProductName', 'Customer.FirstName'],
+  trigger_first_purchase: ['OrderNumber', 'TotalPrice', 'OrderStatusURL', 'Customer.FirstName'],
+  trigger_repeat_purchase: ['OrderNumber', 'TotalPrice', 'OrderStatusURL', 'Customer.FirstName', 'Customer.TotalOrders'],
+  trigger_fulfilled_order: ['OrderNumber', 'Tracking.Number', 'Tracking.URL', 'OrderStatusURL', 'Customer.FirstName'],
+  trigger_cancelled_order: ['OrderNumber', 'TotalPrice', 'Customer.FirstName'],
+  // Cadastro / lead
+  trigger_signup: ['Customer.FirstName', 'Customer.Email'],
+  trigger_form_submitted: ['Customer.FirstName', 'Customer.Email'],
+  trigger_popup_subscribed: ['Customer.FirstName', 'Customer.Email'],
+}
+
+const CANONICAL_BY_PATH = new Map(CANONICAL_SPEC.map((s) => [s.path, s]))
+
 interface MergeTagPickerProps {
   isOpen: boolean
   onClose: () => void
@@ -180,14 +212,40 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
     }
   }, [isAutomation])
 
+  // Curated "recommended for this trigger" group — the exact variables that
+  // resolve for the selected funnel, each with its PT-BR meaning. Shown FIRST
+  // so the merchant sees "the variable to use + what it means" up front,
+  // instead of hunting through 29 canonical + static tags (many of which don't
+  // apply to this trigger).
+  const recommendedGroup = useMemo(() => {
+    if (!isAutomation || !triggerType) return null
+    const paths = RECOMMENDED_PATHS_BY_TRIGGER[triggerType]
+    if (!paths || paths.length === 0) return null
+    const tags = paths
+      .map((p) => CANONICAL_BY_PATH.get(p))
+      .filter(Boolean)
+      .map((s: any) => ({
+        name: s.tag,
+        value: `{{ ${s.path} }}`,
+        sample: s.description,
+        hint: 'recomendada p/ este gatilho',
+      }))
+    if (tags.length === 0) return null
+    return {
+      name: `⭐ Recomendadas para “${humanTriggerLabel(triggerType)}” (${tags.length})`,
+      icon: 'Sparkles',
+      tags,
+    }
+  }, [isAutomation, triggerType])
+
   const availableGroups = useMemo(() => {
     const baseGroups = MERGE_TAGS
 
-    // Stitch the dynamic groups in: canonical Worder tags first (always
-    // safe to use, never break across integrations), then trigger-
-    // discovered tags (rich source-specific paths), then custom
-    // shortcuts, then the static catalog.
+    // Stitch the dynamic groups in: RECOMMENDED (curated per-trigger) first,
+    // then canonical Worder tags (always safe), then trigger-discovered tags
+    // (rich source-specific paths), then custom shortcuts, then static catalog.
     let groups: any[] = []
+    if (recommendedGroup) groups.push(recommendedGroup)
     if (canonicalGroup) groups.push(canonicalGroup)
     if (triggerGroup) groups.push(triggerGroup)
     if (customGroup) groups.push(customGroup)
@@ -205,7 +263,7 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
         (t.sample && String(t.sample).toLowerCase().includes(q))
       ),
     })).filter(g => g.tags.length > 0)
-  }, [search, isAutomation, triggerGroup, customGroup, canonicalGroup])
+  }, [search, isAutomation, triggerGroup, customGroup, canonicalGroup, recommendedGroup])
 
   const handleSelect = (value: string, label?: string) => {
     onSelect(value, label)
@@ -247,8 +305,13 @@ export function MergeTagPicker({ isOpen, onClose, onSelect, context, triggerType
           <div className="mx-4 mt-2 px-3 py-2 bg-violet-50 border border-violet-200 rounded-lg flex items-start gap-2">
             <Zap className="w-3.5 h-3.5 text-violet-500 mt-0.5 flex-shrink-0" />
             <p className="text-[11px] text-violet-700">
-              <strong>Tags do Gatilho</strong> são auto-detectadas dos eventos recentes
-              {triggerType ? ` de “${humanTriggerLabel(triggerType)}”` : ''} — todas as propriedades disponíveis no payload aparecem aqui em tempo real.
+              {recommendedGroup ? (
+                <>As <strong>⭐ Recomendadas</strong> no topo são as variáveis certas para
+                {triggerType ? ` “${humanTriggerLabel(triggerType)}”` : ' este gatilho'} — cada uma com o significado. Abaixo, todas as demais tags disponíveis.</>
+              ) : (
+                <><strong>Tags do Gatilho</strong> são auto-detectadas dos eventos recentes
+                {triggerType ? ` de “${humanTriggerLabel(triggerType)}”` : ''} — todas as propriedades disponíveis no payload aparecem aqui em tempo real.</>
+              )}
               {loadingDynamic && <Loader2 className="w-3 h-3 inline-block ml-1 animate-spin" />}
             </p>
           </div>
