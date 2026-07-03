@@ -180,6 +180,9 @@ export async function GET(request: NextRequest) {
             dealId: metadata.deal_id,
             context: previousContext || {
               organizationId: automation.organization_id,
+              // Store host so message bodies build ABSOLUTE product/checkout
+              // links (resolved to the domain by the execution-engine).
+              storeId: (metadata as any).store_id || (automation as any).store_id || null,
               contact: contact ? {
                 id: contact.id,
                 email: contact.email,

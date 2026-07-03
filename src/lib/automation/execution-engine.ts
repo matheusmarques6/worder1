@@ -145,6 +145,22 @@ export class ExecutionEngine {
       (context as any).organizationId = options.organizationId;
     }
 
+    // Attach the store host (shop_domain) ONCE per execution so message bodies
+    // build ABSOLUTE product/checkout links (a relative "/products/x" 404s on
+    // the app domain). Single choke point for EVERY runner — some context
+    // builders only set storeId, not store.domain. variableEngine +
+    // node-executors + resolveCartBlocks all read context.store?.domain.
+    if (!(context as any)?.store?.domain) {
+      const storeId = (context as any)?.storeId || (options as any)?.storeId;
+      if (storeId) {
+        try {
+          const { resolveStoreShopDomain } = await import('./store-host');
+          const domain = await resolveStoreShopDomain(this.supabase, storeId);
+          if (domain) (context as any).store = { ...((context as any).store || {}), domain };
+        } catch { /* non-fatal: falls back to event-derived host */ }
+      }
+    }
+
     // Populate product recommendations from the trigger anchor product.
     // Email/WhatsApp templates can reference {{ recommendations.fbt[0].title }}
     // — this is what surfaces them with real data at render time. Fire and
