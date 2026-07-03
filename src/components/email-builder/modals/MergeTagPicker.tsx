@@ -55,7 +55,7 @@ const RECOMMENDED_PATHS_BY_TRIGGER: Record<string, string[]> = {
   trigger_viewed_product: ['ProductURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].ImageURL', 'Customer.FirstName'],
   trigger_browse_abandoned: ['ProductURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].ImageURL', 'Customer.FirstName'],
   trigger_back_in_stock: ['ProductURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].ImageURL', 'Customer.FirstName'],
-  trigger_price_drop: ['ProductURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].ImageURL', 'Customer.FirstName'],
+  trigger_price_drop: ['ProductURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].CompareAtPrice', 'Items[0].ImageURL', 'Customer.FirstName'],
   trigger_viewed_collection: ['ProductURL', 'Items[0].ProductName', 'Items[0].ImageURL', 'Customer.FirstName'],
   // Carrinho / checkout → link de RECUPERAÇÃO + itens
   trigger_added_to_cart: ['CheckoutURL', 'Items[0].ProductName', 'Items[0].ItemPrice', 'Items[0].ImageURL', 'Items[0].Quantity', 'ItemCount', 'TotalPrice', 'Customer.FirstName'],

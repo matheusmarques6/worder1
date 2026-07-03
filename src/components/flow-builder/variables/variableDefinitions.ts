@@ -233,6 +233,59 @@ export function getVariablesByTriggerType(triggerType: string): VariableCategory
       ];
       eventLabel = 'Adicionado ao Carrinho';
       break;
+    case 'trigger_browse_abandoned':
+      eventVariables = [
+        { key: 'ProductURL', label: 'URL do Produto', description: 'Link do produto navegado', example: 'https://loja.com/produto', category: 'event' },
+        { key: 'Items[0].ProductName', label: 'Nome do Produto', description: 'Produto navegado', example: 'Camiseta Azul', category: 'event' },
+        { key: 'Items[0].ItemPrice', label: 'Preco', description: 'Preco do produto', example: '99.90', category: 'event' },
+        { key: 'Items[0].ImageURL', label: 'Imagem', description: 'URL da imagem', example: 'https://...', category: 'event' },
+      ];
+      eventLabel = 'Navegacao Abandonada';
+      break;
+    case 'trigger_back_in_stock':
+      eventVariables = [
+        { key: 'ProductURL', label: 'URL do Produto', description: 'Link do produto que voltou ao estoque', example: 'https://loja.com/produto', category: 'event' },
+        { key: 'Items[0].ProductName', label: 'Nome do Produto', description: 'Produto de volta ao estoque', example: 'Camiseta Azul', category: 'event' },
+        { key: 'Items[0].ItemPrice', label: 'Preco', description: 'Preco do produto', example: '99.90', category: 'event' },
+        { key: 'Items[0].ImageURL', label: 'Imagem', description: 'URL da imagem', example: 'https://...', category: 'event' },
+      ];
+      eventLabel = 'Voltou ao Estoque';
+      break;
+    case 'trigger_price_drop':
+      eventVariables = [
+        { key: 'ProductURL', label: 'URL do Produto', description: 'Link do produto com preco reduzido', example: 'https://loja.com/produto', category: 'event' },
+        { key: 'Items[0].ProductName', label: 'Nome do Produto', description: 'Produto com queda de preco', example: 'Camiseta Azul', category: 'event' },
+        { key: 'Items[0].ItemPrice', label: 'Preco Novo', description: 'Preco atual (reduzido)', example: '79.90', category: 'event' },
+        { key: 'Items[0].CompareAtPrice', label: 'Preco Antigo', description: 'Preco anterior (de)', example: '99.90', category: 'event' },
+        { key: 'Items[0].ImageURL', label: 'Imagem', description: 'URL da imagem', example: 'https://...', category: 'event' },
+      ];
+      eventLabel = 'Queda de Preco';
+      break;
+    case 'trigger_viewed_collection':
+      eventVariables = [
+        { key: 'event.collection', label: 'Colecao', description: 'Nome da colecao visualizada', example: 'Verao 2025', category: 'event' },
+        { key: 'event.collection_url', label: 'URL da Colecao', description: 'Link da colecao', example: 'https://loja.com/collections/verao', category: 'event' },
+      ];
+      eventLabel = 'Colecao Visualizada';
+      break;
+    case 'trigger_viewed_page':
+    case 'trigger_active_on_site':
+      eventVariables = [
+        { key: 'event.url', label: 'URL da Pagina', description: 'Pagina que o cliente visitou', example: 'https://loja.com/pagina', category: 'event' },
+        { key: 'event.page_title', label: 'Titulo da Pagina', description: 'Titulo da pagina', example: 'Sobre nos', category: 'event' },
+      ];
+      eventLabel = 'Atividade no Site';
+      break;
+    case 'trigger_first_purchase':
+    case 'trigger_repeat_purchase':
+      eventVariables = [
+        { key: 'OrderNumber', label: 'Numero do Pedido', description: 'Numero do pedido', example: '1234', category: 'event' },
+        { key: 'TotalPrice', label: 'Valor Total', description: 'Valor do pedido', example: '299.90', category: 'event' },
+        { key: 'OrderStatusURL', label: 'Status do Pedido', description: 'Link de status do pedido', example: 'https://loja.com/orders/abc', category: 'event' },
+        { key: 'Items[0].ProductName', label: 'Nome do Produto', description: 'Primeiro produto do pedido', example: 'Camiseta Azul', category: 'event' },
+      ];
+      eventLabel = triggerType === 'trigger_first_purchase' ? 'Primeira Compra' : 'Compra Recorrente';
+      break;
     case 'trigger_fulfilled_order':
       eventVariables = [
         { key: 'OrderNumber', label: 'Numero do Pedido', description: 'Numero do pedido', example: '1234', category: 'event' },

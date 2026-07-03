@@ -160,6 +160,7 @@ export const CANONICAL_SPEC: { tag: string; path: string; description: string; s
   { tag: 'Items[0].ImageURL', path: 'Items[0].ImageURL', description: 'Imagem do primeiro produto.', sampleValue: 'https://cdn.shopify.com/produto.jpg' },
   { tag: 'Items[0].ProductURL', path: 'Items[0].ProductURL', description: 'Link do primeiro produto.', sampleValue: 'https://loja.com/products/camiseta-premium' },
   { tag: 'Items[0].Quantity', path: 'Items[0].Quantity', description: 'Quantidade do primeiro produto.', sampleValue: '1' },
+  { tag: 'Items[0].CompareAtPrice', path: 'Items[0].CompareAtPrice', description: 'Preço antigo (de) do primeiro produto.', sampleValue: '99.90' },
   { tag: 'FinancialStatus', path: 'FinancialStatus', description: 'Status financeiro.', sampleValue: 'paid' },
   { tag: 'FulfillmentStatus', path: 'FulfillmentStatus', description: 'Status de envio.', sampleValue: 'fulfilled' },
   { tag: 'Tracking.Number', path: 'Tracking.Number', description: 'Código de rastreio.', sampleValue: 'BR123456789' },
