@@ -188,7 +188,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     })
 
     // Converter arquivo
-    const buffer = Buffer.from(await file.arrayBuffer())
+    const fileBytes = await file.arrayBuffer()
+    const buffer = Buffer.from(fileBytes)
     const base64 = buffer.toString('base64')
 
     // Upload para Storage
@@ -232,6 +233,77 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       console.error('[Media POST] Storage error:', storageError)
     }
 
+    // ✅ META_CLOUD: upload na Meta + envio via message-service (NUNCA Evolution)
+    if (instance.api_type === 'META_CLOUD') {
+      const { uploadMedia, sendMessage: sendViaMeta } = await import('@/lib/services/whatsapp/message-service')
+
+      const upload = await uploadMedia(
+        instance.id,
+        conversation.organization_id,
+        fileBytes,
+        file.type || 'application/octet-stream',
+        file.name
+      )
+
+      if (upload.error || !upload.data?.mediaId) {
+        return NextResponse.json(
+          { error: upload.error || 'Falha no upload da mídia para a Meta', success: false },
+          { status: 502, headers: NO_CACHE_HEADERS }
+        )
+      }
+
+      const result = await sendViaMeta({
+        conversationId,
+        organizationId: conversation.organization_id,
+        instanceId: instance.id,
+        to: phoneNumber,
+        messageType: mediaType as any,
+        content: caption || undefined,
+        mediaId: upload.data.mediaId,
+        mediaUrl: mediaUrl || undefined,
+        mediaMimeType: file.type,
+        mediaFilename: file.name,
+        senderType: 'agent',
+      })
+
+      if (result.error && !result.data) {
+        const status = result.code === 131047 ? 400 : 500
+        return NextResponse.json(
+          { error: result.error, success: false },
+          { status, headers: NO_CACHE_HEADERS }
+        )
+      }
+
+      const savedMeta: any = result.data
+
+      // Guardar o caminho do storage para refresh de signed URL (GET desta rota)
+      if (savedMeta?.id && storagePath) {
+        await supabase
+          .from('whatsapp_messages')
+          .update({ media_storage_path: storagePath })
+          .eq('id', savedMeta.id)
+      }
+
+      return NextResponse.json({
+        message: savedMeta ? {
+          id: savedMeta.id,
+          conversation_id: savedMeta.conversation_id || conversationId,
+          direction: 'outbound',
+          message_type: savedMeta.message_type || mediaType,
+          content: typeof savedMeta.content === 'string' ? savedMeta.content : (caption || ''),
+          media_url: savedMeta.media_url || mediaUrl,
+          media_filename: savedMeta.media_filename || file.name,
+          media_mime_type: savedMeta.media_mime_type || file.type,
+          status: savedMeta.status || (result.error ? 'failed' : 'sent'),
+          sent_by_bot: false,
+          created_at: savedMeta.created_at,
+        } : null,
+        success: !result.error,
+        ...(result.error ? { error: result.error } : {}),
+      }, { headers: NO_CACHE_HEADERS })
+    }
+
+    // ✅ EVOLUTION: fluxo original inalterado
     // Enviar via Evolution API
     let endpoint = ''
     let payload: any = { number: phoneNumber }

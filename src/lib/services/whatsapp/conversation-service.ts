@@ -158,8 +158,12 @@ export async function upsertConversation(
         store_id: storeId,
         instance_id: instanceId,
         contact_phone: contactPhone,
+        // chat_id é NOT NULL no banco — convenção JID do WhatsApp
+        chat_id: `${contactPhone}@s.whatsapp.net`,
+        phone_number: contactPhone,
         contact_name: contactName || contactPhone,
         contact_id: contactId,
+        provider: 'meta_cloud',
         status: 'open',
         is_contact_initiated: true,
         service_window_expires_at: windowExpires,

@@ -145,14 +145,22 @@ export async function sendMessage(
   })
 
   // 3. Insert message optimistically with pending status
+  // message_id é NOT NULL no banco: usa id temporário até o wamid chegar
+  const tempMessageId = `out-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
   const { data: pendingMsg, error: insertError } = await supabaseAdmin
     .from('whatsapp_messages')
     .insert({
       organization_id: organizationId,
       conversation_id: conversationId,
+      instance_id: instanceId,
+      store_id: instance.store_id || null,
+      message_id: tempMessageId,
+      to_number: to,
+      provider: 'meta_cloud',
       direction: 'outbound' as MessageDirection,
       message_type: messageType,
-      content,
+      content: content ?? '',
+      text_body: content ?? null,
       media_url: mediaUrl,
       media_mime_type: mediaMimeType,
       media_filename: mediaFilename,
@@ -259,6 +267,7 @@ export async function sendMessage(
       .from('whatsapp_messages')
       .update({
         wamid,
+        message_id: wamid || tempMessageId,
         status: 'sent' as MessageStatus,
       })
       .eq('id', pendingMsg.id)
@@ -330,6 +339,8 @@ export async function sendInternalNote(
     .insert({
       organization_id: organizationId,
       conversation_id: conversationId,
+      message_id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      provider: 'internal',
       direction: 'outbound' as MessageDirection,
       message_type: 'note' as MessageType,
       content,

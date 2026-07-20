@@ -160,16 +160,59 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       )
     }
 
+    const phoneNumber = conversation.contact_phone || conversation.phone_number
+
+    // ✅ META_CLOUD: enviar pela API oficial da Meta via message-service
+    // (grava em whatsapp_messages com wamid; NUNCA usa Evolution)
+    if (instance.api_type === 'META_CLOUD') {
+      const { sendMessage: sendViaMeta } = await import('@/lib/services/whatsapp/message-service')
+
+      const result = await sendViaMeta({
+        conversationId,
+        organizationId: conversation.organization_id,
+        instanceId: instance.id,
+        to: phoneNumber,
+        messageType: message_type,
+        content,
+        senderType: 'agent',
+      })
+
+      // Sem registro salvo = falha total (ex.: janela de 24h expirada antes do envio)
+      if (result.error && !result.data) {
+        const status = result.code === 131047 ? 400 : 500
+        return NextResponse.json(
+          { error: result.error, success: false },
+          { status, headers: NO_CACHE_HEADERS }
+        )
+      }
+
+      const saved: any = result.data
+      return NextResponse.json({
+        message: {
+          id: saved?.id,
+          conversation_id: saved?.conversation_id || conversationId,
+          direction: 'outbound',
+          message_type: saved?.message_type || message_type,
+          content: typeof saved?.content === 'string' ? saved.content : content,
+          status: saved?.status || (result.error ? 'failed' : 'sent'),
+          sent_by_bot: false,
+          created_at: saved?.created_at,
+        },
+        success: !result.error,
+        ...(result.error ? { error: result.error } : {}),
+      }, { headers: NO_CACHE_HEADERS })
+    }
+
+    // ✅ EVOLUTION: fluxo original inalterado
     // ✅ FASE 3: Verificar config sem fallback hardcoded
     const config = getEvolutionConfig(instance)
     if (!config) {
-      return NextResponse.json({ 
-        error: 'Evolution API not configured. Set EVOLUTION_API_URL and EVOLUTION_API_KEY.' 
+      return NextResponse.json({
+        error: 'Evolution API not configured. Set EVOLUTION_API_URL and EVOLUTION_API_KEY.'
       }, { status: 503, headers: NO_CACHE_HEADERS })
     }
 
     const instanceName = instance.instance_name || instance.instance_id || instance.unique_id
-    const phoneNumber = conversation.contact_phone || conversation.phone_number
 
     // ✅ FASE 3: Logar detalhes para debug
     console.log('[Messages POST] Enviando mensagem:', {
