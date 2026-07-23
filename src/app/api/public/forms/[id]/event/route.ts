@@ -3,6 +3,7 @@
 // =============================================
 import { NextRequest } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 import { META_BASE_URL } from '@/lib/whatsapp/api-version'
 import { corsJson, corsError, corsPreflight } from '@/lib/forms/public-cors'
 
@@ -20,6 +21,18 @@ export async function POST(
     }
 
     const formId = params.id
+
+    // Rate limit: this endpoint fires server-side Facebook CAPI conversions
+    // using the org's Meta token. Without a limit, anyone who knows a
+    // submission_id could spam duplicate conversions and burn Meta quota.
+    // (The current storefront script posts to /events, not here — this is
+    // a legacy path kept alive but now guarded.)
+    const ip = getClientIp(request)
+    const rl = await checkRateLimit(`form:event:${formId}:${ip}`, { limit: 20, windowSec: 60 })
+    if (!rl.allowed) {
+      return corsError('Muitas tentativas. Aguarde e tente novamente.', 429, 'rate_limited')
+    }
+
     const body = await request.json()
     const { submission_id, event_type } = body
 
