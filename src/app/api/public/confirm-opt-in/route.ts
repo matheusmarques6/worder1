@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     // the original consent timestamp for audit.
     const { data: contact } = await supabaseAdmin
       .from('contacts')
-      .select('id, email, email_consent, email_consent_at')
+      .select('id, email, first_name, last_name, phone, email_consent, email_consent_at')
       .eq('id', payload.contactId)
       .eq('organization_id', payload.orgId)
       .maybeSingle()
@@ -120,6 +120,47 @@ export async function GET(req: NextRequest) {
           console.error('[confirm-opt-in] consent write failed:', consentErr.message, '| retry:', retryErr.message)
           throw retryErr
         }
+      }
+
+      // Welcome flow fires HERE for double opt-in popups — not at submit.
+      // The subscriber has just confirmed, so consent is now granted and
+      // the flow's email node will actually send (at submit the contact
+      // was 'pending' and every email node correctly skipped it).
+      // submit/route.ts defers trigger_popup_subscribed when
+      // doubleOptInEnabled precisely so this is the single enrollment.
+      try {
+        const { data: form } = await supabaseAdmin
+          .from('crm_forms')
+          .select('id, name, form_type, store_id')
+          .eq('id', payload.formId)
+          .eq('organization_id', payload.orgId)
+          .maybeSingle()
+        if (form) {
+          const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
+          await dispatchTrigger({
+            organizationId: payload.orgId,
+            storeId: (form as any).store_id || null,
+            triggerType: 'trigger_popup_subscribed',
+            contactId: contact.id,
+            triggerData: {
+              form_id: form.id,
+              form_name: form.name,
+              form_type: (form as any).form_type,
+              email: contact.email || null,
+              first_name: (contact as any).first_name || null,
+              last_name: (contact as any).last_name || null,
+              phone: (contact as any).phone || null,
+              double_optin: true,
+            },
+            matchConfig: (cfg: any) => {
+              if (cfg?.form_id && cfg.form_id !== form.id) return false
+              return true
+            },
+            idempotencyKey: `popup_subscribed:doi:${form.id}:${contact.id}`,
+          })
+        }
+      } catch (e: any) {
+        console.warn('[confirm-opt-in] welcome dispatch failed:', e?.message)
       }
     }
 

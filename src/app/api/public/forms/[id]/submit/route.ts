@@ -1137,7 +1137,14 @@ export async function POST(
     // (trigger_form_submitted above stays ungated on purpose — it drives
     // non-marketing CRM automations too, and the persisted 'denied'
     // consent already blocks any email node inside those flows.)
-    if (isVisualFormType && contactId && !marketingConsentDenied) {
+    //
+    // Also deferred when doubleOptInEnabled: the contact is parked at
+    // 'pending' here, so the welcome flow's email node would just skip
+    // (and never re-run). For DOI popups the welcome trigger fires from
+    // /api/public/confirm-opt-in AFTER the subscriber confirms — that's
+    // the moment they actually subscribed, and consent is now granted so
+    // the email sends. Firing here too would double-enroll them.
+    if (isVisualFormType && contactId && !marketingConsentDenied && !doubleOptInEnabled) {
       try {
         const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
         await dispatchTrigger({
