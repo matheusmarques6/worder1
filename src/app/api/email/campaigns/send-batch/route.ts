@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendBatchEmails } from '@/lib/email/resend';
+import { isEmailBlocked } from '@/lib/email/consent';
 import {
   prepareEmailHtml,
   resolveProductBlocks,
@@ -183,9 +184,10 @@ export async function POST(req: NextRequest) {
     const eligibleContacts = contacts.filter((c: any) => {
       if (!c.email) return false;
       if (suppressedEmails.has(c.email.toLowerCase())) return false;
-      if (c.email_consent === false) return false;
-      const status = String(c.status || '').toLowerCase();
-      if (['bounced', 'complained', 'unsubscribed', 'invalid'].includes(status)) return false;
+      // Shared guard — same rule the automation email node uses. Blocks
+      // boolean false AND the string states (pending/denied/...) so a
+      // double-opt-in 'pending' contact on a TEXT schema isn't blasted.
+      if (isEmailBlocked(c.email_consent, c.status)) return false;
       return true;
     });
     const skipped = contacts.length - eligibleContacts.length;

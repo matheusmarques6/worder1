@@ -14,6 +14,7 @@ import {
   buildCapiUserData,
   isVisualPopupForm,
 } from '@/lib/forms/submit-utils'
+import { isValidEmail } from '@/lib/email/validation'
 
 export const dynamic = 'force-dynamic'
 
@@ -123,7 +124,16 @@ function extractContactData(answers: Record<string, any>, fields: any[], designB
   // Normalize identifiers once, here, so every downstream consumer
   // (lookup, insert, CAPI hashing, identity graph) sees the same value.
   // E-mail lowercase is an invariant of contacts_org_email_unique.
-  if (contactData.email !== undefined) contactData.email = normalizeEmail(contactData.email)
+  if (contactData.email !== undefined) {
+    contactData.email = normalizeEmail(contactData.email)
+    // Drop a malformed address rather than create an un-emailable junk
+    // contact that hard-bounces on the first send (a sender-reputation +
+    // deliverability hit). Phone / name / custom fields on the same
+    // submit are still captured, so a typo'd email doesn't lose the lead.
+    if (contactData.email && !isValidEmail(contactData.email)) {
+      delete contactData.email
+    }
+  }
   if (contactData.phone !== undefined) contactData.phone = normalizePhone(contactData.phone)
   if (contactData.whatsapp !== undefined) contactData.whatsapp = normalizePhone(contactData.whatsapp)
 
@@ -279,9 +289,46 @@ async function bumpFormCounters(supabase: any, formId: string, columns: string[]
 async function writeEmailConsent(
   supabase: any,
   contactId: string,
-  state: 'granted' | 'pending',
+  state: 'granted' | 'pending' | 'denied',
   source: string
 ): Promise<void> {
+  if (state === 'denied') {
+    // Explicit opt-out (legal-consent checkbox left unchecked). Persist a
+    // BLOCKING value so the shared send guard (isEmailBlocked) treats the
+    // contact as unsendable — NULL would read as "sendable" and the
+    // welcome flow would email someone who declined marketing.
+    //
+    // Never downgrade a prior positive consent: leaving a checkbox
+    // unchecked on a LATER popup must not silently unsubscribe someone
+    // who opted in earlier. Read current state and bail if already granted.
+    const { data: cur } = await supabase
+      .from('contacts')
+      .select('email_consent')
+      .eq('id', contactId)
+      .maybeSingle()
+    const c = cur?.email_consent
+    const curStr = String(c ?? '').toLowerCase()
+    const alreadyGranted = c === true || curStr === 'true' || curStr === 'subscribed' || curStr === 'granted'
+    if (alreadyGranted) return
+
+    const payload = {
+      email_consent: false,
+      email_consent_source: `${source}:declined`,
+    }
+    const { error } = await supabase.from('contacts').update(payload).eq('id', contactId)
+    if (error) {
+      // TEXT + CHECK vocabulary schema — retry with the string form.
+      const { error: retryErr } = await supabase
+        .from('contacts')
+        .update({ ...payload, email_consent: 'denied' })
+        .eq('id', contactId)
+      if (retryErr) {
+        console.error('[Form Submit] email_consent denial failed:', error.message, '| retry:', retryErr.message)
+      }
+    }
+    return
+  }
+
   if (state === 'granted') {
     const payload = {
       email_consent: true,
@@ -501,6 +548,12 @@ export async function POST(
         const existingCustom = (existing.custom_fields && typeof existing.custom_fields === 'object') ? existing.custom_fields : {}
         updatePayload.custom_fields = { ...existingCustom, ...contactData.custom_fields }
       }
+      // Multi-tenant backfill: contacts created before store scoping (or
+      // via a channel that didn't set it) carry store_id = NULL and stay
+      // invisible to every store-scoped view. Adopt the popup's store —
+      // but ONLY when currently unset, so a contact already owned by
+      // store A is never yanked into store B by submitting B's popup.
+      if (!existing.store_id && form.store_id) updatePayload.store_id = form.store_id
       if (storeUtmOnConsent && Object.keys(utmPayload).length > 0) {
         const existingUtm = (existing.utm_data && typeof existing.utm_data === 'object') ? existing.utm_data : null
         const hasFirstTouch = existingUtm && Object.keys(existingUtm).some((k) => k.startsWith('utm_'))
@@ -518,7 +571,7 @@ export async function POST(
       return id
     }
 
-    const CONTACT_SELECT = 'id, custom_fields, utm_data'
+    const CONTACT_SELECT = 'id, custom_fields, utm_data, store_id'
 
     if (hasContactData) {
       // Tentar encontrar contato existente por email (já normalizado
@@ -611,6 +664,13 @@ export async function POST(
     // legal-consent → não grava nada de marketing.
     if (contactId && contactData.email && !marketingConsentDenied && !doubleOptInEnabled) {
       await writeEmailConsent(supabase, contactId, 'granted', `popup_form:${form.id}`)
+    }
+    // Consent explicitly declined → persist a blocking state so every send
+    // guard downstream (automation email node + campaign send-batch) skips
+    // this contact. Without this the row stays NULL = "sendable" and the
+    // welcome automation emails someone who opted out.
+    if (contactId && contactData.email && marketingConsentDenied) {
+      await writeEmailConsent(supabase, contactId, 'denied', `popup_form:${form.id}`)
     }
 
     // 5. Criar deal no pipeline (se configurado)
@@ -858,8 +918,11 @@ export async function POST(
         .eq('id', submission.id)
     }
 
-    // 8.4. Aplicar audiencia (tags + listId) do formulario no contato
-    if (contactId) {
+    // 8.4. Aplicar audiencia (tags + listId) do formulario no contato.
+    // Gated on !marketingConsentDenied: adding a contact who unchecked the
+    // legal-consent box to a marketing list/tag IS the consent action, so
+    // an explicit opt-out must not land them in the audience.
+    if (contactId && !marketingConsentDenied) {
       try {
         const audienceTags: string[] = Array.isArray(audienceCfg.tags) ? audienceCfg.tags.filter(Boolean) : (Array.isArray(form.tags) ? form.tags : [])
         const audienceListId: string | null = audienceCfg.listId || form.list_id || null
@@ -1068,7 +1131,13 @@ export async function POST(
     // form, landing page, etc.). Mirrors the form_submitted dispatch
     // but with a different triggerType the editor can match against.
     const isVisualFormType = ['popup', 'flyout', 'banner', 'fullpage'].includes(form.form_type || 'popup')
-    if (isVisualFormType && contactId) {
+    // Gated on !marketingConsentDenied: this trigger's contract is
+    // "subscribed via popup". A visitor who left the consent box unchecked
+    // did NOT subscribe, so the welcome flow must not fire for them.
+    // (trigger_form_submitted above stays ungated on purpose — it drives
+    // non-marketing CRM automations too, and the persisted 'denied'
+    // consent already blocks any email node inside those flows.)
+    if (isVisualFormType && contactId && !marketingConsentDenied) {
       try {
         const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
         await dispatchTrigger({

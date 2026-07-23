@@ -512,25 +512,11 @@ const actionExecutors: Record<string, NodeExecutor> = {
             .eq('organization_id', organizationId)
             .ilike('email', String(email))
             .maybeSingle();
-          const badStatuses = new Set(['bounced', 'complained', 'unsubscribed', 'invalid']);
-          const status = String(consentRow?.status || '').toLowerCase();
-          // email_consent is boolean on some schemas and TEXT on others. Treat
-          // BOTH boolean false AND the string states 'pending'/'false'/'denied'/
-          // 'unsubscribed' as "do not send". This is what enforces double opt-in:
-          // a popup signup with double opt-in parks the contact at
-          // email_consent='pending' (a string on TEXT schemas), and without this
-          // the welcome flow would email them BEFORE they confirm.
-          const consentVal = consentRow?.email_consent;
-          const consentStr = String(consentVal ?? '').toLowerCase();
-          const consentBlocked =
-            consentVal === false ||
-            consentStr === 'pending' ||
-            consentStr === 'false' ||
-            consentStr === 'denied' ||
-            consentStr === 'unsubscribed';
-          const isInvalid =
-            consentRow &&
-            (consentBlocked || badStatuses.has(status));
+          // Shared guard (see @/lib/email/consent) — blocks boolean false AND
+          // the TEXT states pending/denied/... so double-opt-in 'pending'
+          // contacts don't get the welcome flow before they confirm.
+          const { isEmailBlocked } = await import('@/lib/email/consent');
+          const isInvalid = !!consentRow && isEmailBlocked(consentRow.email_consent, consentRow.status);
           if (isInvalid) {
             console.log('[action_email] ⊘ skipped — email marked invalid', {
               nodeId: node?.id,
