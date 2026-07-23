@@ -93,6 +93,47 @@ function mapTriggerItem(it: any) {
   }
 }
 
+// Fetch the store's public domain once so catalog products get real
+// clickable URLs (https://{domain}/products/{handle}).
+async function getShopDomain(orgId: string): Promise<string> {
+  try {
+    const { data } = await supabaseAdmin
+      .from('shopify_stores')
+      .select('shop_domain')
+      .eq('organization_id', orgId)
+      .eq('is_active', true)
+      .order('installed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    return data?.shop_domain || ''
+  } catch { return '' }
+}
+
+// Map a synced shopify_products row to the feed product shape the email
+// renderer expects. Catalog feeds (bestsellers/newest/etc.) read from
+// shopify_products — the generic `products` table is never populated by
+// the Shopify sync, which is why these feeds came back empty.
+function mapCatalogProduct(p: any, shopDomain: string) {
+  const imgs = Array.isArray(p.images) ? p.images : []
+  const image_url = imgs.length > 0 ? (imgs[0]?.url || imgs[0]?.src || null) : null
+  const url = shopDomain && p.handle ? `https://${shopDomain}/products/${p.handle}` : '#'
+  return {
+    product_id: p.shopify_product_id || p.id || null,
+    title: p.title || 'Produto',
+    price: p.price != null ? parseFloat(String(p.price)) : 0,
+    compare_at_price: p.compare_at_price != null ? parseFloat(String(p.compare_at_price)) : null,
+    image_url,
+    url,
+    quantity: 1,
+    sku: p.sku || null,
+    variant_title: null,
+    brand: p.vendor || null,
+    product_type: p.product_type || null,
+  }
+}
+
+const CATALOG_COLS = 'shopify_product_id, title, handle, price, compare_at_price, images, vendor, sku, status, product_type, created_at'
+
 export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[]> {
   const { orgId } = opts
   if (!orgId) return []
@@ -106,37 +147,33 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
 
   switch (type) {
     case 'bestsellers':
-    case 'most_viewed': {
-      const { data } = await supabaseAdmin.from('products')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('created_at', { ascending: false })
-        .limit(limit)
-      products = data || []
-      break
-    }
-
+    case 'most_viewed':
     case 'newest': {
-      const { data } = await supabaseAdmin.from('products')
-        .select('*')
+      const shopDomain = await getShopDomain(orgId)
+      const { data } = await supabaseAdmin.from('shopify_products')
+        .select(CATALOG_COLS)
         .eq('organization_id', orgId)
+        .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(limit)
-      products = data || []
+      products = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain))
       break
     }
 
     case 'random': {
-      const { data } = await supabaseAdmin.from('products')
-        .select('*')
+      const shopDomain = await getShopDomain(orgId)
+      const { data } = await supabaseAdmin.from('shopify_products')
+        .select(CATALOG_COLS)
         .eq('organization_id', orgId)
+        .eq('status', 'active')
         .limit(limit * 3)
-      const shuffled = (data || []).sort(() => Math.random() - 0.5)
+      const shuffled = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain)).sort(() => Math.random() - 0.5)
       products = shuffled.slice(0, limit)
       break
     }
 
     case 'recently_viewed': {
+      const shopDomain = await getShopDomain(orgId)
       if (contact_id) {
         try {
           const { data: events } = await supabaseAdmin.from('tracking_events')
@@ -148,19 +185,21 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
           const productIds = (events || [])
             .map((e: any) => e.properties?.product_id)
             .filter(Boolean)
+            .map((id: any) => String(id))
           if (productIds.length > 0) {
-            const { data } = await supabaseAdmin.from('products')
-              .select('*')
-              .in('id', productIds)
-            products = data || []
+            const { data } = await supabaseAdmin.from('shopify_products')
+              .select(CATALOG_COLS)
+              .eq('organization_id', orgId)
+              .in('shopify_product_id', productIds)
+            products = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain))
           }
         } catch {}
       }
       if (products.length === 0) {
-        const { data } = await supabaseAdmin.from('products')
-          .select('*').eq('organization_id', orgId)
+        const { data } = await supabaseAdmin.from('shopify_products')
+          .select(CATALOG_COLS).eq('organization_id', orgId).eq('status', 'active')
           .order('created_at', { ascending: false }).limit(limit)
-        products = data || []
+        products = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain))
       }
       break
     }
@@ -359,10 +398,12 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
 
     case 'recommendations':
     default: {
-      const { data } = await supabaseAdmin.from('products')
-        .select('*').eq('organization_id', orgId)
+      const shopDomain = await getShopDomain(orgId)
+      const { data } = await supabaseAdmin.from('shopify_products')
+        .select(CATALOG_COLS).eq('organization_id', orgId).eq('status', 'active')
+        .order('created_at', { ascending: false })
         .limit(limit)
-      products = data || []
+      products = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain))
     }
   }
 
