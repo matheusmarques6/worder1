@@ -71,21 +71,16 @@ export async function POST(request: NextRequest) {
     const skipPreflight = request.headers.get('x-skip-preflight') === 'true'
     if (!skipPreflight) {
       const { runPreflight, hasBlockingErrors } = await import('@/lib/email/preflight')
-      const fromEmail = (campaign.from_email || '').trim()
-      // Bug fix: default to false — only trust explicitly verified domains
-      let domainVerified = false
-      if (fromEmail && fromEmail.includes('@')) {
-        const domainPart = fromEmail.split('@')[1].toLowerCase()
-        const { data: dom } = await supabaseAdmin
-          .from('email_domains')
-          .select('verification_status')
-          .eq('organization_id', organizationId)
-          .eq('domain', domainPart)
-          .maybeSingle()
-        if (dom && dom.verification_status === 'verified') {
-          domainVerified = true
-        }
-      }
+      // Resolve the ACTUAL send domain + its verification via the shared
+      // helper. The previous inline check read a non-existent column
+      // (verification_status) and matched org-only, which 422'd EVERY
+      // campaign send — verified domain, system domain, store default alike.
+      const { resolveSendDomainVerification } = await import('@/lib/email/domain-verification')
+      const { fromEmail, domainVerified } = await resolveSendDomainVerification(
+        organizationId,
+        campaign.store_id,
+        campaign.from_email
+      )
       // Block sends from unverified domains (unless this is a test send)
       const isTestSend = request.headers.get('x-test-send') === 'true'
       if (!domainVerified && !isTestSend) {

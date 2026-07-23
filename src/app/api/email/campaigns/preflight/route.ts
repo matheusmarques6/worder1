@@ -33,20 +33,15 @@ export async function POST(req: NextRequest) {
   }
 
   const template = campaign.email_templates
-  const fromEmail = (campaign.from_email || '').trim()
-  let domainVerified = true
-
-  if (fromEmail && fromEmail.includes('@')) {
-    const domainPart = fromEmail.split('@')[1].toLowerCase()
-    const { data: dom } = await supabaseAdmin
-      .from('email_domains')
-      .select('verification_status')
-      .eq('organization_id', orgId)
-      .eq('domain', domainPart)
-      .maybeSingle()
-    if (dom) domainVerified = dom.verification_status === 'verified'
-    else domainVerified = false
-  }
+  // Shared resolver: real `status` column, matches the system domain, and
+  // resolves the store/org sender when from_email is blank. The old inline
+  // read of `verification_status` always reported domain_not_verified.
+  const { resolveSendDomainVerification } = await import('@/lib/email/domain-verification')
+  const { fromEmail, domainVerified } = await resolveSendDomainVerification(
+    orgId,
+    campaign.store_id,
+    campaign.from_email
+  )
 
   const issues = runPreflight({
     subject: campaign.subject || template?.subject,
