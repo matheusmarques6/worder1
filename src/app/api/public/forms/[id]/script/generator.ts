@@ -714,7 +714,13 @@ function show(){
   // novalidate: our validator replaces browser-native bubbles (R9), so
   // visitors never see the browser's locale-specific messages.
   function renderForm(html){
-    content.innerHTML='<form id="wf-form-'+FID+'" novalidate style="margin:auto 0;width:100%">'+html+'</form>';
+    // Honeypot: an off-screen field real users never see or tab to, but
+    // naive bots auto-fill. Harvested like any input; the submit handler
+    // lifts it out of answers into payload._hp and the server silently
+    // drops any submission that carries a value. autocomplete=off +
+    // tabindex=-1 + aria-hidden keep humans and screen readers away.
+    var hp='<div aria-hidden="true" style="position:absolute!important;left:-9999px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important"><label>Deixe este campo em branco<input type="text" name="_wf_hp" tabindex="-1" autocomplete="off" value="" /></label></div>';
+    content.innerHTML='<form id="wf-form-'+FID+'" novalidate style="margin:auto 0;width:100%">'+hp+html+'</form>';
     bindForm();
   }
   // R9: shared validator for submit AND next-step. Paints borders with the
@@ -850,7 +856,12 @@ function show(){
       submitting=true;
       setLoading(true);
       dlog("submit posting to backend...");
+      // Lift the honeypot out of answers into a top-level signal so it
+      // never lands in the submission record; server drops non-empty _hp.
+      var _hp=allData._wf_hp||"";
+      if(allData._wf_hp!==undefined)delete allData._wf_hp;
       var payload={answers:allData};
+      if(_hp)payload._hp=_hp;
       if(currentUtms.utm_source)payload.utm_source=currentUtms.utm_source;
       if(currentUtms.utm_medium)payload.utm_medium=currentUtms.utm_medium;
       if(currentUtms.utm_campaign)payload.utm_campaign=currentUtms.utm_campaign;

@@ -466,6 +466,27 @@ export async function POST(
       return corsError('Formulário não encontrado ou não publicado', 404, 'not_found')
     }
 
+    // Honeypot: the storefront renders an off-screen _wf_hp field that only
+    // bots fill. A non-empty value → drop the submission silently: create
+    // no contact, no deal, fire no automation, apply no audience. Return a
+    // success shape indistinguishable from a real one so the bot gets no
+    // signal to adapt. Placed after the form loads so the fake success can
+    // echo the same success_message/redirect the real path would.
+    if (typeof (body as any)?._hp === 'string' && (body as any)._hp.trim() !== '') {
+      console.warn('[Form Submit] honeypot tripped — dropping bot submission', { formId })
+      return corsJson({
+        success: true,
+        submission_id: null,
+        contact_id: null,
+        deal_id: null,
+        events_fired: [],
+        redirect_url: form.redirect_url || null,
+        success_message: form.success_message,
+        coupon: null,
+        double_optin_sent: false,
+      })
+    }
+
     const designJson = form.design_json || {}
     const isVisualForm = isVisualPopupForm(form.form_type, designJson)
 
