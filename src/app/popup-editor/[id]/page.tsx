@@ -3096,6 +3096,49 @@ export default function PopupEditorPage() {
 
   const s = design.styles
 
+  // Canvas-preview parity with the storefront script (generator.ts
+  // popCss()/ovStyle): the box size, its position and the backdrop all
+  // depend on formType. Without this the editor drew EVERY type as a
+  // centered popup, so a merchant designing a banner/flyout/fullpage/embed
+  // saw a layout that didn't match what publishes.
+  const ft = design.formType || 'popup'
+  const isBannerFt = ft === 'banner'
+  const isFlyoutFt = ft === 'flyout'
+  const isFullpageFt = ft === 'fullpage'
+  const isEmbedFt = ft === 'embed'
+  // Dark backdrop only for the two types that dim the page.
+  const showBackdrop = (ft === 'popup' || ft === 'fullpage') && s.overlay.enabled
+  // Where the box sits within the canvas viewport.
+  const canvasAlign: React.CSSProperties =
+    isFlyoutFt ? { alignItems: 'flex-end', justifyContent: 'flex-end', padding: 16 }
+    : isBannerFt ? { alignItems: 'flex-start', justifyContent: 'center' }
+    : { alignItems: 'center', justifyContent: 'center' }
+  const boxWidth: number | string =
+    isBannerFt || isFullpageFt || isEmbedFt ? '100%'
+    : previewDevice === 'mobile' ? 360
+    : isFlyoutFt ? Math.min(s.width, 400)
+    : s.width
+  const boxStyle: React.CSSProperties = {
+    width: boxWidth,
+    maxWidth: isBannerFt || isFullpageFt || isEmbedFt ? '100%' : '95%',
+    height: isFullpageFt ? '100%' : undefined,
+    minHeight: isBannerFt || isFlyoutFt || isEmbedFt ? undefined : (s.minHeight ?? 500),
+    borderRadius: isBannerFt || isFullpageFt ? 0 : s.borderRadius,
+    // Inline shadow wins over the shadow-2xl class for non-popup types;
+    // popup leaves it undefined so the class applies.
+    boxShadow: isFullpageFt || isEmbedFt ? 'none'
+      : isBannerFt ? '0 2px 8px rgba(0,0,0,0.08)'
+      : isFlyoutFt ? '0 20px 40px -10px rgba(0,0,0,0.3)'
+      : undefined,
+    animation: s.animation === 'fade' ? 'fadeIn 0.3s ease' : s.animation === 'slide-up' ? 'slideUp 0.3s ease' : undefined,
+  }
+  // Banner/flyout flow top-aligned; popup/fullpage/embed keep the
+  // vertically-centered column.
+  const contentVCenter = !(isBannerFt || isFlyoutFt)
+  // Side image never renders on banner/flyout or on mobile (matches the
+  // script's hasSideAt()).
+  const sideAllowed = !isBannerFt && !isFlyoutFt && previewDevice !== 'mobile'
+
   return (
     <div className="h-screen flex flex-col bg-gray-100">
       <InlineEditableStyles />
@@ -3498,30 +3541,25 @@ export default function PopupEditorPage() {
                 <div className="h-3 w-full bg-gray-300/60 rounded" /><div className="h-3 w-3/4 bg-gray-300/60 rounded" /><div className="h-3 w-5/6 bg-gray-300/60 rounded" />
               </div>
             </div>
-            {/* Popup overlay */}
-            <div className="fixed inset-0 top-[52px] flex items-center justify-center" style={{ zIndex: 10 }}>
-              {s.overlay.enabled && <div className="absolute inset-0" style={{ backgroundColor: s.overlay.color, opacity: s.overlay.opacity / 100 }} />}
-              <div className="relative flex overflow-hidden shadow-2xl" style={{
-                width: previewDevice === 'mobile' ? 360 : s.width,
-                maxWidth: '95%',
-                minHeight: s.minHeight ?? 500,
-                borderRadius: s.borderRadius,
-                animation: s.animation === 'fade' ? 'fadeIn 0.3s ease' : s.animation === 'slide-up' ? 'slideUp 0.3s ease' : undefined,
-              }}>
+            {/* Popup overlay — position/backdrop/box mirror the storefront per formType */}
+            <div className="fixed inset-0 top-[52px] flex" style={{ zIndex: 10, ...canvasAlign }}>
+              {showBackdrop && <div className="absolute inset-0" style={{ backgroundColor: s.overlay.color, opacity: s.overlay.opacity / 100 }} />}
+              <div className="relative flex overflow-hidden shadow-2xl" style={boxStyle}>
                 {s.closeButton.show && (
-                  <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/30 flex items-center justify-center z-20">
-                    <X style={{ color: s.closeButton.color || '#FFFFFF' }} className="w-4 h-4" />
+                  <button className="absolute top-3 right-3 rounded-full bg-black/30 flex items-center justify-center z-20"
+                    style={{ width: s.closeButton.size ?? 24, height: s.closeButton.size ?? 24 }}>
+                    <X style={{ color: s.closeButton.color || '#FFFFFF', width: Math.round((s.closeButton.size ?? 24) * 0.58), height: Math.round((s.closeButton.size ?? 24) * 0.58) }} />
                   </button>
                 )}
-                {s.sideImage.enabled && s.sideImage.position === 'left' && s.sideImage.src && previewDevice !== 'mobile' && (
+                {s.sideImage.enabled && s.sideImage.position === 'left' && s.sideImage.src && sideAllowed && (
                   <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
                     <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
                   </div>
                 )}
-                <div style={{ backgroundColor: s.backgroundColor, paddingTop: s.paddingTop ?? s.padding ?? 32, paddingRight: s.paddingRight ?? s.padding ?? 32, paddingBottom: s.paddingBottom ?? s.padding ?? 32, paddingLeft: s.paddingLeft ?? s.padding ?? 32, fontFamily: s.fontFamily, flex: 1, flexBasis: 0, minWidth: 0, minHeight: s.minHeight ?? 500, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <div style={{ backgroundColor: s.backgroundColor, paddingTop: s.paddingTop ?? s.padding ?? 32, paddingRight: s.paddingRight ?? s.padding ?? 32, paddingBottom: s.paddingBottom ?? s.padding ?? 32, paddingLeft: s.paddingLeft ?? s.padding ?? 32, fontFamily: s.fontFamily, flex: 1, flexBasis: 0, minWidth: 0, minHeight: (isBannerFt || isFlyoutFt) ? undefined : (s.minHeight ?? 500), display: 'flex', flexDirection: 'column', justifyContent: contentVCenter ? 'center' : 'flex-start' }}>
                   {activeStep.blocks.map(block => <BlockPreview key={block.id} block={block} />)}
                 </div>
-                {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && previewDevice !== 'mobile' && (
+                {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && sideAllowed && (
                   <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
                     <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
                   </div>
