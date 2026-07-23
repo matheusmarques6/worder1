@@ -134,6 +134,26 @@ function mapCatalogProduct(p: any, shopDomain: string) {
 
 const CATALOG_COLS = 'shopify_product_id, title, handle, price, compare_at_price, images, vendor, sku, status, product_type, created_at'
 
+// Fetch newest active catalog products for an org, tolerant of how the
+// status was stored. Some historical syncs saved the Shopify enum verbatim
+// ('ACTIVE') or left it null, so a strict .eq('status','active') silently
+// returned nothing. We try the case-insensitive/null-tolerant filter first,
+// and if that still yields zero we fall back to ANY product for the org so
+// a recommendation block never renders empty when the catalog IS synced.
+async function fetchNewestCatalog(orgId: string, limit: number): Promise<any[]> {
+  const base = () => supabaseAdmin.from('shopify_products')
+    .select(CATALOG_COLS)
+    .eq('organization_id', orgId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  let { data } = await base().or('status.ilike.active,status.is.null')
+  if (!data || data.length === 0) {
+    const retry = await base()
+    data = retry.data || []
+  }
+  return data || []
+}
+
 export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[]> {
   const { orgId } = opts
   if (!orgId) return []
@@ -150,13 +170,8 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
     case 'most_viewed':
     case 'newest': {
       const shopDomain = await getShopDomain(orgId)
-      const { data } = await supabaseAdmin.from('shopify_products')
-        .select(CATALOG_COLS)
-        .eq('organization_id', orgId)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(limit)
-      products = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain))
+      const data = await fetchNewestCatalog(orgId, limit)
+      products = data.map((p: any) => mapCatalogProduct(p, shopDomain))
       break
     }
 
@@ -165,7 +180,7 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
       const { data } = await supabaseAdmin.from('shopify_products')
         .select(CATALOG_COLS)
         .eq('organization_id', orgId)
-        .eq('status', 'active')
+        .or('status.ilike.active,status.is.null')
         .limit(limit * 3)
       const shuffled = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain)).sort(() => Math.random() - 0.5)
       products = shuffled.slice(0, limit)
@@ -197,7 +212,7 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
       }
       if (products.length === 0) {
         const { data } = await supabaseAdmin.from('shopify_products')
-          .select(CATALOG_COLS).eq('organization_id', orgId).eq('status', 'active')
+          .select(CATALOG_COLS).eq('organization_id', orgId).or('status.ilike.active,status.is.null')
           .order('created_at', { ascending: false }).limit(limit)
         products = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain))
       }
@@ -399,11 +414,8 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
     case 'recommendations':
     default: {
       const shopDomain = await getShopDomain(orgId)
-      const { data } = await supabaseAdmin.from('shopify_products')
-        .select(CATALOG_COLS).eq('organization_id', orgId).eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(limit)
-      products = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain))
+      const data = await fetchNewestCatalog(orgId, limit)
+      products = data.map((p: any) => mapCatalogProduct(p, shopDomain))
     }
   }
 
