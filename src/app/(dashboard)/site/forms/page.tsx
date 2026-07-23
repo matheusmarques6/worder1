@@ -562,7 +562,7 @@ export default function FormsPage() {
                   <td className="p-4">
                     <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => router.push(`/forms/${form.id}/edit`)}
+                        onClick={() => router.push(`/forms/${form.id}`)}
                         className="p-1.5 rounded hover:bg-gray-100 transition-colors group/btn"
                         title="Editar"
                       >

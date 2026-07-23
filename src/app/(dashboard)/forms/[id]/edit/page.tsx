@@ -54,6 +54,18 @@ export default function PopupBuilderPage() {
   const [toast, setToast] = useState('')
   const [embedCopied, setEmbedCopied] = useState(false)
 
+  // This legacy config editor predates design_json popups. It cannot read
+  // their content (form.config never exists → it always loads
+  // DEFAULT_CONFIG), and its Save posts { config, status:'draft' }: the API
+  // ignores `config` (silent edit loss) and applies 'draft', UNPUBLISHING a
+  // live popup — all while showing a false "Salvo!". Bounce every existing
+  // form to the dispatcher (/forms/[id]), which routes visual popups to the
+  // real drag-and-drop editor and embeddable forms to their field editor.
+  // Only the untouched 'new' scaffold below stays reachable.
+  useEffect(() => {
+    if (formId && formId !== 'new') router.replace(`/forms/${formId}`)
+  }, [formId, router])
+
   useEffect(() => {
     if (formId === 'new') { setLoading(false); return }
     fetch(`/api/forms/${formId}`)

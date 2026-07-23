@@ -379,6 +379,11 @@ var allData={};
 var _knownFields={};
 var _ppEnabled=!!(B.progressiveProfiling&&B.progressiveProfiling.enabled);
 var _ppHide=_ppEnabled&&B.progressiveProfiling.hideKnownFields!==false;
+// Prefill: merchant turned OFF hide-known-fields but ON prefill. Only the
+// visitor_id known-fields path returns string VALUES (the email path returns
+// booleans to avoid a PII oracle), so prefill naturally applies to string
+// entries only; a boolean true never becomes an input value.
+var _ppFill=_ppEnabled&&!!B.progressiveProfiling.prefillKnownFields;
 function loadKnownFields(cb){
   if(!_ppEnabled){cb();return}
   var em=gc("__worder_id_email")||"";
@@ -416,7 +421,7 @@ function renderBlock(b){
     case"text":{
       var tag=({h1:1,h2:1,h3:1,h4:1,h5:1,h6:1,p:1,div:1,span:1})[p.tag]?p.tag:"p";
       var ts=blockStyleStr(p);
-      ts+="font-size:"+nv(p.fontSize,16)+"px;color:"+sv(p.color,"#111827")+";font-weight:"+sv(p.fontWeight,"normal")+";font-style:"+sv(p.fontStyle,"normal")+";text-decoration:"+sv(p.textDecoration,"none")+";text-align:"+sv(p.align,"left")+";line-height:"+nv(p.lineHeight,1.4)+";font-family:"+sv(p.fontFamily,"inherit")+";";
+      ts+="font-size:"+nv(p.fontSize,16)+"px;color:"+sv(p.color,"#111827")+";font-weight:"+sv(p.fontWeight,"normal")+";font-style:"+sv(p.fontStyle,"normal")+";text-decoration:"+sv(p.textDecoration,"none")+";text-align:"+sv(p.align,"left")+";line-height:"+nv(p.lineHeight,1.4)+";font-family:"+sv(p.fontFamily,"inherit")+";white-space:pre-wrap;";
       if(p.letterSpacing!=null)ts+="letter-spacing:"+nv(p.letterSpacing,0)+"px;";
       if(p.blockPadTop!=null||p.blockPadRight!=null||p.blockPadBottom!=null||p.blockPadLeft!=null)ts+="padding:"+nv(p.blockPadTop,0)+"px "+nv(p.blockPadRight,0)+"px "+nv(p.blockPadBottom,0)+"px "+nv(p.blockPadLeft,0)+"px;";
       h='<'+tag+' style="'+ts+'">'+esc(p.content||"")+'</'+tag+'>';
@@ -441,7 +446,13 @@ function renderBlock(b){
       var iid="wi_"+bid(b.id);
       var lbl=(p.showLabel&&p.label)?'<label for="'+iid+'" style="'+labelStyleStr(p)+'">'+esc(p.label)+'</label>':'';
       var ccAttr=(b.type==="phone"&&p.countryCode)?' data-cc="'+esc(p.countryCode)+'"':'';
-      var inputHtml='<input id="'+iid+'" name="'+esc(nm)+'" type="'+itype+'" placeholder="'+esc(p.placeholder||"")+'"'+req+vaStr(p)+ccAttr+' style="'+inputStyleStr(p)+'" />';
+      // Progressive-profiling prefill (bug fix): emit value= for a known
+      // field so a returning visitor sees it pre-populated. Same mapTo
+      // derivation as visibleBlocks; only string values prefill.
+      var _mk=p.mapTo||(b.type==="email"?"email":b.type==="phone"?"phone":b.type==="name-input"?"first_name":"");
+      var _pfv=(_ppFill&&_mk&&typeof _knownFields[_mk]==="string")?_knownFields[_mk]:"";
+      var _va=_pfv?' value="'+esc(_pfv)+'"':'';
+      var inputHtml='<input id="'+iid+'" name="'+esc(nm)+'" type="'+itype+'" placeholder="'+esc(p.placeholder||"")+'"'+req+_va+vaStr(p)+ccAttr+' style="'+inputStyleStr(p)+'" />';
       var customCss='<style>#'+iid+'::placeholder{color:'+phc+';opacity:1}</style>';
       if(b.type==="phone"&&p.countryCode){
         var cc=esc(p.countryCode||"+55");

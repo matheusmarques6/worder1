@@ -2798,6 +2798,28 @@ export default function PopupEditorPage() {
           successMessage: saved.successMessage || form.success_message || '',
           errorMessage: saved.errorMessage || '',
         }
+        // Legacy trigger normalization: popups authored in the OLD editor
+        // stored a single `behavior.display.trigger` string and NO boolean
+        // flags. The deep-merge above fills timeEnabled/exitEnabled/… from
+        // defaults (timeEnabled:true), which defeats the `?? (trigger===…)`
+        // fallback and silently flips an exit/scroll popup to time-delay on
+        // the next save. Derive the booleans from the legacy trigger when
+        // the saved data carried none of them.
+        const savedDisplay: any = ((saved.behavior || {}) as any).display || {}
+        const hadBooleanTriggers =
+          savedDisplay.timeEnabled !== undefined ||
+          savedDisplay.scrollEnabled !== undefined ||
+          savedDisplay.exitEnabled !== undefined ||
+          savedDisplay.pageViewEnabled !== undefined
+        if (!hadBooleanTriggers && typeof savedDisplay.trigger === 'string') {
+          const t = savedDisplay.trigger
+          merged.behavior.display.scrollEnabled = t === 'scroll'
+          merged.behavior.display.exitEnabled = t === 'exit_intent'
+          merged.behavior.display.pageViewEnabled = t === 'page_view'
+          // 'time_delay', unsupported 'click' and any unknown value fall
+          // back to the time-delay trigger so the popup still shows.
+          merged.behavior.display.timeEnabled = t !== 'scroll' && t !== 'exit_intent' && t !== 'page_view'
+        }
         // Seed postSubmit.redirectUrl da coluna legada form.redirect_url apenas
         // para EXIBIÇÃO — NÃO auto-flipar action p/ 'redirect'. O runtime só
         // redireciona quando action==='redirect', então flipar aqui alteraria
