@@ -680,9 +680,10 @@ function BlockPreview({ block, selected, onContentChange, onSelect }: { block: B
         {p.href ? <a href={p.href} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block' }}>{imgEl}</a> : imgEl}
       </div>
     }
-    // Legacy spacers without the prop render 16px on the storefront — match it.
-    // New inserts carry an explicit height: 24 in defaultProps.
-    case 'spacer': return <div style={{ ...blockStyle, height: p.height ?? 16 }} />
+    // Prop-less spacers render 24px on the storefront (generator.ts
+    // nv(p.height,24)); match that default here so the canvas doesn't
+    // under-draw the gap. New inserts already carry height: 24.
+    case 'spacer': return <div style={{ ...blockStyle, height: p.height ?? 24 }} />
     case 'line': return <div style={blockStyle}><hr style={{ border: 'none', borderTop: `${p.thickness || 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'}`, margin: '0 auto', width: `${p.width ?? 100}%` }} /></div>
     case 'coupon':
       return <div style={{ ...blockStyle, padding: '16px', border: `2px ${p.borderStyle || 'dashed'} ${p.borderColor || '#F97316'}`, borderRadius: p.borderRadius ?? 8, textAlign: 'center', background: p.bgColor || '#FFF7ED' }}>
@@ -719,14 +720,14 @@ function BlockPreview({ block, selected, onContentChange, onSelect }: { block: B
       return <div style={blockStyle}>
         {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1.5">{p.label}</label>}
         <div style={{ display: 'flex', flexDirection: p.layout === 'horizontal' ? 'row' : 'column', gap: p.layout === 'horizontal' ? 12 : 8 }}>
-          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="accent-zinc-900" />{o}</label>)}
+          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="accent-orange-500" />{o}</label>)}
         </div>
       </div>
     case 'checkbox':
       return <div style={blockStyle}>
         {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1.5">{p.label}</label>}
         <div className="space-y-2">
-          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="checkbox" className="rounded accent-zinc-900" />{o}</label>)}
+          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="checkbox" className="rounded accent-orange-500" />{o}</label>)}
         </div>
       </div>
     default: return <div className="text-xs text-gray-400 p-2">[{block.type}]</div>
@@ -1642,7 +1643,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           <div className="space-y-3">
             <SectionHeader title="Espaçador" icon={<MoveVertical className="w-3 h-3" />} />
             <LabeledField label="Altura" hint="Espaço em branco entre blocos.">
-              <Slider value={p.height ?? 16} onChange={v => up('height', v)} min={4} max={200} unit="px" />
+              <Slider value={p.height ?? 24} onChange={v => up('height', v)} min={4} max={200} unit="px" />
             </LabeledField>
             <div className="grid grid-cols-4 gap-2">
               {[8, 16, 24, 48].map(h => (

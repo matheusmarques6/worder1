@@ -323,6 +323,15 @@ export default function PopupEditorPage() {
   const activeStep = showSuccess ? design.successStep : design.steps[activeStepIdx]
   const selectedBlock = activeStep?.blocks.find(b => b.id === selectedBlockId) ?? null
 
+  // Orphaned older design_json editor. It reads `data.design_json` but the
+  // GET returns `{ form }`, so it ALWAYS loads a blank defaultDesign — and a
+  // Save then overwrites the popup's real design_json with that blank. There
+  // are no links to it; /popup-editor/[id] is the canonical editor. Bounce
+  // every form to the dispatcher so a stray bookmark can't wipe a popup.
+  useEffect(() => {
+    if (formId) router.replace(`/forms/${formId}`)
+  }, [formId, router])
+
   // Load
   useEffect(() => {
     fetch(`/api/forms/${formId}`).then(r => r.json()).then(data => {
