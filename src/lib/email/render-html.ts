@@ -143,14 +143,22 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       const nets = (p.networks || []).filter((n: any) => n.url && n.enabled !== false)
       const iconSz = p.iconSize || 32
       const spacing = (p.spacing || 12) / 2
+      const textLinkColor = p.linkColor || p.textColor || '#6B7280'
       const html = nets.map((n: any) => {
         const url = iconUrls[n.type]
         if (url) {
-          return `<a href="${n.url}" target="_blank" style="display:inline-block;margin:0 ${spacing}px;line-height:0;text-decoration:none;"><img src="${url}" alt="${labels[n.type] || n.type}" width="${iconSz}" height="${iconSz}" style="display:block;width:${iconSz}px;height:${iconSz}px;border:0;${p.iconStyle === 'black' ? 'filter:grayscale(1);' : ''}" /></a>`
+          return `<a href="${attr(n.url)}" target="_blank" style="display:inline-block;margin:0 ${spacing}px;line-height:0;text-decoration:none;vertical-align:middle;"><img src="${url}" alt="${attr(labels[n.type] || n.type)}" width="${iconSz}" height="${iconSz}" style="display:inline-block;width:${iconSz}px;height:${iconSz}px;border:0;vertical-align:middle;${p.iconStyle === 'black' ? 'filter:grayscale(1);' : ''}" /></a>`
         }
-        return `<a href="${n.url}" target="_blank" style="display:inline-block;margin:0 ${spacing}px;font-size:${iconSz}px;text-decoration:none;">${labels[n.type] || n.type}</a>`
+        // Text fallback for networks without an icon image (e.g. e-mail,
+        // custom links). Previously rendered at font-size:iconSize (32px),
+        // which made a text label like "support@..." huge and misaligned
+        // inside the font-size:0 cell. Use a normal readable size + middle
+        // vertical-align so it sits inline with any icons.
+        return `<a href="${attr(n.url)}" target="_blank" style="display:inline-block;margin:0 ${spacing}px;font-size:14px;line-height:1.4;vertical-align:middle;text-decoration:none;color:${textLinkColor};">${labels[n.type] || n.type}</a>`
       }).join('')
-      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};line-height:0;font-size:0;">${html}</td></tr>`
+      // font-size:0 removes whitespace gaps between inline icons; each text
+      // fallback link re-declares its own font-size so it stays readable.
+      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};line-height:1;font-size:0;">${html}</td></tr>`
     }
 
     case 'header':
