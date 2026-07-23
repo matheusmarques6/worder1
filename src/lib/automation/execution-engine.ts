@@ -145,6 +145,16 @@ export class ExecutionEngine {
       (context as any).organizationId = options.organizationId;
     }
 
+    // Backfill storeId onto the context so EVERY downstream reader sees it —
+    // most importantly the email node, which resolves the STORE's sender
+    // identity (getEmailProviderForOrg(org, storeId)) from context.storeId.
+    // createExecutionContext() never sets it and some callers pass it only
+    // via options, so without this the send silently falls back to the ORG
+    // sender — a multi-store org's mail then arrives under the wrong brand.
+    if (!(context as any).storeId && (options as any)?.storeId) {
+      (context as any).storeId = (options as any).storeId;
+    }
+
     // Attach the store host (shop_domain) ONCE per execution so message bodies
     // build ABSOLUTE product/checkout links (a relative "/products/x" 404s on
     // the app domain). Single choke point for EVERY runner — some context

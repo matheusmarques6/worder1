@@ -59,15 +59,23 @@ export async function getEmailProviderForOrg(
   if (storeId) {
     const { data: store } = await supabaseAdmin
       .from('shopify_stores')
-      .select('settings')
+      .select('name, settings')
       .eq('id', storeId)
       .eq('organization_id', organizationId)
       .maybeSingle();
     const storeEmailSettings: any = (store?.settings as any)?.email_settings || null;
+    // Sender NAME for a store-scoped send is the store's identity, never
+    // the org's. Precedence: explicit per-store setting → the store's own
+    // name. Without this a multi-store org sends EVERY store's mail under
+    // the org name (e.g. Dr. Groot's emails arriving as "Based"), because
+    // the org-level default above was left in place for stores with no
+    // explicit email_settings.default_sender_name.
+    if (storeEmailSettings?.default_sender_name) {
+      config.defaultSenderName = storeEmailSettings.default_sender_name;
+    } else if (store?.name) {
+      config.defaultSenderName = store.name;
+    }
     if (storeEmailSettings) {
-      if (storeEmailSettings.default_sender_name) {
-        config.defaultSenderName = storeEmailSettings.default_sender_name;
-      }
       if (storeEmailSettings.default_sender_email) {
         config.defaultFrom = storeEmailSettings.default_sender_email;
       }

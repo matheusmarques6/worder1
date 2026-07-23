@@ -236,6 +236,23 @@ export async function POST(req: NextRequest) {
     let batchFromAddress = campaign.from_email
       ? (campaign.sender_name ? `${campaign.sender_name} <${campaign.from_email}>` : campaign.from_email)
       : null;
+    if (!batchFromAddress && campaign.store_id) {
+      // Store-aware sender: a multi-store org must send each store's
+      // campaigns under THAT store's identity, not the org default.
+      // getEmailProviderForOrg layers store email_settings (and the
+      // store's own name) over the org — same resolution the automation
+      // send path uses. Without this a Dr. Groot campaign fell back to
+      // getOrgSender() and arrived as the org name ("Based").
+      try {
+        const { getEmailProviderForOrg } = await import('@/lib/email/providers');
+        const { config } = await getEmailProviderForOrg(organizationId, campaign.store_id);
+        if (config.defaultFrom) {
+          batchFromAddress = config.defaultSenderName
+            ? `${config.defaultSenderName} <${config.defaultFrom}>`
+            : config.defaultFrom;
+        }
+      } catch { /* fall through to org-level */ }
+    }
     if (!batchFromAddress) {
       try {
         const { getOrgSender } = await import('@/lib/email/sender');
