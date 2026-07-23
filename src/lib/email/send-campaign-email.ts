@@ -273,6 +273,17 @@ export async function sendCampaignEmail({
       }
     }
 
+    // Always ship a text/plain alternative. Visual-editor templates carry no
+    // plain-text version, so without this the email is HTML-only — a major
+    // spam signal. Derive it from the fully-rendered HTML as a fallback.
+    if (!finalText || !finalText.trim()) {
+      try {
+        const { htmlToPlainText } = await import('@/lib/email/html-to-text');
+        const derived = htmlToPlainText(finalHtml);
+        finalText = derived && derived.trim() ? derived : undefined;
+      } catch { /* keep undefined; better to send than block */ }
+    }
+
     const result = await provider.send({
       to: contactEmail,
       from: effectiveFrom,

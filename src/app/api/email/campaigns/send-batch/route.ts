@@ -524,6 +524,16 @@ export async function POST(req: NextRequest) {
             console.warn('[SendBatch] plain-text merge failed:', e)
           }
         }
+        // Always ship a text/plain alternative — HTML-only email is a major
+        // spam signal. Visual campaigns have no plainSource, so derive the
+        // text part from the fully-rendered HTML.
+        if (!finalText || !finalText.trim()) {
+          try {
+            const { htmlToPlainText } = await import('@/lib/email/html-to-text')
+            const derived = htmlToPlainText(finalHtml)
+            finalText = derived && derived.trim() ? derived : undefined
+          } catch { /* better to send than block */ }
+        }
 
         prepped.push({
           contactId: contact.id,
