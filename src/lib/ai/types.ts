@@ -77,6 +77,19 @@ export interface AgentSettings {
   tools?: {
     enabled: string[]
   }
+  /**
+   * Travas de segurança aplicadas no caminho live (cloud-runner/cloud-sender).
+   * Opcional: agentes antigos no banco não têm este bloco — runtime trata
+   * undefined como listas vazias.
+   */
+  safety?: {
+    /** Palavras do CLIENTE que forçam transferência p/ humano (case/acento-insensitive). */
+    handoff_keywords: string[]
+    /** Mensagem opcional enviada ao cliente quando a transferência por keyword acontece. */
+    handoff_confirmation_message?: string
+    /** Tópicos que a RESPOSTA da IA não pode mencionar — violação bloqueia o envio e transfere. */
+    blocked_topics: string[]
+  }
 }
 
 // =====================================================
@@ -427,6 +440,11 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   // mudam: DEFAULT_SETTINGS só entra em novos INSERTs (POST /api/ai/agents)
   // e getActiveTools devolve [] quando settings.tools está ausente.
   tools: { enabled: ['transfer_to_human'] },
+  safety: {
+    handoff_keywords: [],
+    handoff_confirmation_message: '',
+    blocked_topics: [],
+  },
 }
 
 export const RESPONSE_LENGTH_TOKENS = {
