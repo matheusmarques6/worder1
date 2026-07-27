@@ -20,6 +20,11 @@ import {
   readOverrideFromRequest,
   buildOptOutBlockedResponse,
 } from '@/lib/whatsapp/opt-out-guard'
+import {
+  checkBeforeSend,
+  reportSendResult,
+  buildRateLimitedResponseBody,
+} from '@/lib/whatsapp/send-guard'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -143,6 +148,22 @@ export async function POST(
       )
     }
 
+    // Send guard — tier da Meta + circuit breaker (paridade com campanhas).
+    // Template fora da janela de 24h é exatamente o caso que a Meta
+    // monitora para qualidade — cota diária bloqueia com mensagem clara.
+    const guardCheck = await checkBeforeSend({
+      accountId: cloudConv.account.id,
+      recipientPhone: phoneNumber,
+      messagingLimit: cloudConv.account.messaging_limit,
+    })
+    if (!guardCheck.allowed) {
+      const body429 = buildRateLimitedResponseBody(guardCheck)
+      return NextResponse.json(body429, {
+        status: 429,
+        headers: { ...NO_CACHE_HEADERS, 'Retry-After': String(body429.retryAfter) },
+      })
+    }
+
     const client = createWhatsAppCloudClient({
       phoneNumberId: cloudConv.account.phone_number_id,
       accessToken: getAccessToken(cloudConv.account),
@@ -153,11 +174,19 @@ export async function POST(
       result = await client.sendTemplate(phoneNumber, templateName, language, components)
     } catch (apiError: any) {
       console.error('[send-template] Cloud API error:', apiError)
+      await reportSendResult({
+        accountId: cloudConv.account.id,
+        success: false,
+        errorCode: apiError?.code,
+        error: apiError,
+        messagingLimit: cloudConv.account.messaging_limit,
+      })
       return NextResponse.json(
         { error: apiError.message || 'Failed to send template', code: apiError.code },
         { status: 400, headers: NO_CACHE_HEADERS },
       )
     }
+    await reportSendResult({ accountId: cloudConv.account.id, success: true })
 
     const messageId = result.messages?.[0]?.id
     const renderedBody = renderPreview(template.body_text || templateName, parameters)
