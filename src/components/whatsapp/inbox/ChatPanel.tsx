@@ -411,21 +411,26 @@ export function ChatPanel({
   async function handleCSATSubmit(rating: number, comment: string) {
     if (!organizationId) return
     try {
-      // Save CSAT rating
+      // Save CSAT rating (opcional — nao bloqueia o resolve)
       await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/csat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rating, comment }),
       })
     } catch { /* */ }
-    try {
-      // Mark as resolved via close endpoint (existing)
-      await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/close`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resolution: comment, rating }),
-      })
-    } catch { /* */ }
+
+    // Mark as resolved via close endpoint. NAO engolir erro: se a API
+    // falhar, lancamos para o CSATModal manter o modal aberto e exibir o
+    // erro — e onResolved() NAO e chamado (a conversa nao fechou no DB).
+    const res = await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolution: comment, rating }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({} as any))
+      throw new Error(data.error || 'Falha ao resolver a conversa')
+    }
     if (onResolved) onResolved()
   }
 

@@ -15,18 +15,22 @@ export function CSATModal({ isOpen, onClose, onSubmit, contactName }: CSATModalP
   const [hoveredRating, setHoveredRating] = useState(0)
   const [comment, setComment] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   if (!isOpen) return null
 
   async function handleSubmit() {
     if (rating === 0) return
     setLoading(true)
+    setError(null)
     try {
       await onSubmit(rating, comment)
       onClose()
       setRating(0)
       setComment('')
-    } catch { /* */ }
+    } catch (e: any) {
+      setError(e?.message || 'Erro ao resolver a conversa. Tente novamente.')
+    }
     setLoading(false)
   }
 
@@ -87,6 +91,10 @@ export function CSATModal({ isOpen, onClose, onSubmit, contactName }: CSATModalP
             placeholder="Comentario (opcional)"
             className="w-full px-3 py-2 border rounded-lg text-sm resize-none h-20"
           />
+
+          {error && (
+            <p className="mt-3 text-sm text-red-600" role="alert">{error}</p>
+          )}
         </div>
 
         <div className="flex items-center justify-end gap-2 p-4 border-t">
