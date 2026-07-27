@@ -376,6 +376,13 @@ export function ChatPanel({
     }
   }, [input])
 
+  // Se a janela de 24h cair enquanto o gravador esta aberto, fecha-o em vez
+  // de deixa-lo montado como um no-op silencioso (o banner + composer
+  // desabilitado ja comunicam o estado).
+  useEffect(() => {
+    if (!isWindowOpen) setRecordingMode(false)
+  }, [isWindowOpen])
+
   const handleSend = async () => {
     if (!input.trim() || isSending || !isWindowOpen) return
     const content = input.trim()
@@ -486,6 +493,7 @@ export function ChatPanel({
     .slice(-1)[0]?.content
 
   async function handleSendPaymentLink(data: { amount: number; description: string; paymentUrl?: string }) {
+    if (!isWindowOpen) return
     if (!organizationId) return
     await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/payment-link`, {
       method: 'POST',
@@ -495,6 +503,7 @@ export function ChatPanel({
   }
 
   async function handleSendCatalog() {
+    if (!isWindowOpen) return
     if (!organizationId) return
     // Prompt for product ids (simple approach, no selector UI for brevity)
     const ids = prompt('IDs dos produtos Shopify separados por virgula:')
@@ -529,6 +538,7 @@ export function ChatPanel({
   }
 
   const handleSendMedia = async (caption: string) => {
+    if (!isWindowOpen) return
     if (!selectedFile) return
     await onSendMedia(selectedFile, selectedMediaType, caption)
     setSelectedFile(null)
@@ -865,6 +875,7 @@ export function ChatPanel({
               isUploading={isUploading}
               onCancel={() => setRecordingMode(false)}
               onSend={async (file) => {
+                if (!isWindowOpen) return
                 await onSendMedia(file, 'audio')
                 setRecordingMode(false)
               }}
