@@ -22,7 +22,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { X, Search, FileText, MessageSquare, Loader2, ChevronLeft, Send } from 'lucide-react'
 import { authedFetch } from '@/lib/api/authed-fetch'
 import { Badge } from '@/components/ui/Badge'
-import { getHeaderFormat, getDynamicUrlButtonIndexes } from '@/lib/whatsapp/template-components'
+import {
+  getHeaderFormat,
+  getDynamicUrlButtonIndexes,
+  getBodyText,
+  countBodyVariables,
+} from '@/lib/whatsapp/template-components'
 
 export interface SendTemplatePayload {
   templateName: string
@@ -63,12 +68,6 @@ interface TemplatePickerModalProps {
   onSendTemplate: (payload: SendTemplatePayload) => Promise<void>
   onSelectQuickReply: (content: string) => void
   isSending?: boolean
-}
-
-function countBodyVariables(bodyText: string | null | undefined): number {
-  if (!bodyText) return 0
-  const m = bodyText.match(/\{\{\s*\d+\s*\}\}/g)
-  return m ? m.length : 0
 }
 
 function renderPreview(bodyText: string, params: string[]): string {
@@ -151,7 +150,7 @@ export function TemplatePickerModal({
     if (!q) return templates
     return templates.filter(t =>
       t.name.toLowerCase().includes(q) ||
-      (t.body_text || '').toLowerCase().includes(q),
+      getBodyText(t).toLowerCase().includes(q),
     )
   }, [templates, search])
 
@@ -166,11 +165,13 @@ export function TemplatePickerModal({
   }, [quickReplies, search])
 
   function handlePickTemplate(t: TemplateRow) {
-    const n = countBodyVariables(t.body_text)
+    const n = countBodyVariables(getBodyText(t))
     setSelected(t)
     setParams(Array(n).fill(''))
-    // Header de midia: pre-preenche com a URL de exemplo sincronizada, se houver
-    setHeaderMediaUrl(t.header_media_url || '')
+    // Header de midia: pre-preenche apenas se ja for uma URL valida — na sincronizacao
+    // achatada, header_media_url pode conter o handle opaco da Meta (example.header_handle),
+    // que nao e uma URL e falharia na validacao /^https:\/\// do submit.
+    setHeaderMediaUrl(/^https:\/\//i.test(t.header_media_url || '') ? (t.header_media_url as string) : '')
     setButtonVars(Array(getDynamicUrlButtonIndexes(t).length).fill(''))
   }
 
@@ -181,7 +182,7 @@ export function TemplatePickerModal({
 
   async function handleSubmitTemplate() {
     if (!selected) return
-    const expected = countBodyVariables(selected.body_text)
+    const expected = countBodyVariables(getBodyText(selected))
     if (params.some((p, i) => i < expected && !p.trim())) {
       setError('Preencha todas as variaveis')
       return
@@ -334,7 +335,7 @@ export function TemplatePickerModal({
                   ) : (
                     <ul className="space-y-2">
                       {filteredT.map(t => {
-                        const vars = countBodyVariables(t.body_text)
+                        const vars = countBodyVariables(getBodyText(t))
                         return (
                           <li key={t.id}>
                             <button
@@ -351,7 +352,7 @@ export function TemplatePickerModal({
                                 )}
                               </div>
                               <p className="text-xs text-gray-600 line-clamp-2">
-                                {t.body_text || '(sem corpo)'}
+                                {getBodyText(t) || '(sem corpo)'}
                               </p>
                             </button>
                           </li>
@@ -447,7 +448,7 @@ export function TemplatePickerModal({
               <div>
                 <p className="text-xs font-medium text-gray-500 mb-1">CORPO</p>
                 <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                  {selected.body_text}
+                  {getBodyText(selected)}
                 </p>
               </div>
 
@@ -485,7 +486,7 @@ export function TemplatePickerModal({
                   <div className="border-t border-dashed border-gray-200 pt-3">
                     <p className="text-xs font-medium text-gray-500 mb-1">PREVIEW</p>
                     <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-900 whitespace-pre-wrap">
-                      {renderPreview(selected.body_text || '', params)}
+                      {renderPreview(getBodyText(selected), params)}
                     </div>
                   </div>
                 </div>
