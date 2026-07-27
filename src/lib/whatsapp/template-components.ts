@@ -135,7 +135,7 @@ export function buildTemplateComponents(
   if (dynIndexes.length !== buttonVars.length) {
     throw new TemplateComponentsError(
       'button_vars_mismatch',
-      `Template tem ${dynIndexes.length} botao(oes) de URL dinamica, recebeu ${buttonVars.length} valor(es) (buttonParameters).`,
+      `Template tem ${dynIndexes.length} botao(oes) de URL dinamica, recebeu ${buttonVars.length} valor(es) (buttonVars).`,
     )
   }
   dynIndexes.forEach((btnIndex, i) => {
