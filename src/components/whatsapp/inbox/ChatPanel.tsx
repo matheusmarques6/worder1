@@ -55,6 +55,13 @@ const formatMessageTime = (date?: string) => {
   return new Date(date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
+const formatMessageDateTime = (date?: string) => {
+  if (!date) return ''
+  return new Date(date).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  })
+}
+
 const getInitials = (name?: string) => {
   if (!name) return '??'
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -66,16 +73,29 @@ const formatFileSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-// Status Icon
-function MessageStatus({ status }: { status: InboxMessage['status'] }) {
-  switch (status) {
-    case 'pending': return <Clock className="w-4 h-4 text-gray-400" />
-    case 'sent': return <Check className="w-4 h-4 text-gray-400" />
-    case 'delivered': return <CheckCheck className="w-4 h-4 text-gray-400" />
-    case 'read': return <CheckCheck className="w-4 h-4 text-cyan-400" />
-    case 'failed': return <AlertCircle className="w-4 h-4 text-error-400" />
-    default: return <Clock className="w-4 h-4 text-gray-400" />
-  }
+// Status Icon — checks estilo WhatsApp com tooltip de entrega/leitura
+function MessageStatus({ status, deliveredAt, readAt }: {
+  status: InboxMessage['status']
+  deliveredAt?: string
+  readAt?: string
+}) {
+  const tooltip = [
+    deliveredAt ? `Entregue ${formatMessageDateTime(deliveredAt)}` : null,
+    readAt ? `Lida ${formatMessageDateTime(readAt)}` : null,
+  ].filter(Boolean).join(' · ')
+
+  const icon = (() => {
+    switch (status) {
+      case 'pending': return <Clock className="w-4 h-4 text-gray-400" />
+      case 'sent': return <Check className="w-4 h-4 text-gray-400" />
+      case 'delivered': return <CheckCheck className="w-4 h-4 text-gray-400" />
+      case 'read': return <CheckCheck className="w-4 h-4 text-cyan-400" />
+      case 'failed': return <AlertCircle className="w-4 h-4 text-error-400" />
+      default: return <Clock className="w-4 h-4 text-gray-400" />
+    }
+  })()
+
+  return <span title={tooltip || undefined} className="inline-flex">{icon}</span>
 }
 
 // Message Bubble
@@ -190,7 +210,13 @@ function MessageBubble({ message, contactName, onRetry }: { message: InboxMessag
           {isPending && <span className="text-[10px] text-gray-500">Enviando...</span>}
           {isBot && isOutbound && !isPending && <span className="text-[10px] text-gray-400">via Bot</span>}
           <span className="text-[10px] text-gray-400">{formatMessageTime(message.created_at)}</span>
-          {isOutbound && <MessageStatus status={message.status} />}
+          {isOutbound && (
+            <MessageStatus
+              status={message.status}
+              deliveredAt={message.delivered_at}
+              readAt={message.read_at}
+            />
+          )}
         </div>
       </div>
     </div>
