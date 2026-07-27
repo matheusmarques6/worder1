@@ -14,6 +14,7 @@ import {
   reportSendResult,
   buildRateLimitedResponseBody,
 } from '@/lib/whatsapp/send-guard'
+import { computeCanSendTemplateOnly } from '@/lib/whatsapp/service-window'
 
 // ✅ FASE 3: Force dynamic para evitar cache
 export const dynamic = 'force-dynamic'
@@ -157,6 +158,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           status: 429,
           headers: { ...NO_CACHE_HEADERS, 'Retry-After': String(body429.retryAfter) },
         })
+      }
+
+      // Janela de 24h (Meta): fora da janela so template aprovado. Sem este
+      // guard a mensagem ia ate a Meta e falhava la (erro 131047).
+      if (computeCanSendTemplateOnly(cloudConv.is_window_open, cloudConv.window_expires_at)) {
+        return NextResponse.json(
+          {
+            error: 'Janela de 24h expirada. Envie um template aprovado para reabrir a conversa.',
+            code: 'WINDOW_EXPIRED',
+          },
+          { status: 400, headers: NO_CACHE_HEADERS },
+        )
       }
 
       const client = createWhatsAppCloudClient({
