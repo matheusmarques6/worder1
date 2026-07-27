@@ -217,8 +217,11 @@ export class AIAgentEngine {
 
         await this.logUsage({
           conversationId,
-          inputTokens: 0,
-          outputTokens: 0,
+          // loopResult.{prompt,completion}Tokens = soma real de todas as
+          // rodadas do tool-loop (cada rodada carrega usage do provider) —
+          // sem isso o checkAiBudget não via custo de agentes com tools.
+          inputTokens: loopResult.promptTokens,
+          outputTokens: loopResult.completionTokens,
           responseTimeMs,
           sourcesUsed,
           actionsTriggered,
