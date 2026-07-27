@@ -26,10 +26,16 @@ describe('mapCloudMessageRow', () => {
       direction: 'inbound',
       message_type: 'text',
       content: 'oi',
+      media_url: null,
+      media_filename: null,
+      media_mime_type: null,
+      media_storage_path: null,
       status: 'delivered',
       sent_by_bot: false,
       is_deleted: false,
       created_at: '2026-07-27T12:00:01Z',
+      delivered_at: null,
+      read_at: null,
       error_code: undefined,
       error_message: undefined,
     })
@@ -48,11 +54,52 @@ describe('mapCloudMessageRow', () => {
       sent_by_bot: null,
       created_at: null,
       timestamp: '2026-07-27T13:00:00Z',
+      media_url: 'https://signed.example/media-1.jpg',
+      media_filename: 'foto.jpg',
+      media_mime_type: 'image/jpeg',
+      media_storage_path: 'org-1/media-1.jpg',
     })
     expect(msg.status).toBe('sent')
     expect(msg.created_at).toBe('2026-07-27T13:00:00Z')
     expect(msg.content).toBe('foto')
     expect(msg.sent_by_bot).toBe(false)
+    expect(msg.media_url).toBe('https://signed.example/media-1.jpg')
+    expect(msg.media_filename).toBe('foto.jpg')
+    expect(msg.media_mime_type).toBe('image/jpeg')
+    expect((msg as any).media_storage_path).toBe('org-1/media-1.jpg')
+  })
+
+  it('midia ausente vira null (nao quebra bolha, so nao renderiza midia)', () => {
+    const msg = mapCloudMessageRow({
+      id: 'msg-2b',
+      conversation_id: 'conv-1',
+      message_id: 'wamid.DEF2',
+      direction: 'inbound',
+      message_type: 'text',
+      content: { text: { body: 'sem midia' } },
+      timestamp: '2026-07-27T13:00:00Z',
+    })
+    expect(msg.media_url).toBeNull()
+    expect(msg.media_filename).toBeNull()
+    expect(msg.media_mime_type).toBeNull()
+    expect((msg as any).media_storage_path).toBeNull()
+  })
+
+  it('propaga delivered_at/read_at de atualizacoes de status (recibos de entrega)', () => {
+    const msg = mapCloudMessageRow({
+      id: 'msg-4',
+      conversation_id: 'conv-1',
+      message_id: 'wamid.JKL',
+      direction: 'outbound',
+      message_type: 'text',
+      content: { text: { body: 'oi' } },
+      status: 'read',
+      timestamp: '2026-07-27T15:00:00Z',
+      delivered_at: '2026-07-27T15:00:05Z',
+      read_at: '2026-07-27T15:00:10Z',
+    })
+    expect(msg.delivered_at).toBe('2026-07-27T15:00:05Z')
+    expect(msg.read_at).toBe('2026-07-27T15:00:10Z')
   })
 
   it('propaga erro de envio (status failed + error_code/error_message)', () => {

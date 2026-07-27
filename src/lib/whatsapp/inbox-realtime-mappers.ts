@@ -37,7 +37,18 @@ export interface RealtimeConversationEvent {
   updated_at?: string
 }
 
-export function mapCloudMessageRow(row: CloudMessageRow): InboxMessage {
+/**
+ * `InboxMessage` nao declara `media_storage_path` (campo interno usado so
+ * pra re-assinar a URL de midia sob demanda — ver GET /messages linha 87).
+ * Estendemos o retorno com esse campo opcional sem quebrar compat com
+ * `InboxMessage` (qualquer consumidor que espera `InboxMessage` continua
+ * funcionando; o campo extra e so mais informacao pra quem quiser usar).
+ */
+export type MappedInboxMessage = InboxMessage & {
+  media_storage_path?: string | null
+}
+
+export function mapCloudMessageRow(row: CloudMessageRow): MappedInboxMessage {
   return {
     id: row.id,
     conversation_id: row.conversation_id,
@@ -45,10 +56,19 @@ export function mapCloudMessageRow(row: CloudMessageRow): InboxMessage {
     direction: row.direction,
     message_type: row.message_type || 'text',
     content: extractMessageText(row.content, row.text_body),
+    // Midia: melhor esforco, mesmo shape/derivacao do GET /messages (linhas
+    // 87-92) — sem re-assinar URL aqui (mapper e puro, sem IO); uma
+    // mensagem inbound recem-inserida ja chega com signed URL fresca.
+    media_url: row.media_url ?? null,
+    media_filename: row.media_filename ?? null,
+    media_mime_type: row.media_mime_type ?? null,
+    media_storage_path: row.media_storage_path ?? null,
     status: row.status || 'sent',
     sent_by_bot: row.sent_by_bot || false,
     is_deleted: false,
     created_at: row.created_at || row.timestamp,
+    delivered_at: row.delivered_at ?? null,
+    read_at: row.read_at ?? null,
     error_code: row.error_code ?? undefined,
     error_message: row.error_message ?? undefined,
   }
