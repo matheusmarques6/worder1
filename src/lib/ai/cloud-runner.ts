@@ -927,6 +927,22 @@ export async function maybeRunAgentForCloudConversation(
     };
   }
 
+  // send_guard_* (rate limiter/circuit breaker por tier da Meta): bloqueio
+  // de proteção contra excesso de envio/instabilidade, igual ao path de
+  // campanhas. Retentar não destrava — o guard só libera quando a janela de
+  // rate-limit passar ou o breaker fechar — então é terminal (sem failure)
+  // como opted_out, para o worker NÃO martelar a Meta com retry.
+  if (!sendResult.sent && sendResult.reason?.startsWith('send_guard_')) {
+    return {
+      replied: false,
+      transferred: false,
+      response,
+      traceId,
+      agentId,
+      skipped: sendResult.reason,
+    };
+  }
+
   return {
     replied: sendResult.sent,
     transferred: false,

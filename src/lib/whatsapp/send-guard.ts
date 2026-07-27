@@ -8,12 +8,21 @@
 //   checkBeforeSend() ANTES do envio  -> 429/skip quando bloqueado
 //   reportSendResult() DEPOIS do envio -> alimenta breaker/throttle
 //
+// Chave compartilhada: phone_number_id (o NÚMERO FÍSICO da Meta), não
+// whatsapp_business_accounts.id nem whatsapp_instances.id — essas duas
+// tabelas podem ter linhas diferentes apontando pro MESMO número, e o
+// throughput/pair-rate/cota-diária/circuit-breaker são limites da Meta
+// por número físico. Chavear por id de tabela split o estado em dois
+// (campanha vs. interativo), permitindo ~2x o limite real. Ver
+// campaign-processor.ts:488-489 (mesma chave, phoneNumberId).
+//
 // Fail-open: indisponibilidade de Redis loga e PERMITE o envio —
 // um outage de infra nunca pode derrubar o atendimento humano.
 // =============================================
 
 import { getRateLimiter, type RateLimitResult } from './rate-limiter'
 import { getCircuitBreaker, type CircuitBreaker } from './circuit-breaker'
+import { normalizePhone } from './cloud-api'
 
 export type SendGuardBlockReason =
   | 'circuit_open'
@@ -23,8 +32,10 @@ export type SendGuardBlockReason =
   | 'daily_quota'
 
 export interface SendGuardCheckParams {
-  /** whatsapp_business_accounts.id — mesmo id/keyspace usado pelas campanhas */
+  /** whatsapp_business_accounts.id — mantido para referência/telemetria */
   accountId: string
+  /** Meta phone_number_id — chave REAL do breaker/rate-limiter (compartilhada com campanhas) */
+  phoneNumberId: string
   recipientPhone: string
   /** whatsapp_business_accounts.messaging_limit (TIER_250, TIER_1K, ...) */
   messagingLimit?: string | null
@@ -39,7 +50,10 @@ export interface SendGuardResult {
 }
 
 export interface SendGuardReportParams {
+  /** whatsapp_business_accounts.id — mantido para referência/telemetria */
   accountId: string
+  /** Meta phone_number_id — chave REAL do breaker/rate-limiter (compartilhada com campanhas) */
+  phoneNumberId: string
   success: boolean
   errorCode?: string | number
   error?: Error
@@ -86,8 +100,8 @@ export function tierFromMessagingLimit(messagingLimit?: string | null): number {
   }
 }
 
-function guardBreaker(accountId: string): CircuitBreaker {
-  return getCircuitBreaker(`wa:${accountId}`, {
+function guardBreaker(phoneNumberId: string): CircuitBreaker {
+  return getCircuitBreaker(`wa:${phoneNumberId}`, {
     failureThreshold: CIRCUIT_FAILURE_THRESHOLD,
     resetTimeout: CIRCUIT_RESET_TIMEOUT_MS,
   })
@@ -106,10 +120,14 @@ function mapRateLimitReason(result: RateLimitResult): SendGuardBlockReason {
 export async function checkBeforeSend(
   params: SendGuardCheckParams,
 ): Promise<SendGuardResult> {
-  const { accountId, recipientPhone, messagingLimit } = params
+  const { phoneNumberId, recipientPhone, messagingLimit } = params
+  // Normaliza UMA vez antes de montar a chave do pair-rate (10/min/destinatário)
+  // — evita fragmentar o bucket por variações do mesmo número (com/sem 9º
+  // dígito, com/sem +, espaços etc.), o que na prática desativaria o limite.
+  const normalizedPhone = normalizePhone(recipientPhone)
   try {
     // 1. Circuit breaker (compartilhado com campanhas)
-    if (!(await guardBreaker(accountId).canExecute())) {
+    if (!(await guardBreaker(phoneNumberId).canExecute())) {
       return {
         allowed: false,
         reason: 'circuit_open',
@@ -119,8 +137,8 @@ export async function checkBeforeSend(
     }
 
     // 2. Rate limiter por tier (throttle, MPS, pair-rate, cota diária)
-    const limiter = getRateLimiter(accountId, tierFromMessagingLimit(messagingLimit))
-    const rate = await limiter.canSend(recipientPhone)
+    const limiter = getRateLimiter(phoneNumberId, tierFromMessagingLimit(messagingLimit))
+    const rate = await limiter.canSend(normalizedPhone)
     if (!rate.allowed) {
       const reason = mapRateLimitReason(rate)
       return {
@@ -139,14 +157,14 @@ export async function checkBeforeSend(
 }
 
 export async function reportSendResult(params: SendGuardReportParams): Promise<void> {
-  const { accountId, success, errorCode, error, messagingLimit } = params
+  const { phoneNumberId, success, errorCode, error, messagingLimit } = params
   try {
-    const breaker = guardBreaker(accountId)
+    const breaker = guardBreaker(phoneNumberId)
     if (success) {
       await breaker.recordSuccess()
       return
     }
-    const limiter = getRateLimiter(accountId, tierFromMessagingLimit(messagingLimit))
+    const limiter = getRateLimiter(phoneNumberId, tierFromMessagingLimit(messagingLimit))
     await limiter.recordError(errorCode ?? 'UNKNOWN')
     await breaker.recordFailure(error)
   } catch (e: any) {

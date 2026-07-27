@@ -144,6 +144,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       // upload em Storage/Meta quando a conta está limitada.
       const guardCheck = await checkBeforeSend({
         accountId: cloudConv.account.id,
+        phoneNumberId: cloudConv.account.phone_number_id,
         recipientPhone: phoneNumber,
         messagingLimit: cloudConv.account.messaging_limit,
       })
@@ -236,6 +237,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         console.error('[Media POST/Cloud] send error:', e)
         await reportSendResult({
           accountId: cloudConv.account.id,
+          phoneNumberId: cloudConv.account.phone_number_id,
           success: false,
           errorCode: e?.code,
           error: e,
@@ -253,7 +255,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         )
       }
 
-      await reportSendResult({ accountId: cloudConv.account.id, success: true })
+      await reportSendResult({
+        accountId: cloudConv.account.id,
+        phoneNumberId: cloudConv.account.phone_number_id,
+        success: true,
+      })
 
       const messageId = result.messages?.[0]?.id
       const { data: saved } = await supabase

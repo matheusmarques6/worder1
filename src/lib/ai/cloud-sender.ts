@@ -210,6 +210,7 @@ export async function sendHumanizedReply(
   // pair-rate de 10/min por destinatário.
   const guard = await checkBeforeSend({
     accountId: account.id,
+    phoneNumberId: account.phone_number_id,
     recipientPhone: phone,
     messagingLimit: account.messaging_limit,
   });
@@ -293,6 +294,7 @@ export async function sendHumanizedReply(
       hadSendError = true;
       await reportSendResult({
         accountId: account.id,
+        phoneNumberId: account.phone_number_id,
         success: false,
         errorCode: apiError?.code,
         error: apiError,
@@ -340,7 +342,11 @@ export async function sendHumanizedReply(
   }
 
   if (!hadSendError) {
-    await reportSendResult({ accountId: account.id, success: true });
+    await reportSendResult({
+      accountId: account.id,
+      phoneNumberId: account.phone_number_id,
+      success: true,
+    });
   }
 
   // ---------- Atualiza last_message_* só no FIM ----------

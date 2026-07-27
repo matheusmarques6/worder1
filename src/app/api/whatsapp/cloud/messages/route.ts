@@ -232,6 +232,7 @@ export async function POST(request: NextRequest) {
     // 80/s acima continua como camada anti-abuso por org.
     const guardCheck = await checkBeforeSend({
       accountId: account.id,
+      phoneNumberId: account.phone_number_id,
       recipientPhone: to,
       messagingLimit: account.messaging_limit,
     });
@@ -343,6 +344,7 @@ export async function POST(request: NextRequest) {
 
       await reportSendResult({
         accountId: account.id,
+        phoneNumberId: account.phone_number_id,
         success: false,
         errorCode: apiError?.code,
         error: apiError,
@@ -405,7 +407,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    await reportSendResult({ accountId: account.id, success: true });
+    await reportSendResult({ accountId: account.id, phoneNumberId: account.phone_number_id, success: true });
 
     const messageId = result.messages?.[0]?.id;
     const recipientWaId = result.contacts?.[0]?.wa_id || normalizePhone(to);

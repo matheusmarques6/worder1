@@ -153,6 +153,7 @@ export async function POST(
     // monitora para qualidade — cota diária bloqueia com mensagem clara.
     const guardCheck = await checkBeforeSend({
       accountId: cloudConv.account.id,
+      phoneNumberId: cloudConv.account.phone_number_id,
       recipientPhone: phoneNumber,
       messagingLimit: cloudConv.account.messaging_limit,
     })
@@ -176,6 +177,7 @@ export async function POST(
       console.error('[send-template] Cloud API error:', apiError)
       await reportSendResult({
         accountId: cloudConv.account.id,
+        phoneNumberId: cloudConv.account.phone_number_id,
         success: false,
         errorCode: apiError?.code,
         error: apiError,
@@ -186,7 +188,11 @@ export async function POST(
         { status: 400, headers: NO_CACHE_HEADERS },
       )
     }
-    await reportSendResult({ accountId: cloudConv.account.id, success: true })
+    await reportSendResult({
+      accountId: cloudConv.account.id,
+      phoneNumberId: cloudConv.account.phone_number_id,
+      success: true,
+    })
 
     const messageId = result.messages?.[0]?.id
     const renderedBody = renderPreview(template.body_text || templateName, parameters)

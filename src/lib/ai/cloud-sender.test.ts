@@ -239,6 +239,7 @@ describe('sendHumanizedReply — send guard (rate limit por tier + circuit break
     expect(mockSendText).not.toHaveBeenCalled()
     expect(mockCheckBeforeSend).toHaveBeenCalledWith({
       accountId: 'waba-1',
+      phoneNumberId: 'pnid-1',
       recipientPhone: '553898575602',
       messagingLimit: undefined,
     })
@@ -259,6 +260,7 @@ describe('sendHumanizedReply — send guard (rate limit por tier + circuit break
     expect(mockReportSendResult).toHaveBeenCalledTimes(1)
     expect(mockReportSendResult).toHaveBeenCalledWith({
       accountId: 'waba-1',
+      phoneNumberId: 'pnid-1',
       success: true,
     })
   })
@@ -279,6 +281,7 @@ describe('sendHumanizedReply — send guard (rate limit por tier + circuit break
     expect(mockReportSendResult).toHaveBeenCalledTimes(1)
     expect(mockReportSendResult).toHaveBeenCalledWith({
       accountId: 'waba-1',
+      phoneNumberId: 'pnid-1',
       success: false,
       errorCode: 131056,
       error: apiError,

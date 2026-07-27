@@ -288,3 +288,57 @@ describe('cloud-runner guards — handoff keywords', () => {
     expect(r.error).toBe('no_valid_api_key') // seguiu ate o gate BYO-key
   })
 })
+
+describe('cloud-runner — bloqueio do send guard e terminal (sem retry)', () => {
+  // Percorre o fluxo completo ate o sender: agente ativo, chave BYO valida,
+  // engine mockado devolvendo resposta pronta, e sendHumanizedReply (mockado)
+  // simulando bloqueio do send-guard (rate limiter/circuit breaker por tier).
+  beforeEach(() => {
+    queueResult('ai_agents', { data: agentRow() })
+    // lastBot (cooldown) -> sem mensagem recente do bot
+    queueResult('whatsapp_cloud_messages', { data: null })
+    // stop_on_human -> sem resposta humana
+    queueResult('whatsapp_cloud_messages', { data: null })
+    // organization_api_keys -> chave BYO valida (passa o gate)
+    queueResult('organization_api_keys', {
+      data: { api_key: 'sk-test', base_url: null, is_active: true },
+    })
+    // historico (~20 ultimas)
+    queueResult('whatsapp_cloud_messages', { data: [] })
+    // agent_traces insert().select('id').maybeSingle()
+    queueResult('agent_traces', { data: { id: 'trace-1' } })
+
+    mockCreateAgentEngine.mockResolvedValue({
+      processMessage: vi.fn().mockResolvedValue({ response: 'Claro, posso ajudar!' }),
+    })
+  })
+
+  it('send_guard_* nao marca failure (terminal, mesmo tratamento de opted_out)', async () => {
+    mockSendHumanizedReply.mockResolvedValue({ sent: false, reason: 'send_guard_daily_quota' })
+
+    const r = await maybeRunAgentForCloudConversation({
+      account,
+      conversation: conv(),
+      text: 'qual o preco do produto?',
+    })
+
+    expect(mockSendHumanizedReply).toHaveBeenCalledTimes(1)
+    expect(r.replied).toBe(false)
+    expect(r.transferred).toBe(false)
+    expect(r.skipped).toBe('send_guard_daily_quota')
+    expect(r.failure).toBeUndefined() // worker NAO reagenda retry
+  })
+
+  it('envio normal (sem bloqueio do guard) permanece com replied=true', async () => {
+    mockSendHumanizedReply.mockResolvedValue({ sent: true, messageId: 'wamid.1' })
+
+    const r = await maybeRunAgentForCloudConversation({
+      account,
+      conversation: conv(),
+      text: 'qual o preco do produto?',
+    })
+
+    expect(r.replied).toBe(true)
+    expect(r.failure).toBeUndefined()
+  })
+})

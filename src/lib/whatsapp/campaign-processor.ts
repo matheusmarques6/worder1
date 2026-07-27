@@ -485,8 +485,11 @@ export class CampaignProcessor {
     const { campaignId, recipients, instance, template, mediaUrl, mediaType, organizationId } = data
 
     // Obter rate limiter e circuit breaker
-    const rateLimiter = this.getRateLimiter(instance.id, instance.tier)
-    const circuitBreaker = this.getCircuitBreaker(instance.id)
+    // Chave = phoneNumberId (número físico da Meta), NÃO instance.id —
+    // compartilha estado com send-guard.ts (caminhos interativos/IA), que
+    // protege o MESMO número. Ver send-guard.ts topo do arquivo.
+    const rateLimiter = this.getRateLimiter(instance.phoneNumberId, instance.tier)
+    const circuitBreaker = this.getCircuitBreaker(instance.phoneNumberId)
 
     const result: ProcessResult = {
       sent: 0,

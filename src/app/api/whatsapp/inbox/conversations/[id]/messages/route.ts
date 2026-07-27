@@ -147,6 +147,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       // Send guard — tier da Meta + circuit breaker (paridade com campanhas)
       const guardCheck = await checkBeforeSend({
         accountId: cloudConv.account.id,
+        phoneNumberId: cloudConv.account.phone_number_id,
         recipientPhone: phoneNumber,
         messagingLimit: cloudConv.account.messaging_limit,
       })
@@ -170,6 +171,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         console.error('[Messages POST] Cloud API error:', apiError)
         await reportSendResult({
           accountId: cloudConv.account.id,
+          phoneNumberId: cloudConv.account.phone_number_id,
           success: false,
           errorCode: apiError?.code,
           error: apiError,
@@ -180,7 +182,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           { status: 400, headers: NO_CACHE_HEADERS }
         )
       }
-      await reportSendResult({ accountId: cloudConv.account.id, success: true })
+      await reportSendResult({
+        accountId: cloudConv.account.id,
+        phoneNumberId: cloudConv.account.phone_number_id,
+        success: true,
+      })
 
       const messageId = result.messages?.[0]?.id
       const { data: saved } = await supabase
