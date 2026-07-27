@@ -30,6 +30,7 @@ import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
 import { requireOptIn } from '@/lib/whatsapp/opt-out-guard';
 import { wlog } from '@/lib/observability/whatsapp-logger';
+import { findBlockedTopic } from './guards';
 
 // ---- Caps de split ----
 const MAX_BUBBLES = 4;
@@ -122,6 +123,35 @@ export async function sendHumanizedReply(
   const trimmed = (text || '').trim();
   if (!trimmed) {
     return { sent: false, reason: 'empty_text' };
+  }
+
+  // --- Moderação mínima: tópicos bloqueados (settings.safety.blocked_topics) ---
+  // Checa a RESPOSTA do LLM antes de QUALQUER envio (inclusive antes da janela
+  // 24h/opt-out, para sempre registrar a violação). Match simples,
+  // case/acento-insensitive; sem API de moderação externa (YAGNI).
+  // Violação => não envia, loga, desabilita a IA e transfere para humano.
+  const blockedTopic = findBlockedTopic(
+    trimmed,
+    agent?.settings?.safety?.blocked_topics,
+  );
+  if (blockedTopic) {
+    const nowIso = new Date().toISOString();
+    wlog.warn('whatsapp.ai.blocked_topic', {
+      organization_id: conversation.organization_id,
+      conversation_id: conversation.id,
+      agent_id: agent.id,
+      topic: blockedTopic,
+    });
+    await supabaseAdmin
+      .from('whatsapp_cloud_conversations')
+      .update({
+        ai_enabled: false,
+        ai_disabled_at: nowIso,
+        ai_disabled_reason: 'blocked_topic',
+        ai_transferred_at: nowIso,
+      })
+      .eq('id', conversation.id);
+    return { sent: false, reason: 'blocked_topic' };
   }
 
   // --- Janela de 24h (checagem proativa) ---

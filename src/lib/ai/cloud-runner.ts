@@ -892,6 +892,20 @@ export async function maybeRunAgentForCloudConversation(
     };
   }
 
+  // blocked_topic (moderação, Task 4): o sender já desabilitou a conversa e
+  // marcou a transferência — retry nunca vai destravar, então é terminal
+  // (sem failure) e reportamos transferred=true pro chamador/simulador.
+  if (!sendResult.sent && sendResult.reason === 'blocked_topic') {
+    return {
+      replied: false,
+      transferred: true,
+      response,
+      traceId,
+      agentId,
+      skipped: 'blocked_topic',
+    };
+  }
+
   return {
     replied: sendResult.sent,
     transferred: false,

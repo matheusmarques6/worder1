@@ -10,6 +10,7 @@ const mockCreateClient = vi.fn(() => ({
 }))
 const mockUpsert = vi.fn(async () => ({}))
 const mockUpdateEq = vi.fn(async () => ({}))
+const mockUpdate = vi.fn((_payload: any) => ({ eq: mockUpdateEq }))
 
 vi.mock('@/lib/whatsapp/opt-out-guard', () => ({
   requireOptIn: (...args: any[]) => mockRequireOptIn(...args),
@@ -27,7 +28,7 @@ vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
     from: vi.fn(() => ({
       upsert: mockUpsert,
-      update: vi.fn(() => ({ eq: mockUpdateEq })),
+      update: mockUpdate,
     })),
   },
 }))
@@ -130,5 +131,68 @@ describe('sendHumanizedReply — opt-out guard (Onda 13 / B2)', () => {
     expect(r.sent).toBe(false)
     expect(r.reason).toBe('window_closed')
     expect(mockRequireOptIn).not.toHaveBeenCalled()
+  })
+})
+
+describe('sendHumanizedReply — moderacao blocked_topics', () => {
+  beforeEach(() => {
+    mockRequireOptIn.mockReset()
+    mockSendText.mockReset()
+    mockCreateClient.mockClear()
+    mockUpsert.mockClear()
+    mockUpdate.mockClear()
+    mockUpdateEq.mockClear()
+  })
+
+  it('NAO envia quando a resposta contem topico bloqueado; desabilita e transfere', async () => {
+    const r = await sendHumanizedReply({
+      account,
+      conversation,
+      text: 'Sobre Política, eu acho que o candidato...',
+      agent: { id: 'agent-1', settings: { safety: { blocked_topics: ['politica'] } } },
+      skipDelays: true,
+    })
+
+    expect(r.sent).toBe(false)
+    expect(r.reason).toBe('blocked_topic')
+    // Nada foi pra Meta
+    expect(mockCreateClient).not.toHaveBeenCalled()
+    expect(mockSendText).not.toHaveBeenCalled()
+    // Conversa desabilitada + transferida
+    const payload = mockUpdate.mock.calls[0][0]
+    expect(payload.ai_enabled).toBe(false)
+    expect(payload.ai_disabled_reason).toBe('blocked_topic')
+    expect(payload.ai_transferred_at).toBeDefined()
+  })
+
+  it('envia normalmente quando nenhum topico bloqueado aparece', async () => {
+    mockRequireOptIn.mockResolvedValue({ allowed: true })
+    mockSendText.mockResolvedValue({ messages: [{ id: 'wamid.9' }] })
+
+    const r = await sendHumanizedReply({
+      account,
+      conversation,
+      text: 'Seu pedido saiu para entrega!',
+      agent: { id: 'agent-1', settings: { safety: { blocked_topics: ['politica'] } } },
+      skipDelays: true,
+    })
+
+    expect(r.sent).toBe(true)
+    expect(mockSendText).toHaveBeenCalledTimes(1)
+  })
+
+  it('agente sem settings.safety segue funcionando (retrocompatibilidade)', async () => {
+    mockRequireOptIn.mockResolvedValue({ allowed: true })
+    mockSendText.mockResolvedValue({ messages: [{ id: 'wamid.10' }] })
+
+    const r = await sendHumanizedReply({
+      account,
+      conversation,
+      text: 'oi, posso ajudar?',
+      agent: { id: 'agent-1' },
+      skipDelays: true,
+    })
+
+    expect(r.sent).toBe(true)
   })
 })
