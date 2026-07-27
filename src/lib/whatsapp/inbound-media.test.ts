@@ -17,6 +17,12 @@ const mockUpdate = vi.fn()
 const mockUpload = vi.fn()
 const mockCreateSignedUrl = vi.fn()
 
+// Controla o resultado do .update(...).eq(...) do mock do Supabase, para
+// exercitar os caminhos onde a própria persistência falha (ver testes de
+// "persist_failed" e "mark-failed também falha" abaixo).
+type UpdateEqBehavior = 'ok' | 'error' | 'throw'
+const updateEqBehavior: { mode: UpdateEqBehavior } = { mode: 'ok' }
+
 vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
     from: (table: string) => ({
@@ -30,7 +36,13 @@ vi.mock('@/lib/supabase-admin', () => ({
       }),
       update: (values: any) => {
         mockUpdate(table, values)
-        return { eq: async () => ({ error: null }) }
+        return {
+          eq: async () => {
+            if (updateEqBehavior.mode === 'throw') throw new Error('db update boom')
+            if (updateEqBehavior.mode === 'error') return { error: { message: 'update failed' } }
+            return { error: null }
+          },
+        }
       },
     }),
     storage: {
@@ -85,6 +97,7 @@ describe('processInboundMedia', () => {
     rows.account = { id: 'acc-1', phone_number_id: 'pn-1', access_token: 'raw-token' }
     mockUpload.mockResolvedValue({ error: null })
     mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed.example/x' }, error: null })
+    updateEqBehavior.mode = 'ok'
   })
 
   it('baixa da Meta, sobe pro Storage e persiste media_url/storage_path/mime/filename + done', async () => {
@@ -144,5 +157,24 @@ describe('processInboundMedia', () => {
     const result = await processInboundMedia(JOB)
     expect(result).toEqual({ ok: false, reason: 'no_media_id' })
     expect(mockUpload).not.toHaveBeenCalled()
+  })
+
+  it('update final (persistência) falha: NÃO lança, retorna persist_failed', async () => {
+    mockDownloadMedia.mockResolvedValue({ data: new Uint8Array([1, 2, 3]), mimeType: 'image/jpeg' })
+    updateEqBehavior.mode = 'error'
+
+    const result = await processInboundMedia(JOB)
+
+    expect(result).toEqual({ ok: false, reason: 'persist_failed' })
+  })
+
+  it('update de media_download_status=failed também falha: NÃO lança, ainda resolve com o motivo original', async () => {
+    mockDownloadMedia.mockRejectedValue(new Error('meta 401'))
+    updateEqBehavior.mode = 'throw'
+
+    const result = await processInboundMedia(JOB)
+
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('meta 401')
   })
 })

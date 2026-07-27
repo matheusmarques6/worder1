@@ -114,7 +114,7 @@ export async function processInboundMedia(job: InboundMediaJob): Promise<Inbound
       row.content?.document?.filename ||
       `${row.message_type || 'media'}-${row.id}.${extensionFromMime(mimeType)}`;
 
-    await supabase
+    const { error: persistError } = await supabase
       .from('whatsapp_cloud_messages')
       .update({
         media_url: mediaUrl,
@@ -126,6 +126,17 @@ export async function processInboundMedia(job: InboundMediaJob): Promise<Inbound
       })
       .eq('id', row.id);
 
+    if (persistError) {
+      wlog.error('whatsapp.media.inbound_persist_failed', {
+        error: persistError.message,
+        cloud_message_id: job.cloudMessageId,
+        media_id: row.media_id,
+      });
+      // Storage upload já foi feito (upsert=true) — um retry do QStash refaz o
+      // download/upload (idempotente) e tenta persistir de novo.
+      return { ok: false, reason: 'persist_failed' };
+    }
+
     return { ok: true };
   } catch (err: any) {
     wlog.error('whatsapp.media.inbound_download_failed', {
@@ -133,13 +144,31 @@ export async function processInboundMedia(job: InboundMediaJob): Promise<Inbound
       cloud_message_id: job.cloudMessageId,
       media_id: row.media_id,
     });
-    await supabase
-      .from('whatsapp_cloud_messages')
-      .update({
-        media_download_status: 'failed',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', row.id);
+    // Contrato "nunca lança": mesmo que marcar media_download_status='failed'
+    // também falhe (ex.: instabilidade transitória do Supabase), essa segunda
+    // falha não pode escapar — só logamos e seguimos para o retorno abaixo.
+    try {
+      const { error: markFailedError } = await supabase
+        .from('whatsapp_cloud_messages')
+        .update({
+          media_download_status: 'failed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', row.id);
+      if (markFailedError) {
+        wlog.error('whatsapp.media.inbound_mark_failed_persist_failed', {
+          error: markFailedError.message,
+          cloud_message_id: job.cloudMessageId,
+          media_id: row.media_id,
+        });
+      }
+    } catch (markFailedErr: any) {
+      wlog.error('whatsapp.media.inbound_mark_failed_persist_threw', {
+        error: markFailedErr?.message,
+        cloud_message_id: job.cloudMessageId,
+        media_id: row.media_id,
+      });
+    }
     return { ok: false, reason: err?.message || 'download_failed' };
   }
 }
