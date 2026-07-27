@@ -253,29 +253,64 @@ async function processMessage(
   const textBody = extractWebhookMessageText(message);
   const content = buildMessageContent(message);
 
-  await supabase.from('whatsapp_cloud_messages').insert({
-    organization_id: account.organization_id,
-    store_id: account.store_id || conversation.store_id || null,
-    waba_id: account.id,
-    conversation_id: conversation.id,
-    message_id: message.id,
-    direction: 'inbound',
-    from_number: phoneNumber,
-    to_number: account.phone_number,
-    message_type: messageType,
-    content,
-    text_body: textBody,
-    caption:
-      message.image?.caption || message.video?.caption || message.document?.caption,
-    media_id:
-      message.image?.id ||
-      message.video?.id ||
-      message.audio?.id ||
-      message.document?.id ||
-      message.sticker?.id,
-    status: 'received',
-    timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-  });
+  const mediaId =
+    message.image?.id ||
+    message.video?.id ||
+    message.audio?.id ||
+    message.document?.id ||
+    message.sticker?.id;
+
+  const { data: insertedMsg } = await supabase
+    .from('whatsapp_cloud_messages')
+    .insert({
+      organization_id: account.organization_id,
+      store_id: account.store_id || conversation.store_id || null,
+      waba_id: account.id,
+      conversation_id: conversation.id,
+      message_id: message.id,
+      direction: 'inbound',
+      from_number: phoneNumber,
+      to_number: account.phone_number,
+      message_type: messageType,
+      content,
+      text_body: textBody,
+      caption:
+        message.image?.caption || message.video?.caption || message.document?.caption,
+      media_id: mediaId,
+      media_download_status: mediaId ? 'pending' : null,
+      status: 'received',
+      timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
+    })
+    .select('id')
+    .maybeSingle();
+
+  // ============================================================
+  // PIPELINE DE MÍDIA INBOUND — nunca quebra a persistência.
+  // Preferência: QStash (async). Fallback: inline (ambientes sem fila).
+  // Falha aqui deixa media_download_status='pending'/'failed' e a
+  // mensagem segue visível no inbox (sem mídia).
+  // ============================================================
+  if (mediaId && insertedMsg?.id) {
+    try {
+      const mediaJob = {
+        cloudMessageId: insertedMsg.id,
+        accountId: account.id,
+        organizationId: account.organization_id,
+      };
+      const { enqueueWhatsAppInboundMedia } = await import('@/lib/queue');
+      const queued = await enqueueWhatsAppInboundMedia(mediaJob);
+      if (!queued) {
+        const { processInboundMedia } = await import('./inbound-media');
+        await processInboundMedia(mediaJob);
+      }
+    } catch (err: any) {
+      wlog.error('whatsapp.media.inbound_pipeline_error', {
+        error: err?.message,
+        message_id: message.id,
+        conversation_id: conversation.id,
+      });
+    }
+  }
 
   const nowIso = new Date().toISOString();
   // Counters via RPC: UPDATE atomico (COALESCE(col,0)+1). Sem isso, duas
