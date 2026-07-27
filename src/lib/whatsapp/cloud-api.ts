@@ -863,8 +863,22 @@ export async function exchangeEmbeddedSignupCode(params: {
 }
 
 /**
+ * Webhook fields this app actually processes — must mirror the switch(field)
+ * cases in webhook-processor.ts. Sent explicitly on subscribe so message
+ * delivery does NOT depend on the app dashboard's webhook field config.
+ */
+export const WABA_SUBSCRIBED_FIELDS = [
+  'messages',
+  'message_template_status_update',
+  'template_category_update',
+  'phone_number_quality_update',
+] as const;
+
+/**
  * Subscribe your app to a WABA's webhook events. Must be called once per
  * WABA after Embedded Signup completes — without this, no inbound messages.
+ * Sends subscribed_fields explicitly (audit: MEDIUM gap #1) instead of
+ * relying on the Meta app dashboard webhook configuration.
  */
 export async function subscribeAppToWABA(params: {
   wabaId: string;
@@ -876,6 +890,7 @@ export async function subscribeAppToWABA(params: {
       Authorization: `Bearer ${params.accessToken}`,
       'Content-Type': 'application/json',
     },
+    body: JSON.stringify({ subscribed_fields: WABA_SUBSCRIBED_FIELDS }),
   });
   const data = await res.json();
   if (!res.ok || data.error) {
