@@ -6,8 +6,11 @@
 // 24h customer service window — Meta only accepts free-form text
 // inside the window, but templates work any time.
 //
-// Body: { templateName, language, parameters?: string[] }
-// parameters are positional values for {{1}}..{{N}} in the template body.
+// Body: { templateName, language, parameters?: string[],
+//         headerMediaUrl?: string, buttonParameters?: string[] }
+// parameters: valores posicionais {{1}}..{{N}} do body do template.
+// headerMediaUrl: obrigatorio quando o template tem header IMAGE/VIDEO/DOCUMENT.
+// buttonParameters: valores para botoes de URL dinamica, na ordem dos botoes.
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -25,17 +28,15 @@ import {
   reportSendResult,
   buildRateLimitedResponseBody,
 } from '@/lib/whatsapp/send-guard'
+import {
+  buildTemplateComponents as buildTemplateMediaComponents,
+  TemplateComponentsError,
+} from '@/lib/whatsapp/template-components'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const NO_CACHE_HEADERS = { 'Cache-Control': 'no-store, max-age=0' }
-
-function countBodyVariables(bodyText: string | null | undefined): number {
-  if (!bodyText) return 0
-  const matches = bodyText.match(/\{\{\s*\d+\s*\}\}/g)
-  return matches ? matches.length : 0
-}
 
 function renderPreview(bodyText: string, parameters: string[]): string {
   return bodyText.replace(/\{\{\s*(\d+)\s*\}\}/g, (_m, n) => {
@@ -65,6 +66,13 @@ export async function POST(
     const templateName: string | undefined = body?.templateName
     const language: string = body?.language || 'pt_BR'
     const parameters: string[] = Array.isArray(body?.parameters) ? body.parameters : []
+    const headerMediaUrl: string | undefined =
+      typeof body?.headerMediaUrl === 'string' && body.headerMediaUrl.trim()
+        ? body.headerMediaUrl.trim()
+        : undefined
+    const buttonParameters: string[] = Array.isArray(body?.buttonParameters)
+      ? body.buttonParameters.map((v: unknown) => String(v))
+      : []
 
     if (!templateName) {
       return NextResponse.json(
@@ -116,17 +124,26 @@ export async function POST(
       )
     }
 
-    const expectedVars = countBodyVariables(template.body_text)
-    if (expectedVars !== parameters.length) {
-      return NextResponse.json(
-        { error: `Template expects ${expectedVars} variable(s), received ${parameters.length}` },
-        { status: 400, headers: NO_CACHE_HEADERS },
-      )
+    // Monta header (midia) + body + botoes URL dinamicos. O builder valida
+    // contagem de variaveis e exige headerMediaUrl quando o template
+    // aprovado tem header IMAGE/VIDEO/DOCUMENT (senao a Meta rejeita o envio).
+    let builtComponents: any[]
+    try {
+      builtComponents = buildTemplateMediaComponents(template, {
+        bodyVars: parameters,
+        headerMediaUrl,
+        buttonVars: buttonParameters,
+      })
+    } catch (err) {
+      if (err instanceof TemplateComponentsError) {
+        return NextResponse.json(
+          { error: err.message, code: err.code },
+          { status: 400, headers: NO_CACHE_HEADERS },
+        )
+      }
+      throw err
     }
-
-    const components = parameters.length
-      ? [{ type: 'body', parameters: parameters.map((text) => ({ type: 'text', text })) }]
-      : undefined
+    const components = builtComponents.length ? builtComponents : undefined
 
     const phoneNumber = cloudConv.contact_phone || cloudConv.wa_id
 
