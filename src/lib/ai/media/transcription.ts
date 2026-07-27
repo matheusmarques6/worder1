@@ -84,10 +84,25 @@ export async function transcribeAudio(params: {
     body: form,
   })
 
-  const data = await response.json()
   if (!response.ok) {
-    throw new Error(data.error?.message || `${config.provider} transcription error`)
+    // Corpo de erro nem sempre é JSON (ex.: gateway 502/504 devolvendo HTML) —
+    // parseia defensivamente pra nunca deixar um SyntaxError opaco escapar no
+    // lugar da mensagem de erro do provider.
+    let detail = `status ${response.status}`
+    try {
+      const errData = await response.json()
+      detail = errData?.error?.message || detail
+    } catch {
+      try {
+        const text = await response.text()
+        if (text) detail = text
+      } catch {
+        // mantém o detail de status
+      }
+    }
+    throw new Error(`${config.provider} transcription error: ${detail}`)
   }
 
+  const data = await response.json()
   return (data.text || '').trim()
 }

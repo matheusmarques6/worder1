@@ -75,4 +75,23 @@ describe('transcribeAudio', () => {
       }),
     ).rejects.toThrow('invalid api key')
   })
+
+  it('lanca erro legivel quando o corpo de erro nao e JSON (ex.: gateway 502/504)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        json: () => Promise.reject(new SyntaxError('Unexpected token < in JSON')),
+        text: () => Promise.resolve('<html>Bad Gateway</html>'),
+      }),
+    )
+    await expect(
+      transcribeAudio({
+        config: { provider: 'openai', apiKey: 'sk', model: 'whisper-1' },
+        audio: Buffer.from('x'),
+        mimeType: 'audio/ogg',
+      }),
+    ).rejects.toThrow(/transcription error/)
+  })
 })
