@@ -72,10 +72,9 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
     isLoading: conversationsLoading,
     isRefreshing, // ✅ NOVO: polling silencioso (não mostra loader)
     filters,
-    selectConversation, 
-    fetchConversations, 
-    updateConversation, 
-    toggleBot, 
+    selectConversation,
+    fetchConversations,
+    toggleBot,
     setFilters, 
     refresh: refreshConversations,
   } = useInboxConversations(organizationId, storeId)

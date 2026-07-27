@@ -3,9 +3,9 @@
 -- Postgres Realtime NAO publica VIEWs (whatsapp_inbox_messages),
 -- entao publicamos as tabelas BASE do Cloud API.
 --
--- RLS: as policies *_org_select (via profiles) ja existem
--- (01-migration-cloud-api-schema.sql, secao 11) e sao exatamente
--- o que o Realtime usa para autorizar entrega de eventos.
+-- RLS: as policies de SELECT org-scoped nessas tabelas ja existem
+-- (supabase/migrations/001_enable_rls.sql, via auth.organization_id())
+-- e sao exatamente o que o Realtime usa para autorizar entrega de eventos.
 -- O client precisa de JWT autenticado (realtime.setAuth) — ver
 -- endpoint /api/auth/realtime-token.
 -- =============================================

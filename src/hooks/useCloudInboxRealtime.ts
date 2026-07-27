@@ -199,11 +199,19 @@ export function useCloudInboxRealtime(
     if (!enabled || !organizationId || !conversationId || !authReady) return
 
     const channelName = `cloud-inbox-msg-${conversationId}`
-    // Compound filter (comma-joined, suportado pelo @supabase/realtime-js):
-    // organization_id ALEM de conversation_id — o contrato exige os dois
-    // canais filtrados por organization_id (RLS ja re-checa isso no server,
-    // mas o filtro do client tem que casar com o contrato escrito).
-    const messagesFilter = `organization_id=eq.${organizationId},conversation_id=eq.${conversationId}`
+    // So conversation_id: o Supabase Realtime (postgres_changes) so suporta
+    // UMA condicao de filtro por assinatura — um filtro composto
+    // comma-joined (organization_id=eq....,conversation_id=eq....) NAO e
+    // suportado oficialmente e pode fazer o servidor rejeitar a assinatura
+    // (canal cai silenciosamente em CHANNEL_ERROR, e mensagens novas na
+    // conversa aberta so aparecem no proximo poll, ate 30s depois).
+    // conversation_id sozinho ja escopa unicamente para uma unica org (uma
+    // conversa pertence a exatamente uma organizacao), e a policy de SELECT
+    // do RLS em whatsapp_cloud_messages (org-scoped via auth.organization_id(),
+    // ver supabase/migrations/001_enable_rls.sql) re-checa a organizacao no
+    // servidor de qualquer forma — entao o termo organization_id aqui seria
+    // redundante mesmo se filtros compostos fossem suportados.
+    const messagesFilter = `conversation_id=eq.${conversationId}`
     console.log('[CloudRealtime] Subscribing:', channelName)
 
     const channel = supabaseClient
