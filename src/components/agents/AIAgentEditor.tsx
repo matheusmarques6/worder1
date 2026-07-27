@@ -7,6 +7,7 @@ import {
   Bot,
   Database,
   Zap,
+  Wrench,
   Plug,
   UserCircle,
   Settings,
@@ -28,6 +29,7 @@ import {
 // Tabs
 import SourcesTab from './tabs/SourcesTab'
 import ActionsTab from './tabs/ActionsTab'
+import ToolsTab from './tabs/ToolsTab'
 import IntegrationsTab from './tabs/IntegrationsTab'
 import PersonaTab from './tabs/PersonaTab'
 import SettingsTab from './tabs/SettingsTab'
@@ -70,6 +72,7 @@ const tabs = [
   { id: 'persona', label: 'Persona', icon: UserCircle },
   { id: 'sources', label: 'Fontes', icon: Database },
   { id: 'actions', label: 'Ações', icon: Zap },
+  { id: 'tools', label: 'Ferramentas', icon: Wrench },
   { id: 'integrations', label: 'Integrações', icon: Plug },
   { id: 'settings', label: 'Configurações', icon: Settings },
   { id: 'versions', label: 'Versões', icon: History },
@@ -437,6 +440,10 @@ export default function AIAgentEditor({
             let badge = ''
             if (tab.id === 'sources') badge = sources.length > 0 ? `${sources.length}` : ''
             if (tab.id === 'actions') badge = actions.length > 0 ? `${actions.length}` : ''
+            if (tab.id === 'tools') {
+              const enabledCount = agent.settings?.tools?.enabled?.length || 0
+              badge = enabledCount > 0 ? `${enabledCount}` : ''
+            }
             if (tab.id === 'integrations') badge = integrations.filter(i => i.sync_status === 'synced').length > 0 ? `${integrations.filter(i => i.sync_status === 'synced').length}` : ''
 
             return (
@@ -490,6 +497,18 @@ export default function AIAgentEditor({
                     onActionsChange={setActions}
                     onRefresh={fetchActions}
                   />
+                </motion.div>
+              )}
+
+              {activeTab === 'tools' && (
+                <motion.div
+                  key="tools"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="h-full"
+                >
+                  <ToolsTab agent={agent} onUpdate={updateAgent} />
                 </motion.div>
               )}
 
