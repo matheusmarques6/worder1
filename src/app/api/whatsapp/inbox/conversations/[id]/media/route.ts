@@ -8,6 +8,11 @@ import {
 } from '@/lib/whatsapp/opt-out-guard'
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api'
 import { getAccessToken } from '@/lib/whatsapp/account-loader'
+import {
+  checkBeforeSend,
+  reportSendResult,
+  buildRateLimitedResponseBody,
+} from '@/lib/whatsapp/send-guard'
 
 // ✅ FASE 3: Force dynamic para evitar cache
 export const dynamic = 'force-dynamic'
@@ -135,6 +140,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         )
       }
 
+      // Send guard ANTES do upload — falha rápida sem desperdiçar
+      // upload em Storage/Meta quando a conta está limitada.
+      const guardCheck = await checkBeforeSend({
+        accountId: cloudConv.account.id,
+        recipientPhone: phoneNumber,
+        messagingLimit: cloudConv.account.messaging_limit,
+      })
+      if (!guardCheck.allowed) {
+        const body429 = buildRateLimitedResponseBody(guardCheck)
+        return NextResponse.json(
+          { ...body429, success: false },
+          {
+            status: 429,
+            headers: { ...NO_CACHE_HEADERS, 'Retry-After': String(body429.retryAfter) },
+          },
+        )
+      }
+
       const client = createWhatsAppCloudClient({
         phoneNumberId: cloudConv.account.phone_number_id,
         accessToken: getAccessToken(cloudConv.account),
@@ -211,6 +234,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         }
       } catch (e: any) {
         console.error('[Media POST/Cloud] send error:', e)
+        await reportSendResult({
+          accountId: cloudConv.account.id,
+          success: false,
+          errorCode: e?.code,
+          error: e,
+          messagingLimit: cloudConv.account.messaging_limit,
+        })
         const codeStr = e?.code ? ` (code ${e.code})` : ''
         return NextResponse.json(
           {
@@ -222,6 +252,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           { status: 400, headers: NO_CACHE_HEADERS },
         )
       }
+
+      await reportSendResult({ accountId: cloudConv.account.id, success: true })
 
       const messageId = result.messages?.[0]?.id
       const { data: saved } = await supabase
