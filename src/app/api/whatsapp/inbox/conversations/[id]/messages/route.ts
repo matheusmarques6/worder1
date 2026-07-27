@@ -9,6 +9,11 @@ import {
   readOverrideFromRequest,
   buildOptOutBlockedResponse,
 } from '@/lib/whatsapp/opt-out-guard'
+import {
+  checkBeforeSend,
+  reportSendResult,
+  buildRateLimitedResponseBody,
+} from '@/lib/whatsapp/send-guard'
 
 // ✅ FASE 3: Force dynamic para evitar cache
 export const dynamic = 'force-dynamic'
@@ -139,6 +144,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         )
       }
 
+      // Send guard — tier da Meta + circuit breaker (paridade com campanhas)
+      const guardCheck = await checkBeforeSend({
+        accountId: cloudConv.account.id,
+        recipientPhone: phoneNumber,
+        messagingLimit: cloudConv.account.messaging_limit,
+      })
+      if (!guardCheck.allowed) {
+        const body429 = buildRateLimitedResponseBody(guardCheck)
+        return NextResponse.json(body429, {
+          status: 429,
+          headers: { ...NO_CACHE_HEADERS, 'Retry-After': String(body429.retryAfter) },
+        })
+      }
+
       const client = createWhatsAppCloudClient({
         phoneNumberId: cloudConv.account.phone_number_id,
         accessToken: getAccessToken(cloudConv.account),
@@ -149,11 +168,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         result = await client.sendText(phoneNumber, content)
       } catch (apiError: any) {
         console.error('[Messages POST] Cloud API error:', apiError)
+        await reportSendResult({
+          accountId: cloudConv.account.id,
+          success: false,
+          errorCode: apiError?.code,
+          error: apiError,
+          messagingLimit: cloudConv.account.messaging_limit,
+        })
         return NextResponse.json(
           { error: apiError.message || 'Failed to send message', code: apiError.code },
           { status: 400, headers: NO_CACHE_HEADERS }
         )
       }
+      await reportSendResult({ accountId: cloudConv.account.id, success: true })
 
       const messageId = result.messages?.[0]?.id
       const { data: saved } = await supabase
