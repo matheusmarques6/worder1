@@ -19,9 +19,17 @@ interface AIConfig {
   baseUrl?: string;
 }
 
-interface AIMessage {
+/** Imagem inline anexada a uma mensagem de user (visão multimodal). */
+export interface AIMessageImage {
+  mimeType: string
+  base64: string
+}
+
+export interface AIMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+  /** Imagens da mensagem (somente role='user'; providers sem visão fazem strip). */
+  images?: AIMessageImage[];
 }
 
 interface AIResponse {
@@ -65,6 +73,8 @@ export interface ToolLoopMessage {
   toolCalls?: ProviderToolCall[];
   /** resultados de tools (quando role='tool') */
   toolResults?: Array<{ id: string; name: string; result: any }>;
+  /** imagens inline (quando role='user' — visão multimodal) */
+  images?: AIMessageImage[];
 }
 
 export interface ProviderToolResult {
@@ -98,6 +108,54 @@ function genCallId(prefix: string): string {
 }
 
 // =============================================
+// SERIALIZADORES MULTIMODAIS (imagem inline)
+// =============================================
+// Exportados para reuso no caminho sem tools (callAI) e no tool-loop, e para
+// testes unitários. Imagem só em role='user'; demais roles ignoram `images`.
+
+export function toOpenAIChatMessage(m: AIMessage): any {
+  if (m.role !== 'user' || !m.images || m.images.length === 0) {
+    return { role: m.role, content: m.content };
+  }
+  const parts: any[] = [];
+  if (m.content) parts.push({ type: 'text', text: m.content });
+  for (const img of m.images) {
+    parts.push({
+      type: 'image_url',
+      image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
+    });
+  }
+  return { role: 'user', content: parts };
+}
+
+export function toAnthropicChatMessage(m: AIMessage): any {
+  if (m.role !== 'user' || !m.images || m.images.length === 0) {
+    return { role: m.role, content: m.content };
+  }
+  const blocks: any[] = m.images.map((img) => ({
+    type: 'image',
+    source: { type: 'base64', media_type: img.mimeType, data: img.base64 },
+  }));
+  if (m.content) blocks.push({ type: 'text', text: m.content });
+  return { role: 'user', content: blocks };
+}
+
+export function toGeminiParts(m: AIMessage): any[] {
+  const parts: any[] = [];
+  if (m.content) parts.push({ text: m.content });
+  for (const img of m.images || []) {
+    parts.push({ inline_data: { mime_type: img.mimeType, data: img.base64 } });
+  }
+  if (parts.length === 0) parts.push({ text: '' });
+  return parts;
+}
+
+/** Strip defensivo p/ providers SEM visão (Groq/DeepSeek): nunca vaza `images`. */
+function toTextOnlyMessage(m: AIMessage): { role: string; content: string } {
+  return { role: m.role, content: m.content };
+}
+
+// =============================================
 // OPENAI
 // =============================================
 async function callOpenAI(config: AIConfig, messages: AIMessage[]): Promise<AIResponse> {
@@ -109,7 +167,7 @@ async function callOpenAI(config: AIConfig, messages: AIMessage[]): Promise<AIRe
     },
     body: JSON.stringify({
       model: config.model || 'gpt-4o-mini',
-      messages,
+      messages: messages.map(toOpenAIChatMessage),
       temperature: config.temperature ?? 0.7,
       max_tokens: config.maxTokens ?? 1000,
     }),
@@ -150,10 +208,7 @@ async function callAnthropic(config: AIConfig, messages: AIMessage[]): Promise<A
       model: config.model || 'claude-3-haiku-20240307',
       max_tokens: config.maxTokens ?? 1000,
       system: systemMessage?.content || config.systemPrompt || '',
-      messages: chatMessages.map(m => ({
-        role: m.role,
-        content: m.content,
-      })),
+      messages: chatMessages.map(toAnthropicChatMessage),
     }),
   });
 
@@ -183,7 +238,7 @@ async function callGemini(config: AIConfig, messages: AIMessage[]): Promise<AIRe
   // Converter formato de mensagens
   const contents = chatMessages.map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
+    parts: toGeminiParts(m),
   }));
 
   const response = await fetch(
@@ -232,7 +287,7 @@ async function callDeepSeek(config: AIConfig, messages: AIMessage[]): Promise<AI
     },
     body: JSON.stringify({
       model: config.model || 'deepseek-chat',
-      messages,
+      messages: messages.map(toTextOnlyMessage),
       temperature: config.temperature ?? 0.7,
       max_tokens: config.maxTokens ?? 1000,
     }),
@@ -266,7 +321,7 @@ async function callGroq(config: AIConfig, messages: AIMessage[]): Promise<AIResp
     },
     body: JSON.stringify({
       model: config.model || 'llama-3.1-70b-versatile',
-      messages,
+      messages: messages.map(toTextOnlyMessage),
       temperature: config.temperature ?? 0.7,
       max_tokens: config.maxTokens ?? 1000,
     }),
@@ -317,7 +372,7 @@ async function callOpenRouter(config: AIConfig, messages: AIMessage[]): Promise<
     headers,
     body: JSON.stringify({
       model: config.model || 'openai/gpt-4o-mini',
-      messages,
+      messages: messages.map(toOpenAIChatMessage),
       temperature: config.temperature ?? 0.7,
       max_tokens: config.maxTokens ?? 1000,
     }),
@@ -414,7 +469,9 @@ async function callAnthropicWithTools(
       }));
       anthropicMessages.push({ role: 'user', content: blocks });
     } else {
-      anthropicMessages.push({ role: 'user', content: m.content || '' });
+      anthropicMessages.push(
+        toAnthropicChatMessage({ role: 'user', content: m.content || '', images: m.images }),
+      );
     }
   }
 
@@ -498,7 +555,11 @@ async function callOpenAICompatWithTools(
         });
       }
     } else {
-      openaiMessages.push({ role: m.role, content: m.content || '' });
+      openaiMessages.push(
+        m.role === 'user'
+          ? toOpenAIChatMessage({ role: 'user', content: m.content || '', images: m.images })
+          : { role: m.role, content: m.content || '' },
+      );
     }
   }
 
@@ -582,7 +643,10 @@ async function callGeminiWithTools(
       }));
       contents.push({ role: 'user', parts });
     } else {
-      contents.push({ role: 'user', parts: [{ text: m.content || '' }] });
+      contents.push({
+        role: 'user',
+        parts: toGeminiParts({ role: 'user', content: m.content || '', images: m.images }),
+      });
     }
   }
 
