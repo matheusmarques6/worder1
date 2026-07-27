@@ -76,6 +76,87 @@ async function notifyAiDisabled(params: {
   if (notifErr) wlog.warn('whatsapp.ai.notify_insert_failed', { error: notifErr.message });
 }
 
+interface HandoffKeywordParams {
+  account: any;
+  conversation: any;
+  agent: any;
+  agentId: string;
+  organizationId: string;
+  /** Texto a checar — cru para route='text', effectiveText (pós-transcrição) para audio/image. */
+  text: string;
+  keywords: readonly string[] | null | undefined;
+  confirmationMessage: string | null | undefined;
+  inboundMessageId?: string;
+  skipSend: boolean;
+  skipDelays: boolean;
+}
+
+/**
+ * Handoff por keyword (settings.safety.handoff_keywords): match case/acento-
+ * insensitive contra `text`. Sem match => null (segue o fluxo normal). Com
+ * match => desativa a conversa (ai_disabled_reason='handoff_keyword'), marca
+ * ai_transferred_at (cooldown), loga e (opcional) confirma via sender
+ * humanizado — best-effort, falha no envio não desfaz a transferência.
+ *
+ * Chamada em DOIS pontos de maybeRunAgentForCloudConversation: (1) sobre o
+ * texto CRU, route='text', ANTES do gate de chave BYO — para que um pedido de
+ * handoff não dependa de a org ter LLM key válida; (2) sobre o effectiveText
+ * pós-transcrição, DEPOIS do gate de chave, para audio/image (trade-off
+ * aceito: se a chave estiver quebrada, um handoff falado desativa como
+ * no_valid_api_key em vez de handoff_keyword).
+ */
+async function tryHandoffKeyword(params: HandoffKeywordParams): Promise<CloudRunnerResult | null> {
+  const {
+    account,
+    conversation,
+    agent,
+    agentId,
+    organizationId,
+    text,
+    keywords,
+    confirmationMessage,
+    inboundMessageId,
+    skipSend,
+    skipDelays,
+  } = params;
+
+  const matchedKeyword = matchHandoffKeyword(text, keywords);
+  if (!matchedKeyword) return null;
+
+  const nowIso = new Date().toISOString();
+  await supabaseAdmin
+    .from('whatsapp_cloud_conversations')
+    .update({
+      ai_enabled: false,
+      ai_disabled_at: nowIso,
+      ai_disabled_reason: 'handoff_keyword',
+      ai_transferred_at: nowIso,
+    })
+    .eq('id', conversation.id);
+
+  wlog.info('whatsapp.ai.handoff_keyword', {
+    organization_id: organizationId,
+    conversation_id: conversation.id,
+    agent_id: agentId,
+    keyword: matchedKeyword,
+  });
+
+  const confirmation = String(confirmationMessage || '').trim();
+  if (confirmation && !skipSend) {
+    // Best-effort: falha no envio da confirmação não desfaz a transferência.
+    await sendHumanizedReply({
+      account,
+      conversation,
+      text: confirmation,
+      agent: { id: agentId, ...agent },
+      inboundMessageId,
+      skipDelays,
+    });
+  }
+
+  return { replied: false, transferred: true, agentId, skipped: 'handoff_keyword' };
+}
+
 interface MediaFallbackParams {
   account: any;
   conversation: any;
@@ -374,6 +455,76 @@ export async function maybeRunAgentForCloudConversation(
     }
   }
 
+  const handoffCtx = {
+    account,
+    conversation,
+    agent,
+    agentId,
+    organizationId,
+    keywords: safety.handoff_keywords,
+    confirmationMessage: safety.handoff_confirmation_message,
+    inboundMessageId: params.inboundMessageId,
+    skipSend,
+    skipDelays,
+  };
+
+  // ---------- Handoff keywords sobre o texto CRU (route === 'text') ----------
+  // Para texto puro não há pipeline de mídia: effectiveText === text sempre,
+  // então checa aqui, ANTES do gate de chave BYO — um pedido de handoff do
+  // cliente não deve depender de a org ter uma chave de LLM válida
+  // configurada. Para audio/image o match roda mais abaixo, DEPOIS do gate
+  // de chave (ver comentário lá).
+  if (route === 'text') {
+    const handoffResult = await tryHandoffKeyword({ ...handoffCtx, text });
+    if (handoffResult) return handoffResult;
+  }
+
+  // ---------- BYO-key gracioso ----------
+  // Checa organization_api_keys ANTES do createAgentEngine para evitar o fallback
+  // silencioso para process.env.OPENAI_API_KEY quando o provider do agente não
+  // é OpenAI. Tabela 'api_keys' (legacy) era pra API keys do Worder; chaves de
+  // provider LLM moram em 'organization_api_keys' (gravada pela UI Configurações).
+  // Roda ANTES do pipeline de mídia (transcrição/download) — sem isso, audio
+  // e imagem gastariam STT/Storage à toa numa conversa que vai ser desabilitada
+  // de qualquer forma por falta de chave.
+  const { data: apiKeyRow } = await supabaseAdmin
+    .from('organization_api_keys')
+    .select('api_key, base_url, is_active')
+    .eq('organization_id', organizationId)
+    .eq('provider', agent.provider)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (!apiKeyRow?.api_key) {
+    await supabaseAdmin
+      .from('whatsapp_cloud_conversations')
+      .update({
+        ai_enabled: false,
+        ai_disabled_at: new Date().toISOString(),
+        ai_disabled_reason: 'no_valid_api_key',
+      })
+      .eq('id', conversation.id);
+
+    console.error(
+      `[cloud-runner] no_valid_api_key — provider="${agent.provider}" ` +
+        `org=${organizationId} agent=${agentId} conversation=${conversation.id}. ` +
+        `IA desabilitada para esta conversa até configurar a chave.`,
+    );
+    await notifyAiDisabled({
+      organizationId,
+      conversationId: conversation.id,
+      reason: 'no_valid_api_key',
+      detail: `provider=${agent.provider} agent=${agentId}`,
+    });
+    return {
+      replied: false,
+      transferred: false,
+      agentId,
+      failure: 'permanent',
+      error: 'no_valid_api_key',
+    };
+  }
+
   // ---------- Mídia inbound (áudio/imagem) ----------
   // Áudio: transcreve via chave BYO (OpenAI whisper-1 / Groq whisper-large-v3)
   // e PERSISTE o transcript em text_body — assim entra no histórico e retries
@@ -461,90 +612,14 @@ export async function maybeRunAgentForCloudConversation(
     }
   }
 
-  // ---------- Handoff keywords (settings.safety.handoff_keywords) ----------
-  // Checa o texto INBOUND EFETIVO (effectiveText — já com a transcrição do
-  // áudio aplicada, quando houver) ANTES do engine, case/acento-insensitive.
-  // Match => desativa a IA na conversa, marca a transferência
-  // (ai_transferred_at, para o guard de cooldown) e (opcional) confirma.
-  const matchedKeyword = matchHandoffKeyword(effectiveText, safety.handoff_keywords);
-  if (matchedKeyword) {
-    const nowIso = new Date().toISOString();
-    await supabaseAdmin
-      .from('whatsapp_cloud_conversations')
-      .update({
-        ai_enabled: false,
-        ai_disabled_at: nowIso,
-        ai_disabled_reason: 'handoff_keyword',
-        ai_transferred_at: nowIso,
-      })
-      .eq('id', conversation.id);
-
-    wlog.info('whatsapp.ai.handoff_keyword', {
-      organization_id: organizationId,
-      conversation_id: conversation.id,
-      agent_id: agentId,
-      keyword: matchedKeyword,
-    });
-
-    const confirmation = String(safety.handoff_confirmation_message || '').trim();
-    if (confirmation && !skipSend) {
-      // Best-effort: falha no envio da confirmação não desfaz a transferência.
-      await sendHumanizedReply({
-        account,
-        conversation,
-        text: confirmation,
-        agent: { id: agentId, ...agent },
-        inboundMessageId: params.inboundMessageId,
-        skipDelays,
-      });
-    }
-
-    return { replied: false, transferred: true, agentId, skipped: 'handoff_keyword' };
-  }
-
-  // ---------- BYO-key gracioso ----------
-  // Checa organization_api_keys ANTES do createAgentEngine para evitar o fallback
-  // silencioso para process.env.OPENAI_API_KEY quando o provider do agente não
-  // é OpenAI. Tabela 'api_keys' (legacy) era pra API keys do Worder; chaves de
-  // provider LLM moram em 'organization_api_keys' (gravada pela UI Configurações).
-  // Roda DEPOIS do handoff por keyword: uma transferência solicitada pelo
-  // cliente não deve depender de a org ter uma chave de LLM válida configurada.
-  const { data: apiKeyRow } = await supabaseAdmin
-    .from('organization_api_keys')
-    .select('api_key, base_url, is_active')
-    .eq('organization_id', organizationId)
-    .eq('provider', agent.provider)
-    .eq('is_active', true)
-    .maybeSingle();
-
-  if (!apiKeyRow?.api_key) {
-    await supabaseAdmin
-      .from('whatsapp_cloud_conversations')
-      .update({
-        ai_enabled: false,
-        ai_disabled_at: new Date().toISOString(),
-        ai_disabled_reason: 'no_valid_api_key',
-      })
-      .eq('id', conversation.id);
-
-    console.error(
-      `[cloud-runner] no_valid_api_key — provider="${agent.provider}" ` +
-        `org=${organizationId} agent=${agentId} conversation=${conversation.id}. ` +
-        `IA desabilitada para esta conversa até configurar a chave.`,
-    );
-    await notifyAiDisabled({
-      organizationId,
-      conversationId: conversation.id,
-      reason: 'no_valid_api_key',
-      detail: `provider=${agent.provider} agent=${agentId}`,
-    });
-    return {
-      replied: false,
-      transferred: false,
-      agentId,
-      failure: 'permanent',
-      error: 'no_valid_api_key',
-    };
+  // ---------- Handoff keywords sobre o texto EFETIVO (audio/image) ----------
+  // route='text' já foi checado acima (texto cru === effectiveText); aqui só
+  // roda para audio/image, sobre o texto pós-transcrição/caption — DEPOIS do
+  // gate de chave BYO (trade-off aceito: chave quebrada + handoff falado =>
+  // desativa como no_valid_api_key, não handoff_keyword).
+  if (route !== 'text') {
+    const handoffResult = await tryHandoffKeyword({ ...handoffCtx, text: effectiveText });
+    if (handoffResult) return handoffResult;
   }
 
   // ---------- Histórico (~20 últimas) ----------
