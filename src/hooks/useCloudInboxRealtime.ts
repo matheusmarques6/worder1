@@ -11,7 +11,10 @@
 // Auth: o client do browser e anon (login via cookie httpOnly), e as
 // tabelas cloud tem RLS org-scoped. Sem realtime.setAuth(jwt) o servidor
 // de realtime nao entrega NENHUM evento. O token vem do endpoint
-// /api/auth/realtime-token e e renovado antes do JWT (1h) expirar.
+// /api/auth/realtime-token, que devolve tambem `expiresAt` (epoch seconds
+// do claim `exp` do JWT); a renovacao e agendada com base nesse valor
+// (com margem de seguranca), caindo no fallback de 45min so se
+// `expiresAt` vier ausente/invalido.
 // =============================================
 
 import { useEffect, useRef, useState } from 'react'
@@ -24,7 +27,24 @@ import {
 } from '@/lib/whatsapp/inbox-realtime-mappers'
 import type { InboxMessage } from '@/types/inbox'
 
-const TOKEN_REFRESH_MS = 45 * 60 * 1000 // JWT do Supabase expira em 1h
+const TOKEN_REFRESH_MS = 45 * 60 * 1000 // fallback: sem expiresAt, renova em 45min (JWT expira em 1h)
+const TOKEN_RETRY_MS = 10 * 1000 // 1 retry rapido antes de cair no fallback, pra falha transiente nao compor
+const TOKEN_MIN_REFRESH_MS = 30 * 1000 // nunca agenda renovacao mais cedo que isso (evita martelar em token invalido)
+const TOKEN_SAFETY_MARGIN_MS = 60 * 1000 // renova este tanto ANTES do expiresAt real
+
+/**
+ * Calcula em quanto tempo renovar o token, a partir do `expiresAt` (epoch
+ * seconds) devolvido por /api/auth/realtime-token. Se `expiresAt` estiver
+ * ausente/invalido, cai no fallback fixo de 45min — nunca deixa de agendar
+ * a proxima renovacao.
+ */
+function computeRenewalDelayMs(expiresAt: unknown): number {
+  if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt)) {
+    return TOKEN_REFRESH_MS
+  }
+  const rawDelay = expiresAt * 1000 - Date.now() - TOKEN_SAFETY_MARGIN_MS
+  return Math.max(rawDelay, TOKEN_MIN_REFRESH_MS)
+}
 
 type ChannelState = 'idle' | 'connected' | 'error'
 
@@ -62,30 +82,60 @@ export function useCloudInboxRealtime(
   useEffect(() => {
     if (!enabled || !organizationId) return
     let cancelled = false
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    // Ja tentou 1 retry rapido para a falha atual? Evita martelar o
+    // endpoint: 1 retry em 10s, se falhar de novo cai pro fallback de 45min.
+    let hasRetried = false
+
+    const scheduleNext = (delayMs: number) => {
+      if (cancelled) return
+      timeoutId = setTimeout(applyToken, delayMs)
+    }
+
+    const handleFailure = () => {
+      if (!hasRetried) {
+        hasRetried = true
+        scheduleNext(TOKEN_RETRY_MS)
+      } else {
+        // 2a falha seguida: para de tentar rapido, volta pro fallback fixo
+        // e reseta o contador pro proximo ciclo poder retry-once de novo.
+        hasRetried = false
+        scheduleNext(TOKEN_REFRESH_MS)
+      }
+    }
 
     const applyToken = async () => {
       try {
         const res = await authedFetch('/api/auth/realtime-token')
+        if (cancelled) return
         if (!res.ok) {
           console.warn('[CloudRealtime] realtime-token failed:', res.status)
+          handleFailure()
           return
         }
         const data = await res.json()
-        if (!cancelled && data.token) {
-          // setAuth propaga o token para canais ja conectados tambem
-          supabaseClient.realtime.setAuth(data.token)
-          setAuthReady(true)
+        if (cancelled) return
+        if (!data.token) {
+          console.warn('[CloudRealtime] realtime-token response missing token')
+          handleFailure()
+          return
         }
+        // setAuth propaga o token para canais ja conectados tambem
+        supabaseClient.realtime.setAuth(data.token)
+        setAuthReady(true)
+        hasRetried = false
+        scheduleNext(computeRenewalDelayMs(data.expiresAt))
       } catch (err) {
+        if (cancelled) return
         console.warn('[CloudRealtime] Failed to fetch realtime token:', err)
+        handleFailure()
       }
     }
 
     applyToken()
-    const interval = setInterval(applyToken, TOKEN_REFRESH_MS)
     return () => {
       cancelled = true
-      clearInterval(interval)
+      if (timeoutId) clearTimeout(timeoutId)
     }
   }, [enabled, organizationId])
 
@@ -146,9 +196,14 @@ export function useCloudInboxRealtime(
 
   // ---- Canal de mensagens (conversa selecionada) ----
   useEffect(() => {
-    if (!enabled || !conversationId || !authReady) return
+    if (!enabled || !organizationId || !conversationId || !authReady) return
 
     const channelName = `cloud-inbox-msg-${conversationId}`
+    // Compound filter (comma-joined, suportado pelo @supabase/realtime-js):
+    // organization_id ALEM de conversation_id — o contrato exige os dois
+    // canais filtrados por organization_id (RLS ja re-checa isso no server,
+    // mas o filtro do client tem que casar com o contrato escrito).
+    const messagesFilter = `organization_id=eq.${organizationId},conversation_id=eq.${conversationId}`
     console.log('[CloudRealtime] Subscribing:', channelName)
 
     const channel = supabaseClient
@@ -159,7 +214,7 @@ export function useCloudInboxRealtime(
           event: 'INSERT',
           schema: 'public',
           table: 'whatsapp_cloud_messages',
-          filter: `conversation_id=eq.${conversationId}`,
+          filter: messagesFilter,
         },
         (payload) => {
           const message = mapCloudMessageRow(payload.new as Record<string, any>)
@@ -175,7 +230,7 @@ export function useCloudInboxRealtime(
           event: 'UPDATE',
           schema: 'public',
           table: 'whatsapp_cloud_messages',
-          filter: `conversation_id=eq.${conversationId}`,
+          filter: messagesFilter,
         },
         (payload) => {
           callbacksRef.current.onMessageUpdate?.(
@@ -199,7 +254,7 @@ export function useCloudInboxRealtime(
       supabaseClient.removeChannel(channel)
       setMessagesState('idle')
     }
-  }, [enabled, conversationId, authReady])
+  }, [enabled, organizationId, conversationId, authReady])
 
   return {
     // O canal de conversas e o "coracao" do inbox: e ele que dita se o
