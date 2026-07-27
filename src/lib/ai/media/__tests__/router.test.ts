@@ -203,6 +203,32 @@ describe('appendCurrentTurn', () => {
     })
   })
 
+  // Fix (review Task 6/7, Finding 2 IMPORTANT): dado real de producao — o
+  // webhook-processor grava a caption tambem em text_body, entao a query de
+  // historico (cloud-runner) NUNCA monta o placeholder `[Cliente enviou uma
+  // imagem...]` pra ESTA linha (body ja vem preenchido) — o tail do historico
+  // e a propria caption como texto puro. Sem o fix, appendCurrentTurn
+  // empilhava um SEGUNDO turno 'user' (o mesmo texto, agora com imagens),
+  // duplicando o turno pro LLM. Cobre exatamente essa forma de historico.
+  it('happy path de producao (imagem+caption, SEM placeholder pq webhook grava caption em text_body): substitui o tail em vez de duplicar', () => {
+    const history: EngineMessage[] = [
+      { role: 'assistant', content: 'oi! como posso ajudar?' },
+      { role: 'user', content: 'meu comprovante' }, // linha da PROPRIA imagem atual, ja como texto puro
+    ]
+    const images = [{ mimeType: 'image/jpeg', base64: 'BBB' }]
+    const result = appendCurrentTurn(history, {
+      route: 'image',
+      effectiveText: 'meu comprovante',
+      images,
+    })
+    expect(result).toEqual([
+      { role: 'assistant', content: 'oi! como posso ajudar?' },
+      { role: 'user', content: 'meu comprovante', images },
+    ])
+    expect(result).toHaveLength(2)
+    expect(result.filter((m) => m.role === 'user')).toHaveLength(1)
+  })
+
   it('placeholder de audio nao e afetado pela logica de imagem (route text/audio ja transcrito nao mexe no placeholder)', () => {
     const history: EngineMessage[] = [
       { role: 'user', content: '[Cliente enviou um áudio sem transcrição]' },

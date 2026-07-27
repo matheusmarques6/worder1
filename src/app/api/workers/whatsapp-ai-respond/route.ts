@@ -30,7 +30,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { planAiRetry } from '@/lib/ai/failure-classifier';
 import { wlog } from '@/lib/observability/whatsapp-logger';
 import { sendAlert } from '@/lib/whatsapp/alerts';
-import { buildRunnerMediaInput } from '@/lib/ai/media/router';
+import { buildRunnerMediaInput, type InboundMediaInput } from '@/lib/ai/media/router';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -163,7 +163,28 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     const text = (lastInbound?.text_body || '').trim();
-    const inboundMedia = lastInbound ? buildRunnerMediaInput(lastInbound) : null;
+    const messageType = lastInbound?.message_type || 'text';
+    const isMediaType = messageType === 'audio' || messageType === 'image';
+    let inboundMedia: InboundMediaInput | null = lastInbound
+      ? buildRunnerMediaInput(lastInbound)
+      : null;
+    // Fix (review Finding 1 — CRITICAL): áudio/imagem SEM ponteiros ainda
+    // (media_url/media_storage_path nulos porque o download assíncrono ainda
+    // não terminou, ou falhou permanentemente) não pode cair no guard abaixo
+    // e virar silêncio terminal — o claim de ai_pending já foi consumido, e
+    // NENHUM job posterior vai reprocessar esta mensagem. Monta um input de
+    // mídia "vazio" (ponteiros null) a partir do tipo da linha; o runner
+    // trata isso normalmente: fetchInboundMedia retorna null e
+    // runMediaFallback dispara (ask_text/handoff) — nunca silêncio.
+    if (!inboundMedia && isMediaType) {
+      inboundMedia = {
+        type: messageType as 'audio' | 'image',
+        mediaUrl: null,
+        storagePath: null,
+        mimeType: lastInbound?.media_mime_type ?? null,
+        caption: lastInbound?.caption ?? null,
+      };
+    }
     if (!text && !inboundMedia) {
       return NextResponse.json({ ok: true, skipped: 'no_inbound_text' }, { status: 200 });
     }
@@ -176,7 +197,7 @@ export async function POST(req: NextRequest) {
       contact,
       text,
       inboundMessageId: lastInbound?.message_id,
-      messageType: lastInbound?.message_type || 'text',
+      messageType,
       phoneNumber: conversation.contact_phone || conversation.wa_id,
       inboundMedia: inboundMedia || undefined,
     });

@@ -31,6 +31,9 @@ export const AI_DISABLED_REASON_LABELS: Record<string, string> = {
   budget_exceeded: 'Orçamento de IA excedido',
   ai_permanent_error: 'Erro do provedor de IA',
   transferred_to_human: 'Transferido para atendente',
+  // media_handoff: semantica igual a transferred_to_human (requer acao humana,
+  // NAO entra em AUTO_DISABLED_REASONS/isAutoDisabledReason) — intencional.
+  media_handoff: 'Mídia não interpretada pela IA',
 }
 
 /** Normaliza valores legados pro vocabulario canonico. */

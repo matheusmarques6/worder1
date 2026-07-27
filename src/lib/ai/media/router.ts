@@ -134,7 +134,21 @@ export function appendCurrentTurn(
   }
 
   const tail = next[next.length - 1]
-  if (!tail || tail.role !== 'user' || tail.content !== effectiveText || images) {
+  const tailIsCurrentTurn = Boolean(tail) && tail.role === 'user' && tail.content === effectiveText
+  if (tailIsCurrentTurn) {
+    if (images) {
+      // Fix (review Finding 2): o histórico às vezes já traz este MESMO turno
+      // como texto puro (ex.: webhook-processor grava a caption também em
+      // text_body, então a query de histórico nunca produz o placeholder
+      // `[Cliente enviou uma imagem...]` pra ESTA linha). Sem isto, o `push`
+      // abaixo empilharia um SEGUNDO turno 'user' idêntico (um sem imagens,
+      // outro com) — o LLM veria a mesma mensagem duas vezes. Substitui em
+      // vez de duplicar.
+      next.pop()
+      next.push({ role: 'user', content: effectiveText, images })
+    }
+    // sem images: o turno já está correto no histórico — nada a fazer.
+  } else {
     next.push({ role: 'user', content: effectiveText, images })
   }
 
