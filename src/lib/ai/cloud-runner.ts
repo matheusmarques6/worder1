@@ -41,6 +41,7 @@ import {
 import { resolveSttConfig, transcribeAudio } from './media/transcription';
 import { fetchInboundMedia } from './media/fetch-media';
 import type { AIMessageImage } from '@/lib/whatsapp/ai-providers';
+import { matchHandoffKeyword, isTransferCooldownActive } from './guards';
 
 const COOLDOWN_MS = 5000;
 
@@ -118,12 +119,14 @@ async function runMediaFallback(params: MediaFallbackParams): Promise<CloudRunne
   });
 
   if (fallback.mode === 'handoff') {
+    const handoffIso = new Date().toISOString();
     await supabaseAdmin
       .from('whatsapp_cloud_conversations')
       .update({
         ai_enabled: false,
-        ai_disabled_at: new Date().toISOString(),
+        ai_disabled_at: handoffIso,
         ai_disabled_reason: 'media_handoff',
+        ai_transferred_at: handoffIso,
       })
       .eq('id', conversation.id);
 
@@ -290,6 +293,34 @@ export async function maybeRunAgentForCloudConversation(
   }
 
   const behavior = agent.settings?.behavior || {};
+  const safety = agent.settings?.safety || {};
+
+  // ---------- activate_on: 'manual' NUNCA dispara automaticamente ----------
+  // Mecanismo de ativação manual JÁ existe: POST /api/whatsapp/inbox/
+  // conversations/[id]/bot com ai_agent_id grava conversation.ai_agent_id.
+  // Agente manual só roda quando foi explicitamente atribuído a ESTA conversa.
+  if (behavior.activate_on === 'manual' && conversation.ai_agent_id !== agentId) {
+    return {
+      replied: false,
+      transferred: false,
+      agentId,
+      skipped: 'manual_activation_required',
+    };
+  }
+
+  // ---------- Cooldown pós-transferência (behavior.cooldown_after_transfer) ----------
+  // ai_transferred_at NÃO é limpo na reativação manual da IA — o cooldown
+  // configurado (default 300s) vale mesmo se um humano religar a IA cedo.
+  // Roda ANTES de qualquer trabalho caro (resolver histórico, transcrição,
+  // engine) — silencia cedo, sem custo.
+  if (
+    isTransferCooldownActive({
+      transferredAt: conversation.ai_transferred_at,
+      cooldownSeconds: behavior.cooldown_after_transfer,
+    })
+  ) {
+    return { replied: false, transferred: false, agentId, skipped: 'transfer_cooldown' };
+  }
 
   // ---------- Guards de comportamento (helpers TS, tabelas Cloud) ----------
   // Cooldown: último outbound da IA (sent_by_bot=true) < COOLDOWN_MS.
@@ -341,49 +372,6 @@ export async function maybeRunAgentForCloudConversation(
     if (humanMsg) {
       return { replied: false, transferred: false, skipped: 'stop_on_human' };
     }
-  }
-
-  // ---------- BYO-key gracioso ----------
-  // Checa organization_api_keys ANTES do createAgentEngine para evitar o fallback
-  // silencioso para process.env.OPENAI_API_KEY quando o provider do agente não
-  // é OpenAI. Tabela 'api_keys' (legacy) era pra API keys do Worder; chaves de
-  // provider LLM moram em 'organization_api_keys' (gravada pela UI Configurações).
-  const { data: apiKeyRow } = await supabaseAdmin
-    .from('organization_api_keys')
-    .select('api_key, base_url, is_active')
-    .eq('organization_id', organizationId)
-    .eq('provider', agent.provider)
-    .eq('is_active', true)
-    .maybeSingle();
-
-  if (!apiKeyRow?.api_key) {
-    await supabaseAdmin
-      .from('whatsapp_cloud_conversations')
-      .update({
-        ai_enabled: false,
-        ai_disabled_at: new Date().toISOString(),
-        ai_disabled_reason: 'no_valid_api_key',
-      })
-      .eq('id', conversation.id);
-
-    console.error(
-      `[cloud-runner] no_valid_api_key — provider="${agent.provider}" ` +
-        `org=${organizationId} agent=${agentId} conversation=${conversation.id}. ` +
-        `IA desabilitada para esta conversa até configurar a chave.`,
-    );
-    await notifyAiDisabled({
-      organizationId,
-      conversationId: conversation.id,
-      reason: 'no_valid_api_key',
-      detail: `provider=${agent.provider} agent=${agentId}`,
-    });
-    return {
-      replied: false,
-      transferred: false,
-      agentId,
-      failure: 'permanent',
-      error: 'no_valid_api_key',
-    };
   }
 
   // ---------- Mídia inbound (áudio/imagem) ----------
@@ -471,6 +459,92 @@ export async function maybeRunAgentForCloudConversation(
           : 'provider_without_vision',
       });
     }
+  }
+
+  // ---------- Handoff keywords (settings.safety.handoff_keywords) ----------
+  // Checa o texto INBOUND EFETIVO (effectiveText — já com a transcrição do
+  // áudio aplicada, quando houver) ANTES do engine, case/acento-insensitive.
+  // Match => desativa a IA na conversa, marca a transferência
+  // (ai_transferred_at, para o guard de cooldown) e (opcional) confirma.
+  const matchedKeyword = matchHandoffKeyword(effectiveText, safety.handoff_keywords);
+  if (matchedKeyword) {
+    const nowIso = new Date().toISOString();
+    await supabaseAdmin
+      .from('whatsapp_cloud_conversations')
+      .update({
+        ai_enabled: false,
+        ai_disabled_at: nowIso,
+        ai_disabled_reason: 'handoff_keyword',
+        ai_transferred_at: nowIso,
+      })
+      .eq('id', conversation.id);
+
+    wlog.info('whatsapp.ai.handoff_keyword', {
+      organization_id: organizationId,
+      conversation_id: conversation.id,
+      agent_id: agentId,
+      keyword: matchedKeyword,
+    });
+
+    const confirmation = String(safety.handoff_confirmation_message || '').trim();
+    if (confirmation && !skipSend) {
+      // Best-effort: falha no envio da confirmação não desfaz a transferência.
+      await sendHumanizedReply({
+        account,
+        conversation,
+        text: confirmation,
+        agent: { id: agentId, ...agent },
+        inboundMessageId: params.inboundMessageId,
+        skipDelays,
+      });
+    }
+
+    return { replied: false, transferred: true, agentId, skipped: 'handoff_keyword' };
+  }
+
+  // ---------- BYO-key gracioso ----------
+  // Checa organization_api_keys ANTES do createAgentEngine para evitar o fallback
+  // silencioso para process.env.OPENAI_API_KEY quando o provider do agente não
+  // é OpenAI. Tabela 'api_keys' (legacy) era pra API keys do Worder; chaves de
+  // provider LLM moram em 'organization_api_keys' (gravada pela UI Configurações).
+  // Roda DEPOIS do handoff por keyword: uma transferência solicitada pelo
+  // cliente não deve depender de a org ter uma chave de LLM válida configurada.
+  const { data: apiKeyRow } = await supabaseAdmin
+    .from('organization_api_keys')
+    .select('api_key, base_url, is_active')
+    .eq('organization_id', organizationId)
+    .eq('provider', agent.provider)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (!apiKeyRow?.api_key) {
+    await supabaseAdmin
+      .from('whatsapp_cloud_conversations')
+      .update({
+        ai_enabled: false,
+        ai_disabled_at: new Date().toISOString(),
+        ai_disabled_reason: 'no_valid_api_key',
+      })
+      .eq('id', conversation.id);
+
+    console.error(
+      `[cloud-runner] no_valid_api_key — provider="${agent.provider}" ` +
+        `org=${organizationId} agent=${agentId} conversation=${conversation.id}. ` +
+        `IA desabilitada para esta conversa até configurar a chave.`,
+    );
+    await notifyAiDisabled({
+      organizationId,
+      conversationId: conversation.id,
+      reason: 'no_valid_api_key',
+      detail: `provider=${agent.provider} agent=${agentId}`,
+    });
+    return {
+      replied: false,
+      transferred: false,
+      agentId,
+      failure: 'permanent',
+      error: 'no_valid_api_key',
+    };
   }
 
   // ---------- Histórico (~20 últimas) ----------
@@ -670,12 +744,14 @@ export async function maybeRunAgentForCloudConversation(
 
   // ---------- Transferência ----------
   if (result.was_transferred) {
+    const transferIso = new Date().toISOString();
     await supabaseAdmin
       .from('whatsapp_cloud_conversations')
       .update({
         ai_enabled: false,
-        ai_disabled_at: new Date().toISOString(),
+        ai_disabled_at: transferIso,
         ai_disabled_reason: 'transferred_to_human',
+        ai_transferred_at: transferIso,
       })
       .eq('id', conversation.id);
 
