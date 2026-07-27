@@ -47,6 +47,22 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const hasMore = (data?.length || 0) > limit
     const messages = hasMore ? data?.slice(0, limit) : data
 
+    // Re-assina URLs de mídia a partir do storage_path a CADA leitura.
+    // A URL persistida em media_url expira em 1h; sem isso, mídia (inclusive
+    // enviada) quebra no reload. 1 chamada batch por página de mensagens.
+    const mediaPaths = (messages || [])
+      .map(m => m.media_storage_path)
+      .filter((p): p is string => !!p)
+    const signedByPath: Record<string, string> = {}
+    if (mediaPaths.length > 0) {
+      const { data: signed } = await supabase.storage
+        .from('whatsapp-media')
+        .createSignedUrls(mediaPaths, 3600)
+      for (const s of signed || []) {
+        if (s.path && s.signedUrl) signedByPath[s.path] = s.signedUrl
+      }
+    }
+
     if (!before && !after) {
       const firstMsg = messages?.[0]
       const provider = firstMsg?.provider
@@ -60,7 +76,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const formatted = (messages || []).map(m => ({
       id: m.id, conversation_id: m.conversation_id, direction: m.direction,
       message_type: m.message_type || 'text', content: extractMessageText(m.content, m.text_body),
-      media_url: m.media_url, media_filename: m.media_filename, media_mime_type: m.media_mime_type,
+      media_url: (m.media_storage_path && signedByPath[m.media_storage_path]) || m.media_url,
+      media_filename: m.media_filename, media_mime_type: m.media_mime_type,
       status: m.status || 'sent', sent_by_bot: m.sent_by_bot || false,
       created_at: m.created_at || m.timestamp, delivered_at: m.delivered_at, read_at: m.read_at,
       meta_message_id: m.message_id,

@@ -125,6 +125,14 @@ function MessageBubble({ message, contactName, onRetry }: { message: InboxMessag
               onClick={() => window.open(message.media_url, '_blank')} 
             />
           )}
+          {message.message_type === 'sticker' && message.media_url && (
+            <img
+              src={message.media_url}
+              alt="Figurinha"
+              loading="lazy"
+              className="rounded-lg mb-2 w-32 h-32 object-contain"
+            />
+          )}
           {/* ✅ CORREÇÃO: Vídeo com preload, playsInline e tamanho limitado */}
           {message.message_type === 'video' && message.media_url && (
             <video 

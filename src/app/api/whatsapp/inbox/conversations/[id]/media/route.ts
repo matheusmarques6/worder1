@@ -312,7 +312,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     const { data: message, error } = await supabase
-      .from('whatsapp_messages')
+      .from('whatsapp_cloud_messages')
       .select('media_storage_path, media_url')
       .eq('id', messageId)
       .eq('conversation_id', params.id)
