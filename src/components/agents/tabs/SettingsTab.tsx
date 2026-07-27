@@ -79,12 +79,13 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
       hours: { start: '08:00', end: '18:00' }, 
       days: ['mon', 'tue', 'wed', 'thu', 'fri'] 
     },
-    behavior: { 
-      activate_on: 'new_message', 
-      stop_on_human_reply: true, 
-      cooldown_after_transfer: 300, 
-      max_messages_per_conversation: 0 
+    behavior: {
+      activate_on: 'new_message',
+      stop_on_human_reply: true,
+      cooldown_after_transfer: 300,
+      max_messages_per_conversation: 0
     },
+    media_fallback: { mode: 'ask_text' as const },
   }
 
   // Fetch data
@@ -635,6 +636,73 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                 <p className="hint">
                   Após este número de mensagens, o agente para de responder automaticamente (0 = ilimitado)
                 </p>
+              </div>
+
+              {/* Media fallback — áudio/imagem que a IA não conseguiu interpretar */}
+              <div className="rule-card">
+                <div className="mb-2">
+                  <span className="text-sm" style={{ color: 'var(--text)' }}>
+                    Mídia não compreendida (áudio/imagem)
+                  </span>
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    O que fazer quando a IA não conseguir transcrever um áudio ou interpretar uma imagem
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label
+                    className={`selcard ${(settings.media_fallback?.mode || 'ask_text') === 'ask_text' ? 'on' : ''} flex items-center gap-3`}
+                    style={{ padding: 12 }}
+                  >
+                    <input
+                      type="radio"
+                      name="media_fallback_mode"
+                      checked={(settings.media_fallback?.mode || 'ask_text') === 'ask_text'}
+                      onChange={() => updateSettings({
+                        media_fallback: { ...settings.media_fallback, mode: 'ask_text' }
+                      })}
+                    />
+                    <div>
+                      <span className="text-sm" style={{ color: 'var(--text)' }}>Pedir texto</span>
+                      <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                        Responde automaticamente pedindo que o cliente escreva em texto
+                      </p>
+                    </div>
+                  </label>
+                  <label
+                    className={`selcard ${settings.media_fallback?.mode === 'handoff' ? 'on' : ''} flex items-center gap-3`}
+                    style={{ padding: 12 }}
+                  >
+                    <input
+                      type="radio"
+                      name="media_fallback_mode"
+                      checked={settings.media_fallback?.mode === 'handoff'}
+                      onChange={() => updateSettings({
+                        media_fallback: { ...settings.media_fallback, mode: 'handoff' }
+                      })}
+                    />
+                    <div>
+                      <span className="text-sm" style={{ color: 'var(--text)' }}>Transferir para humano</span>
+                      <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                        Pausa a IA na conversa e notifica a equipe
+                      </p>
+                    </div>
+                  </label>
+                  {(settings.media_fallback?.mode || 'ask_text') === 'ask_text' && (
+                    <div>
+                      <label className="label">Mensagem enviada ao cliente</label>
+                      <textarea
+                        className="field"
+                        rows={2}
+                        placeholder="Desculpe, não consegui entender sua mensagem por aqui. Pode me escrever em texto, por favor?"
+                        value={settings.media_fallback?.message || ''}
+                        onChange={(e) => updateSettings({
+                          media_fallback: { mode: 'ask_text', message: e.target.value }
+                        })}
+                      />
+                      <p className="hint">Vazio = usa a mensagem padrão acima</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </AccordionItem>
