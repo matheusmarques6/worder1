@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
 import { resolveStoreContext, applyStoreFilter } from '@/lib/api/store-filter';
+import { computeCanSendTemplateOnly } from '@/lib/whatsapp/service-window'
 
 export async function GET(request: NextRequest) {
   try {
@@ -90,6 +91,14 @@ function formatConversation(conv: any, ai?: any) {
   // unificada nao tem essas colunas. Legacy (evolution) assume IA ligada.
   const aiEnabled = ai?.ai_enabled ?? true
 
+  // Janela de 24h (Meta). A view ja traz is_window_open/window_expires_at;
+  // aqui normalizamos: flag do BD pode ficar stale (true com timestamp
+  // vencido), entao o horario de expiracao manda.
+  const canSendTemplateOnly = computeCanSendTemplateOnly(
+    conv.is_window_open,
+    conv.window_expires_at,
+  )
+
   return {
     id: conv.id,
     organization_id: conv.organization_id,
@@ -107,7 +116,8 @@ function formatConversation(conv: any, ai?: any) {
     ai_disabled_at: ai?.ai_disabled_at ?? null,
     ai_disabled_reason: ai?.ai_disabled_reason ?? null,
 
-    is_window_open: conv.is_window_open ?? false,
+    is_window_open: !canSendTemplateOnly,
+    can_send_template_only: canSendTemplateOnly,
     window_expires_at: conv.window_expires_at,
     last_customer_message_at: conv.last_customer_message_at,
 
