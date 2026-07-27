@@ -97,6 +97,26 @@ export function useInboxConversations(organizationId: string | null, storeId?: s
       if (!response.ok) throw new Error(data.error || 'Failed to fetch conversations')
 
       setConversations(data.conversations || [])
+      // Re-sync the OPEN conversation's 24h-window fields from the fresh list so
+      // the composer unlocks live when the customer re-opens the window (new
+      // inbound bumps window_expires_at). selectedConversation is otherwise a
+      // snapshot frozen until re-select. Equality guard keeps the reference
+      // stable (no re-render) when nothing changed.
+      const freshList = (data.conversations || []) as InboxConversation[]
+      setSelectedConversation(prev => {
+        if (!prev) return prev
+        const updated = freshList.find(c => c.id === prev.id)
+        if (!updated) return prev
+        if (
+          updated.window_expires_at === prev.window_expires_at &&
+          updated.can_send_template_only === prev.can_send_template_only
+        ) return prev
+        return {
+          ...prev,
+          window_expires_at: updated.window_expires_at,
+          can_send_template_only: updated.can_send_template_only,
+        }
+      })
       setPagination(data.pagination || null)
       hasLoadedOnce.current = true // ✅ Marca que já carregou
       
