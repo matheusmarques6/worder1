@@ -69,6 +69,14 @@ export interface AgentSettings {
     mode: 'ask_text' | 'handoff'
     message?: string
   }
+  /**
+   * Tool-calling (Fase 2b/2c). `enabled` lista os NOMES das tools ativas
+   * (ver src/lib/ai/tools/registry.ts). Ausente => nenhuma tool (compat com
+   * agentes criados antes desta feature).
+   */
+  tools?: {
+    enabled: string[]
+  }
 }
 
 // =====================================================
@@ -414,6 +422,11 @@ export const DEFAULT_SETTINGS: AgentSettings = {
     max_messages_per_conversation: 0,
   },
   media_fallback: { mode: 'ask_text' },
+  // transfer_to_human por padrão: é a válvula de escape sem dependência
+  // externa (não exige Shopify nem chave extra). Agentes EXISTENTES não
+  // mudam: DEFAULT_SETTINGS só entra em novos INSERTs (POST /api/ai/agents)
+  // e getActiveTools devolve [] quando settings.tools está ausente.
+  tools: { enabled: ['transfer_to_human'] },
 }
 
 export const RESPONSE_LENGTH_TOKENS = {
