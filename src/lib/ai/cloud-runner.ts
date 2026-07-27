@@ -124,7 +124,7 @@ async function tryHandoffKeyword(params: HandoffKeywordParams): Promise<CloudRun
   if (!matchedKeyword) return null;
 
   const nowIso = new Date().toISOString();
-  await supabaseAdmin
+  const { error: disableErr } = await supabaseAdmin
     .from('whatsapp_cloud_conversations')
     .update({
       ai_enabled: false,
@@ -133,6 +133,13 @@ async function tryHandoffKeyword(params: HandoffKeywordParams): Promise<CloudRun
       ai_transferred_at: nowIso,
     })
     .eq('id', conversation.id);
+  if (disableErr) {
+    wlog.warn('whatsapp.ai.safety_disable_failed', {
+      reason: 'handoff_keyword',
+      conversationId: conversation.id,
+      error: disableErr.message,
+    });
+  }
 
   wlog.info('whatsapp.ai.handoff_keyword', {
     organization_id: organizationId,
@@ -201,7 +208,7 @@ async function runMediaFallback(params: MediaFallbackParams): Promise<CloudRunne
 
   if (fallback.mode === 'handoff') {
     const handoffIso = new Date().toISOString();
-    await supabaseAdmin
+    const { error: disableErr } = await supabaseAdmin
       .from('whatsapp_cloud_conversations')
       .update({
         ai_enabled: false,
@@ -210,6 +217,13 @@ async function runMediaFallback(params: MediaFallbackParams): Promise<CloudRunne
         ai_transferred_at: handoffIso,
       })
       .eq('id', conversation.id);
+    if (disableErr) {
+      wlog.warn('whatsapp.ai.safety_disable_failed', {
+        reason: 'media_handoff',
+        conversationId: conversation.id,
+        error: disableErr.message,
+      });
+    }
 
     const { error: notifErr } = await supabaseAdmin.from('notifications').insert({
       organization_id: organizationId,
@@ -820,7 +834,7 @@ export async function maybeRunAgentForCloudConversation(
   // ---------- Transferência ----------
   if (result.was_transferred) {
     const transferIso = new Date().toISOString();
-    await supabaseAdmin
+    const { error: disableErr } = await supabaseAdmin
       .from('whatsapp_cloud_conversations')
       .update({
         ai_enabled: false,
@@ -829,6 +843,13 @@ export async function maybeRunAgentForCloudConversation(
         ai_transferred_at: transferIso,
       })
       .eq('id', conversation.id);
+    if (disableErr) {
+      wlog.warn('whatsapp.ai.safety_disable_failed', {
+        reason: 'transferred_to_human',
+        conversationId: conversation.id,
+        error: disableErr.message,
+      });
+    }
 
     console.log(
       `[cloud-runner] transferência para humano — conversation=${conversation.id}`,

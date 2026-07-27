@@ -69,6 +69,11 @@ export const transferToHumanTool: Tool = {
       // fluxo de inbox; não há humano definido no momento da transferência, e
       // gravar o ID do agente de IA aqui confundiria a UI. A conversa fica na
       // fila não-atribuída para um humano assumir.
+      // NÃO setamos ai_transferred_at aqui de propósito: o chamador
+      // (cloud-runner, bloco pós-processMessage de was_transferred) já
+      // re-grava a conversa e carimba ai_transferred_at (cooldown). Manter
+      // essa omissão intencional — não adicionar o campo aqui num refactor
+      // futuro sem revisar esse fluxo duplo de escrita.
       const { error: updErr } = await orgUpdate(
         'whatsapp_cloud_conversations',
         ctx.organizationId,

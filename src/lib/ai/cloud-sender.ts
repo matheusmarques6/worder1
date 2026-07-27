@@ -142,7 +142,7 @@ export async function sendHumanizedReply(
       agent_id: agent.id,
       topic: blockedTopic,
     });
-    await supabaseAdmin
+    const { error: disableErr } = await supabaseAdmin
       .from('whatsapp_cloud_conversations')
       .update({
         ai_enabled: false,
@@ -151,6 +151,13 @@ export async function sendHumanizedReply(
         ai_transferred_at: nowIso,
       })
       .eq('id', conversation.id);
+    if (disableErr) {
+      wlog.warn('whatsapp.ai.safety_disable_failed', {
+        reason: 'blocked_topic',
+        conversationId: conversation.id,
+        error: disableErr.message,
+      });
+    }
     return { sent: false, reason: 'blocked_topic' };
   }
 
