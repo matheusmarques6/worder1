@@ -1,8 +1,9 @@
 // src/app/api/whatsapp/inbox/conversations/[id]/assign/route.ts
-// CORRIGIDO: Usa coluna assigned_to correta
+// Atribui na tabela base correta (cloud ou legacy) — ambas tem assigned_to.
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireOrgFromAuth } from '@/lib/auth/require-org'
+import { resolveInboxConversation } from '@/lib/whatsapp/inbox-conversation-resolver'
 export const dynamic = 'force-dynamic';
 
 // POST - Atribuir ou remover atribuição de conversa
@@ -19,16 +20,18 @@ export async function POST(
     const body = await request.json()
     const { userId } = body // null para remover atribuição
 
-    // Preparar dados de atualização
-    // CORREÇÃO: Coluna correta é 'assigned_to', não 'assigned_agent_id'
+    const resolved = await resolveInboxConversation(supabase, conversationId, orgId)
+    if (!resolved) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+    }
+
     const updateData: Record<string, any> = {
       assigned_to: userId || null,
       updated_at: new Date().toISOString()
     }
 
-    // Atualizar conversa
     const { data: updatedConversation, error: updateError } = await supabase
-      .from('whatsapp_conversations')
+      .from(resolved.table)
       .update(updateData)
       .eq('id', conversationId)
       .eq('organization_id', orgId)
@@ -42,7 +45,6 @@ export async function POST(
 
     // Registrar atividade
     if (userId) {
-      // Buscar nome do agente
       const { data: agent } = await supabase
         .from('profiles')
         .select('full_name, first_name')
@@ -50,25 +52,13 @@ export async function POST(
         .single()
 
       const agentName = agent?.full_name || agent?.first_name || 'Agente'
-
-      // Buscar conversa para pegar contact_id
-      const { data: conversation } = await supabase
-        .from('whatsapp_conversations')
-        .select('unified_contact_id, contact_id')
-        .eq('id', conversationId)
-        .single()
-
-      const contactId = conversation?.unified_contact_id || conversation?.contact_id
+      const contactId = resolved.row.unified_contact_id || resolved.row.contact_id
 
       if (contactId) {
         await supabase
           .from('contact_activities')
           .insert({
-            organization_id: (await supabase
-              .from('whatsapp_conversations')
-              .select('organization_id')
-              .eq('id', conversationId)
-              .single()).data?.organization_id,
+            organization_id: orgId,
             contact_id: contactId,
             conversation_id: conversationId,
             activity_type: 'conversation_assigned',
@@ -78,7 +68,7 @@ export async function POST(
       }
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       conversation: {
         ...updatedConversation,
