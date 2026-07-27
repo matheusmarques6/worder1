@@ -12,6 +12,7 @@ import {
   ProviderTool,
   ToolLoopMessage,
   ProviderToolCall,
+  AIMessageImage,
 } from '@/lib/whatsapp/ai-providers'
 import type { Tool, ToolContext, ToolResultPayload } from './types'
 
@@ -58,8 +59,11 @@ export interface ToolLoopResult {
 
 export interface RunToolLoopParams {
   providerConfig: ToolLoopProviderConfig
-  /** histórico de chat (sem system; o system vai em providerConfig.systemPrompt). */
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  /** histórico de chat (sem system; o system vai em providerConfig.systemPrompt).
+   *  `images` só se aplica a role='user' (visão multimodal) — o caller
+   *  (cloud-runner/engine) já garante que só chega preenchido quando o
+   *  provider do agente suporta visão (providerSupportsVision). */
+  messages: Array<{ role: 'user' | 'assistant'; content: string; images?: AIMessageImage[] }>
   tools: Tool[]
   context: ToolContext
   caps?: ToolLoopCaps
@@ -87,7 +91,7 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
   // Histórico no formato neutro do loop. System vai como primeira msg 'system'.
   const loopMessages: ToolLoopMessage[] = [
     { role: 'system', content: providerConfig.systemPrompt },
-    ...messages.map((m) => ({ role: m.role, content: m.content })),
+    ...messages.map((m) => ({ role: m.role, content: m.content, images: m.images })),
   ]
 
   const aggregatedCalls: ToolLoopCall[] = []

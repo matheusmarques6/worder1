@@ -30,6 +30,15 @@ import { AiBudgetExceededError } from './budget';
 import { classifyAiFailure } from './failure-classifier';
 import { sendAlert } from '@/lib/whatsapp/alerts';
 import { wlog } from '@/lib/observability/whatsapp-logger';
+import {
+  routeInboundForAi,
+  providerSupportsVision,
+  resolveMediaFallback,
+  type InboundMediaInput,
+} from './media/router';
+import { resolveSttConfig, transcribeAudio } from './media/transcription';
+import { fetchInboundMedia } from './media/fetch-media';
+import type { AIMessageImage } from '@/lib/whatsapp/ai-providers';
 
 const COOLDOWN_MS = 5000;
 
@@ -64,6 +73,101 @@ async function notifyAiDisabled(params: {
   if (notifErr) wlog.warn('whatsapp.ai.notify_insert_failed', { error: notifErr.message });
 }
 
+interface MediaFallbackParams {
+  account: any;
+  conversation: any;
+  agent: any;
+  agentId: string;
+  organizationId: string;
+  reason: string;
+  inboundMessageId?: string;
+  skipSend: boolean;
+  skipDelays: boolean;
+}
+
+/**
+ * Fallback de segurança quando a mídia não pôde ser interpretada
+ * (sem STT, provider sem visão, download/transcrição falhou, mídia grande).
+ *   - ask_text (default): responde pedindo texto (via sender humanizado);
+ *   - handoff: pausa a IA (ai_enabled=false, reason='media_handoff') e
+ *     notifica a equipe — NUNCA silêncio.
+ */
+async function runMediaFallback(params: MediaFallbackParams): Promise<CloudRunnerResult> {
+  const {
+    account,
+    conversation,
+    agent,
+    agentId,
+    organizationId,
+    reason,
+    inboundMessageId,
+    skipSend,
+    skipDelays,
+  } = params;
+
+  const fallback = resolveMediaFallback(agent.settings);
+
+  wlog.warn('whatsapp.ai.media_fallback', {
+    organization_id: organizationId,
+    conversation_id: conversation.id,
+    agent_id: agentId,
+    reason,
+    mode: fallback.mode,
+  });
+
+  if (fallback.mode === 'handoff') {
+    await supabaseAdmin
+      .from('whatsapp_cloud_conversations')
+      .update({
+        ai_enabled: false,
+        ai_disabled_at: new Date().toISOString(),
+        ai_disabled_reason: 'media_handoff',
+      })
+      .eq('id', conversation.id);
+
+    const { error: notifErr } = await supabaseAdmin.from('notifications').insert({
+      organization_id: organizationId,
+      type: 'whatsapp_ai_media_handoff',
+      title: 'Cliente enviou mídia que a IA não interpretou',
+      message: `A IA foi pausada em uma conversa (${reason}). Responda manualmente.`,
+      metadata: { conversation_id: conversation.id, reason },
+      action_url: '/whatsapp/inbox',
+    });
+    if (notifErr) wlog.warn('whatsapp.ai.notify_insert_failed', { error: notifErr.message });
+
+    return { replied: false, transferred: true, agentId, skipped: 'media_handoff' };
+  }
+
+  if (skipSend) {
+    return {
+      replied: true,
+      transferred: false,
+      response: fallback.message,
+      agentId,
+      skipped: `media_fallback:${reason}`,
+    };
+  }
+
+  const sendResult = await sendHumanizedReply({
+    account,
+    conversation,
+    text: fallback.message,
+    agent: { id: agentId, ...agent },
+    inboundMessageId,
+    skipDelays,
+  });
+
+  return {
+    replied: sendResult.sent,
+    transferred: false,
+    response: fallback.message,
+    agentId,
+    skipped: `media_fallback:${reason}`,
+    failure: sendResult.sent ? undefined : 'transient',
+    error: sendResult.sent ? undefined : sendResult.reason || sendResult.error,
+  };
+}
+
 export interface CloudRunnerParams {
   account: any;
   conversation: any;
@@ -79,6 +183,12 @@ export interface CloudRunnerParams {
    * persistência continuam acontecendo.
    */
   skipDelays?: boolean;
+  /**
+   * Mídia da última mensagem inbound (áudio/imagem), com ponteiros das colunas
+   * media_* de whatsapp_cloud_messages (preenchidas pelo inbound-media-pipeline).
+   * Ausente => mensagem de texto puro.
+   */
+  inboundMedia?: InboundMediaInput;
 }
 
 export interface CloudRunnerResult {
@@ -111,11 +221,16 @@ export async function maybeRunAgentForCloudConversation(
   const phone = phoneNumber || conversation.contact_phone || conversation.wa_id;
 
   // ---------- Guards básicos ----------
-  if (!text || !text.trim()) {
-    return { replied: false, transferred: false, skipped: 'empty_text' };
-  }
-  if (messageType && messageType !== 'text') {
-    return { replied: false, transferred: false, skipped: 'non_text' };
+  // Roteamento por tipo: text/audio/image seguem; document/sticker/location/
+  // video/etc continuam fora (skipped non_text, como antes).
+  const route = routeInboundForAi(messageType, text);
+  if (route === 'unsupported') {
+    const isTextish = !messageType || messageType === 'text';
+    return {
+      replied: false,
+      transferred: false,
+      skipped: isTextish ? 'empty_text' : 'non_text',
+    };
   }
   // Anti-loop: ignorar se o "remetente" é o próprio número da conta.
   if (phone && account.phone_number && phone === account.phone_number) {
@@ -256,28 +371,145 @@ export async function maybeRunAgentForCloudConversation(
     };
   }
 
+  // ---------- Mídia inbound (áudio/imagem) ----------
+  // Áudio: transcreve via chave BYO (OpenAI whisper-1 / Groq whisper-large-v3)
+  // e PERSISTE o transcript em text_body — assim entra no histórico e retries
+  // re-roteiam como 'text' (idempotente). Imagem: baixa do Storage e injeta
+  // base64 na mensagem atual (visão). Falhas => media_fallback configurável.
+  let effectiveText = text;
+  let currentImages: AIMessageImage[] | undefined;
+  const media = params.inboundMedia;
+  const fallbackCtx: Omit<MediaFallbackParams, 'reason'> = {
+    account,
+    conversation,
+    agent,
+    agentId,
+    organizationId,
+    inboundMessageId: params.inboundMessageId,
+    skipSend,
+    skipDelays,
+  };
+
+  if (route === 'audio') {
+    const sttConfig = await resolveSttConfig(organizationId);
+    if (!sttConfig) {
+      return runMediaFallback({ ...fallbackCtx, reason: 'no_stt_provider' });
+    }
+    const fetched = media
+      ? await fetchInboundMedia({
+          storagePath: media.storagePath,
+          mediaUrl: media.mediaUrl,
+          mimeType: media.mimeType,
+        })
+      : null;
+    if (!fetched) {
+      return runMediaFallback({ ...fallbackCtx, reason: 'media_unavailable' });
+    }
+
+    let transcript = '';
+    try {
+      transcript = await transcribeAudio({
+        config: sttConfig,
+        audio: fetched.buffer,
+        mimeType: fetched.mimeType,
+      });
+    } catch (sttErr: any) {
+      wlog.warn('whatsapp.ai.transcription_failed', {
+        organization_id: organizationId,
+        conversation_id: conversation.id,
+        error: sttErr?.message,
+      });
+    }
+    if (!transcript) {
+      return runMediaFallback({ ...fallbackCtx, reason: 'transcription_failed' });
+    }
+
+    effectiveText = transcript;
+    if (params.inboundMessageId) {
+      await supabaseAdmin
+        .from('whatsapp_cloud_messages')
+        .update({ text_body: transcript })
+        .eq('organization_id', organizationId)
+        .eq('message_id', params.inboundMessageId);
+    }
+  } else if (route === 'image') {
+    const caption = (media?.caption || text || '').trim();
+    const fetched =
+      media && providerSupportsVision(agent.provider)
+        ? await fetchInboundMedia({
+            storagePath: media.storagePath,
+            mediaUrl: media.mediaUrl,
+            mimeType: media.mimeType,
+          })
+        : null;
+
+    if (fetched) {
+      currentImages = [{ mimeType: fetched.mimeType, base64: fetched.buffer.toString('base64') }];
+      effectiveText = caption || 'O cliente enviou esta imagem.';
+    } else if (caption) {
+      // Sem visão/sem bytes mas com caption: degrada para texto (melhor que fallback).
+      effectiveText = caption;
+    } else {
+      return runMediaFallback({
+        ...fallbackCtx,
+        reason: providerSupportsVision(agent.provider)
+          ? 'media_unavailable'
+          : 'provider_without_vision',
+      });
+    }
+  }
+
   // ---------- Histórico (~20 últimas) ----------
   const { data: historyRows } = await supabaseAdmin
     .from('whatsapp_cloud_messages')
-    .select('direction, text_body, timestamp')
+    .select('direction, text_body, timestamp, message_type, caption')
     .eq('organization_id', organizationId)
     .eq('conversation_id', conversation.id)
     .order('timestamp', { ascending: false })
     .limit(20);
 
   const ordered = (historyRows || []).slice().reverse();
-  const conversationHistory: EngineMessage[] = ordered
-    .filter((m) => (m.text_body || '').trim().length > 0)
-    .map((m) => ({
-      role: m.direction === 'inbound' ? ('user' as const) : ('assistant' as const),
-      content: m.text_body as string,
-      timestamp: m.timestamp ? new Date(m.timestamp) : undefined,
-    }));
+  const conversationHistory: EngineMessage[] = [];
+  for (const m of ordered) {
+    const role = m.direction === 'inbound' ? ('user' as const) : ('assistant' as const);
+    const body = (m.text_body || '').trim();
+    if (body) {
+      conversationHistory.push({
+        role,
+        content: body,
+        timestamp: m.timestamp ? new Date(m.timestamp) : undefined,
+      });
+      continue;
+    }
+    // Mídia inbound sem texto: placeholder para o modelo saber o que houve
+    // (a imagem REAL só é anexada na mensagem atual, nunca no histórico —
+    // custo/latência).
+    if (role === 'user' && m.message_type === 'image') {
+      conversationHistory.push({
+        role: 'user',
+        content: m.caption
+          ? `[Cliente enviou uma imagem: ${m.caption}]`
+          : '[Cliente enviou uma imagem]',
+      });
+    } else if (role === 'user' && m.message_type === 'audio') {
+      conversationHistory.push({ role: 'user', content: '[Cliente enviou um áudio sem transcrição]' });
+    }
+  }
 
-  // Garantir que a mensagem atual está no fim como 'user'.
+  // Garantir que a mensagem atual está no fim como 'user' (com as imagens,
+  // quando visão). Se o fim é o placeholder da PRÓPRIA imagem atual, remove.
   const last = conversationHistory[conversationHistory.length - 1];
-  if (!last || last.role !== 'user' || last.content !== text) {
-    conversationHistory.push({ role: 'user', content: text });
+  if (
+    currentImages &&
+    last &&
+    last.role === 'user' &&
+    last.content.startsWith('[Cliente enviou uma imagem')
+  ) {
+    conversationHistory.pop();
+  }
+  const tail = conversationHistory[conversationHistory.length - 1];
+  if (!tail || tail.role !== 'user' || tail.content !== effectiveText || currentImages) {
+    conversationHistory.push({ role: 'user', content: effectiveText, images: currentImages });
   }
 
   const contactId: string | undefined = contact?.crm_contact_id || contact?.id;
@@ -393,7 +625,7 @@ export async function maybeRunAgentForCloudConversation(
         agent_id: agentId,
         provider: agent.provider,
         model: agent.model,
-        input: text,
+        input: effectiveText,
         output: result.response,
         tool_calls:
           result.tool_calls && result.tool_calls.length > 0
