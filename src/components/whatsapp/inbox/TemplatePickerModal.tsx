@@ -22,11 +22,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { X, Search, FileText, MessageSquare, Loader2, ChevronLeft, Send } from 'lucide-react'
 import { authedFetch } from '@/lib/api/authed-fetch'
 import { Badge } from '@/components/ui/Badge'
+import { getHeaderFormat, getDynamicUrlButtonIndexes } from '@/lib/whatsapp/template-components'
 
 export interface SendTemplatePayload {
   templateName: string
   language: string
   parameters: string[]
+  headerMediaUrl?: string
+  buttonParameters?: string[]
 }
 
 interface TemplateRow {
@@ -37,8 +40,12 @@ interface TemplateRow {
   status: string
   body_text: string | null
   body_variables: number | null
+  header_type: string | null
   header_text: string | null
+  header_media_url: string | null
   footer_text: string | null
+  components: any[] | null
+  buttons: any[] | null
 }
 
 interface QuickReplyRow {
@@ -88,6 +95,9 @@ export function TemplatePickerModal({
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<TemplateRow | null>(null)
   const [params, setParams] = useState<string[]>([])
+  const [headerMediaUrl, setHeaderMediaUrl] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [buttonVars, setButtonVars] = useState<string[]>([])
 
   useEffect(() => {
     if (!open) {
@@ -95,6 +105,8 @@ export function TemplatePickerModal({
       setParams([])
       setSearch('')
       setError(null)
+      setHeaderMediaUrl('')
+      setButtonVars([])
       return
     }
     loadTemplates()
@@ -157,6 +169,9 @@ export function TemplatePickerModal({
     const n = countBodyVariables(t.body_text)
     setSelected(t)
     setParams(Array(n).fill(''))
+    // Header de midia: pre-preenche com a URL de exemplo sincronizada, se houver
+    setHeaderMediaUrl(t.header_media_url || '')
+    setButtonVars(Array(getDynamicUrlButtonIndexes(t).length).fill(''))
   }
 
   function handlePickQuickReply(r: QuickReplyRow) {
@@ -171,16 +186,58 @@ export function TemplatePickerModal({
       setError('Preencha todas as variaveis')
       return
     }
+    if (isMediaHeader && !/^https:\/\//i.test(headerMediaUrl.trim())) {
+      setError(`Este template tem cabecalho de ${headerLabel.toLowerCase()}. Informe uma URL https publica ou faca upload do arquivo.`)
+      return
+    }
+    if (dynButtonIndexes.length > 0 && buttonVars.some(v => !v.trim())) {
+      setError('Preencha o valor de todos os botoes de URL dinamica')
+      return
+    }
     setError(null)
     try {
       await onSendTemplate({
         templateName: selected.name,
         language: selected.language,
         parameters: params.slice(0, expected),
+        ...(isMediaHeader ? { headerMediaUrl: headerMediaUrl.trim() } : {}),
+        ...(dynButtonIndexes.length > 0 ? { buttonParameters: buttonVars.map(v => v.trim()) } : {}),
       })
       onClose()
     } catch (e: any) {
       setError(e?.message || 'Falha ao enviar template')
+    }
+  }
+
+  const headerFormat = selected ? getHeaderFormat(selected) : null
+  const isMediaHeader = headerFormat === 'IMAGE' || headerFormat === 'VIDEO' || headerFormat === 'DOCUMENT'
+  const dynButtonIndexes = selected ? getDynamicUrlButtonIndexes(selected) : []
+  const headerLabel = headerFormat === 'IMAGE' ? 'Imagem'
+    : headerFormat === 'VIDEO' ? 'Video'
+    : 'Documento'
+  const headerAccept = headerFormat === 'IMAGE' ? 'image/jpeg,image/png,image/webp'
+    : headerFormat === 'VIDEO' ? 'video/mp4,video/3gpp'
+    : 'application/pdf'
+
+  async function handleUploadHeaderMedia(file: File) {
+    setUploading(true)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('mediaType', (headerFormat || 'IMAGE').toLowerCase())
+      // authedFetch com FormData: NAO definir Content-Type manualmente
+      const res = await authedFetch('/api/whatsapp/inbox/template-header-media', {
+        method: 'POST',
+        body: fd,
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setHeaderMediaUrl(data.url)
+    } catch (e: any) {
+      setError(e?.message || 'Falha no upload da midia')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -347,6 +404,39 @@ export function TemplatePickerModal({
         {selected && (
           <>
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {isMediaHeader && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-1">
+                    CABECALHO — {headerLabel.toUpperCase()} (obrigatorio)
+                  </p>
+                  <input
+                    type="url"
+                    value={headerMediaUrl}
+                    onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                    placeholder={`URL https publica da ${headerLabel.toLowerCase()}`}
+                    className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500"
+                  />
+                  <label className="mt-2 inline-flex items-center gap-2 text-xs text-primary-600 cursor-pointer hover:underline">
+                    {uploading ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando arquivo...</>
+                    ) : (
+                      <>ou fazer upload do arquivo</>
+                    )}
+                    <input
+                      type="file"
+                      accept={headerAccept}
+                      className="hidden"
+                      disabled={uploading}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0]
+                        if (f) handleUploadHeaderMedia(f)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+
               {selected.header_text && (
                 <div>
                   <p className="text-xs font-medium text-gray-500 mb-1">CABECALHO</p>
@@ -401,6 +491,30 @@ export function TemplatePickerModal({
                 </div>
               )}
 
+              {dynButtonIndexes.length > 0 && (
+                <div className="border-t border-gray-200 pt-4 space-y-3">
+                  <p className="text-sm font-medium text-gray-700">Botoes de URL dinamica</p>
+                  {dynButtonIndexes.map((btnIdx, i) => (
+                    <div key={btnIdx}>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Botao {btnIdx + 1} — sufixo da URL {'{{1}}'}
+                      </label>
+                      <input
+                        type="text"
+                        value={buttonVars[i] || ''}
+                        onChange={(e) => {
+                          const next = buttonVars.slice()
+                          next[i] = e.target.value
+                          setButtonVars(next)
+                        }}
+                        placeholder="Ex.: codigo-do-pedido"
+                        className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
                   {error}
@@ -418,7 +532,7 @@ export function TemplatePickerModal({
               </button>
               <button
                 onClick={handleSubmitTemplate}
-                disabled={isSending}
+                disabled={isSending || uploading}
                 className="flex-1 px-4 py-2.5 bg-primary-500 text-white rounded-xl hover:bg-primary-600 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {isSending ? (
