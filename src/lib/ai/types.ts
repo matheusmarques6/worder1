@@ -58,6 +58,15 @@ export interface AgentSettings {
     cooldown_after_transfer: number
     max_messages_per_conversation: number
   }
+  /**
+   * O que fazer quando o cliente manda mídia que a IA não consegue
+   * interpretar (áudio sem STT disponível, imagem sem visão, falha de
+   * transcrição). Default seguro: ask_text (pede pra escrever em texto).
+   */
+  media_fallback?: {
+    mode: 'ask_text' | 'handoff'
+    message?: string
+  }
 }
 
 // =====================================================
@@ -400,6 +409,7 @@ export const DEFAULT_SETTINGS: AgentSettings = {
     cooldown_after_transfer: 300,
     max_messages_per_conversation: 0,
   },
+  media_fallback: { mode: 'ask_text' },
 }
 
 export const RESPONSE_LENGTH_TOKENS = {
