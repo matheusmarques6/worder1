@@ -16,6 +16,11 @@ import {
 import { wlog } from '@/lib/observability/whatsapp-logger';
 import { sendAlert } from '@/lib/whatsapp/alerts';
 import { checkRateLimit } from '@/lib/rate-limit';
+import {
+  checkBeforeSend,
+  reportSendResult,
+  buildRateLimitedResponseBody,
+} from '@/lib/whatsapp/send-guard';
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -222,6 +227,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Send guard — rate limiter por tier da Meta + circuit breaker
+    // (mesma proteção do caminho de campanhas). O checkRateLimit de
+    // 80/s acima continua como camada anti-abuso por org.
+    const guardCheck = await checkBeforeSend({
+      accountId: account.id,
+      recipientPhone: to,
+      messagingLimit: account.messaging_limit,
+    });
+    if (!guardCheck.allowed) {
+      const body429 = buildRateLimitedResponseBody(guardCheck);
+      return NextResponse.json(body429, {
+        status: 429,
+        headers: { 'Retry-After': String(body429.retryAfter) },
+      });
+    }
+
     // Criar cliente
     const client = createWhatsAppCloudClient({
       phoneNumberId: account.phone_number_id,
@@ -320,6 +341,14 @@ export async function POST(request: NextRequest) {
         organization_id: profile.organization_id,
       });
 
+      await reportSendResult({
+        accountId: account.id,
+        success: false,
+        errorCode: apiError?.code,
+        error: apiError,
+        messagingLimit: account.messaging_limit,
+      });
+
       if (apiError.code === 132015 || apiError.code === 132016) {
         const newStatus = apiError.code === 132015 ? 'PAUSED' : 'DISABLED';
         if (templateName) {
@@ -375,6 +404,8 @@ export async function POST(request: NextRequest) {
         details: apiError.error_data
       }, { status: 400 });
     }
+
+    await reportSendResult({ accountId: account.id, success: true });
 
     const messageId = result.messages?.[0]?.id;
     const recipientWaId = result.contacts?.[0]?.wa_id || normalizePhone(to);
