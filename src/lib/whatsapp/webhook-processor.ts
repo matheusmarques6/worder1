@@ -28,6 +28,7 @@ import { RuleEngine, type EventData } from '@/lib/services/automation/rule-engin
 import { wlog } from '@/lib/observability/whatsapp-logger';
 import { applyCampaignRecipientWebhookStatus } from './campaign-recipient-status';
 import { statusTimestampFields } from './status-timestamps';
+import { routeInboundForAi } from '@/lib/ai/media/router';
 
 // Ordem canonica de status WhatsApp. Webhooks chegam fora de ordem em raros
 // casos (delivered antes de sent); sem o guard de ordinal a row sofre retrograde.
@@ -404,15 +405,12 @@ async function processMessage(
   // dentro do runner, executado no worker.
   // ============================================================
   try {
-    // Só agenda p/ inbound de texto, fora de auto-conversa, com IA habilitada.
+    // Agenda p/ inbound de texto, ÁUDIO e IMAGEM (document/sticker/location/
+    // video seguem fora — rota 'unsupported'), fora de auto-conversa, com IA
+    // habilitada. Mesma janela de debounce para todos os tipos.
     const isSelf = phoneNumber && account.phone_number && phoneNumber === account.phone_number;
-    if (
-      messageType === 'text' &&
-      textBody &&
-      textBody.trim() &&
-      !isSelf &&
-      conversation?.ai_enabled !== false
-    ) {
+    const aiRoute = routeInboundForAi(messageType, textBody);
+    if (aiRoute !== 'unsupported' && !isSelf && conversation?.ai_enabled !== false) {
       const debounceSeconds = AI_DEBOUNCE_SECONDS;
       const debounceUntil = new Date(Date.now() + debounceSeconds * 1000).toISOString();
 
@@ -433,9 +431,16 @@ async function processMessage(
       );
 
       // Fallback: QStash não configurado => roda síncrono (caminho legado 2a)
-      // p/ não perder a resposta em ambientes sem fila.
+      // p/ não perder a resposta em ambientes sem fila. Relê a row p/ pegar
+      // media_* (preenchidas pelo pipeline de mídia inbound).
       if (!messageId) {
         const { maybeRunAgentForCloudConversation } = await import('@/lib/ai/cloud-runner');
+        const { buildRunnerMediaInput } = await import('@/lib/ai/media/router');
+        const { data: freshMsg } = await supabase
+          .from('whatsapp_cloud_messages')
+          .select('message_type, caption, media_url, media_storage_path, media_mime_type')
+          .eq('message_id', message.id)
+          .maybeSingle();
         await maybeRunAgentForCloudConversation({
           account,
           conversation,
@@ -444,6 +449,7 @@ async function processMessage(
           inboundMessageId: message.id,
           messageType,
           phoneNumber,
+          inboundMedia: freshMsg ? buildRunnerMediaInput(freshMsg) || undefined : undefined,
         });
       }
     }

@@ -30,6 +30,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { planAiRetry } from '@/lib/ai/failure-classifier';
 import { wlog } from '@/lib/observability/whatsapp-logger';
 import { sendAlert } from '@/lib/whatsapp/alerts';
+import { buildRunnerMediaInput } from '@/lib/ai/media/router';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -148,10 +149,12 @@ export async function POST(req: NextRequest) {
       contact = c;
     }
 
-    // ---------- 5. Última mensagem inbound de texto ----------
+    // ---------- 5. Última mensagem inbound elegível (texto/áudio/imagem) ----------
     const { data: lastInbound } = await supabaseAdmin
       .from('whatsapp_cloud_messages')
-      .select('message_id, text_body, message_type')
+      .select(
+        'message_id, text_body, message_type, caption, media_url, media_storage_path, media_mime_type',
+      )
       .eq('organization_id', organizationId)
       .eq('conversation_id', conversationId)
       .eq('direction', 'inbound')
@@ -160,7 +163,8 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     const text = (lastInbound?.text_body || '').trim();
-    if (!text) {
+    const inboundMedia = lastInbound ? buildRunnerMediaInput(lastInbound) : null;
+    if (!text && !inboundMedia) {
       return NextResponse.json({ ok: true, skipped: 'no_inbound_text' }, { status: 200 });
     }
 
@@ -172,8 +176,9 @@ export async function POST(req: NextRequest) {
       contact,
       text,
       inboundMessageId: lastInbound?.message_id,
-      messageType: 'text',
+      messageType: lastInbound?.message_type || 'text',
       phoneNumber: conversation.contact_phone || conversation.wa_id,
+      inboundMedia: inboundMedia || undefined,
     });
 
     // ---------- 7. Falha transient => retry com backoff (cap em ai_retry_count) ----------
