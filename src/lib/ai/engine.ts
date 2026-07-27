@@ -206,6 +206,7 @@ export class AIAgentEngine {
           messages: messages.map(m => ({
             role: (m.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
             content: m.content,
+            images: m.images,
           })),
           tools: activeTools,
           context: toolContext,
@@ -251,7 +252,7 @@ export class AIAgentEngine {
           maxTokens: this.agent.max_tokens,
           baseUrl: this.baseUrl,
         },
-        messages.map(m => ({ role: m.role as any, content: m.content }))
+        messages.map(m => ({ role: m.role as any, content: m.content, images: m.images }))
       )
 
       // 8. Pós-processamento

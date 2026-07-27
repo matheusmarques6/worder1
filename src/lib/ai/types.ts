@@ -2,6 +2,8 @@
 // TIPOS PARA O SISTEMA DE AGENTES DE IA
 // =====================================================
 
+import type { AIMessageImage } from '@/lib/whatsapp/ai-providers'
+
 // =====================================================
 // AGENTE
 // =====================================================
@@ -245,6 +247,8 @@ export interface EngineMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp?: Date
+  /** Imagens inline da mensagem (visão multimodal — só role='user'). */
+  images?: AIMessageImage[]
 }
 
 export interface EngineContext {
