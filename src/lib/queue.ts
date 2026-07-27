@@ -430,6 +430,43 @@ export async function enqueueWhatsAppAiRespond(
 }
 
 /**
+ * Enfileira o download de mídia INBOUND de uma mensagem já persistida.
+ *
+ * O webhook-processor salva a mensagem com media_id + media_download_status
+ * ='pending' e chama esta função. O worker /api/workers/whatsapp-inbound-media
+ * baixa da Meta e sobe pro Supabase Storage. Retorna null quando QStash não
+ * está configurado — o caller roda processInboundMedia inline como fallback.
+ */
+export async function enqueueWhatsAppInboundMedia(
+  job: { cloudMessageId: string; accountId: string; organizationId: string }
+): Promise<string | null> {
+  const client = getQStashClient();
+  if (!client) {
+    console.warn('[Queue] QStash not configured — inbound media will run inline');
+    return null;
+  }
+
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) {
+    console.warn('[Queue] APP_URL not configured');
+    return null;
+  }
+
+  const response = await client.publishJSON({
+    url: `${baseUrl}/api/workers/whatsapp-inbound-media`,
+    body: job,
+    // 2 retries: URL de mídia da Meta expira em ~5min, mais que isso é inútil.
+    // processInboundMedia é idempotente (skip quando done, upsert no Storage).
+    retries: 2,
+  });
+
+  console.log(
+    `[Queue] Enqueued inbound media msg=${job.cloudMessageId}, messageId: ${response.messageId}`
+  );
+  return response.messageId;
+}
+
+/**
  * Enfileira envio de WhatsApp
  */
 export async function enqueueWhatsAppSend(
