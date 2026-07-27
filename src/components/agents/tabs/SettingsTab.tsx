@@ -10,6 +10,7 @@ import {
   Info,
   Loader2,
   Brain,
+  Shield,
 } from 'lucide-react'
 import { AIAgent, AgentSettings } from '@/lib/ai/types'
 import { AccordionItem } from '../ui/primitives'
@@ -86,6 +87,11 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
       max_messages_per_conversation: 0
     },
     media_fallback: { mode: 'ask_text' as const },
+    safety: {
+      handoff_keywords: [],
+      handoff_confirmation_message: '',
+      blocked_topics: [],
+    },
   }
 
   // Fetch data
@@ -127,6 +133,19 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
       settings: { ...settings, ...updates },
     })
   }
+
+  const safety = settings.safety || {
+    handoff_keywords: [],
+    handoff_confirmation_message: '',
+    blocked_topics: [],
+  }
+
+  // Lista separada por vírgula -> string[] limpa.
+  const parseKeywordList = (raw: string): string[] =>
+    raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
 
   const toggleSection = (section: string) => {
     setExpandedSection(expandedSection === section ? null : section)
@@ -703,6 +722,87 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          </AccordionItem>
+
+          {/* Safety Section */}
+          <AccordionItem
+            open={expandedSection === 'safety'}
+            onToggle={() => toggleSection('safety')}
+            title={
+              <div className="flex items-center gap-3">
+                <div className="act-ico" style={{ background: 'var(--brand-tint)', color: 'var(--brand)' }}>
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text)' }}>Segurança</span>
+                  <p className="text-xs" style={{ color: 'var(--text-3)', fontWeight: 500 }}>
+                    Transferência por palavra-chave e tópicos bloqueados
+                  </p>
+                </div>
+              </div>
+            }
+          >
+            <div className="space-y-4">
+              {/* Handoff keywords */}
+              <div className="rule-card">
+                <label className="label">Palavras-chave de transferência</label>
+                <input
+                  type="text"
+                  className="field"
+                  placeholder="atendente, humano, falar com alguém"
+                  defaultValue={(safety.handoff_keywords || []).join(', ')}
+                  onBlur={(e) => updateSettings({
+                    safety: { ...safety, handoff_keywords: parseKeywordList(e.target.value) },
+                  })}
+                />
+                <p className="hint">
+                  Se a mensagem do cliente contiver uma destas palavras, a IA transfere a
+                  conversa para um humano (não diferencia maiúsculas nem acentos).
+                  Separe por vírgula. A checagem é por trecho (substring): evite palavras
+                  curtas ou muito genéricas, pois podem casar dentro de outras (ex.:
+                  &quot;vendedor&quot; também combina com &quot;revendedor&quot;). Prefira
+                  termos mais específicos, como frases completas.
+                </p>
+              </div>
+
+              {/* Handoff confirmation message */}
+              <div className="rule-card">
+                <label className="label">Mensagem de confirmação da transferência (opcional)</label>
+                <input
+                  type="text"
+                  className="field"
+                  placeholder="Certo! Vou te passar para um atendente humano."
+                  defaultValue={safety.handoff_confirmation_message || ''}
+                  onBlur={(e) => updateSettings({
+                    safety: { ...safety, handoff_confirmation_message: e.target.value },
+                  })}
+                />
+                <p className="hint">
+                  Enviada ao cliente quando a transferência por palavra-chave acontece.
+                  Deixe vazio para não enviar nada.
+                </p>
+              </div>
+
+              {/* Blocked topics */}
+              <div className="rule-card">
+                <label className="label">Tópicos bloqueados</label>
+                <input
+                  type="text"
+                  className="field"
+                  placeholder="política, religião, concorrente"
+                  defaultValue={(safety.blocked_topics || []).join(', ')}
+                  onBlur={(e) => updateSettings({
+                    safety: { ...safety, blocked_topics: parseKeywordList(e.target.value) },
+                  })}
+                />
+                <p className="hint">
+                  Se a resposta da IA mencionar um destes tópicos, ela NÃO é enviada e a
+                  conversa é transferida para um humano. Separe por vírgula. A checagem
+                  também é por trecho (substring): evite palavras curtas ou muito
+                  genéricas, que podem combinar dentro de outras palavras sem relação.
+                </p>
               </div>
             </div>
           </AccordionItem>
