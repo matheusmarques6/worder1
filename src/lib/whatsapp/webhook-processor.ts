@@ -27,6 +27,7 @@ import {
 import { RuleEngine, type EventData } from '@/lib/services/automation/rule-engine';
 import { wlog } from '@/lib/observability/whatsapp-logger';
 import { applyCampaignRecipientWebhookStatus } from './campaign-recipient-status';
+import { statusTimestampFields } from './status-timestamps';
 
 // Ordem canonica de status WhatsApp. Webhooks chegam fora de ordem em raros
 // casos (delivered antes de sent); sem o guard de ordinal a row sofre retrograde.
@@ -459,14 +460,14 @@ async function processMessage(
 // ============================================================
 
 async function processStatus(account: any, status: any) {
-  const { id: messageId, status: newStatus, errors, conversation, pricing } = status;
+  const { id: messageId, status: newStatus, timestamp, errors, conversation, pricing } = status;
 
   // B2: guard contra retrograde. Meta as vezes entrega o webhook de 'sent'
   // depois do 'delivered'; sem o guard a row volta pra 'sent'. failed sempre
   // se aplica porque carrega error_code que precisa ser persistido.
   const { data: currentRow } = await supabase
     .from('whatsapp_cloud_messages')
-    .select('status')
+    .select('status, delivered_at, read_at')
     .eq('message_id', messageId)
     .maybeSingle();
 
@@ -485,6 +486,12 @@ async function processStatus(account: any, status: any) {
   const updateData: any = {
     status: newStatus,
     updated_at: new Date().toISOString(),
+    // statuses[].timestamp (epoch string da Meta) -> delivered_at/read_at.
+    // Roda DEPOIS do guard monotonico acima; nunca sobrescreve valor ja gravado.
+    ...statusTimestampFields(newStatus, timestamp, {
+      currentDeliveredAt: currentRow?.delivered_at,
+      currentReadAt: currentRow?.read_at,
+    }),
   };
 
   if (errors && errors.length > 0) {
