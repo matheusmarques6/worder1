@@ -23,6 +23,11 @@ const mockCreateSignedUrl = vi.fn()
 type UpdateEqBehavior = 'ok' | 'error' | 'throw'
 const updateEqBehavior: { mode: UpdateEqBehavior } = { mode: 'ok' }
 
+// Controla o `error` devolvido pelo .select(...).eq(...).maybeSingle() do mock,
+// por tabela, para exercitar o caminho de leitura transitoriamente falha
+// (ver teste "db_read_failed" abaixo). null = comportamento padrão (sem erro).
+const selectErrorBehavior: { message: any; account: any } = { message: null, account: null }
+
 vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
     from: (table: string) => ({
@@ -30,7 +35,7 @@ vi.mock('@/lib/supabase-admin', () => ({
         eq: () => ({
           maybeSingle: async () => ({
             data: table === 'whatsapp_cloud_messages' ? rows.message : rows.account,
-            error: null,
+            error: table === 'whatsapp_cloud_messages' ? selectErrorBehavior.message : selectErrorBehavior.account,
           }),
         }),
       }),
@@ -98,6 +103,8 @@ describe('processInboundMedia', () => {
     mockUpload.mockResolvedValue({ error: null })
     mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed.example/x' }, error: null })
     updateEqBehavior.mode = 'ok'
+    selectErrorBehavior.message = null
+    selectErrorBehavior.account = null
   })
 
   it('baixa da Meta, sobe pro Storage e persiste media_url/storage_path/mime/filename + done', async () => {
@@ -176,5 +183,14 @@ describe('processInboundMedia', () => {
 
     expect(result.ok).toBe(false)
     expect(result.reason).toBe('meta 401')
+  })
+
+  it('erro transitório ao ler a mensagem NÃO lança e retorna db_read_failed (retryável, diferente de message_not_found)', async () => {
+    selectErrorBehavior.message = { message: 'connection reset' }
+
+    const result = await processInboundMedia(JOB)
+
+    expect(result).toEqual({ ok: false, reason: 'db_read_failed' })
+    expect(mockDownloadMedia).not.toHaveBeenCalled()
   })
 })

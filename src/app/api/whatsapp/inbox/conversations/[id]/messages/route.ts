@@ -55,9 +55,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       .filter((p): p is string => !!p)
     const signedByPath: Record<string, string> = {}
     if (mediaPaths.length > 0) {
-      const { data: signed } = await supabase.storage
+      const { data: signed, error: signError } = await supabase.storage
         .from('whatsapp-media')
         .createSignedUrls(mediaPaths, 3600)
+      if (signError) {
+        console.error('[Messages GET] createSignedUrls error:', signError)
+      }
       for (const s of signed || []) {
         if (s.path && s.signedUrl) signedByPath[s.path] = s.signedUrl
       }

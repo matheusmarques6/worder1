@@ -260,7 +260,7 @@ async function processMessage(
     message.document?.id ||
     message.sticker?.id;
 
-  const { data: insertedMsg } = await supabase
+  const { data: insertedMsg, error: insertError } = await supabase
     .from('whatsapp_cloud_messages')
     .insert({
       organization_id: account.organization_id,
@@ -283,6 +283,15 @@ async function processMessage(
     })
     .select('id')
     .maybeSingle();
+
+  // Não engolir erro de insert: se o schema estiver atrasado (coluna nova
+  // ainda não migrada) ou qualquer outra falha do PostgREST, propaga para o
+  // caller (processMessage's caller conta em result.errors e o evento do
+  // webhook é reprocessado pelo cron) em vez de marcar o evento como "done"
+  // com a mensagem inbound silenciosamente perdida.
+  if (insertError) {
+    throw insertError;
+  }
 
   // ============================================================
   // PIPELINE DE MÍDIA INBOUND — nunca quebra a persistência.

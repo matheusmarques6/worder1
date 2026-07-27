@@ -61,23 +61,40 @@ export function buildStoragePath(
 }
 
 export async function processInboundMedia(job: InboundMediaJob): Promise<InboundMediaResult> {
-  const { data: row } = await supabase
+  const { data: row, error: rowError } = await supabase
     .from('whatsapp_cloud_messages')
     .select('id, media_id, conversation_id, message_type, content, media_download_status')
     .eq('id', job.cloudMessageId)
     .maybeSingle();
 
+  if (rowError) {
+    wlog.error('whatsapp.media.inbound_message_read_failed', {
+      error: rowError.message,
+      cloud_message_id: job.cloudMessageId,
+    });
+    // Erro transitório de leitura: NÃO é definitivo como message_not_found.
+    // O worker deve tratar db_read_failed como retryável (500 -> QStash retenta).
+    return { ok: false, reason: 'db_read_failed' };
+  }
   if (!row) return { ok: false, reason: 'message_not_found' };
   if (!row.media_id) return { ok: false, reason: 'no_media_id' };
   // Idempotência: retry do QStash (ou corrida enqueue+inline) vira no-op.
   if (row.media_download_status === 'done') return { ok: true, reason: 'already_done' };
 
-  const { data: account } = await supabase
+  const { data: account, error: accountError } = await supabase
     .from('whatsapp_business_accounts')
     .select('*')
     .eq('id', job.accountId)
     .maybeSingle();
 
+  if (accountError) {
+    wlog.error('whatsapp.media.inbound_account_read_failed', {
+      error: accountError.message,
+      cloud_message_id: job.cloudMessageId,
+      account_id: job.accountId,
+    });
+    return { ok: false, reason: 'db_read_failed' };
+  }
   if (!account) return { ok: false, reason: 'account_not_found' };
 
   try {
