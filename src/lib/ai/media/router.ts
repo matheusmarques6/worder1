@@ -11,7 +11,8 @@
  * whatsapp-ai-respond e pelo cloud-runner.
  */
 
-import type { AgentSettings } from '../types'
+import type { AgentSettings, EngineMessage } from '../types'
+import type { AIMessageImage } from '@/lib/whatsapp/ai-providers'
 
 export type AiMediaRoute = 'text' | 'audio' | 'image' | 'unsupported'
 
@@ -83,4 +84,59 @@ export function resolveMediaFallback(
   const mode = raw?.mode === 'handoff' ? 'handoff' : 'ask_text'
   const message = (raw?.message || '').trim() || DEFAULT_MEDIA_FALLBACK_MESSAGE
   return { mode, message }
+}
+
+/**
+ * Vision gate: só vale a pena baixar os bytes da imagem (download + base64
+ * no payload do LLM) quando existe mídia utilizável E o provider do agente
+ * aceita imagem inline. Pura — usada pelo cloud-runner ANTES de chamar
+ * fetchInboundMedia (evita I/O desnecessário p/ Groq/DeepSeek) e serve como
+ * o gate testável: nenhum provider sem visão recebe bytes de imagem.
+ */
+export function shouldFetchImageBytes(
+  provider: string,
+  media: InboundMediaInput | null | undefined,
+): boolean {
+  return Boolean(media) && providerSupportsVision(provider)
+}
+
+/**
+ * Garante que a mensagem do turno atual esteja no fim do histórico como
+ * 'user' — sem duplicar quando a MESMA linha do banco já virou um
+ * placeholder de mídia sem texto (ex.: `[Cliente enviou uma imagem: ...]`).
+ *
+ * Isso importa sobretudo para imagem: diferente do áudio (que persiste o
+ * transcript em text_body ANTES de montar o histórico, então a própria
+ * query já traz o texto certo), a imagem nunca é persistida de volta —
+ * então a última linha do histórico ainda aparece como placeholder mesmo
+ * quando o runner degradou para caption/texto puro (sem visão ou sem
+ * bytes). Sem este pop, o modelo veria o mesmo turno duas vezes: uma vez
+ * como placeholder e outra como o texto/caption.
+ *
+ * Pura — usada pelo cloud-runner logo após montar `history` a partir das
+ * linhas do banco (com placeholders já aplicados).
+ */
+export function appendCurrentTurn(
+  history: EngineMessage[],
+  params: { route: AiMediaRoute; effectiveText: string; images?: AIMessageImage[] },
+): EngineMessage[] {
+  const { route, effectiveText, images } = params
+  const next = history.slice()
+
+  const last = next[next.length - 1]
+  if (
+    route === 'image' &&
+    last &&
+    last.role === 'user' &&
+    last.content.startsWith('[Cliente enviou uma imagem')
+  ) {
+    next.pop()
+  }
+
+  const tail = next[next.length - 1]
+  if (!tail || tail.role !== 'user' || tail.content !== effectiveText || images) {
+    next.push({ role: 'user', content: effectiveText, images })
+  }
+
+  return next
 }

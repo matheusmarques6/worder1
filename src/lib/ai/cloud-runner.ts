@@ -34,6 +34,8 @@ import {
   routeInboundForAi,
   providerSupportsVision,
   resolveMediaFallback,
+  shouldFetchImageBytes,
+  appendCurrentTurn,
   type InboundMediaInput,
 } from './media/router';
 import { resolveSttConfig, transcribeAudio } from './media/transcription';
@@ -156,6 +158,19 @@ async function runMediaFallback(params: MediaFallbackParams): Promise<CloudRunne
     inboundMessageId,
     skipDelays,
   });
+
+  // opted_out e skip terminal (mesmo tratamento do caminho principal,
+  // linha ~726): retry nunca vai destravar um STOP do contato, entao nao
+  // marca failure (worker nao agenda retry para reason terminal).
+  if (!sendResult.sent && sendResult.reason === 'opted_out') {
+    return {
+      replied: false,
+      transferred: false,
+      response: fallback.message,
+      agentId,
+      skipped: 'opted_out',
+    };
+  }
 
   return {
     replied: sendResult.sent,
@@ -434,14 +449,13 @@ export async function maybeRunAgentForCloudConversation(
     }
   } else if (route === 'image') {
     const caption = (media?.caption || text || '').trim();
-    const fetched =
-      media && providerSupportsVision(agent.provider)
-        ? await fetchInboundMedia({
-            storagePath: media.storagePath,
-            mediaUrl: media.mediaUrl,
-            mimeType: media.mimeType,
-          })
-        : null;
+    const fetched = shouldFetchImageBytes(agent.provider, media)
+      ? await fetchInboundMedia({
+          storagePath: media!.storagePath,
+          mediaUrl: media!.mediaUrl,
+          mimeType: media!.mimeType,
+        })
+      : null;
 
     if (fetched) {
       currentImages = [{ mimeType: fetched.mimeType, base64: fetched.buffer.toString('base64') }];
@@ -497,20 +511,13 @@ export async function maybeRunAgentForCloudConversation(
   }
 
   // Garantir que a mensagem atual está no fim como 'user' (com as imagens,
-  // quando visão). Se o fim é o placeholder da PRÓPRIA imagem atual, remove.
-  const last = conversationHistory[conversationHistory.length - 1];
-  if (
-    currentImages &&
-    last &&
-    last.role === 'user' &&
-    last.content.startsWith('[Cliente enviou uma imagem')
-  ) {
-    conversationHistory.pop();
-  }
-  const tail = conversationHistory[conversationHistory.length - 1];
-  if (!tail || tail.role !== 'user' || tail.content !== effectiveText || currentImages) {
-    conversationHistory.push({ role: 'user', content: effectiveText, images: currentImages });
-  }
+  // quando visão) sem duplicar o placeholder da PRÓPRIA imagem/áudio atual
+  // (appendCurrentTurn — pura, testada em media/__tests__/router.test.ts).
+  const finalHistory = appendCurrentTurn(conversationHistory, {
+    route,
+    effectiveText,
+    images: currentImages,
+  });
 
   const contactId: string | undefined = contact?.crm_contact_id || contact?.id;
 
@@ -531,7 +538,7 @@ export async function maybeRunAgentForCloudConversation(
     const engine = await createAgentEngine(agentId, organizationId);
     result = await engine.processMessage({
       conversationId: conversation.id,
-      conversationHistory,
+      conversationHistory: finalHistory,
       contactInfo: {
         id: contactId,
         name: contact?.name || contact?.contact_name,

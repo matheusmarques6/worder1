@@ -4,8 +4,12 @@ import {
   providerSupportsVision,
   buildRunnerMediaInput,
   resolveMediaFallback,
+  shouldFetchImageBytes,
+  appendCurrentTurn,
   DEFAULT_MEDIA_FALLBACK_MESSAGE,
+  type InboundMediaInput,
 } from '../router'
+import type { EngineMessage } from '../../types'
 
 describe('routeInboundForAi', () => {
   it('texto com body vira text', () => {
@@ -102,5 +106,115 @@ describe('resolveMediaFallback', () => {
   })
   it('mode invalido cai no default ask_text', () => {
     expect(resolveMediaFallback({ media_fallback: { mode: 'explode' } } as any).mode).toBe('ask_text')
+  })
+})
+
+describe('shouldFetchImageBytes (vision gate)', () => {
+  const media: InboundMediaInput = {
+    type: 'image',
+    mediaUrl: 'https://x.supabase.co/storage/v1/object/public/whatsapp-media/a.jpg',
+    storagePath: null,
+    mimeType: 'image/jpeg',
+    caption: null,
+  }
+
+  it('providers com visao (openai/anthropic/gemini/google/openrouter) baixam bytes quando ha midia', () => {
+    for (const p of ['openai', 'anthropic', 'gemini', 'google', 'openrouter']) {
+      expect(shouldFetchImageBytes(p, media)).toBe(true)
+    }
+  })
+
+  it('groq/deepseek (sem visao) NUNCA baixam bytes, mesmo com midia disponivel', () => {
+    for (const p of ['groq', 'deepseek']) {
+      expect(shouldFetchImageBytes(p, media)).toBe(false)
+    }
+  })
+
+  it('sem midia (null/undefined), nao baixa bytes mesmo com provider de visao', () => {
+    expect(shouldFetchImageBytes('openai', null)).toBe(false)
+    expect(shouldFetchImageBytes('openai', undefined)).toBe(false)
+  })
+})
+
+describe('appendCurrentTurn', () => {
+  it('conversa so-texto: comportamento identico ao antigo (sem placeholder, sem duplicar)', () => {
+    const history: EngineMessage[] = [{ role: 'assistant', content: 'oi, tudo bem?' }]
+    const result = appendCurrentTurn(history, { route: 'text', effectiveText: 'quero comprar' })
+    expect(result).toEqual([
+      { role: 'assistant', content: 'oi, tudo bem?' },
+      { role: 'user', content: 'quero comprar', images: undefined },
+    ])
+  })
+
+  it('nao duplica quando a ultima linha ja e exatamente a mensagem atual', () => {
+    const history: EngineMessage[] = [{ role: 'user', content: 'quero comprar' }]
+    const result = appendCurrentTurn(history, { route: 'text', effectiveText: 'quero comprar' })
+    expect(result).toHaveLength(1)
+  })
+
+  it('imagem com visao: substitui o placeholder por UM turno com as imagens (nao duplica)', () => {
+    const history: EngineMessage[] = [
+      { role: 'assistant', content: 'oi!' },
+      { role: 'user', content: '[Cliente enviou uma imagem: olha isso]' },
+    ]
+    const images = [{ mimeType: 'image/jpeg', base64: 'AAA' }]
+    const result = appendCurrentTurn(history, {
+      route: 'image',
+      effectiveText: 'olha isso',
+      images,
+    })
+    expect(result).toEqual([
+      { role: 'assistant', content: 'oi!' },
+      { role: 'user', content: 'olha isso', images },
+    ])
+  })
+
+  // Fix (review Task 6, Important #3): imagem+caption SEM visao (ou sem bytes)
+  // degrada para texto puro — antes disso, o placeholder ficava e o caption
+  // era empilhado por cima, criando DOIS turnos de user pro mesmo inbound.
+  it('imagem+caption sem visao/sem bytes: exatamente UM turno de user com o caption (sem duplicar o placeholder)', () => {
+    const history: EngineMessage[] = [
+      { role: 'assistant', content: 'oi!' },
+      { role: 'user', content: '[Cliente enviou uma imagem: minha duvida]' },
+    ]
+    const result = appendCurrentTurn(history, {
+      route: 'image',
+      effectiveText: 'minha duvida',
+      images: undefined,
+    })
+    expect(result).toEqual([
+      { role: 'assistant', content: 'oi!' },
+      { role: 'user', content: 'minha duvida', images: undefined },
+    ])
+  })
+
+  it('imagem sem caption (placeholder generico) sem visao: substitui pelo texto padrao, UM turno so', () => {
+    const history: EngineMessage[] = [{ role: 'user', content: '[Cliente enviou uma imagem]' }]
+    const result = appendCurrentTurn(history, {
+      route: 'image',
+      effectiveText: 'O cliente enviou esta imagem.',
+      images: undefined,
+    })
+    expect(result).toHaveLength(1)
+    expect(result[0]).toEqual({
+      role: 'user',
+      content: 'O cliente enviou esta imagem.',
+      images: undefined,
+    })
+  })
+
+  it('placeholder de audio nao e afetado pela logica de imagem (route text/audio ja transcrito nao mexe no placeholder)', () => {
+    const history: EngineMessage[] = [
+      { role: 'user', content: '[Cliente enviou um áudio sem transcrição]' },
+    ]
+    // Simula um audio NOVO (route='audio' so ocorre antes da transcricao ter
+    // sucesso; apos sucesso o runner ja roteia como 'text' pq persistiu no
+    // banco). Aqui validamos que appendCurrentTurn so faz pop de placeholder
+    // de IMAGEM — o de audio permanece no historico (empilha um novo turno).
+    const result = appendCurrentTurn(history, { route: 'text', effectiveText: 'quero um produto' })
+    expect(result).toEqual([
+      { role: 'user', content: '[Cliente enviou um áudio sem transcrição]' },
+      { role: 'user', content: 'quero um produto', images: undefined },
+    ])
   })
 })
