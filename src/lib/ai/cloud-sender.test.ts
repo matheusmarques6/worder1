@@ -37,6 +37,14 @@ vi.mock('@/lib/observability/whatsapp-logger', () => ({
   wlog: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
+const mockCheckBeforeSend = vi.fn(async () => ({ allowed: true }) as any)
+const mockReportSendResult = vi.fn(async () => {})
+
+vi.mock('@/lib/whatsapp/send-guard', () => ({
+  checkBeforeSend: (...args: any[]) => (mockCheckBeforeSend as any)(...args),
+  reportSendResult: (...args: any[]) => (mockReportSendResult as any)(...args),
+}))
+
 import { sendHumanizedReply } from './cloud-sender'
 
 const account = {
@@ -62,6 +70,9 @@ describe('sendHumanizedReply — opt-out guard (Onda 13 / B2)', () => {
     mockSendText.mockReset()
     mockCreateClient.mockClear()
     mockUpsert.mockClear()
+    mockCheckBeforeSend.mockReset()
+    mockCheckBeforeSend.mockResolvedValue({ allowed: true })
+    mockReportSendResult.mockClear()
   })
 
   it('NAO envia quando contato esta opted_out (skip terminal)', async () => {
@@ -194,5 +205,84 @@ describe('sendHumanizedReply — moderacao blocked_topics', () => {
     })
 
     expect(r.sent).toBe(true)
+  })
+})
+
+describe('sendHumanizedReply — send guard (rate limit por tier + circuit breaker)', () => {
+  beforeEach(() => {
+    mockRequireOptIn.mockReset()
+    mockRequireOptIn.mockResolvedValue({ allowed: true })
+    mockSendText.mockReset()
+    mockCreateClient.mockClear()
+    mockCheckBeforeSend.mockReset()
+    mockCheckBeforeSend.mockResolvedValue({ allowed: true })
+    mockReportSendResult.mockClear()
+  })
+
+  it('NAO envia quando o guard bloqueia (skip silencioso com reason)', async () => {
+    mockCheckBeforeSend.mockResolvedValue({
+      allowed: false,
+      reason: 'daily_quota',
+      retryAfterMs: 3600000,
+    })
+
+    const r = await sendHumanizedReply({
+      account,
+      conversation,
+      text: 'oi, posso ajudar?',
+      agent,
+      skipDelays: true,
+    })
+
+    expect(r.sent).toBe(false)
+    expect(r.reason).toBe('send_guard_daily_quota')
+    expect(mockSendText).not.toHaveBeenCalled()
+    expect(mockCheckBeforeSend).toHaveBeenCalledWith({
+      accountId: 'waba-1',
+      recipientPhone: '553898575602',
+      messagingLimit: undefined,
+    })
+  })
+
+  it('reporta sucesso 1x quando a resposta e enviada', async () => {
+    mockSendText.mockResolvedValue({ messages: [{ id: 'wamid.1' }] })
+
+    const r = await sendHumanizedReply({
+      account,
+      conversation,
+      text: 'tudo certo!',
+      agent,
+      skipDelays: true,
+    })
+
+    expect(r.sent).toBe(true)
+    expect(mockReportSendResult).toHaveBeenCalledTimes(1)
+    expect(mockReportSendResult).toHaveBeenCalledWith({
+      accountId: 'waba-1',
+      success: true,
+    })
+  })
+
+  it('reporta falha quando a 1a bolha falha na Meta', async () => {
+    const apiError = Object.assign(new Error('(#131056) pair rate'), { code: 131056 })
+    mockSendText.mockRejectedValue(apiError)
+
+    const r = await sendHumanizedReply({
+      account,
+      conversation,
+      text: 'oi',
+      agent,
+      skipDelays: true,
+    })
+
+    expect(r.sent).toBe(false)
+    expect(mockReportSendResult).toHaveBeenCalledTimes(1)
+    expect(mockReportSendResult).toHaveBeenCalledWith({
+      accountId: 'waba-1',
+      success: false,
+      errorCode: 131056,
+      error: apiError,
+      messagingLimit: undefined,
+    })
   })
 })

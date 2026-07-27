@@ -29,6 +29,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
 import { requireOptIn } from '@/lib/whatsapp/opt-out-guard';
+import { checkBeforeSend, reportSendResult } from '@/lib/whatsapp/send-guard';
 import { wlog } from '@/lib/observability/whatsapp-logger';
 import { findBlockedTopic } from './guards';
 
@@ -202,6 +203,27 @@ export async function sendHumanizedReply(
     return { sent: false, reason: 'opted_out' };
   }
 
+  // --- Send guard (rate limiter por tier da Meta + circuit breaker) ---
+  // Mesma proteção do caminho de campanhas. Bloqueio => skip silencioso:
+  // o worker de IA não deve martelar a Meta com a conta limitada.
+  // 1 check por resposta: as até MAX_BUBBLES bolhas cabem com folga no
+  // pair-rate de 10/min por destinatário.
+  const guard = await checkBeforeSend({
+    accountId: account.id,
+    recipientPhone: phone,
+    messagingLimit: account.messaging_limit,
+  });
+  if (!guard.allowed) {
+    wlog.warn('whatsapp.ai.blocked_by_send_guard', {
+      organization_id: conversation.organization_id,
+      conversation_id: conversation.id,
+      agent_id: agent.id,
+      reason: guard.reason,
+      retry_after_ms: guard.retryAfterMs,
+    });
+    return { sent: false, reason: `send_guard_${guard.reason ?? 'blocked'}` };
+  }
+
   const bubbles = splitIntoBubbles(trimmed);
   if (bubbles.length === 0) {
     return { sent: false, reason: 'empty_text' };
@@ -243,6 +265,7 @@ export async function sendHumanizedReply(
 
   const nowBase = Date.now();
   const messageIds: string[] = [];
+  let hadSendError = false;
 
   for (let i = 0; i < bubbles.length; i++) {
     const bubble = bubbles[i];
@@ -267,6 +290,14 @@ export async function sendHumanizedReply(
         `[cloud-sender] Cloud API error na bolha ${i + 1}/${bubbles.length}:`,
         apiError?.message || apiError,
       );
+      hadSendError = true;
+      await reportSendResult({
+        accountId: account.id,
+        success: false,
+        errorCode: apiError?.code,
+        error: apiError,
+        messagingLimit: account.messaging_limit,
+      });
       // Se a 1ª bolha falhou, nada foi enviado.
       if (i === 0) {
         return { sent: false, error: apiError?.message || 'send_failed' };
@@ -306,6 +337,10 @@ export async function sendHumanizedReply(
 
   if (messageIds.length === 0) {
     return { sent: false, error: 'send_failed' };
+  }
+
+  if (!hadSendError) {
+    await reportSendResult({ accountId: account.id, success: true });
   }
 
   // ---------- Atualiza last_message_* só no FIM ----------
