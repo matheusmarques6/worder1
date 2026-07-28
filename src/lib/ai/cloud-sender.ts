@@ -29,7 +29,9 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
 import { requireOptIn } from '@/lib/whatsapp/opt-out-guard';
+import { checkBeforeSend, reportSendResult } from '@/lib/whatsapp/send-guard';
 import { wlog } from '@/lib/observability/whatsapp-logger';
+import { findBlockedTopic } from './guards';
 
 // ---- Caps de split ----
 const MAX_BUBBLES = 4;
@@ -124,6 +126,42 @@ export async function sendHumanizedReply(
     return { sent: false, reason: 'empty_text' };
   }
 
+  // --- Moderação mínima: tópicos bloqueados (settings.safety.blocked_topics) ---
+  // Checa a RESPOSTA do LLM antes de QUALQUER envio (inclusive antes da janela
+  // 24h/opt-out, para sempre registrar a violação). Match simples,
+  // case/acento-insensitive; sem API de moderação externa (YAGNI).
+  // Violação => não envia, loga, desabilita a IA e transfere para humano.
+  const blockedTopic = findBlockedTopic(
+    trimmed,
+    agent?.settings?.safety?.blocked_topics,
+  );
+  if (blockedTopic) {
+    const nowIso = new Date().toISOString();
+    wlog.warn('whatsapp.ai.blocked_topic', {
+      organization_id: conversation.organization_id,
+      conversation_id: conversation.id,
+      agent_id: agent.id,
+      topic: blockedTopic,
+    });
+    const { error: disableErr } = await supabaseAdmin
+      .from('whatsapp_cloud_conversations')
+      .update({
+        ai_enabled: false,
+        ai_disabled_at: nowIso,
+        ai_disabled_reason: 'blocked_topic',
+        ai_transferred_at: nowIso,
+      })
+      .eq('id', conversation.id);
+    if (disableErr) {
+      wlog.warn('whatsapp.ai.safety_disable_failed', {
+        reason: 'blocked_topic',
+        conversationId: conversation.id,
+        error: disableErr.message,
+      });
+    }
+    return { sent: false, reason: 'blocked_topic' };
+  }
+
   // --- Janela de 24h (checagem proativa) ---
   const windowExpired =
     conversation.is_window_open === false ||
@@ -163,6 +201,28 @@ export async function sendHumanizedReply(
       agent_id: agent.id,
     });
     return { sent: false, reason: 'opted_out' };
+  }
+
+  // --- Send guard (rate limiter por tier da Meta + circuit breaker) ---
+  // Mesma proteção do caminho de campanhas. Bloqueio => skip silencioso:
+  // o worker de IA não deve martelar a Meta com a conta limitada.
+  // 1 check por resposta: as até MAX_BUBBLES bolhas cabem com folga no
+  // pair-rate de 10/min por destinatário.
+  const guard = await checkBeforeSend({
+    accountId: account.id,
+    phoneNumberId: account.phone_number_id,
+    recipientPhone: phone,
+    messagingLimit: account.messaging_limit,
+  });
+  if (!guard.allowed) {
+    wlog.warn('whatsapp.ai.blocked_by_send_guard', {
+      organization_id: conversation.organization_id,
+      conversation_id: conversation.id,
+      agent_id: agent.id,
+      reason: guard.reason,
+      retry_after_ms: guard.retryAfterMs,
+    });
+    return { sent: false, reason: `send_guard_${guard.reason ?? 'blocked'}` };
   }
 
   const bubbles = splitIntoBubbles(trimmed);
@@ -206,6 +266,7 @@ export async function sendHumanizedReply(
 
   const nowBase = Date.now();
   const messageIds: string[] = [];
+  let hadSendError = false;
 
   for (let i = 0; i < bubbles.length; i++) {
     const bubble = bubbles[i];
@@ -230,6 +291,15 @@ export async function sendHumanizedReply(
         `[cloud-sender] Cloud API error na bolha ${i + 1}/${bubbles.length}:`,
         apiError?.message || apiError,
       );
+      hadSendError = true;
+      await reportSendResult({
+        accountId: account.id,
+        phoneNumberId: account.phone_number_id,
+        success: false,
+        errorCode: apiError?.code,
+        error: apiError,
+        messagingLimit: account.messaging_limit,
+      });
       // Se a 1ª bolha falhou, nada foi enviado.
       if (i === 0) {
         return { sent: false, error: apiError?.message || 'send_failed' };
@@ -269,6 +339,14 @@ export async function sendHumanizedReply(
 
   if (messageIds.length === 0) {
     return { sent: false, error: 'send_failed' };
+  }
+
+  if (!hadSendError) {
+    await reportSendResult({
+      accountId: account.id,
+      phoneNumberId: account.phone_number_id,
+      success: true,
+    });
   }
 
   // ---------- Atualiza last_message_* só no FIM ----------

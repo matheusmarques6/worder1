@@ -219,6 +219,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Header de midia (IMAGE/VIDEO/DOCUMENT): a Meta exige um exemplo
+    // enviado via Resumable Upload API (example.header_handle). Sem isso
+    // ela rejeita a criacao tardiamente e sem feedback claro — barra aqui.
+    const MEDIA_HEADER_FORMATS = ['IMAGE', 'VIDEO', 'DOCUMENT']
+    const headerFormat = String(headerComponent?.format || '').toUpperCase()
+    if (headerComponent && MEDIA_HEADER_FORMATS.includes(headerFormat)) {
+      const handles = headerComponent.example?.header_handle
+      if (!Array.isArray(handles) || handles.length === 0 ||
+          typeof handles[0] !== 'string' || handles[0].trim() === '') {
+        return NextResponse.json({
+          error: `Header de midia (${headerFormat}) exige um exemplo enviado via Resumable Upload API da Meta: preencha components[HEADER].example.header_handle com o handle retornado pelo upload (formato "4::..."). Sem isso a Meta rejeita o template.`,
+        }, { status: 400 });
+      }
+    }
+
     // Buscar conta
     const { data: account } = await supabase
       .from('whatsapp_business_accounts')

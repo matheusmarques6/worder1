@@ -2,6 +2,8 @@
 // TIPOS PARA O SISTEMA DE AGENTES DE IA
 // =====================================================
 
+import type { AIMessageImage } from '@/lib/whatsapp/ai-providers'
+
 // =====================================================
 // AGENTE
 // =====================================================
@@ -57,6 +59,36 @@ export interface AgentSettings {
     stop_on_human_reply: boolean
     cooldown_after_transfer: number
     max_messages_per_conversation: number
+  }
+  /**
+   * O que fazer quando o cliente manda mídia que a IA não consegue
+   * interpretar (áudio sem STT disponível, imagem sem visão, falha de
+   * transcrição). Default seguro: ask_text (pede pra escrever em texto).
+   */
+  media_fallback?: {
+    mode: 'ask_text' | 'handoff'
+    message?: string
+  }
+  /**
+   * Tool-calling (Fase 2b/2c). `enabled` lista os NOMES das tools ativas
+   * (ver src/lib/ai/tools/registry.ts). Ausente => nenhuma tool (compat com
+   * agentes criados antes desta feature).
+   */
+  tools?: {
+    enabled: string[]
+  }
+  /**
+   * Travas de segurança aplicadas no caminho live (cloud-runner/cloud-sender).
+   * Opcional: agentes antigos no banco não têm este bloco — runtime trata
+   * undefined como listas vazias.
+   */
+  safety?: {
+    /** Palavras do CLIENTE que forçam transferência p/ humano (case/acento-insensitive). */
+    handoff_keywords: string[]
+    /** Mensagem opcional enviada ao cliente quando a transferência por keyword acontece. */
+    handoff_confirmation_message?: string
+    /** Tópicos que a RESPOSTA da IA não pode mencionar — violação bloqueia o envio e transfere. */
+    blocked_topics: string[]
   }
 }
 
@@ -236,6 +268,8 @@ export interface EngineMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp?: Date
+  /** Imagens inline da mensagem (visão multimodal — só role='user'). */
+  images?: AIMessageImage[]
 }
 
 export interface EngineContext {
@@ -399,6 +433,17 @@ export const DEFAULT_SETTINGS: AgentSettings = {
     stop_on_human_reply: true,
     cooldown_after_transfer: 300,
     max_messages_per_conversation: 0,
+  },
+  media_fallback: { mode: 'ask_text' },
+  // transfer_to_human por padrão: é a válvula de escape sem dependência
+  // externa (não exige Shopify nem chave extra). Agentes EXISTENTES não
+  // mudam: DEFAULT_SETTINGS só entra em novos INSERTs (POST /api/ai/agents)
+  // e getActiveTools devolve [] quando settings.tools está ausente.
+  tools: { enabled: ['transfer_to_human'] },
+  safety: {
+    handoff_keywords: [],
+    handoff_confirmation_message: '',
+    blocked_topics: [],
   },
 }
 

@@ -10,6 +10,7 @@ import {
   Info,
   Loader2,
   Brain,
+  Shield,
 } from 'lucide-react'
 import { AIAgent, AgentSettings } from '@/lib/ai/types'
 import { AccordionItem } from '../ui/primitives'
@@ -79,11 +80,17 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
       hours: { start: '08:00', end: '18:00' }, 
       days: ['mon', 'tue', 'wed', 'thu', 'fri'] 
     },
-    behavior: { 
-      activate_on: 'new_message', 
-      stop_on_human_reply: true, 
-      cooldown_after_transfer: 300, 
-      max_messages_per_conversation: 0 
+    behavior: {
+      activate_on: 'new_message',
+      stop_on_human_reply: true,
+      cooldown_after_transfer: 300,
+      max_messages_per_conversation: 0
+    },
+    media_fallback: { mode: 'ask_text' as const },
+    safety: {
+      handoff_keywords: [],
+      handoff_confirmation_message: '',
+      blocked_topics: [],
     },
   }
 
@@ -126,6 +133,19 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
       settings: { ...settings, ...updates },
     })
   }
+
+  const safety = settings.safety || {
+    handoff_keywords: [],
+    handoff_confirmation_message: '',
+    blocked_topics: [],
+  }
+
+  // Lista separada por vírgula -> string[] limpa.
+  const parseKeywordList = (raw: string): string[] =>
+    raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
 
   const toggleSection = (section: string) => {
     setExpandedSection(expandedSection === section ? null : section)
@@ -634,6 +654,154 @@ export default function SettingsTab({ agent, organizationId, onUpdate }: Setting
                 />
                 <p className="hint">
                   Após este número de mensagens, o agente para de responder automaticamente (0 = ilimitado)
+                </p>
+              </div>
+
+              {/* Media fallback — áudio/imagem que a IA não conseguiu interpretar */}
+              <div className="rule-card">
+                <div className="mb-2">
+                  <span className="text-sm" style={{ color: 'var(--text)' }}>
+                    Mídia não compreendida (áudio/imagem)
+                  </span>
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    O que fazer quando a IA não conseguir transcrever um áudio ou interpretar uma imagem
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label
+                    className={`selcard ${(settings.media_fallback?.mode || 'ask_text') === 'ask_text' ? 'on' : ''} flex items-center gap-3`}
+                    style={{ padding: 12 }}
+                  >
+                    <input
+                      type="radio"
+                      name="media_fallback_mode"
+                      checked={(settings.media_fallback?.mode || 'ask_text') === 'ask_text'}
+                      onChange={() => updateSettings({
+                        media_fallback: { ...settings.media_fallback, mode: 'ask_text' }
+                      })}
+                    />
+                    <div>
+                      <span className="text-sm" style={{ color: 'var(--text)' }}>Pedir texto</span>
+                      <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                        Responde automaticamente pedindo que o cliente escreva em texto
+                      </p>
+                    </div>
+                  </label>
+                  <label
+                    className={`selcard ${settings.media_fallback?.mode === 'handoff' ? 'on' : ''} flex items-center gap-3`}
+                    style={{ padding: 12 }}
+                  >
+                    <input
+                      type="radio"
+                      name="media_fallback_mode"
+                      checked={settings.media_fallback?.mode === 'handoff'}
+                      onChange={() => updateSettings({
+                        media_fallback: { ...settings.media_fallback, mode: 'handoff' }
+                      })}
+                    />
+                    <div>
+                      <span className="text-sm" style={{ color: 'var(--text)' }}>Transferir para humano</span>
+                      <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                        Pausa a IA na conversa e notifica a equipe
+                      </p>
+                    </div>
+                  </label>
+                  {(settings.media_fallback?.mode || 'ask_text') === 'ask_text' && (
+                    <div>
+                      <label className="label">Mensagem enviada ao cliente</label>
+                      <textarea
+                        className="field"
+                        rows={2}
+                        placeholder="Desculpe, não consegui entender sua mensagem por aqui. Pode me escrever em texto, por favor?"
+                        value={settings.media_fallback?.message || ''}
+                        onChange={(e) => updateSettings({
+                          media_fallback: { mode: 'ask_text', message: e.target.value }
+                        })}
+                      />
+                      <p className="hint">Vazio = usa a mensagem padrão acima</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </AccordionItem>
+
+          {/* Safety Section */}
+          <AccordionItem
+            open={expandedSection === 'safety'}
+            onToggle={() => toggleSection('safety')}
+            title={
+              <div className="flex items-center gap-3">
+                <div className="act-ico" style={{ background: 'var(--brand-tint)', color: 'var(--brand)' }}>
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text)' }}>Segurança</span>
+                  <p className="text-xs" style={{ color: 'var(--text-3)', fontWeight: 500 }}>
+                    Transferência por palavra-chave e tópicos bloqueados
+                  </p>
+                </div>
+              </div>
+            }
+          >
+            <div className="space-y-4">
+              {/* Handoff keywords */}
+              <div className="rule-card">
+                <label className="label">Palavras-chave de transferência</label>
+                <input
+                  type="text"
+                  className="field"
+                  placeholder="atendente, humano, falar com alguém"
+                  defaultValue={(safety.handoff_keywords || []).join(', ')}
+                  onBlur={(e) => updateSettings({
+                    safety: { ...safety, handoff_keywords: parseKeywordList(e.target.value) },
+                  })}
+                />
+                <p className="hint">
+                  Se a mensagem do cliente contiver uma destas palavras, a IA transfere a
+                  conversa para um humano (não diferencia maiúsculas nem acentos).
+                  Separe por vírgula. A checagem é por trecho (substring): evite palavras
+                  curtas ou muito genéricas, pois podem casar dentro de outras (ex.:
+                  &quot;vendedor&quot; também combina com &quot;revendedor&quot;). Prefira
+                  termos mais específicos, como frases completas.
+                </p>
+              </div>
+
+              {/* Handoff confirmation message */}
+              <div className="rule-card">
+                <label className="label">Mensagem de confirmação da transferência (opcional)</label>
+                <input
+                  type="text"
+                  className="field"
+                  placeholder="Certo! Vou te passar para um atendente humano."
+                  defaultValue={safety.handoff_confirmation_message || ''}
+                  onBlur={(e) => updateSettings({
+                    safety: { ...safety, handoff_confirmation_message: e.target.value },
+                  })}
+                />
+                <p className="hint">
+                  Enviada ao cliente quando a transferência por palavra-chave acontece.
+                  Deixe vazio para não enviar nada.
+                </p>
+              </div>
+
+              {/* Blocked topics */}
+              <div className="rule-card">
+                <label className="label">Tópicos bloqueados</label>
+                <input
+                  type="text"
+                  className="field"
+                  placeholder="política, religião, concorrente"
+                  defaultValue={(safety.blocked_topics || []).join(', ')}
+                  onBlur={(e) => updateSettings({
+                    safety: { ...safety, blocked_topics: parseKeywordList(e.target.value) },
+                  })}
+                />
+                <p className="hint">
+                  Se a resposta da IA mencionar um destes tópicos, ela NÃO é enviada e a
+                  conversa é transferida para um humano. Separe por vírgula. A checagem
+                  também é por trecho (substring): evite palavras curtas ou muito
+                  genéricas, que podem combinar dentro de outras palavras sem relação.
                 </p>
               </div>
             </div>

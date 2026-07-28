@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { AudioRecorder } from './AudioRecorder'
 import { ServiceWindowBar } from './ServiceWindowBar'
+import { useServiceWindow } from './useServiceWindow'
 import { getDisabledReasonLabel, isAutoDisabledReason } from '@/lib/ai/disabled-reasons'
 import { QuickRepliesPicker } from './QuickRepliesPicker'
 import { TemplatePickerModal, type SendTemplatePayload } from './TemplatePickerModal'
@@ -55,6 +56,13 @@ const formatMessageTime = (date?: string) => {
   return new Date(date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
+const formatMessageDateTime = (date?: string) => {
+  if (!date) return ''
+  return new Date(date).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  })
+}
+
 const getInitials = (name?: string) => {
   if (!name) return '??'
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -66,16 +74,29 @@ const formatFileSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-// Status Icon
-function MessageStatus({ status }: { status: InboxMessage['status'] }) {
-  switch (status) {
-    case 'pending': return <Clock className="w-4 h-4 text-gray-400" />
-    case 'sent': return <Check className="w-4 h-4 text-gray-400" />
-    case 'delivered': return <CheckCheck className="w-4 h-4 text-gray-400" />
-    case 'read': return <CheckCheck className="w-4 h-4 text-cyan-400" />
-    case 'failed': return <AlertCircle className="w-4 h-4 text-error-400" />
-    default: return <Clock className="w-4 h-4 text-gray-400" />
-  }
+// Status Icon — checks estilo WhatsApp com tooltip de entrega/leitura
+function MessageStatus({ status, deliveredAt, readAt }: {
+  status: InboxMessage['status']
+  deliveredAt?: string
+  readAt?: string
+}) {
+  const tooltip = [
+    deliveredAt ? `Entregue ${formatMessageDateTime(deliveredAt)}` : null,
+    readAt ? `Lida ${formatMessageDateTime(readAt)}` : null,
+  ].filter(Boolean).join(' · ')
+
+  const icon = (() => {
+    switch (status) {
+      case 'pending': return <Clock className="w-4 h-4 text-gray-400" />
+      case 'sent': return <Check className="w-4 h-4 text-gray-400" />
+      case 'delivered': return <CheckCheck className="w-4 h-4 text-gray-400" />
+      case 'read': return <CheckCheck className="w-4 h-4 text-cyan-400" />
+      case 'failed': return <AlertCircle className="w-4 h-4 text-error-400" />
+      default: return <Clock className="w-4 h-4 text-gray-400" />
+    }
+  })()
+
+  return <span title={tooltip || undefined} className="inline-flex">{icon}</span>
 }
 
 // Message Bubble
@@ -123,6 +144,14 @@ function MessageBubble({ message, contactName, onRetry }: { message: InboxMessag
               loading="lazy"
               className="rounded-lg mb-2 cursor-pointer hover:opacity-90 w-full max-w-[320px] max-h-[360px] object-contain bg-white/30"
               onClick={() => window.open(message.media_url, '_blank')} 
+            />
+          )}
+          {message.message_type === 'sticker' && message.media_url && (
+            <img
+              src={message.media_url}
+              alt="Figurinha"
+              loading="lazy"
+              className="rounded-lg mb-2 w-32 h-32 object-contain"
             />
           )}
           {/* ✅ CORREÇÃO: Vídeo com preload, playsInline e tamanho limitado */}
@@ -182,7 +211,13 @@ function MessageBubble({ message, contactName, onRetry }: { message: InboxMessag
           {isPending && <span className="text-[10px] text-gray-500">Enviando...</span>}
           {isBot && isOutbound && !isPending && <span className="text-[10px] text-gray-400">via Bot</span>}
           <span className="text-[10px] text-gray-400">{formatMessageTime(message.created_at)}</span>
-          {isOutbound && <MessageStatus status={message.status} />}
+          {isOutbound && (
+            <MessageStatus
+              status={message.status}
+              deliveredAt={message.delivered_at}
+              readAt={message.read_at}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -319,7 +354,13 @@ export function ChatPanel({
   const [slashQuery, setSlashQuery] = useState('')
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
   const [isSendingTemplate, setIsSendingTemplate] = useState(false)
-  
+
+  // Fonte unica derivada da janela de 24h — controla composer e banner.
+  const { isOpen: isWindowOpen } = useServiceWindow(
+    conversation.window_expires_at,
+    conversation.can_send_template_only,
+  )
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -335,8 +376,15 @@ export function ChatPanel({
     }
   }, [input])
 
+  // Se a janela de 24h cair enquanto o gravador esta aberto, fecha-o em vez
+  // de deixa-lo montado como um no-op silencioso (o banner + composer
+  // desabilitado ja comunicam o estado).
+  useEffect(() => {
+    if (!isWindowOpen) setRecordingMode(false)
+  }, [isWindowOpen])
+
   const handleSend = async () => {
-    if (!input.trim() || isSending) return
+    if (!input.trim() || isSending || !isWindowOpen) return
     const content = input.trim()
     setInput('')
     setShowQuickReplies(false)
@@ -403,21 +451,26 @@ export function ChatPanel({
   async function handleCSATSubmit(rating: number, comment: string) {
     if (!organizationId) return
     try {
-      // Save CSAT rating
+      // Save CSAT rating (opcional — nao bloqueia o resolve)
       await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/csat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rating, comment }),
       })
     } catch { /* */ }
-    try {
-      // Mark as resolved via close endpoint (existing)
-      await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/close`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resolution: comment, rating }),
-      })
-    } catch { /* */ }
+
+    // Mark as resolved via close endpoint. NAO engolir erro: se a API
+    // falhar, lancamos para o CSATModal manter o modal aberto e exibir o
+    // erro — e onResolved() NAO e chamado (a conversa nao fechou no DB).
+    const res = await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolution: comment, rating }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({} as any))
+      throw new Error(data.error || 'Falha ao resolver a conversa')
+    }
     if (onResolved) onResolved()
   }
 
@@ -440,6 +493,7 @@ export function ChatPanel({
     .slice(-1)[0]?.content
 
   async function handleSendPaymentLink(data: { amount: number; description: string; paymentUrl?: string }) {
+    if (!isWindowOpen) return
     if (!organizationId) return
     await authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/payment-link`, {
       method: 'POST',
@@ -449,6 +503,7 @@ export function ChatPanel({
   }
 
   async function handleSendCatalog() {
+    if (!isWindowOpen) return
     if (!organizationId) return
     // Prompt for product ids (simple approach, no selector UI for brevity)
     const ids = prompt('IDs dos produtos Shopify separados por virgula:')
@@ -483,6 +538,7 @@ export function ChatPanel({
   }
 
   const handleSendMedia = async (caption: string) => {
+    if (!isWindowOpen) return
     if (!selectedFile) return
     await onSendMedia(selectedFile, selectedMediaType, caption)
     setSelectedFile(null)
@@ -733,11 +789,19 @@ export function ChatPanel({
 
       {/* Input */}
       <div className="p-4 border-t border-gray-200 bg-gray-50">
-        {conversation.can_send_template_only && (
+        {!isWindowOpen && (
           <div className="flex items-center gap-2 p-3 mb-3 bg-warning-500/10 border border-warning-500/20 rounded-xl">
             <AlertCircle className="w-4 h-4 text-warning-400 flex-shrink-0" />
-            <span className="text-sm text-warning-400">Janela de 24h expirada. Use um template.</span>
-            <button className="ml-auto text-sm text-brand-600 font-medium hover:underline">Enviar Template</button>
+            <span className="text-sm text-warning-400">
+              Janela de 24h expirada. Envie um template aprovado para reabrir a conversa.
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowTemplatePicker(true)}
+              className="ml-auto text-sm text-brand-600 font-medium hover:underline whitespace-nowrap"
+            >
+              Enviar Template
+            </button>
           </div>
         )}
 
@@ -749,7 +813,8 @@ export function ChatPanel({
           {/* Attach Menu */}
           <div className="relative">
             <button onClick={() => setShowAttachMenu(!showAttachMenu)}
-              className={`p-2.5 rounded-xl ${showAttachMenu ? 'bg-brand-100 text-brand-600' : 'hover:bg-gray-100 text-gray-500 hover:text-brand-600'}`}>
+              disabled={!isWindowOpen}
+              className={`p-2.5 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed ${showAttachMenu ? 'bg-brand-100 text-brand-600' : 'hover:bg-gray-100 text-gray-500 hover:text-brand-600'}`}>
               <Paperclip className="w-5 h-5" />
             </button>
             
@@ -810,6 +875,7 @@ export function ChatPanel({
               isUploading={isUploading}
               onCancel={() => setRecordingMode(false)}
               onSend={async (file) => {
+                if (!isWindowOpen) return
                 await onSendMedia(file, 'audio')
                 setRecordingMode(false)
               }}
@@ -818,7 +884,8 @@ export function ChatPanel({
             <>
               <div className="flex-1 relative">
                 <textarea ref={inputRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyDown}
-                  placeholder="Digite uma mensagem ou /atalho..." disabled={isSending} rows={1}
+                  placeholder={isWindowOpen ? 'Digite uma mensagem ou /atalho...' : 'Janela de 24h expirada — use um template'}
+                  disabled={isSending || !isWindowOpen} rows={1}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-400 resize-none disabled:opacity-50"
                   style={{ maxHeight: '120px' }} />
                 {showQuickReplies && organizationId && (
@@ -832,14 +899,14 @@ export function ChatPanel({
               </div>
 
               {input.trim() ? (
-                <button onClick={handleSend} disabled={!input.trim() || isSending}
+                <button onClick={handleSend} disabled={!input.trim() || isSending || !isWindowOpen}
                   className="p-3 rounded-xl bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed">
                   {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                 </button>
               ) : (
                 <button
                   onClick={() => setRecordingMode(true)}
-                  disabled={isSending || isUploading}
+                  disabled={isSending || isUploading || !isWindowOpen}
                   title="Gravar audio"
                   className="p-3 rounded-xl hover:bg-gray-100 text-gray-500 hover:text-primary-600 disabled:opacity-50"
                 >

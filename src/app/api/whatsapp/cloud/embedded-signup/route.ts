@@ -26,6 +26,7 @@ import {
   WhatsAppCloudError,
 } from '@/lib/whatsapp/cloud-api';
 import { encryptToken } from '@/lib/whatsapp/token-encryption';
+import { validateBusinessToken } from '@/lib/whatsapp/token-validation';
 import { isFeatureEnabled } from '@/lib/feature-flags';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 
@@ -123,6 +124,27 @@ export async function POST(request: NextRequest) {
       console.error('[embedded-signup] code exchange failed:', err);
       return NextResponse.json(
         { error: 'code_exchange_failed', detail: err?.message },
+        { status: 400 }
+      );
+    }
+
+    // Step 1.5 — validate token scopes/expiry BEFORE any Meta side-effects or
+    // persistence. Without whatsapp_business_management the connection would be
+    // saved as 'active' and fail later with error 190 (audit: MEDIUM gap #2).
+    const validation = await validateBusinessToken({
+      accessToken: businessToken,
+      appId,
+      appSecret,
+    });
+    if (!validation.valid) {
+      console.error('[embedded-signup] token validation failed:', validation.error);
+      return NextResponse.json(
+        {
+          error: 'token_validation_failed',
+          detail:
+            validation.error ||
+            'Token retornado pela Meta sem as permissões necessárias. Refaça a conexão com o Facebook.',
+        },
         { status: 400 }
       );
     }

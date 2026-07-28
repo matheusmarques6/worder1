@@ -32,6 +32,7 @@ import {
   generatePromptFromTemplate,
 } from '@/lib/ai/templates';
 import { templateActionToAgentActionPayload } from '@/lib/ai/templates/action-adapter';
+import { DEFAULT_SETTINGS } from '@/lib/ai/types';
 import type { StoreAnalysis } from '@/types/store-analysis';
 
 interface CreateAgentFlowProps {
@@ -455,6 +456,10 @@ ${agentFunction.handoffRules}
                 cooldown_after_transfer: 300,
                 max_messages_per_conversation: 0,
               },
+              // Preserva o default de tools (transfer_to_human) — este PUT
+              // sobrescreve settings por inteiro, então precisa incluir a
+              // mesma chave que o POST/INSERT usaria.
+              tools: { ...DEFAULT_SETTINGS.tools },
             },
           }),
         });
@@ -515,12 +520,13 @@ ${agentFunction.handoffRules}
                 cooldown_after_transfer: 300,
                 max_messages_per_conversation: 0,
               },
+              tools: { ...DEFAULT_SETTINGS.tools },
             },
           }),
         });
-        
+
         const data = await res.json();
-        
+
         if (!res.ok) {
           throw new Error(data.error || 'Erro ao criar agente');
         }

@@ -12,6 +12,7 @@ import {
   ProviderTool,
   ToolLoopMessage,
   ProviderToolCall,
+  AIMessageImage,
 } from '@/lib/whatsapp/ai-providers'
 import type { Tool, ToolContext, ToolResultPayload } from './types'
 
@@ -51,6 +52,10 @@ export interface ToolLoopResult {
   text: string
   toolCalls: ToolLoopCall[]
   tokens: number
+  /** Soma de promptTokens de todas as rodadas (para o AI budget/cost-tracker). */
+  promptTokens: number
+  /** Soma de completionTokens de todas as rodadas (para o AI budget/cost-tracker). */
+  completionTokens: number
   stoppedBy: StoppedBy
   transferred: boolean
   rateLimited: boolean
@@ -58,8 +63,11 @@ export interface ToolLoopResult {
 
 export interface RunToolLoopParams {
   providerConfig: ToolLoopProviderConfig
-  /** histórico de chat (sem system; o system vai em providerConfig.systemPrompt). */
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  /** histórico de chat (sem system; o system vai em providerConfig.systemPrompt).
+   *  `images` só se aplica a role='user' (visão multimodal) — o caller
+   *  (cloud-runner/engine) já garante que só chega preenchido quando o
+   *  provider do agente suporta visão (providerSupportsVision). */
+  messages: Array<{ role: 'user' | 'assistant'; content: string; images?: AIMessageImage[] }>
   tools: Tool[]
   context: ToolContext
   caps?: ToolLoopCaps
@@ -87,11 +95,13 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
   // Histórico no formato neutro do loop. System vai como primeira msg 'system'.
   const loopMessages: ToolLoopMessage[] = [
     { role: 'system', content: providerConfig.systemPrompt },
-    ...messages.map((m) => ({ role: m.role, content: m.content })),
+    ...messages.map((m) => ({ role: m.role, content: m.content, images: m.images })),
   ]
 
   const aggregatedCalls: ToolLoopCall[] = []
   let totalTokens = 0
+  let totalPromptTokens = 0
+  let totalCompletionTokens = 0
   let finalText = ''
   let transferred = false
 
@@ -102,6 +112,8 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
         text: finalText,
         toolCalls: aggregatedCalls,
         tokens: totalTokens,
+        promptTokens: totalPromptTokens,
+        completionTokens: totalCompletionTokens,
         stoppedBy: 'max_tokens',
         transferred,
         rateLimited: false,
@@ -130,6 +142,8 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
         text: finalText,
         toolCalls: aggregatedCalls,
         tokens: totalTokens,
+        promptTokens: totalPromptTokens,
+        completionTokens: totalCompletionTokens,
         stoppedBy: 'final',
         transferred,
         rateLimited: false,
@@ -137,6 +151,8 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
     }
 
     totalTokens += step.usage?.totalTokens || 0
+    totalPromptTokens += step.usage?.promptTokens || 0
+    totalCompletionTokens += step.usage?.completionTokens || 0
 
     // 429 / rate-limit: abort gracioso, sinaliza no retorno (runner loga no trace).
     if (step.rateLimited) {
@@ -144,6 +160,8 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
         text: finalText,
         toolCalls: aggregatedCalls,
         tokens: totalTokens,
+        promptTokens: totalPromptTokens,
+        completionTokens: totalCompletionTokens,
         stoppedBy: 'rate_limited',
         transferred,
         rateLimited: true,
@@ -158,6 +176,8 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
         text: finalText,
         toolCalls: aggregatedCalls,
         tokens: totalTokens,
+        promptTokens: totalPromptTokens,
+        completionTokens: totalCompletionTokens,
         stoppedBy: 'final',
         transferred,
         rateLimited: false,
@@ -207,6 +227,8 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
         text: finalText,
         toolCalls: aggregatedCalls,
         tokens: totalTokens,
+        promptTokens: totalPromptTokens,
+        completionTokens: totalCompletionTokens,
         stoppedBy: 'control_stop',
         transferred,
         rateLimited: false,
@@ -224,6 +246,8 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
     text: finalText,
     toolCalls: aggregatedCalls,
     tokens: totalTokens,
+    promptTokens: totalPromptTokens,
+    completionTokens: totalCompletionTokens,
     stoppedBy: 'max_iterations',
     transferred,
     rateLimited: false,

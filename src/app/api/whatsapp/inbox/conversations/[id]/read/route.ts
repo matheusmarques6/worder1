@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
+import { resolveInboxConversation } from '@/lib/whatsapp/inbox-conversation-resolver';
 export const dynamic = 'force-dynamic';
 
 export async function POST(
@@ -14,8 +15,13 @@ export async function POST(
 
     const conversationId = params.id
 
+    const resolved = await resolveInboxConversation(supabase, conversationId, orgId)
+    if (!resolved) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+    }
+
     const { error } = await supabase
-      .from('whatsapp_conversations')
+      .from(resolved.table)
       .update({ unread_count: 0 })
       .eq('id', conversationId)
       .eq('organization_id', orgId)

@@ -8,6 +8,12 @@ import {
 } from '@/lib/whatsapp/opt-out-guard'
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api'
 import { getAccessToken } from '@/lib/whatsapp/account-loader'
+import {
+  checkBeforeSend,
+  reportSendResult,
+  buildRateLimitedResponseBody,
+} from '@/lib/whatsapp/send-guard'
+import { validateWhatsAppMediaFile } from '@/lib/whatsapp/media-validation'
 
 // ✅ FASE 3: Force dynamic para evitar cache
 export const dynamic = 'force-dynamic'
@@ -19,60 +25,6 @@ const NO_CACHE_HEADERS = {
 }
 
 const SIGNED_URL_EXPIRY = 3600 // 1 hora
-
-// Meta Cloud API enforces different size limits per media category.
-// Reject early instead of letting Meta refuse the upload.
-const MAX_SIZE_BY_TYPE: Record<string, number> = {
-  image: 5 * 1024 * 1024,      // 5 MB
-  video: 16 * 1024 * 1024,     // 16 MB
-  audio: 16 * 1024 * 1024,     // 16 MB
-  document: 100 * 1024 * 1024, // 100 MB
-}
-const FALLBACK_MAX_SIZE = 16 * 1024 * 1024
-
-// MIME types accepted by Meta's /media endpoint. Anything outside
-// these lists is rejected by Meta with code 131053.
-const ALLOWED_TYPES = {
-  image: ['image/jpeg', 'image/png', 'image/webp'],
-  video: ['video/mp4', 'video/3gpp'],
-  audio: ['audio/aac', 'audio/mpeg', 'audio/mp4', 'audio/amr', 'audio/ogg'],
-  document: [
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-powerpoint',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    'text/plain',
-    'text/csv',
-  ],
-}
-
-const DANGEROUS_EXTENSIONS = ['.exe', '.bat', '.cmd', '.sh', '.ps1', '.vbs', '.js', '.jar', '.msi']
-
-// Validação de arquivo
-function validateFile(file: File, mediaType: string): { valid: boolean; error?: string } {
-  const maxSize = MAX_SIZE_BY_TYPE[mediaType] ?? FALLBACK_MAX_SIZE
-  if (file.size > maxSize) {
-    const label = mediaType === 'image' ? 'Imagem'
-      : mediaType === 'video' ? 'Video'
-      : mediaType === 'audio' ? 'Audio'
-      : 'Documento'
-    return { valid: false, error: `${label} muito grande. Maximo: ${maxSize / (1024 * 1024)}MB` }
-  }
-
-  if (DANGEROUS_EXTENSIONS.some(ext => file.name.toLowerCase().endsWith(ext))) {
-    return { valid: false, error: 'Tipo de arquivo não permitido por segurança' }
-  }
-
-  const allowedList = ALLOWED_TYPES[mediaType as keyof typeof ALLOWED_TYPES]
-  if (allowedList && !allowedList.includes(file.type)) {
-    return { valid: false, error: `Tipo de arquivo nao aceito pelo WhatsApp para ${mediaType}: ${file.type}` }
-  }
-
-  return { valid: true }
-}
 
 // POST - Enviar mídia
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
@@ -102,7 +54,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       )
     }
 
-    const validation = validateFile(file, mediaType)
+    const validation = validateWhatsAppMediaFile(file, mediaType)
     if (!validation.valid) {
       return NextResponse.json(
         { error: validation.error, success: false },
@@ -132,6 +84,25 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         return NextResponse.json(
           buildOptOutBlockedResponse(optCheck, undefined),
           { status: 409, headers: NO_CACHE_HEADERS },
+        )
+      }
+
+      // Send guard ANTES do upload — falha rápida sem desperdiçar
+      // upload em Storage/Meta quando a conta está limitada.
+      const guardCheck = await checkBeforeSend({
+        accountId: cloudConv.account.id,
+        phoneNumberId: cloudConv.account.phone_number_id,
+        recipientPhone: phoneNumber,
+        messagingLimit: cloudConv.account.messaging_limit,
+      })
+      if (!guardCheck.allowed) {
+        const body429 = buildRateLimitedResponseBody(guardCheck)
+        return NextResponse.json(
+          { ...body429, success: false },
+          {
+            status: 429,
+            headers: { ...NO_CACHE_HEADERS, 'Retry-After': String(body429.retryAfter) },
+          },
         )
       }
 
@@ -211,6 +182,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         }
       } catch (e: any) {
         console.error('[Media POST/Cloud] send error:', e)
+        await reportSendResult({
+          accountId: cloudConv.account.id,
+          phoneNumberId: cloudConv.account.phone_number_id,
+          success: false,
+          errorCode: e?.code,
+          error: e,
+          messagingLimit: cloudConv.account.messaging_limit,
+        })
         const codeStr = e?.code ? ` (code ${e.code})` : ''
         return NextResponse.json(
           {
@@ -222,6 +201,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           { status: 400, headers: NO_CACHE_HEADERS },
         )
       }
+
+      await reportSendResult({
+        accountId: cloudConv.account.id,
+        phoneNumberId: cloudConv.account.phone_number_id,
+        success: true,
+      })
 
       const messageId = result.messages?.[0]?.id
       const { data: saved } = await supabase
@@ -312,7 +297,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     const { data: message, error } = await supabase
-      .from('whatsapp_messages')
+      .from('whatsapp_cloud_messages')
       .select('media_storage_path, media_url')
       .eq('id', messageId)
       .eq('conversation_id', params.id)

@@ -27,6 +27,8 @@ import {
 import { RuleEngine, type EventData } from '@/lib/services/automation/rule-engine';
 import { wlog } from '@/lib/observability/whatsapp-logger';
 import { applyCampaignRecipientWebhookStatus } from './campaign-recipient-status';
+import { statusTimestampFields } from './status-timestamps';
+import { routeInboundForAi } from '@/lib/ai/media/router';
 
 // Ordem canonica de status WhatsApp. Webhooks chegam fora de ordem em raros
 // casos (delivered antes de sent); sem o guard de ordinal a row sofre retrograde.
@@ -253,29 +255,73 @@ async function processMessage(
   const textBody = extractWebhookMessageText(message);
   const content = buildMessageContent(message);
 
-  await supabase.from('whatsapp_cloud_messages').insert({
-    organization_id: account.organization_id,
-    store_id: account.store_id || conversation.store_id || null,
-    waba_id: account.id,
-    conversation_id: conversation.id,
-    message_id: message.id,
-    direction: 'inbound',
-    from_number: phoneNumber,
-    to_number: account.phone_number,
-    message_type: messageType,
-    content,
-    text_body: textBody,
-    caption:
-      message.image?.caption || message.video?.caption || message.document?.caption,
-    media_id:
-      message.image?.id ||
-      message.video?.id ||
-      message.audio?.id ||
-      message.document?.id ||
-      message.sticker?.id,
-    status: 'received',
-    timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-  });
+  const mediaId =
+    message.image?.id ||
+    message.video?.id ||
+    message.audio?.id ||
+    message.document?.id ||
+    message.sticker?.id;
+
+  const { data: insertedMsg, error: insertError } = await supabase
+    .from('whatsapp_cloud_messages')
+    .insert({
+      organization_id: account.organization_id,
+      store_id: account.store_id || conversation.store_id || null,
+      waba_id: account.id,
+      conversation_id: conversation.id,
+      message_id: message.id,
+      direction: 'inbound',
+      from_number: phoneNumber,
+      to_number: account.phone_number,
+      message_type: messageType,
+      content,
+      text_body: textBody,
+      caption:
+        message.image?.caption || message.video?.caption || message.document?.caption,
+      media_id: mediaId,
+      media_download_status: mediaId ? 'pending' : null,
+      status: 'received',
+      timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
+    })
+    .select('id')
+    .maybeSingle();
+
+  // Não engolir erro de insert: se o schema estiver atrasado (coluna nova
+  // ainda não migrada) ou qualquer outra falha do PostgREST, propaga para o
+  // caller (processMessage's caller conta em result.errors e o evento do
+  // webhook é reprocessado pelo cron) em vez de marcar o evento como "done"
+  // com a mensagem inbound silenciosamente perdida.
+  if (insertError) {
+    throw insertError;
+  }
+
+  // ============================================================
+  // PIPELINE DE MÍDIA INBOUND — nunca quebra a persistência.
+  // Preferência: QStash (async). Fallback: inline (ambientes sem fila).
+  // Falha aqui deixa media_download_status='pending'/'failed' e a
+  // mensagem segue visível no inbox (sem mídia).
+  // ============================================================
+  if (mediaId && insertedMsg?.id) {
+    try {
+      const mediaJob = {
+        cloudMessageId: insertedMsg.id,
+        accountId: account.id,
+        organizationId: account.organization_id,
+      };
+      const { enqueueWhatsAppInboundMedia } = await import('@/lib/queue');
+      const queued = await enqueueWhatsAppInboundMedia(mediaJob);
+      if (!queued) {
+        const { processInboundMedia } = await import('./inbound-media');
+        await processInboundMedia(mediaJob);
+      }
+    } catch (err: any) {
+      wlog.error('whatsapp.media.inbound_pipeline_error', {
+        error: err?.message,
+        message_id: message.id,
+        conversation_id: conversation.id,
+      });
+    }
+  }
 
   const nowIso = new Date().toISOString();
   // Counters via RPC: UPDATE atomico (COALESCE(col,0)+1). Sem isso, duas
@@ -359,15 +405,12 @@ async function processMessage(
   // dentro do runner, executado no worker.
   // ============================================================
   try {
-    // Só agenda p/ inbound de texto, fora de auto-conversa, com IA habilitada.
+    // Agenda p/ inbound de texto, ÁUDIO e IMAGEM (document/sticker/location/
+    // video seguem fora — rota 'unsupported'), fora de auto-conversa, com IA
+    // habilitada. Mesma janela de debounce para todos os tipos.
     const isSelf = phoneNumber && account.phone_number && phoneNumber === account.phone_number;
-    if (
-      messageType === 'text' &&
-      textBody &&
-      textBody.trim() &&
-      !isSelf &&
-      conversation?.ai_enabled !== false
-    ) {
+    const aiRoute = routeInboundForAi(messageType, textBody);
+    if (aiRoute !== 'unsupported' && !isSelf && conversation?.ai_enabled !== false) {
       const debounceSeconds = AI_DEBOUNCE_SECONDS;
       const debounceUntil = new Date(Date.now() + debounceSeconds * 1000).toISOString();
 
@@ -388,9 +431,16 @@ async function processMessage(
       );
 
       // Fallback: QStash não configurado => roda síncrono (caminho legado 2a)
-      // p/ não perder a resposta em ambientes sem fila.
+      // p/ não perder a resposta em ambientes sem fila. Relê a row p/ pegar
+      // media_* (preenchidas pelo pipeline de mídia inbound).
       if (!messageId) {
         const { maybeRunAgentForCloudConversation } = await import('@/lib/ai/cloud-runner');
+        const { buildRunnerMediaInput } = await import('@/lib/ai/media/router');
+        const { data: freshMsg } = await supabase
+          .from('whatsapp_cloud_messages')
+          .select('message_type, caption, media_url, media_storage_path, media_mime_type')
+          .eq('message_id', message.id)
+          .maybeSingle();
         await maybeRunAgentForCloudConversation({
           account,
           conversation,
@@ -399,6 +449,7 @@ async function processMessage(
           inboundMessageId: message.id,
           messageType,
           phoneNumber,
+          inboundMedia: freshMsg ? buildRunnerMediaInput(freshMsg) || undefined : undefined,
         });
       }
     }
@@ -415,14 +466,14 @@ async function processMessage(
 // ============================================================
 
 async function processStatus(account: any, status: any) {
-  const { id: messageId, status: newStatus, errors, conversation, pricing } = status;
+  const { id: messageId, status: newStatus, timestamp, errors, conversation, pricing } = status;
 
   // B2: guard contra retrograde. Meta as vezes entrega o webhook de 'sent'
   // depois do 'delivered'; sem o guard a row volta pra 'sent'. failed sempre
   // se aplica porque carrega error_code que precisa ser persistido.
   const { data: currentRow } = await supabase
     .from('whatsapp_cloud_messages')
-    .select('status')
+    .select('status, delivered_at, read_at')
     .eq('message_id', messageId)
     .maybeSingle();
 
@@ -441,6 +492,12 @@ async function processStatus(account: any, status: any) {
   const updateData: any = {
     status: newStatus,
     updated_at: new Date().toISOString(),
+    // statuses[].timestamp (epoch string da Meta) -> delivered_at/read_at.
+    // Roda DEPOIS do guard monotonico acima; nunca sobrescreve valor ja gravado.
+    ...statusTimestampFields(newStatus, timestamp, {
+      currentDeliveredAt: currentRow?.delivered_at,
+      currentReadAt: currentRow?.read_at,
+    }),
   };
 
   if (errors && errors.length > 0) {

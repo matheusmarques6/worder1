@@ -296,16 +296,24 @@ ${wrapAsDataBlock('base_conhecimento', context)}`
     const maxHistory = 20
     const recentHistory = history.slice(-maxHistory)
 
-    // Converter para formato da LLM
-    const messages: EngineMessage[] = recentHistory.map(msg => ({
+    // A mensagem atual costuma JÁ ser o último item do histórico (o runner a
+    // anexa antes de chamar o engine). Removemos essa cópia para não duplicar
+    // a mensagem — com imagem anexada a duplicação dobraria tokens/custo.
+    const last = recentHistory[recentHistory.length - 1]
+    const lastIsCurrent = last?.role === 'user' && last.content === currentMessage
+    const base = lastIsCurrent ? recentHistory.slice(0, -1) : recentHistory
+
+    const messages: EngineMessage[] = base.map(msg => ({
       role: msg.role,
       content: msg.content,
+      images: msg.images,
     }))
 
-    // Adicionar mensagem atual
+    // Adicionar mensagem atual (carregando as imagens dela, se houver)
     messages.push({
       role: 'user',
       content: currentMessage,
+      images: lastIsCurrent ? last.images : undefined,
     })
 
     return messages

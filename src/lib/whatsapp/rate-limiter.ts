@@ -32,11 +32,14 @@ export const TIER_CONFIG: Record<number, { mps: number; daily: number; name: str
   4: { mps: 500, daily: Infinity, name: 'Unlimited' }, // Margem de 1000
 }
 
+export type RateLimitBlockCode = 'throttled' | 'throughput' | 'pair_rate' | 'daily_quota'
+
 export interface RateLimitResult {
   allowed: boolean
   retryAfter?: number // segundos
   remaining?: number
   reason?: string
+  code?: RateLimitBlockCode
 }
 
 export interface RateLimiterStats {
@@ -90,6 +93,7 @@ export class WhatsAppRateLimiter {
         allowed: false,
         retryAfter: ttl > 0 ? ttl : 60,
         reason: 'Instance throttled due to rate limit errors',
+        code: 'throttled',
       }
     }
 
@@ -102,6 +106,7 @@ export class WhatsAppRateLimiter {
         retryAfter: Math.max(retryAfter, 1),
         remaining: throughputResult.remaining,
         reason: 'Throughput limit exceeded',
+        code: 'throughput',
       }
     }
 
@@ -120,6 +125,7 @@ export class WhatsAppRateLimiter {
         allowed: false,
         retryAfter: Math.max(retryAfter, 6), // Mínimo 6s (pair rate = 1 msg/6s)
         reason: 'Pair rate limit exceeded (max 10 msg/min per recipient)',
+        code: 'pair_rate',
       }
     }
 
@@ -141,6 +147,7 @@ export class WhatsAppRateLimiter {
         retryAfter: this.getSecondsUntilMidnight(),
         remaining: 0,
         reason: `Daily limit exceeded (${config.daily} messages)`,
+        code: 'daily_quota',
       }
     }
 

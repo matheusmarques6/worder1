@@ -30,11 +30,16 @@ import { useInboxConversations } from '@/hooks/useInboxConversations'
 import { useInboxMessages } from '@/hooks/useInboxMessages'
 import { useInboxContact } from '@/hooks/useInboxContact'
 import { useWhatsAppConnection } from '@/hooks/useWhatsAppConnectionManager'
+import { useCloudInboxRealtime } from '@/hooks/useCloudInboxRealtime'
 
 // Types
 import type { InboxConversation, InboxTask } from '@/types/inbox'
 
-const POLLING_INTERVAL = 5000
+// Polling e FALLBACK: 5s quando o realtime esta caido, 30s quando o
+// canal esta SUBSCRIBED (so pra pegar o que o realtime nao cobre, ex.
+// conversas legacy provider=evolution).
+const POLLING_INTERVAL_FALLBACK = 5000
+const POLLING_INTERVAL_REALTIME = 30000
 
 interface InboxContentProps {
   /** Altura customizada (default: calc(100vh - 4rem)) */
@@ -67,10 +72,9 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
     isLoading: conversationsLoading,
     isRefreshing, // ✅ NOVO: polling silencioso (não mostra loader)
     filters,
-    selectConversation, 
-    fetchConversations, 
-    updateConversation, 
-    toggleBot, 
+    selectConversation,
+    fetchConversations,
+    toggleBot,
     setFilters, 
     refresh: refreshConversations,
   } = useInboxConversations(organizationId, storeId)
@@ -130,8 +134,9 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
   // =============================================
   
   const handleConversationInsert = useCallback((conv: any) => {
-    // ✅ CRÍTICO: Verificar se conversa pertence à loja atual
-    if (storeId && conv.store_id !== storeId) {
+    // ✅ Filtro de loja no padrao "store-or-org" da API: descarta apenas
+    // conversa de OUTRA loja; store_id NULL (orfa/legacy) e visivel.
+    if (storeId && conv.store_id && conv.store_id !== storeId) {
       console.log('📥 [InboxContent] Ignoring conversation from different store')
       return
     }
@@ -140,13 +145,15 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
   }, [refreshConversations, storeId])
 
   const handleConversationUpdate = useCallback((conv: any) => {
-    // ✅ CRÍTICO: Verificar se conversa pertence à loja atual
-    if (storeId && conv.store_id !== storeId) {
+    if (storeId && conv.store_id && conv.store_id !== storeId) {
       return
     }
     console.log('📝 [InboxContent] Conversation update:', conv.id)
-    updateConversation(conv.id, conv)
-  }, [updateConversation, storeId])
+    // ⚠️ NAO usar updateConversation aqui: ela faz PUT na API — ecoar um
+    // evento de realtime como write criaria loop UPDATE→PUT→UPDATE.
+    // Refresh silencioso (isRefreshing, sem loader) traz o estado novo.
+    refreshConversations()
+  }, [refreshConversations, storeId])
 
   const handleNewMessage = useCallback((msg: any) => {
     console.log('📨 [InboxContent] New message:', msg.id)
@@ -162,6 +169,19 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
       updateMessageStatus(msg.id, msg.status)
     }
   }, [updateMessageStatus])
+
+  // =============================================
+  // REALTIME (Cloud API) — poll de 5s vira fallback
+  // =============================================
+  const { isConnected: realtimeConnected } = useCloudInboxRealtime({
+    organizationId,
+    conversationId: selectedConversation?.id ?? null,
+    onNewConversation: handleConversationInsert,
+    onConversationUpdate: handleConversationUpdate,
+    onNewMessage: handleNewMessage,
+    onMessageUpdate: handleStatusUpdate,
+    enabled: Boolean(organizationId && storeId),
+  })
 
   // =============================================
   // EFFECTS
@@ -207,19 +227,25 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
       clearInterval(pollingRef.current)
     }
 
+    // Realtime conectado => poll relaxa pra 30s (fallback + legacy).
+    // Canal caido/erro => volta pros 5s originais.
+    const interval = realtimeConnected
+      ? POLLING_INTERVAL_REALTIME
+      : POLLING_INTERVAL_FALLBACK
+
     pollingRef.current = setInterval(() => {
       if (selectedConversation) {
         refetchLatest()
       }
       refreshConversations()
-    }, POLLING_INTERVAL)
+    }, interval)
 
     return () => {
       if (pollingRef.current) {
         clearInterval(pollingRef.current)
       }
     }
-  }, [selectedConversation?.id, refetchLatest, refreshConversations])
+  }, [selectedConversation?.id, refetchLatest, refreshConversations, realtimeConnected])
 
   // =============================================
   // HANDLERS

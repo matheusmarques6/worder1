@@ -31,6 +31,14 @@ export const AI_DISABLED_REASON_LABELS: Record<string, string> = {
   budget_exceeded: 'Orçamento de IA excedido',
   ai_permanent_error: 'Erro do provedor de IA',
   transferred_to_human: 'Transferido para atendente',
+  // media_handoff: semantica igual a transferred_to_human (requer acao humana,
+  // NAO entra em AUTO_DISABLED_REASONS/isAutoDisabledReason) — intencional.
+  media_handoff: 'Mídia não interpretada pela IA',
+  // handoff_keyword / blocked_topic (guardrails de seguranca, Tasks 3/4):
+  // mesma semantica de transferred_to_human — requerem religar manual pela
+  // conversa, NAO entram em AUTO_DISABLED_REASONS/isAutoDisabledReason.
+  handoff_keyword: 'Palavra-chave de transferência',
+  blocked_topic: 'Tópico bloqueado',
 }
 
 /** Normaliza valores legados pro vocabulario canonico. */

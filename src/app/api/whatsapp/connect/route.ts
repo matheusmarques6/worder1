@@ -6,6 +6,7 @@ import {
   META_BASE_URL,
 } from '@/lib/whatsapp/cloud-api';
 import { encryptToken } from '@/lib/whatsapp/token-encryption';
+import { validateBusinessToken } from '@/lib/whatsapp/token-validation';
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
 import { wlog } from '@/lib/observability/whatsapp-logger';
@@ -364,44 +365,14 @@ async function validateCredentials(
       }
     }
 
-    // B.5 — Token quality check via debug_token. Só roda se o app tem credenciais.
+    // B.5 — Token quality check via debug_token (helper compartilhado com o
+    // Embedded Signup). Só roda se o app tem credenciais.
     const appId = process.env.META_APP_ID
     const appSecret = process.env.META_APP_SECRET
     if (appId && appSecret) {
-      try {
-        const dbgRes = await fetch(
-          `${META_BASE_URL}/debug_token?input_token=${encodeURIComponent(accessToken)}` +
-          `&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`
-        )
-        const dbg = await dbgRes.json()
-
-        if (dbg?.data) {
-          // Token expirando?
-          if (typeof dbg.data.expires_at === 'number' && dbg.data.expires_at > 0) {
-            const hoursLeft = (dbg.data.expires_at * 1000 - Date.now()) / 3600000
-            if (hoursLeft < 168) {
-              return {
-                valid: false,
-                error:
-                  `Token expira em ${Math.round(hoursLeft)}h. Use um System User Access Token (não expira) gerado em Business Manager → Usuários do Sistema → Gerar novo token.`
-              }
-            }
-          }
-
-          const scopes: string[] = Array.isArray(dbg.data.scopes) ? dbg.data.scopes : []
-          const required = ['whatsapp_business_messaging', 'whatsapp_business_management']
-          const missing = required.filter((s) => !scopes.includes(s))
-          if (scopes.length > 0 && missing.length > 0) {
-            return {
-              valid: false,
-              error:
-                `Token sem permissões obrigatórias: ${missing.join(', ')}. Edite o System User no Business Manager e adicione esses escopos.`
-            }
-          }
-        }
-      } catch (e) {
-        // debug_token é best-effort — se a Meta falha, segue.
-        console.warn('debug_token check falhou (seguindo):', (e as any)?.message)
+      const tokenCheck = await validateBusinessToken({ accessToken, appId, appSecret })
+      if (!tokenCheck.valid) {
+        return { valid: false, error: tokenCheck.error }
       }
     }
 

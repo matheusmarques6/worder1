@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
+import { resolveInboxConversation } from '@/lib/whatsapp/inbox-conversation-resolver'
 export const dynamic = 'force-dynamic';
 
 // GET /api/whatsapp/inbox/conversations/[id]
@@ -95,40 +96,63 @@ export async function PUT(
 
     const { id } = params
     const body = await request.json()
-    const { 
-      status, 
-      priority, 
-      assignedAgentId, 
-      isBotActive, 
+    const {
+      status,
+      priority,
+      assignedAgentId,
+      isBotActive,
       botDisabledReason,
-      internalNote 
+      internalNote
     } = body
+
+    // Conversas do inbox unificado podem viver em whatsapp_cloud_conversations
+    // OU whatsapp_conversations — resolver a tabela base antes do UPDATE.
+    const resolved = await resolveInboxConversation(supabase, id, orgId)
+    if (!resolved) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+    }
 
     const updates: any = {
       updated_at: new Date().toISOString()
     }
 
     if (status !== undefined) updates.status = status
-    if (priority !== undefined) updates.priority = priority
-    if (assignedAgentId !== undefined) {
-      updates.assigned_agent_id = assignedAgentId
-      updates.assigned_at = new Date().toISOString()
-    }
-    if (isBotActive !== undefined) {
-      // CORREÇÃO: Atualizar AMBOS os campos para compatibilidade
-      updates.is_bot_active = isBotActive
-      updates.ai_enabled = isBotActive  // <- AI Process verifica este campo!
-      if (!isBotActive) {
-        updates.bot_disabled_reason = botDisabledReason || null
-      } else {
-        updates.bot_disabled_reason = null
-        updates.bot_disabled_by = null
+
+    if (resolved.table === 'whatsapp_cloud_conversations') {
+      // Cloud: sem priority/internal_note/is_bot_active; usa assigned_to + ai_*
+      if (assignedAgentId !== undefined) updates.assigned_to = assignedAgentId
+      if (isBotActive !== undefined) {
+        updates.ai_enabled = isBotActive
+        if (!isBotActive) {
+          updates.ai_disabled_at = new Date().toISOString()
+          updates.ai_disabled_reason = botDisabledReason || 'manual'
+        } else {
+          updates.ai_disabled_at = null
+          updates.ai_disabled_reason = null
+        }
       }
+    } else {
+      if (priority !== undefined) updates.priority = priority
+      if (assignedAgentId !== undefined) {
+        updates.assigned_agent_id = assignedAgentId
+        updates.assigned_at = new Date().toISOString()
+      }
+      if (isBotActive !== undefined) {
+        // CORREÇÃO: Atualizar AMBOS os campos para compatibilidade
+        updates.is_bot_active = isBotActive
+        updates.ai_enabled = isBotActive  // <- AI Process verifica este campo!
+        if (!isBotActive) {
+          updates.bot_disabled_reason = botDisabledReason || null
+        } else {
+          updates.bot_disabled_reason = null
+          updates.bot_disabled_by = null
+        }
+      }
+      if (internalNote !== undefined) updates.internal_note = internalNote
     }
-    if (internalNote !== undefined) updates.internal_note = internalNote
 
     const { data, error } = await supabase
-      .from('whatsapp_conversations')
+      .from(resolved.table)
       .update(updates)
       .eq('id', id)
       .eq('organization_id', orgId)

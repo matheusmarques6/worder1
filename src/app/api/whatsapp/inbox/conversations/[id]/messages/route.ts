@@ -9,6 +9,12 @@ import {
   readOverrideFromRequest,
   buildOptOutBlockedResponse,
 } from '@/lib/whatsapp/opt-out-guard'
+import {
+  checkBeforeSend,
+  reportSendResult,
+  buildRateLimitedResponseBody,
+} from '@/lib/whatsapp/send-guard'
+import { computeCanSendTemplateOnly } from '@/lib/whatsapp/service-window'
 
 // ✅ FASE 3: Force dynamic para evitar cache
 export const dynamic = 'force-dynamic'
@@ -47,6 +53,25 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const hasMore = (data?.length || 0) > limit
     const messages = hasMore ? data?.slice(0, limit) : data
 
+    // Re-assina URLs de mídia a partir do storage_path a CADA leitura.
+    // A URL persistida em media_url expira em 1h; sem isso, mídia (inclusive
+    // enviada) quebra no reload. 1 chamada batch por página de mensagens.
+    const mediaPaths = (messages || [])
+      .map(m => m.media_storage_path)
+      .filter((p): p is string => !!p)
+    const signedByPath: Record<string, string> = {}
+    if (mediaPaths.length > 0) {
+      const { data: signed, error: signError } = await supabase.storage
+        .from('whatsapp-media')
+        .createSignedUrls(mediaPaths, 3600)
+      if (signError) {
+        console.error('[Messages GET] createSignedUrls error:', signError)
+      }
+      for (const s of signed || []) {
+        if (s.path && s.signedUrl) signedByPath[s.path] = s.signedUrl
+      }
+    }
+
     if (!before && !after) {
       const firstMsg = messages?.[0]
       const provider = firstMsg?.provider
@@ -60,7 +85,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const formatted = (messages || []).map(m => ({
       id: m.id, conversation_id: m.conversation_id, direction: m.direction,
       message_type: m.message_type || 'text', content: extractMessageText(m.content, m.text_body),
-      media_url: m.media_url, media_filename: m.media_filename, media_mime_type: m.media_mime_type,
+      media_url: (m.media_storage_path && signedByPath[m.media_storage_path]) || m.media_url,
+      media_filename: m.media_filename, media_mime_type: m.media_mime_type,
       status: m.status || 'sent', sent_by_bot: m.sent_by_bot || false,
       created_at: m.created_at || m.timestamp, delivered_at: m.delivered_at, read_at: m.read_at,
       meta_message_id: m.message_id,
@@ -119,6 +145,33 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         )
       }
 
+      // Janela de 24h (Meta): fora da janela so template aprovado. Sem este
+      // guard a mensagem ia ate a Meta e falhava la (erro 131047).
+      if (computeCanSendTemplateOnly(cloudConv.is_window_open, cloudConv.window_expires_at)) {
+        return NextResponse.json(
+          {
+            error: 'Janela de 24h expirada. Envie um template aprovado para reabrir a conversa.',
+            code: 'WINDOW_EXPIRED',
+          },
+          { status: 400, headers: NO_CACHE_HEADERS },
+        )
+      }
+
+      // Send guard — tier da Meta + circuit breaker (paridade com campanhas)
+      const guardCheck = await checkBeforeSend({
+        accountId: cloudConv.account.id,
+        phoneNumberId: cloudConv.account.phone_number_id,
+        recipientPhone: phoneNumber,
+        messagingLimit: cloudConv.account.messaging_limit,
+      })
+      if (!guardCheck.allowed) {
+        const body429 = buildRateLimitedResponseBody(guardCheck)
+        return NextResponse.json(body429, {
+          status: 429,
+          headers: { ...NO_CACHE_HEADERS, 'Retry-After': String(body429.retryAfter) },
+        })
+      }
+
       const client = createWhatsAppCloudClient({
         phoneNumberId: cloudConv.account.phone_number_id,
         accessToken: getAccessToken(cloudConv.account),
@@ -129,11 +182,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         result = await client.sendText(phoneNumber, content)
       } catch (apiError: any) {
         console.error('[Messages POST] Cloud API error:', apiError)
+        await reportSendResult({
+          accountId: cloudConv.account.id,
+          phoneNumberId: cloudConv.account.phone_number_id,
+          success: false,
+          errorCode: apiError?.code,
+          error: apiError,
+          messagingLimit: cloudConv.account.messaging_limit,
+        })
         return NextResponse.json(
           { error: apiError.message || 'Failed to send message', code: apiError.code },
           { status: 400, headers: NO_CACHE_HEADERS }
         )
       }
+      await reportSendResult({
+        accountId: cloudConv.account.id,
+        phoneNumberId: cloudConv.account.phone_number_id,
+        success: true,
+      })
 
       const messageId = result.messages?.[0]?.id
       const { data: saved } = await supabase

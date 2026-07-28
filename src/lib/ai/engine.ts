@@ -206,6 +206,7 @@ export class AIAgentEngine {
           messages: messages.map(m => ({
             role: (m.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
             content: m.content,
+            images: m.images,
           })),
           tools: activeTools,
           context: toolContext,
@@ -216,8 +217,11 @@ export class AIAgentEngine {
 
         await this.logUsage({
           conversationId,
-          inputTokens: 0,
-          outputTokens: 0,
+          // loopResult.{prompt,completion}Tokens = soma real de todas as
+          // rodadas do tool-loop (cada rodada carrega usage do provider) —
+          // sem isso o checkAiBudget não via custo de agentes com tools.
+          inputTokens: loopResult.promptTokens,
+          outputTokens: loopResult.completionTokens,
           responseTimeMs,
           sourcesUsed,
           actionsTriggered,
@@ -251,7 +255,7 @@ export class AIAgentEngine {
           maxTokens: this.agent.max_tokens,
           baseUrl: this.baseUrl,
         },
-        messages.map(m => ({ role: m.role as any, content: m.content }))
+        messages.map(m => ({ role: m.role as any, content: m.content, images: m.images }))
       )
 
       // 8. Pós-processamento

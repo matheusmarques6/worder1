@@ -2,22 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
+import { authorizeCronRequest } from '@/lib/cron-auth';
+import { buildResyncUpdate } from '@/lib/whatsapp/template-resync';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-function authorize(req: NextRequest): boolean {
-  if (req.headers.get('x-vercel-cron')) return true;
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = req.headers.get('authorization');
-    if (auth === `Bearer ${cronSecret}`) return true;
-  }
-  return process.env.NODE_ENV !== 'production';
+interface StaleTemplateRow {
+  /** Legacy alias of row_id (table PK). Kept by the RPC for rollout compat. */
+  template_id: string;
+  name: string;
+  language: string;
+  waba_id: string;
+  created_at: string;
+  age_minutes: number;
+  /** whatsapp_templates.id (PK) — unambiguous. */
+  row_id: string;
+  /** COALESCE(meta_template_id, template_id) from the table — Meta's ID. */
+  meta_template_id: string | null;
 }
 
 export async function GET(req: NextRequest) {
-  if (!authorize(req)) {
+  if (!authorizeCronRequest(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
@@ -32,16 +38,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  if (!staleTemplates || staleTemplates.length === 0) {
+  const rows = (staleTemplates || []) as StaleTemplateRow[];
+  if (rows.length === 0) {
     return NextResponse.json({ ok: true, checked: 0, updated: 0 });
   }
 
   // 2. Group templates by waba_id so we load each account once
-  const byWaba = new Map<string, typeof staleTemplates>();
-  for (const tpl of staleTemplates) {
-    const wabaId = tpl.waba_id as string;
-    if (!byWaba.has(wabaId)) byWaba.set(wabaId, []);
-    byWaba.get(wabaId)!.push(tpl);
+  const byWaba = new Map<string, StaleTemplateRow[]>();
+  for (const tpl of rows) {
+    if (!byWaba.has(tpl.waba_id)) byWaba.set(tpl.waba_id, []);
+    byWaba.get(tpl.waba_id)!.push(tpl);
   }
 
   let checked = 0;
@@ -78,48 +84,35 @@ export async function GET(req: NextRequest) {
     // 4. For each stale template, fetch current status from Meta
     for (const tpl of templates) {
       checked++;
+      // Rollout safety: if the RPC migration was not applied yet,
+      // row_id is undefined and template_id still carries the PK.
+      const rowId = tpl.row_id ?? tpl.template_id;
 
       try {
-        const { data: dbTemplate } = await supabaseAdmin
-          .from('whatsapp_templates')
-          .select('template_id, meta_template_id')
-          .eq('id', tpl.template_id)
-          .single();
-
-        const metaTemplateId = dbTemplate?.meta_template_id || dbTemplate?.template_id;
-        if (!metaTemplateId) {
-          errors.push(`Template ${tpl.template_id} (${tpl.name}): no Meta ID in DB`);
+        if (!tpl.meta_template_id) {
+          errors.push(`Template ${rowId} (${tpl.name}): no Meta ID in DB`);
           continue;
         }
 
-        const metaTemplate = await client.getTemplateById(metaTemplateId);
+        const metaTemplate = await client.getTemplateById(tpl.meta_template_id);
+        const update = buildResyncUpdate(metaTemplate);
+        if (!update) continue; // still PENDING on Meta's side
 
-        if (metaTemplate.status && metaTemplate.status !== 'PENDING') {
-          // Status changed on Meta side - update our DB
-          const { error: updateErr } = await supabaseAdmin
-            .from('whatsapp_templates')
-            .update({
-              status: metaTemplate.status,
-              components: metaTemplate.components || undefined,
-              rejection_reason:
-                metaTemplate.status === 'REJECTED'
-                  ? (metaTemplate as any).rejected_reason || (metaTemplate as any).quality_score?.reason || null
-                  : undefined,
-              synced_at: new Date().toISOString(),
-            })
-            .eq('id', tpl.template_id);
+        const { error: updateErr } = await supabaseAdmin
+          .from('whatsapp_templates')
+          .update(update)
+          .eq('id', rowId);
 
-          if (updateErr) {
-            errors.push(`Template ${tpl.template_id}: update failed - ${updateErr.message}`);
-          } else {
-            updated++;
-            console.log(
-              `[resync-templates] Template "${tpl.name}" (${tpl.language}) updated: PENDING -> ${metaTemplate.status}`
-            );
-          }
+        if (updateErr) {
+          errors.push(`Template ${rowId}: update failed - ${updateErr.message}`);
+        } else {
+          updated++;
+          console.log(
+            `[resync-templates] Template "${tpl.name}" (${tpl.language}) updated: PENDING -> ${update.status}`
+          );
         }
       } catch (e: any) {
-        errors.push(`Template ${tpl.template_id} (${tpl.name}): Meta API error - ${e.message}`);
+        errors.push(`Template ${rowId} (${tpl.name}): Meta API error - ${e.message}`);
       }
     }
   }
