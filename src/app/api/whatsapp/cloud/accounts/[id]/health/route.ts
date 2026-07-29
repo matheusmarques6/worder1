@@ -52,18 +52,18 @@ export async function GET(
     // Persist snapshot (non-blocking semantics — if it fails we still return
     // the live result, since the diagnostic is the primary value).
     //
-    // webhook_configured so e sobrescrito quando a Meta deu um veredito
-    // (true/false). Indeterminado (sem waba_id, META_APP_ID ausente, erro de
-    // rede) preserva o valor atual em vez de degradar o que ja se sabia.
-    const snapshot: Record<string, unknown> = {
+    // O veredito do webhook NAO e persistido de proposito. webhook_configured
+    // significa outra coisa — "a URL do webhook passou pelo challenge da Meta"
+    // (cloud/webhook/route.ts) — e e renderizado como tal em
+    // /integrations/meta. Sobrescrever com o estado da inscricao juntaria dois
+    // fatos independentes e apagaria o original. Enquanto nao houver coluna
+    // propria, o veredito e ao vivo: quem quer saber clica em "Verificar agora".
+    const snapshot = {
       last_health_check_at: health.checkedAt,
       last_health_status: status,
       last_health_error_code: health.errorCode ?? null,
       last_health_expires_at: health.expiresAt ?? null,
     };
-    if (typeof health.webhook?.subscribed === 'boolean') {
-      snapshot.webhook_configured = health.webhook.subscribed;
-    }
 
     if (health.webhook?.subscribed === false) {
       wlog.error('whatsapp.webhook.subscription_missing', {

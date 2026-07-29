@@ -73,9 +73,9 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
   const [checkingId, setCheckingId] = useState<string | null>(null)
   const [resubscribingId, setResubscribingId] = useState<string | null>(null)
   const [refreshingAccount, setRefreshingAccount] = useState<BusinessAccount | null>(null)
-  // Veredito ao vivo da ultima checagem, por conta. Nao vem do banco: o
-  // snapshot persistido guarda so o booleano (webhook_configured), e aqui
-  // queremos tambem os campos ausentes e o motivo de um indeterminado.
+  // Veredito da inscricao do webhook por conta — vive so nesta sessao. Nao ha
+  // coluna para ele (ver a nota em .../[id]/health/route.ts), entao recarregar
+  // a pagina volta para "nao verificado" em vez de mostrar dado velho.
   const [webhookState, setWebhookState] = useState<
     Record<string, { result?: WebhookSubscription; error?: string }>
   >({})
@@ -154,10 +154,6 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
               last_health_status: h.status ?? null,
               last_health_error_code: h.errorCode ?? null,
               last_health_expires_at: h.expiresAt ?? null,
-              webhook_configured:
-                typeof h.webhook?.subscribed === 'boolean'
-                  ? h.webhook.subscribed
-                  : a.webhook_configured,
             }
           : a
       ))
@@ -203,11 +199,6 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
         ...prev,
         [accountId]: { result: webhook, error: data.webhookError },
       }))
-      if (typeof webhook?.subscribed === 'boolean') {
-        setAccounts(prev => prev.map(a =>
-          a.id === accountId ? { ...a, webhook_configured: webhook.subscribed as boolean } : a
-        ))
-      }
 
       if (webhook?.subscribed === false) {
         // POST aceito mas a releitura desmentiu — nao dizer "resolvido".
@@ -346,7 +337,7 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
                 <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     <HealthBadge account={account} />
-                    <WebhookBadge account={account} live={wh} />
+                    <WebhookBadge live={wh} />
                     {account.last_health_check_at && (
                       <span className="text-xs text-gray-400">
                         Verificado: {formatAbsoluteTime(account.last_health_check_at)}
@@ -527,22 +518,16 @@ function HealthBadge({ account }: { account: BusinessAccount }) {
 // =============================================
 
 function WebhookBadge({
-  account,
   live,
 }: {
-  account: BusinessAccount
   live?: { result?: WebhookSubscription; error?: string }
 }) {
-  // Veredito ao vivo tem prioridade; sem ele cai no snapshot do banco.
-  const subscribed = live?.result
-    ? live.result.subscribed
-    : live?.error
-      ? null
-      : account.last_health_check_at
-        ? account.webhook_configured
-        : undefined
-
-  if (subscribed === undefined) {
+  // SO veredito ao vivo. Nao cair para webhook_configured do banco: aquela
+  // coluna diz "a URL passou pelo challenge da Meta", o que fica true desde a
+  // conexao e nao tem relacao com a inscricao estar viva. Usa-la aqui pintaria
+  // de verde justamente a conta com inbound morto — o falso conforto que este
+  // badge existe para eliminar. Sem checagem nesta sessao: "nao verificado".
+  if (!live) {
     return (
       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">
         <Radio className="w-3 h-3" />
@@ -550,6 +535,8 @@ function WebhookBadge({
       </span>
     )
   }
+
+  const subscribed = live.result ? live.result.subscribed : null
 
   if (subscribed === false) {
     return (
@@ -570,7 +557,7 @@ function WebhookBadge({
   }
 
   // Inscrito, mas faltando campo que processamos (ex.: sem 'messages').
-  if ((live?.result?.missingFields.length ?? 0) > 0) {
+  if ((live.result?.missingFields.length ?? 0) > 0) {
     return (
       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700">
         <AlertTriangle className="w-3 h-3" />

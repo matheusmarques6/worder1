@@ -109,13 +109,6 @@ export async function POST(
       webhookError = e?.message || 'Falha ao confirmar a inscricao';
     }
 
-    if (typeof webhook?.subscribed === 'boolean') {
-      await supabaseAdmin
-        .from('whatsapp_business_accounts')
-        .update({ webhook_configured: webhook.subscribed })
-        .eq('id', account.id);
-    }
-
     wlog.info('whatsapp.webhook.resubscribed', {
       account_id: account.id,
       organization_id: orgId,
@@ -124,7 +117,13 @@ export async function POST(
       app_count: webhook?.appCount ?? null,
     });
 
-    return NextResponse.json({ success: true, webhook, webhookError });
+    // success reflete a RELEITURA, nao o 200 do POST: a Meta aceita a chamada
+    // e ainda assim deixa o app fora da lista em alguns casos de permissao.
+    return NextResponse.json({
+      success: webhook?.subscribed !== false,
+      webhook,
+      webhookError,
+    });
   } catch (e: any) {
     console.error('[accounts/resubscribe] unhandled:', e);
     return NextResponse.json(
