@@ -28,6 +28,7 @@ import { RuleEngine, type EventData } from '@/lib/services/automation/rule-engin
 import { wlog } from '@/lib/observability/whatsapp-logger';
 import { applyCampaignRecipientWebhookStatus } from './campaign-recipient-status';
 import { statusTimestampFields } from './status-timestamps';
+import { resolveWebhookAccount } from './webhook-account-resolver';
 import { routeInboundForAi } from '@/lib/ai/media/router';
 
 // Ordem canonica de status WhatsApp. Webhooks chegam fora de ordem em raros
@@ -80,43 +81,71 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
             continue;
           }
 
-          // Lookup: filtra por phone_number_id + waba_id (quando disponivel).
-          // Row legacy pode ter waba_id NULL — neste caso so phone_number_id ja
-          // basta (pre-multi-tenant). Se >1 row casar, e bug (DB UNIQUE deveria
-          // impedir): logamos e pulamos pra nao chutar.
-          let accountQuery = supabase
+          // Lookup: filtra por phone_number_id no banco e desempata por
+          // waba_id em memoria (resolveWebhookAccount — pura, testada). O
+          // limite de 10 e folga: as duas UNIQUE do banco tornam >2 linhas
+          // impossivel na pratica, e o corte serve so de teto de leitura.
+          const { data: matchingAccounts, error: lookupError } = await supabase
             .from('whatsapp_business_accounts')
             .select('*')
-            .eq('phone_number_id', phoneNumberId);
-          if (entryWabaId) {
-            accountQuery = accountQuery.eq('waba_id', entryWabaId);
-          }
-          const { data: matchingAccounts } = await accountQuery.limit(2);
-          const account = matchingAccounts?.[0];
+            .eq('phone_number_id', phoneNumberId)
+            .limit(10);
 
-          if (matchingAccounts && matchingAccounts.length > 1) {
-            wlog.error('whatsapp.webhook.account_ambiguous', {
+          if (lookupError) {
+            // Falha de infra != conta inexistente. Propaga pra o evento ser
+            // reprocessado em vez de virar 'done' com a mensagem perdida.
+            wlog.error('whatsapp.webhook.account_lookup_failed', {
               phone_number_id: phoneNumberId,
               waba_id: entryWabaId,
-              matches: matchingAccounts.length,
+              error: lookupError.message,
+            });
+            throw lookupError;
+          }
+
+          const resolution = resolveWebhookAccount(matchingAccounts, entryWabaId);
+
+          if (!resolution.ok) {
+            // ANTES ESTE DESCARTE ERA MUDO: sem log, e o retorno de
+            // processWebhookPayload e ignorado pelo caller sincrono. A Meta
+            // recebia 200, nao fazia retry, e nada aparecia em log nenhum —
+            // inbound morto e invisivel ao mesmo tempo. Agora grita.
+            wlog.error('whatsapp.webhook.account_unresolved', {
+              phone_number_id: phoneNumberId,
+              waba_id_from_meta: entryWabaId,
+              reason: resolution.reason,
+              candidates: resolution.candidates,
+              // Sem isto o operador nao sabe o que comparar: e o valor gravado
+              // que diverge do entry.id da Meta.
+              stored_waba_ids: (matchingAccounts || []).map((a: any) => a.waba_id ?? null),
+              hint:
+                resolution.reason === 'ambiguous'
+                  ? 'Mais de uma conta candidata — o banco tem linha duplicada.'
+                  : 'Nenhuma conta com este phone_number_id + waba_id. Confira waba_id gravado vs o WABA ID na Meta.',
             });
             result.skipped++;
             result.details.push({
               type: 'change',
               status: 'skipped',
-              reason: `ambiguous_account:${phoneNumberId}`,
+              reason:
+                resolution.reason === 'ambiguous'
+                  ? `ambiguous_account:${phoneNumberId}`
+                  : `unknown_phone_number_id:${phoneNumberId}`,
             });
             continue;
           }
 
-          if (!account) {
-            result.skipped++;
-            result.details.push({
-              type: 'change',
-              status: 'skipped',
-              reason: `unknown_phone_number_id:${phoneNumberId}`,
+          const account = resolution.account;
+
+          if (resolution.matchedBy === 'legacy_null_waba') {
+            // Casou por ser a unica linha legada com waba_id NULL. Funciona,
+            // mas e um match por eliminacao: registrar torna auditavel e
+            // aponta o backfill que encerra o caso.
+            wlog.warn('whatsapp.webhook.account_matched_legacy', {
+              account_id: account.id,
+              phone_number_id: phoneNumberId,
+              waba_id_from_meta: entryWabaId,
+              hint: 'Linha com waba_id NULL. Faca backfill do waba_id nesta conta.',
             });
-            continue;
           }
 
           for (const message of value.messages || []) {

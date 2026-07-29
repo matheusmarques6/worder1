@@ -410,6 +410,28 @@ async function validateCredentials(
           details: wabaData.error
         }
       }
+
+      // A checagem acima so prova que o token LE este WABA — nao que ele e o
+      // WABA deste numero. Sem a comparacao abaixo, colar o ID de outra WABA
+      // do mesmo Business Manager passava, era gravado (o retorno prefere
+      // `wabaId` ao detectado) e a partir dai TODO webhook era descartado:
+      // waba_id gravado != entry.id que a Meta manda. Falha silenciosa —
+      // envio segue funcionando, nada entra.
+      // Só compara quando ha valor detectado: a deteccao e best-effort e falha
+      // sem whatsapp_business_management, caso em que o valor do usuario e a
+      // unica fonte e segue sendo aceito.
+      if (detectedWabaId && String(detectedWabaId) !== String(wabaId)) {
+        return {
+          valid: false,
+          error: 'WABA ID não corresponde ao número informado',
+          details: {
+            informado: wabaId,
+            detectado: detectedWabaId,
+            explicacao:
+              'Este phone_number_id pertence ao WABA detectado. Use o WABA ID detectado ou deixe o campo em branco para preenchimento automático.',
+          },
+        }
+      }
     }
 
     return {
