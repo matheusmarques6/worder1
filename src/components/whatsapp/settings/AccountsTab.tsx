@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import {
   Smartphone, Plus, Trash2, Loader2, Wifi, WifiOff, Copy, Check,
-  RefreshCw, KeyRound, AlertTriangle, ShieldCheck, X,
+  RefreshCw, KeyRound, AlertTriangle, ShieldCheck, X, Radio, Link2,
 } from 'lucide-react'
 import { useStoreStore } from '@/stores'
 import { useToast } from '@/components/ui/Toast'
@@ -29,12 +29,26 @@ interface BusinessAccount {
   last_health_expires_at?: string | null
 }
 
+/**
+ * Estado da inscricao do app nos webhooks do WABA. Espelha
+ * WABASubscriptionState em lib/whatsapp/cloud-api.ts.
+ */
+interface WebhookSubscription {
+  subscribed: boolean | null
+  subscribedFields: string[]
+  missingFields: string[]
+  appCount: number
+  note?: string
+}
+
 interface HealthCheckResult {
   valid: boolean
   status?: 'healthy' | 'expired' | 'invalid' | 'error'
   expiresAt?: string | null
   errorCode?: number
   errorMessage?: string
+  webhook?: WebhookSubscription
+  webhookError?: string
   checkedAt: string
 }
 
@@ -57,7 +71,14 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
   const [copied, setCopied] = useState(false)
   const [showConnectModal, setShowConnectModal] = useState(false)
   const [checkingId, setCheckingId] = useState<string | null>(null)
+  const [resubscribingId, setResubscribingId] = useState<string | null>(null)
   const [refreshingAccount, setRefreshingAccount] = useState<BusinessAccount | null>(null)
+  // Veredito ao vivo da ultima checagem, por conta. Nao vem do banco: o
+  // snapshot persistido guarda so o booleano (webhook_configured), e aqui
+  // queremos tambem os campos ausentes e o motivo de um indeterminado.
+  const [webhookState, setWebhookState] = useState<
+    Record<string, { result?: WebhookSubscription; error?: string }>
+  >({})
 
   const webhookUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/whatsapp/cloud/webhook`
@@ -133,10 +154,26 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
               last_health_status: h.status ?? null,
               last_health_error_code: h.errorCode ?? null,
               last_health_expires_at: h.expiresAt ?? null,
+              webhook_configured:
+                typeof h.webhook?.subscribed === 'boolean'
+                  ? h.webhook.subscribed
+                  : a.webhook_configured,
             }
           : a
       ))
-      if (h.valid) {
+      setWebhookState(prev => ({
+        ...prev,
+        [accountId]: { result: h.webhook, error: h.webhookError },
+      }))
+
+      // Webhook morto vence o resultado do token na mensagem: e a falha que
+      // deixa o envio funcionando e o recebimento parado.
+      if (h.webhook?.subscribed === false) {
+        toast.error(
+          'Webhook desinscrito',
+          'Nenhuma mensagem recebida chega ate reinscrever. Clique em "Reinscrever webhook".',
+        )
+      } else if (h.valid) {
         toast.success('Conexao ativa', h.expiresAt ? `Expira em ${formatRelativeExpiry(h.expiresAt)}` : 'Token sem expiracao')
       } else {
         toast.warning('Conexao com problema', h.errorMessage || 'Token invalido')
@@ -145,6 +182,43 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
       toast.error('Erro de rede', e?.message || 'Tente novamente')
     } finally {
       setCheckingId(null)
+    }
+  }
+
+  async function resubscribeWebhook(accountId: string) {
+    setResubscribingId(accountId)
+    try {
+      const res = await authedFetch(
+        `/api/whatsapp/cloud/accounts/${accountId}/resubscribe`,
+        { method: 'POST' },
+      )
+      const data = await safeJson(res)
+      if (!res.ok) {
+        toast.error('Falha ao reinscrever', data.hint || data.details || data.error || `HTTP ${res.status}`)
+        return
+      }
+
+      const webhook: WebhookSubscription | undefined = data.webhook
+      setWebhookState(prev => ({
+        ...prev,
+        [accountId]: { result: webhook, error: data.webhookError },
+      }))
+      if (typeof webhook?.subscribed === 'boolean') {
+        setAccounts(prev => prev.map(a =>
+          a.id === accountId ? { ...a, webhook_configured: webhook.subscribed as boolean } : a
+        ))
+      }
+
+      if (webhook?.subscribed === false) {
+        // POST aceito mas a releitura desmentiu — nao dizer "resolvido".
+        toast.warning('Reinscricao nao confirmada', 'A Meta aceitou a chamada mas o app segue fora da lista.')
+      } else {
+        toast.success('Webhook reinscrito', 'Peca ao cliente para enviar uma mensagem de teste.')
+      }
+    } catch (e: any) {
+      toast.error('Erro de rede', e?.message || 'Tente novamente')
+    } finally {
+      setResubscribingId(null)
     }
   }
 
@@ -226,6 +300,9 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
           {accounts.map(account => {
             const isActive = account.status === 'active'
             const isChecking = checkingId === account.id
+            const isResubscribing = resubscribingId === account.id
+            const wh = webhookState[account.id]
+            const webhookBroken = wh?.result?.subscribed === false
             return (
               <div key={account.id} className="bg-white rounded-xl border border-gray-200 p-5">
                 <div className="flex items-start justify-between">
@@ -265,10 +342,11 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
                   </div>
                 </div>
 
-                {/* Token health section */}
+                {/* Token + webhook health section */}
                 <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     <HealthBadge account={account} />
+                    <WebhookBadge account={account} live={wh} />
                     {account.last_health_check_at && (
                       <span className="text-xs text-gray-400">
                         Verificado: {formatAbsoluteTime(account.last_health_check_at)}
@@ -285,6 +363,19 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
                       Verificar agora
                     </button>
                     <button
+                      onClick={() => resubscribeWebhook(account.id)}
+                      disabled={isResubscribing}
+                      title="Reinscreve este app nos webhooks do WABA na Meta"
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg disabled:opacity-50 ${
+                        webhookBroken
+                          ? 'text-white bg-red-600 hover:bg-red-700 border-red-600'
+                          : 'text-gray-700 bg-gray-50 hover:bg-gray-100 border-gray-200'
+                      }`}
+                    >
+                      {isResubscribing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+                      Reinscrever webhook
+                    </button>
+                    <button
                       onClick={() => setRefreshingAccount(account)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg"
                     >
@@ -293,6 +384,30 @@ export function AccountsTab({ organizationId }: AccountsTabProps) {
                     </button>
                   </div>
                 </div>
+
+                {/* Explicacao do estado do webhook — so quando ha algo a dizer */}
+                {(webhookBroken || wh?.error || wh?.result?.note || (wh?.result?.missingFields?.length ?? 0) > 0) && (
+                  <div
+                    className={`mt-3 rounded-lg border p-3 text-xs ${
+                      webhookBroken
+                        ? 'bg-red-50 border-red-200 text-red-800'
+                        : 'bg-gray-50 border-gray-200 text-gray-600'
+                    }`}
+                  >
+                    {webhookBroken && (
+                      <p className="font-medium mb-1">
+                        Este numero nao recebe webhook da Meta. O envio continua
+                        funcionando, mas nenhuma mensagem do cliente entra e as
+                        mensagens enviadas nunca saem de &quot;enviada&quot;.
+                      </p>
+                    )}
+                    {wh?.result?.note && <p>{wh.result.note}</p>}
+                    {(wh?.result?.missingFields?.length ?? 0) > 0 && (
+                      <p>Campos ausentes na inscricao: {wh!.result!.missingFields.join(', ')}</p>
+                    )}
+                    {wh?.error && <p>Nao foi possivel checar: {wh.error}</p>}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -399,6 +514,75 @@ function HealthBadge({ account }: { account: BusinessAccount }) {
     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700">
       <AlertTriangle className="w-3 h-3" />
       Erro
+    </span>
+  )
+}
+
+// =============================================
+// WebhookBadge
+//
+// Separado do HealthBadge de proposito: token valido e webhook vivo sao
+// coisas independentes, e tratar "token ok" como "conectado" foi exatamente
+// o que escondeu um WABA sem inscricao recebendo zero mensagens.
+// =============================================
+
+function WebhookBadge({
+  account,
+  live,
+}: {
+  account: BusinessAccount
+  live?: { result?: WebhookSubscription; error?: string }
+}) {
+  // Veredito ao vivo tem prioridade; sem ele cai no snapshot do banco.
+  const subscribed = live?.result
+    ? live.result.subscribed
+    : live?.error
+      ? null
+      : account.last_health_check_at
+        ? account.webhook_configured
+        : undefined
+
+  if (subscribed === undefined) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">
+        <Radio className="w-3 h-3" />
+        Webhook nao verificado
+      </span>
+    )
+  }
+
+  if (subscribed === false) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-red-100 text-red-700">
+        <AlertTriangle className="w-3 h-3" />
+        Webhook desinscrito
+      </span>
+    )
+  }
+
+  if (subscribed === null) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700">
+        <AlertTriangle className="w-3 h-3" />
+        Webhook indeterminado
+      </span>
+    )
+  }
+
+  // Inscrito, mas faltando campo que processamos (ex.: sem 'messages').
+  if ((live?.result?.missingFields.length ?? 0) > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700">
+        <AlertTriangle className="w-3 h-3" />
+        Webhook incompleto
+      </span>
+    )
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+      <Radio className="w-3 h-3" />
+      Webhook ativo
     </span>
   )
 }

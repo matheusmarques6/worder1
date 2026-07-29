@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
 import { checkAccountHealth, deriveHealthStatus } from '@/lib/whatsapp/account-health';
+import { wlog } from '@/lib/observability/whatsapp-logger';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -50,14 +51,33 @@ export async function GET(
 
     // Persist snapshot (non-blocking semantics — if it fails we still return
     // the live result, since the diagnostic is the primary value).
+    //
+    // webhook_configured so e sobrescrito quando a Meta deu um veredito
+    // (true/false). Indeterminado (sem waba_id, META_APP_ID ausente, erro de
+    // rede) preserva o valor atual em vez de degradar o que ja se sabia.
+    const snapshot: Record<string, unknown> = {
+      last_health_check_at: health.checkedAt,
+      last_health_status: status,
+      last_health_error_code: health.errorCode ?? null,
+      last_health_expires_at: health.expiresAt ?? null,
+    };
+    if (typeof health.webhook?.subscribed === 'boolean') {
+      snapshot.webhook_configured = health.webhook.subscribed;
+    }
+
+    if (health.webhook?.subscribed === false) {
+      wlog.error('whatsapp.webhook.subscription_missing', {
+        account_id: account.id,
+        organization_id: orgId,
+        waba_id: account.waba_id,
+        phone_number_id: account.phone_number_id,
+        app_count: health.webhook.appCount,
+      });
+    }
+
     const { error: updateError } = await supabaseAdmin
       .from('whatsapp_business_accounts')
-      .update({
-        last_health_check_at: health.checkedAt,
-        last_health_status: status,
-        last_health_error_code: health.errorCode ?? null,
-        last_health_expires_at: health.expiresAt ?? null,
-      })
+      .update(snapshot)
       .eq('id', account.id);
 
     const persisted = !updateError;

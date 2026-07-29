@@ -900,6 +900,133 @@ export async function subscribeAppToWABA(params: {
 }
 
 /**
+ * Estado da inscricao do app nos webhooks de um WABA.
+ *
+ * `subscribed === false` e o unico veredito realmente acionavel: significa
+ * que NENHUM webhook chega (nem mensagens do cliente, nem recibos de entrega)
+ * enquanto o envio continua funcionando normalmente — o modo de falha mais
+ * silencioso da Cloud API.
+ */
+export interface WABASubscriptionState {
+  /** true = inscrito; false = definitivamente nao; null = indeterminado. */
+  subscribed: boolean | null;
+  /** Campos que a inscricao carrega. Vazio quando a Meta nao os reporta. */
+  subscribedFields: string[];
+  /** Campos de WABA_SUBSCRIBED_FIELDS ausentes (so quando a Meta os reporta). */
+  missingFields: string[];
+  /** Total de apps inscritos no WABA. */
+  appCount: number;
+  /** Por que o veredito e indeterminado / parcial. */
+  note?: string;
+}
+
+/**
+ * Le a inscricao atual do WABA: GET /{wabaId}/subscribed_apps.
+ * Lanca WhatsAppCloudError se a Meta recusar (token sem
+ * whatsapp_business_management, WABA inexistente, etc).
+ */
+export async function getWABASubscribedApps(params: {
+  wabaId: string;
+  accessToken: string;
+}): Promise<any> {
+  const res = await fetch(`${META_BASE_URL}/${params.wabaId}/subscribed_apps`, {
+    headers: { Authorization: `Bearer ${params.accessToken}` },
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new WhatsAppCloudError(
+      data.error || { message: 'subscribed_apps read failed', code: res.status },
+    );
+  }
+  return data;
+}
+
+/**
+ * Interpreta a resposta de /subscribed_apps. Pura — testada isoladamente.
+ *
+ * `appId` (META_APP_ID) e o que permite afirmar que a inscricao e DESTE app.
+ * Sem ele o veredito fica indeterminado, exceto no caso decisivo de lista
+ * vazia: zero apps inscritos quebra o webhook independente de qual app seja.
+ */
+export function deriveWebhookSubscription(
+  apiResponse: any,
+  appId?: string | null,
+): WABASubscriptionState {
+  const entries: any[] = Array.isArray(apiResponse?.data) ? apiResponse.data : [];
+  const appCount = entries.length;
+
+  if (appCount === 0) {
+    return {
+      subscribed: false,
+      subscribedFields: [],
+      missingFields: [...WABA_SUBSCRIBED_FIELDS],
+      appCount: 0,
+      note: 'Nenhum app inscrito neste WABA — a Meta nao envia webhook algum.',
+    };
+  }
+
+  const entryAppId = (e: any) => e?.whatsapp_business_api_data?.id ?? e?.id;
+  // A Meta ja devolveu subscribed_fields nos dois niveis conforme a versao.
+  const entryFields = (e: any): string[] | null => {
+    const raw = e?.subscribed_fields ?? e?.whatsapp_business_api_data?.subscribed_fields;
+    if (!Array.isArray(raw)) return null;
+    return raw.map((f: any) => (typeof f === 'string' ? f : f?.name)).filter(Boolean);
+  };
+
+  const matched = appId
+    ? entries.find((e) => String(entryAppId(e)) === String(appId))
+    : undefined;
+
+  // Fonte dos campos: o app casado; se o veredito e indeterminado mas so ha
+  // um inscrito, ele e informativo o bastante para listar campos ausentes.
+  const fieldsSource = matched ?? (appCount === 1 ? entries[0] : undefined);
+  const fields = fieldsSource ? entryFields(fieldsSource) : null;
+
+  // fields === null => a Meta nao reportou os campos. Tratar como "todos
+  // ausentes" seria alarme falso, entao nao acusamos nada.
+  const subscribedFields = fields ?? [];
+  const missingFields = fields
+    ? WABA_SUBSCRIBED_FIELDS.filter((f) => !fields.includes(f))
+    : [];
+  const fieldsNote = fields
+    ? undefined
+    : 'A Meta nao reportou subscribed_fields nesta resposta.';
+
+  if (!appId) {
+    return {
+      subscribed: null,
+      subscribedFields,
+      missingFields,
+      appCount,
+      note: [
+        `META_APP_ID nao configurado — ${appCount} app(s) inscrito(s), sem como confirmar que e este.`,
+        fieldsNote,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    };
+  }
+
+  if (!matched) {
+    return {
+      subscribed: false,
+      subscribedFields: [],
+      missingFields: [...WABA_SUBSCRIBED_FIELDS],
+      appCount,
+      note: `Este app (${appId}) nao esta na lista de inscritos — ha ${appCount} outro(s) app(s) inscrito(s).`,
+    };
+  }
+
+  return {
+    subscribed: true,
+    subscribedFields,
+    missingFields,
+    appCount,
+    note: fieldsNote,
+  };
+}
+
+/**
  * Register a phone number with Meta after Embedded Signup. PIN is required
  * by Meta API; for accounts without 2FA the value is arbitrary but must be
  * 6 digits.
