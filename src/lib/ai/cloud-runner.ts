@@ -355,6 +355,37 @@ export async function maybeRunAgentForCloudConversation(
     return { replied: false, transferred: false, skipped: 'ai_disabled' };
   }
 
+  // ---------- Progresso ao vivo (whatsapp_ai_run_steps) ----------
+  // Definido ANTES de resolver o agente porque os motivos mais comuns de
+  // silencio (nenhum agente ativo, stop_on_human, max_messages) acontecem em
+  // guards que retornam cedo. Sem registrar esses casos, o inbox mostrava
+  // "Agente vai responder" e depois nada, para sempre — que e exatamente a
+  // pergunta "o bot esta ativo, por que nao respondeu?".
+  //
+  // skipSend === simulacao (/api/ai/test/cloud-webhook), que roda contra uma
+  // conversa REAL: gravar progresso ali faria o inbox mostrar um agente
+  // trabalhando numa resposta que nunca vai chegar.
+  const runId = randomUUID();
+  // agentId so existe depois da RPC; os guards anteriores registram sem ele.
+  let stepAgentId: string | undefined;
+  const step = skipSend
+    ? async () => {}
+    : (s: AiRunStep, detail?: string, metadata?: Record<string, unknown>) =>
+        recordAiStep({
+          organizationId,
+          conversationId: conversation.id,
+          runId,
+          agentId: stepAgentId,
+          step: s,
+          detail,
+          metadata,
+        });
+
+  /** Encerra o run explicando por que a IA nao vai responder. */
+  const skip = async (detail: string): Promise<void> => {
+    await step(AI_RUN_STEPS.SKIPPED, detail);
+  };
+
   // ---------- Resolver agente ativo ----------
   // RPC agnóstica: compara p_channel_id contra settings.channels.channel_ids;
   // agente com all_channels=true casa sempre. channel = account.id.
@@ -372,10 +403,12 @@ export async function maybeRunAgentForCloudConversation(
     return { replied: false, transferred: false, error: agentErr.message };
   }
   if (!agentRows || agentRows.length === 0) {
+    await skip('Nenhum agente de IA ativo para este canal');
     return { replied: false, transferred: false, skipped: 'no_active_agent' };
   }
 
   const agentId: string = agentRows[0].agent_id;
+  stepAgentId = agentId;
 
   // ---------- Buscar agente completo (provider/model/settings) ----------
   const { data: agent } = await supabaseAdmin
@@ -386,33 +419,12 @@ export async function maybeRunAgentForCloudConversation(
     .maybeSingle();
 
   if (!agent) {
+    await skip('Agente configurado não foi encontrado');
     return { replied: false, transferred: false, skipped: 'agent_not_found' };
   }
 
   const behavior = agent.settings?.behavior || {};
   const safety = agent.settings?.safety || {};
-
-  // ---------- Progresso ao vivo (whatsapp_ai_run_steps) ----------
-  // runId agrupa os passos DESTE run. Definido aqui (e nao no topo) porque so
-  // faz sentido registrar progresso depois de existir um agente resolvido —
-  // inbound barrado por guard nao e "agente trabalhando".
-  const runId = randomUUID();
-  // skipSend === simulacao (/api/ai/test/cloud-webhook), que roda contra uma
-  // conversa REAL. Gravar progresso ali faria o inbox mostrar um agente
-  // trabalhando numa resposta que nunca vai chegar — e sem passo terminal, o
-  // painel ficaria preso. Simulacao nao emite progresso.
-  const step = skipSend
-    ? async () => {}
-    : (s: AiRunStep, detail?: string, metadata?: Record<string, unknown>) =>
-        recordAiStep({
-          organizationId,
-          conversationId: conversation.id,
-          runId,
-          agentId,
-          step: s,
-          detail,
-          metadata,
-        });
 
   /**
    * Emite o passo terminal correspondente a um resultado e o devolve.
@@ -440,6 +452,7 @@ export async function maybeRunAgentForCloudConversation(
   // conversations/[id]/bot com ai_agent_id grava conversation.ai_agent_id.
   // Agente manual só roda quando foi explicitamente atribuído a ESTA conversa.
   if (behavior.activate_on === 'manual' && conversation.ai_agent_id !== agentId) {
+    await skip('Agente é de ativação manual e não está atribuído a esta conversa');
     return {
       replied: false,
       transferred: false,
@@ -459,6 +472,7 @@ export async function maybeRunAgentForCloudConversation(
       cooldownSeconds: behavior.cooldown_after_transfer,
     })
   ) {
+    await skip('Em cooldown depois de uma transferência para humano');
     return { replied: false, transferred: false, agentId, skipped: 'transfer_cooldown' };
   }
 
@@ -478,6 +492,7 @@ export async function maybeRunAgentForCloudConversation(
     if (lastBot?.timestamp) {
       const elapsed = Date.now() - new Date(lastBot.timestamp).getTime();
       if (elapsed < COOLDOWN_MS) {
+        await skip('Cooldown: o agente acabou de responder');
         return { replied: false, transferred: false, skipped: 'cooldown' };
       }
     }
@@ -494,6 +509,7 @@ export async function maybeRunAgentForCloudConversation(
       .eq('sent_by_bot', true);
 
     if ((count || 0) >= maxMessages) {
+      await skip(`Limite de ${maxMessages} resposta(s) por conversa atingido`);
       return { replied: false, transferred: false, skipped: 'max_messages' };
     }
   }
@@ -510,6 +526,11 @@ export async function maybeRunAgentForCloudConversation(
       .maybeSingle();
 
     if (humanMsg) {
+      // Guard PERMANENTE por conversa: uma unica mensagem manual no passado
+      // silencia o agente para sempre nela. Sem este passo o inbox nao tinha
+      // como explicar o silencio — o badge continua "Bot Ativo", porque
+      // ai_enabled segue true; quem barra e este guard, nao a flag.
+      await skip('Um humano já respondeu nesta conversa (stop_on_human_reply)');
       return { replied: false, transferred: false, skipped: 'stop_on_human' };
     }
   }
