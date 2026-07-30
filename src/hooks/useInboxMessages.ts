@@ -19,7 +19,12 @@ interface UseInboxMessagesReturn {
   sendMedia: (params: SendMediaParams) => Promise<InboxMessage | OptedOutSignal | null>
   loadMore: () => Promise<void>
   addMessage: (message: InboxMessage) => void
-  updateMessageStatus: (messageId: string, status: InboxMessage['status']) => void
+  updateMessageStatus: (
+    messageId: string,
+    status: InboxMessage['status'],
+    /** Timestamps reais da Meta; sem eles cai no relogio local. */
+    timestamps?: { deliveredAt?: string | null; readAt?: string | null },
+  ) => void
   clear: () => void
   refetchLatest: () => Promise<void>
 }
@@ -377,18 +382,36 @@ export function useInboxMessages(): UseInboxMessagesReturn {
   // =============================================
   // UPDATE MESSAGE STATUS
   // =============================================
-  const updateMessageStatus = useCallback((messageId: string, status: InboxMessage['status']) => {
+  const updateMessageStatus = useCallback((
+    messageId: string,
+    status: InboxMessage['status'],
+    timestamps?: { deliveredAt?: string | null; readAt?: string | null },
+  ) => {
     setMessages(prev =>
-      prev.map(m =>
-        m.id === messageId || m.meta_message_id === messageId
-          ? { 
-              ...m, 
-              status,
-              ...(status === 'delivered' && { delivered_at: new Date().toISOString() }),
-              ...(status === 'read' && { read_at: new Date().toISOString() }),
-            }
-          : m
-      )
+      prev.map(m => {
+        if (m.id !== messageId && m.meta_message_id !== messageId) return m
+
+        // Preferir o timestamp REAL da Meta, que vem na row do evento de
+        // realtime (statusTimestampFields grava delivered_at/read_at a partir
+        // de statuses[].timestamp). Antes isto usava new Date() sempre, ou
+        // seja: exibia a hora em que o BROWSER recebeu o evento, nao a hora em
+        // que a mensagem foi entregue/lida — divergia sempre que o webhook
+        // atrasava. O relogio local ficou como ultimo recurso, para mensagem
+        // antiga cuja coluna nunca foi preenchida.
+        const nowIfNeeded = () => new Date().toISOString()
+        const deliveredAt =
+          timestamps?.deliveredAt ??
+          m.delivered_at ??
+          (status === 'delivered' || status === 'read' ? nowIfNeeded() : undefined)
+        // 'read' implica entregue: antes um salto direto para 'read' deixava
+        // delivered_at vazio.
+        const readAt =
+          timestamps?.readAt ??
+          m.read_at ??
+          (status === 'read' ? nowIfNeeded() : undefined)
+
+        return { ...m, status, delivered_at: deliveredAt, read_at: readAt }
+      })
     )
   }, [])
 

@@ -30,7 +30,8 @@ import { useInboxConversations } from '@/hooks/useInboxConversations'
 import { useInboxMessages } from '@/hooks/useInboxMessages'
 import { useInboxContact } from '@/hooks/useInboxContact'
 import { useWhatsAppConnection } from '@/hooks/useWhatsAppConnectionManager'
-import { useCloudInboxRealtime } from '@/hooks/useCloudInboxRealtime'
+import { useCloudInboxRealtime, type AgentRunStepEvent } from '@/hooks/useCloudInboxRealtime'
+import { isTerminalStep } from '@/components/whatsapp/inbox/AgentActivity'
 
 // Types
 import type { InboxConversation, InboxTask } from '@/types/inbox'
@@ -166,9 +167,35 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
   const handleStatusUpdate = useCallback((msg: any) => {
     console.log('✓ [InboxContent] Status update:', msg.id, '->', msg.status)
     if (msg.id && msg.status) {
-      updateMessageStatus(msg.id, msg.status)
+      // Repassar delivered_at/read_at: o mapper ja os extrai da row, e sem isto
+      // o hook fabricava o horario com o relogio do browser.
+      updateMessageStatus(msg.id, msg.status, {
+        deliveredAt: msg.delivered_at,
+        readAt: msg.read_at,
+      })
     }
   }, [updateMessageStatus])
+
+  // ---- Progresso do agente na conversa aberta ----
+  // Só recebe eventos ao vivo (nao ha fetch inicial): abrir a conversa no meio
+  // de um run mostra o painel a partir do proximo passo.
+  const [agentSteps, setAgentSteps] = useState<AgentRunStepEvent[]>([])
+
+  const handleAgentStep = useCallback((s: AgentRunStepEvent) => {
+    setAgentSteps(prev => {
+      // Passo nao-terminal depois de um terminal = run novo: zera a trilha para
+      // nao misturar duas execucoes no mesmo painel.
+      const lastWasTerminal = prev.length > 0 && isTerminalStep(prev[prev.length - 1].step)
+      const base = lastWasTerminal && !isTerminalStep(s.step) ? [] : prev
+      if (base.some(p => p.id === s.id)) return base
+      return [...base, s].slice(-12)
+    })
+  }, [])
+
+  // Trocar de conversa nao deve carregar o progresso da anterior.
+  useEffect(() => {
+    setAgentSteps([])
+  }, [selectedConversation?.id])
 
   // =============================================
   // REALTIME (Cloud API) — poll de 5s vira fallback
@@ -180,6 +207,7 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
     onConversationUpdate: handleConversationUpdate,
     onNewMessage: handleNewMessage,
     onMessageUpdate: handleStatusUpdate,
+    onAgentStep: handleAgentStep,
     enabled: Boolean(organizationId && storeId),
   })
 
@@ -474,6 +502,7 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
             showContactPanel={showContactPanel}
             onRetryMessage={handleRetryMessage}
             organizationId={organizationId}
+            agentSteps={agentSteps}
             currentAgentId={user?.id}
             currentAgentName={user?.email || user?.id}
             onResolved={() => {

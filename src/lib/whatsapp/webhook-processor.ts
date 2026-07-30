@@ -449,6 +449,21 @@ async function processMessage(
         .update({ ai_debounce_until: debounceUntil, ai_pending: true })
         .eq('id', conversation.id);
 
+      // Progresso ao vivo: a janela de debounce e justamente o trecho em que o
+      // inbox ficava mudo sem explicacao. O runId aqui e proprio deste
+      // agendamento e nao coincide com o do run — o painel agrupa por conversa
+      // e encerra no passo terminal, nao por runId (ver run-steps.ts).
+      const { recordAiStep, AI_RUN_STEPS } = await import('@/lib/ai/run-steps');
+      const { randomUUID } = await import('crypto');
+      await recordAiStep({
+        organizationId: account.organization_id,
+        conversationId: conversation.id,
+        runId: randomUUID(),
+        step: AI_RUN_STEPS.QUEUED,
+        detail: 'Agente vai responder',
+        metadata: { debounce_seconds: debounceSeconds },
+      });
+
       const { enqueueWhatsAppAiRespond } = await import('@/lib/queue');
       const messageId = await enqueueWhatsAppAiRespond(
         {

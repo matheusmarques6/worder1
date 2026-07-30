@@ -10,6 +10,8 @@ import {
 } from 'lucide-react'
 import { AudioRecorder } from './AudioRecorder'
 import { ServiceWindowBar } from './ServiceWindowBar'
+import { AgentActivity } from './AgentActivity'
+import type { AgentRunStepEvent } from '@/hooks/useCloudInboxRealtime'
 import { useServiceWindow } from './useServiceWindow'
 import { getDisabledReasonLabel, isAutoDisabledReason } from '@/lib/ai/disabled-reasons'
 import { QuickRepliesPicker } from './QuickRepliesPicker'
@@ -38,6 +40,8 @@ interface ChatPanelProps {
   organizationId?: string
   currentAgentId?: string
   currentAgentName?: string
+  /** Progresso ao vivo do agente de IA nesta conversa. */
+  agentSteps?: AgentRunStepEvent[]
   onResolved?: () => void
 }
 
@@ -97,6 +101,51 @@ function MessageStatus({ status, deliveredAt, readAt }: {
   })()
 
   return <span title={tooltip || undefined} className="inline-flex">{icon}</span>
+}
+
+/**
+ * Recibo textual de entrega/leitura.
+ *
+ * Os checks sozinhos nao respondem "QUANDO foi entregue/lida", e a resposta
+ * estava so no atributo `title` — invisivel sem hover e inacessivel no touch,
+ * onde o inbox e muito usado. Aqui o horario fica escrito.
+ *
+ * Mostra o estagio mais avancado apenas: "Lida" implica entregue, entao exibir
+ * os dois seria ruido em toda mensagem lida.
+ */
+function DeliveryReceipt({ status, deliveredAt, readAt }: {
+  status: InboxMessage['status']
+  deliveredAt?: string
+  readAt?: string
+}) {
+  // Preferir os timestamps reais da Meta; cair para o status quando a coluna
+  // ainda nao foi preenchida (mensagem antiga, anterior a status-timestamps).
+  if (readAt) {
+    return (
+      <span className="text-[10px] text-cyan-600" title={`Lida ${formatMessageDateTime(readAt)}`}>
+        Lida {formatMessageTime(readAt)}
+      </span>
+    )
+  }
+  if (status === 'read') {
+    return <span className="text-[10px] text-cyan-600">Lida</span>
+  }
+  if (deliveredAt) {
+    return (
+      <span className="text-[10px] text-gray-400" title={`Entregue ${formatMessageDateTime(deliveredAt)}`}>
+        Entregue {formatMessageTime(deliveredAt)}
+      </span>
+    )
+  }
+  if (status === 'delivered') {
+    return <span className="text-[10px] text-gray-400">Entregue</span>
+  }
+  // 'sent' sem recibo: a Meta aceitou, o aparelho do cliente ainda nao
+  // confirmou. Dizer isso e melhor que deixar o usuario adivinhar o check.
+  if (status === 'sent') {
+    return <span className="text-[10px] text-gray-400">Enviada</span>
+  }
+  return null
 }
 
 // Message Bubble
@@ -211,6 +260,13 @@ function MessageBubble({ message, contactName, onRetry }: { message: InboxMessag
           {isPending && <span className="text-[10px] text-gray-500">Enviando...</span>}
           {isBot && isOutbound && !isPending && <span className="text-[10px] text-gray-400">via Bot</span>}
           <span className="text-[10px] text-gray-400">{formatMessageTime(message.created_at)}</span>
+          {isOutbound && !isPending && !isFailed && (
+            <DeliveryReceipt
+              status={message.status}
+              deliveredAt={message.delivered_at}
+              readAt={message.read_at}
+            />
+          )}
           {isOutbound && (
             <MessageStatus
               status={message.status}
@@ -338,6 +394,7 @@ export function ChatPanel({
   organizationId,
   currentAgentId,
   currentAgentName,
+  agentSteps,
   onResolved,
 }: ChatPanelProps) {
   const [input, setInput] = useState('')
@@ -786,6 +843,10 @@ export function ChatPanel({
           </>
         )}
       </div>
+
+      {/* Progresso do agente — logo acima do composer, onde o atendente olha
+          quando esta esperando a resposta do bot. */}
+      <AgentActivity steps={agentSteps || []} />
 
       {/* Input */}
       <div className="p-4 border-t border-gray-200 bg-gray-50">

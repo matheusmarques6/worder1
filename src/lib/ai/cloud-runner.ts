@@ -21,6 +21,7 @@
  *   - Entrega ao sender (cloud-sender.ts), salvo skipSend.
  */
 
+import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createAgentEngine } from './engine';
 import type { EngineMessage } from './types';
@@ -42,6 +43,7 @@ import { resolveSttConfig, transcribeAudio } from './media/transcription';
 import { fetchInboundMedia } from './media/fetch-media';
 import type { AIMessageImage } from '@/lib/whatsapp/ai-providers';
 import { matchHandoffKeyword, isTransferCooldownActive } from './guards';
+import { AI_RUN_STEPS, describeToolCall, recordAiStep, type AiRunStep } from './run-steps';
 
 const COOLDOWN_MS = 5000;
 
@@ -390,6 +392,49 @@ export async function maybeRunAgentForCloudConversation(
   const behavior = agent.settings?.behavior || {};
   const safety = agent.settings?.safety || {};
 
+  // ---------- Progresso ao vivo (whatsapp_ai_run_steps) ----------
+  // runId agrupa os passos DESTE run. Definido aqui (e nao no topo) porque so
+  // faz sentido registrar progresso depois de existir um agente resolvido —
+  // inbound barrado por guard nao e "agente trabalhando".
+  const runId = randomUUID();
+  // skipSend === simulacao (/api/ai/test/cloud-webhook), que roda contra uma
+  // conversa REAL. Gravar progresso ali faria o inbox mostrar um agente
+  // trabalhando numa resposta que nunca vai chegar — e sem passo terminal, o
+  // painel ficaria preso. Simulacao nao emite progresso.
+  const step = skipSend
+    ? async () => {}
+    : (s: AiRunStep, detail?: string, metadata?: Record<string, unknown>) =>
+        recordAiStep({
+          organizationId,
+          conversationId: conversation.id,
+          runId,
+          agentId,
+          step: s,
+          detail,
+          metadata,
+        });
+
+  /**
+   * Emite o passo terminal correspondente a um resultado e o devolve.
+   *
+   * Existe porque varios caminhos saem por helpers (runMediaFallback,
+   * tryHandoffKeyword) DEPOIS de STARTED. Sem um terminal, o painel do inbox
+   * fica preso no ultimo passo para sempre. Derivar do proprio resultado evita
+   * ter que lembrar de anotar cada return novo.
+   */
+  const finish = async (r: CloudRunnerResult): Promise<CloudRunnerResult> => {
+    await step(
+      r.transferred
+        ? AI_RUN_STEPS.TRANSFERRED
+        : r.replied
+          ? AI_RUN_STEPS.SENT
+          : r.failure
+            ? AI_RUN_STEPS.FAILED
+            : AI_RUN_STEPS.SKIPPED,
+    );
+    return r;
+  };
+
   // ---------- activate_on: 'manual' NUNCA dispara automaticamente ----------
   // Mecanismo de ativação manual JÁ existe: POST /api/whatsapp/inbox/
   // conversations/[id]/bot com ai_agent_id grava conversation.ai_agent_id.
@@ -544,6 +589,10 @@ export async function maybeRunAgentForCloudConversation(
   // e PERSISTE o transcript em text_body — assim entra no histórico e retries
   // re-roteiam como 'text' (idempotente). Imagem: baixa do Storage e injeta
   // base64 na mensagem atual (visão). Falhas => media_fallback configurável.
+  // Guards e gates passaram: daqui em diante o agente esta efetivamente
+  // trabalhando, e o inbox pode mostrar isso.
+  await step(AI_RUN_STEPS.STARTED, agent.name ? `${agent.name} assumiu` : 'Agente assumiu');
+
   let effectiveText = text;
   let currentImages: AIMessageImage[] | undefined;
   const media = params.inboundMedia;
@@ -561,7 +610,7 @@ export async function maybeRunAgentForCloudConversation(
   if (route === 'audio') {
     const sttConfig = await resolveSttConfig(organizationId);
     if (!sttConfig) {
-      return runMediaFallback({ ...fallbackCtx, reason: 'no_stt_provider' });
+      return finish(await runMediaFallback({ ...fallbackCtx, reason: 'no_stt_provider' }));
     }
     const fetched = media
       ? await fetchInboundMedia({
@@ -571,8 +620,10 @@ export async function maybeRunAgentForCloudConversation(
         })
       : null;
     if (!fetched) {
-      return runMediaFallback({ ...fallbackCtx, reason: 'media_unavailable' });
+      return finish(await runMediaFallback({ ...fallbackCtx, reason: 'media_unavailable' }));
     }
+
+    await step(AI_RUN_STEPS.TRANSCRIBING, 'Transcrevendo áudio do cliente');
 
     let transcript = '';
     try {
@@ -589,7 +640,7 @@ export async function maybeRunAgentForCloudConversation(
       });
     }
     if (!transcript) {
-      return runMediaFallback({ ...fallbackCtx, reason: 'transcription_failed' });
+      return finish(await runMediaFallback({ ...fallbackCtx, reason: 'transcription_failed' }));
     }
 
     effectiveText = transcript;
@@ -611,18 +662,19 @@ export async function maybeRunAgentForCloudConversation(
       : null;
 
     if (fetched) {
+      await step(AI_RUN_STEPS.ANALYZING_IMAGE, 'Analisando imagem do cliente');
       currentImages = [{ mimeType: fetched.mimeType, base64: fetched.buffer.toString('base64') }];
       effectiveText = caption || 'O cliente enviou esta imagem.';
     } else if (caption) {
       // Sem visão/sem bytes mas com caption: degrada para texto (melhor que fallback).
       effectiveText = caption;
     } else {
-      return runMediaFallback({
+      return finish(await runMediaFallback({
         ...fallbackCtx,
         reason: providerSupportsVision(agent.provider)
           ? 'media_unavailable'
           : 'provider_without_vision',
-      });
+      }));
     }
   }
 
@@ -633,7 +685,7 @@ export async function maybeRunAgentForCloudConversation(
   // desativa como no_valid_api_key, não handoff_keyword).
   if (route !== 'text') {
     const handoffResult = await tryHandoffKeyword({ ...handoffCtx, text: effectiveText });
-    if (handoffResult) return handoffResult;
+    if (handoffResult) return finish(handoffResult);
   }
 
   // ---------- Histórico (~20 últimas) ----------
@@ -697,6 +749,12 @@ export async function maybeRunAgentForCloudConversation(
 
   // ---------- Criar engine + rodar ----------
   let result;
+  await step(
+    AI_RUN_STEPS.GENERATING,
+    'Gerando resposta',
+    { provider: agent.provider, model: agent.model },
+  );
+
   try {
     const engine = await createAgentEngine(agentId, organizationId);
     result = await engine.processMessage({
@@ -713,6 +771,7 @@ export async function maybeRunAgentForCloudConversation(
     // Budget excedido: silenciar + marcar conversa para revisão humana.
     // NÃO é falha permanente — budget pode renovar no próximo mês.
     if (engineErr instanceof AiBudgetExceededError) {
+      await step(AI_RUN_STEPS.FAILED, 'Orçamento de IA excedido — agente desativado');
       await supabaseAdmin
         .from('whatsapp_cloud_conversations')
         .update({
@@ -737,11 +796,13 @@ export async function maybeRunAgentForCloudConversation(
 
     if (failureClass === 'skip') {
       // Gates intencionais (agente inativo / fora do horário) — não é falha.
+      await step(AI_RUN_STEPS.SKIPPED, 'Agente indisponível (fora do horário ou inativo)');
       return { replied: false, transferred: false, agentId, skipped: 'agent_unavailable' };
     }
 
     if (failureClass === 'transient') {
       // NÃO desabilita. O worker agenda retry com backoff.
+      await step(AI_RUN_STEPS.FAILED, 'Erro temporário — vai tentar de novo');
       wlog.warn('whatsapp.ai.transient_error', {
         organization_id: organizationId,
         conversation_id: conversation.id,
@@ -761,6 +822,12 @@ export async function maybeRunAgentForCloudConversation(
     const reason = /api[ _-]?key/i.test(engineErr?.message || '')
       ? 'no_valid_api_key'
       : 'ai_permanent_error';
+    await step(
+      AI_RUN_STEPS.FAILED,
+      reason === 'no_valid_api_key'
+        ? 'Chave de API inválida — agente desativado'
+        : 'Erro permanente — agente desativado',
+    );
     await supabaseAdmin
       .from('whatsapp_cloud_conversations')
       .update({
@@ -811,10 +878,28 @@ export async function maybeRunAgentForCloudConversation(
     console.error('[cloud-runner] falha ao gravar trace:', traceErr?.message);
   }
 
+  // Tool calls sao conhecidas apenas AGORA: o engine as devolve no fim do
+  // turno, sem stream por chamada. Registrar aqui ainda antecede a mensagem
+  // (que so aparece depois dos delays humanizados), entao o inbox mostra o que
+  // o agente consultou antes da resposta surgir.
+  if (result.tool_calls && result.tool_calls.length > 0) {
+    const names = result.tool_calls
+      .map((c: any) => c?.name || c?.tool || c?.function?.name)
+      .filter(Boolean);
+    if (names.length > 0) {
+      await step(
+        AI_RUN_STEPS.TOOLS,
+        names.map((n: string) => describeToolCall(n)).join(' · '),
+        { tools: names, stopped_by: result.stopped_by },
+      );
+    }
+  }
+
   // ---------- 429 no tool-loop ----------
   // rate_limited: loop.ts:139-146 aborta gracioso com stopped_by='rate_limited'
   // e texto vazio — hoje cairia no `if (!response)` silencioso.
   if (result.stopped_by === 'rate_limited' && !(result.response || '').trim()) {
+    await step(AI_RUN_STEPS.FAILED, 'Limite de requisições atingido — vai tentar de novo');
     wlog.warn('whatsapp.ai.transient_error', {
       organization_id: organizationId,
       conversation_id: conversation.id,
@@ -851,6 +936,7 @@ export async function maybeRunAgentForCloudConversation(
       });
     }
 
+    await step(AI_RUN_STEPS.TRANSFERRED, 'Transferido para atendimento humano');
     console.log(
       `[cloud-runner] transferência para humano — conversation=${conversation.id}`,
     );
@@ -870,6 +956,7 @@ export async function maybeRunAgentForCloudConversation(
     // estouram max_tokens pensando e devolvem '' — antes isso virava bot mudo
     // sem retry nem alerta. transient => worker re-tenta com backoff e, se
     // persistir, dispara o alerta gave_up (visível no sino/Slack).
+    await step(AI_RUN_STEPS.FAILED, 'Modelo devolveu resposta vazia — vai tentar de novo');
     wlog.warn('whatsapp.ai.empty_response', {
       organization_id: organizationId,
       conversation_id: conversation.id,
@@ -891,6 +978,10 @@ export async function maybeRunAgentForCloudConversation(
     return { replied: true, transferred: false, response, traceId, agentId };
   }
 
+  // Cobre tambem os delays humanizados dentro de sendHumanizedReply (digitando,
+  // pausa por tamanho de texto), que sao a maior parte do tempo percebido.
+  await step(AI_RUN_STEPS.SENDING, 'Enviando resposta');
+
   const sendResult = await sendHumanizedReply({
     account,
     conversation,
@@ -903,6 +994,7 @@ export async function maybeRunAgentForCloudConversation(
   // opted_out e skip terminal (Onda 13 / B2): retry nunca vai destravar um
   // STOP do contato, entao nao marca failure (worker nao agenda retry).
   if (!sendResult.sent && sendResult.reason === 'opted_out') {
+    await step(AI_RUN_STEPS.SKIPPED, 'Contato pediu para não receber mensagens (opt-out)');
     return {
       replied: false,
       transferred: false,
@@ -917,6 +1009,7 @@ export async function maybeRunAgentForCloudConversation(
   // marcou a transferência — retry nunca vai destravar, então é terminal
   // (sem failure) e reportamos transferred=true pro chamador/simulador.
   if (!sendResult.sent && sendResult.reason === 'blocked_topic') {
+    await step(AI_RUN_STEPS.TRANSFERRED, 'Assunto bloqueado pela moderação — passou para humano');
     return {
       replied: false,
       transferred: true,
@@ -933,6 +1026,7 @@ export async function maybeRunAgentForCloudConversation(
   // rate-limit passar ou o breaker fechar — então é terminal (sem failure)
   // como opted_out, para o worker NÃO martelar a Meta com retry.
   if (!sendResult.sent && sendResult.reason?.startsWith('send_guard_')) {
+    await step(AI_RUN_STEPS.SKIPPED, 'Envio bloqueado por proteção de limite da Meta');
     return {
       replied: false,
       transferred: false,
@@ -942,6 +1036,13 @@ export async function maybeRunAgentForCloudConversation(
       skipped: sendResult.reason,
     };
   }
+
+  // Terminal. O passo SENT e o sinal que faz o painel do inbox sumir — a
+  // mensagem em si chega pelo canal de whatsapp_cloud_messages.
+  await step(
+    sendResult.sent ? AI_RUN_STEPS.SENT : AI_RUN_STEPS.FAILED,
+    sendResult.sent ? 'Resposta enviada' : 'Falha ao enviar — vai tentar de novo',
+  );
 
   return {
     replied: sendResult.sent,

@@ -48,6 +48,17 @@ function computeRenewalDelayMs(expiresAt: unknown): number {
 
 type ChannelState = 'idle' | 'connected' | 'error'
 
+/** Passo de progresso do agente (whatsapp_ai_run_steps). */
+export interface AgentRunStepEvent {
+  id: string
+  conversation_id: string
+  run_id: string
+  agent_id: string | null
+  step: string
+  detail: string | null
+  created_at: string
+}
+
 interface UseCloudInboxRealtimeOptions {
   organizationId: string | null
   conversationId?: string | null
@@ -55,6 +66,7 @@ interface UseCloudInboxRealtimeOptions {
   onConversationUpdate?: (conversation: RealtimeConversationEvent) => void
   onNewMessage?: (message: InboxMessage) => void
   onMessageUpdate?: (message: InboxMessage) => void
+  onAgentStep?: (step: AgentRunStepEvent) => void
   enabled?: boolean
 }
 
@@ -261,6 +273,49 @@ export function useCloudInboxRealtime(
       console.log('[CloudRealtime] Unsubscribing:', channelName)
       supabaseClient.removeChannel(channel)
       setMessagesState('idle')
+    }
+  }, [enabled, organizationId, conversationId, authReady])
+
+  // ---- Canal de progresso do agente (conversa selecionada) ----
+  // Canal separado do de mensagens de proposito: a tabela e outra e um
+  // CHANNEL_ERROR aqui (ex.: migration 20260730 ainda nao aplicada, tabela
+  // fora da publication) NAO pode derrubar a entrega de mensagens, que e a
+  // funcao critica do inbox. Estado proprio, falha isolada.
+  useEffect(() => {
+    if (!enabled || !organizationId || !conversationId || !authReady) return
+
+    const channelName = `cloud-inbox-aisteps-${conversationId}`
+    const channel = supabaseClient
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'whatsapp_ai_run_steps',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const row = payload.new as Record<string, any>
+          callbacksRef.current.onAgentStep?.({
+            id: String(row.id),
+            conversation_id: String(row.conversation_id),
+            run_id: String(row.run_id),
+            agent_id: row.agent_id ?? null,
+            step: String(row.step),
+            detail: row.detail ?? null,
+            created_at: String(row.created_at),
+          })
+        },
+      )
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[CloudRealtime] ai steps channel:', status, err?.message || '')
+        }
+      })
+
+    return () => {
+      supabaseClient.removeChannel(channel)
     }
   }, [enabled, organizationId, conversationId, authReady])
 
