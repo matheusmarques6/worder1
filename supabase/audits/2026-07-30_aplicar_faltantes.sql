@@ -605,3 +605,75 @@ FROM estado;
 -- Se as tres carregarem, as policies estao certas. Se alguma vier vazia,
 -- o suspeito e profiles.organization_id nulo para esse usuario:
 --   SELECT id, organization_id FROM profiles WHERE id = '<uuid do user>';
+
+
+-- ---------------------------------------------------------------------
+-- BLOCO 5 - Orfaos: linhas que a policy tornou invisiveis
+--           (SOMENTE LEITURA — rode depois do BLOCO 4 fechar)
+--
+-- A policy do grupo A compara organization_id com o da pessoa logada.
+-- Linha com organization_id NULL nao casa com ninguem: continua no
+-- banco, continua sendo lida por service_role, e some para todo usuario.
+-- Antes da RLS ela aparecia para todos, entao esse tipo de linha pode
+-- existir ha muito tempo sem nunca ter incomodado.
+--
+-- O mesmo do outro lado: perfil sem organization_id faz
+-- current_org_id() devolver NULL, e ai NADA casa. Esse usuario ve todas
+-- as telas vazias — primeiro suspeito se alguem reclamar.
+--
+-- Nenhum resultado aqui e necessariamente bug. E o inventario do que
+-- mudou de visibilidade, para voce decidir o que fazer.
+--
+-- Em DO block com to_regclass pelo mesmo motivo do BLOCO 3: consultar
+-- direto uma tabela que nao existe aborta o resto. Sai como NOTICE.
+-- ---------------------------------------------------------------------
+DO $do$
+DECLARE
+  r    record;
+  n    bigint;
+  tot  bigint := 0;
+BEGIN
+  RAISE NOTICE '--- orfaos por organization_id nula ---';
+  FOR r IN
+    SELECT unnest(ARRAY['profiles','credentials','notifications',
+                        'google_ads_accounts','google_ads_campaigns',
+                        'google_ads_metrics','google_ads_products']) AS t
+  LOOP
+    IF to_regclass('public.' || r.t) IS NULL THEN
+      RAISE NOTICE '  % : tabela nao existe', rpad(r.t, 22);
+    ELSE
+      EXECUTE format('SELECT count(*) FROM public.%I WHERE organization_id IS NULL', r.t) INTO n;
+      tot := tot + n;
+      RAISE NOTICE '  % : % linha(s)%', rpad(r.t, 22), n,
+        CASE WHEN n > 0 AND r.t = 'profiles'
+             THEN '   <-- esses usuarios veem TUDO vazio' ELSE '' END;
+    END IF;
+  END LOOP;
+
+  RAISE NOTICE '--- elos quebrados na cadeia do google ads ---';
+  FOR r IN
+    SELECT * FROM (VALUES
+      ('google_ads_ad_groups',   'campaign_id', 'google_ads_campaigns'),
+      ('google_ads_keywords',    'ad_group_id', 'google_ads_ad_groups'),
+      ('google_ads_search_terms','campaign_id', 'google_ads_campaigns')
+    ) AS v(filho, col, pai)
+  LOOP
+    IF to_regclass('public.' || r.filho) IS NULL OR to_regclass('public.' || r.pai) IS NULL THEN
+      RAISE NOTICE '  % : tabela ausente, pulado', rpad(r.filho, 24);
+    ELSE
+      EXECUTE format(
+        'SELECT count(*) FROM public.%I f WHERE NOT EXISTS (SELECT 1 FROM public.%I p WHERE p.id = f.%I)',
+        r.filho, r.pai, r.col) INTO n;
+      tot := tot + n;
+      RAISE NOTICE '  % : % sem % valido', rpad(r.filho, 24), n, r.pai;
+    END IF;
+  END LOOP;
+
+  IF tot = 0 THEN
+    RAISE NOTICE '=> 0 orfaos. Nada mudou de visibilidade; so o isolamento foi imposto.';
+  ELSE
+    RAISE NOTICE '=> % linha(s) existem mas nenhum usuario as enxerga mais.', tot;
+    RAISE NOTICE '   Decida por caso: atribuir organization_id, apagar, ou';
+    RAISE NOTICE '   aceitar que so o backend as use.';
+  END IF;
+END $do$;
