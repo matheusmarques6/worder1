@@ -27,10 +27,16 @@ function decodeExpiry(token: string): number | undefined {
  *
  * Por que existe: o login grava `sb-access-token` como cookie httpOnly
  * (JS nao le), e o client Supabase do browser (`supabase-client.ts`) e
- * anon sem sessao. Realtime postgres_changes respeita RLS: sem JWT,
- * as policies *_org_select das tabelas whatsapp_cloud_* negam tudo e
- * nenhum evento chega. O hook useCloudInboxRealtime chama este endpoint
- * e repassa o token para supabaseClient.realtime.setAuth().
+ * anon sem sessao. Realtime postgres_changes respeita RLS: sem JWT, as
+ * policies das tabelas whatsapp_cloud_* negam tudo e nenhum evento chega.
+ * O hook useCloudInboxRealtime chama este endpoint e repassa o token para
+ * supabaseClient.realtime.setAuth().
+ *
+ * (Este comentario dizia "as policies *_org_select ... via
+ * auth.organization_id()". Nao dizia a verdade: aquela funcao nao existe
+ * em producao e nenhuma policy de 001_enable_rls.sql chegou a ser criada.
+ * O que existe nessas tabelas veio de outro lugar e ainda nao foi
+ * auditado — supabase/audits/2026-07-30_rls_realtime_audit.sql.)
  *
  * Seguranca: same-origin + autenticado. `requireOrgFromAuth` aceita 2
  * fontes (Authorization header OU cookie) para resolver a org — mas
