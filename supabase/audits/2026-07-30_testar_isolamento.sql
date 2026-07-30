@@ -1,18 +1,31 @@
 -- =====================================================================
 -- TESTE DE ISOLAMENTO: as policies do grupo A funcionam mesmo?
 --
--- O BLOCO 4 do aplicar_faltantes so diz que as policies EXISTEM. Isso
+-- O BLOCO 4 do aplicar_faltantes so diz que as 9 policies EXISTEM. Isso
 -- nao e a mesma coisa que estarem CERTAS: uma policy escrita errado
--- existe do mesmo jeito e pode negar tudo, ou pior, permitir tudo.
+-- existe do mesmo jeito e pode negar tudo, ou permitir tudo, e nos dois
+-- casos a verificacao de existencia devolve 9/9 igual.
 --
--- Este arquivo faz o teste de verdade — assume a identidade de um
--- usuario real e compara o que ele enxerga com o que existe no banco.
--- Nao precisa de duas contas nem de abrir a app.
+-- Este arquivo assume a identidade de um usuario real e compara o que
+-- ele enxerga com o que existe de fato. Nao precisa de duas contas nem
+-- de abrir a app.
 --
--- 100% SOMENTE LEITURA. Tudo roda dentro de BEGIN ... ROLLBACK.
+-- SOMENTE LEITURA sobre os dados. O unico objeto criado e a funcao de
+-- teste, que a SECAO 4 apaga.
 --
--- COMO USAR: rode a secao 1, copie os dois UUIDs que ela devolve, cole
--- nas duas linhas marcadas da secao 2 e rode a secao 2.
+-- POR QUE UMA FUNCAO E NAO UM SCRIPT COM BEGIN/COMMIT:
+--   a versao anterior usava TEMP TABLE dentro de BEGIN ... ROLLBACK e
+--   morria no SQL Editor do Supabase com
+--     42P01: relation "_real" does not exist
+--   O editor nao mantem uma transacao entre as instrucoes coladas: cada
+--   uma comita sozinha, e ai ON COMMIT DROP apaga a temp table antes da
+--   proxima instrucao ler. Qualquer teste que dependa de estado entre
+--   instrucoes quebra ali.
+--   Dentro de uma funcao o problema nao existe: a chamada inteira e uma
+--   instrucao so, logo uma transacao so. O SET LOCAL ROLE vale ate o fim
+--   dela e se desfaz sozinho na saida.
+--
+-- COMO USAR: rode as 4 secoes na ordem, uma de cada vez.
 -- =====================================================================
 
 
@@ -20,12 +33,12 @@
 -- SECAO 1 - Escolher dois usuarios de organizacoes DIFERENTES
 --
 -- O teste so prova alguma coisa se as duas organizacoes tiverem dados.
--- Esta consulta ja ordena por quem tem mais credenciais.
+-- Ja vem ordenado por quem tem mais.
 -- ---------------------------------------------------------------------
 SELECT
   p.id            AS user_id,
   p.organization_id,
-  (SELECT count(*) FROM credentials c WHERE c.organization_id = p.organization_id) AS credenciais,
+  (SELECT count(*) FROM credentials c   WHERE c.organization_id = p.organization_id) AS credenciais,
   (SELECT count(*) FROM notifications n WHERE n.organization_id = p.organization_id) AS notificacoes,
   (SELECT count(*) FROM google_ads_campaigns g WHERE g.organization_id = p.organization_id) AS campanhas
 FROM profiles p
@@ -33,148 +46,127 @@ WHERE p.organization_id IS NOT NULL
 ORDER BY credenciais DESC, notificacoes DESC
 LIMIT 10;
 -- Pegue DOIS user_id com organization_id DIFERENTES entre si.
--- Se so aparecer uma organizacao, o teste de vazamento cruzado nao tem
--- como rodar — nesse caso so a secao 2a faz sentido.
+-- Se so aparecer uma organizacao, a linha 6 do teste passa por
+-- construcao e nao prova nada — o proprio teste avisa quando isso ocorre.
 
 
 -- ---------------------------------------------------------------------
--- SECAO 2 - O teste
+-- SECAO 2 - Criar a funcao de teste
 --
--- Assume a identidade de USUARIO_A e mede o que ele ve. Depois compara
--- com o total real (medido como postgres, que ignora RLS).
---
--- >>> EDITE AS DUAS LINHAS ABAIXO ANTES DE RODAR <<<
+-- Cole e rode inteira, de uma vez. Nao edite nada aqui.
 -- ---------------------------------------------------------------------
-BEGIN;
-
-SELECT
-  set_config('teste.user_a', '00000000-0000-0000-0000-000000000000', true),  -- <<< EDITE
-  set_config('teste.user_b', '00000000-0000-0000-0000-000000000000', true);  -- <<< EDITE
-
--- Guarda os numeros reais ANTES de virar usuario comum.
-CREATE TEMP TABLE _real ON COMMIT DROP AS
-SELECT
-  (SELECT organization_id FROM profiles WHERE id = current_setting('teste.user_a')::uuid) AS org_a,
-  (SELECT organization_id FROM profiles WHERE id = current_setting('teste.user_b')::uuid) AS org_b,
-  (SELECT count(*) FROM credentials)   AS cred_total,
-  (SELECT count(*) FROM notifications) AS notif_total,
-  (SELECT count(*) FROM google_ads_campaigns) AS camp_total,
-  (SELECT count(*) FROM google_ads_keywords)  AS kw_total;
-
--- Quanto DEVERIA ser visivel para cada um.
-CREATE TEMP TABLE _esperado ON COMMIT DROP AS
-SELECT
-  (SELECT count(*) FROM credentials   WHERE organization_id = (SELECT org_a FROM _real)) AS cred_a,
-  (SELECT count(*) FROM notifications WHERE organization_id = (SELECT org_a FROM _real)) AS notif_a,
-  (SELECT count(*) FROM google_ads_campaigns WHERE organization_id = (SELECT org_a FROM _real)) AS camp_a,
-  (SELECT count(*) FROM google_ads_keywords k
-     WHERE EXISTS (SELECT 1 FROM google_ads_ad_groups ag
-                   JOIN google_ads_campaigns c ON c.id = ag.campaign_id
-                   WHERE ag.id = k.ad_group_id
-                     AND c.organization_id = (SELECT org_a FROM _real))) AS kw_a;
-
--- Guarda a org de A numa variavel de sessao. Necessario porque, depois
--- do SET ROLE abaixo, as temp tables criadas como postgres deixam de ser
--- legiveis — e a medicao de B precisa saber qual e a org de A.
-SELECT set_config('teste.org_a', coalesce((SELECT org_a::text FROM _real), ''), true);
-
--- Se um dos dois usuarios nao tem organizacao, o teste nao consegue
--- medir nada — e isso ja e o diagnostico. Sem este aviso o sintoma
--- apareceria como um erro de cast de uuid, que nao explica nada.
-DO $do$
-DECLARE a uuid; b uuid;
+CREATE OR REPLACE FUNCTION public._teste_isolamento(p_user_a uuid, p_user_b uuid)
+RETURNS TABLE(ord int, caso text, esperado text, obtido text, veredito text)
+LANGUAGE plpgsql
+AS $fn$
+DECLARE
+  org_a uuid; org_b uuid;
+  e_cred bigint; e_notif bigint; e_camp bigint; e_kw bigint;
+  v_cred bigint; v_notif bigint; v_camp bigint; v_kw bigint; v_org uuid;
+  b_cred bigint;
+  aviso  text := '';
 BEGIN
-  SELECT org_a, org_b INTO a, b FROM _real;
-  IF a IS NULL THEN
-    RAISE NOTICE '!! USUARIO A nao tem organization_id em profiles.';
-    RAISE NOTICE '   current_org_id() devolve NULL para ele, entao ele ve TODAS';
-    RAISE NOTICE '   as telas vazias na app. Isso e um problema de dado, nao de';
-    RAISE NOTICE '   policy. Corrija o profile ou escolha outro usuario.';
+  SELECT organization_id INTO org_a FROM profiles WHERE id = p_user_a;
+  SELECT organization_id INTO org_b FROM profiles WHERE id = p_user_b;
+
+  IF org_a IS NULL THEN
+    aviso := 'USUARIO A sem organization_id: current_org_id() devolve NULL '
+          || 'e ele ve TODAS as telas vazias. Problema de dado, nao de policy.';
+  ELSIF org_b IS NULL THEN
+    aviso := 'USUARIO B sem organization_id — mesmo caso.';
+  ELSIF org_a = org_b THEN
+    aviso := 'A e B sao da MESMA organizacao: a linha 6 passa por construcao '
+          || 'e nao prova nada. Escolha usuarios de orgs diferentes.';
   END IF;
-  IF b IS NULL THEN
-    RAISE NOTICE '!! USUARIO B nao tem organization_id — mesmo caso.';
-  END IF;
-  IF a IS NOT NULL AND a = b THEN
-    RAISE NOTICE '!! A e B sao da MESMA organizacao. A linha 6 vai passar por';
-    RAISE NOTICE '   construcao e nao prova nada. Escolha usuarios de orgs';
-    RAISE NOTICE '   diferentes na secao 1.';
-  END IF;
-END $do$;
 
--- Agora vira o usuario A. auth.uid() do Supabase le request.jwt.claims->>'sub'.
-SET LOCAL ROLE authenticated;
-SELECT set_config('request.jwt.claims',
-                  json_build_object('sub', current_setting('teste.user_a'))::text,
-                  true);
+  -- Quanto DEVERIA ser visivel. Medido antes da troca de role, ainda com
+  -- os privilegios de quem chamou, entao a RLS nao interfere.
+  SELECT count(*) INTO e_cred  FROM credentials         WHERE organization_id = org_a;
+  SELECT count(*) INTO e_notif FROM notifications       WHERE organization_id = org_a;
+  SELECT count(*) INTO e_camp  FROM google_ads_campaigns WHERE organization_id = org_a;
+  SELECT count(*) INTO e_kw    FROM google_ads_keywords k
+    WHERE EXISTS (SELECT 1 FROM google_ads_ad_groups ag
+                  JOIN google_ads_campaigns c ON c.id = ag.campaign_id
+                  WHERE ag.id = k.ad_group_id AND c.organization_id = org_a);
 
-CREATE TEMP TABLE _visto_a ON COMMIT DROP AS
-SELECT
-  (SELECT count(*) FROM credentials)          AS cred,
-  (SELECT count(*) FROM notifications)        AS notif,
-  (SELECT count(*) FROM google_ads_campaigns) AS camp,
-  (SELECT count(*) FROM google_ads_keywords)  AS kw,
-  (SELECT public.current_org_id())            AS org_resolvida;
+  -- Vira o usuario A. auth.uid() do Supabase le request.jwt.claims->>'sub'.
+  -- SET LOCAL: desfaz sozinho quando a funcao termina.
+  PERFORM set_config('request.jwt.claims',
+                     json_build_object('sub', p_user_a::text)::text, true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
 
--- E agora o usuario B, para provar que ele NAO ve os dados de A.
-SELECT set_config('request.jwt.claims',
-                  json_build_object('sub', current_setting('teste.user_b'))::text,
-                  true);
+  SELECT count(*) INTO v_cred  FROM credentials;
+  SELECT count(*) INTO v_notif FROM notifications;
+  SELECT count(*) INTO v_camp  FROM google_ads_campaigns;
+  SELECT count(*) INTO v_kw    FROM google_ads_keywords;
+  v_org := public.current_org_id();
 
-CREATE TEMP TABLE _visto_b ON COMMIT DROP AS
-SELECT
-  (SELECT count(*) FROM credentials
-     WHERE organization_id = nullif(current_setting('teste.org_a'),'')::uuid) AS cred_da_org_a,
-  (SELECT public.current_org_id()) AS org_resolvida;
+  -- Agora o usuario B, para provar que ele NAO alcanca os dados de A.
+  PERFORM set_config('request.jwt.claims',
+                     json_build_object('sub', p_user_b::text)::text, true);
+  SELECT count(*) INTO b_cred FROM credentials WHERE organization_id = org_a;
 
-RESET ROLE;
+  EXECUTE 'RESET ROLE';
+
+  RETURN QUERY
+  SELECT 1, 'A: current_org_id() resolve a org certa',
+         coalesce(org_a::text,'(nulo)'), coalesce(v_org::text,'(nulo)'),
+         -- org nula bate com org nula, mas isso nao e aprovacao: significa
+         -- usuario sem organizacao, que ve tudo vazio. Sai como ATENCAO
+         -- para nao virar um PASSOU enganoso.
+         CASE WHEN org_a IS NULL                     THEN 'ATENCAO'
+              WHEN v_org IS NOT DISTINCT FROM org_a  THEN 'PASSOU'
+              ELSE 'FALHOU' END
+  UNION ALL SELECT 2, 'A: credentials visiveis',
+         e_cred::text, v_cred::text,
+         CASE WHEN e_cred = v_cred THEN 'PASSOU' ELSE 'FALHOU' END
+  UNION ALL SELECT 3, 'A: notifications visiveis',
+         e_notif::text, v_notif::text,
+         CASE WHEN e_notif = v_notif THEN 'PASSOU' ELSE 'FALHOU' END
+  UNION ALL SELECT 4, 'A: campanhas visiveis',
+         e_camp::text, v_camp::text,
+         CASE WHEN e_camp = v_camp THEN 'PASSOU' ELSE 'FALHOU' END
+  UNION ALL SELECT 5, 'A: keywords visiveis (cadeia de 3 niveis)',
+         e_kw::text, v_kw::text,
+         CASE WHEN e_kw = v_kw THEN 'PASSOU' ELSE 'FALHOU' END
+  UNION ALL SELECT 6, 'B NAO ve credenciais da org de A',
+         '0', b_cred::text,
+         CASE WHEN b_cred = 0 THEN 'PASSOU' ELSE 'FALHOU' END
+  UNION ALL SELECT 7, 'total no banco, sem RLS (so referencia)',
+         '-', (SELECT count(*)::text FROM credentials), 'INFO'
+  UNION ALL SELECT 8, coalesce(nullif(aviso,''), 'sem avisos'),
+         '-', '-', CASE WHEN aviso = '' THEN 'INFO' ELSE 'ATENCAO' END
+  ORDER BY 1;
+END
+$fn$;
+
 
 -- ---------------------------------------------------------------------
--- RESULTADO
--- ---------------------------------------------------------------------
-SELECT caso, esperado, obtido,
-       CASE WHEN esperado = obtido THEN 'PASSOU' ELSE 'FALHOU' END AS veredito
-FROM (
-  SELECT 1 AS ord,
-         'A: current_org_id() resolve a org certa' AS caso,
-         (SELECT org_a::text FROM _real) AS esperado,
-         (SELECT org_resolvida::text FROM _visto_a) AS obtido
-  UNION ALL
-  SELECT 2, 'A: credentials visiveis',
-         (SELECT cred_a::text FROM _esperado), (SELECT cred::text FROM _visto_a)
-  UNION ALL
-  SELECT 3, 'A: notifications visiveis',
-         (SELECT notif_a::text FROM _esperado), (SELECT notif::text FROM _visto_a)
-  UNION ALL
-  SELECT 4, 'A: campanhas visiveis',
-         (SELECT camp_a::text FROM _esperado), (SELECT camp::text FROM _visto_a)
-  UNION ALL
-  SELECT 5, 'A: keywords visiveis (cadeia de 3 niveis)',
-         (SELECT kw_a::text FROM _esperado), (SELECT kw::text FROM _visto_a)
-  UNION ALL
-  SELECT 6, 'B NAO ve credenciais da org de A',
-         '0', (SELECT cred_da_org_a::text FROM _visto_b)
-) t
-ORDER BY ord;
-
--- Contexto, para saber se o teste teve o que medir:
-SELECT 'total no banco (sem RLS)' AS referencia,
-       cred_total AS credentials, notif_total AS notifications,
-       camp_total AS campanhas,  kw_total AS keywords
-FROM _real;
-
-ROLLBACK;
--- Nada foi alterado. As TEMP tables somem no ROLLBACK.
+-- SECAO 3 - Rodar o teste
 --
+-- >>> TROQUE OS DOIS UUIDs PELOS DA SECAO 1 <<<
+-- ---------------------------------------------------------------------
+SELECT * FROM public._teste_isolamento(
+  '00000000-0000-0000-0000-000000000000',   -- <<< usuario A
+  '00000000-0000-0000-0000-000000000000'    -- <<< usuario B
+);
 -- COMO LER:
---   Todas PASSOU  -> as policies estao corretas: cada organizacao ve o
---                    proprio dado e nao ve o da outra.
---   Linha 1 FALHOU com obtido vazio -> profiles.organization_id nulo
---                    para esse usuario. Ele veria tudo vazio na app.
---   Linhas 2-5 obtido = 0 e esperado > 0 -> policy negando demais. A
---                    tela correspondente esta VAZIA agora. Reverta:
---                    ALTER TABLE <x> DISABLE ROW LEVEL SECURITY;
---   Linhas 2-5 obtido = total do banco -> policy nao esta filtrando.
---                    Vazamento entre organizacoes continua aberto.
---   Linha 6 FALHOU (obtido > 0) -> VAZAMENTO. B esta lendo credencial
---                    de outra organizacao. Isso e o bug original ainda
---                    de pe; me avise antes de qualquer outra coisa.
+--   linhas 1-6 todas PASSOU -> as policies estao corretas: cada
+--     organizacao ve o proprio dado e nao alcanca o da outra.
+--   linha 8 com ATENCAO -> leia o texto antes de confiar no resto.
+--
+--   obtido = 0 e esperado > 0  -> policy negando demais. A tela
+--     correspondente esta VAZIA agora. Reverta a tabela do caso:
+--     ALTER TABLE <x> DISABLE ROW LEVEL SECURITY;
+--   obtido = o total da linha 7 -> policy nao esta filtrando; o
+--     vazamento entre organizacoes continua aberto.
+--   linha 6 FALHOU -> VAZAMENTO CONFIRMADO: B esta lendo credencial de
+--     outra organizacao. Me avise antes de qualquer outra coisa.
+--   linha 5 FALHOU sozinha, com 4 passando -> o elo do meio da cadeia
+--     (google_ads_ad_groups) esta sem policy.
+
+
+-- ---------------------------------------------------------------------
+-- SECAO 4 - Limpar
+-- ---------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public._teste_isolamento(uuid, uuid);
