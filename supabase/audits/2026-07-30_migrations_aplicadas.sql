@@ -1361,16 +1361,61 @@ FROM (
   UNION ALL SELECT '20260617_ai_sources_bucket.sql',
     (SELECT count(*) FROM storage.buckets WHERE id='ai-sources') > 0,
     'bucket ai-sources existe no storage'
+  -- ATENCAO: a versao anterior deste teste olhava so "RLS ligada nas 18
+  -- tabelas de ads/credentials" e virou FALSO POSITIVO assim que o
+  -- 2026-07-30_aplicar_faltantes.sql rodou — e ele quem liga essa RLS,
+  -- nao o PARTE3. O teste passou a exigir tambem a marca exclusiva do
+  -- PARTE3: as 3 policies de leitura publica do conteudo de ajuda, que
+  -- nenhum outro arquivo cria. Se as tabelas de help nem existem, ele
+  -- comprovadamente nao rodou, por mais RLS que haja nas de ads.
   UNION ALL SELECT 'PARTE3_rls_e_dados.sql',
-    (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-      WHERE n.nspname='public' AND c.relrowsecurity
-        AND c.relname IN ('google_ads_accounts','google_ads_campaigns','google_ads_ad_groups',
-          'google_ads_keywords','google_ads_metrics','google_ads_search_terms','google_ads_products',
-          'google_ads_product_metrics','meta_ads_accounts','meta_ads_campaigns','meta_ads_adsets',
-          'meta_ads_ads','meta_ads_metrics','tiktok_ads_accounts','tiktok_ads_campaigns',
-          'tiktok_ads_adgroups','tiktok_ads_metrics','credentials')) = 18,
-    'RLS ligada nas 18 tabelas de ads/credentials'
+    (SELECT count(*) FROM pg_policy pol
+       JOIN pg_class c ON c.oid = pol.polrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public'
+        AND pol.polname IN ('public_read_help_categories',
+                            'public_read_help_articles',
+                            'public_read_faqs')) = 3,
+    'as 3 policies de leitura publica do help (RLS de ads sozinha NAO '
+    || 'serve: o aplicar_faltantes tambem liga). Ver nota abaixo.'
 ) t ORDER BY ok, arquivo;
+-- SOBRE A LINHA DO PARTE3: mesmo esta versao nao e prova definitiva. O
+-- 2026-07-30_aplicar_faltantes.sql cria policies de mesmo nome, entao
+-- APLICADA aqui significa "as policies existem", nao "foi o PARTE3 que
+-- as criou". Na pratica o efeito e o mesmo e nao muda o que fazer.
+-- O que so o PARTE3 faz e semear o conteudo de ajuda — e isso o bloco
+-- 3b abaixo verifica. Nao da para juntar os dois na mesma consulta:
+-- referenciar help_categories aqui derruba o bloco inteiro com 42P01
+-- quando a tabela nao existe, que e exatamente o caso hoje. pg_policy
+-- pode ser consultada sem a tabela existir; help_categories, nao.
+
+
+-- ---------------------------------------------------------------------
+-- BLOCO 3b - A marca exclusiva do PARTE3: os dados de ajuda
+--
+-- O PARTE3 insere 8 categorias de ajuda com slugs fixos e 10 FAQs.
+-- Nenhum outro arquivo do repo faz isso, entao aqui nao ha ambiguidade.
+-- Em DO block porque a tabela pode nao existir.
+-- ---------------------------------------------------------------------
+DO $do$
+DECLARE n int;
+BEGIN
+  IF to_regclass('public.help_categories') IS NULL THEN
+    RAISE NOTICE 'PARTE3 (dados): help_categories nem existe.';
+    RAISE NOTICE '  -> o PARTE3 comprovadamente NAO rodou. Falta antes o';
+    RAISE NOTICE '     PARTE2_help_e_outras_tabelas.sql, que cria a tabela.';
+  ELSE
+    EXECUTE $q$SELECT count(*) FROM public.help_categories
+                WHERE slug IN ('getting-started','crm-contacts','whatsapp',
+                               'email-marketing','automations','integrations',
+                               'analytics','settings')$q$ INTO n;
+    IF n >= 8 THEN
+      RAISE NOTICE 'PARTE3 (dados): 8/8 categorias de ajuda presentes -> rodou.';
+    ELSE
+      RAISE NOTICE 'PARTE3 (dados): so %/8 categorias -> rodou parcial ou nao rodou.', n;
+    END IF;
+  END IF;
+END $do$;
 -- Se 20260727_enable_cloud_inbox_realtime aparecer NAO APLICADA, esta
 -- e a causa do canal de mensagens nao entregar: a tabela nao publica
 -- alteracao nenhuma, e nenhum erro e emitido para o client.
