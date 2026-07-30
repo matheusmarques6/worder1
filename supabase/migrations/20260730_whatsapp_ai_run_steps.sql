@@ -45,21 +45,34 @@ CREATE INDEX IF NOT EXISTS idx_wars_run
 -- RLS: leitura por org. INSERT so via service role (fura RLS) — o runner
 -- nunca escreve com o JWT do usuario.
 --
--- Usa auth.organization_id() (001_enable_rls.sql), o MESMO helper das policies
--- *_org_select de whatsapp_cloud_messages / _conversations. Isso nao e detalhe
--- de estilo: o servidor de Realtime autoriza a entrega de cada evento
--- reexecutando a policy de SELECT com o JWT do browser. Se esta tabela usasse
--- um helper diferente (ex.: user_belongs_to_org, das tabelas de IA), a
--- assinatura poderia conectar e simplesmente nunca receber evento — falha muda,
--- identica a "a feature nao funciona". auth.organization_id() ainda resolve o
--- claim do JWT com fallback para profiles, entao funciona com o token que
--- /api/auth/realtime-token devolve.
+-- A policy e AUTOCONTIDA de proposito: depende so de auth.uid() (built-in do
+-- Supabase, sempre existe) e da tabela profiles. Nenhum helper.
+--
+-- Historico que justifica isso: o comentario em useCloudInboxRealtime.ts afirma
+-- que as tabelas whatsapp_cloud_* usam policies *_org_select via
+-- auth.organization_id() (001_enable_rls.sql). No banco de producao essa funcao
+-- NAO existe — 001 nunca foi aplicada por completo, provavelmente porque criar
+-- funcao no schema `auth` e negado para o role do projeto. Depender de
+-- auth.organization_id() ou de user_belongs_to_org() (das tabelas de IA)
+-- significaria apostar em migration que pode nao ter rodado.
+--
+-- Isso importa mais aqui do que numa tabela comum: o servidor de Realtime
+-- reexecuta esta policy de SELECT com o JWT do browser para autorizar CADA
+-- evento. Policy que falha => canal conecta e nunca entrega nada, sem erro
+-- visivel — indistinguivel de "a feature nao funciona".
+--
+-- O subquery em profiles e permitido pela propria policy de profiles
+-- ("id = auth.uid()"), e funciona igual se profiles estiver sem RLS.
 -- -----------------------------------------------------
 ALTER TABLE whatsapp_ai_run_steps ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "whatsapp_ai_run_steps_org_select" ON whatsapp_ai_run_steps;
 CREATE POLICY "whatsapp_ai_run_steps_org_select" ON whatsapp_ai_run_steps
-  FOR SELECT USING (organization_id = auth.organization_id());
+  FOR SELECT USING (
+    organization_id IN (
+      SELECT organization_id FROM public.profiles WHERE id = auth.uid()
+    )
+  );
 
 -- -----------------------------------------------------
 -- Realtime. Sem isto o painel nunca recebe evento — mesmo padrao de
