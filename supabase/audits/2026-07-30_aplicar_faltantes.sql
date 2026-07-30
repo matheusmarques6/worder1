@@ -140,200 +140,271 @@ SELECT
 -- ---------------------------------------------------------------------
 -- BLOCO 3 - PARTE3 corrigida: liga a RLS **com** as policies que faltaram
 --
--- ATENCAO AO FORMATO: uma transacao MINUSCULA por tabela, nao uma grande.
+-- DUAS CORRECOES ACUMULADAS AQUI, as duas vindas de erro em producao:
 --
--- A primeira versao deste arquivo agrupava as 9 tabelas em um unico
--- BEGIN/COMMIT. Isso tomou deadlock em producao (40P01) e o motivo e
--- estrutural, nao azar:
+-- 1) 40P01 deadlock detected.
+--    A versao original agrupava as 9 tabelas do grupo A em um unico
+--    BEGIN/COMMIT. ENABLE ROW LEVEL SECURITY exige AccessExclusiveLock e,
+--    numa transacao unica, o lock da primeira tabela fica retido ate o
+--    commit da ultima. O vercel.json tem 35 crons, 11 deles "* * * * *",
+--    entao sempre ha job lendo alguma dessas tabelas: basta ele segurar a
+--    tabela 5 enquanto esta transacao segura a 2 e quer a 5, e ele querer
+--    a 2. O deadlock foi o desfecho BOM — sem ele o ALTER ficaria na fila,
+--    e ALTER na fila bloqueia toda leitura posterior na mesma tabela: a
+--    app cairia esperando, por fila e nao por erro.
+--    -> Cada tabela virou uma unidade propria com lock_timeout de 3s.
+--       Nenhuma segura mais de um lock, entao nao ha ciclo possivel.
 --
---   ENABLE ROW LEVEL SECURITY exige AccessExclusiveLock. Numa transacao
---   unica, o lock da primeira tabela fica retido ate o COMMIT de todas.
---   O vercel.json deste projeto tem 35 crons, 11 deles com schedule
---   "* * * * *". Sempre ha um job lendo alguma dessas tabelas. Basta ele
---   segurar a tabela 5 enquanto esta transacao segura a 2 e quer a 5, e
---   ele querer a 2: deadlock.
+-- 2) 42P01 relation "help_articles" does not exist.
+--    O PARTE3 original pressupoe as tabelas criadas pelo PARTE1 e PARTE2.
+--    Se esses nunca rodaram, parte das 24 tabelas nao existe — e um
+--    ALTER TABLE em tabela inexistente aborta tudo dali para a frente.
+--    -> Cada tabela agora e um DO block que confere to_regclass antes.
+--       O que nao existe e PULADO com um NOTICE, e o resto segue.
 --
---   E o deadlock foi o desfecho BOM. Sem ele, o ALTER TABLE ficaria
---   esperando o lock — e um ALTER na fila bloqueia toda leitura que
---   chegar depois na mesma tabela. A app cairia enquanto o comando
---   espera, nao por erro, por fila.
---
--- Por isso cada tabela vira uma transacao propria com lock_timeout: se
--- nao conseguir o lock em 3s, aquele comando desiste sozinho, a fila
--- nao se forma e as outras tabelas seguem.
---
--- RLS e policy da mesma tabela ficam JUNTAS na mesma transacao — separar
+-- Cada DO block e uma unica instrucao, logo sua propria transacao: as
+-- duas propriedades (lock curto, falha isolada) valem por tabela.
+-- RLS e policy da mesma tabela continuam juntas no mesmo bloco — separar
 -- abriria uma janela de deny-all em producao.
 --
--- Perde-se a atomicidade do conjunto: pode aplicar 7 de 9. Nao e
--- problema, o arquivo e idempotente (DROP POLICY IF EXISTS antes de todo
--- CREATE, e ENABLE RLS em tabela que ja tem RLS e no-op). Se algum
--- comando falhar por lock_timeout, rode o arquivo de novo — o que ja
--- passou nao e refeito. Repita ate o BLOCO 4 fechar.
+-- ACOMPANHE OS NOTICES. Cada tabela imprime 'ok <nome>' ou
+-- 'PULADA <nome>: ...'. As puladas nao sao erro deste arquivo: sao
+-- migrations anteriores que faltam. Descubra quais com o BLOCO 2a e com
+-- 2026-07-30_migrations_aplicadas.sql.
+--
+-- Idempotente: rodar de novo nao refaz o que ja passou. Se algo falhar
+-- por lock_timeout, rode outra vez ate o BLOCO 4 dar faltando=0.
 -- ---------------------------------------------------------------------
 
 -- 3a. Resolver a organizacao do usuario logado.
 --
--- A 001_enable_rls.sql tentou criar auth.organization_id() e abortou:
--- o role do projeto nao pode criar funcao no schema `auth`. Por isso
--- nenhuma policy dela existe. Aqui a funcao vive em `public`, que o
+-- A 001_enable_rls.sql tentou criar auth.organization_id() e abortou: o
+-- role do projeto nao pode criar funcao no schema `auth`. Por isso
+-- nenhuma policy dela existe. Aqui a funcao vive em `public`, onde o
 -- projeto pode escrever.
 --
 -- SECURITY DEFINER de proposito: sem isso a leitura de profiles dentro
 -- da policy passaria pela RLS de profiles e poderia recursar.
 --
--- Nao pega lock em tabela nenhuma, entao vai solto.
+-- Nao pega lock em tabela nenhuma, entao vai solta.
 CREATE OR REPLACE FUNCTION public.current_org_id()
 RETURNS uuid
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
-AS $$
+AS $fn$
   SELECT organization_id FROM public.profiles WHERE id = auth.uid()
-$$;
+$fn$;
 
 REVOKE ALL ON FUNCTION public.current_org_id() FROM public;
 GRANT EXECUTE ON FUNCTION public.current_org_id() TO authenticated, service_role;
 
 
--- 3b. GRUPO A - tabelas lidas com a chave do usuario.
---     Uma transacao por tabela. As tabelas-pai vem primeiro para que a
---     cadeia campaigns -> ad_groups -> keywords nunca fique com um elo
---     sem policy enquanto o filho ja esta com RLS ligada.
-
--- credentials
-BEGIN;
-  SET LOCAL lock_timeout = '3s';
-  ALTER TABLE credentials ENABLE ROW LEVEL SECURITY;
-  DROP POLICY IF EXISTS org_isolation ON credentials;
-  CREATE POLICY org_isolation ON credentials
-    FOR ALL TO authenticated
-    USING (organization_id = public.current_org_id())
-    WITH CHECK (organization_id = public.current_org_id());
-COMMIT;
-
--- notifications
-BEGIN;
-  SET LOCAL lock_timeout = '3s';
-  ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-  DROP POLICY IF EXISTS org_isolation ON notifications;
-  CREATE POLICY org_isolation ON notifications
-    FOR ALL TO authenticated
-    USING (organization_id = public.current_org_id())
-    WITH CHECK (organization_id = public.current_org_id());
-COMMIT;
-
--- google_ads_accounts
-BEGIN;
-  SET LOCAL lock_timeout = '3s';
-  ALTER TABLE google_ads_accounts ENABLE ROW LEVEL SECURITY;
-  DROP POLICY IF EXISTS org_isolation ON google_ads_accounts;
-  CREATE POLICY org_isolation ON google_ads_accounts
-    FOR ALL TO authenticated
-    USING (organization_id = public.current_org_id())
-    WITH CHECK (organization_id = public.current_org_id());
-COMMIT;
-
--- google_ads_campaigns  (pai da cadeia — antes de ad_groups)
-BEGIN;
-  SET LOCAL lock_timeout = '3s';
-  ALTER TABLE google_ads_campaigns ENABLE ROW LEVEL SECURITY;
-  DROP POLICY IF EXISTS org_isolation ON google_ads_campaigns;
-  CREATE POLICY org_isolation ON google_ads_campaigns
-    FOR ALL TO authenticated
-    USING (organization_id = public.current_org_id())
-    WITH CHECK (organization_id = public.current_org_id());
-COMMIT;
-
--- google_ads_ad_groups  (elo do meio: sem organization_id proprio)
+-- 3b. GRUPO A - tabelas lidas com a chave do usuario (getAuthClient).
+--     Pais antes de filhas: a cadeia campaigns -> ad_groups -> keywords
+--     nunca pode ter um elo sem policy enquanto o filho ja tem RLS.
 --
--- A subconsulta nao filtra organizacao e nao precisa: policy roda com as
--- permissoes de quem consulta, entao o SELECT interno ja passa pela
--- policy de google_ads_campaigns. Por isso esta tabela precisa de policy
--- mesmo o app nunca a lendo direto — sem ela a cadeia de keywords quebra
--- e o usuario nao ve as proprias keywords.
-BEGIN;
-  SET LOCAL lock_timeout = '3s';
-  ALTER TABLE google_ads_ad_groups ENABLE ROW LEVEL SECURITY;
-  DROP POLICY IF EXISTS org_isolation ON google_ads_ad_groups;
-  CREATE POLICY org_isolation ON google_ads_ad_groups
-    FOR ALL TO authenticated
-    USING (campaign_id IN (SELECT id FROM google_ads_campaigns))
-    WITH CHECK (campaign_id IN (SELECT id FROM google_ads_campaigns));
-COMMIT;
+--     As tres da cadeia nao tem organization_id proprio. A subconsulta
+--     nao filtra organizacao e nao precisa: policy roda com as permissoes
+--     de quem consulta, entao o SELECT interno ja passa pela policy da
+--     tabela pai. Por isso google_ads_ad_groups precisa de policy mesmo o
+--     app nunca a lendo direto — sem ela a cadeia quebra e o usuario nao
+--     ve as proprias keywords. E por isso o bloco dela checa a dependencia.
 
--- google_ads_keywords  (ponta da cadeia)
-BEGIN;
-  SET LOCAL lock_timeout = '3s';
-  ALTER TABLE google_ads_keywords ENABLE ROW LEVEL SECURITY;
-  DROP POLICY IF EXISTS org_isolation ON google_ads_keywords;
-  CREATE POLICY org_isolation ON google_ads_keywords
-    FOR ALL TO authenticated
-    USING (ad_group_id IN (SELECT id FROM google_ads_ad_groups))
-    WITH CHECK (ad_group_id IN (SELECT id FROM google_ads_ad_groups));
-COMMIT;
+DO $do$
+BEGIN
+  IF to_regclass('public.credentials') IS NULL THEN
+    RAISE NOTICE 'PULADA credentials: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.credentials ENABLE ROW LEVEL SECURITY$sql$;
+    EXECUTE $sql$DROP POLICY IF EXISTS org_isolation ON public.credentials$sql$;
+    EXECUTE $sql$CREATE POLICY org_isolation ON public.credentials
+               FOR ALL TO authenticated
+               USING (organization_id = public.current_org_id())
+               WITH CHECK (organization_id = public.current_org_id())$sql$;
+    RAISE NOTICE 'ok credentials';
+  END IF;
+END $do$;
 
--- google_ads_search_terms  (isola por campaign_id)
-BEGIN;
-  SET LOCAL lock_timeout = '3s';
-  ALTER TABLE google_ads_search_terms ENABLE ROW LEVEL SECURITY;
-  DROP POLICY IF EXISTS org_isolation ON google_ads_search_terms;
-  CREATE POLICY org_isolation ON google_ads_search_terms
-    FOR ALL TO authenticated
-    USING (campaign_id IN (SELECT id FROM google_ads_campaigns))
-    WITH CHECK (campaign_id IN (SELECT id FROM google_ads_campaigns));
-COMMIT;
+DO $do$
+BEGIN
+  IF to_regclass('public.notifications') IS NULL THEN
+    RAISE NOTICE 'PULADA notifications: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY$sql$;
+    EXECUTE $sql$DROP POLICY IF EXISTS org_isolation ON public.notifications$sql$;
+    EXECUTE $sql$CREATE POLICY org_isolation ON public.notifications
+               FOR ALL TO authenticated
+               USING (organization_id = public.current_org_id())
+               WITH CHECK (organization_id = public.current_org_id())$sql$;
+    RAISE NOTICE 'ok notifications';
+  END IF;
+END $do$;
 
--- google_ads_metrics
-BEGIN;
-  SET LOCAL lock_timeout = '3s';
-  ALTER TABLE google_ads_metrics ENABLE ROW LEVEL SECURITY;
-  DROP POLICY IF EXISTS org_isolation ON google_ads_metrics;
-  CREATE POLICY org_isolation ON google_ads_metrics
-    FOR ALL TO authenticated
-    USING (organization_id = public.current_org_id())
-    WITH CHECK (organization_id = public.current_org_id());
-COMMIT;
+DO $do$
+BEGIN
+  IF to_regclass('public.google_ads_accounts') IS NULL THEN
+    RAISE NOTICE 'PULADA google_ads_accounts: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.google_ads_accounts ENABLE ROW LEVEL SECURITY$sql$;
+    EXECUTE $sql$DROP POLICY IF EXISTS org_isolation ON public.google_ads_accounts$sql$;
+    EXECUTE $sql$CREATE POLICY org_isolation ON public.google_ads_accounts
+               FOR ALL TO authenticated
+               USING (organization_id = public.current_org_id())
+               WITH CHECK (organization_id = public.current_org_id())$sql$;
+    RAISE NOTICE 'ok google_ads_accounts';
+  END IF;
+END $do$;
 
--- google_ads_products
-BEGIN;
-  SET LOCAL lock_timeout = '3s';
-  ALTER TABLE google_ads_products ENABLE ROW LEVEL SECURITY;
-  DROP POLICY IF EXISTS org_isolation ON google_ads_products;
-  CREATE POLICY org_isolation ON google_ads_products
-    FOR ALL TO authenticated
-    USING (organization_id = public.current_org_id())
-    WITH CHECK (organization_id = public.current_org_id());
-COMMIT;
+DO $do$
+BEGIN
+  IF to_regclass('public.google_ads_campaigns') IS NULL THEN
+    RAISE NOTICE 'PULADA google_ads_campaigns: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.google_ads_campaigns ENABLE ROW LEVEL SECURITY$sql$;
+    EXECUTE $sql$DROP POLICY IF EXISTS org_isolation ON public.google_ads_campaigns$sql$;
+    EXECUTE $sql$CREATE POLICY org_isolation ON public.google_ads_campaigns
+               FOR ALL TO authenticated
+               USING (organization_id = public.current_org_id())
+               WITH CHECK (organization_id = public.current_org_id())$sql$;
+    RAISE NOTICE 'ok google_ads_campaigns';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.google_ads_ad_groups') IS NULL THEN
+    RAISE NOTICE 'PULADA google_ads_ad_groups: a tabela nao existe neste banco';
+  ELSIF to_regclass('public.google_ads_campaigns') IS NULL THEN
+    RAISE NOTICE 'PULADA google_ads_ad_groups: depende de google_ads_campaigns, que nao existe';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.google_ads_ad_groups ENABLE ROW LEVEL SECURITY$sql$;
+    EXECUTE $sql$DROP POLICY IF EXISTS org_isolation ON public.google_ads_ad_groups$sql$;
+    EXECUTE $sql$CREATE POLICY org_isolation ON public.google_ads_ad_groups
+               FOR ALL TO authenticated
+               USING (campaign_id IN (SELECT id FROM public.google_ads_campaigns))
+               WITH CHECK (campaign_id IN (SELECT id FROM public.google_ads_campaigns))$sql$;
+    RAISE NOTICE 'ok google_ads_ad_groups';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.google_ads_keywords') IS NULL THEN
+    RAISE NOTICE 'PULADA google_ads_keywords: a tabela nao existe neste banco';
+  ELSIF to_regclass('public.google_ads_ad_groups') IS NULL THEN
+    RAISE NOTICE 'PULADA google_ads_keywords: depende de google_ads_ad_groups, que nao existe';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.google_ads_keywords ENABLE ROW LEVEL SECURITY$sql$;
+    EXECUTE $sql$DROP POLICY IF EXISTS org_isolation ON public.google_ads_keywords$sql$;
+    EXECUTE $sql$CREATE POLICY org_isolation ON public.google_ads_keywords
+               FOR ALL TO authenticated
+               USING (ad_group_id IN (SELECT id FROM public.google_ads_ad_groups))
+               WITH CHECK (ad_group_id IN (SELECT id FROM public.google_ads_ad_groups))$sql$;
+    RAISE NOTICE 'ok google_ads_keywords';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.google_ads_search_terms') IS NULL THEN
+    RAISE NOTICE 'PULADA google_ads_search_terms: a tabela nao existe neste banco';
+  ELSIF to_regclass('public.google_ads_campaigns') IS NULL THEN
+    RAISE NOTICE 'PULADA google_ads_search_terms: depende de google_ads_campaigns, que nao existe';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.google_ads_search_terms ENABLE ROW LEVEL SECURITY$sql$;
+    EXECUTE $sql$DROP POLICY IF EXISTS org_isolation ON public.google_ads_search_terms$sql$;
+    EXECUTE $sql$CREATE POLICY org_isolation ON public.google_ads_search_terms
+               FOR ALL TO authenticated
+               USING (campaign_id IN (SELECT id FROM public.google_ads_campaigns))
+               WITH CHECK (campaign_id IN (SELECT id FROM public.google_ads_campaigns))$sql$;
+    RAISE NOTICE 'ok google_ads_search_terms';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.google_ads_metrics') IS NULL THEN
+    RAISE NOTICE 'PULADA google_ads_metrics: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.google_ads_metrics ENABLE ROW LEVEL SECURITY$sql$;
+    EXECUTE $sql$DROP POLICY IF EXISTS org_isolation ON public.google_ads_metrics$sql$;
+    EXECUTE $sql$CREATE POLICY org_isolation ON public.google_ads_metrics
+               FOR ALL TO authenticated
+               USING (organization_id = public.current_org_id())
+               WITH CHECK (organization_id = public.current_org_id())$sql$;
+    RAISE NOTICE 'ok google_ads_metrics';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.google_ads_products') IS NULL THEN
+    RAISE NOTICE 'PULADA google_ads_products: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.google_ads_products ENABLE ROW LEVEL SECURITY$sql$;
+    EXECUTE $sql$DROP POLICY IF EXISTS org_isolation ON public.google_ads_products$sql$;
+    EXECUTE $sql$CREATE POLICY org_isolation ON public.google_ads_products
+               FOR ALL TO authenticated
+               USING (organization_id = public.current_org_id())
+               WITH CHECK (organization_id = public.current_org_id())$sql$;
+    RAISE NOTICE 'ok google_ads_products';
+  END IF;
+END $do$;
 
 
 -- 3c. GRUPO B - conteudo de ajuda, leitura publica.
---     Mesmas 3 policies do PARTE3 original, uma transacao cada.
+--     Mesmas 3 policies do PARTE3 original. Estas sao as mais provaveis
+--     de serem PULADAS: dependem do PARTE2_help_e_outras_tabelas.sql.
 
-BEGIN;
-  SET LOCAL lock_timeout = '3s';
-  ALTER TABLE help_categories ENABLE ROW LEVEL SECURITY;
-  DROP POLICY IF EXISTS "public_read_help_categories" ON help_categories;
-  CREATE POLICY "public_read_help_categories" ON help_categories
-    FOR SELECT TO public USING (is_active = true);
-COMMIT;
+DO $do$
+BEGIN
+  IF to_regclass('public.help_categories') IS NULL THEN
+    RAISE NOTICE 'PULADA help_categories: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.help_categories ENABLE ROW LEVEL SECURITY$sql$;
+    EXECUTE $sql$DROP POLICY IF EXISTS "public_read_help_categories" ON public.help_categories$sql$;
+    EXECUTE $sql$CREATE POLICY "public_read_help_categories" ON public.help_categories FOR SELECT TO public USING (is_active = true)$sql$;
+    RAISE NOTICE 'ok help_categories';
+  END IF;
+END $do$;
 
-BEGIN;
-  SET LOCAL lock_timeout = '3s';
-  ALTER TABLE help_articles ENABLE ROW LEVEL SECURITY;
-  DROP POLICY IF EXISTS "public_read_help_articles" ON help_articles;
-  CREATE POLICY "public_read_help_articles" ON help_articles
-    FOR SELECT TO public USING (status = 'published');
-COMMIT;
+DO $do$
+BEGIN
+  IF to_regclass('public.help_articles') IS NULL THEN
+    RAISE NOTICE 'PULADA help_articles: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.help_articles ENABLE ROW LEVEL SECURITY$sql$;
+    EXECUTE $sql$DROP POLICY IF EXISTS "public_read_help_articles" ON public.help_articles$sql$;
+    EXECUTE $sql$CREATE POLICY "public_read_help_articles" ON public.help_articles FOR SELECT TO public USING (status = 'published')$sql$;
+    RAISE NOTICE 'ok help_articles';
+  END IF;
+END $do$;
 
-BEGIN;
-  SET LOCAL lock_timeout = '3s';
-  ALTER TABLE faq_items ENABLE ROW LEVEL SECURITY;
-  DROP POLICY IF EXISTS "public_read_faqs" ON faq_items;
-  CREATE POLICY "public_read_faqs" ON faq_items
-    FOR SELECT TO public USING (is_active = true);
-COMMIT;
+DO $do$
+BEGIN
+  IF to_regclass('public.faq_items') IS NULL THEN
+    RAISE NOTICE 'PULADA faq_items: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.faq_items ENABLE ROW LEVEL SECURITY$sql$;
+    EXECUTE $sql$DROP POLICY IF EXISTS "public_read_faqs" ON public.faq_items$sql$;
+    EXECUTE $sql$CREATE POLICY "public_read_faqs" ON public.faq_items FOR SELECT TO public USING (is_active = true)$sql$;
+    RAISE NOTICE 'ok faq_items';
+  END IF;
+END $do$;
 
 
 -- ---------------------------------------------------------------------
@@ -347,59 +418,190 @@ COMMIT;
 -- Rode SO depois de confirmar que o BLOCO 3 nao quebrou nada.
 -- Rollback de qualquer uma: ALTER TABLE <x> DISABLE ROW LEVEL SECURITY;
 --
--- Uma transacao por tabela pelo mesmo motivo do BLOCO 3. `orders` e
--- `abandoned_carts` sao as mais disputadas — varios dos crons de minuto
--- escrevem nelas. Se alguma der lock_timeout, rode o arquivo de novo.
+-- orders e abandoned_carts sao as mais disputadas — varios dos crons de
+-- minuto escrevem nelas. Se derem lock_timeout, rode o arquivo de novo.
 -- ---------------------------------------------------------------------
-BEGIN; SET LOCAL lock_timeout='3s'; ALTER TABLE google_ads_product_metrics ENABLE ROW LEVEL SECURITY; COMMIT;
-BEGIN; SET LOCAL lock_timeout='3s'; ALTER TABLE meta_ads_accounts    ENABLE ROW LEVEL SECURITY; COMMIT;
-BEGIN; SET LOCAL lock_timeout='3s'; ALTER TABLE meta_ads_campaigns   ENABLE ROW LEVEL SECURITY; COMMIT;
-BEGIN; SET LOCAL lock_timeout='3s'; ALTER TABLE meta_ads_adsets      ENABLE ROW LEVEL SECURITY; COMMIT;
-BEGIN; SET LOCAL lock_timeout='3s'; ALTER TABLE meta_ads_ads         ENABLE ROW LEVEL SECURITY; COMMIT;
-BEGIN; SET LOCAL lock_timeout='3s'; ALTER TABLE meta_ads_metrics     ENABLE ROW LEVEL SECURITY; COMMIT;
-BEGIN; SET LOCAL lock_timeout='3s'; ALTER TABLE tiktok_ads_accounts  ENABLE ROW LEVEL SECURITY; COMMIT;
-BEGIN; SET LOCAL lock_timeout='3s'; ALTER TABLE tiktok_ads_campaigns ENABLE ROW LEVEL SECURITY; COMMIT;
-BEGIN; SET LOCAL lock_timeout='3s'; ALTER TABLE tiktok_ads_adgroups  ENABLE ROW LEVEL SECURITY; COMMIT;
-BEGIN; SET LOCAL lock_timeout='3s'; ALTER TABLE tiktok_ads_metrics   ENABLE ROW LEVEL SECURITY; COMMIT;
-BEGIN; SET LOCAL lock_timeout='3s'; ALTER TABLE orders               ENABLE ROW LEVEL SECURITY; COMMIT;
-BEGIN; SET LOCAL lock_timeout='3s'; ALTER TABLE abandoned_carts      ENABLE ROW LEVEL SECURITY; COMMIT;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.google_ads_product_metrics') IS NULL THEN
+    RAISE NOTICE 'PULADA google_ads_product_metrics: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.google_ads_product_metrics ENABLE ROW LEVEL SECURITY$sql$;
+    RAISE NOTICE 'ok google_ads_product_metrics';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.meta_ads_accounts') IS NULL THEN
+    RAISE NOTICE 'PULADA meta_ads_accounts: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.meta_ads_accounts ENABLE ROW LEVEL SECURITY$sql$;
+    RAISE NOTICE 'ok meta_ads_accounts';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.meta_ads_campaigns') IS NULL THEN
+    RAISE NOTICE 'PULADA meta_ads_campaigns: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.meta_ads_campaigns ENABLE ROW LEVEL SECURITY$sql$;
+    RAISE NOTICE 'ok meta_ads_campaigns';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.meta_ads_adsets') IS NULL THEN
+    RAISE NOTICE 'PULADA meta_ads_adsets: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.meta_ads_adsets ENABLE ROW LEVEL SECURITY$sql$;
+    RAISE NOTICE 'ok meta_ads_adsets';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.meta_ads_ads') IS NULL THEN
+    RAISE NOTICE 'PULADA meta_ads_ads: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.meta_ads_ads ENABLE ROW LEVEL SECURITY$sql$;
+    RAISE NOTICE 'ok meta_ads_ads';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.meta_ads_metrics') IS NULL THEN
+    RAISE NOTICE 'PULADA meta_ads_metrics: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.meta_ads_metrics ENABLE ROW LEVEL SECURITY$sql$;
+    RAISE NOTICE 'ok meta_ads_metrics';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.tiktok_ads_accounts') IS NULL THEN
+    RAISE NOTICE 'PULADA tiktok_ads_accounts: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.tiktok_ads_accounts ENABLE ROW LEVEL SECURITY$sql$;
+    RAISE NOTICE 'ok tiktok_ads_accounts';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.tiktok_ads_campaigns') IS NULL THEN
+    RAISE NOTICE 'PULADA tiktok_ads_campaigns: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.tiktok_ads_campaigns ENABLE ROW LEVEL SECURITY$sql$;
+    RAISE NOTICE 'ok tiktok_ads_campaigns';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.tiktok_ads_adgroups') IS NULL THEN
+    RAISE NOTICE 'PULADA tiktok_ads_adgroups: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.tiktok_ads_adgroups ENABLE ROW LEVEL SECURITY$sql$;
+    RAISE NOTICE 'ok tiktok_ads_adgroups';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.tiktok_ads_metrics') IS NULL THEN
+    RAISE NOTICE 'PULADA tiktok_ads_metrics: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.tiktok_ads_metrics ENABLE ROW LEVEL SECURITY$sql$;
+    RAISE NOTICE 'ok tiktok_ads_metrics';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.orders') IS NULL THEN
+    RAISE NOTICE 'PULADA orders: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY$sql$;
+    RAISE NOTICE 'ok orders';
+  END IF;
+END $do$;
+
+DO $do$
+BEGIN
+  IF to_regclass('public.abandoned_carts') IS NULL THEN
+    RAISE NOTICE 'PULADA abandoned_carts: a tabela nao existe neste banco';
+  ELSE
+    PERFORM set_config('lock_timeout', '3s', true);
+    EXECUTE $sql$ALTER TABLE public.abandoned_carts ENABLE ROW LEVEL SECURITY$sql$;
+    RAISE NOTICE 'ok abandoned_carts';
+  END IF;
+END $do$;
 
 
 -- ---------------------------------------------------------------------
 -- BLOCO 4 - Verificacao pos-aplicacao  (SOMENTE LEITURA)
 --
--- Como o BLOCO 3 nao e mais atomico, esta verificacao deixou de ser
--- opcional: e ela que diz se sobrou tabela para tras. Enquanto
--- `faltando` nao for 0, rode o arquivo de novo.
+-- Como o BLOCO 3 nao e atomico, esta verificacao nao e opcional: e ela
+-- que diz o que sobrou para tras, e separa os dois motivos possiveis.
 -- ---------------------------------------------------------------------
 WITH grupo_a(tabela) AS (VALUES
   ('credentials'),('notifications'),('google_ads_accounts'),
   ('google_ads_campaigns'),('google_ads_ad_groups'),('google_ads_keywords'),
   ('google_ads_metrics'),('google_ads_search_terms'),('google_ads_products')
+), estado AS (
+  SELECT g.tabela,
+         c.oid IS NOT NULL                                   AS existe,
+         coalesce(c.relrowsecurity, false)                    AS rls,
+         pol.polname IS NOT NULL                              AS tem_policy
+  FROM grupo_a g
+  LEFT JOIN pg_class c
+    ON c.relname = g.tabela AND c.relnamespace = 'public'::regnamespace
+  LEFT JOIN pg_policy pol
+    ON pol.polrelid = c.oid AND pol.polname = 'org_isolation'
 )
 SELECT
-  (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-    WHERE n.nspname='public' AND p.proname='current_org_id') AS current_org_id_existe,
-  count(*) FILTER (WHERE c.relrowsecurity AND pol.polname IS NOT NULL) AS prontas,
-  count(*) FILTER (WHERE NOT (c.relrowsecurity AND pol.polname IS NOT NULL)) AS faltando,
-  string_agg(g.tabela, ', ') FILTER (WHERE NOT (c.relrowsecurity AND pol.polname IS NOT NULL))
-    AS quais_faltando
-FROM grupo_a g
-LEFT JOIN pg_class c ON c.relname=g.tabela AND c.relnamespace='public'::regnamespace
-LEFT JOIN pg_policy pol ON pol.polrelid=c.oid AND pol.polname='org_isolation';
--- Esperado: current_org_id_existe=1, prontas=9, faltando=0.
--- faltando > 0 significa lock_timeout naquelas tabelas. Rode de novo.
---
--- Nenhuma tabela do grupo A pode ficar com RLS ligada e policy ausente:
--- esse e o estado deny-all que derruba a tela. O BLOCO 2a mostra isso
--- como 'RLS SEM POLICY'.
+  (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'current_org_id')      AS current_org_id_existe,
+  count(*) FILTER (WHERE rls AND tem_policy)                          AS prontas,
+  count(*) FILTER (WHERE NOT existe)                                  AS nao_existem,
+  count(*) FILTER (WHERE existe AND NOT (rls AND tem_policy))         AS faltando,
+  string_agg(tabela, ', ') FILTER (WHERE NOT existe)                  AS quais_nao_existem,
+  string_agg(tabela, ', ') FILTER (WHERE existe AND NOT (rls AND tem_policy)) AS quais_faltando,
+  string_agg(tabela, ', ') FILTER (WHERE rls AND NOT tem_policy)      AS PERIGO_deny_all
+FROM estado;
+-- Como ler:
+--   prontas = 9              -> grupo A completo.
+--   nao_existem > 0          -> nao e problema deste arquivo. Falta a
+--                               migration que cria a tabela. Veja
+--                               2026-07-30_migrations_aplicadas.sql.
+--   faltando > 0             -> lock_timeout. Rode o arquivo de novo.
+--   PERIGO_deny_all nao nulo -> RLS ligada sem policy: essa tabela esta
+--                               negando tudo AGORA e a tela que a le
+--                               esta vazia. Conserto imediato:
+--                               ALTER TABLE <x> DISABLE ROW LEVEL SECURITY;
 
 -- TESTE FUNCIONAL, que e o que importa de verdade:
 -- entre na app com um usuario comum e confira, nesta ordem:
 --   1. Configuracoes > Integracoes  (le credentials)
 --   2. Analytics > Google Ads       (le as 6 tabelas google_ads_*)
 --   3. o sino de notificacoes       (le notifications)
--- Se as tres carregarem, as policies estao certas. Se alguma vier
--- vazia, o culpado provavel e profiles.organization_id nulo para esse
--- usuario — confira com:
+-- Se as tres carregarem, as policies estao certas. Se alguma vier vazia,
+-- o suspeito e profiles.organization_id nulo para esse usuario:
 --   SELECT id, organization_id FROM profiles WHERE id = '<uuid do user>';
