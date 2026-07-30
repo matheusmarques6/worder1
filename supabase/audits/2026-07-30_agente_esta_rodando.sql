@@ -5,9 +5,16 @@
 --
 --   whatsapp_ai_run_steps  o caminho. Um registro por passo do run, com
 --                          timestamp. E daqui que sai "onde ele parou".
---   agent_traces           o conteudo. O prompt exato que foi enviado ao
---                          modelo, a resposta crua, as tool calls, o
---                          modelo usado, tokens e latencia.
+--   agent_traces           o conteudo. A mensagem do cliente, a resposta
+--                          crua do modelo, as tool calls, modelo, tokens
+--                          e latencia.
+--                          ATENCAO: a coluna `input` NAO guarda o prompt
+--                          de sistema. cloud-runner.ts:876 grava ali o
+--                          `effectiveText`, que e o texto do cliente. O
+--                          prompt montado e enviado e descartado, nao fica
+--                          em lugar nenhum. Por isso `tokens` vem ~1500 e
+--                          length(input) vem 2 ou 12 — nao e inconsistencia,
+--                          sao coisas diferentes.
 --
 -- Os passos possiveis, na ordem em que acontecem (src/lib/ai/run-steps-shared.ts):
 --   queued          inbound chegou, debounce agendado — o agente AINDA NAO rodou
@@ -123,11 +130,15 @@ LIMIT 30;
 
 
 -- ---------------------------------------------------------------------
--- 4. O RACIOCINIO DE VERDADE: o que o modelo recebeu e o que devolveu
+-- 4. O que entrou e o que saiu de cada chamada ao modelo
 --
--- agent_traces guarda o prompt final, ja montado, e a resposta crua.
--- E a unica forma de ver o que o agente realmente "pensou", em vez de
--- inferir pelo caminho dos passos.
+-- Le a mensagem do cliente (`input`), a resposta crua (`output`), o
+-- modelo, o custo em tokens e a latencia.
+--
+-- Note o que isto NAO mostra: o prompt de sistema. Ele nao e persistido.
+-- Da para ver o que o agente respondeu e quanto custou, nao o que ele
+-- recebeu como instrucao. A diferenca entre `tokens` e length(input)
+-- mede indiretamente o tamanho do prompt invisivel.
 -- ---------------------------------------------------------------------
 SELECT
   to_char(created_at, 'DD/MM HH24:MI:SS') AS quando,
@@ -137,7 +148,10 @@ SELECT
   latency_ms,
   length(input)  AS tam_prompt,
   length(output) AS tam_resposta,
-  jsonb_array_length(coalesce(tool_calls, '[]'::jsonb)) AS n_ferramentas,
+  -- tool_calls e gravado como {calls:[...], stopped_by:...}, nao como array
+  -- (cloud-runner.ts:878). jsonb_array_length direto levanta erro assim que
+  -- existir um trace com ferramenta.
+  coalesce(jsonb_array_length(tool_calls -> 'calls'), 0) AS n_ferramentas,
   left(output, 300) AS resposta_inicio
 FROM agent_traces
 ORDER BY created_at DESC
@@ -163,31 +177,42 @@ ORDER BY created_at;
 
 
 -- ---------------------------------------------------------------------
--- 6. O prompt ainda vaza andaime?
+-- 6. O prompt do agente tem andaime?
 --
--- O fix E1-E4 (commit 0169eab0) parou o generatePromptFromTemplate de
--- deixar placeholder e secao vazia no prompt final. Aqui se confirma se
--- ele pegou em producao: estes quatro padroes NAO podem aparecer em
--- trace nenhum posterior ao deploy.
+-- CORRECAO: a primeira versao desta consulta procurava os padroes de
+-- andaime em agent_traces.input, e estava errada. cloud-runner.ts:876
+-- grava `input: effectiveText` — a MENSAGEM DO CLIENTE, nao o prompt.
+-- Por isso tam_prompt vem 2, 12, 39 caracteres enquanto tokens vem 1500:
+-- os 1500 tokens sao o prompt de sistema, que NAO e persistido em lugar
+-- nenhum. A consulta antiga voltaria vazia sempre e daria a impressao
+-- falsa de que o fix E1-E4 foi confirmado em producao.
+--
+-- O que da para verificar e o TEMPLATE guardado em ai_agents.system_prompt,
+-- que e a materia-prima do prompt final. Se o andaime estiver ali, ele
+-- chega ao modelo; se nao estiver, o fix E1-E4 cuida da renderizacao.
+-- Nao e a mesma prova, e a diferenca importa: isto verifica a origem,
+-- nao o que de fato saiu.
 -- ---------------------------------------------------------------------
 SELECT
-  to_char(created_at, 'DD/MM HH24:MI') AS quando,
+  id,
+  name,
   CASE
-    WHEN input ~ 'Você é\s*,'                                     THEN 'E1: "Você é ," com nome vazio'
-    WHEN input LIKE '%Defina o tom de voz ideal para seu negócio%' THEN 'E2: placeholder de tom de voz'
-    WHEN input ~ '\{\{[^}]+\}\}'                                   THEN 'E3: variavel {{...}} nao substituida'
-    WHEN input ~ '(?m)^##[^\n]*\n\s*(##|$)'                        THEN 'E4: secao ## vazia'
-  END AS andaime_encontrado,
-  left(input, 200) AS trecho
-FROM agent_traces
-WHERE input ~ 'Você é\s*,'
-   OR input LIKE '%Defina o tom de voz ideal para seu negócio%'
-   OR input ~ '\{\{[^}]+\}\}'
-   OR input ~ '(?m)^##[^\n]*\n\s*(##|$)'
-ORDER BY created_at DESC
-LIMIT 20;
--- VAZIO = o fix pegou, nenhum prompt vaza andaime.
--- Linhas com data ANTERIOR ao deploy = historico, esperado.
--- Linhas com data POSTERIOR ao deploy = o fix nao cobriu esse caminho.
---   Nesse caso me mande o trecho: significa que ha outro ponto montando
---   prompt sem passar pelo generatePromptFromTemplate corrigido.
+    WHEN system_prompt ~ 'Você é\s*,'                                     THEN 'E1: "Você é ," com nome vazio'
+    WHEN system_prompt LIKE '%Defina o tom de voz ideal para seu negócio%' THEN 'E2: placeholder de tom de voz'
+    WHEN system_prompt ~ '\{\{[^}]+\}\}'                                   THEN 'E3: variavel {{...}} nao substituida'
+    WHEN system_prompt ~ '(?m)^##[^\n]*\n\s*(##|$)'                        THEN 'E4: secao ## vazia'
+  END AS andaime_no_template,
+  length(system_prompt) AS tam_template
+FROM ai_agents
+WHERE system_prompt ~ 'Você é\s*,'
+   OR system_prompt LIKE '%Defina o tom de voz ideal para seu negócio%'
+   OR system_prompt ~ '\{\{[^}]+\}\}'
+   OR system_prompt ~ '(?m)^##[^\n]*\n\s*(##|$)';
+-- VAZIO = nenhum template tem andaime na origem.
+-- Linhas = aquele agente carrega andaime no proprio template. O fix
+--   E1-E4 remove parte disso na renderizacao, mas template sujo e
+--   problema de dado e continua ali ate ser editado.
+--
+-- PARA PROVAR DE VERDADE o que o modelo recebe seria preciso persistir o
+-- prompt renderizado — hoje ele e montado, enviado e descartado. Nao ha
+-- como auditar em producao o que efetivamente foi para o LLM.
