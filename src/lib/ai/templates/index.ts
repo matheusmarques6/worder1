@@ -70,6 +70,23 @@ export function getTemplatesByTag(tag: string): NicheTemplate[] {
 }
 
 /**
+ * Remove seções cujo corpo ficou vazio depois da substituição.
+ *
+ * Um cabeçalho órfão ("## SOBRE O NEGÓCIO" seguido de nada) não é neutro: o
+ * modelo lê a seção vazia como informação que deveria estar ali, gasta contexto
+ * com ela e às vezes tenta preencher sozinho. Melhor não enviar a seção.
+ */
+function stripEmptySections(prompt: string): string {
+  return prompt
+    .split(/(?=^## )/m)
+    .filter((block) => {
+      if (!block.startsWith('## ')) return true; // preâmbulo antes do 1o header
+      return block.replace(/^##[^\n]*/, '').trim() !== '';
+    })
+    .join('');
+}
+
+/**
  * Gera o prompt final substituindo as variáveis
  */
 export function generatePromptFromTemplate(
@@ -77,23 +94,48 @@ export function generatePromptFromTemplate(
   data: TemplateData
 ): GeneratedPromptResult {
   let prompt = template.promptTemplate;
-  
-  // Substituir variáveis do formulário
+
+  // Tabela única de variáveis. Antes havia dois caminhos de substituição —
+  // um laço sobre customFieldValues e dois .replace() avulsos — e `agentName`
+  // não estava em nenhum dos dois, apesar de existir em `data` e ser usado
+  // logo abaixo na saudação. A limpeza final apagava a variável órfã, e o
+  // prompt gravado no banco começava com "Você é , assistente virtual de X".
+  // O wizard não coleta um nome de agente separado: `data.agentName` cai no
+  // nome da loja (CreateAgentFlow.tsx). Repetir o mesmo nome nos dois lugares
+  // renderia "Você é wdww, assistente virtual de **wdww**" — nesse caso o
+  // genérico lê melhor.
+  const storeNameValue = data.customFieldValues.storeName?.trim();
+  const agentNameValue = data.agentName?.trim();
+  const values: Record<string, string> = {
+    agentName:
+      !agentNameValue || agentNameValue === storeNameValue ? 'Assistente' : agentNameValue,
+    voiceDescription: template.persona.voiceDescription,
+    emojis: template.persona.emojis.join(' '),
+  };
+  // O que o lojista digitou vence o default do template — mas só se digitou
+  // algo: string vazia não pode sobrescrever um default útil.
   Object.entries(data.customFieldValues).forEach(([key, value]) => {
-    const variable = `{{${key}}}`;
-    prompt = prompt.replace(new RegExp(variable, 'g'), value || '');
+    if (value != null && value !== '') values[key] = value;
   });
-  
-  // Substituir variáveis de persona
-  prompt = prompt.replace('{{voiceDescription}}', template.persona.voiceDescription);
-  prompt = prompt.replace('{{emojis}}', template.persona.emojis.join(' '));
-  
+
+  // replaceAll com padrão string troca TODAS as ocorrências sem construir
+  // regex — o caminho antigo montava `new RegExp('{{storeName}}')`, que só
+  // funciona porque `{` solto é tolerado fora do modo unicode. A função de
+  // replace evita que um `$&` no texto do lojista seja interpretado como
+  // referência de captura.
+  Object.entries(values).forEach(([key, value]) => {
+    prompt = prompt.replaceAll(`{{${key}}}`, () => value.trim());
+  });
+
   // Limpar variáveis não preenchidas
   prompt = prompt.replace(/\{\{[^}]+\}\}/g, '');
-  
+
   // Limpar linhas vazias extras
   prompt = prompt.replace(/\n{3,}/g, '\n\n');
-  
+
+  // Seções que perderam o corpo na limpeza acima não devem ir para o modelo
+  prompt = stripEmptySections(prompt).trim();
+
   // Gerar guidelines
   const guidelines = [
     ...template.defaultGuidelines,
