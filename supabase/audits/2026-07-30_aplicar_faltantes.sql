@@ -18,17 +18,30 @@
 --   ANON_KEY + token do usuario. O proprio comentario da funcao diz
 --   "RETORNA CLIENTE QUE RESPEITA RLS". Ou seja: RLS SE APLICA.
 --
---   E esse cliente que le, hoje, em producao:
---     credentials              5 rotas  (src/app/api/credentials/*,
---                                        automations/[id]/execute,
---                                        automations/connections)
+--   CUIDADO ao mapear isto: importar getAuthClient nao significa
+--   consultar com ele. Varias rotas usam getAuthClient so para
+--   autenticar e depois consultam com service_role. Em
+--   src/app/api/credentials/route.ts, por exemplo, `supabase` e um
+--   Proxy sobre getSupabaseClient() — service_role, RLS ignorada.
+--   O que vale e a origem da variavel usada no .from(): se veio de
+--   `const { supabase } = auth`, a RLS se aplica.
+--
+--   Conferido assim, arquivo por arquivo, sao estes que leem com o
+--   cliente sujeito a RLS:
+--     credentials              4 rotas:
+--                                credentials/[id]/route.ts:23
+--                                credentials/test/route.ts:176
+--                                automations/connections/route.ts:187
+--                                automations/[id]/execute/route.ts:90
+--                              (credentials/route.ts NAO — service_role)
 --     google_ads_accounts      src/app/api/analytics/google-ads/route.ts:38
 --     google_ads_campaigns     mesma rota, linha 60
 --     google_ads_metrics       mesma rota, linha 67
 --     google_ads_keywords      mesma rota, linha 84
 --     google_ads_search_terms  mesma rota, linha 95
 --     google_ads_products      mesma rota, linha 103
---     notifications            src/app/api/notifications/read-all/route.ts
+--     notifications            whatsapp/inbox/contacts/[id]/comments:229
+--                              (read-all NAO — service_role)
 --
 -- Rodar o PARTE3 original derruba as integracoes, o analytics do Google
 -- Ads e as notificacoes — todas passariam a devolver vazio, sem erro.
