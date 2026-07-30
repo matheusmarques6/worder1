@@ -29,7 +29,13 @@ export const customTemplate: NicheTemplate = {
       'Olá! Bem-vindo! Como posso ajudar você hoje?',
     ],
     
-    voiceDescription: 'Defina o tom de voz ideal para seu negócio.',
+    // ATENÇÃO: este texto vai direto para a seção "## TOM DE VOZ" do system
+    // prompt — o modelo o lê como instrução própria. Não use aqui a dica de
+    // preenchimento do formulário: o valor anterior era "Defina o tom de voz
+    // ideal para seu negócio.", e o agente recebia isso como ordem.
+    // Texto de ajuda para o lojista vive em customFields[].helpText.
+    voiceDescription:
+      'Tom cordial e prestativo, claro e objetivo. Acompanhe o jeito do cliente sem perder a clareza.',
   },
   
   promptTemplate: `## IDENTIDADE
