@@ -38,44 +38,59 @@
 -- ---------------------------------------------------------------------
 -- 1. Ele esta rodando? Volume e desfecho nos ultimos 7 dias
 --
--- Um run e identificado por run_id. Aqui cada run e classificado pelo
--- passo terminal que alcancou — ou como 'sem desfecho' se nunca chegou
--- a um, que e o sintoma de run que morreu no meio sem registrar falha.
+-- CUIDADO COM O run_id: o passo `queued` SEMPRE tem run_id proprio,
+-- diferente do run que de fato executa. Sao dois randomUUID() em lugares
+-- distintos — webhook-processor.ts:461 gera um so para o queued, e
+-- cloud-runner.ts:369 gera outro quando o worker roda. O proprio codigo
+-- anota que o painel "encerra no passo terminal, nao por runId".
+--
+-- Consequencia: agrupar so por run_id faz TODO atendimento normal
+-- produzir um run fantasma contendo apenas `queued`. A primeira versao
+-- desta consulta reportava isso como "nunca comecou" — falso alarme em
+-- 100% dos casos.
+--
+-- Aqui um `queued` sozinho so vira problema se NENHUM run comecou na
+-- mesma conversa nos 5 minutos seguintes.
 -- ---------------------------------------------------------------------
 WITH runs AS (
-  SELECT run_id,
+  SELECT run_id, conversation_id,
          min(created_at) AS inicio,
          max(created_at) AS fim,
          array_agg(step ORDER BY created_at) AS passos
   FROM whatsapp_ai_run_steps
   WHERE created_at > now() - interval '7 days'
-  GROUP BY run_id
+  GROUP BY run_id, conversation_id
 )
 SELECT
   CASE
-    WHEN 'sent'        = ANY(passos) THEN 'sent — respondeu'
-    WHEN 'transferred' = ANY(passos) THEN 'transferred — passou para humano'
-    WHEN 'skipped'     = ANY(passos) THEN 'skipped — decidiu nao responder'
-    WHEN 'failed'      = ANY(passos) THEN 'failed — quebrou'
-    WHEN 'queued'      = ANY(passos) AND NOT ('started' = ANY(passos))
-                                     THEN 'PAROU EM queued — nunca comecou'
+    WHEN 'sent'        = ANY(r.passos) THEN 'sent — respondeu'
+    WHEN 'transferred' = ANY(r.passos) THEN 'transferred — passou para humano'
+    WHEN 'skipped'     = ANY(r.passos) THEN 'skipped — decidiu nao responder'
+    WHEN 'failed'      = ANY(r.passos) THEN 'failed — quebrou'
+    WHEN r.passos = ARRAY['queued'] THEN
+      CASE WHEN EXISTS (
+             SELECT 1 FROM runs x
+             WHERE x.conversation_id = r.conversation_id
+               AND 'started' = ANY(x.passos)
+               AND x.inicio >= r.inicio
+               AND x.inicio <= r.inicio + interval '5 minutes')
+           THEN 'queued — normal, o run correspondente executou'
+           ELSE 'QUEUED ORFAO — o worker nunca executou' END
     ELSE 'SEM DESFECHO — morreu no meio'
   END AS desfecho,
-  count(*)                                              AS runs,
-  round(avg(extract(epoch FROM (fim - inicio)))::numeric, 1) AS seg_medio,
-  max(fim)                                              AS mais_recente
-FROM runs
+  count(*)                                                       AS runs,
+  round(avg(extract(epoch FROM (r.fim - r.inicio)))::numeric, 1) AS seg_medio,
+  max(r.fim)                                                     AS mais_recente
+FROM runs r
 GROUP BY 1
 ORDER BY runs DESC;
--- Se voltar VAZIO: nenhum run em 7 dias. O agente nao esta sendo
--- acionado — o problema esta antes dele (webhook, guard, bot desligado
--- na conversa), nao no raciocinio.
---
--- 'PAROU EM queued' em volume: o debounce agenda mas o worker nunca
--- executa. Olhe o cron /api/workers/whatsapp-ai-respond.
---
--- 'SEM DESFECHO' em volume: o run comeca e some. Normalmente timeout do
--- serverless no meio do generating.
+-- VAZIO: nenhum run em 7 dias. O agente nao esta sendo acionado — o
+--   problema esta antes dele (webhook, guard, bot desligado na conversa).
+-- 'QUEUED ORFAO' em volume: o debounce agenda e o worker nao executa.
+--   Olhe o cron /api/workers/whatsapp-ai-respond.
+-- 'SEM DESFECHO' em volume: o run comeca e some. Tipicamente timeout do
+--   serverless no meio do generating.
+-- 'queued — normal': ignore. E o par de todo atendimento que funcionou.
 
 
 -- ---------------------------------------------------------------------
