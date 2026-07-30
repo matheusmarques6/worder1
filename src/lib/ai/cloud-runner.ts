@@ -44,6 +44,7 @@ import { fetchInboundMedia } from './media/fetch-media';
 import type { AIMessageImage } from '@/lib/whatsapp/ai-providers';
 import { matchHandoffKeyword, isTransferCooldownActive } from './guards';
 import { AI_RUN_STEPS, describeToolCall, recordAiStep, type AiRunStep } from './run-steps';
+import { countBotMessages, hasHumanReply } from './conversation-ai-status';
 
 const COOLDOWN_MS = 5000;
 
@@ -501,14 +502,11 @@ export async function maybeRunAgentForCloudConversation(
   // max_messages_per_conversation: nº de outbound da IA já enviados.
   const maxMessages = Number(behavior.max_messages_per_conversation || 0);
   if (maxMessages > 0) {
-    const { count } = await supabaseAdmin
-      .from('whatsapp_cloud_messages')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', organizationId)
-      .eq('conversation_id', conversation.id)
-      .eq('sent_by_bot', true);
+    // Mesma consulta que o badge do inbox usa (conversation-ai-status.ts) —
+    // compartilhada para os dois nunca discordarem sobre por que o bot calou.
+    const count = await countBotMessages(organizationId, conversation.id);
 
-    if ((count || 0) >= maxMessages) {
+    if (count >= maxMessages) {
       await skip(`Limite de ${maxMessages} resposta(s) por conversa atingido`);
       return { replied: false, transferred: false, skipped: 'max_messages' };
     }
@@ -516,16 +514,8 @@ export async function maybeRunAgentForCloudConversation(
 
   // stop_on_human_reply: humano já respondeu manualmente nesta conversa.
   if (behavior.stop_on_human_reply !== false) {
-    const { data: humanMsg } = await supabaseAdmin
-      .from('whatsapp_cloud_messages')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('conversation_id', conversation.id)
-      .eq('sender', 'human')
-      .limit(1)
-      .maybeSingle();
-
-    if (humanMsg) {
+    // Idem: predicado compartilhado com conversation-ai-status.ts.
+    if (await hasHumanReply(organizationId, conversation.id)) {
       // Guard PERMANENTE por conversa: uma unica mensagem manual no passado
       // silencia o agente para sempre nela. Sem este passo o inbox nao tinha
       // como explicar o silencio — o badge continua "Bot Ativo", porque

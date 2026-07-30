@@ -410,6 +410,35 @@ export function ChatPanel({
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
+
+  // Estado REAL do agente nesta conversa (guards do cloud-runner), nao so a
+  // flag ai_enabled. Refaz a consulta quando chega/sai mensagem porque uma
+  // resposta manual liga o stop_on_human_reply na hora.
+  const [aiStatus, setAiStatus] = useState<{
+    willRespond: boolean
+    label: string
+    detail?: string
+  } | null>(null)
+
+  useEffect(() => {
+    if (!conversation?.id) {
+      setAiStatus(null)
+      return
+    }
+    let cancelled = false
+    authedFetch(`/api/whatsapp/inbox/conversations/${conversation.id}/ai-status`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setAiStatus(d?.status ?? null)
+      })
+      .catch(() => {
+        // Badge cai para o comportamento antigo (so ai_enabled). Falhar aqui
+        // nao pode quebrar o chat.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [conversation?.id, messages.length])
   const [isSendingTemplate, setIsSendingTemplate] = useState(false)
 
   // Fonte unica derivada da janela de 24h — controla composer e banner.
@@ -682,14 +711,37 @@ export function ChatPanel({
             </span>
           )}
 
-          <button onClick={onToggleBot}
+          {/* O rotulo reflete o comportamento REAL, nao so a flag ai_enabled:
+              com ai_enabled=true o agente ainda pode estar calado por um guard
+              (stop_on_human_reply, max_messages, ativacao manual...). Dizer
+              "Bot Ativo" nesse estado e simplesmente mentir para quem atende. */}
+          <button
+            onClick={onToggleBot}
+            title={
+              conversation.is_bot_active && aiStatus && !aiStatus.willRespond
+                ? aiStatus.detail
+                : undefined
+            }
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              conversation.is_bot_active
-                ? 'bg-brand-50 text-brand-600 border border-brand-300'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700'
-            }`}>
-            <Bot className="w-4 h-4" />
-            <span className="hidden sm:inline">{conversation.is_bot_active ? 'Bot Ativo' : 'Bot Off'}</span>
+              !conversation.is_bot_active
+                ? 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+                : aiStatus && !aiStatus.willRespond
+                  ? 'bg-amber-50 text-amber-700 border border-amber-300'
+                  : 'bg-brand-50 text-brand-600 border border-brand-300'
+            }`}
+          >
+            {conversation.is_bot_active && aiStatus && !aiStatus.willRespond ? (
+              <AlertCircle className="w-4 h-4" />
+            ) : (
+              <Bot className="w-4 h-4" />
+            )}
+            <span className="hidden sm:inline">
+              {!conversation.is_bot_active
+                ? 'Bot Off'
+                : aiStatus && !aiStatus.willRespond
+                  ? aiStatus.label
+                  : 'Bot Ativo'}
+            </span>
           </button>
 
           {/* Resolve conversation */}
@@ -779,6 +831,20 @@ export function ChatPanel({
 
       {/* Service Window 24h Bar */}
       <ServiceWindowBar expiresAt={conversation.window_expires_at} />
+
+      {/* Bot ligado mas calado por um guard. Precisa ser uma faixa visivel, e
+          nao tooltip do badge: o caso real que motivou isto e alguem olhando a
+          tela sem entender por que o agente nao respondeu, e informacao
+          escondida atras de hover nao resolve isso. */}
+      {conversation.is_bot_active && aiStatus && !aiStatus.willRespond && (
+        <div className="flex items-start gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200">
+          <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-800">
+            <span className="font-medium">O agente não vai responder nesta conversa.</span>{' '}
+            {aiStatus.detail}
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {showCSATModal && organizationId && (
