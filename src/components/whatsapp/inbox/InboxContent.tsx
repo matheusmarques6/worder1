@@ -76,8 +76,9 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
     selectConversation,
     fetchConversations,
     toggleBot,
-    setFilters, 
+    setFilters,
     refresh: refreshConversations,
+    markAsRead,
   } = useInboxConversations(organizationId, storeId)
 
   const {
@@ -160,9 +161,16 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
     console.log('📨 [InboxContent] New message:', msg.id)
     if (selectedConversation?.id === msg.conversation_id) {
       addMessage(msg)
+      // Zerar o nao-lidas: markAsRead so rodava em selectConversation (ou
+      // seja, no clique). Mensagem que chega com a conversa JA aberta
+      // incrementava unread_count via RPC e ninguem zerava — o inbox marcava
+      // "1 nao lida" numa conversa que o atendente esta lendo naquele instante.
+      if (msg.direction === 'inbound') {
+        markAsRead(msg.conversation_id)
+      }
     }
     refreshConversations()
-  }, [selectedConversation?.id, addMessage, refreshConversations])
+  }, [selectedConversation?.id, addMessage, refreshConversations, markAsRead])
 
   const handleStatusUpdate = useCallback((msg: any) => {
     console.log('✓ [InboxContent] Status update:', msg.id, '->', msg.status)
@@ -196,6 +204,18 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
   useEffect(() => {
     setAgentSteps([])
   }, [selectedConversation?.id])
+
+  // Rede de seguranca do nao-lidas, cobrindo o caminho de POLLING: se o canal
+  // de mensagens estiver caido, handleNewMessage nunca roda, mas a lista ainda
+  // traz unread_count > 0 na conversa que esta aberta na tela. Zera de todo
+  // jeito — badge de nao-lida no que o atendente esta lendo e sempre errado.
+  useEffect(() => {
+    if (!selectedConversation?.id) return
+    const fresh = conversations.find((c) => c.id === selectedConversation.id)
+    if (fresh && fresh.unread_count > 0) {
+      markAsRead(fresh.id)
+    }
+  }, [conversations, selectedConversation?.id, markAsRead])
 
   // =============================================
   // REALTIME (Cloud API) — poll de 5s vira fallback
