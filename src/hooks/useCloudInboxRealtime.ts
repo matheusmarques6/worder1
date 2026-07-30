@@ -73,6 +73,17 @@ interface UseCloudInboxRealtimeOptions {
 interface UseCloudInboxRealtimeReturn {
   isConnected: boolean
   hasError: boolean
+  /**
+   * Estado por canal. `isConnected` é um agregado e por definição esconde
+   * QUAL canal caiu — que é exatamente a pergunta em aberto do inbox
+   * (mensagens não chegam ao vivo, lista lateral atualiza na hora).
+   * `messages`/`agentSteps` ficam em 'idle' quando não há conversa aberta.
+   */
+  channels: {
+    conversations: ChannelState
+    messages: ChannelState
+    agentSteps: ChannelState
+  }
 }
 
 export function useCloudInboxRealtime(
@@ -83,6 +94,7 @@ export function useCloudInboxRealtime(
   const [authReady, setAuthReady] = useState(false)
   const [conversationsState, setConversationsState] = useState<ChannelState>('idle')
   const [messagesState, setMessagesState] = useState<ChannelState>('idle')
+  const [agentStepsState, setAgentStepsState] = useState<ChannelState>('idle')
 
   // Callbacks em ref: a identidade deles muda a cada render do
   // InboxContent e NAO pode derrubar/recriar canal (bug do hook legado
@@ -218,11 +230,20 @@ export function useCloudInboxRealtime(
     // (canal cai silenciosamente em CHANNEL_ERROR, e mensagens novas na
     // conversa aberta so aparecem no proximo poll, ate 30s depois).
     // conversation_id sozinho ja escopa unicamente para uma unica org (uma
-    // conversa pertence a exatamente uma organizacao), e a policy de SELECT
-    // do RLS em whatsapp_cloud_messages (org-scoped via auth.organization_id(),
-    // ver supabase/migrations/001_enable_rls.sql) re-checa a organizacao no
-    // servidor de qualquer forma — entao o termo organization_id aqui seria
-    // redundante mesmo se filtros compostos fossem suportados.
+    // conversa pertence a exatamente uma organizacao), e o RLS de
+    // whatsapp_cloud_messages re-checa a organizacao no servidor de qualquer
+    // forma — entao o termo organization_id aqui seria redundante mesmo se
+    // filtros compostos fossem suportados.
+    //
+    // NAO afirme aqui QUAL e a policy. O comentario anterior dizia que era a
+    // `*_org_select` de 001_enable_rls.sql, via auth.organization_id(). Essa
+    // funcao nao existe no banco de producao: a 001 aborta na criacao dela
+    // (o Supabase nega DDL no schema `auth` para o role do projeto), entao
+    // nenhuma policy daquele arquivo foi criada. As policies que existem
+    // vieram de outro lugar e seu conteudo segue nao auditado — ver
+    // supabase/audits/2026-07-30_rls_realtime_audit.sql. Um comentario errado
+    // sobre infraestrutura ja custou uma migration quebrada em producao
+    // (42883: function auth.organization_id() does not exist).
     const messagesFilter = `conversation_id=eq.${conversationId}`
     console.log('[CloudRealtime] Subscribing:', channelName)
 
@@ -309,21 +330,44 @@ export function useCloudInboxRealtime(
         },
       )
       .subscribe((status, err) => {
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        if (status === 'SUBSCRIBED') {
+          setAgentStepsState('connected')
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.warn('[CloudRealtime] ai steps channel:', status, err?.message || '')
+          setAgentStepsState('error')
+        } else if (status === 'CLOSED') {
+          setAgentStepsState('idle')
         }
       })
 
     return () => {
       supabaseClient.removeChannel(channel)
+      setAgentStepsState('idle')
     }
   }, [enabled, organizationId, conversationId, authReady])
 
+  // O polling so pode relaxar para 30s se TODOS os canais que alimentam a
+  // tela atual estao de pe. Antes isso media apenas o canal de conversas:
+  // com o canal de mensagens caido, a UI dizia "conectado", o poll ia para
+  // 30s e a mensagem da conversa aberta demorava ate meio minuto para
+  // aparecer — enquanto a lista lateral, alimentada pelo canal que estava
+  // vivo, atualizava na hora. O sintoma virava "a mensagem nunca chega".
+  //
+  // O canal de steps NAO entra na conta: ele alimenta o painel de progresso
+  // do agente, nao o conteudo da conversa, e nao vale voltar o inbox inteiro
+  // para 5s por causa dele.
+  const needsMessagesChannel = Boolean(enabled && organizationId && conversationId)
+
   return {
-    // O canal de conversas e o "coracao" do inbox: e ele que dita se o
-    // polling pode relaxar para 30s (Task 5).
-    isConnected: conversationsState === 'connected',
+    isConnected:
+      conversationsState === 'connected' &&
+      (!needsMessagesChannel || messagesState === 'connected'),
     hasError: conversationsState === 'error' || messagesState === 'error',
+    channels: {
+      conversations: conversationsState,
+      messages: needsMessagesChannel ? messagesState : 'idle',
+      agentSteps: needsMessagesChannel ? agentStepsState : 'idle',
+    },
   }
 }
 

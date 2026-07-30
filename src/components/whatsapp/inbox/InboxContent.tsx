@@ -220,7 +220,7 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
   // =============================================
   // REALTIME (Cloud API) — poll de 5s vira fallback
   // =============================================
-  const { isConnected: realtimeConnected } = useCloudInboxRealtime({
+  const { isConnected: realtimeConnected, channels: realtimeChannels } = useCloudInboxRealtime({
     organizationId,
     conversationId: selectedConversation?.id ?? null,
     onNewConversation: handleConversationInsert,
@@ -230,6 +230,27 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
     onAgentStep: handleAgentStep,
     enabled: Boolean(organizationId && storeId),
   })
+
+  // Canal de mensagens caido com uma conversa aberta e o cenario que produz
+  // "o cliente respondeu e a mensagem nao apareceu": a lista lateral atualiza
+  // (canal de conversas vivo) e o corpo da conversa nao. Antes isso nao
+  // aparecia em lugar nenhum — nem na UI, nem no console. O poll cai para 5s
+  // sozinho (isConnected agora conta este canal); esta linha existe para dizer
+  // QUAL canal caiu quando alguem for investigar.
+  //
+  // A dependencia e `realtimeChannels.messages` (string), NAO o objeto
+  // `realtimeChannels`: o hook devolve um literal novo a cada render, entao
+  // depender do objeto dispararia o aviso em todo render.
+  const messagesChannelState = realtimeChannels.messages
+  useEffect(() => {
+    if (!selectedConversation?.id) return
+    if (messagesChannelState === 'error') {
+      console.warn(
+        '[Inbox] canal de mensagens em erro — conversa aberta atualiza so por polling (5s).',
+        { conversationId: selectedConversation.id },
+      )
+    }
+  }, [messagesChannelState, selectedConversation?.id])
 
   // =============================================
   // EFFECTS
