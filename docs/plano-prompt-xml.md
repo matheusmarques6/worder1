@@ -13,19 +13,30 @@
 | 7 | agentes existentes | **A** — migram automaticamente |
 | 8 | `drift_mitigation` | orquestrador, não é seção do XML |
 
-## A decisão que falta, e é a mais importante
+## A regra que manda em tudo
 
-**O XML é armazenado pronto ou renderizado a cada uso?**
+**Uma fonte só. Montado na hora. Sem cópia, sem cache, sem webhook.**
 
-Se for armazenado pronto, recriamos exatamente o bug que estamos consertando:
-o prompt congela na criação e para de refletir a configuração.
+O XML nunca é armazenado. Ele é montado a cada atendimento, a partir de
+`ai_agents.prompt_sections`. O que o lojista salva na tela é literalmente o
+que o agente recebe na próxima mensagem — não há passo intermediário onde os
+dois possam divergir.
 
-**Recomendação: renderizado.** As seções viram dado estruturado em
-`ai_agents.prompt_sections` (jsonb), e o XML é montado a partir delas. Editar
-a persona muda o prompt no próximo atendimento, sem regenerar nada.
+Isso não é preferência de implementação, é a correção do bug. Toda variante
+que guarda o texto pronto — congelar na criação, webhook no salvar, cache com
+carimbo de tempo — cria de novo o mesmo problema: dois lugares dizendo a
+mesma coisa, um deles desatualizado.
 
-O resto deste plano assume isso. Se você preferir congelado, vários pontos
-mudam e eu reescrevo.
+Consequências, que valem para o plano inteiro:
+
+- `system_prompt` e `persona.role_description` **deixam de existir como
+  campos separados**. Hoje os dois guardam o mesmo texto e o modelo recebe as
+  duas cópias; na migração viram uma seção só de `prompt_sections`.
+- Não há coluna com o XML pronto. Nenhuma.
+- Auditoria não vem de cache: vem de `agent_traces.rendered_prompt`, que
+  registra o que foi enviado **naquele** atendimento (fase 1).
+- Correção de template que a gente deployar vale para todos os agentes na
+  mensagem seguinte, sem migração de dado.
 
 ---
 
@@ -65,7 +76,12 @@ Em runtime, `PromptBuilder` concatena 10 blocos com `parts.join('\n\n')`:
 ## Os defeitos conhecidos
 
 - **B1** prompt congelado na criação; `generatePromptFromTemplate` só roda em `CreateAgentFlow.tsx:280`
-- **B2** nenhuma aba do editor lê ou escreve `system_prompt`
+- **B2** o campo "Função e Personalidade" da aba Persona (`PersonaTab.tsx:114`)
+  edita `persona.role_description`, **não** o `system_prompt`. Como os dois
+  nascem com o mesmo texto, o lojista corrige o que vê, salva, e o
+  `system_prompt` continua com a versão defeituosa — que segue indo ao modelo
+  no bloco 1, agora acompanhada da correção no bloco 2. **Cada edição cria uma
+  contradição nova e a versão errada nunca sai.**
 - **B3** o `if/else` cobre só o bloco 1; blocos 3–6 são anexados sempre → instrução duplicada e contraditória
 - **B4** `Seu nome é ${agent.name}` vive no ramo `else`, então agente com `system_prompt` nunca recebe o próprio nome
 - **B5** blocos 1 e 2 recebem **o mesmo texto** (`system_prompt` e `persona.role_description`), duplicando tokens
@@ -199,6 +215,7 @@ selecionada, que é editável mas tem default da loja logada.
 ## Schema novo
 
 ```sql
+-- A UNICA fonte do prompt. Nao existe coluna com o XML pronto.
 ALTER TABLE ai_agents ADD COLUMN IF NOT EXISTS prompt_sections jsonb;
 ALTER TABLE ai_agents ADD COLUMN IF NOT EXISTS store_id uuid;
 ALTER TABLE ai_agents ADD COLUMN IF NOT EXISTS agent_type text;   -- sales|support|leads|scheduling|faq|custom
