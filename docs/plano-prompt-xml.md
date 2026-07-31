@@ -382,3 +382,171 @@ escolhe **um** e descarta a cópia — resolvendo B5.
 **A migração muda o prompt de todo agente ativo.** Exige preview antes/depois
 por agente, execução por organização, e `prompt_format` de volta para `legacy`
 como rollback.
+
+---
+
+# PARTE 6 — O flywheel de qualidade
+
+## O que já existe
+
+| peça | arquivo / tabela | estado |
+|---|---|---|
+| Juiz com score 0–100, `note` e `flags` (`turn_index`, `label`, `severe`) | `judge.ts` | funciona |
+| Juiz por critério (`pass`/`fail` por `criterion_id`) | `judge.ts` | funciona |
+| Casos e critérios de eval | `ai_eval_cases`, `ai_eval_criteria` | existem |
+| Resultados de eval por versão | `ai_eval_results` | existe |
+| Score médio por `version_id` | `evals.ts` | existe |
+| Anotação humana em trace | `agent_trace_annotations`, `AnnotationTab` | existe |
+| CSAT real do cliente | `whatsapp_csat_ratings` | existe |
+| Propostas de melhoria a partir de sinais | `proposals.ts` | existe |
+| Versionamento e rollback | `ai_agent_versions`, `VersionsTab` | existe |
+
+**Quase todas as peças do ciclo já estão construídas.**
+
+## Por que ele não gira hoje
+
+**1. O juiz não avalia conversa real.**
+`grep -c "judge" src/lib/ai/cloud-runner.ts` devolve **0**. O juiz roda em
+`evals.ts`, `test-runner.ts` e `proposals.ts` — todos sobre cenários
+inventados. Nenhuma conversa de produção é pontuada automaticamente.
+
+O ciclo aprende com o que imaginamos, não com o que aconteceu.
+
+**2. Não há como ligar resultado a prompt.**
+Sem `rendered_prompt`/`prompt_hash` no trace (B6), é impossível dizer *"as
+conversas ruins usavam esta versão do prompt"*. A correlação que sustentaria
+todo o resto não existe.
+
+**3. A proposta é um texto inteiro.**
+`proposals.ts` pede ao modelo o *"PROMPT DE SISTEMA COMPLETO já reescrito"* e
+grava em `system_prompt`. Não dá para dizer **qual parte** estava errada, nem
+aceitar só uma correção. É trocar o motor para consertar uma vela.
+
+**4. Nada trava regressão.**
+`evals.ts` pontua por versão, mas nada compara a nova com a anterior nem
+impede publicar uma versão pior.
+
+**5. O aprendizado não acumula.**
+Uma conversa ruim vira, no máximo, uma proposta. Ela não vira caso de teste.
+Corrigido o problema, nada garante que ele não volte.
+
+## O desenho
+
+```
+   ┌──────────────────────────────────────────────────────────┐
+   │                                                          │
+   ▼                                                          │
+1. ATENDIMENTO                                                │
+   trace + rendered_prompt + prompt_hash + version_id         │
+   │                                                          │
+   ▼                                                          │
+2. SINAL                                                      │
+   ├─ juiz em AMOSTRA das conversas reais → score + flags     │
+   ├─ CSAT real do cliente                                    │
+   ├─ implícito: transferiu p/ humano, cliente sumiu,         │
+   │             repetiu a mesma pergunta                     │
+   └─ anotação humana no inbox                                │
+   │                                                          │
+   ▼                                                          │
+3. ATRIBUIÇÃO POR SEÇÃO                                       │
+   cada flag do juiz é mapeada para a seção do XML            │
+   responsável. "prometeu prazo sem consultar"                │
+   → <critical_rules>                                          │
+   │                                                          │
+   ▼                                                          │
+4. PROPOSTA POR SEÇÃO                                         │
+   "<critical_rules>: 7 conversas com esta falha,             │
+    veja 3 exemplos. Sugestão: ..."                           │
+   │                                                          │
+   ▼                                                          │
+5. ACEITE campo a campo (RF8) → nova versão                   │
+   │                                                          │
+   ▼                                                          │
+6. PORTÃO DE REGRESSÃO                                        │
+   roda os casos de eval na versão nova                       │
+   piorou em caso que passava? → bloqueia e avisa             │
+   │                                                          │
+   ▼                                                          │
+7. AS FALHAS VIRAM CASOS PERMANENTES ──────────────────────────┘
+   cada conversa que gerou proposta aceita entra em
+   ai_eval_cases com o comportamento esperado
+```
+
+## O que torna isso um flywheel, e não um loop
+
+**O passo 7.** Sem ele, o ciclo corrige e esquece — e o mesmo problema volta
+na próxima reescrita.
+
+Com ele, **cada falha real vira caso de teste permanente**. O conjunto de
+avaliação cresce com o uso, e toda mudança futura passa a ser conferida contra
+todos os problemas já vividos por aquele agente.
+
+O ativo que acumula não é o prompt: é o **corpus de casos**. O prompt fica bom
+como consequência.
+
+## Como a arquitetura nova viabiliza isso
+
+Duas coisas que só passam a existir com o XML por seções:
+
+**Atribuição.** Hoje, com um blocão de texto, saber "que parte causou a falha"
+é chute. Com seções nomeadas, a flag do juiz aponta um lugar.
+
+**Correção cirúrgica.** Propor mudança em `<critical_rules>` sem tocar em
+`<persona>` só é possível se as duas forem coisas separadas.
+
+O flywheel **depende** da arquitetura de seções. Não é um módulo à parte.
+
+## O que precisa ser construído
+
+| item | onde | esforço |
+|---|---|---|
+| `prompt_hash` + `version_id` no trace | `cloud-runner.ts`, `agent_traces` | pequeno — já está na fase 1 |
+| Juiz em amostra de produção | novo worker, ou cron | médio |
+| Taxa de amostragem configurável | `settings` do agente | pequeno |
+| Mapa flag → seção | `prompt-sections.ts` | médio — é design, não código |
+| Sinais implícitos (transferência, abandono, repetição) | `reports-metrics.ts` | médio |
+| Propostas por seção | reescrever `proposals.ts` | **grande** |
+| Portão de regressão | `evals.ts` + API de publicação | médio |
+| Promover trace a caso de eval | `ai_eval_cases` + UI | médio |
+
+## Requisitos do flywheel
+
+| # | requisito | como verificar |
+|---|---|---|
+| **RF11** | Todo trace é rastreável até o prompt exato e a versão | `prompt_hash` e `version_id` preenchidos |
+| **RF12** | Conversas reais são avaliadas, não só cenários | `ai_eval_results` com origem de produção |
+| **RF13** | Toda falha aponta uma seção | flag do juiz tem `section` |
+| **RF14** | Proposta cita evidência: N conversas, exemplos | proposta sem trace de origem é rejeitada |
+| **RF15** | Versão que regride caso que passava não publica sozinha | portão bloqueia e avisa |
+| **RF16** | Falha corrigida vira caso permanente | `ai_eval_cases` cresce com proposta aceita |
+| **RNF11** | Julgar produção respeita orçamento | amostragem configurável + `checkAiBudget` |
+| **RNF12** | Julgar não atrasa resposta ao cliente | roda fora do caminho da resposta, assíncrono |
+| **RNF13** | Conteúdo de conversa em caso de eval respeita LGPD | anonimizar ao promover, ou pedir consentimento |
+
+## Fases do flywheel
+
+| # | fase | risco | depende de |
+|---|---|---|---|
+| 12 | `prompt_hash` + `version_id` no trace | baixo | 1 |
+| 13 | Mapa flag → seção | baixo | 2 |
+| 14 | Juiz em amostra de produção, assíncrono | médio | 12, `ai_budgets` |
+| 15 | Sinais implícitos | médio | 12 |
+| 16 | Propostas por seção com evidência | **alto** | 5, 13, 14 |
+| 17 | Portão de regressão | médio | 16 |
+| 18 | Promover trace a caso de eval | médio | 16 |
+
+**Ordem sugerida:** 12 e 13 podem entrar junto com as fases 1 e 2 — são
+baratas e destravam todo o resto. Da 14 em diante, só depois do XML rodando.
+
+## Riscos próprios
+
+- **Custo.** Julgar conversa real é chamada de LLM por conversa. Sem
+  amostragem e sem `ai_budgets` funcionando, escala mal.
+- **Juiz enviesado.** O juiz é um LLM com prompt próprio. Se ele estiver
+  errado, o flywheel otimiza para a métrica errada — e com convicção. Precisa
+  de calibração contra anotação humana.
+- **Otimizar o mensurável.** Score de juiz e CSAT não capturam tudo. O ciclo
+  vai empurrar o agente para o que é medido; o que não é medido pode piorar
+  sem aparecer.
+- **Privacidade.** Promover conversa real a caso de teste guarda mensagem de
+  cliente indefinidamente. Precisa de decisão antes, não depois.
