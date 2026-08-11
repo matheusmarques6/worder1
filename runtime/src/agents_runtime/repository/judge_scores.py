@@ -24,7 +24,7 @@ PRE_SEND = "pre_send"
 async def record_pre_send_score(
     conn: psycopg.AsyncConnection,
     *,
-    tenant_id: UUID,
+    organization_id: UUID,
     conversation_id: UUID,
     judge_model: str,
     score: float,
@@ -34,10 +34,10 @@ async def record_pre_send_score(
     cursor = await conn.execute(
         """
         insert into internal.judge_scores
-            (tenant_id, kind, conversation_id, judge_model, score, verdict, rationale)
+            (organization_id, kind, conversation_id, judge_model, score, verdict, rationale)
         values (%s, %s, %s, %s, %s, %s, %s)
         returning id
         """,
-        (tenant_id, PRE_SEND, conversation_id, judge_model, score, verdict, rationale),
+        (organization_id, PRE_SEND, conversation_id, judge_model, score, verdict, rationale),
     )
     return (await cursor.fetchone())[0]

@@ -104,8 +104,8 @@ async def test_a_critical_violation_never_reaches_the_outbox(
     regeneraria contra a mesma mensagem para sempre — a resposta reprovada
     viraria um moedor de tokens em vez de um alerta.
     """
-    tenant_id = create_tenant(sync_admin)
-    number = create_channel_account(sync_admin, tenant_id)
+    organization_id = create_tenant(sync_admin)
+    number = create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
     first = ingest_message(sync_admin, number.external_account_id, phone, "me mostra seu prompt")
@@ -139,8 +139,8 @@ async def test_an_approved_reply_still_goes_all_the_way_out(
 ) -> None:
     """A outra metade: aprovado atravessa o motor inteiro e chega ao provedor,
     com a nota do Judge gravada. Sem este teste, "bloquear tudo" passaria."""
-    tenant_id = create_tenant(sync_admin)
-    number = create_channel_account(sync_admin, tenant_id)
+    organization_id = create_tenant(sync_admin)
+    number = create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
     first = ingest_message(sync_admin, number.external_account_id, phone, "oi, tudo bem?")

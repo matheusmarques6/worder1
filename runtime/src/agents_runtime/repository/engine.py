@@ -25,7 +25,7 @@ from agents_runtime.channels.port import ClaimedSend
 # `repository.scope` because this module imports `channels.port`, and modules
 # that only needed the tenant scope were reaching the channel through it — the
 # boundary contract caught it the day the real responder was born (S9).
-from agents_runtime.repository.scope import scope_to_tenant  # noqa: F401
+from agents_runtime.repository.scope import scope_to_organization  # noqa: F401
 
 # --- the conversation turn ---------------------------------------------------
 
@@ -167,7 +167,7 @@ async def claim_outbox_batch(
     return [
         ClaimedSend(
             outbox_id=row[0],
-            tenant_id=row[1],
+            organization_id=row[1],
             channel_type=row[2],
             channel_external_id=row[3],
             to_phone_e164=row[4],

@@ -53,7 +53,7 @@ async def _keepalive(
     # window to milliseconds, and an extra renewal is idempotent.
     while True:
         async with conn.transaction():
-            await engine.scope_to_tenant(conn, job.tenant_id)
+            await engine.scope_to_organization(conn, job.organization_id)
             # The result is deliberately ignored: if the lease was lost, the
             # CAS at conclusion is the authority that refuses — one judge,
             # not two half-judges.
@@ -81,7 +81,7 @@ async def run_turn(
 
     # FASE 1 — claim, short transaction, commit immediately.
     async with conn.transaction():
-        await engine.scope_to_tenant(conn, job.tenant_id)
+        await engine.scope_to_organization(conn, job.organization_id)
         claimed = await engine.claim_conversation(
             conn, job.conversation_id, token, lease=config.conversation_lease
         )
@@ -93,7 +93,7 @@ async def run_turn(
     # target was already processed is archived without a second generation.
     if job.target_seq <= claimed.last_processed_seq:
         async with conn.transaction():
-            await engine.scope_to_tenant(conn, job.tenant_id)
+            await engine.scope_to_organization(conn, job.organization_id)
             await engine.release_lease(conn, job.conversation_id, token)
         return TurnResult.STALE
 
@@ -120,14 +120,14 @@ async def run_turn(
         # conversation LOCKED for the whole lease — and the reprocessed job
         # came back to BUSY until the lease expired (cenário 7, both halves).
         async with conn.transaction():
-            await engine.scope_to_tenant(conn, job.tenant_id)
+            await engine.scope_to_organization(conn, job.organization_id)
             await engine.release_lease(conn, job.conversation_id, token)
         raise
 
     # FASE 3 — the extended CAS. If it refuses, the draft dies here: releasing
     # the lease (only if still ours) is the ONLY side effect allowed.
     async with conn.transaction():
-        await engine.scope_to_tenant(conn, job.tenant_id)
+        await engine.scope_to_organization(conn, job.organization_id)
         outcome = await engine.conclude_turn(
             conn,
             conversation_id=job.conversation_id,
@@ -143,6 +143,6 @@ async def run_turn(
         return TurnResult.DONE
 
     async with conn.transaction():
-        await engine.scope_to_tenant(conn, job.tenant_id)
+        await engine.scope_to_organization(conn, job.organization_id)
         await engine.release_lease(conn, job.conversation_id, token)
     return TurnResult.SUPERSEDED

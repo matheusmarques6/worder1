@@ -211,7 +211,7 @@ def test_the_tenant_comes_from_the_source_account_not_from_the_payload(
         admin,
         source="shopify",
         source_account_id=store.source_account_id,
-        payload={"tenant_id": str(two_tenants.b.id), "total": 199},
+        payload={"organization_id": str(two_tenants.b.id), "total": 199},
     )
 
     assert outcome[2] == two_tenants.a.id

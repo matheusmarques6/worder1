@@ -55,7 +55,7 @@ class Thread:
 
 def create_connector_account(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     *,
     platform: str = "shopify",
 ) -> ConnectorAccount:
@@ -63,11 +63,11 @@ def create_connector_account(
     with conn.cursor() as cur:
         cur.execute(
             """
-            insert into public.connector_accounts (tenant_id, platform, source_account_id)
+            insert into public.connector_accounts (organization_id, platform, source_account_id)
             values (%s, %s, %s)
             returning id
             """,
-            (tenant_id, platform, source_account_id),
+            (organization_id, platform, source_account_id),
         )
         (account_id,) = cur.fetchone()
 
@@ -76,7 +76,7 @@ def create_connector_account(
 
 def create_channel_account(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     *,
     type: str = "cloud",
 ) -> ChannelAccount:
@@ -86,22 +86,23 @@ def create_channel_account(
         cur.execute(
             """
             insert into public.channels_accounts
-                (tenant_id, type, phone_e164, external_account_id, status)
+                (organization_id, type, phone_e164, external_account_id, status)
             values (%s, %s, %s, %s, 'active')
             returning id
             """,
-            (tenant_id, type, phone, external_account_id),
+            (organization_id, type, phone, external_account_id),
         )
         (account_id,) = cur.fetchone()
 
     return ChannelAccount(id=account_id, phone_e164=phone, external_account_id=external_account_id)
 
 
-def create_contact(conn: psycopg.Connection, tenant_id: uuid.UUID) -> uuid.UUID:
+def create_contact(conn: psycopg.Connection, organization_id: uuid.UUID) -> uuid.UUID:
     with conn.cursor() as cur:
         cur.execute(
-            "insert into public.contacts (tenant_id, phone_e164) values (%s, %s) returning id",
-            (tenant_id, unique_phone()),
+            "insert into public.contacts (organization_id, phone_e164)"
+            " values (%s, %s) returning id",
+            (organization_id, unique_phone()),
         )
         (contact_id,) = cur.fetchone()
     return contact_id
@@ -109,22 +110,22 @@ def create_contact(conn: psycopg.Connection, tenant_id: uuid.UUID) -> uuid.UUID:
 
 def create_thread(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     *,
     origin_occasion: str = "direct",
 ) -> Thread:
-    contact_id = create_contact(conn, tenant_id)
-    channel = create_channel_account(conn, tenant_id)
+    contact_id = create_contact(conn, organization_id)
+    channel = create_channel_account(conn, organization_id)
 
     with conn.cursor() as cur:
         cur.execute(
             """
             insert into public.conversations
-                (tenant_id, contact_id, channel_account_id, origin_occasion)
+                (organization_id, contact_id, channel_account_id, origin_occasion)
             values (%s, %s, %s, %s)
             returning id
             """,
-            (tenant_id, contact_id, channel.id, origin_occasion),
+            (organization_id, contact_id, channel.id, origin_occasion),
         )
         (conversation_id,) = cur.fetchone()
 
@@ -137,7 +138,7 @@ def create_thread(
 
 def create_message(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     thread: Thread,
     *,
     direction: str = "inbound",
@@ -148,12 +149,12 @@ def create_message(
         cur.execute(
             """
             insert into public.messages
-                (tenant_id, conversation_id, direction, seq, channel, author_type, content)
+                (organization_id, conversation_id, direction, seq, channel, author_type, content)
             values (%s, %s, %s, %s, 'whatsapp_cloud', %s, %s)
             returning id
             """,
             (
-                tenant_id,
+                organization_id,
                 thread.conversation_id,
                 direction,
                 seq,
@@ -167,7 +168,7 @@ def create_message(
 
 def create_outbox_item(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     thread: Thread,
     *,
     status: str = "pending",
@@ -176,13 +177,13 @@ def create_outbox_item(
         cur.execute(
             """
             insert into internal.message_outbox
-                (tenant_id, conversation_id, contact_id, channel_account_id,
+                (organization_id, conversation_id, contact_id, channel_account_id,
                  kind, payload, idempotency_key, status)
             values (%s, %s, %s, %s, 'reply', %s, %s, %s)
             returning id
             """,
             (
-                tenant_id,
+                organization_id,
                 thread.conversation_id,
                 thread.contact_id,
                 thread.channel_account_id,
@@ -197,7 +198,7 @@ def create_outbox_item(
 
 def create_webhook_event(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     *,
     source: str = "shopify",
     source_account_id: str | None = None,
@@ -209,7 +210,7 @@ def create_webhook_event(
         cur.execute(
             """
             insert into internal.webhook_events
-                (source, source_account_id, external_event_id, tenant_id, event_type, payload)
+                (source, source_account_id, external_event_id, organization_id, event_type, payload)
             values (%s, %s, %s, %s, %s, %s)
             returning id
             """,
@@ -217,7 +218,7 @@ def create_webhook_event(
                 source,
                 source_account_id or unique_id("store"),
                 external_event_id or unique_id("evt"),
-                tenant_id,
+                organization_id,
                 event_type,
                 psycopg.types.json.Jsonb(payload if payload is not None else {"raw": True}),
             ),
@@ -253,7 +254,7 @@ def make_due(
 
 def create_agent_version(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     *,
     status: str = "draft",
     origin: str = "onboarding",
@@ -261,8 +262,8 @@ def create_agent_version(
     base_prompt: str = "Você é o atendente da loja.",
 ) -> uuid.UUID:
     """One version of the agent. `model` left as None exercises the default."""
-    columns = ["tenant_id", "status", "origin", "base_prompt"]
-    values: list[object] = [tenant_id, status, origin, base_prompt]
+    columns = ["organization_id", "status", "origin", "base_prompt"]
+    values: list[object] = [organization_id, status, origin, base_prompt]
     if model is not None:
         columns.append("model")
         values.append(model)
@@ -288,7 +289,7 @@ def an_embedding(dimensions: int = 1536, value: float = 0.1) -> str:
 
 def create_knowledge_chunk(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     *,
     source: str = "faq",
     content: str = "Entregamos em todo o Brasil.",
@@ -297,11 +298,16 @@ def create_knowledge_chunk(
     with conn.cursor() as cur:
         cur.execute(
             """
-            insert into public.knowledge_chunks (tenant_id, source, content, embedding)
+            insert into public.knowledge_chunks (organization_id, source, content, embedding)
             values (%s, %s, %s, %s::vector)
             returning id
             """,
-            (tenant_id, source, content, embedding if embedding is not None else an_embedding()),
+            (
+                organization_id,
+                source,
+                content,
+                embedding if embedding is not None else an_embedding(),
+            ),
         )
         (chunk_id,) = cur.fetchone()
     return chunk_id
@@ -309,7 +315,7 @@ def create_knowledge_chunk(
 
 def create_alert(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     *,
     type: str = "critical_violation",
     severity: str = "critical",
@@ -318,11 +324,11 @@ def create_alert(
     with conn.cursor() as cur:
         cur.execute(
             """
-            insert into public.alerts (tenant_id, type, severity, title)
+            insert into public.alerts (organization_id, type, severity, title)
             values (%s, %s, %s, %s)
             returning id
             """,
-            (tenant_id, type, severity, title),
+            (organization_id, type, severity, title),
         )
         (alert_id,) = cur.fetchone()
     return alert_id
@@ -330,7 +336,7 @@ def create_alert(
 
 def create_scenario(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID | None,
+    organization_id: uuid.UUID | None,
     *,
     origin: str = "base_pack",
     occasion: str = "direct",
@@ -339,12 +345,12 @@ def create_scenario(
     with conn.cursor() as cur:
         cur.execute(
             """
-            insert into internal.scenarios (tenant_id, origin, occasion, title, script)
+            insert into internal.scenarios (organization_id, origin, occasion, title, script)
             values (%s, %s, %s, %s, %s)
             returning id
             """,
             (
-                tenant_id,
+                organization_id,
                 origin,
                 occasion,
                 title,
@@ -357,7 +363,7 @@ def create_scenario(
 
 def create_eval_run(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     agent_version_id: uuid.UUID,
     *,
     trigger: str = "manual",
@@ -366,11 +372,11 @@ def create_eval_run(
     with conn.cursor() as cur:
         cur.execute(
             """
-            insert into internal.eval_runs (tenant_id, agent_version_id, trigger, status)
+            insert into internal.eval_runs (organization_id, agent_version_id, trigger, status)
             values (%s, %s, %s, %s)
             returning id
             """,
-            (tenant_id, agent_version_id, trigger, status),
+            (organization_id, agent_version_id, trigger, status),
         )
         (run_id,) = cur.fetchone()
     return run_id
@@ -378,7 +384,7 @@ def create_eval_run(
 
 def create_judge_score(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     *,
     kind: str = "pre_send",
     verdict: str = "pass",
@@ -389,11 +395,11 @@ def create_judge_score(
         cur.execute(
             """
             insert into internal.judge_scores
-                (tenant_id, kind, conversation_id, judge_model, score, verdict)
+                (organization_id, kind, conversation_id, judge_model, score, verdict)
             values (%s, %s, %s, %s, %s, %s)
             returning id
             """,
-            (tenant_id, kind, conversation_id, judge_model, 1.0, verdict),
+            (organization_id, kind, conversation_id, judge_model, 1.0, verdict),
         )
         (score_id,) = cur.fetchone()
     return score_id
@@ -401,7 +407,7 @@ def create_judge_score(
 
 def create_tool_call(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     thread: Thread,
     *,
     tool_name: str = "get_order",
@@ -410,12 +416,12 @@ def create_tool_call(
         cur.execute(
             """
             insert into internal.tool_calls
-                (tenant_id, conversation_id, tool_name, input, output, success, latency_ms)
+                (organization_id, conversation_id, tool_name, input, output, success, latency_ms)
             values (%s, %s, %s, %s, %s, true, 12)
             returning id
             """,
             (
-                tenant_id,
+                organization_id,
                 thread.conversation_id,
                 tool_name,
                 psycopg.types.json.Jsonb({"order_id": "123"}),
@@ -428,7 +434,7 @@ def create_tool_call(
 
 def create_llm_call(
     conn: psycopg.Connection,
-    tenant_id: uuid.UUID,
+    organization_id: uuid.UUID,
     *,
     purpose: str = "agent_reply",
     provider: str = "openrouter",
@@ -438,12 +444,12 @@ def create_llm_call(
         cur.execute(
             """
             insert into internal.llm_calls
-                (tenant_id, purpose, provider, model, input_tokens, output_tokens,
+                (organization_id, purpose, provider, model, input_tokens, output_tokens,
                  cost_usd, latency_ms)
             values (%s, %s, %s, %s, 120, 40, 0.000180, 900)
             returning id
             """,
-            (tenant_id, purpose, provider, model),
+            (organization_id, purpose, provider, model),
         )
         (call_id,) = cur.fetchone()
     return call_id
@@ -456,5 +462,5 @@ def create_tenant(conn: psycopg.Connection, label: str | None = None) -> uuid.UU
             "insert into public.tenants (id, name) values (%s, %s) returning id",
             (uuid.uuid4(), label or unique_id("tenant")),
         )
-        (tenant_id,) = cur.fetchone()
-    return tenant_id
+        (organization_id,) = cur.fetchone()
+    return organization_id

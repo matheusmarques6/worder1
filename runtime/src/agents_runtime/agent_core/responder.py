@@ -52,7 +52,7 @@ from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository import judge_scores as scores_repo
 from agents_runtime.repository import llm_calls as llm_repo
-from agents_runtime.repository.scope import scope_to_tenant
+from agents_runtime.repository.scope import scope_to_organization
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.knowledge import SearchKnowledge
 
@@ -136,9 +136,13 @@ def build_responder(
 
             # --- leitura: uma transação curta, fechada antes de qualquer rede
             async with conn.transaction():
-                await scope_to_tenant(conn, job.tenant_id)
-                settings = await agent_repo.load_tenant_policy(conn, tenant_id=job.tenant_id)
-                version = await agent_repo.load_active_version(conn, tenant_id=job.tenant_id)
+                await scope_to_organization(conn, job.organization_id)
+                settings = await agent_repo.load_tenant_policy(
+                    conn, organization_id=job.organization_id
+                )
+                version = await agent_repo.load_active_version(
+                    conn, organization_id=job.organization_id
+                )
                 state = await agent_repo.load_conversation_view(
                     conn, conversation_id=job.conversation_id
                 )
@@ -155,7 +159,7 @@ def build_responder(
                 )
 
             if version is None:
-                raise NoActiveVersion(f"tenant {job.tenant_id} has no active agent version")
+                raise NoActiveVersion(f"tenant {job.organization_id} has no active agent version")
 
             if not pending:
                 # Janela vazia: não há o que responder, e a conversa precisa
@@ -216,10 +220,10 @@ def build_responder(
             # --- o rastro: uma nota por tentativa (RNF-050), transação própria
             for judgement in outcome.judgements:
                 async with conn.transaction():
-                    await scope_to_tenant(conn, job.tenant_id)
+                    await scope_to_organization(conn, job.organization_id)
                     await scores_repo.record_pre_send_score(
                         conn,
-                        tenant_id=job.tenant_id,
+                        organization_id=job.organization_id,
                         conversation_id=job.conversation_id,
                         judge_model=JUDGE_MODEL,
                         score=judgement.score,
@@ -231,10 +235,10 @@ def build_responder(
                 # O alerta vem ANTES da conclusão: uma morte no meio deixa
                 # alerta duplicado (benigno e visível) em vez de silêncio.
                 async with conn.transaction():
-                    await scope_to_tenant(conn, job.tenant_id)
+                    await scope_to_organization(conn, job.organization_id)
                     await alerts_repo.open_alert(
                         conn,
-                        tenant_id=job.tenant_id,
+                        organization_id=job.organization_id,
                         type=alerts_repo.CRITICAL_VIOLATION,
                         severity="critical",
                         title="Judge 1 reprovou a resposta e nada foi enviado",
@@ -279,18 +283,18 @@ def _metered(
     return MeteredLlm(
         llm,
         clock=clock,
-        record=_recorder(conn, job.tenant_id, job.conversation_id),
+        record=_recorder(conn, job.organization_id, job.conversation_id),
         purpose=purpose,
     )
 
 
-def _recorder(conn: psycopg.AsyncConnection, tenant_id: UUID, conversation_id: UUID):
+def _recorder(conn: psycopg.AsyncConnection, organization_id: UUID, conversation_id: UUID):
     async def record(call: CallRecord) -> None:
         async with conn.transaction():
-            await scope_to_tenant(conn, tenant_id)
+            await scope_to_organization(conn, organization_id)
             await llm_repo.record_llm_call(
                 conn,
-                tenant_id=tenant_id,
+                organization_id=organization_id,
                 purpose=call.purpose,
                 provider=call.provider,
                 model=call.model,
@@ -331,7 +335,7 @@ async def _knowledge(
     result = await run_tool(
         conn,
         SearchKnowledge(embedder, limit=limit),
-        ToolContext(tenant_id=job.tenant_id, conversation_id=job.conversation_id),
+        ToolContext(organization_id=job.organization_id, conversation_id=job.conversation_id),
         {"query": query},
         clock=clock,
     )

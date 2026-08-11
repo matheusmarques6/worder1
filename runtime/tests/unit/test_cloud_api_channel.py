@@ -23,7 +23,7 @@ from agents_runtime.queueing.failures import Failure, classify
 def a_send(**overrides) -> ClaimedSend:
     defaults = dict(
         outbox_id=uuid.uuid4(),
-        tenant_id=uuid.uuid4(),
+        organization_id=uuid.uuid4(),
         channel_type="cloud",
         channel_external_id="123456789012345",  # the phone_number_id
         to_phone_e164="+5511987654321",

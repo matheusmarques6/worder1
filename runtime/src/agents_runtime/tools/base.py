@@ -17,7 +17,7 @@ forgotten by the next tool somebody writes:
     reply over a provider being briefly down;
   * **latency comes from the injected clock**, like everywhere else.
 
-Each tool opens its own SHORT transaction and sets `app.tenant_id` inside it
+Each tool opens its own SHORT transaction and sets `app.organization_id` inside it
 (ADR-6 holds within the responder too). Nothing here opens a transaction around
 the tool itself, because that would be a transaction spanning whatever network
 call the tool makes.
@@ -32,14 +32,14 @@ import psycopg
 
 from agents_runtime.clock import Clock
 from agents_runtime.repository import tool_calls as tool_calls_repo
-from agents_runtime.repository.scope import scope_to_tenant
+from agents_runtime.repository.scope import scope_to_organization
 
 
 @dataclass(frozen=True, slots=True)
 class ToolContext:
     """Where the tool is allowed to look. Never built from model output."""
 
-    tenant_id: UUID
+    organization_id: UUID
     conversation_id: UUID
 
 
@@ -66,7 +66,7 @@ def require_text(arguments: Mapping[str, Any], key: str) -> str:
     """Strict parsing, the webhook doctrine — never "use what parsed".
 
     Unknown keys are simply not read: the model may add whatever it likes, and
-    a `tenant_id` among the arguments is ignored rather than honoured. What
+    a `organization_id` among the arguments is ignored rather than honoured. What
     must NOT happen is coercion — `str(42)` would turn a wrong type into a
     plausible query.
     """
@@ -96,10 +96,10 @@ async def run_tool(
     latency_ms = int((clock.now() - started).total_seconds() * 1000)
 
     async with conn.transaction():
-        await scope_to_tenant(conn, context.tenant_id)
+        await scope_to_organization(conn, context.organization_id)
         await tool_calls_repo.record_tool_call(
             conn,
-            tenant_id=context.tenant_id,
+            organization_id=context.organization_id,
             conversation_id=context.conversation_id,
             tool_name=result.tool,
             arguments=dict(arguments),

@@ -59,8 +59,8 @@ def test_scenario_4a_a_kill_mid_turn_loses_nothing_and_doubles_nothing(
     The dead worker's lease expires, pgmq redelivers, the resurrected process
     concludes. The customer sees exactly one reply and no trace of the death.
     """
-    tenant_id = create_tenant(sync_admin)
-    thread = create_thread(sync_admin, tenant_id)
+    organization_id = create_tenant(sync_admin)
+    thread = create_thread(sync_admin, organization_id)
     make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
     arm_gate(sync_admin, thread.conversation_id, holds=1)
 
@@ -139,8 +139,8 @@ async def test_scenario_4b_a_crash_between_conclusion_and_archive_converges(
     convergence: redelivery finds STALE, archives without a second turn, and
     the pending send goes out once.
     """
-    tenant_id = create_tenant(sync_admin)
-    thread = create_thread(sync_admin, tenant_id)
+    organization_id = create_tenant(sync_admin)
+    thread = create_thread(sync_admin, organization_id)
 
     sync_admin.execute(
         "update public.conversations set next_inbound_seq = 3, last_processed_seq = 3,"
@@ -150,12 +150,12 @@ async def test_scenario_4b_a_crash_between_conclusion_and_archive_converges(
     sync_admin.execute(
         """
         insert into public.messages
-            (tenant_id, conversation_id, direction, seq, channel, author_type, content)
+            (organization_id, conversation_id, direction, seq, channel, author_type, content)
         values (%s, %s, 'outbound', 1, 'whatsapp_cloud', 'agent', '{"text": "resposta"}'::jsonb)
         """,
-        (tenant_id, thread.conversation_id),
+        (organization_id, thread.conversation_id),
     )
-    outbox_id = create_outbox_item(sync_admin, tenant_id, thread)
+    outbox_id = create_outbox_item(sync_admin, organization_id, thread)
     sync_admin.execute(
         "select pgmq.send(%s, %s)",
         (
@@ -165,7 +165,7 @@ async def test_scenario_4b_a_crash_between_conclusion_and_archive_converges(
                     "conversation_id": str(thread.conversation_id),
                     "generation": 1,
                     "target_seq": 3,
-                    "tenant_id": str(tenant_id),
+                    "organization_id": str(organization_id),
                     "otel": None,
                 }
             ),
@@ -237,8 +237,8 @@ async def test_scenario_7_a_poisoned_job_goes_to_the_dlq_and_comes_back(
 ) -> None:
     """Permanent failure → the right DLQ, payload intact → manual reprocess →
     the same job concludes. A waiting room, not a cemetery."""
-    tenant_id = create_tenant(sync_admin)
-    thread = create_thread(sync_admin, tenant_id)
+    organization_id = create_tenant(sync_admin)
+    thread = create_thread(sync_admin, organization_id)
     make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
 
     poisoned = True
@@ -320,8 +320,8 @@ async def test_scenario_7_exhaustion_also_ends_in_the_dlq(
             "AGENTS_BACKOFF_CAP_MS": "1000",
         }
     )
-    tenant_id = create_tenant(sync_admin)
-    thread = create_thread(sync_admin, tenant_id)
+    organization_id = create_tenant(sync_admin)
+    thread = create_thread(sync_admin, organization_id)
     make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
 
     async def always_flaky(job: InboundJob):
@@ -359,9 +359,9 @@ def test_scenario_10_a_dead_sender_never_causes_a_resend(
     Correlation (the status webhook echoing biz_opaque_callback_data, which IS
     the idempotency_key) is what resolves it to sent. Never a resend.
     """
-    tenant_id = create_tenant(sync_admin)
-    thread = create_thread(sync_admin, tenant_id)
-    outbox_id = create_outbox_item(sync_admin, tenant_id, thread)
+    organization_id = create_tenant(sync_admin)
+    thread = create_thread(sync_admin, organization_id)
+    outbox_id = create_outbox_item(sync_admin, organization_id, thread)
     key = q(dsn, "select idempotency_key from internal.message_outbox where id = %s", (outbox_id,))[
         0
     ][0]
@@ -432,9 +432,9 @@ async def test_scenario_10_variant_no_evidence_ends_in_manual_review(
     config = config_from_env(
         {**TINY_INTERVALS, "AGENTS_SEND_LEASE_MS": "300", "AGENTS_REVIEW_MS": "500"}
     )
-    tenant_id = create_tenant(sync_admin)
-    thread = create_thread(sync_admin, tenant_id)
-    outbox_id = create_outbox_item(sync_admin, tenant_id, thread, status="sending")
+    organization_id = create_tenant(sync_admin)
+    thread = create_thread(sync_admin, organization_id)
+    outbox_id = create_outbox_item(sync_admin, organization_id, thread, status="sending")
     sync_admin.execute(
         "update internal.message_outbox set locked_by = 'dead-sender',"
         " locked_until = now() - interval '1 second', request_started_at = now()"

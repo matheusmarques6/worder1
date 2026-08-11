@@ -22,17 +22,19 @@ def dsn_from_env() -> str:
 
 
 @asynccontextmanager
-async def as_worker(dsn: str, tenant_id: uuid.UUID) -> AsyncIterator[psycopg.AsyncConnection]:
+async def as_worker(dsn: str, organization_id: uuid.UUID) -> AsyncIterator[psycopg.AsyncConnection]:
     """The runtime's own credential, scoped the way a unit of work scopes it.
 
     Async because the repository layer is: the runtime is asyncio, and a suite
     that exercised a synchronous copy would be proving code nobody runs.
     `is_local => true` mirrors the production discipline of `SET LOCAL
-    app.tenant_id` per unit of work, and `SET ROLE` is what makes RLS apply —
+    app.organization_id` per unit of work, and `SET ROLE` is what makes RLS apply —
     `worker_role` is not a superuser, has no BYPASSRLS and owns nothing.
     """
     async with await psycopg.AsyncConnection.connect(dsn) as conn:
-        await conn.execute("select set_config('app.tenant_id', %s, true)", (str(tenant_id),))
+        await conn.execute(
+            "select set_config('app.organization_id', %s, true)", (str(organization_id),)
+        )
         await conn.execute("set role worker_role")
         yield conn
 

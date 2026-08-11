@@ -1,7 +1,7 @@
 """O que o responder carrega antes de gerar — e o que ele recusa carregar.
 
 O responder real (S9) roda dentro da FASE 2, fora de qualquer transação longa:
-cada leitura aqui é uma transação curta própria, com `SET LOCAL app.tenant_id`
+cada leitura aqui é uma transação curta própria, com `SET LOCAL app.organization_id`
 (a mesma disciplina das tools do S7). O que estes testes provam é o contrato
 dessas leituras contra o banco real, com a credencial de produção.
 
@@ -28,10 +28,10 @@ from tests.support.database import as_worker
 
 @pytest.fixture
 def tenant(admin: psycopg.Connection) -> uuid.UUID:
-    tenant_id = create_tenant(admin)
-    yield tenant_id
+    organization_id = create_tenant(admin)
+    yield organization_id
     with admin.cursor() as cur:
-        cur.execute("delete from public.tenants where id = %s", (tenant_id,))
+        cur.execute("delete from public.tenants where id = %s", (organization_id,))
 
 
 class TestTheActiveVersion:
@@ -48,7 +48,7 @@ class TestTheActiveVersion:
         )
 
         async with as_worker(dsn, tenant) as conn:
-            version = await agent_repo.load_active_version(conn, tenant_id=tenant)
+            version = await agent_repo.load_active_version(conn, organization_id=tenant)
 
         assert version is not None
         assert version.base_prompt == "Você é o atendente da loja."
@@ -63,7 +63,7 @@ class TestTheActiveVersion:
         create_agent_version(admin, tenant, status="draft")
 
         async with as_worker(dsn, tenant) as conn:
-            assert await agent_repo.load_active_version(conn, tenant_id=tenant) is None
+            assert await agent_repo.load_active_version(conn, organization_id=tenant) is None
 
     async def test_it_never_loads_the_version_of_another_tenant(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
@@ -73,7 +73,7 @@ class TestTheActiveVersion:
             create_agent_version(admin, stranger, status="active", base_prompt="prompt alheio")
 
             async with as_worker(dsn, tenant) as conn:
-                assert await agent_repo.load_active_version(conn, tenant_id=tenant) is None
+                assert await agent_repo.load_active_version(conn, organization_id=tenant) is None
         finally:
             with admin.cursor() as cur:
                 cur.execute("delete from public.tenants where id = %s", (stranger,))
@@ -91,7 +91,7 @@ class TestTheTenantPolicy:
             )
 
         async with as_worker(dsn, tenant) as conn:
-            policy = await agent_repo.load_tenant_policy(conn, tenant_id=tenant)
+            policy = await agent_repo.load_tenant_policy(conn, organization_id=tenant)
 
         assert policy.primary_language == "es-AR"
         assert policy.never_say_ai is False

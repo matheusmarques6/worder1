@@ -1,7 +1,7 @@
 """The cost trail's SQL — `internal.llm_calls` (§6.4).
 
 Like the rest of this layer, the function takes a connection and never opens or
-commits one: the caller owns the transaction and the `SET LOCAL app.tenant_id`
+commits one: the caller owns the transaction and the `SET LOCAL app.organization_id`
 scope that goes with it. That is what keeps the write a short transaction of
 its own instead of something living across the LLM call that produced it.
 
@@ -21,7 +21,7 @@ import psycopg
 async def record_llm_call(
     conn: psycopg.AsyncConnection,
     *,
-    tenant_id: UUID,
+    organization_id: UUID,
     purpose: str,
     provider: str,
     model: str,
@@ -36,13 +36,13 @@ async def record_llm_call(
     cursor = await conn.execute(
         """
         insert into internal.llm_calls
-            (tenant_id, purpose, conversation_id, eval_run_id, provider, model,
+            (organization_id, purpose, conversation_id, eval_run_id, provider, model,
              input_tokens, output_tokens, cost_usd, latency_ms)
         values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         returning id
         """,
         (
-            tenant_id,
+            organization_id,
             purpose,
             conversation_id,
             eval_run_id,

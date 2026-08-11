@@ -1,7 +1,7 @@
 """Alerts the merchant sees — `public.alerts` (§6.5).
 
 Takes a connection, never opens one: the caller owns the short transaction and
-the `SET LOCAL app.tenant_id` inside it.
+the `SET LOCAL app.organization_id` inside it.
 
 The first writer is Judge 1 (S8), and the reason is worth stating: a reply that
 is blocked leaves the customer with silence, and silence is indistinguishable
@@ -21,7 +21,7 @@ CRITICAL_VIOLATION = "critical_violation"
 async def open_alert(
     conn: psycopg.AsyncConnection,
     *,
-    tenant_id: UUID,
+    organization_id: UUID,
     type: str,
     severity: str,
     title: str,
@@ -29,10 +29,10 @@ async def open_alert(
 ) -> UUID:
     cursor = await conn.execute(
         """
-        insert into public.alerts (tenant_id, type, severity, title, payload)
+        insert into public.alerts (organization_id, type, severity, title, payload)
         values (%s, %s, %s, %s, %s)
         returning id
         """,
-        (tenant_id, type, severity, title, Jsonb(payload if payload is not None else {})),
+        (organization_id, type, severity, title, Jsonb(payload if payload is not None else {})),
     )
     return (await cursor.fetchone())[0]

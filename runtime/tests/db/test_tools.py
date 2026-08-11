@@ -6,7 +6,7 @@ after reading a message written by a stranger — so nothing a tool does about
 authorisation may depend on what the model said. Three properties follow, and
 each is a test here:
 
-  * **scope never comes from the arguments.** A `tenant_id` in the model's
+  * **scope never comes from the arguments.** A `organization_id` in the model's
     arguments is ignored, always: the scope comes from the job's context.
   * **no transaction ever spans the embedding call.** ADR-6 holds inside the
     responder too, and a retrieval that embedded inside its own transaction
@@ -41,20 +41,20 @@ TROCA = "Trocas em até sete dias corridos."
 
 @pytest.fixture
 def tenant(admin: psycopg.Connection) -> uuid.UUID:
-    tenant_id = create_tenant(admin)
-    yield tenant_id
+    organization_id = create_tenant(admin)
+    yield organization_id
     with admin.cursor() as cur:
-        cur.execute("delete from public.tenants where id = %s", (tenant_id,))
+        cur.execute("delete from public.tenants where id = %s", (organization_id,))
 
 
-async def _ingest(dsn: str, tenant_id: uuid.UUID, texts=(FRETE, TROCA)) -> None:
+async def _ingest(dsn: str, organization_id: uuid.UUID, texts=(FRETE, TROCA)) -> None:
     from agents_runtime.repository import knowledge as knowledge_repo
 
     async with as_platform(dsn) as conn:
         for text in texts:
             await knowledge_repo.ingest_chunk(
                 conn,
-                tenant_id=tenant_id,
+                organization_id=organization_id,
                 source="faq",
                 content=text,
                 embedding=embed_text(text),
@@ -62,15 +62,15 @@ async def _ingest(dsn: str, tenant_id: uuid.UUID, texts=(FRETE, TROCA)) -> None:
         await conn.commit()
 
 
-def _context(tenant_id: uuid.UUID, conversation_id: uuid.UUID) -> tools.ToolContext:
-    return tools.ToolContext(tenant_id=tenant_id, conversation_id=conversation_id)
+def _context(organization_id: uuid.UUID, conversation_id: uuid.UUID) -> tools.ToolContext:
+    return tools.ToolContext(organization_id=organization_id, conversation_id=conversation_id)
 
 
 async def _recorded(admin: psycopg.Connection, conversation_id: uuid.UUID) -> list[tuple]:
     with admin.cursor() as cur:
         cur.execute(
             """
-            select tool_name, input, output, success, error, latency_ms, tenant_id
+            select tool_name, input, output, success, error, latency_ms, organization_id
               from internal.tool_calls where conversation_id = %s order by id
             """,
             (conversation_id,),
@@ -101,7 +101,7 @@ class TestSearchKnowledge:
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
     ) -> None:
         """The model read a message from a stranger before choosing these
-        arguments. A `tenant_id` among them is not a hint — it is an attack, and
+        arguments. A `organization_id` among them is not a hint — it is an attack, and
         the only answer is to ignore it and scope from the job."""
         stranger = create_tenant(admin)
         try:
@@ -114,7 +114,7 @@ class TestSearchKnowledge:
                     conn,
                     SearchKnowledge(EmbeddingStandIn()),
                     _context(tenant, thread.conversation_id),
-                    {"query": "cupom secreto", "tenant_id": str(stranger)},
+                    {"query": "cupom secreto", "organization_id": str(stranger)},
                     clock=FrozenClock(START),
                 )
 

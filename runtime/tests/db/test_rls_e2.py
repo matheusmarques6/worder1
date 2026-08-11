@@ -40,7 +40,7 @@ from tests.db.factories import (
 
 pytestmark = pytest.mark.rls
 
-# Every E2 table that carries tenant_id. The merchant-facing ones live in
+# Every E2 table that carries organization_id. The merchant-facing ones live in
 # `public` behind RLS; the evaluation ones live in `internal` and never leave it.
 MERCHANT_TABLES = ("public.agent_versions", "public.knowledge_chunks", "public.alerts")
 INTERNAL_TABLES = (
@@ -82,14 +82,16 @@ def e2_rows(admin: psycopg.Connection, two_tenants: TwoTenants) -> Iterator[dict
     yield rows
 
 
-def rows_of_the_other_tenant(conn: psycopg.Connection, table: str, tenant_id: uuid.UUID) -> list:
+def rows_of_the_other_tenant(
+    conn: psycopg.Connection, table: str, organization_id: uuid.UUID
+) -> list:
     """What this credential manages to read of another tenant. Should be nothing.
 
     A denial by privilege counts as nothing: the row was not reached either way.
     """
     try:
         return conn.execute(
-            f"select id from {table} where tenant_id = %s", (tenant_id,)
+            f"select id from {table} where organization_id = %s", (organization_id,)
         ).fetchall()
     except psycopg.errors.InsufficientPrivilege:
         return []
@@ -123,7 +125,7 @@ class TestWriteIsConfinedToOneTenant:
         # The nastiest write in this milestone: flipping another tenant's agent.
         with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
             affected = conn.execute(
-                "update public.agent_versions set status = 'archived' where tenant_id = %s",
+                "update public.agent_versions set status = 'archived' where organization_id = %s",
                 (two_tenants.b.id,),
             ).rowcount
             conn.commit()

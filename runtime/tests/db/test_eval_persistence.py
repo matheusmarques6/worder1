@@ -33,10 +33,12 @@ from tests.support.evals import (
 
 
 @asynccontextmanager
-async def as_worker(dsn: str, tenant_id: uuid.UUID) -> AsyncIterator[psycopg.AsyncConnection]:
+async def as_worker(dsn: str, organization_id: uuid.UUID) -> AsyncIterator[psycopg.AsyncConnection]:
     """The runtime's own credential, scoped the way a unit of work scopes it."""
     async with await psycopg.AsyncConnection.connect(dsn) as conn:
-        await conn.execute("select set_config('app.tenant_id', %s, true)", (str(tenant_id),))
+        await conn.execute(
+            "select set_config('app.organization_id', %s, true)", (str(organization_id),)
+        )
         await conn.execute("set role worker_role")
         yield conn
 
@@ -66,19 +68,21 @@ def a_report(*, good: bool) -> EvalReport:
 @pytest.fixture
 def version(admin: psycopg.Connection) -> tuple[uuid.UUID, uuid.UUID]:
     """A tenant and one draft version of its agent — what a run is about."""
-    tenant_id = create_tenant(admin)
-    version_id = create_agent_version(admin, tenant_id)
-    yield tenant_id, version_id
+    organization_id = create_tenant(admin)
+    version_id = create_agent_version(admin, organization_id)
+    yield organization_id, version_id
     with admin.cursor() as cur:
-        cur.execute("delete from public.tenants where id = %s", (tenant_id,))
+        cur.execute("delete from public.tenants where id = %s", (organization_id,))
 
 
-async def _persist(dsn: str, tenant_id: uuid.UUID, version_id: uuid.UUID, report: EvalReport):
-    async with as_worker(dsn, tenant_id) as conn:
+async def _persist(dsn: str, organization_id: uuid.UUID, version_id: uuid.UUID, report: EvalReport):
+    async with as_worker(dsn, organization_id) as conn:
         run_id = await evals_repo.start_eval_run(
-            conn, tenant_id=tenant_id, agent_version_id=version_id, trigger="manual"
+            conn, organization_id=organization_id, agent_version_id=version_id, trigger="manual"
         )
-        await evals_repo.record_judgements(conn, run_id=run_id, tenant_id=tenant_id, report=report)
+        await evals_repo.record_judgements(
+            conn, run_id=run_id, organization_id=organization_id, report=report
+        )
         await evals_repo.finish_eval_run(conn, run_id=run_id, report=report)
         await conn.commit()
     return run_id
@@ -88,11 +92,11 @@ class TestTheRun:
     async def test_a_run_is_running_before_it_is_finished(
         self, dsn: str, admin: psycopg.Connection, version
     ) -> None:
-        tenant_id, version_id = version
+        organization_id, version_id = version
 
-        async with as_worker(dsn, tenant_id) as conn:
+        async with as_worker(dsn, organization_id) as conn:
             run_id = await evals_repo.start_eval_run(
-                conn, tenant_id=tenant_id, agent_version_id=version_id, trigger="manual"
+                conn, organization_id=organization_id, agent_version_id=version_id, trigger="manual"
             )
             await conn.commit()
 
@@ -110,10 +114,10 @@ class TestTheRun:
     async def test_finishing_records_the_weakest_rubric_as_the_headline_score(
         self, dsn: str, admin: psycopg.Connection, version
     ) -> None:
-        tenant_id, version_id = version
+        organization_id, version_id = version
         # `tom` satisfies 2 of its 4 criteria in both scenarios (0.50);
         # `seguranca` is perfect (1.00). The weaker one is the headline.
-        run_id = await _persist(dsn, tenant_id, version_id, a_report(good=False))
+        run_id = await _persist(dsn, organization_id, version_id, a_report(good=False))
 
         with admin.cursor() as cur:
             cur.execute(
@@ -130,8 +134,8 @@ class TestTheRun:
         self, dsn: str, admin: psycopg.Connection, version
     ) -> None:
         """`failed` means the harness broke — never "the agent was rejected"."""
-        tenant_id, version_id = version
-        run_id = await _persist(dsn, tenant_id, version_id, a_report(good=False))
+        organization_id, version_id = version
+        run_id = await _persist(dsn, organization_id, version_id, a_report(good=False))
 
         with admin.cursor() as cur:
             cur.execute("select status, summary from internal.eval_runs where id = %s", (run_id,))
@@ -145,8 +149,8 @@ class TestTheSummary:
     async def test_the_summary_holds_the_verdict_of_each_rubric(
         self, dsn: str, admin: psycopg.Connection, version
     ) -> None:
-        tenant_id, version_id = version
-        run_id = await _persist(dsn, tenant_id, version_id, a_report(good=False))
+        organization_id, version_id = version
+        run_id = await _persist(dsn, organization_id, version_id, a_report(good=False))
 
         with admin.cursor() as cur:
             cur.execute("select summary from internal.eval_runs where id = %s", (run_id,))
@@ -162,8 +166,8 @@ class TestTheSummary:
     ) -> None:
         """The dictionary calls `summary` "por cenário", and S11 resumes from it:
         the pack's scenarios are files, so this is where their ids survive."""
-        tenant_id, version_id = version
-        run_id = await _persist(dsn, tenant_id, version_id, a_report(good=False))
+        organization_id, version_id = version
+        run_id = await _persist(dsn, organization_id, version_id, a_report(good=False))
 
         with admin.cursor() as cur:
             cur.execute("select summary from internal.eval_runs where id = %s", (run_id,))
@@ -179,8 +183,8 @@ class TestTheScores:
     async def test_every_scenario_leaves_one_row(
         self, dsn: str, admin: psycopg.Connection, version
     ) -> None:
-        tenant_id, version_id = version
-        run_id = await _persist(dsn, tenant_id, version_id, a_report(good=False))
+        organization_id, version_id = version
+        run_id = await _persist(dsn, organization_id, version_id, a_report(good=False))
 
         with admin.cursor() as cur:
             cur.execute(
@@ -208,8 +212,8 @@ class TestTheScores:
     async def test_a_good_run_writes_only_passes(
         self, dsn: str, admin: psycopg.Connection, version
     ) -> None:
-        tenant_id, version_id = version
-        run_id = await _persist(dsn, tenant_id, version_id, a_report(good=True))
+        organization_id, version_id = version
+        run_id = await _persist(dsn, organization_id, version_id, a_report(good=True))
 
         with admin.cursor() as cur:
             cur.execute(
@@ -226,16 +230,16 @@ class TestTheScores:
     async def test_the_scores_belong_to_the_tenant_that_ran_them(
         self, dsn: str, admin: psycopg.Connection, version
     ) -> None:
-        """A NOT NULL tenant_id is not enough — it has to be the right one, or
+        """A NOT NULL organization_id is not enough — it has to be the right one, or
         the leak suite passes while the trail attributes work to a stranger."""
-        tenant_id, version_id = version
-        run_id = await _persist(dsn, tenant_id, version_id, a_report(good=True))
+        organization_id, version_id = version
+        run_id = await _persist(dsn, organization_id, version_id, a_report(good=True))
 
         with admin.cursor() as cur:
             cur.execute(
-                "select distinct tenant_id from internal.judge_scores where eval_run_id = %s",
+                "select distinct organization_id from internal.judge_scores where eval_run_id = %s",
                 (run_id,),
             )
             owners = {row[0] for row in cur.fetchall()}
 
-        assert owners == {tenant_id}
+        assert owners == {organization_id}

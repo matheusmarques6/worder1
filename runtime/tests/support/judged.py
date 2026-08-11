@@ -79,10 +79,10 @@ def judged_responder(dsn: str, *, verdict: str):
             # transaction — nothing here may live across the model call above.
             for judgement in outcome.judgements:
                 async with conn.transaction():
-                    await engine.scope_to_tenant(conn, job.tenant_id)
+                    await engine.scope_to_organization(conn, job.organization_id)
                     await scores_repo.record_pre_send_score(
                         conn,
-                        tenant_id=job.tenant_id,
+                        organization_id=job.organization_id,
                         conversation_id=job.conversation_id,
                         judge_model=JUDGE_MODEL,
                         score=judgement.score,
@@ -95,10 +95,10 @@ def judged_responder(dsn: str, *, verdict: str):
                 # between leaves a duplicate alert (benign, visible) instead of
                 # a silence nobody can see.
                 async with conn.transaction():
-                    await engine.scope_to_tenant(conn, job.tenant_id)
+                    await engine.scope_to_organization(conn, job.organization_id)
                     await alerts_repo.open_alert(
                         conn,
-                        tenant_id=job.tenant_id,
+                        organization_id=job.organization_id,
                         type=alerts_repo.CRITICAL_VIOLATION,
                         severity="critical",
                         title="Judge 1 reprovou a resposta e nada foi enviado",

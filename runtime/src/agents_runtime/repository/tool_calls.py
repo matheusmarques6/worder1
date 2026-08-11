@@ -1,7 +1,7 @@
 """The tool trail's SQL — `internal.tool_calls` (§6.3).
 
 Takes a connection, never opens one: the caller owns the short transaction and
-the `SET LOCAL app.tenant_id` inside it.
+the `SET LOCAL app.organization_id` inside it.
 
 `input` and `output` are jsonb and they DO hold content — a contact's question
 and a customer's data. That is correct and deliberate: this table lives in
@@ -19,7 +19,7 @@ from psycopg.types.json import Jsonb
 async def record_tool_call(
     conn: psycopg.AsyncConnection,
     *,
-    tenant_id: UUID,
+    organization_id: UUID,
     conversation_id: UUID,
     tool_name: str,
     arguments: dict,
@@ -33,13 +33,13 @@ async def record_tool_call(
     cursor = await conn.execute(
         """
         insert into internal.tool_calls
-            (tenant_id, conversation_id, message_id, tool_name, input, output,
+            (organization_id, conversation_id, message_id, tool_name, input, output,
              success, error, latency_ms)
         values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         returning id
         """,
         (
-            tenant_id,
+            organization_id,
             conversation_id,
             message_id,
             tool_name,

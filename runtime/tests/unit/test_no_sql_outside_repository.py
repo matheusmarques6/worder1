@@ -4,7 +4,7 @@ Import-linter already forbids domain modules from importing the driver, but a
 module can hold a query string and hand it to someone else to run. The rule the
 architecture actually states is about the SQL, not about the import: a query
 written next to a business rule escapes review, escapes RLS reasoning and
-escapes the `SET LOCAL app.tenant_id` discipline that goes with every statement.
+escapes the `SET LOCAL app.organization_id` discipline that goes with every statement.
 
 Docstrings are exempt — prose quoting a query is not a query.
 """

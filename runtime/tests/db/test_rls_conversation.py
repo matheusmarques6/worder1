@@ -72,7 +72,7 @@ class TestReadIsConfinedToOneTenant:
     ) -> None:
         with as_app_role(dsn, "sender_role", two_tenants.a.id) as conn:
             rows = conn.execute(
-                "select id from internal.message_outbox where tenant_id = %s",
+                "select id from internal.message_outbox where organization_id = %s",
                 (two_tenants.b.id,),
             ).fetchall()
 
@@ -126,7 +126,7 @@ class TestWriteIsConfinedToOneTenant:
                 conn.execute(
                     """
                     insert into public.messages
-                        (tenant_id, conversation_id, direction, seq, channel,
+                        (organization_id, conversation_id, direction, seq, channel,
                          author_type, content)
                     values (%s, %s, 'outbound', 99, 'whatsapp_cloud', 'agent', '{}'::jsonb)
                     """,
@@ -138,7 +138,7 @@ class TestWriteIsConfinedToOneTenant:
     ) -> None:
         with as_app_role(dsn, "sender_role", two_tenants.a.id) as conn:
             affected = conn.execute(
-                "update internal.message_outbox set status = 'sent' where tenant_id = %s",
+                "update internal.message_outbox set status = 'sent' where organization_id = %s",
                 (two_tenants.b.id,),
             ).rowcount
 
@@ -163,7 +163,7 @@ class TestTheLegitimatePathStillWorks:
     ) -> None:
         with as_app_role(dsn, "sender_role", two_tenants.a.id) as conn:
             rows = conn.execute(
-                "select id from internal.message_outbox where tenant_id = %s",
+                "select id from internal.message_outbox where organization_id = %s",
                 (two_tenants.a.id,),
             ).fetchall()
 
@@ -175,25 +175,25 @@ class TestTenantScopeCannotComeFromTheClient:
     def test_an_unusable_tenant_scope_reads_nothing(
         self, dsn: str, threads: dict[str, Thread], scope: str
     ) -> None:
-        # Unset or garbage must read NOTHING, never everything. `tenant_id = NULL`
+        # Unset or garbage must read NOTHING, never everything. `organization_id = NULL`
         # is never true, which is what makes failing closed the default.
         with psycopg.connect(dsn) as conn:
             with conn.cursor() as cur:
-                cur.execute("select set_config('app.tenant_id', %s, true)", (scope,))
+                cur.execute("select set_config('app.organization_id', %s, true)", (scope,))
                 cur.execute("set role worker_role")
                 rows = cur.execute("select id from public.conversations").fetchall()
 
         assert rows == []
 
-    def test_a_tenant_id_in_the_row_does_not_grant_access(
+    def test_a_organization_id_in_the_row_does_not_grant_access(
         self, dsn: str, two_tenants: TwoTenants, threads: dict[str, Thread]
     ) -> None:
-        # The scope comes from `SET LOCAL app.tenant_id`, never from the data
+        # The scope comes from `SET LOCAL app.organization_id`, never from the data
         # being asked about: naming tenant B in the WHERE clause is exactly the
         # attack the policy exists to defeat.
         with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
             rows = conn.execute(
-                "select id from public.conversations where tenant_id = %s",
+                "select id from public.conversations where organization_id = %s",
                 (two_tenants.b.id,),
             ).fetchall()
 

@@ -1,12 +1,12 @@
 """O que o responder precisa ler antes de gerar (§2.1, §4.2, §4.3).
 
 Cada função recebe uma conexão e não abre nem comita nenhuma: quem chama é dono
-da transação curta e do `SET LOCAL app.tenant_id` dentro dela. No responder isso
+da transação curta e do `SET LOCAL app.organization_id` dentro dela. No responder isso
 importa mais do que em qualquer outro lugar — a FASE 2 roda **fora** de
 transação, e uma leitura que abrisse a sua e a deixasse aberta seria uma
 conexão presa atravessando a chamada do LLM (ADR-6).
 
-Não há `where tenant_id = …` em lugar nenhum aqui: quem escopa é a policy
+Não há `where organization_id = …` em lugar nenhum aqui: quem escopa é a policy
 (CLAUDE.md, fronteiras de confiança). O que a conexão não pode ver, ela não vê.
 
 A versão ativa vem do **índice parcial** do S2 (D6): não existe FK de cache em
@@ -69,7 +69,7 @@ class ConversationState:
 
 
 async def load_active_version(
-    conn: psycopg.AsyncConnection, *, tenant_id: UUID
+    conn: psycopg.AsyncConnection, *, organization_id: UUID
 ) -> ActiveVersion | None:
     """A versão em produção deste tenant, ou None — que significa "esta conta
     não pode responder", nunca "improvise um prompt"."""
@@ -95,14 +95,20 @@ async def load_active_version(
     )
 
 
-async def load_tenant_policy(conn: psycopg.AsyncConnection, *, tenant_id: UUID) -> TenantSettings:
+async def load_tenant_policy(
+    conn: psycopg.AsyncConnection, *, organization_id: UUID
+) -> TenantSettings:
+    # FORK: Worder has no `tenants` table; the org-level policy knobs the motor
+    # kept there (primary_language, never_say_ai, shadow_until) do not exist on
+    # `organizations`, so the motor defaults are pinned here. Etapa 3 replaces
+    # this loader with per-agent config from ai_agents (see FORK.md).
     cursor = await conn.execute(
-        "select primary_language, never_say_ai, shadow_until from public.tenants where id = %s",
-        (tenant_id,),
+        "select 'pt-BR'::text, true, null::timestamptz from public.organizations where id = %s",
+        (organization_id,),
     )
     row = await cursor.fetchone()
     if row is None:
-        raise LookupError(f"tenant {tenant_id} is not visible to this connection")
+        raise LookupError(f"organization {organization_id} is not visible to this connection")
 
     return TenantSettings(
         policy=TenantPolicy(primary_language=row[0], never_say_ai=row[1]),

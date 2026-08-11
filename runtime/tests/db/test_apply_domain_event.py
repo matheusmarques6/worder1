@@ -37,14 +37,14 @@ def apply_event(conn: psycopg.Connection, event_id: int, text: str = TOUCH) -> t
     ).fetchone()
 
 
-def outbox_rows(conn: psycopg.Connection, tenant_id) -> list[tuple]:
+def outbox_rows(conn: psycopg.Connection, organization_id) -> list[tuple]:
     return conn.execute(
         """
         select kind, payload, idempotency_key, status
           from internal.message_outbox
-         where tenant_id = %s
+         where organization_id = %s
         """,
-        (tenant_id,),
+        (organization_id,),
     ).fetchall()
 
 
@@ -55,7 +55,7 @@ def number(admin: psycopg.Connection, two_tenants: TwoTenants) -> ChannelAccount
 
 def abandonment(
     admin: psycopg.Connection,
-    tenant_id,
+    organization_id,
     *,
     phone: str | None = None,
     event_type: str = "checkout_abandoned",
@@ -63,7 +63,7 @@ def abandonment(
 ) -> int:
     return create_webhook_event(
         admin,
-        tenant_id,
+        organization_id,
         event_type=event_type,
         payload=payload if payload is not None else {"phone": phone or unique_phone()},
     )
@@ -96,7 +96,7 @@ def test_an_abandonment_becomes_exactly_one_touch(
 
     # O contato nasceu do payload, telefone E.164 intacto.
     contact = admin.execute(
-        "select phone_e164 from public.contacts where tenant_id = %s",
+        "select phone_e164 from public.contacts where organization_id = %s",
         (two_tenants.a.id,),
     ).fetchall()
     assert contact == [(phone,)]
@@ -174,7 +174,7 @@ def test_the_touch_reuses_an_open_conversation(
     assert conversation_id == existing_conversation
 
     conversations = admin.execute(
-        "select count(*) from public.conversations where tenant_id = %s",
+        "select count(*) from public.conversations where organization_id = %s",
         (two_tenants.a.id,),
     ).fetchone()[0]
     assert conversations == 1
@@ -216,7 +216,7 @@ def test_a_payload_without_a_phone_fails_visibly_and_writes_nothing(
     assert outbox_rows(admin, two_tenants.a.id) == []
     assert (
         admin.execute(
-            "select count(*) from public.contacts where tenant_id = %s",
+            "select count(*) from public.contacts where organization_id = %s",
             (two_tenants.a.id,),
         ).fetchone()[0]
         == 0

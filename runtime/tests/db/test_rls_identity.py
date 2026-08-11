@@ -6,8 +6,8 @@ architecture: three credentials reach the data — the user's JWT, `worker_role`
 and `sender_role` — and every one of them must be confined to its own tenant.
 **Any row returned or affected fails the suite.**
 
-`tenant_id` never comes from the client. Here that is literal: the app roles
-carry it in `app.tenant_id`, the user carries it implicitly through
+`organization_id` never comes from the client. Here that is literal: the app roles
+carry it in `app.organization_id`, the user carries it implicitly through
 `memberships`, and neither can be talked into a different value.
 """
 
@@ -27,7 +27,7 @@ class TestReadIsConfinedToOneTenant:
     ) -> None:
         with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
             rows = conn.execute(
-                "select id from public.memberships where tenant_id = %s",
+                "select id from public.memberships where organization_id = %s",
                 (two_tenants.b.id,),
             ).fetchall()
 
@@ -38,7 +38,7 @@ class TestReadIsConfinedToOneTenant:
     ) -> None:
         with as_app_role(dsn, "sender_role", two_tenants.a.id) as conn:
             rows = conn.execute(
-                "select id from public.memberships where tenant_id = %s",
+                "select id from public.memberships where organization_id = %s",
                 (two_tenants.b.id,),
             ).fetchall()
 
@@ -49,7 +49,7 @@ class TestReadIsConfinedToOneTenant:
     ) -> None:
         with as_authenticated_user(dsn, two_tenants.a.user_id) as conn:
             rows = conn.execute(
-                "select id from public.memberships where tenant_id = %s",
+                "select id from public.memberships where organization_id = %s",
                 (two_tenants.b.id,),
             ).fetchall()
 
@@ -91,7 +91,7 @@ class TestTheLegitimatePathStillWorks:
     ) -> None:
         with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
             rows = conn.execute(
-                "select id from public.memberships where tenant_id = %s",
+                "select id from public.memberships where organization_id = %s",
                 (two_tenants.a.id,),
             ).fetchall()
 
@@ -110,7 +110,7 @@ class TestWriteIsConfinedToOneTenant:
     ) -> None:
         with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
             affected = conn.execute(
-                "delete from public.memberships where tenant_id = %s",
+                "delete from public.memberships where organization_id = %s",
                 (two_tenants.b.id,),
             ).rowcount
             conn.commit()
@@ -122,7 +122,7 @@ class TestWriteIsConfinedToOneTenant:
     ) -> None:
         with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
             affected = conn.execute(
-                "update public.memberships set role = 'attendant' where tenant_id = %s",
+                "update public.memberships set role = 'attendant' where organization_id = %s",
                 (two_tenants.b.id,),
             ).rowcount
             conn.commit()
@@ -136,7 +136,7 @@ class TestWriteIsConfinedToOneTenant:
             with pytest.raises(psycopg.errors.InsufficientPrivilege):
                 conn.execute(
                     """
-                    insert into public.memberships (tenant_id, user_id, role)
+                    insert into public.memberships (organization_id, user_id, role)
                     values (%s, %s, 'attendant')
                     """,
                     (two_tenants.b.id, two_tenants.a.user_id),
@@ -213,7 +213,7 @@ class TestTenantIdCannotComeFromTheClient:
         every statement — a pool that writes garbage must not turn into an
         outage of its whole connection."""
         with psycopg.connect(dsn) as conn:
-            conn.execute("select set_config('app.tenant_id', 'not-a-uuid', true)")
+            conn.execute("select set_config('app.organization_id', 'not-a-uuid', true)")
             conn.execute("set role worker_role")
             rows = conn.execute("select id from public.memberships").fetchall()
 

@@ -32,18 +32,20 @@ from tests.support.llm import ScriptedLlm
 
 @pytest.fixture
 def tenant(admin: psycopg.Connection) -> uuid.UUID:
-    tenant_id = create_tenant(admin)
-    yield tenant_id
+    organization_id = create_tenant(admin)
+    yield organization_id
     with admin.cursor() as cur:
-        cur.execute("delete from public.tenants where id = %s", (tenant_id,))
+        cur.execute("delete from public.tenants where id = %s", (organization_id,))
 
 
-def a_job(tenant_id: uuid.UUID, conversation_id: uuid.UUID, *, target_seq: int = 1) -> InboundJob:
+def a_job(
+    organization_id: uuid.UUID, conversation_id: uuid.UUID, *, target_seq: int = 1
+) -> InboundJob:
     return InboundJob(
         conversation_id=conversation_id,
         generation=1,
         target_seq=target_seq,
-        tenant_id=tenant_id,
+        organization_id=organization_id,
     )
 
 

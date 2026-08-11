@@ -22,20 +22,22 @@ from tests.db.factories import create_tenant, create_thread
 
 
 @asynccontextmanager
-async def as_worker(dsn: str, tenant_id: uuid.UUID) -> AsyncIterator[psycopg.AsyncConnection]:
+async def as_worker(dsn: str, organization_id: uuid.UUID) -> AsyncIterator[psycopg.AsyncConnection]:
     """The runtime's own credential, scoped the way a unit of work scopes it."""
     async with await psycopg.AsyncConnection.connect(dsn) as conn:
-        await conn.execute("select set_config('app.tenant_id', %s, true)", (str(tenant_id),))
+        await conn.execute(
+            "select set_config('app.organization_id', %s, true)", (str(organization_id),)
+        )
         await conn.execute("set role worker_role")
         yield conn
 
 
 @pytest.fixture
 def tenant(admin: psycopg.Connection) -> uuid.UUID:
-    tenant_id = create_tenant(admin)
-    yield tenant_id
+    organization_id = create_tenant(admin)
+    yield organization_id
     with admin.cursor() as cur:
-        cur.execute("delete from public.tenants where id = %s", (tenant_id,))
+        cur.execute("delete from public.tenants where id = %s", (organization_id,))
 
 
 class TestTheRow:
@@ -45,7 +47,7 @@ class TestTheRow:
         async with as_worker(dsn, tenant) as conn:
             call_id = await llm_repo.record_llm_call(
                 conn,
-                tenant_id=tenant,
+                organization_id=tenant,
                 purpose="agent_reply",
                 provider="openrouter",
                 model="anthropic/claude-sonnet-5",
@@ -59,7 +61,7 @@ class TestTheRow:
         with admin.cursor() as cur:
             cur.execute(
                 """
-                select tenant_id, purpose, provider, model, input_tokens, output_tokens,
+                select organization_id, purpose, provider, model, input_tokens, output_tokens,
                        cost_usd, latency_ms, conversation_id
                   from internal.llm_calls where id = %s
                 """,
@@ -86,7 +88,7 @@ class TestTheRow:
         async with as_worker(dsn, tenant) as conn:
             call_id = await llm_repo.record_llm_call(
                 conn,
-                tenant_id=tenant,
+                organization_id=tenant,
                 purpose="agent_reply",
                 provider="openrouter",
                 model="anthropic/claude-sonnet-5",
@@ -112,7 +114,7 @@ class TestTheRow:
         async with as_worker(dsn, tenant) as conn:
             call_id = await llm_repo.record_llm_call(
                 conn,
-                tenant_id=tenant,
+                organization_id=tenant,
                 purpose="embedding",
                 provider="openrouter",
                 model="openai/text-embedding-3-small",
@@ -145,7 +147,7 @@ class TestTheBoundary:
                 with pytest.raises(psycopg.errors.InsufficientPrivilege):
                     await llm_repo.record_llm_call(
                         conn,
-                        tenant_id=stranger,
+                        organization_id=stranger,
                         purpose="agent_reply",
                         provider="openrouter",
                         model="anthropic/claude-sonnet-5",
@@ -172,7 +174,7 @@ class TestTheBoundary:
 
         assert columns == {
             "id",
-            "tenant_id",
+            "organization_id",
             "purpose",
             "conversation_id",
             "eval_run_id",

@@ -90,7 +90,7 @@ async def run(
 
             # A full tenant postpones the job — set_vt, never a drop, never an
             # in-memory queue. The other tenants keep flowing (cenário 9).
-            if not slots.try_acquire(job.tenant_id):
+            if not slots.try_acquire(job.organization_id):
                 return Ack.RETRY_SHORT
             try:
                 result = await run_turn(
@@ -103,7 +103,7 @@ async def run(
                     message_id=message.id,
                 )
             finally:
-                slots.release(job.tenant_id)
+                slots.release(job.organization_id)
             return Ack.RETRY_SHORT if result is TurnResult.BUSY else Ack.ARCHIVE
 
         return handle

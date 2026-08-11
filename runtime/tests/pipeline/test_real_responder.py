@@ -59,14 +59,14 @@ def ingest_message(sync_admin: psycopg.Connection, account_id: str, phone: str, 
 
 
 def a_tenant_with_an_agent(sync_admin: psycopg.Connection, *, tools=("search_knowledge",)):
-    tenant_id = create_tenant(sync_admin)
+    organization_id = create_tenant(sync_admin)
     sync_admin.execute(
-        "update public.agent_versions set enabled_tools = %s where tenant_id = %s",
-        (list(tools), tenant_id),
+        "update public.agent_versions set enabled_tools = %s where organization_id = %s",
+        (list(tools), organization_id),
     )
     version_id = create_agent_version(
         sync_admin,
-        tenant_id,
+        organization_id,
         status="active",
         base_prompt="Você é o atendente da loja Worder. Responda curto e cordial.",
     )
@@ -74,8 +74,10 @@ def a_tenant_with_an_agent(sync_admin: psycopg.Connection, *, tools=("search_kno
         "update public.agent_versions set enabled_tools = %s where id = %s",
         (list(tools), version_id),
     )
-    create_knowledge_chunk(sync_admin, tenant_id, content=FRETE, embedding=an_embedding_of(FRETE))
-    return tenant_id
+    create_knowledge_chunk(
+        sync_admin, organization_id, content=FRETE, embedding=an_embedding_of(FRETE)
+    )
+    return organization_id
 
 
 def an_embedding_of(text: str) -> str:
@@ -113,8 +115,8 @@ async def test_the_real_agent_answers_through_the_whole_engine(
     """Uma mensagem entra pela ingestão e sai uma resposta do agente real pelo
     canal — passando por conhecimento, prompt em camadas e Judge 1, com o motor
     do E1 intocado no meio."""
-    tenant_id = a_tenant_with_an_agent(sync_admin)
-    number = create_channel_account(sync_admin, tenant_id)
+    organization_id = a_tenant_with_an_agent(sync_admin)
+    number = create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
     first = ingest_message(sync_admin, number.external_account_id, phone, "qual é o frete?")
@@ -172,8 +174,8 @@ async def test_the_merchants_knowledge_reaches_the_model(
     """A última camada do RF-010 chegando de verdade: o que a loja escreveu está
     no prompt que o modelo recebeu. Sem esta asserção, a recuperação poderia
     estar rodando e sendo jogada fora, e o teste acima passaria igual."""
-    tenant_id = a_tenant_with_an_agent(sync_admin)
-    number = create_channel_account(sync_admin, tenant_id)
+    organization_id = a_tenant_with_an_agent(sync_admin)
+    number = create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
     ingest_message(sync_admin, number.external_account_id, phone, "qual é o frete?")

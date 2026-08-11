@@ -69,13 +69,13 @@ class TwoTenants:
 
 
 def _create_tenant(conn: psycopg.Connection, label: str) -> Tenant:
-    tenant_id = uuid.uuid4()
+    organization_id = uuid.uuid4()
     user_id = uuid.uuid4()
 
     with conn.cursor() as cur:
         cur.execute(
             "insert into public.tenants (id, name) values (%s, %s)",
-            (tenant_id, label),
+            (organization_id, label),
         )
         cur.execute(
             """
@@ -91,15 +91,15 @@ def _create_tenant(conn: psycopg.Connection, label: str) -> Tenant:
         )
         cur.execute(
             """
-            insert into public.memberships (tenant_id, user_id, role)
+            insert into public.memberships (organization_id, user_id, role)
             values (%s, %s, 'owner')
             returning id
             """,
-            (tenant_id, user_id),
+            (organization_id, user_id),
         )
         membership_id = cur.fetchone()[0]
 
-    return Tenant(id=tenant_id, user_id=user_id, membership_id=membership_id)
+    return Tenant(id=organization_id, user_id=user_id, membership_id=membership_id)
 
 
 @pytest.fixture
@@ -124,7 +124,7 @@ def two_tenants(admin: psycopg.Connection) -> Iterator[TwoTenants]:
 
 
 @contextmanager
-def as_app_role(dsn: str, role: str, tenant_id: uuid.UUID) -> Iterator[psycopg.Connection]:
+def as_app_role(dsn: str, role: str, organization_id: uuid.UUID) -> Iterator[psycopg.Connection]:
     """A connection acting as `worker_role`/`sender_role` scoped to one tenant.
 
     SET ROLE is enough to make RLS apply: the resulting role is not a superuser,
@@ -132,7 +132,7 @@ def as_app_role(dsn: str, role: str, tenant_id: uuid.UUID) -> Iterator[psycopg.C
     production pools have, asserted separately in the leak suite.
 
     The scope is transaction-local (`is_local => true`) on purpose: the
-    production discipline is `SET LOCAL app.tenant_id` per unit of work, and
+    production discipline is `SET LOCAL app.organization_id` per unit of work, and
     the harness must exercise the same lifetime the driver will use.
     """
     if role not in APP_ROLES:
@@ -140,7 +140,10 @@ def as_app_role(dsn: str, role: str, tenant_id: uuid.UUID) -> Iterator[psycopg.C
 
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
-            cur.execute("select set_config('app.tenant_id', %s, true)", (str(tenant_id),))
+            cur.execute(
+                "select set_config('app.organization_id', %s, true)",
+                (str(organization_id),),
+            )
             cur.execute(f"set role {role}")
         yield conn
 

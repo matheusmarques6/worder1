@@ -20,18 +20,18 @@ class TenantSlots:
         self._limit = limit
         self._active: dict[UUID, int] = {}
 
-    def try_acquire(self, tenant_id: UUID) -> bool:
+    def try_acquire(self, organization_id: UUID) -> bool:
         """True and counted, or False and untouched. Never blocks: the caller's
         move on a full tenant is to postpone the job, not to hold a worker."""
-        current = self._active.get(tenant_id, 0)
+        current = self._active.get(organization_id, 0)
         if current >= self._limit:
             return False
-        self._active[tenant_id] = current + 1
+        self._active[organization_id] = current + 1
         return True
 
-    def release(self, tenant_id: UUID) -> None:
-        remaining = self._active.get(tenant_id, 0) - 1
+    def release(self, organization_id: UUID) -> None:
+        remaining = self._active.get(organization_id, 0) - 1
         if remaining <= 0:
-            self._active.pop(tenant_id, None)
+            self._active.pop(organization_id, None)
         else:
-            self._active[tenant_id] = remaining
+            self._active[organization_id] = remaining

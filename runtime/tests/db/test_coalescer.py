@@ -109,7 +109,7 @@ def test_a_due_conversation_becomes_exactly_one_job(
         "conversation_id": str(due_thread.conversation_id),
         "generation": 1,
         "target_seq": 3,
-        "tenant_id": str(two_tenants.a.id),
+        "organization_id": str(two_tenants.a.id),
         "otel": None,
     }
 

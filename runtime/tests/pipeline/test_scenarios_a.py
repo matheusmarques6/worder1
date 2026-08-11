@@ -60,8 +60,8 @@ async def test_scenario_1_a_burst_of_five_becomes_exactly_one_reply(
     sync_admin: psycopg.Connection,
     tiny_config: QueueingConfig,
 ) -> None:
-    tenant_id = create_tenant(sync_admin)
-    number = create_channel_account(sync_admin, tenant_id)
+    organization_id = create_tenant(sync_admin)
+    number = create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
     # The burst lands BEFORE the engine wakes: five webhooks, one contact, one
@@ -134,8 +134,8 @@ async def test_scenario_3_a_redelivered_job_is_archived_without_a_second_generat
     sync_admin: psycopg.Connection,
     tiny_config: QueueingConfig,
 ) -> None:
-    tenant_id = create_tenant(sync_admin)
-    thread = create_thread(sync_admin, tenant_id)
+    organization_id = create_tenant(sync_admin)
+    thread = create_thread(sync_admin, organization_id)
 
     # A conversation already answered up to seq 3 — and then pgmq redelivers
     # the job that answered it (a VT expiry, a crash after work, any of the
@@ -153,7 +153,7 @@ async def test_scenario_3_a_redelivered_job_is_archived_without_a_second_generat
                     "conversation_id": str(thread.conversation_id),
                     "generation": 1,
                     "target_seq": 3,
-                    "tenant_id": str(tenant_id),
+                    "organization_id": str(organization_id),
                     "otel": None,
                 }
             ),

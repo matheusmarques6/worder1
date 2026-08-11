@@ -19,7 +19,7 @@ class ClaimedSend:
     """One row from `claim_outbox_batch` — everything a send needs, no second query."""
 
     outbox_id: UUID
-    tenant_id: UUID
+    organization_id: UUID
     channel_type: str
     channel_external_id: str
     to_phone_e164: str

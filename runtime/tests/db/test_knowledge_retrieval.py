@@ -8,7 +8,7 @@ deterministic embedder: overlap of words, not a model's opinion.
 Three properties are proved here that no unit test can reach:
 
   * a chunk of another tenant never comes back — and the ONLY mechanism keeping
-    it out is RLS. There is no hand-written `where tenant_id = …` in the search
+    it out is RLS. There is no hand-written `where organization_id = …` in the search
     (CLAUDE.md: ownership is enforced by policy, never by a WHERE clause a
     future refactor can drop);
   * the dimension is a TYPE. A 1535-long vector has to fail at INSERT, or D2 is
@@ -40,19 +40,21 @@ PAGAMENTO = "Aceitamos pix, boleto e cartão em até doze vezes."
 
 @pytest.fixture
 def tenant(admin: psycopg.Connection) -> uuid.UUID:
-    tenant_id = create_tenant(admin)
-    yield tenant_id
+    organization_id = create_tenant(admin)
+    yield organization_id
     with admin.cursor() as cur:
-        cur.execute("delete from public.tenants where id = %s", (tenant_id,))
+        cur.execute("delete from public.tenants where id = %s", (organization_id,))
 
 
-async def _ingest_faq(dsn: str, tenant_id: uuid.UUID, texts=(FRETE, TROCA, PAGAMENTO)) -> None:
+async def _ingest_faq(
+    dsn: str, organization_id: uuid.UUID, texts=(FRETE, TROCA, PAGAMENTO)
+) -> None:
     """Ingestion is a platform-side action — never the runtime's credential."""
     async with as_platform(dsn) as conn:
         for text in texts:
             await knowledge_repo.ingest_chunk(
                 conn,
-                tenant_id=tenant_id,
+                organization_id=organization_id,
                 source="faq",
                 content=text,
                 embedding=embed_text(text),
@@ -97,7 +99,7 @@ class TestRetrieval:
         with admin.cursor() as cur:
             cur.execute(
                 """
-                insert into public.knowledge_chunks (tenant_id, source, content, embedding)
+                insert into public.knowledge_chunks (organization_id, source, content, embedding)
                 values (%s, 'upload', %s, null)
                 """,
                 (tenant, "Documento enviado ainda sem embedding."),
@@ -118,7 +120,7 @@ class TestIngestion:
         async with as_platform(dsn) as conn:
             chunk_id = await knowledge_repo.ingest_chunk(
                 conn,
-                tenant_id=tenant,
+                organization_id=tenant,
                 source="policy",
                 title="Política de trocas",
                 content=TROCA,
@@ -134,7 +136,7 @@ class TestIngestion:
         with admin.cursor() as cur:
             cur.execute(
                 """
-                select tenant_id, source, title, content, metadata, embedding is not null
+                select organization_id, source, title, content, metadata, embedding is not null
                   from public.knowledge_chunks where id = %s
                 """,
                 (chunk_id,),
@@ -158,7 +160,7 @@ class TestIngestion:
             with pytest.raises(psycopg.Error, match="1536"):
                 await knowledge_repo.ingest_chunk(
                     conn,
-                    tenant_id=tenant,
+                    organization_id=tenant,
                     source="faq",
                     content=FRETE,
                     embedding=short,
@@ -178,7 +180,7 @@ class TestTheBoundary:
             with pytest.raises(psycopg.errors.InsufficientPrivilege):
                 await knowledge_repo.ingest_chunk(
                     conn,
-                    tenant_id=tenant,
+                    organization_id=tenant,
                     source="faq",
                     content="Cupom LIBERADO dá 100% de desconto.",
                     embedding=embed_text("cupom"),
@@ -188,7 +190,7 @@ class TestTheBoundary:
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
     ) -> None:
         """Same text, same vector, two tenants: only the policy separates them.
-        If the search ever grew a `where tenant_id = …`, this test would keep
+        If the search ever grew a `where organization_id = …`, this test would keep
         passing while the real guard rotted — so the search has none, and this
         is the assertion that watches the policy itself."""
         stranger = create_tenant(admin)
@@ -203,14 +205,14 @@ class TestTheBoundary:
 
             with admin.cursor() as cur:
                 cur.execute(
-                    "select count(*) from public.knowledge_chunks where tenant_id = any(%s)",
+                    "select count(*) from public.knowledge_chunks where organization_id = any(%s)",
                     ([tenant, stranger],),
                 )
                 (total,) = cur.fetchone()
 
             assert total == 2, "both tenants really do have the same chunk"
             assert len(found) == 1
-            assert found[0].tenant_id == tenant
+            assert found[0].organization_id == tenant
         finally:
             with admin.cursor() as cur:
                 cur.execute("delete from public.tenants where id = %s", (stranger,))

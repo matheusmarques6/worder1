@@ -1,12 +1,12 @@
 """The merchant's knowledge — ingestion and similarity search (§2.5).
 
 Like the rest of this layer, functions take a connection and never open or
-commit one: the caller owns the transaction and the `SET LOCAL app.tenant_id`
+commit one: the caller owns the transaction and the `SET LOCAL app.organization_id`
 that scopes it. In the responder that transaction is short and its own — a
 retrieval must never sit inside a transaction that also spans the LLM call
 (ADR-6).
 
-**There is no `where tenant_id = …` in the search, and that is deliberate.**
+**There is no `where organization_id = …` in the search, and that is deliberate.**
 Ownership is enforced by the policy, never by a hand-written clause (CLAUDE.md,
 trust boundaries): a WHERE can be dropped in a refactor and nothing fails,
 while dropping the policy fails the leak suite. The scope arrives through the
@@ -33,7 +33,7 @@ from psycopg.types.json import Jsonb
 @dataclass(frozen=True, slots=True)
 class KnowledgeChunk:
     id: UUID
-    tenant_id: UUID
+    organization_id: UUID
     source: str
     title: str | None
     content: str
@@ -49,7 +49,7 @@ def _vector_literal(embedding: Sequence[float]) -> str:
 async def ingest_chunk(
     conn: psycopg.AsyncConnection,
     *,
-    tenant_id: UUID,
+    organization_id: UUID,
     source: str,
     content: str,
     embedding: Sequence[float],
@@ -65,12 +65,12 @@ async def ingest_chunk(
     cursor = await conn.execute(
         """
         insert into public.knowledge_chunks
-            (tenant_id, source, title, content, embedding, metadata)
+            (organization_id, source, title, content, embedding, metadata)
         values (%s, %s, %s, %s, %s::vector, %s)
         returning id
         """,
         (
-            tenant_id,
+            organization_id,
             source,
             title,
             content,
@@ -95,7 +95,7 @@ async def search_knowledge(
     """
     cursor = await conn.execute(
         """
-        select id, tenant_id, source, title, content,
+        select id, organization_id, source, title, content,
                1 - (embedding <=> %(query)s::vector) as similarity
           from public.knowledge_chunks
          where embedding is not null
@@ -107,7 +107,7 @@ async def search_knowledge(
     return tuple(
         KnowledgeChunk(
             id=row[0],
-            tenant_id=row[1],
+            organization_id=row[1],
             source=row[2],
             title=row[3],
             content=row[4],

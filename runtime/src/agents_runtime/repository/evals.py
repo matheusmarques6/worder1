@@ -5,7 +5,7 @@ against a real LLM is the expensive step, so every run lands on disk and S11
 resumes from it instead of paying for the same scenarios twice.
 
 Like the rest of this layer, functions take a connection and never open or
-commit one — the caller owns the transaction and the `SET LOCAL app.tenant_id`
+commit one — the caller owns the transaction and the `SET LOCAL app.organization_id`
 scope that goes with it.
 
 Two shape decisions, both forced by the schema and neither hidden in a commit
@@ -39,18 +39,18 @@ _EVAL_JUDGE_KIND = "post_hoc"
 async def start_eval_run(
     conn: psycopg.AsyncConnection,
     *,
-    tenant_id: UUID,
+    organization_id: UUID,
     agent_version_id: UUID,
     trigger: str,
 ) -> UUID:
     """Open a run. It stays `running` until `finish_eval_run` closes it."""
     cursor = await conn.execute(
         """
-        insert into internal.eval_runs (tenant_id, agent_version_id, trigger, status)
+        insert into internal.eval_runs (organization_id, agent_version_id, trigger, status)
         values (%s, %s, %s, 'running')
         returning id
         """,
-        (tenant_id, agent_version_id, trigger),
+        (organization_id, agent_version_id, trigger),
     )
     return (await cursor.fetchone())[0]
 
@@ -59,7 +59,7 @@ async def record_judgements(
     conn: psycopg.AsyncConnection,
     *,
     run_id: UUID,
-    tenant_id: UUID,
+    organization_id: UUID,
     report: EvalReport,
 ) -> None:
     """One row per scenario judged, in the order the pack ran."""
@@ -68,11 +68,11 @@ async def record_judgements(
             await cursor.execute(
                 """
                 insert into internal.judge_scores
-                    (tenant_id, kind, eval_run_id, judge_model, score, verdict, rationale)
+                    (organization_id, kind, eval_run_id, judge_model, score, verdict, rationale)
                 values (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
-                    tenant_id,
+                    organization_id,
                     _EVAL_JUDGE_KIND,
                     run_id,
                     report.judge_model,

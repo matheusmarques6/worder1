@@ -88,7 +88,7 @@ def test_the_unique_constraint_cannot_be_violated_through_the_official_path(
         admin.execute(
             """
             insert into public.messages
-                (tenant_id, conversation_id, direction, seq, channel, author_type, content)
+                (organization_id, conversation_id, direction, seq, channel, author_type, content)
             values (%s, %s, 'inbound', %s, 'whatsapp_cloud', 'contact', '{}'::jsonb)
             """,
             (two_tenants.a.id, thread.conversation_id, seq),

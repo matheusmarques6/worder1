@@ -17,7 +17,7 @@ Three rules, each of them a decision of S5:
     Postgres; what leaves for the telemetry of S10 is cost, latency and ids.
 
 Who writes the row is the caller's business: `record` is a port, and the
-short transaction with `SET LOCAL app.tenant_id` around
+short transaction with `SET LOCAL app.organization_id` around
 `repository.llm_calls.record_llm_call` is opened where a connection exists.
 Opening one here would mean a transaction living across an LLM call, which is
 exactly what ADR-6 forbids.

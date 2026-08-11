@@ -58,7 +58,7 @@ class TestOnlyOneVersionCanBeActive:
             create_agent_version(admin, two_tenants.a.id, status="archived")
 
         rows = admin.execute(
-            "select count(*) from public.agent_versions where tenant_id = %s",
+            "select count(*) from public.agent_versions where organization_id = %s",
             (two_tenants.a.id,),
         ).fetchone()
 

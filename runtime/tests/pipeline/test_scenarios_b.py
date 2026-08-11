@@ -72,8 +72,8 @@ async def test_scenario_2_a_message_during_generation_invalidates_the_draft(
     coalescer's snapshot goes stale. On release, the CAS refuses generation 1:
     ZERO sends from it reach the provider. Generation 2 answers all six.
     """
-    tenant_id = create_tenant(sync_admin)
-    number = create_channel_account(sync_admin, tenant_id)
+    organization_id = create_tenant(sync_admin)
+    number = create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
     first = ingest_message(sync_admin, number.external_account_id, phone, "oi")
@@ -165,8 +165,8 @@ async def test_scenario_5_an_expired_lease_is_assumed_and_the_late_worker_sends_
         }
     )
 
-    tenant_id = create_tenant(sync_admin)
-    thread = create_thread(sync_admin, tenant_id)
+    organization_id = create_tenant(sync_admin)
+    thread = create_thread(sync_admin, organization_id)
     make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
 
     # One hold: the FIRST worker stalls, the redelivery sails through.
@@ -253,8 +253,8 @@ async def test_scenario_6_the_keepalive_prevents_redelivery_during_long_work(
         }
     )
 
-    tenant_id = create_tenant(sync_admin)
-    thread = create_thread(sync_admin, tenant_id)
+    organization_id = create_tenant(sync_admin)
+    thread = create_thread(sync_admin, organization_id)
     make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
     arm_gate(sync_admin, thread.conversation_id, holds=1)
 
@@ -329,7 +329,7 @@ async def test_scenario_9_a_full_tenant_postpones_its_own_jobs_and_nobody_elses(
 
     async def steering_responder(job: InboundJob):
         nonlocal a_active, a_peak
-        if job.tenant_id == tenant_a:
+        if job.organization_id == tenant_a:
             a_active += 1
             a_peak = max(a_peak, a_active)
             await release_a.wait()

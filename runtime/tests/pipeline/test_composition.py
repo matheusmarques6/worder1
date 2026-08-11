@@ -31,9 +31,9 @@ async def eventually(check, *, deadline_s: float = DEADLINE, note: str = ""):
 
 @pytest.fixture
 def world(sync_admin: psycopg.Connection):
-    tenant_id = create_tenant(sync_admin)
-    thread = create_thread(sync_admin, tenant_id)
-    return tenant_id, thread
+    organization_id = create_tenant(sync_admin)
+    thread = create_thread(sync_admin, organization_id)
+    return organization_id, thread
 
 
 async def test_a_due_conversation_becomes_a_queued_reply(

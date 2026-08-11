@@ -19,7 +19,7 @@ class InboundJob:
     conversation_id: UUID
     generation: int
     target_seq: int
-    tenant_id: UUID
+    organization_id: UUID
     otel: dict[str, Any] | None = None
 
     @classmethod
@@ -29,7 +29,7 @@ class InboundJob:
                 conversation_id=UUID(payload["conversation_id"]),
                 generation=int(payload["generation"]),
                 target_seq=int(payload["target_seq"]),
-                tenant_id=UUID(payload["tenant_id"]),
+                organization_id=UUID(payload["organization_id"]),
                 otel=payload.get("otel"),
             )
         except (KeyError, TypeError, ValueError) as error:

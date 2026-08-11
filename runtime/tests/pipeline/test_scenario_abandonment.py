@@ -34,9 +34,9 @@ async def test_an_abandonment_reaches_the_fake_whatsapp(
     sync_admin: psycopg.Connection,
     tiny_config: QueueingConfig,
 ) -> None:
-    tenant_id = create_tenant(sync_admin)
-    store = create_connector_account(sync_admin, tenant_id)
-    create_channel_account(sync_admin, tenant_id)
+    organization_id = create_tenant(sync_admin)
+    store = create_connector_account(sync_admin, organization_id)
+    create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
     # The abandonment lands BEFORE the engine wakes — exactly how the demo
