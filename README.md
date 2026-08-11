@@ -177,3 +177,16 @@ Após confirmar que a Fase 1 está funcionando:
 - [ ] Deals API atualizada
 - [ ] Deploy feito
 - [ ] Testes passaram
+
+---
+
+## Runtime de IA — agentes por evento (ago/2026)
+
+O runtime Python dos agentes de IA vive em `runtime/` (processo único asyncio:
+coalescer + workers + sender + heartbeat). Mapa do trabalho:
+
+- **Doc-fonte e estado vivo:** `core/doc-fonte-agentes-por-evento.md` + `core/STATUS-agentes-por-evento.md`
+- **Deploy do runtime:** `runtime/DEPLOY.md` (envs, checklist, o que o processo NÃO faz)
+- **Migrations:** `supabase/migrations/2026081*` (identidade canônica, missões, outbox, preflight do sender)
+- **Cutover:** por org via `ai_runtime_rollout` — tabela vazia = nada muda no app; o webhook
+  só desvia para o runtime quem estiver nela.
