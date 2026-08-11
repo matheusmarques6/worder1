@@ -37,6 +37,20 @@ class ActiveVersion:
     provider: str = "openai"
     persona: dict | None = None
     settings: dict | None = None
+    # 10.4: como o agente se apresenta e a que se adapta — colunas de
+    # ai_agents que a radial escreve e o compiler consome.
+    presentation_mode: str = "nome_funcao"
+    client_adaptation: dict | None = None
+
+    @property
+    def adaptation_flags(self) -> tuple[str, ...]:
+        """As flags LIGADAS, no vocabulário do compiler (_ADAPTATION_LINES).
+        A UI grava emoji_if_client; o compiler fala emoji — a ponte é aqui."""
+        raw = self.client_adaptation or {}
+        renames = {"emoji_if_client": "emoji"}
+        return tuple(
+            renames.get(key, key) for key, enabled in raw.items() if enabled
+        )
 
     @property
     def base_prompt(self) -> str:
@@ -84,7 +98,8 @@ async def load_active_version(
         """
         select v.id, a.model, coalesce(v.system_prompt, a.system_prompt),
                a.id, a.name, coalesce(v.persona, a.persona),
-               coalesce(v.settings, a.settings), coalesce(a.provider, 'openai')
+               coalesce(v.settings, a.settings), coalesce(a.provider, 'openai'),
+               coalesce(a.presentation_mode, 'nome_funcao'), a.client_adaptation
           from public.ai_agent_versions v
           join public.ai_agents a on a.id = v.agent_id
          where v.status = 'produção'
@@ -116,6 +131,8 @@ async def load_active_version(
         provider=row[7],
         persona=persona,
         settings=settings,
+        presentation_mode=row[8],
+        client_adaptation=dict(row[9] or {}),
     )
 
 

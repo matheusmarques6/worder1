@@ -165,13 +165,15 @@ migrarem para SDK, com captura de conteúdo desligada explicitamente.
 | 10.1 Um agente por loja | **feito** | zip do design recebido 11/08. `AIAgentList` saiu da aba Agente; `/api/ai/agents/canonical` (GET estado, POST escolhe — demais arquivam is_active=false, restauráveis); org com N ativos cai na tela única de escolha |
 | 10.2 Radial + clássica | **feito (núcleo)** | `src/components/ai-hub/` (AgentTab/RadialView/ClassicView/AreaFields) + model `agent-hub.ts` (área↔coluna REAL com round-trip testado; merge preserva o que a órbita não conhece); breakpoint lg decide radial/clássica sobre o MESMO HubState (sem toggle, §4.4-2); 9 áreas nas 9 posições; CSS do zip escopado em agents-theme.css; nó Conhecimento abre o KnowledgeBasePanel real no drawer (§4.4-8) |
 | 10.6 Missão descoberta na radial | **feito** | área "Missão descoberta (default)" (ex-Papel, §4.4-3): viés vendedor/suporte/híbrido = OBJECTIVE da missão whatsapp.received (3 textos canônicos; um dado, N portas); salvar cria versão nova + ativa (append-only) — nada de papel global |
-| 10.4 presentation/adaptation | **metade feita** | schema no vivo (migration 0014) + UI (identidade com 3 modos e linha fixa exibida; adaptação com os 5 toggles, §4.4-4/5); falta o runtime LER (AgentBlock.presentation_mode/adaptation + StateBlock) |
+| 10.4 presentation/adaptation | **feito** | schema no vivo (migration 0014) + UI (3 modos, linha fixa exibida; 5 toggles §4.4-4/5) + runtime LÊ: load_active_version carrega as colunas, responder e toucher montam AgentBlock com presentation_mode e adaptation_flags (ponte emoji_if_client→emoji); provado em teste db que o modo escolhido muda o prompt e a linha fixa de IA fica em qualquer modo |
 | 10.3 / 10.5 / 10.7 / 10.8 | pendentes | fusão de abas + Limites sub-aba; preview real no painel; custom tools v1; banner de momentos |
 | RLS fase B/C (D11) | lotes contínuos, **[GATE-Bruno]** por lote | fase A feita |
 
-Estado da suíte após 10.1/10.2: **836 unit + 365 db/pipeline (Python),
+Estado da suíte após 10.4: **838 unit + 367 db/pipeline (Python),
 925 testes TS (+1 gerador de vetores, gated); tsc, ruff, import-linter e
-next build limpos.** 18 migrations aplicadas no vivo. A Etapa 9 fecha com
+next build limpos.** 18 migrations aplicadas no vivo. Próxima ação da
+Etapa 10: 10.3 (fusão de abas + sub-aba Limites), depois 10.5 (preview
+real no painel), 10.7 (custom tools v1) e 10.8 (banner de momentos). A Etapa 9 fecha com
 9.1/9.2/9.3/9.4 feitos no código; o que resta dela é observação
 pós-deploy (9.1: conversa navegável no Logfire — depende de 8.1/8.2 +
 token) e 9.5 (roadmap, não bloqueia).

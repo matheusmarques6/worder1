@@ -260,9 +260,10 @@ def build_toucher(
                     name=version.name,
                     tone=str(persona.get("tone") or "friendly"),
                     language=language,
-                    presentation_mode="nome_funcao",
+                    # 10.4: mesmas colunas da radial no toque outbound.
+                    presentation_mode=version.presentation_mode,
                     guidelines=tuple(persona.get("guidelines") or ()),
-                    adaptation=(),
+                    adaptation=version.adaptation_flags,
                     base_instructions=version.base_prompt or "",
                 ),
                 mission=resolved,
