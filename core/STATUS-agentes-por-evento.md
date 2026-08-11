@@ -34,13 +34,20 @@ Estados: `pendente | em curso | verde-local | verde-CI | aplicado-em-prod`.
 | 1 | 848e8ca2 | docs(core): doc-fonte agentes por evento v1.0 + adendo de execução + STATUS |
 | 2 | 33f3737d | chore(runtime): fork do motor agents-worder em runtime/ (main@288be7f, inalterado) |
 | 3 | 1901a892 | chore(db): arquiva migrations legadas + baseline prereqs conformado ao banco vivo |
-| 4 | (este) | refactor(runtime): tenant_id→organization_id no fork (unit 566 ✓, ruff ✓, boundaries ✓) |
+| 4 | 52a6c0ee | refactor(runtime): tenant_id vira organization_id em todo o fork |
+| 5 | (este) | feat(db): roles do runtime, schema internal, pgmq + 8 filas |
+
+Nota de sequenciamento: a suíte `db`/`pipeline` do fork ainda referencia o schema
+do motor (factories criam `tenants` etc.) — adaptação em bloco na Etapa 2. Até lá,
+o job `db-pipeline` do CI roda como informativo (`continue-on-error`); vira
+obrigatório no commit 9.
 
 ## Migrations aplicadas (via MCP `apply_migration`)
 
 | Arquivo | Aplicada em | Verificação |
 |---|---|---|
 | `20260812000001_agents_baseline_prereqs.sql` | 12/08/2026 via MCP (registrada como `20260811045406 agents_baseline_prereqs`) | `list_migrations` OK; no-op no vivo (tudo IF NOT EXISTS); índices `idx_agent_versions_*` criados (tabela tinha 0 linhas) |
+| `20260812000002_runtime_roles_and_internal.sql` | 12/08/2026 via MCP (`runtime_roles_and_internal`) | verificado: 8 filas em `pgmq.meta`, roles worker/sender criados, schema `internal` sem USAGE p/ anon, pgmq 1.5.1 instalado |
 
 ## Adiados / decisões em aberto
 
