@@ -36,9 +36,38 @@ export interface RadialViewProps {
   agentId: string | null
 }
 
+interface PreviewBlock { kind: string; text: string }
+
 export default function RadialView({ hub, onChange, organizationId, agentId }: RadialViewProps) {
   const [selected, setSelected] = useState<HubAreaId | null>(null)
   const [showPrompt, setShowPrompt] = useState(false)
+  const [preview, setPreview] = useState<PreviewBlock[] | null>(null)
+  const [previewNote, setPreviewNote] = useState<string | null>(null)
+
+  // 10.5 (§4.4-6): a folha mostra os blocos REAIS da mesma compile_prompt()
+  // do turno (modo preview). Runtime fora do ar = fantasmas + aviso — nunca
+  // uma reimplementação TS do prompt.
+  const openPreview = async () => {
+    setShowPrompt(true)
+    setSelected(null)
+    setPreview(null)
+    setPreviewNote(null)
+    try {
+      const res = await fetch('/api/ai/preview-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const payload = await res.json().catch(() => null)
+      if (res.ok && Array.isArray(payload?.blocks)) {
+        setPreview(payload.blocks as PreviewBlock[])
+      } else {
+        setPreviewNote(payload?.error || 'Preview indisponível — mostrando fantasmas.')
+      }
+    } catch {
+      setPreviewNote('Preview indisponível — mostrando fantasmas.')
+    }
+  }
   const done = hubDoneCount(hub)
   const pct = Math.round((done / HUB_AREAS.length) * 100)
   const R = 82
@@ -80,7 +109,7 @@ export default function RadialView({ hub, onChange, organizationId, agentId }: R
           )
         })}
         <div className="ocore" style={{ left: '50%', top: '47%' }}
-          onClick={() => { setShowPrompt((v) => !v); setSelected(null) }}>
+          onClick={() => { if (showPrompt) { setShowPrompt(false) } else { void openPreview() } }}>
           <div className="ring-wrap">
             <svg className="ring" width="172" height="172">
               <circle cx="86" cy="86" r={R} fill="none" stroke="var(--border-2)" strokeWidth="5" />
@@ -100,7 +129,7 @@ export default function RadialView({ hub, onChange, organizationId, agentId }: R
               <span className="npct">{pct}% configurado</span>
             </div>
           </div>
-          <div className="ctag"><Eye size={13} />{showPrompt ? 'Ocultar resumo' : 'Ver resumo'}</div>
+          <div className="ctag"><Eye size={13} />{showPrompt ? 'Ocultar prompt' : 'O que o agente sabe'}</div>
         </div>
         <div className="orbit-legend">
           <span><span className="sw" />&nbsp; área configurada</span>
@@ -111,16 +140,33 @@ export default function RadialView({ hub, onChange, organizationId, agentId }: R
           <div className="prompt-sheet">
             <div className="psheet-head">
               <Wand2 size={16} style={{ color: 'var(--brand)' }} />
-              <span style={{ fontSize: 13, fontWeight: 700 }}>Resumo de {hub.identity.name || '—'}</span>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>
+                O que {hub.identity.name || 'o agente'} sabe
+              </span>
               <span className="chip" style={{ marginLeft: 4 }}>{pct}%</span>
               <button type="button" className="close-x" onClick={() => setShowPrompt(false)}><X size={16} /></button>
             </div>
-            <div className="prompt-box" style={{ borderRadius: 0, maxHeight: 260 }}>
-              {HUB_AREAS.map((a) =>
-                hubAreaDone(hub, a.id)
-                  ? <div key={a.id}><span className="h"># {a.label.toUpperCase()}</span>{'\n'}configurada — os blocos reais aparecem no preview do prompt{'\n\n'}</div>
-                  : <div key={a.id}><span className="ghost">· {a.label} — a preencher</span>{'\n\n'}</div>
+            <div className="prompt-box" style={{ borderRadius: 0, maxHeight: 240 }}>
+              {preview ? (
+                preview.map((block, i) => (
+                  <div key={`${block.kind}-${i}`}>
+                    <span className="h"># {block.kind}</span>{'\n'}
+                    {block.text.replace(/^#[^\n]*\n?/, '')}{'\n\n'}
+                  </div>
+                ))
+              ) : (
+                <>
+                  {previewNote && <div><span className="ghost">{previewNote}</span>{'\n\n'}</div>}
+                  <div><span className="ghost">· MISSÃO — entra a cada conversa</span>{'\n\n'}</div>
+                  <div><span className="ghost">· ESTADO — momento ativo e promessas</span>{'\n\n'}</div>
+                  <div><span className="ghost">· CANAL — janela e restrições do WhatsApp</span>{'\n\n'}</div>
+                </>
               )}
+            </div>
+            {/* Juízes e Motor FORA do box (§4.4-6): não são prompt, são regime */}
+            <div style={{ display: 'flex', gap: 8, padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
+              <span className="chip">Judge 1 · pré-envio · 100% das respostas</span>
+              <span className="chip">Motor: {hub.budget.model} · chave BYO da org</span>
             </div>
           </div>
         )}
