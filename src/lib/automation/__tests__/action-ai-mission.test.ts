@@ -110,3 +110,36 @@ describe('action_ai_mission executor', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 });
+
+describe('object binding from the trigger', () => {
+  it('a concession without an object borrows it from the trigger data', async () => {
+    rpc.mockResolvedValue({
+      data: [{ status: 'queued', conversation_id: 'c', msg_id: 1 }],
+      error: null,
+    });
+    const context = baseContext();
+    context.trigger = { type: 'trigger_abandon', data: { cart_id: 9911 }, timestamp: '' };
+
+    await execute(
+      { eventFamily: 'cart.abandoned', concession: { kind: 'percent', value: 10 } },
+      { context }
+    );
+
+    const [, args] = rpc.mock.calls[0];
+    expect(args.p_concession_request).toEqual({
+      kind: 'percent', value: 10, object_kind: 'cart', object_ref: '9911',
+    });
+  });
+
+  it('no object anywhere means the touch goes without a benefit request', async () => {
+    rpc.mockResolvedValue({
+      data: [{ status: 'queued', conversation_id: 'c', msg_id: 1 }],
+      error: null,
+    });
+
+    await execute({ eventFamily: 'cart.abandoned', concession: { kind: 'percent', value: 10 } });
+
+    const [, args] = rpc.mock.calls[0];
+    expect(args.p_concession_request).toBeNull();
+  });
+});

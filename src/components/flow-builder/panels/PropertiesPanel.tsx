@@ -12,6 +12,7 @@ import { MessageEditor, VariableButton } from '../variables';
 import { WhatsAppTemplateEditor } from '../whatsapp';
 import { EmailPreviewMode } from './EmailPreviewMode';
 import { EmailEditorOverlay } from './EmailEditorOverlay';
+import AiMissionActionConfig from './AiMissionActionConfig';
 
 // ============================================
 // TYPES
@@ -822,6 +823,14 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 config={selectedNode.data.config || {}}
                 onUpdate={handleUpdate}
                 triggerType={triggerType}
+              />
+            )}
+
+            {/* TOQUE DE IA POR MISSÃO (runtime) */}
+            {selectedNode.data.nodeType === 'action_ai_mission' && (
+              <AiMissionActionConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
               />
             )}
 

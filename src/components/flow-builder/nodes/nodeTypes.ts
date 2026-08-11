@@ -469,6 +469,8 @@ export const actionTypes: NodeTypeDefinition[] = [
     defaultConfig: { targetType: 'queue', targetId: '' },
   },
   {
+    // DEPRECADO (D8): fora da palette; definição fica para fluxos antigos
+    // renderizarem com label/ícone certos.
     type: 'action_whatsapp_ai',
     label: 'IA Responder',
     description: 'Agente IA responde a conversa',
@@ -476,6 +478,15 @@ export const actionTypes: NodeTypeDefinition[] = [
     category: 'action',
     color: '#06b6d4',
     defaultConfig: { aiAgentId: '', maxInteractions: 5 },
+  },
+  {
+    type: 'action_ai_mission',
+    label: 'Toque de IA (Missão)',
+    description: 'Runtime gera o toque pela missão do evento',
+    icon: Bot,
+    category: 'action',
+    color: '#06b6d4',
+    defaultConfig: { eventFamily: '', preferredChannel: 'whatsapp' },
   },
   {
     type: 'action_shopify_coupon',
@@ -733,6 +744,7 @@ export const nodeTypes: Record<string, any> = {
   action_whatsapp_wait_reply: ActionNode,
   action_whatsapp_transfer: ActionNode,
   action_whatsapp_ai: ActionNode,
+  action_ai_mission: ActionNode,
   action_shopify_coupon: ActionNode,
   action_whatsapp_catalog: ActionNode,
   action_whatsapp_payment: ActionNode,

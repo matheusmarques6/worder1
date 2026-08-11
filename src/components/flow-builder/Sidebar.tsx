@@ -124,7 +124,9 @@ const LIBRARY_SECTIONS: SectionConfig[] = [
       { type: 'action_email', label: 'E-mail', description: 'Envia email para o contato', icon: Mail, category: 'action', color: '#3b82f6' },
       { type: 'action_sms', label: 'SMS', description: 'Envia SMS para o contato', icon: Smartphone, category: 'action', color: '#a855f7' },
       { type: 'action_whatsapp', label: 'WhatsApp', description: 'Envia mensagem ou template via WhatsApp', icon: MessageCircle, category: 'action', color: '#25D366' },
-      { type: 'action_whatsapp_ai', label: 'IA Responder', description: 'Agente IA responde automaticamente', icon: Bot, category: 'action', color: '#06b6d4', hasAI: true },
+      // D8 (core/agentes-por-evento.md): action_whatsapp_ai saiu da palette —
+      // fluxos antigos seguem renderizando; nada novo nasce nele.
+      { type: 'action_ai_mission', label: 'Toque de IA (Missão)', description: 'Runtime gera o toque pela missão do evento', icon: Bot, category: 'action', color: '#06b6d4', hasAI: true },
       { type: 'action_whatsapp_wait_reply', label: 'Aguardar Resposta', description: 'Aguarda resposta do contato com timeout', icon: Clock, category: 'action', color: '#0ea5e9' },
       { type: 'action_whatsapp_transfer', label: 'Transferir p/ Agente', description: 'Transfere para fila ou agente humano', icon: UserPlus, category: 'action', color: '#8b5cf6' },
     ],

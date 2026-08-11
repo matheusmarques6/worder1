@@ -1779,6 +1779,26 @@ const actionExecutors: Record<string, NodeExecutor> = {
         if (Array.isArray(config.forbidden) && config.forbidden.length) delta.forbidden = config.forbidden;
         if (config.context && typeof config.context === 'object') delta.context = config.context;
 
+        // O benefício precisa de OBJETO para amarrar (grant é por carrinho/
+        // checkout/pedido) — e o objeto é dado do GATILHO, não da config: o
+        // nó configura o quê/quanto; o fluxo em execução diz de quem.
+        let concession = config.concession ? { ...config.concession } : null;
+        if (concession && !concession.object_ref) {
+          const data = context.trigger?.data ?? {};
+          const binding =
+            data.cart_id ? { object_kind: 'cart', object_ref: String(data.cart_id) }
+            : data.checkout_id ? { object_kind: 'checkout', object_ref: String(data.checkout_id) }
+            : data.order_id ? { object_kind: 'order', object_ref: String(data.order_id) }
+            : null;
+          if (binding) {
+            Object.assign(concession, binding);
+          } else {
+            // Sem objeto, o engine não emite: manda o toque sem benefício em
+            // vez de um pedido que o runtime vai ignorar.
+            concession = null;
+          }
+        }
+
         const { supabaseAdmin } = await import('@/lib/supabase-admin');
         const { data, error } = await supabaseAdmin.rpc('emit_ai_mission_job', {
           p_organization_id: orgId,
@@ -1786,7 +1806,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           p_event_family: config.eventFamily,
           p_node_ref: `${context.workflow?.id ?? 'flow'}:${node.id}`,
           p_delta: delta,
-          p_concession_request: config.concession ?? null,
+          p_concession_request: concession,
           p_preferred_channel: config.preferredChannel || 'whatsapp',
           p_otel: null,
         });
