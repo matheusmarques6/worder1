@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
+import MomentBanner from '@/components/ai-hub/MomentBanner'
 import {
   Megaphone,
   Plus,
@@ -143,6 +144,8 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-6">
+      {/* 10.8 — o momento comercial ativo, visível onde a campanha nasce */}
+      <MomentBanner />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

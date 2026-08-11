@@ -104,6 +104,7 @@ ajustados nos testes.
 | `20260813000012_otel_carrier.sql` | 11/08/2026 via MCP (`otel_carrier`) | 9.1b: `message_outbox.otel` + `conclude_turn` 10-arg (p_otel default null; assinatura de 9 caiu) + `coalesce_due_conversations` 3-arg (p_otel) + `claimed_send.otel`/`claim_outbox_batch` devolvendo o carrier ao sender |
 | `20260813000013_activity_compat_views.sql` | 11/08/2026 via MCP (`activity_compat_views`) | 9.4: views `ai_runtime_activity`/`_calls`/`_tools` (definer, dono postgres) sobre internal.* + conversations + missão; SELECT só para service_role — anon/authenticated revogados explicitamente (os defaults do Supabase dariam) |
 | `20260814000001_agent_presentation_adaptation.sql` | 11/08/2026 via MCP (`agent_presentation_adaptation`) | 10.4 (metade schema): `ai_agents.presentation_mode` (CHECK 3 modos, default nome_funcao) + `ai_agents.client_adaptation` jsonb (flags de ESTILO — dinheiro nunca entra) |
+| `20260814000002_active_commercial_moments_view.sql` | 11/08/2026 via MCP (`active_commercial_moments_view`) | 10.8: view `active_commercial_moments` (ativo COMPUTADO: approved + janela + kill intacto); SELECT só service_role, Data API revogada |
 
 ## Adiados / decisões em aberto
 
@@ -168,15 +169,15 @@ migrarem para SDK, com captura de conteúdo desligada explicitamente.
 | 10.4 presentation/adaptation | **feito** | schema no vivo (migration 0014) + UI (3 modos, linha fixa exibida; 5 toggles §4.4-4/5) + runtime LÊ: load_active_version carrega as colunas, responder e toucher montam AgentBlock com presentation_mode e adaptation_flags (ponte emoji_if_client→emoji); provado em teste db que o modo escolhido muda o prompt e a linha fixa de IA fica em qualquer modo |
 | 10.5 Preview "O que o agente sabe" | **feito** | o núcleo da radial abre a folha com os blocos REAIS de /api/ai/preview-prompt (mesma compile_prompt do turno, modo preview); runtime fora do ar = fantasmas MISSÃO/ESTADO/CANAL + aviso (§4.4-6); Juízes e Motor como cards FORA do box; o buildPrompt() do protótipo nunca virou produção |
 | 10.3 Fusão de abas + Limites | **feito** | as 5 sub-abas do doc-fonte: Agente · Missões · Conhecimento · Limites · Atividade. Atividade funde Reports+Eval (sub-views; a seção do runtime do 9.4 vive dentro); API Keys absorvida pelo drawer Motor da radial (ApiKeysManager real); LimitsTab edita os MESMOS campos da área Limites via agent-hub (um dado, N portas) + consolidado de concessão por missão em leitura (describeConcession compartilhado) + interruptor de desligar o agente; links antigos ?tab=reports/eval/api-keys aterrissam no lugar certo |
-| 10.7 / 10.8 | pendentes — próxima ação da Etapa 10 | 10.7: custom tools v1 (tabela ai_agent_custom_tools + executor HTTP read-only no tool-loop do responder + form com teste obrigatório antes de ligar; regra dupla: NUNCA concede); 10.8: view active_commercial_moments (migration) + banner de leitura em Campanhas e no editor de Fluxos |
+| 10.8 Momento visível fora de Momentos | **feito** | view `active_commercial_moments` (migration 20260814000002, vivo+local) + rota `/api/ai/moments/active` (org da sessão) + `MomentBanner` de leitura em Campanhas e no editor de Fluxos ("momento X ativo até Y — a IA pode afirmar: …"); sem momento ativo, nada renderiza |
+| 10.7 Custom tools v1 | **pendente — a última da Etapa 10** | tabela ai_agent_custom_tools + executor HTTP read-only no tool-loop do responder (9.3b já deu o loop) + form com teste obrigatório antes de ligar; regra dupla (UI+código): NUNCA concede. Depois: conferir punch list §4.4 e declarar o DoD da etapa |
 | RLS fase B/C (D11) | lotes contínuos, **[GATE-Bruno]** por lote | fase A feita |
 
-Estado da suíte após 10.3: **838 unit + 367 db/pipeline (Python),
+Estado da suíte após 10.8: **838 unit + 367 db/pipeline (Python),
 925 testes TS (+1 gerador de vetores, gated); tsc, ruff, import-linter e
-next build limpos.** 18 migrations aplicadas no vivo. Próxima ação da
-Etapa 10: 10.8 (view active_commercial_moments + banners) e 10.7
-(custom tools v1) — o DoD da etapa fecha com a punch list §4.4 conferida
-e o print de 11/08 irreproduzível. A Etapa 9 fecha com
+next build limpos.** 19 migrations aplicadas no vivo. Próxima ação da
+Etapa 10: **10.7 (custom tools v1)** — a última; o DoD da etapa fecha com
+a punch list §4.4 conferida e o print de 11/08 irreproduzível. A Etapa 9 fecha com
 9.1/9.2/9.3/9.4 feitos no código; o que resta dela é observação
 pós-deploy (9.1: conversa navegável no Logfire — depende de 8.1/8.2 +
 token) e 9.5 (roadmap, não bloqueia).

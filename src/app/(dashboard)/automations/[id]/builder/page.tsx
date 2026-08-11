@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { createBrowserClient } from '@/lib/supabase'
 import { FlowBuilder, getFlowDataForSave } from '@/components/flow-builder'
+import MomentBanner from '@/components/ai-hub/MomentBanner'
 
 export default function AutomationBuilderPage() {
   const router = useRouter()
@@ -96,6 +97,10 @@ export default function AutomationBuilderPage() {
 
   return (
     <div className="fixed inset-0 z-[9999] bg-white">
+      {/* 10.8 — momento ativo visível onde o fluxo é editado (leitura) */}
+      <div style={{ position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 50, width: 'min(560px, 90%)', pointerEvents: 'none' }}>
+        <MomentBanner />
+      </div>
       <FlowBuilder
         automationId={automation.id}
         automationName={automation.name}
