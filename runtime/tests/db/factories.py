@@ -599,3 +599,53 @@ def create_mission(
         )
         (mission_id,) = cur.fetchone()
     return mission_id
+
+
+def create_moment(
+    conn: psycopg.Connection,
+    organization_id: uuid.UUID,
+    *,
+    name: str | None = None,
+    status: str = "approved",
+    starts_in_hours: float = -1.0,
+    ends_in_hours: float = 24.0,
+    public_claim: str | None = "Frete grátis até domingo",
+    offer: dict | None = None,
+    temp_facts: list | None = None,
+    forbidden: list[str] | None = None,
+    priority: int = 0,
+    template_readiness: dict | None = None,
+    killed: bool = False,
+) -> uuid.UUID:
+    """Um momento comercial. Default: aprovado e DENTRO da janela (começou há
+    1h, acaba em 24h) — quem quer um momento inativo diz como (status, janela
+    no passado, ou killed)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.commercial_moments
+                (organization_id, name, starts_at, ends_at, public_claim, offer,
+                 temp_facts, forbidden, priority, template_readiness, status, killed_at)
+            values (%s, %s,
+                    now() + make_interval(secs => %s), now() + make_interval(secs => %s),
+                    %s, %s, %s, %s, %s, %s, %s,
+                    case when %s then now() else null end)
+            returning id
+            """,
+            (
+                organization_id,
+                name or unique_id("momento"),
+                starts_in_hours * 3600,
+                ends_in_hours * 3600,
+                public_claim,
+                psycopg.types.json.Jsonb(offer if offer is not None else {"kind": "none"}),
+                psycopg.types.json.Jsonb(temp_facts or []),
+                forbidden or [],
+                priority,
+                psycopg.types.json.Jsonb(template_readiness or {}),
+                status,
+                killed,
+            ),
+        )
+        (moment_id,) = cur.fetchone()
+    return moment_id
