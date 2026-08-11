@@ -5,9 +5,9 @@ They take a connection rather than opening one, so a test can build its graph
 as the superuser and then attack it as `worker_role` — arranging with the
 credential under test would make the arrangement part of what is being proved.
 
-Uniqueness is per call, not per run. `channels_accounts` is UNIQUE on
-`(type, phone_e164)` GLOBALLY — not per tenant — so two suites running against
-the same database would collide on any fixed number. Everything generated here
+Uniqueness is per call, not per run. `whatsapp_business_accounts` is UNIQUE on
+`phone_number_id` GLOBALLY — not per org — so two suites running against the
+same database would collide on any fixed number. Everything generated here
 derives from a fresh uuid.
 """
 
@@ -30,13 +30,6 @@ def unique_id(prefix: str) -> str:
 
 
 @dataclass(frozen=True)
-class ConnectorAccount:
-    id: uuid.UUID
-    """The id the platform uses for this store — what resolves the tenant."""
-    source_account_id: str
-
-
-@dataclass(frozen=True)
 class ChannelAccount:
     id: uuid.UUID
     phone_e164: str
@@ -53,44 +46,22 @@ class Thread:
     conversation_id: uuid.UUID
 
 
-def create_connector_account(
-    conn: psycopg.Connection,
-    organization_id: uuid.UUID,
-    *,
-    platform: str = "shopify",
-) -> ConnectorAccount:
-    source_account_id = unique_id("store")
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            insert into public.connector_accounts (organization_id, platform, source_account_id)
-            values (%s, %s, %s)
-            returning id
-            """,
-            (organization_id, platform, source_account_id),
-        )
-        (account_id,) = cur.fetchone()
-
-    return ConnectorAccount(id=account_id, source_account_id=source_account_id)
-
-
 def create_channel_account(
     conn: psycopg.Connection,
     organization_id: uuid.UUID,
-    *,
-    type: str = "cloud",
 ) -> ChannelAccount:
+    """A WhatsApp Cloud account (Worder: whatsapp_business_accounts)."""
     phone = unique_phone()
     external_account_id = unique_id("wa")
     with conn.cursor() as cur:
         cur.execute(
             """
-            insert into public.channels_accounts
-                (organization_id, type, phone_e164, external_account_id, status)
-            values (%s, %s, %s, %s, 'active')
+            insert into public.whatsapp_business_accounts
+                (organization_id, phone_number_id, phone_number, status)
+            values (%s, %s, %s, 'active')
             returning id
             """,
-            (organization_id, type, phone, external_account_id),
+            (organization_id, external_account_id, phone),
         )
         (account_id,) = cur.fetchone()
 
@@ -100,7 +71,7 @@ def create_channel_account(
 def create_contact(conn: psycopg.Connection, organization_id: uuid.UUID) -> uuid.UUID:
     with conn.cursor() as cur:
         cur.execute(
-            "insert into public.contacts (organization_id, phone_e164)"
+            "insert into public.contacts (organization_id, phone)"
             " values (%s, %s) returning id",
             (organization_id, unique_phone()),
         )
@@ -111,8 +82,6 @@ def create_contact(conn: psycopg.Connection, organization_id: uuid.UUID) -> uuid
 def create_thread(
     conn: psycopg.Connection,
     organization_id: uuid.UUID,
-    *,
-    origin_occasion: str = "direct",
 ) -> Thread:
     contact_id = create_contact(conn, organization_id)
     channel = create_channel_account(conn, organization_id)
@@ -121,11 +90,11 @@ def create_thread(
         cur.execute(
             """
             insert into public.conversations
-                (organization_id, contact_id, channel_account_id, origin_occasion)
-            values (%s, %s, %s, %s)
+                (organization_id, contact_id, last_channel)
+            values (%s, %s, 'whatsapp')
             returning id
             """,
-            (organization_id, contact_id, channel.id, origin_occasion),
+            (organization_id, contact_id),
         )
         (conversation_id,) = cur.fetchone()
 
@@ -150,7 +119,7 @@ def create_message(
             """
             insert into public.messages
                 (organization_id, conversation_id, direction, seq, channel, author_type, content)
-            values (%s, %s, %s, %s, 'whatsapp_cloud', %s, %s)
+            values (%s, %s, %s, %s, 'whatsapp', %s, %s)
             returning id
             """,
             (
@@ -194,37 +163,6 @@ def create_outbox_item(
         )
         (outbox_id,) = cur.fetchone()
     return outbox_id
-
-
-def create_webhook_event(
-    conn: psycopg.Connection,
-    organization_id: uuid.UUID,
-    *,
-    source: str = "shopify",
-    source_account_id: str | None = None,
-    external_event_id: str | None = None,
-    event_type: str = "checkout_abandoned",
-    payload: dict | None = None,
-) -> int:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            insert into internal.webhook_events
-                (source, source_account_id, external_event_id, organization_id, event_type, payload)
-            values (%s, %s, %s, %s, %s, %s)
-            returning id
-            """,
-            (
-                source,
-                source_account_id or unique_id("store"),
-                external_event_id or unique_id("evt"),
-                organization_id,
-                event_type,
-                psycopg.types.json.Jsonb(payload if payload is not None else {"raw": True}),
-            ),
-        )
-        (event_id,) = cur.fetchone()
-    return event_id
 
 
 def make_due(
@@ -456,11 +394,12 @@ def create_llm_call(
 
 
 def create_tenant(conn: psycopg.Connection, label: str | None = None) -> uuid.UUID:
-    """A bare tenant — enough for the runtime's RLS scope, no hub user attached."""
+    """A bare organization — enough for the runtime's RLS scope, no hub user."""
+    name = label or unique_id("org")
     with conn.cursor() as cur:
         cur.execute(
-            "insert into public.tenants (id, name) values (%s, %s) returning id",
-            (uuid.uuid4(), label or unique_id("tenant")),
+            "insert into public.organizations (id, name, slug) values (%s, %s, %s) returning id",
+            (uuid.uuid4(), name, name),
         )
         (organization_id,) = cur.fetchone()
     return organization_id

@@ -34,7 +34,7 @@ Este diretório é um **fork do motor `agents-worder-main`** dentro do monorepo 
 | `public.connector_accounts`, `public.channels_accounts` | equivalem a `shopify_stores` / `whatsapp_business_accounts` |
 | `internal.webhook_events` + `internal.ingest_webhook` + edge function `ingest-meta` | ingestão fica nos webhooks Next.js chamando RPCs `emit_*`/`ingest_inbound_message`; dedup por wamid |
 | `hub/` (showcase Next 16) | o Worder tem o app |
-| Testes: `test_ingest_webhook.py`, `test_apply_domain_event.py` (forma atual), `test_identity_schema.py`/`test_rls_identity.py` (forma atual) | reescritos contra o schema do Worder nas Etapas 1–2 |
+| Testes: `test_ingest_webhook.py`, `test_apply_domain_event.py`, `test_scenario_abandonment.py` (fluxo de abandono via webhook_events — substituído pela fatia vertical de missão na Etapa 6) | aposentados; `test_identity_schema.py`/`test_rls_identity.py`/`test_internal_schema.py` reescritos contra o schema canônico na Etapa 2 |
 
 ## Divergências conscientes do v1 (detalhe no Adendo §A.4 do doc-fonte)
 

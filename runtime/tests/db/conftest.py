@@ -54,7 +54,6 @@ def admin(dsn: str) -> Iterator[psycopg.Connection]:
 class Tenant:
     id: uuid.UUID
     user_id: uuid.UUID
-    membership_id: uuid.UUID
 
 
 @dataclass(frozen=True)
@@ -69,13 +68,15 @@ class TwoTenants:
 
 
 def _create_tenant(conn: psycopg.Connection, label: str) -> Tenant:
+    # Worder: organizations + profiles; profiles.organization_id IS the
+    # membership (there is no memberships table — see runtime/FORK.md).
     organization_id = uuid.uuid4()
     user_id = uuid.uuid4()
 
     with conn.cursor() as cur:
         cur.execute(
-            "insert into public.tenants (id, name) values (%s, %s)",
-            (organization_id, label),
+            "insert into public.organizations (id, name, slug) values (%s, %s, %s)",
+            (organization_id, label, label),
         )
         cur.execute(
             """
@@ -86,20 +87,14 @@ def _create_tenant(conn: psycopg.Connection, label: str) -> Tenant:
             (user_id, f"{label}@example.test"),
         )
         cur.execute(
-            "insert into public.profiles (user_id, full_name) values (%s, %s)",
-            (user_id, label),
-        )
-        cur.execute(
             """
-            insert into public.memberships (organization_id, user_id, role)
-            values (%s, %s, 'owner')
-            returning id
+            insert into public.profiles (id, email, organization_id, role)
+            values (%s, %s, %s, 'owner')
             """,
-            (organization_id, user_id),
+            (user_id, f"{label}@example.test", organization_id),
         )
-        membership_id = cur.fetchone()[0]
 
-    return Tenant(id=organization_id, user_id=user_id, membership_id=membership_id)
+    return Tenant(id=organization_id, user_id=user_id)
 
 
 @pytest.fixture
@@ -114,7 +109,7 @@ def two_tenants(admin: psycopg.Connection) -> Iterator[TwoTenants]:
 
     with admin.cursor() as cur:
         cur.execute(
-            "delete from public.tenants where id = any(%s)",
+            "delete from public.organizations where id = any(%s)",
             ([tenants.a.id, tenants.b.id],),
         )
         cur.execute(

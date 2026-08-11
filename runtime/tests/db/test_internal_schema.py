@@ -14,13 +14,13 @@ import psycopg
 import pytest
 
 from tests.db.conftest import TwoTenants, as_app_role
-from tests.db.factories import Thread, create_outbox_item, create_thread, create_webhook_event
+from tests.db.factories import Thread, create_outbox_item, create_thread
 
 # `service_role` is on the list deliberately: internal tables get no grant here,
 # not even for the role that bypasses everything else in the Data API.
 DATA_API_ROLES = ("anon", "authenticated", "service_role")
 
-INTERNAL_TABLES = ("internal.webhook_events", "internal.message_outbox")
+INTERNAL_TABLES = ("internal.message_outbox",)
 
 
 @pytest.mark.parametrize("role", DATA_API_ROLES)
@@ -47,15 +47,6 @@ def test_the_data_api_roles_cannot_reach_the_schema_at_all(dsn: str, role: str) 
 
             with pytest.raises(psycopg.errors.InsufficientPrivilege):
                 cur.execute("select 1 from internal.message_outbox limit 1")
-
-
-def test_the_worker_can_record_a_webhook_event(
-    dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
-) -> None:
-    with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
-        event_id = create_webhook_event(conn, two_tenants.a.id)
-
-    assert event_id > 0
 
 
 def test_the_worker_can_queue_a_send_and_the_sender_can_perform_it(
