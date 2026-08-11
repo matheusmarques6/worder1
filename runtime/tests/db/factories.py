@@ -403,3 +403,45 @@ def create_tenant(conn: psycopg.Connection, label: str | None = None) -> uuid.UU
         )
         (organization_id,) = cur.fetchone()
     return organization_id
+
+
+def create_mission(
+    conn: psycopg.Connection,
+    organization_id: uuid.UUID,
+    *,
+    event_type: str = "cart.abandoned",
+    status: str = "draft",
+    origin: str = "worder_default",
+    objective: str = "recuperar a compra sem parecer cobrança",
+    parent_version_id: uuid.UUID | None = None,
+    concession: dict | None = None,
+    enabled_tools: list[str] | None = None,
+    forbidden: list[str] | None = None,
+    promote_moment: bool = False,
+    max_turns: int = 3,
+) -> uuid.UUID:
+    """Uma versão de missão. `concession` ausente exercita o default do banco."""
+    columns = [
+        "organization_id", "event_type", "status", "origin", "objective",
+        "parent_version_id", "enabled_tools", "forbidden", "promote_moment", "max_turns",
+    ]
+    values: list[object] = [
+        organization_id, event_type, status, origin, objective,
+        parent_version_id, enabled_tools or [], forbidden or [], promote_moment, max_turns,
+    ]
+    if concession is not None:
+        columns.append("concession")
+        values.append(psycopg.types.json.Jsonb(concession))
+
+    placeholders = ", ".join(["%s"] * len(values))
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            insert into public.ai_missions ({", ".join(columns)})
+            values ({placeholders})
+            returning id
+            """,
+            tuple(values),
+        )
+        (mission_id,) = cur.fetchone()
+    return mission_id
