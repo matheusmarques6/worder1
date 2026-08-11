@@ -1748,7 +1748,80 @@ const actionExecutors: Record<string, NodeExecutor> = {
     },
   },
 
+  // Toque de IA por missão — runtime Python (core/agentes-por-evento.md §3.2.2).
+  // O NÓ PEDE, o offer engine DECIDE, a tool EXECUTA: este executor faz UMA
+  // chamada (emit_ai_mission_job) e o resto acontece no runtime — missão
+  // re-resolvida no consumo, Judge 1 pré-envio, preflight de momento no sender.
+  // O nó guarda a FAMÍLIA do evento (mission_ref), nunca o texto do toque.
+  action_ai_mission: {
+    async execute({ node, config, context, organizationId, isTest }) {
+      if (isTest) {
+        return {
+          status: 'success',
+          output: { queued: true, event_family: config.eventFamily, test: true },
+        };
+      }
+      try {
+        const orgId = organizationId || (context as any).organization_id;
+        const contactId = context.contact?.id;
+        if (!orgId || !contactId) {
+          return { status: 'error', output: null, error: 'organizationId ou contact.id ausente no contexto' };
+        }
+        if (!config.eventFamily) {
+          return { status: 'error', output: null, error: 'eventFamily (mission_ref) não configurado no nó' };
+        }
+
+        // Delta do toque: só o que o nó pode refinar (§3.3.3 — restrição
+        // acumula, permissão estreita; o teto de concessão é da MISSÃO).
+        const delta: Record<string, any> = {};
+        if (config.objective) delta.objective = config.objective;
+        if (config.tone) delta.tone = config.tone;
+        if (Array.isArray(config.forbidden) && config.forbidden.length) delta.forbidden = config.forbidden;
+        if (config.context && typeof config.context === 'object') delta.context = config.context;
+
+        const { supabaseAdmin } = await import('@/lib/supabase-admin');
+        const { data, error } = await supabaseAdmin.rpc('emit_ai_mission_job', {
+          p_organization_id: orgId,
+          p_contact_id: contactId,
+          p_event_family: config.eventFamily,
+          p_node_ref: `${context.workflow?.id ?? 'flow'}:${node.id}`,
+          p_delta: delta,
+          p_concession_request: config.concession ?? null,
+          p_preferred_channel: config.preferredChannel || 'whatsapp',
+          p_otel: null,
+        });
+        if (error) {
+          return { status: 'error', output: null, error: error.message };
+        }
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row || row.status !== 'queued') {
+          // Caminho de erro do nó (§3.2.2-2): not_rolled_out /
+          // no_active_mission / contact_not_found — o fluxo decide o desvio.
+          return {
+            status: 'error',
+            output: row ?? null,
+            error: `emit_ai_mission_job: ${row?.status ?? 'sem resposta'}`,
+          };
+        }
+        return {
+          status: 'success',
+          output: {
+            queued: true,
+            conversation_id: row.conversation_id,
+            msg_id: row.msg_id,
+            event_family: config.eventFamily,
+          },
+        };
+      } catch (error: any) {
+        return { status: 'error', output: null, error: error.message };
+      }
+    },
+  },
+
   // Ativar agente IA na conversa
+  // DEPRECADO (D8, core/agentes-por-evento.md): fluxos NOVOS usam
+  // action_ai_mission acima. Este executor fica vivo para fluxos antigos até
+  // o pós-cutover; sai da palette na Etapa 7.
   action_whatsapp_ai: {
     async execute({ config, context, isTest }) {
       if (isTest) {
