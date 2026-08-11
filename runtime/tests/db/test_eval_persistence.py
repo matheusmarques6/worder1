@@ -72,7 +72,7 @@ def version(admin: psycopg.Connection) -> tuple[uuid.UUID, uuid.UUID]:
     version_id = create_agent_version(admin, organization_id)
     yield organization_id, version_id
     with admin.cursor() as cur:
-        cur.execute("delete from public.tenants where id = %s", (organization_id,))
+        cur.execute("delete from public.organizations where id = %s", (organization_id,))
 
 
 async def _persist(dsn: str, organization_id: uuid.UUID, version_id: uuid.UUID, report: EvalReport):

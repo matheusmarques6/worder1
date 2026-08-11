@@ -59,6 +59,7 @@ class AgentBlock:
     presentation_mode: str
     guidelines: tuple[str, ...]
     adaptation: tuple[str, ...]
+    base_instructions: str = ""
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,8 @@ def _agent_block(agent: AgentBlock) -> RenderedBlock:
         ),
         f"Tom base: {agent.tone}.",
     ]
+    if agent.base_instructions:
+        lines.append(agent.base_instructions)
     lines.extend(f"Diretriz: {g}" for g in agent.guidelines)
     lines.extend(
         _ADAPTATION_LINES[a] for a in agent.adaptation if a in _ADAPTATION_LINES

@@ -44,13 +44,12 @@ async def eventually(check, *, deadline_s: float = DEADLINE, note: str = ""):
     raise TimeoutError(f"never became true: {note}")
 
 
-def ingest_message(
-    sync_admin: psycopg.Connection, account_id: str, phone: str, text: str
-):
+def ingest_message(sync_admin: psycopg.Connection, organization_id, phone: str, text: str):
+    # FORK: a ingestão do motor (internal.ingest_webhook) não foi portada; o
+    # caminho F2 real é a RPC canônica — debounce 0 deixa o coalescer pegar já.
     return sync_admin.execute(
-        "select * from internal.ingest_webhook('meta', %s, %s, 'message_inbound', %s,"
-        " interval '30 milliseconds')",
-        (account_id, unique_id("evt"), Jsonb({"from": phone, "message": {"text": text}})),
+        "select * from public.ingest_inbound_message(%s, 'whatsapp', %s, null, %s, %s, 0)",
+        (organization_id, phone, Jsonb({"text": text}), unique_id("wamid")),
     ).fetchone()
 
 
@@ -61,14 +60,14 @@ async def test_scenario_1_a_burst_of_five_becomes_exactly_one_reply(
     tiny_config: QueueingConfig,
 ) -> None:
     organization_id = create_tenant(sync_admin)
-    number = create_channel_account(sync_admin, organization_id)
+    create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
     # The burst lands BEFORE the engine wakes: five webhooks, one contact, one
     # conversation, deadline already expired. What the engine owes us is ONE
     # job, ONE generation, ONE reply — not five.
     for text in ("oi", "meu pedido não chegou", "alguém aí?", "??", "pode verificar?"):
-        ingest_message(sync_admin, number.external_account_id, phone, text)
+        ingest_message(sync_admin, organization_id, phone, text)
 
     stop = asyncio.Event()
     running = asyncio.create_task(

@@ -81,7 +81,7 @@ def clean_slate(dsn: str, _testing_schema: None) -> Iterator[None]:
                 " testing.responder_gate"
             )
             # Cascades through contacts, conversations, messages and accounts.
-            conn.execute("truncate public.tenants cascade")
+            conn.execute("truncate public.organizations cascade")
 
     wipe()
     yield

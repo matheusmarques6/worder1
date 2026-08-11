@@ -44,7 +44,7 @@ def tenant(admin: psycopg.Connection) -> uuid.UUID:
     organization_id = create_tenant(admin)
     yield organization_id
     with admin.cursor() as cur:
-        cur.execute("delete from public.tenants where id = %s", (organization_id,))
+        cur.execute("delete from public.organizations where id = %s", (organization_id,))
 
 
 async def _ingest(dsn: str, organization_id: uuid.UUID, texts=(FRETE, TROCA)) -> None:
@@ -122,7 +122,7 @@ class TestSearchKnowledge:
             assert contents == [FRETE]
         finally:
             with admin.cursor() as cur:
-                cur.execute("delete from public.tenants where id = %s", (stranger,))
+                cur.execute("delete from public.organizations where id = %s", (stranger,))
 
     async def test_no_transaction_is_held_across_the_embedding_call(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
@@ -218,7 +218,7 @@ class TestGetCustomerContext:
             assert result.output == {}
         finally:
             with admin.cursor() as cur:
-                cur.execute("delete from public.tenants where id = %s", (stranger,))
+                cur.execute("delete from public.organizations where id = %s", (stranger,))
 
 
 class TestTheTrail:

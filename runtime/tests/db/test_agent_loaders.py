@@ -31,7 +31,7 @@ def tenant(admin: psycopg.Connection) -> uuid.UUID:
     organization_id = create_tenant(admin)
     yield organization_id
     with admin.cursor() as cur:
-        cur.execute("delete from public.tenants where id = %s", (organization_id,))
+        cur.execute("delete from public.organizations where id = %s", (organization_id,))
 
 
 class TestTheActiveVersion:
@@ -76,36 +76,32 @@ class TestTheActiveVersion:
                 assert await agent_repo.load_active_version(conn, organization_id=tenant) is None
         finally:
             with admin.cursor() as cur:
-                cur.execute("delete from public.tenants where id = %s", (stranger,))
+                cur.execute("delete from public.organizations where id = %s", (stranger,))
 
 
 class TestTheTenantPolicy:
-    async def test_it_loads_the_two_switches_that_reach_the_prompt(
+    async def test_the_policy_defaults_are_pinned(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
     ) -> None:
-        with admin.cursor() as cur:
-            cur.execute(
-                "update public.tenants set primary_language = 'es-AR', never_say_ai = false"
-                " where id = %s",
-                (tenant,),
-            )
-
+        """FORK: organizations não tem os knobs do motor; os defaults ficam
+        pinados no loader (pt-BR, never_say_ai True) até a config por agente
+        assumir de vez (FORK.md)."""
         async with as_worker(dsn, tenant) as conn:
             policy = await agent_repo.load_tenant_policy(conn, organization_id=tenant)
 
-        assert policy.primary_language == "es-AR"
-        assert policy.never_say_ai is False
+        assert policy.primary_language == "pt-BR"
+        assert policy.never_say_ai is True
         assert policy.shadow_until is None
 
 
 class TestTheConversation:
-    async def test_it_loads_the_occasion_and_the_contact_language(
+    async def test_it_loads_the_canonical_shape(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
     ) -> None:
-        thread = create_thread(admin, tenant, origin_occasion="cart_abandoned")
+        thread = create_thread(admin, tenant)
         with admin.cursor() as cur:
             cur.execute(
-                "update public.contacts set language = 'en-US' where id = %s",
+                "update public.contacts set first_name = 'Ana' where id = %s",
                 (thread.contact_id,),
             )
 
@@ -115,8 +111,11 @@ class TestTheConversation:
             )
 
         assert view is not None
-        assert view.occasion == "cart_abandoned"
-        assert view.contact_language == "en-US"
+        assert view.status == "open"
+        assert view.last_channel == "whatsapp"
+        assert view.owner_mission_version_id is None
+        assert view.contact_id == thread.contact_id
+        assert view.contact_name == "Ana"
         assert view.last_processed_seq == 0
 
     async def test_a_conversation_of_another_tenant_is_simply_not_there(
@@ -134,7 +133,7 @@ class TestTheConversation:
             assert view is None
         finally:
             with admin.cursor() as cur:
-                cur.execute("delete from public.tenants where id = %s", (stranger,))
+                cur.execute("delete from public.organizations where id = %s", (stranger,))
 
 
 class TestThePendingWindow:

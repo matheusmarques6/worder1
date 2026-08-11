@@ -26,6 +26,7 @@ from tests.db.factories import (
     create_agent_version,
     create_channel_account,
     create_knowledge_chunk,
+    create_mission,
     create_tenant,
     unique_id,
     unique_phone,
@@ -50,29 +51,40 @@ async def eventually(check, *, deadline_s: float = DEADLINE, note: str = ""):
     raise TimeoutError(f"never became true: {note}")
 
 
-def ingest_message(sync_admin: psycopg.Connection, account_id: str, phone: str, text: str):
+def ingest_message(sync_admin: psycopg.Connection, organization_id, phone: str, text: str):
+    # FORK: a ingestão do motor (internal.ingest_webhook) não foi portada; o
+    # caminho F2 real é a RPC canônica — debounce 0 deixa o coalescer pegar já.
     return sync_admin.execute(
-        "select * from internal.ingest_webhook('meta', %s, %s, 'message_inbound', %s,"
-        " interval '30 milliseconds')",
-        (account_id, unique_id("evt"), Jsonb({"from": phone, "message": {"text": text}})),
+        "select * from public.ingest_inbound_message(%s, 'whatsapp', %s, null, %s, %s, 0)",
+        (organization_id, phone, Jsonb({"text": text}), unique_id("wamid")),
     ).fetchone()
 
 
 def a_tenant_with_an_agent(sync_admin: psycopg.Connection, *, tools=("search_knowledge",)):
     organization_id = create_tenant(sync_admin)
-    sync_admin.execute(
-        "update public.agent_versions set enabled_tools = %s where organization_id = %s",
-        (list(tools), organization_id),
-    )
-    version_id = create_agent_version(
+    create_agent_version(
         sync_admin,
         organization_id,
         status="active",
         base_prompt="Você é o atendente da loja Worder. Responda curto e cordial.",
     )
+    # FORK: enabled_tools mora em ai_agents.settings->tools->enabled…
     sync_admin.execute(
-        "update public.agent_versions set enabled_tools = %s where id = %s",
-        (list(tools), version_id),
+        """
+        update public.ai_agents
+           set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{tools}', %s)
+         where organization_id = %s
+        """,
+        (Jsonb({"enabled": list(tools)}), organization_id),
+    )
+    # …e um inbound só responde com uma missão ativa — a descoberta.
+    create_mission(
+        sync_admin,
+        organization_id,
+        event_type="whatsapp.received",
+        status="active",
+        objective="classificar a intenção e ajudar",
+        enabled_tools=list(tools),
     )
     create_knowledge_chunk(
         sync_admin, organization_id, content=FRETE, embedding=an_embedding_of(FRETE)
@@ -116,11 +128,11 @@ async def test_the_real_agent_answers_through_the_whole_engine(
     canal — passando por conhecimento, prompt em camadas e Judge 1, com o motor
     do E1 intocado no meio."""
     organization_id = a_tenant_with_an_agent(sync_admin)
-    number = create_channel_account(sync_admin, organization_id)
+    create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
-    first = ingest_message(sync_admin, number.external_account_id, phone, "qual é o frete?")
-    conversation_id = first[3]
+    first = ingest_message(sync_admin, organization_id, phone, "qual é o frete?")
+    conversation_id = first[0]
 
     llm = ScriptedLlm(reply=REPLY)
 
@@ -175,10 +187,10 @@ async def test_the_merchants_knowledge_reaches_the_model(
     no prompt que o modelo recebeu. Sem esta asserção, a recuperação poderia
     estar rodando e sendo jogada fora, e o teste acima passaria igual."""
     organization_id = a_tenant_with_an_agent(sync_admin)
-    number = create_channel_account(sync_admin, organization_id)
+    create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
-    ingest_message(sync_admin, number.external_account_id, phone, "qual é o frete?")
+    ingest_message(sync_admin, organization_id, phone, "qual é o frete?")
 
     llm = ScriptedLlm(reply=REPLY)
 

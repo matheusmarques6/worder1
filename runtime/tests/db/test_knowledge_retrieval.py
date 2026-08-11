@@ -29,7 +29,7 @@ import psycopg
 import pytest
 
 from agents_runtime.repository import knowledge as knowledge_repo
-from tests.db.factories import create_tenant
+from tests.db.factories import create_agent, create_tenant
 from tests.support.database import as_platform, as_worker
 from tests.support.embedding import DIMENSIONS, embed_text
 
@@ -40,10 +40,13 @@ PAGAMENTO = "Aceitamos pix, boleto e cartão em até doze vezes."
 
 @pytest.fixture
 def tenant(admin: psycopg.Connection) -> uuid.UUID:
+    # FORK: ingest_chunk pendura em ai_agent_sources/ai_agent_chunks, que
+    # exigem um agente ativo na org.
     organization_id = create_tenant(admin)
+    create_agent(admin, organization_id)
     yield organization_id
     with admin.cursor() as cur:
-        cur.execute("delete from public.tenants where id = %s", (organization_id,))
+        cur.execute("delete from public.organizations where id = %s", (organization_id,))
 
 
 async def _ingest_faq(
@@ -99,10 +102,23 @@ class TestRetrieval:
         with admin.cursor() as cur:
             cur.execute(
                 """
-                insert into public.knowledge_chunks (organization_id, source, content, embedding)
-                values (%s, 'upload', %s, null)
+                with agent as (
+                    select id from public.ai_agents
+                     where organization_id = %(org)s and is_active
+                     order by created_at limit 1
+                ),
+                source as (
+                    insert into public.ai_agent_sources
+                        (organization_id, agent_id, source_type, name, status)
+                    select %(org)s, agent.id, 'text', 'upload', 'ready' from agent
+                    returning id, agent_id
+                )
+                insert into public.ai_agent_chunks
+                    (organization_id, agent_id, source_id, content, embedding)
+                select %(org)s, source.agent_id, source.id, %(content)s, null
+                  from source
                 """,
-                (tenant, "Documento enviado ainda sem embedding."),
+                {"org": tenant, "content": "Documento enviado ainda sem embedding."},
             )
 
         async with as_worker(dsn, tenant) as conn:
@@ -136,17 +152,20 @@ class TestIngestion:
         with admin.cursor() as cur:
             cur.execute(
                 """
-                select organization_id, source, title, content, metadata, embedding is not null
-                  from public.knowledge_chunks where id = %s
+                select c.organization_id, s.name, c.content, c.metadata,
+                       c.embedding is not null
+                  from public.ai_agent_chunks c
+                  join public.ai_agent_sources s on s.id = c.source_id
+                 where c.id = %s
                 """,
                 (chunk_id,),
             )
             row = cur.fetchone()
 
         assert row[0] == tenant
-        assert (row[1], row[2], row[3]) == ("policy", "Política de trocas", TROCA)
-        assert row[4] == {"derived_from_conversation": False}
-        assert row[5] is True
+        assert (row[1], row[2]) == ("policy: Política de trocas", TROCA)
+        assert row[3] == {"derived_from_conversation": False}
+        assert row[4] is True
 
     async def test_a_vector_of_the_wrong_dimension_never_reaches_the_table(
         self, dsn: str, tenant: uuid.UUID
@@ -189,11 +208,12 @@ class TestTheBoundary:
     async def test_a_stranger_chunk_never_comes_back(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
     ) -> None:
-        """Same text, same vector, two tenants: only the policy separates them.
-        If the search ever grew a `where organization_id = …`, this test would keep
-        passing while the real guard rotted — so the search has none, and this
-        is the assertion that watches the policy itself."""
+        """Same text, same vector, two orgs: only the scope separates them.
+        FORK: ai_agent_chunks é legada com RLS desligada, então o escopo é o
+        `organization_id = current_app_organization_id()` EXPLÍCITO da query
+        (FORK.md item 6) — e esta é a asserção que o vigia."""
         stranger = create_tenant(admin)
+        create_agent(admin, stranger)
         try:
             await _ingest_faq(dsn, tenant, texts=(FRETE,))
             await _ingest_faq(dsn, stranger, texts=(FRETE,))
@@ -205,7 +225,8 @@ class TestTheBoundary:
 
             with admin.cursor() as cur:
                 cur.execute(
-                    "select count(*) from public.knowledge_chunks where organization_id = any(%s)",
+                    "select count(*) from public.ai_agent_chunks"
+                    " where organization_id = any(%s)",
                     ([tenant, stranger],),
                 )
                 (total,) = cur.fetchone()
@@ -215,4 +236,4 @@ class TestTheBoundary:
             assert found[0].organization_id == tenant
         finally:
             with admin.cursor() as cur:
-                cur.execute("delete from public.tenants where id = %s", (stranger,))
+                cur.execute("delete from public.organizations where id = %s", (stranger,))

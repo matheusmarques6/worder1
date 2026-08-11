@@ -78,10 +78,9 @@ jobs:
 
   tests-db:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # INFORMATIVO até a Etapa 2 (suíte db/rls ainda referencia o schema do
-    # motor). Flip para bloqueante no commit 9 — ver STATUS.
-    continue-on-error: true
+    timeout-minutes: 25
+    # BLOQUEANTE desde a passada de CI da Etapa 4: a suíte db/rls/pipeline
+    # inteira foi adaptada ao schema canônico do Worder.
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v9.0.0
@@ -98,4 +97,6 @@ jobs:
       # teste é o que as migrations descrevem, nunca um dump.
       - name: Start the lean stack
         run: supabase start -x "$SUPABASE_EXCLUDE"
-      - run: uv run --directory runtime pytest -m "db"
+      # db inclui a suíte rls (bloqueante em todo PR); pipeline roda o processo
+      # real com TINY_INTERVALS contra o stack local.
+      - run: uv run --directory runtime pytest -m "db or pipeline"

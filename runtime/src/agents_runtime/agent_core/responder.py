@@ -238,6 +238,7 @@ def build_responder(
                 presentation_mode="nome_funcao",
                 guidelines=tuple(persona.get("guidelines") or ()),
                 adaptation=(),
+                base_instructions=version.base_prompt or "",
             )
             window_open = True
             if state.last_inbound_at is not None:

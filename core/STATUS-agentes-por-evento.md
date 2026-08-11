@@ -44,7 +44,8 @@ Estados: `pendente | em curso | verde-local | verde-CI | aplicado-em-prod`.
 | 11 | bb8414f0 | feat(db): trilha interna llm/tool/judge + factories/testes e2 adaptados |
 | 12 | f01a7511 | feat(runtime): mission_resolver — a cascata resolvida antes do prompt |
 | 13 | a413cdc9 | feat(runtime): prompt_compiler — blocos tipados com linha de IA estrutural |
-| 14 | (este) | feat(runtime): responder religado — arbitragem + merge + frame compilado |
+| 14 | c58f75f9 | feat(runtime): responder religado — arbitragem + merge + frame compilado |
+| 15 | (este) | test(runtime): suíte db/pipeline adaptada ao schema canônico; CI db vira bloqueante |
 
 Ajuste de plano: o flip do job `db-pipeline`→bloqueante fica para o início da
 Etapa 4, numa passada de iteração de CI que adapta os testes db restantes ao
@@ -90,7 +91,7 @@ obrigatório no commit 9.
 ## Próxima ação
 
 **Etapa 4, commit 15 + passada de CI** — na ordem:
-1. **Iteração de CI (db→bloqueante):** adaptar os testes db restantes ao novo shape —
+1. ✅ FEITO — **Iteração de CI (db→bloqueante):** adaptar os testes db restantes ao novo shape —
    `test_agent_loaders` (ActiveVersion agora carrega agent_id/name/persona/settings e vem de
    ai_agents+ai_agent_versions com status 'produção'; ConversationState virou flat com
    status/last_channel/owner_mission_version_id/contact_id/contact_name/last_inbound_at),

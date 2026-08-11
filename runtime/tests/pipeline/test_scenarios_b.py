@@ -51,11 +51,12 @@ async def eventually(check, *, deadline_s: float = DEADLINE, note: str = ""):
     raise TimeoutError(f"never became true: {note}")
 
 
-def ingest_message(sync_admin: psycopg.Connection, account_id: str, phone: str, text: str):
+def ingest_message(sync_admin: psycopg.Connection, organization_id, phone: str, text: str):
+    # FORK: a ingestão do motor (internal.ingest_webhook) não foi portada; o
+    # caminho F2 real é a RPC canônica — debounce 0 deixa o coalescer pegar já.
     return sync_admin.execute(
-        "select * from internal.ingest_webhook('meta', %s, %s, 'message_inbound', %s,"
-        " interval '30 milliseconds')",
-        (account_id, unique_id("evt"), Jsonb({"from": phone, "message": {"text": text}})),
+        "select * from public.ingest_inbound_message(%s, 'whatsapp', %s, null, %s, %s, 0)",
+        (organization_id, phone, Jsonb({"text": text}), unique_id("wamid")),
     ).fetchone()
 
 
@@ -73,13 +74,13 @@ async def test_scenario_2_a_message_during_generation_invalidates_the_draft(
     ZERO sends from it reach the provider. Generation 2 answers all six.
     """
     organization_id = create_tenant(sync_admin)
-    number = create_channel_account(sync_admin, organization_id)
+    create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
-    first = ingest_message(sync_admin, number.external_account_id, phone, "oi")
-    conversation_id = first[3]
+    first = ingest_message(sync_admin, organization_id, phone, "oi")
+    conversation_id = first[0]
     for text in ("meu pedido", "não chegou", "??", "alguém?"):
-        ingest_message(sync_admin, number.external_account_id, phone, text)
+        ingest_message(sync_admin, organization_id, phone, text)
 
     arm_gate(sync_admin, conversation_id, holds=1)
 
@@ -103,7 +104,7 @@ async def test_scenario_2_a_message_during_generation_invalidates_the_draft(
         await eventually(held, note="generation 1 held inside FASE 2")
 
         # The sixth message lands while the draft is being written.
-        ingest_message(sync_admin, number.external_account_id, phone, "e mais isso")
+        ingest_message(sync_admin, organization_id, phone, "e mais isso")
         release_gate(sync_admin, conversation_id)
 
         async def answered_everything():

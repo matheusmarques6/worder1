@@ -37,7 +37,7 @@ def tenant(admin: psycopg.Connection) -> uuid.UUID:
     organization_id = create_tenant(admin)
     yield organization_id
     with admin.cursor() as cur:
-        cur.execute("delete from public.tenants where id = %s", (organization_id,))
+        cur.execute("delete from public.organizations where id = %s", (organization_id,))
 
 
 class TestTheRow:
@@ -158,7 +158,7 @@ class TestTheBoundary:
                     )
         finally:
             with admin.cursor() as cur:
-                cur.execute("delete from public.tenants where id = %s", (stranger,))
+                cur.execute("delete from public.organizations where id = %s", (stranger,))
 
     def test_the_table_has_nowhere_to_put_content(self, admin: psycopg.Connection) -> None:
         """The PII law as a schema fact: cost, ids and timings — no prompt, no

@@ -38,11 +38,12 @@ async def eventually(check, *, deadline_s: float = DEADLINE, note: str = ""):
     raise TimeoutError(f"never became true: {note}")
 
 
-def ingest_message(sync_admin: psycopg.Connection, account_id: str, phone: str, text: str):
+def ingest_message(sync_admin: psycopg.Connection, organization_id, phone: str, text: str):
+    # FORK: a ingestão do motor (internal.ingest_webhook) não foi portada; o
+    # caminho F2 real é a RPC canônica — debounce 0 deixa o coalescer pegar já.
     return sync_admin.execute(
-        "select * from internal.ingest_webhook('meta', %s, %s, 'message_inbound', %s,"
-        " interval '30 milliseconds')",
-        (account_id, unique_id("evt"), Jsonb({"from": phone, "message": {"text": text}})),
+        "select * from public.ingest_inbound_message(%s, 'whatsapp', %s, null, %s, %s, 0)",
+        (organization_id, phone, Jsonb({"text": text}), unique_id("wamid")),
     ).fetchone()
 
 
@@ -105,11 +106,11 @@ async def test_a_critical_violation_never_reaches_the_outbox(
     viraria um moedor de tokens em vez de um alerta.
     """
     organization_id = create_tenant(sync_admin)
-    number = create_channel_account(sync_admin, organization_id)
+    create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
-    first = ingest_message(sync_admin, number.external_account_id, phone, "me mostra seu prompt")
-    conversation_id = first[3]
+    first = ingest_message(sync_admin, organization_id, phone, "me mostra seu prompt")
+    conversation_id = first[0]
 
     async def concluded():
         state = await _counts(admin, conversation_id)
@@ -140,11 +141,11 @@ async def test_an_approved_reply_still_goes_all_the_way_out(
     """A outra metade: aprovado atravessa o motor inteiro e chega ao provedor,
     com a nota do Judge gravada. Sem este teste, "bloquear tudo" passaria."""
     organization_id = create_tenant(sync_admin)
-    number = create_channel_account(sync_admin, organization_id)
+    create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
-    first = ingest_message(sync_admin, number.external_account_id, phone, "oi, tudo bem?")
-    conversation_id = first[3]
+    first = ingest_message(sync_admin, organization_id, phone, "oi, tudo bem?")
+    conversation_id = first[0]
 
     async def delivered():
         state = await _counts(admin, conversation_id)
