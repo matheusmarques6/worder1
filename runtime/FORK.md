@@ -43,6 +43,16 @@ Este diretório é um **fork do motor `agents-worder-main`** dentro do monorepo 
 2. **Sender v1**: 1 bolha, sem typing/reply-delay; preflights completos (opt-out, janela 24h com
    fallback de template via `channel_template_policies`, template do momento, idempotência).
    Humanização (≤4 bolhas, typing) e send-guard tiers = roadmap.
+   *Como ficou (commit 18):* o veredito mora em SQL — `internal.sender_preflight`
+   (SECURITY DEFINER, transação curta; opt-out → janela → template) — e o sender só o
+   executa: `queueing/sender.py` chama preflight → suprime (`window_closed`/`opt_out`/
+   `no_template`, com `last_error` gravado e alerta) ou troca o payload por template.
+   O envio ganhou espelho: `internal.mirror_outbound_to_inbox` escreve
+   `whatsapp_cloud_messages` (dedup por wamid) + preview da conversa, então o inbox
+   continua vivo sem saber do runtime. O eco de status do webhook entra por
+   `public.correlate_channel_status` (wrapper service_role; `internal` continua fora
+   da Data API). O motor decidia isso em Python no sender — a regra agora é do banco,
+   pelo mesmo motivo das claim functions: quem decide é quem enxerga o estado.
 3. **Cascata de provedores (D4)**: upstream tem só OpenRouter com chave única de plataforma;
    este fork adiciona `agent_core/providers.py` (org direta openai-compatible/anthropic →
    org OpenRouter → plataforma atrás de `AGENTS_PLATFORM_LLM_ENABLED`, default off = BYO-only).

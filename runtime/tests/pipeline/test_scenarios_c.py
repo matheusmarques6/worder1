@@ -151,7 +151,7 @@ async def test_scenario_4b_a_crash_between_conclusion_and_archive_converges(
         """
         insert into public.messages
             (organization_id, conversation_id, direction, seq, channel, author_type, content)
-        values (%s, %s, 'outbound', 1, 'whatsapp_cloud', 'agent', '{"text": "resposta"}'::jsonb)
+        values (%s, %s, 'outbound', 1, 'whatsapp', 'agent', '{"text": "resposta"}'::jsonb)
         """,
         (organization_id, thread.conversation_id),
     )
@@ -403,10 +403,12 @@ def test_scenario_10_a_dead_sender_never_causes_a_resend(
         time.sleep(0.6)
         assert q(dsn, "select count(*) from testing.fake_channel_sends")[0][0] == 1
 
-        # The evidence arrives: the status webhook echoes the key.
-        sync_admin.execute("set role ingestion_role")
+        # The evidence arrives: the status webhook echoes the key. FORK: no
+        # Worder o webhook de status é o app server (service_role) e a porta é
+        # o wrapper público — internal segue invisível para a Data API.
+        sync_admin.execute("set role service_role")
         sync_admin.execute(
-            "select internal.correlate_outbox_status(%s, 'sent', 'wamid.real')", (key,)
+            "select public.correlate_channel_status(%s, 'sent', 'wamid.real')", (key,)
         )
         sync_admin.execute("reset role")
 

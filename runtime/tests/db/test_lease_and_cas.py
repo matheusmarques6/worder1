@@ -342,7 +342,9 @@ class TestTheHappyPath:
             (turn["thread"].conversation_id,),
         ).fetchone()
 
-        assert linked == (outcome[2], "whatsapp_cloud")
+        # Vocabulário canônico do Worder: o canal da conversa é 'whatsapp'
+        # (last_channel); 'whatsapp_cloud' era o nome na era do motor.
+        assert linked == (outcome[2], "whatsapp")
 
     def test_a_second_conclusion_with_the_same_arguments_does_nothing(
         self, admin: psycopg.Connection, turn: dict

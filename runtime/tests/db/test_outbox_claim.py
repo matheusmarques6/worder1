@@ -72,17 +72,18 @@ class TestTheClaim:
         (row,) = claim(admin, uuid.uuid4())
 
         phone = admin.execute(
-            "select phone_e164 from public.contacts where id = %s", (thread.contact_id,)
+            "select phone from public.contacts where id = %s", (thread.contact_id,)
         ).fetchone()[0]
 
         assert row[0] == pending
         assert row[1] == two_tenants.a.id
-        assert row[2] == "cloud"
-        assert row[3].startswith("wa-")
+        assert row[2] == "whatsapp"
+        assert row[3].startswith("wa-")  # o phone_number_id da conta Cloud
         assert row[4] == phone
         assert row[5] == {"text": "resposta"}
         assert row[6].startswith("idem-")
         assert row[7] == 1  # a tentativa que este claim inaugura
+        assert row[8] == "reply"  # kind — o que o preflight usa para decidir
 
     def test_claiming_marks_the_row_as_sending_with_the_owner(
         self, admin: psycopg.Connection, pending: uuid.UUID

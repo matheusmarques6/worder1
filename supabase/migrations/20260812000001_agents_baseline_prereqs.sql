@@ -22,6 +22,8 @@
 
 create extension if not exists "uuid-ossp";
 create extension if not exists pgcrypto;
+-- ai_agent_chunks.embedding é vector(1536); no vivo a extensão já existe.
+create extension if not exists vector;
 
 -- ----------------------------------------------------------------------------
 -- Enums usados pelas tabelas base
@@ -693,6 +695,50 @@ create unique index if not exists idx_agent_versions_one_production
 
 create index if not exists idx_agent_versions_agent
   on public.ai_agent_versions (agent_id, version_number desc);
+
+-- ----------------------------------------------------------------------------
+-- ai_agent_sources (a base de conhecimento que o lojista alimenta pela
+-- SourcesTab; o runtime só a lê via ai_agent_chunks)
+-- ----------------------------------------------------------------------------
+create table if not exists public.ai_agent_sources (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null,
+  agent_id uuid not null references public.ai_agents(id) on delete cascade,
+  source_type text not null,
+  name text not null,
+  url text,
+  pages_crawled integer default 0,
+  file_url text,
+  file_size_bytes integer,
+  original_filename text,
+  mime_type text,
+  text_content text,
+  integration_id uuid,
+  integration_type text,
+  products_count integer default 0,
+  last_product_sync_at timestamptz,
+  status text default 'pending'::text,
+  error_message text,
+  chunks_count integer default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  processed_at timestamptz
+);
+
+-- ----------------------------------------------------------------------------
+-- ai_agent_chunks (o RAG que o worker lê; grant na migration da trilha)
+-- ----------------------------------------------------------------------------
+create table if not exists public.ai_agent_chunks (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null,
+  source_id uuid not null references public.ai_agent_sources(id) on delete cascade,
+  agent_id uuid not null references public.ai_agents(id) on delete cascade,
+  content text not null,
+  content_tokens integer,
+  metadata jsonb default '{}'::jsonb,
+  embedding vector(1536),
+  created_at timestamptz default now()
+);
 
 -- ----------------------------------------------------------------------------
 -- agent_traces (trilha do lojista; estendida na Etapa 7 com os IDs do frame)

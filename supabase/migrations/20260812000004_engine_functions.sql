@@ -566,6 +566,10 @@ create function public.ingest_inbound_message(
     security definer
     set search_path = pg_catalog, public, internal
 as $$
+-- As colunas do RETURNS TABLE são variáveis OUT; sem isto o plpgsql acha que
+-- o `contact_id` do ON CONFLICT é a variável e reprova por ambiguidade. Todo
+-- o corpo usa prefixos v_/p_, então só o alvo do ON CONFLICT muda de leitura.
+#variable_conflict use_column
 declare
     v_contact_id      uuid;
     v_conversation_id uuid;

@@ -111,6 +111,41 @@ async def test_a_2xx_without_a_wamid_is_permanent() -> None:
     assert classify(failure.value) is Failure.PERMANENT
 
 
+async def test_a_template_send_takes_the_template_shape() -> None:
+    # O rebaixamento do preflight (janela fechada → template aprovado): o que
+    # chega ao wire é nome + idioma, nunca o texto livre que a outbox carregava.
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={"messages": [{"id": "wamid.T"}]})
+
+    wamid = await channel_answering(handler).send(
+        a_send(payload={"template": {"name": "volta_pra_loja", "language": "pt_BR"}})
+    )
+
+    assert wamid == "wamid.T"
+    assert seen["type"] == "template"
+    assert seen["template"] == {"name": "volta_pra_loja", "language": {"code": "pt_BR"}}
+    assert "text" not in seen
+    # A correlação de status vale para template igual (decisão 59).
+    assert seen["biz_opaque_callback_data"] == "reply-abc-2"
+
+
+async def test_a_template_without_a_name_never_reaches_the_wire() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200)
+
+    with pytest.raises(ValueError, match="template"):
+        await channel_answering(handler).send(a_send(payload={"template": {"language": "pt_BR"}}))
+
+    assert calls == 0
+
+
 async def test_an_unknown_payload_shape_never_reaches_the_wire() -> None:
     calls = 0
 

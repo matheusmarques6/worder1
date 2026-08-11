@@ -130,7 +130,6 @@ class TestWriteIsConfinedToOneOrg:
                 (
                     psycopg.errors.InsufficientPrivilege,
                     psycopg.errors.CheckViolation,
-                    psycopg.errors.RowSecurityViolation,
                 )
             ):
                 create_alert(conn, two_tenants.b.id)

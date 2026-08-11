@@ -26,6 +26,9 @@ class ClaimedSend:
     payload: dict[str, Any]
     idempotency_key: str
     attempt_count: int
+    # Alimenta o preflight: janela fechada suprime um 'reply' mas rebaixa um
+    # toque de funil para template. Default para os construtores pré-preflight.
+    kind: str = "reply"
 
 
 class ChannelPort(Protocol):

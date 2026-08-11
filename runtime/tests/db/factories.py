@@ -87,11 +87,14 @@ def create_thread(
     channel = create_channel_account(conn, organization_id)
 
     with conn.cursor() as cur:
+        # last_inbound_at = now(): no vivo a conversa canônica só nasce por
+        # ingest de inbound — uma thread recém-criada tem janela de 24h aberta.
+        # Teste que precisa de janela fechada usa open_window(hours_ago=25).
         cur.execute(
             """
             insert into public.conversations
-                (organization_id, contact_id, last_channel)
-            values (%s, %s, 'whatsapp')
+                (organization_id, contact_id, last_channel, last_inbound_at)
+            values (%s, %s, 'whatsapp', now())
             returning id
             """,
             (organization_id, contact_id),
@@ -141,6 +144,8 @@ def create_outbox_item(
     thread: Thread,
     *,
     status: str = "pending",
+    kind: str = "reply",
+    text: str = "resposta",
 ) -> uuid.UUID:
     with conn.cursor() as cur:
         cur.execute(
@@ -148,7 +153,7 @@ def create_outbox_item(
             insert into internal.message_outbox
                 (organization_id, conversation_id, contact_id, channel_account_id,
                  kind, payload, idempotency_key, status)
-            values (%s, %s, %s, %s, 'reply', %s, %s, %s)
+            values (%s, %s, %s, %s, %s, %s, %s, %s)
             returning id
             """,
             (
@@ -156,13 +161,103 @@ def create_outbox_item(
                 thread.conversation_id,
                 thread.contact_id,
                 thread.channel_account_id,
-                psycopg.types.json.Jsonb({"text": "resposta"}),
+                kind,
+                psycopg.types.json.Jsonb({"text": text}),
                 unique_id("idem"),
                 status,
             ),
         )
         (outbox_id,) = cur.fetchone()
     return outbox_id
+
+
+def contact_phone(conn: psycopg.Connection, contact_id: uuid.UUID) -> str:
+    with conn.cursor() as cur:
+        cur.execute("select phone from public.contacts where id = %s", (contact_id,))
+        (phone,) = cur.fetchone()
+    return phone
+
+
+def open_window(
+    conn: psycopg.Connection, conversation_id: uuid.UUID, *, hours_ago: int = 1
+) -> None:
+    """Registra um inbound há N horas — a janela de 24h abre (ou fecha) por aqui."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            update public.conversations
+               set last_inbound_at = now() - make_interval(hours => %s)
+             where id = %s
+            """,
+            (hours_ago, conversation_id),
+        )
+
+
+def create_opt_out(conn: psycopg.Connection, organization_id: uuid.UUID, phone: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.whatsapp_opt_status
+                (organization_id, phone, status, opted_out_at)
+            values (%s, %s, 'opted_out', now())
+            """,
+            (organization_id, phone),
+        )
+
+
+def create_template_policy(
+    conn: psycopg.Connection,
+    organization_id: uuid.UUID,
+    *,
+    template_name: str = "retorno_padrao",
+    language: str = "pt_BR",
+    status: str = "approved",
+    event_type: str | None = None,
+) -> uuid.UUID:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.channel_template_policies
+                (organization_id, event_type, channel, template_name, language, status)
+            values (%s, %s, 'whatsapp', %s, %s, %s)
+            returning id
+            """,
+            (organization_id, event_type, template_name, language, status),
+        )
+        (policy_id,) = cur.fetchone()
+    return policy_id
+
+
+@dataclass(frozen=True)
+class CloudMirror:
+    """A conversa do inbox legado (whatsapp_cloud_*) para o espelho do sender."""
+
+    waba_id: uuid.UUID
+    conversation_id: uuid.UUID
+    wa_id: str
+
+
+def create_cloud_mirror(
+    conn: psycopg.Connection,
+    organization_id: uuid.UUID,
+    channel_account_id: uuid.UUID,
+    phone: str,
+) -> CloudMirror:
+    wa_id = phone.lstrip("+")
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.whatsapp_cloud_conversations
+                (organization_id, waba_id, wa_id, contact_phone)
+            values (%s, %s, %s, %s)
+            returning id
+            """,
+            (organization_id, channel_account_id, wa_id, phone),
+        )
+        (conversation_id,) = cur.fetchone()
+    return CloudMirror(
+        waba_id=channel_account_id, conversation_id=conversation_id, wa_id=wa_id
+    )
 
 
 def make_due(

@@ -153,4 +153,6 @@ create policy llm_calls_worker_scoped on internal.llm_calls
 -- SourcesTab) — grant desta etapa; a query chega com o rewire do responder.
 -- ----------------------------------------------------------------------------
 grant select on public.ai_agent_chunks to worker_role;
+-- O search junta ai_agent_sources para dar nome/proveniência ao chunk.
+grant select on public.ai_agent_sources to worker_role;
 grant select on public.ai_agents, public.ai_agent_versions to worker_role;

@@ -35,11 +35,32 @@ class CustomerFacts:
 async def load_customer_facts(
     conn: psycopg.AsyncConnection, *, conversation_id: UUID
 ) -> CustomerFacts | None:
-    """The contact behind a conversation, or None when it is not ours."""
+    """The contact behind a conversation, or None when it is not ours.
+
+    FORK: os campos vêm do shape canônico do Worder — `full_name` é coluna
+    gerada (first+last), idioma vive em `custom_fields` (não há coluna), e
+    opt-out é a tabela `whatsapp_opt_status` (linha ausente = opted_in, a
+    mesma semântica do guard do app). O "última mensagem" é o
+    `last_inbound_at` da conversa em questão — a pergunta que o agente faz é
+    "quando ELE me escreveu por último", não "quando tocou qualquer canal".
+    """
     cursor = await conn.execute(
         """
-        select contact.id, contact.name, contact.language, contact.opt_status,
-               contact.first_seen_at, contact.last_message_at,
+        select contact.id,
+               nullif(trim(contact.full_name), ''),
+               contact.custom_fields ->> 'language',
+               coalesce(
+                   (select o.status
+                      from public.whatsapp_opt_status o
+                     where o.organization_id = contact.organization_id
+                       and o.phone in (contact.whatsapp, contact.phone,
+                                       ltrim(contact.whatsapp, '+'),
+                                       ltrim(contact.phone, '+'))
+                     order by o.updated_at desc
+                     limit 1),
+                   'opted_in'
+               ),
+               contact.created_at, conversation.last_inbound_at,
                (select count(*) from public.conversations other
                  where other.contact_id = contact.id)
           from public.conversations conversation

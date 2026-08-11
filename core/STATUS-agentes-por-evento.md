@@ -47,20 +47,20 @@ Estados: `pendente | em curso | verde-local | verde-CI | aplicado-em-prod`.
 | 14 | c58f75f9 | feat(runtime): responder religado — arbitragem + merge + frame compilado |
 | 15 | 9a68f7cb | test(runtime): suíte db/pipeline adaptada ao schema canônico; CI db vira bloqueante |
 | 16 | 97721fa8 | feat(runtime): secret_box — port byte-compatível do codec do app |
-| 17 | (este) | feat(runtime): cascata de provedores D4 — BYO-only com degrau de plataforma atrás de flag |
+| 17 | a0e27a5f | feat(runtime): cascata de provedores D4 — BYO-only com degrau de plataforma atrás de flag |
+| 18 | (este) | feat(runtime): sender preflight em SQL + channel_template_policies + espelho no inbox; suíte db+pipeline 276 verde |
 
-Ajuste de plano: o flip do job `db-pipeline`→bloqueante fica para o início da
-Etapa 4, numa passada de iteração de CI que adapta os testes db restantes ao
-novo shape: `test_agent_loaders` (ActiveVersion/ConversationState novos),
-`test_responder_guards` e `test_real_responder` (precisam criar missão
-descoberta ativa via create_mission), `test_knowledge_retrieval`
-(ingest_chunk agora exige agente ativo; search escopa por
-current_app_organization_id — rodar como worker escopado).
-
-Nota de sequenciamento: a suíte `db`/`pipeline` do fork ainda referencia o schema
-do motor (factories criam `tenants` etc.) — adaptação em bloco na Etapa 2. Até lá,
-o job `db-pipeline` do CI roda como informativo (`continue-on-error`); vira
-obrigatório no commit 9.
+Nota do commit 18 (a primeira execução COMPLETA da suíte db/pipeline): ela
+revelou e este commit corrige três bugs reais de migration — (1)
+`ingest_inbound_message` quebrava com "contact_id is ambiguous" (colunas do
+RETURNS TABLE são variáveis OUT; fix `#variable_conflict use_column`); (2)
+`ai_agent_sources` sem grant p/ worker (o search junta a fonte p/ proveniência);
+(3) grants de `contacts`/`whatsapp_opt_status` p/ worker/sender sem RLS = leitura
+cross-org (migration 0004 liga RLS e escopa). `repository/contacts.py` foi de
+fato reescrito contra o shape canônico (full_name/custom_fields.language/
+whatsapp_opt_status; era motor puro). Vocabulário `whatsapp_cloud`→`whatsapp` e
+role `ingestion_role`→wrapper `public.correlate_channel_status` (service_role)
+ajustados nos testes.
 
 ## Migrations aplicadas (via MCP `apply_migration`)
 
@@ -71,7 +71,9 @@ obrigatório no commit 9.
 | `20260812000003_identity_conversations.sql` | 12/08/2026 via MCP (`identity_conversations`) | conversations/messages/channel_identities/alerts/ai_runtime_rollout/internal.message_outbox criadas com RLS+policies; suíte db/rls reescrita cobre no CI |
 | `20260813000001_ai_missions.sql` | 12/08/2026 via MCP (`ai_missions`) | one-active parcial verificado por teste db; FK owner_mission_version_id adicionada |
 | `20260813000002_internal_llm_trail.sql` | 12/08/2026 via MCP (`internal_llm_trail`) | scenarios/eval_runs/judge_scores/tool_calls/llm_calls com RLS; grants de ai_agent_chunks/ai_agents p/ worker |
-| `20260812000004_engine_functions.sql` | 12/08/2026 via MCP (`engine_functions`) | 14 funções: seq atômico, coalescer SECURITY DEFINER, claim/renew/release (invoker+RLS), conclude_turn (CAS estendido + branch NULL do juiz), claim_outbox_batch (resolve conta Cloud), marks/sweep/correlate/review/reprocess, heartbeats, public.ingest_inbound_message (EXECUTE só service_role) |
+| `20260812000004_engine_functions.sql` | 12/08/2026 via MCP (`engine_functions`); **emenda 11/08/2026 via `execute_sql`**: `ingest_inbound_message` recriada com `#variable_conflict use_column` (a versão original quebrava em runtime com "contact_id is ambiguous") | 14 funções: seq atômico, coalescer SECURITY DEFINER, claim/renew/release (invoker+RLS), conclude_turn (CAS estendido + branch NULL do juiz), claim_outbox_batch (resolve conta Cloud), marks/sweep/correlate/review/reprocess, heartbeats, public.ingest_inbound_message (EXECUTE só service_role) |
+| `20260813000003_sender_preflight.sql` | 11/08/2026 via MCP (`sender_preflight`) | channel_template_policies (RLS+policies), claimed_send ganha `kind`, claim_outbox_batch recriada, internal.sender_preflight (opt-out→janela 24h→template), public.correlate_channel_status (wrapper p/ webhook de status, EXECUTE só service_role), internal.mirror_outbound_to_inbox |
+| `20260813000004_contacts_rls_for_runtime.sql` | 11/08/2026 via MCP (`contacts_rls_for_runtime`) | RLS LIGADA em `contacts` e `whatsapp_opt_status` (fatia consciente da remediação: policies legadas já existiam; service_role tem BYPASSRLS; worker/sender escopados por current_app_organization_id). Emenda via `execute_sql` no mesmo dia: `grant select on ai_agent_sources to worker_role` (delta da 0002) |
 
 ## Adiados / decisões em aberto
 
@@ -92,26 +94,19 @@ obrigatório no commit 9.
 
 ## Próxima ação
 
-**Etapa 4, commit 15 + passada de CI** — na ordem:
-1. ✅ FEITO — **Iteração de CI (db→bloqueante):** adaptar os testes db restantes ao novo shape —
-   `test_agent_loaders` (ActiveVersion agora carrega agent_id/name/persona/settings e vem de
-   ai_agents+ai_agent_versions com status 'produção'; ConversationState virou flat com
-   status/last_channel/owner_mission_version_id/contact_id/contact_name/last_inbound_at),
-   `test_responder_guards` e `test_real_responder` (criar missão descoberta ativa:
-   `create_mission(admin, org, event_type="whatsapp.received", status="active")` — sem ela o
-   responder alerta `no_active_mission` e devolve None), `test_knowledge_retrieval`
-   (`ingest_chunk` exige agente ativo na org: criar `create_agent` antes; `search_knowledge`
-   escopa por `current_app_organization_id()` — buscar como worker escopado), e
-   `test_conclude_without_send`/`test_lease_and_cas` (conferir contra o conclude adaptado:
-   sem channel_account_id; canal por last_channel). Depois: remover `continue-on-error` do job
-   `tests-db` em `.github/workflows/runtime.yml`.
-2. **Commit 15:** `runtime/src/agents_runtime/crypto/secret_box.py` (scrypt N=16384/r=8/p=1 +
-   AES-256-GCM; formatos v2 5-partes e legado 3-partes + `is_encrypted`) com vetores
-   cross-language gerados de `src/lib/crypto/secret-box.ts` por `scripts/gen-secret-box-vectors.ts`
-   (Node) commitados em `runtime/tests/unit/fixtures/secret_box_vectors.json`. Teste vermelho
-   primeiro: `test_secret_box_vectors.py`.
-3. Commits 16–19 conforme o plano (cascata providers BYO-only + fitness atualizado; sender com
-   preflights + espelho no inbox + DDL channel_template_policies; obs/; server.py healthz+preview).
+**Etapa 4, commit 19 (fecha a etapa)** — na ordem:
+1. **obs/**: `runtime/src/agents_runtime/obs/` — logging estruturado JSON + OTel opcional
+   (`AGENTS_OTEL_EXPORTER_OTLP_ENDPOINT` vazio = no-op), spans nos pontos do doc
+   (`docs/observabilidade-e-monitoramento.md` do runtime), métricas de fila (profundidade
+   pgmq lida no heartbeat) e alertas em `public.alerts` já existentes.
+2. **server.py**: listener HTTP mínimo no processo (`/healthz` liveness lendo heartbeat +
+   `POST /internal/preview-prompt` com token `AGENTS_PREVIEW_TOKEN` — mesma
+   `prompt_compiler.compile()` do turno em modo preview, com o CONHECIMENTO opcional
+   exposto via parâmetro, ver nota viva abaixo).
+3. `runtime/DEPLOY.md` conferido contra o que existe (Railway/Render; envs da cascata,
+   secret_box key, DSN worker/sender) — deploy real segue pendente e bloqueia o cutover.
+Estado da suíte ao fechar o commit 18: **668 unit + 276 db/pipeline verdes; ruff e
+import-linter limpos** — CI inteiro bloqueante e honesto pela primeira vez.
 
 Notas vivas para a retomada:
 - O responder anexa CONHECIMENTO ao frame fora dos blocos tipados (recuperação, não área) —

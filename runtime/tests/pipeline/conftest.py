@@ -74,7 +74,9 @@ def clean_slate(dsn: str, _testing_schema: None) -> Iterator[None]:
                 conn.execute(
                     sql.SQL("delete from pgmq.{}").format(sql.Identifier(f"a_{queue}"))
                 )
-            conn.execute("truncate internal.message_outbox, internal.webhook_events cascade")
+            # FORK: internal.webhook_events do motor não foi portada — a
+            # ingestão F2 é a RPC canônica, sem tabela de eventos própria.
+            conn.execute("truncate internal.message_outbox cascade")
             conn.execute("truncate internal.runtime_heartbeats")
             conn.execute(
                 "truncate testing.fake_channel_sends, testing.fake_channel_directives,"

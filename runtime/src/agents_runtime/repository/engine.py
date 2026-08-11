@@ -174,9 +174,53 @@ async def claim_outbox_batch(
             payload=row[5],
             idempotency_key=row[6],
             attempt_count=row[7],
+            kind=row[8],
         )
         for row in await cursor.fetchall()
     ]
+
+
+@dataclass(frozen=True, slots=True)
+class PreflightVerdict:
+    """What `internal.sender_preflight` decided — the sender executes, never recalcula."""
+
+    verdict: str
+    template_name: str | None
+    template_language: str | None
+
+    @property
+    def suppressed(self) -> bool:
+        return self.verdict in ("opt_out", "window_closed", "no_template")
+
+
+async def sender_preflight(
+    conn: psycopg.AsyncConnection,
+    organization_id: UUID,
+    to_phone: str,
+    kind: str,
+    *,
+    channel: str = "whatsapp",
+) -> PreflightVerdict:
+    cursor = await conn.execute(
+        "select * from internal.sender_preflight(%s, %s, %s, %s)",
+        (organization_id, to_phone, kind, channel),
+    )
+    row = await cursor.fetchone()
+    return PreflightVerdict(verdict=row[0], template_name=row[1], template_language=row[2])
+
+
+async def mirror_outbound_to_inbox(
+    conn: psycopg.AsyncConnection,
+    organization_id: UUID,
+    to_phone: str,
+    wamid: str,
+    text: str,
+) -> bool:
+    cursor = await conn.execute(
+        "select internal.mirror_outbound_to_inbox(%s, %s, %s, %s)",
+        (organization_id, to_phone, wamid, text),
+    )
+    return bool((await cursor.fetchone())[0])
 
 
 async def mark_outbox_sent(

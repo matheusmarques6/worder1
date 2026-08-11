@@ -29,7 +29,7 @@ from agents_runtime.agent_core.llm import EmbeddingResult, Usage
 from agents_runtime.tools import base as tools
 from agents_runtime.tools.customer import GetCustomerContext
 from agents_runtime.tools.knowledge import SearchKnowledge
-from tests.db.factories import create_tenant, create_thread
+from tests.db.factories import create_agent, create_tenant, create_thread
 from tests.support.clock import FrozenClock
 from tests.support.database import as_platform, as_runtime_worker
 from tests.support.embedding import embed_text
@@ -42,6 +42,9 @@ TROCA = "Trocas em até sete dias corridos."
 @pytest.fixture
 def tenant(admin: psycopg.Connection) -> uuid.UUID:
     organization_id = create_tenant(admin)
+    # FORK: ingest_chunk pendura em ai_agent_sources/ai_agent_chunks, que
+    # exigem um agente ativo na org.
+    create_agent(admin, organization_id)
     yield organization_id
     with admin.cursor() as cur:
         cur.execute("delete from public.organizations where id = %s", (organization_id,))
@@ -104,6 +107,7 @@ class TestSearchKnowledge:
         arguments. A `organization_id` among them is not a hint — it is an attack, and
         the only answer is to ignore it and scope from the job."""
         stranger = create_tenant(admin)
+        create_agent(admin, stranger)
         try:
             thread = create_thread(admin, tenant)
             await _ingest(dsn, tenant, texts=(FRETE,))
@@ -171,10 +175,14 @@ class TestGetCustomerContext:
     ) -> None:
         thread = create_thread(admin, tenant)
         with admin.cursor() as cur:
+            # Shape canônico: nome é first/last (full_name é gerada), idioma
+            # vive em custom_fields, e opt-out seria linha em
+            # whatsapp_opt_status — ausente aqui, logo 'opted_in'.
             cur.execute(
                 """
                 update public.contacts
-                   set name = 'Joana', language = 'pt-BR', opt_status = 'authorized'
+                   set first_name = 'Joana',
+                       custom_fields = jsonb_build_object('language', 'pt-BR')
                  where id = %s
                 """,
                 (thread.contact_id,),
@@ -192,7 +200,7 @@ class TestGetCustomerContext:
         assert result.success is True
         assert result.output["name"] == "Joana"
         assert result.output["language"] == "pt-BR"
-        assert result.output["opt_status"] == "authorized"
+        assert result.output["opt_status"] == "opted_in"
         assert result.output["conversations"] == 1
 
     async def test_it_never_reads_a_conversation_of_another_tenant(

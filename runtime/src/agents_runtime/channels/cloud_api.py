@@ -70,20 +70,37 @@ class CloudApiChannel:
 
     @staticmethod
     def _payload_for(send: ClaimedSend) -> dict:
-        if "text" not in send.payload:
-            # E1 sends text; templates and media arrive with the funnels (E3).
-            # Guessing at an unknown shape would send SOMETHING to a customer.
-            raise ValueError(f"payload inválido: sem 'text' — chaves {sorted(send.payload)}")
-
-        return {
+        base = {
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
             "to": send.to_phone_e164,
-            "type": "text",
-            "text": {"body": str(send.payload["text"])},
             # One key, two worlds (decisão 59): the status webhook echoes this
             # back, and that echo is what resolves an unknown without resending.
             "biz_opaque_callback_data": send.idempotency_key,
+        }
+
+        if "template" in send.payload:
+            # O preflight rebaixou um toque de janela fechada para o template
+            # aprovado — o shape é o mínimo da Cloud API: nome + idioma.
+            template = send.payload["template"]
+            if not isinstance(template, dict) or not template.get("name"):
+                raise ValueError(f"payload inválido: template sem 'name' — {template!r:.80}")
+            return base | {
+                "type": "template",
+                "template": {
+                    "name": str(template["name"]),
+                    "language": {"code": str(template.get("language") or "pt_BR")},
+                },
+            }
+
+        if "text" not in send.payload:
+            # Media arrives with the funnels (E3). Guessing at an unknown
+            # shape would send SOMETHING to a customer.
+            raise ValueError(f"payload inválido: sem 'text' — chaves {sorted(send.payload)}")
+
+        return base | {
+            "type": "text",
+            "text": {"body": str(send.payload["text"])},
         }
 
     async def aclose(self) -> None:

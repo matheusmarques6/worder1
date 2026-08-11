@@ -115,7 +115,9 @@ class TestWriteIsConfinedToOneOrg:
         thread: Thread = create_thread(admin, two_tenants.b.id)
 
         with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
-            with pytest.raises(psycopg.errors.RowSecurityViolation):
+            # Violação de RLS no INSERT é SQLSTATE 42501 — a mesma classe de
+            # privilégio insuficiente; psycopg não tem uma classe própria.
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
                 conn.execute(
                     """
                     insert into public.conversations (organization_id, contact_id)
