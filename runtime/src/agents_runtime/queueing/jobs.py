@@ -38,12 +38,9 @@ class InboundJob:
 
 @dataclass(frozen=True, slots=True)
 class DomainEventJob:
-    """What ingestion enqueued: apply this platform event's consequences.
-
-    Only the id travels — tenant, type and payload live on the event row, and
-    `apply_domain_event` reads them there. A fatter job would just be a copy
-    that could drift from the truth.
-    """
+    """Contrato do motor para q_domain_events — MORRE no commit do toucher:
+    internal.webhook_events não foi portada (FORK.md) e o payload canônico do
+    Worder é o MissionTouchJob abaixo. Vive só até o handler trocar."""
 
     webhook_event_id: int
     otel: dict[str, Any] | None = None
@@ -57,3 +54,43 @@ class DomainEventJob:
             )
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"malformed domain event job: {payload!r}") from error
+
+
+@dataclass(frozen=True, slots=True)
+class MissionTouchJob:
+    """O que `public.emit_ai_mission_job` enfileirou: o nó PEDIU um toque.
+
+    `mission_version_id` do payload é INFORMATIVO (a missão ativa na hora da
+    emissão) — o toucher re-resolve a família na hora do consumo, porque a
+    verdade é do turno (§3.2.2 passo 2). `delta` refina a missão para ESTE
+    toque; `concession_request` é o desejo do nó, capado pelo engine.
+    """
+
+    organization_id: UUID
+    contact_id: UUID
+    conversation_id: UUID
+    event_family: str
+    node_ref: str | None = None
+    delta: dict[str, Any] | None = None
+    concession_request: dict[str, Any] | None = None
+    preferred_channel: str = "whatsapp"
+    otel: dict[str, Any] | None = None
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> "MissionTouchJob":
+        try:
+            if payload.get("kind") != "mission_touch":
+                raise ValueError(f"kind: {payload.get('kind')!r}")
+            return cls(
+                organization_id=UUID(payload["organization_id"]),
+                contact_id=UUID(payload["contact_id"]),
+                conversation_id=UUID(payload["conversation_id"]),
+                event_family=str(payload["event_family"]),
+                node_ref=payload.get("node_ref"),
+                delta=payload.get("delta") or None,
+                concession_request=payload.get("concession_request"),
+                preferred_channel=str(payload.get("preferred_channel") or "whatsapp"),
+                otel=payload.get("otel"),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(f"malformed mission touch job: {payload!r}") from error
