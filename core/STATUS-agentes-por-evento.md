@@ -48,7 +48,8 @@ Estados: `pendente | em curso | verde-local | verde-CI | aplicado-em-prod`.
 | 15 | 9a68f7cb | test(runtime): suíte db/pipeline adaptada ao schema canônico; CI db vira bloqueante |
 | 16 | 97721fa8 | feat(runtime): secret_box — port byte-compatível do codec do app |
 | 17 | a0e27a5f | feat(runtime): cascata de provedores D4 — BYO-only com degrau de plataforma atrás de flag |
-| 18 | (este) | feat(runtime): sender preflight em SQL + channel_template_policies + espelho no inbox; suíte db+pipeline 276 verde |
+| 18 | a35ab6ef | feat(runtime): sender preflight em SQL + channel_template_policies + espelho no inbox; suíte db+pipeline 276 verde |
+| 19 | (este) | feat(runtime): obs/ (JSON+OTel opcional+cinto de PII) + server.py (healthz/preview) + DEPLOY.md — fecha Etapa 4 |
 
 Nota do commit 18 (a primeira execução COMPLETA da suíte db/pipeline): ela
 revelou e este commit corrige três bugs reais de migration — (1)
@@ -90,23 +91,25 @@ ajustados nos testes.
 | Consolidação dos 10 call sites graph.facebook.com + fusão libs Instagram | roadmap | regra "código novo só via api-version.ts" em vigor (Adendo §A.3) |
 | Dump completo do schema como baseline | roadmap | exige `supabase db dump` com acesso direto |
 | **Remediação RLS das 292 tabelas existentes** | **aguardando aprovação do usuário** | advisor crítico; ligar sem policies quebra app/realtime |
-| Deploy do runtime (Railway/Render) | pendente | `runtime/DEPLOY.md`; necessário antes do cutover da Etapa 7 |
+| Deploy do runtime (Railway/Render) | pendente (DEPLOY.md escrito no commit 19) | envs documentadas; deploy real necessário antes do cutover da Etapa 7 |
 
 ## Próxima ação
 
-**Etapa 4, commit 19 (fecha a etapa)** — na ordem:
-1. **obs/**: `runtime/src/agents_runtime/obs/` — logging estruturado JSON + OTel opcional
-   (`AGENTS_OTEL_EXPORTER_OTLP_ENDPOINT` vazio = no-op), spans nos pontos do doc
-   (`docs/observabilidade-e-monitoramento.md` do runtime), métricas de fila (profundidade
-   pgmq lida no heartbeat) e alertas em `public.alerts` já existentes.
-2. **server.py**: listener HTTP mínimo no processo (`/healthz` liveness lendo heartbeat +
-   `POST /internal/preview-prompt` com token `AGENTS_PREVIEW_TOKEN` — mesma
-   `prompt_compiler.compile()` do turno em modo preview, com o CONHECIMENTO opcional
-   exposto via parâmetro, ver nota viva abaixo).
-3. `runtime/DEPLOY.md` conferido contra o que existe (Railway/Render; envs da cascata,
-   secret_box key, DSN worker/sender) — deploy real segue pendente e bloqueia o cutover.
-Estado da suíte ao fechar o commit 18: **668 unit + 276 db/pipeline verdes; ruff e
-import-linter limpos** — CI inteiro bloqueante e honesto pela primeira vez.
+**Etapa 5 — Momentos comerciais + offer engine (commits 20–23), doc-fonte §5/§6:**
+1. **Commit 20 (DDL):** `commercial_moments` (fatos por contato+org com validade/fonte,
+   RLS total) + `offer_grants`/`offer_ledger` (a concessão auditável: quem pediu, qual
+   missão autorizou via `concession`, teto, uso) — tabelas novas nascem trancadas.
+2. **Commit 21:** `moments/` no runtime — leitura no turno (StateBlock ganha
+   moment_ids/facts/public_claim, hoje vazios no responder) + escrita pós-turno com
+   `promote_moment` da missão.
+3. **Commit 22:** offer engine — `create_coupon` (ferramenta com teto da `concession`;
+   Shopify/Nuvemshop via connectors) gravando grant+ledger ANTES do provedor
+   (idempotência por grant_id).
+4. **Commit 23:** preflight de template de MOMENTO no sender (o `event_type` da
+   `channel_template_policies` sai do NULL) + suíte.
+Estado da suíte ao fechar a Etapa 4 (commit 19): **694 unit + 284 db/pipeline verdes;
+ruff e import-linter limpos.** O runtime está funcionalmente completo para o caminho
+descoberta→resposta→envio; falta deploy (DEPLOY.md) e as camadas comerciais (E5+).
 
 Notas vivas para a retomada:
 - O responder anexa CONHECIMENTO ao frame fora dos blocos tipados (recuperação, não área) —

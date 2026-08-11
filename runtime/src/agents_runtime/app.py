@@ -17,6 +17,7 @@ what is in hand, return. Nothing here checks the stop event mid-job.
 """
 
 import asyncio
+import logging
 from collections.abc import Mapping
 
 import psycopg
@@ -137,6 +138,16 @@ async def run(
         async def heartbeat() -> None:
             while not stop.is_set():
                 await engine.beat(pulse, process_name)
+                try:
+                    depths = await engine.queue_depths(pulse)
+                except Exception:
+                    # Métrica é acessório: um metrics_all indisponível não pode
+                    # derrubar a prova de vida.
+                    logging.getLogger(__name__).debug("queue_depths indisponível")
+                else:
+                    logging.getLogger(__name__).info(
+                        "heartbeat", extra={"process_name": process_name, "queues": depths}
+                    )
                 await _sleep_or_stop(clock, stop, config.process_heartbeat_every.total_seconds())
 
         tasks.append(asyncio.create_task(coalescer(), name="coalescer"))

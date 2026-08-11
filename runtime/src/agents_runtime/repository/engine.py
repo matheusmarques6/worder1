@@ -283,6 +283,23 @@ async def beat(conn: psycopg.AsyncConnection, process_name: str) -> None:
     )
 
 
+async def queue_depths(conn: psycopg.AsyncConnection) -> dict[str, int]:
+    """Profundidade por fila, lida no tick do heartbeat e emitida como log
+    estruturado — a métrica de fila do doc de observabilidade sem scraper
+    dedicado no v1."""
+    cursor = await conn.execute("select queue_name, queue_length from pgmq.metrics_all()")
+    return {row[0]: row[1] for row in await cursor.fetchall()}
+
+
+async def heartbeat_age_seconds(conn: psycopg.AsyncConnection) -> float | None:
+    """Idade do beat mais recente — o que o /healthz responde. None = nunca bateu."""
+    cursor = await conn.execute(
+        "select extract(epoch from now() - max(beat_at)) from internal.runtime_heartbeats"
+    )
+    row = await cursor.fetchone()
+    return None if row is None or row[0] is None else float(row[0])
+
+
 # --- queue plumbing shared with the loop --------------------------------------
 
 

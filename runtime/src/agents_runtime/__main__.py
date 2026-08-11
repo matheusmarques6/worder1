@@ -16,9 +16,11 @@ import os
 import signal
 import sys
 
+from agents_runtime import server
 from agents_runtime.app import run
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.config import config_from_env
+from agents_runtime.obs import configure_logging, configure_telemetry
 
 DSN_VARIABLE = "SUPABASE_DB_URL"
 
@@ -69,18 +71,36 @@ def _stop_on_shutdown_signals(stop: asyncio.Event) -> None:
 async def _serve(dsn: str) -> None:
     stop = asyncio.Event()
     _stop_on_shutdown_signals(stop)
-    await run(
-        dsn,
-        stop=stop,
-        config=config_from_env(dict(os.environ)),
-        channel=_channel_from_env(dsn),
-        # The responder seam, reachable from outside the process: cenário 4
-        # holds a REAL subprocess inside FASE 2 through this.
-        respond=_factory_from_env(RESPONDER_VARIABLE, dsn, required=True),
-        process_name=os.environ.get("AGENTS_PROCESS_NAME", "agents-runtime"),
-        worker_set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
-        sender_set_role=os.environ.get("AGENTS_SENDER_SET_ROLE"),
-    )
+
+    # O listener HTTP (healthz + preview) é opt-in por porta: a suíte pipeline
+    # roda `app.run` sem ele, e um processo sem porta configurada continua
+    # sendo só o laço.
+    http_server = None
+    port_spec = os.environ.get("AGENTS_HTTP_PORT", "").strip()
+    if port_spec:
+        http_server = await server.serve(
+            dsn,
+            port=int(port_spec),
+            preview_token=os.environ.get("AGENTS_PREVIEW_TOKEN") or None,
+            set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
+        )
+    try:
+        await run(
+            dsn,
+            stop=stop,
+            config=config_from_env(dict(os.environ)),
+            channel=_channel_from_env(dsn),
+            # The responder seam, reachable from outside the process: cenário 4
+            # holds a REAL subprocess inside FASE 2 through this.
+            respond=_factory_from_env(RESPONDER_VARIABLE, dsn, required=True),
+            process_name=os.environ.get("AGENTS_PROCESS_NAME", "agents-runtime"),
+            worker_set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
+            sender_set_role=os.environ.get("AGENTS_SENDER_SET_ROLE"),
+        )
+    finally:
+        if http_server is not None:
+            http_server.close()
+            await http_server.wait_closed()
 
 
 def main() -> None:
@@ -89,6 +109,9 @@ def main() -> None:
     # the selector already is the default and this line changes nothing.
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    configure_logging(os.environ.get("AGENTS_LOG_LEVEL"))
+    configure_telemetry()
 
     dsn = os.environ.get(DSN_VARIABLE)
     if not dsn:
