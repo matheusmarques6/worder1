@@ -421,6 +421,41 @@ async function processMessage(
   }
 
   // ============================================================
+  // ROLLOUT DO RUNTIME (Agentes por Evento, D3)
+  // Org migrada usa o caminho canônico: ingest_inbound_message grava o seq
+  // atômico + pending_response_at e NÃO enfileira — o coalescer do runtime
+  // Python cria o job único da rajada. O bloco de debounce legado abaixo é
+  // PULADO por inteiro (uma conversa nunca está nos dois mecanismos). Org sem
+  // linha em ai_runtime_rollout = legacy; erro de leitura = legacy.
+  // ============================================================
+  const { getRuntimeMode } = await import('@/lib/ai/runtime-rollout');
+  const runtimeMode = await getRuntimeMode(supabase, account.organization_id);
+
+  if (runtimeMode === 'runtime') {
+    // Try/catch que NUNCA quebra o webhook — mesmo contrato do bloco legado.
+    try {
+      const isSelf = phoneNumber && account.phone_number && phoneNumber === account.phone_number;
+      if (!isSelf) {
+        const { error: ingestError } = await supabase.rpc('ingest_inbound_message', {
+          p_organization_id: account.organization_id,
+          p_channel: 'whatsapp',
+          p_external_id: String(phoneNumber ?? ''),
+          p_contact_name: contact?.profile_name || contact?.name || null,
+          p_content: { type: messageType, text: textBody ?? null },
+          p_provider_message_id: message.id,
+          p_debounce_seconds: AI_DEBOUNCE_SECONDS,
+        });
+        if (ingestError) throw new Error(ingestError.message);
+      }
+    } catch (err: any) {
+      wlog.error('whatsapp.runtime.ingest_error', {
+        error: err?.message,
+        conversation_id: conversation?.id,
+      });
+    }
+  }
+
+  // ============================================================
   // DEBOUNCE DA IA (Fase 2d / P4) — auto-resposta humanizada agregada.
   // O webhook NÃO roda mais o LLM síncrono. Em vez disso:
   //   - marca ai_debounce_until = now + DEBOUNCE_SECONDS e ai_pending = true;
@@ -439,7 +474,8 @@ async function processMessage(
     // habilitada. Mesma janela de debounce para todos os tipos.
     const isSelf = phoneNumber && account.phone_number && phoneNumber === account.phone_number;
     const aiRoute = routeInboundForAi(messageType, textBody);
-    if (aiRoute !== 'unsupported' && !isSelf && conversation?.ai_enabled !== false) {
+    // runtimeMode === 'legacy': org migrada já foi atendida pelo bloco acima.
+    if (runtimeMode === 'legacy' && aiRoute !== 'unsupported' && !isSelf && conversation?.ai_enabled !== false) {
       const debounceSeconds = AI_DEBOUNCE_SECONDS;
       const debounceUntil = new Date(Date.now() + debounceSeconds * 1000).toISOString();
 

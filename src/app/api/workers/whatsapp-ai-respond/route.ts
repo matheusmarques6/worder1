@@ -79,6 +79,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Rollout do runtime (Agentes por Evento, D3): org migrada não responde por
+  // este caminho. Jobs QStash em voo no momento do cutover chegam aqui e são
+  // reconhecidos e descartados — a resposta virá pelo coalescer do runtime.
+  const { getRuntimeMode } = await import('@/lib/ai/runtime-rollout');
+  if ((await getRuntimeMode(supabaseAdmin, organizationId)) === 'runtime') {
+    return NextResponse.json({ ok: true, skipped: 'org_migrated_to_runtime' });
+  }
+
   try {
     // ---------- 1. Ler a conversa ----------
     const { data: conversation } = await supabaseAdmin

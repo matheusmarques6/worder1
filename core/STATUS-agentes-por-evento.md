@@ -16,9 +16,9 @@
 
 | # | Etapa | Commits planejados | Estado |
 |---|---|---|---|
-| 0 | Base git + doc + fork verbatim | 1–2 | **verde-local** (unit 688 ✓, push feito) |
-| 1 | Fase 0 (baseline, rename org_id, roles/pgmq, CI) | 3–6 | **em curso** |
-| 2 | Identidade (conversations/messages/identities, ingest, branch webhook) | 7–9 | pendente |
+| 0 | Base git + doc + fork verbatim | 1–2 | **verde-local** (push feito) |
+| 1 | Fase 0 (baseline, rename org_id, roles/pgmq, CI) | 3–6 | **verde-local** (push feito) |
+| 2 | Identidade (conversations/messages/identities, ingest, branch webhook) | 7–9 | **verde-local** (migrations aplicadas; vitest 904 ✓; db/rls prova no CI) |
 | 3 | Missões + compiler + resolver | 10–14 | pendente |
 | 4 | Runner (secret-box, cascata, sender, obs/, preview) | 15–19 | pendente |
 | 5 | Momentos + offer engine + create_coupon | 20–23 | pendente |
@@ -38,7 +38,8 @@ Estados: `pendente | em curso | verde-local | verde-CI | aplicado-em-prod`.
 | 5 | 33da405c | feat(db): roles do runtime, schema internal, pgmq + 8 filas |
 | 6 | 44cdfb46 | ci: workflows runtime/app com path filters + vercel ignoreCommand |
 | 7 | 13c16789 | feat(db): identidade canônica + outbox com RLS; suíte db adaptada ao schema Worder |
-| 8 | (este) | feat(db): funções do motor adaptadas + ingest_inbound_message (F2) |
+| 8 | 7a3c9335 | feat(db): funções do motor adaptadas + ingest_inbound_message (F2) |
+| 9 | (este) | feat(whatsapp): branch por rollout no webhook + guarda no worker QStash |
 
 Ajuste de plano: o flip do job `db-pipeline` para bloqueante fica para o FIM da
 Etapa 3 (não commit 9) — os testes de agente/eval do motor ainda referenciam
@@ -77,4 +78,4 @@ obrigatório no commit 9.
 
 ## Próxima ação
 
-**Etapa 2, commit 7** — DDL `20260812000003_identity_conversations.sql` (conversations, messages, channel_identities, alerts, ai_runtime_rollout com RLS). Teste vermelho primeiro: adaptar `runtime/tests/db/factories.py` + `conftest.py` do schema do motor para o do Worder (organizations em vez de tenants) e escrever `tests/db/test_identity_schema.py` novo cobrindo as tabelas canônicas; a suíte `db` roda no CI (job informativo até o commit 9).
+**Etapa 3, commit 10** — DDL `20260813000001_ai_missions.sql` (dicionário §3.3.3: índice parcial one-active por (org,event_type), concession default `{"kind":"none"}`, FK de conversations.owner_mission_version_id). Teste vermelho primeiro: `runtime/tests/db/test_ai_missions_schema.py` (one-active, append-only). Depois: seeds v0 (commit 11, 6 linhas draft), trilha interna llm/tool/judge (commit 12 — adaptar factories de eval/judge/tool/llm e `test_e2_schema`/`test_rls_e2`/`create_agent_version`→ai_missions), `mission_resolver.py` (commit 13, matriz de merge §1.3) e `prompt_compiler.py` + responder religado (commit 14). Ao fim da Etapa 3: flip do job `db-pipeline` do CI para bloqueante.
