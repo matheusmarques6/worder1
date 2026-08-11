@@ -5,9 +5,29 @@ heartbeat + listener HTTP, tudo dentro de `python -m agents_runtime`. A imagem
 é o `Dockerfile` deste diretório (multi-stage, non-root, SIGTERM gracioso);
 o `docker-compose.yml` é o espelho local dela.
 
-Status: **ainda não deployado** — bloqueia o cutover da Etapa 7. Qualquer
-plataforma que rode um container long-lived serve (Railway/Render/VPS com
-compose); não há estado no disco, tudo vive no Postgres.
+## Caminho rápido: Render Blueprint (render.yaml na raiz do repo)
+
+1. Render Dashboard → **New → Blueprint** → conectar este repo (branch com o
+   `render.yaml`).
+2. O Render lê o blueprint: web service Docker de `runtime/`, health check em
+   `/healthz`, envs não-secretas já preenchidas.
+3. Preencher os 5 segredos no Apply:
+   - `SUPABASE_DB_URL` — **session pooler** (IPv4; a direta é IPv6):
+     `postgresql://postgres.rqpmoavktzvxfcfsdkcc:[SENHA]@aws-0-sa-east-1.pooler.supabase.com:5432/postgres`
+     (transaction pooler 6543 NÃO serve — `set role` e leases são por sessão)
+   - `AGENTS_OPENROUTER_API_KEY` — chave da plataforma (Judge 1 + embeddings)
+   - `ENCRYPTION_KEY` — o MESMO do app Next.js (senão as chaves BYO não abrem)
+   - `AGENTS_META_ACCESS_TOKEN` — token de sistema Meta
+   - `AGENTS_PREVIEW_TOKEN` — um segredo novo; o MESMO vai na Vercel
+4. Apply. Quando o serviço estiver live: na **Vercel**, setar
+   `AGENTS_RUNTIME_URL=https://<serviço>.onrender.com` e o mesmo
+   `AGENTS_PREVIEW_TOKEN` — o preview de /moments passa a responder.
+5. O processo sobe DORMANTE: filas vazias + rollout vazio = idle seguro. O
+   cutover continua sendo o runbook do STATUS (seeds → ativar missões → org
+   no `ai_runtime_rollout`).
+
+Qualquer outra plataforma que rode container long-lived serve igualmente
+(Railway/Fly/VPS com compose); não há estado no disco, tudo vive no Postgres.
 
 ## Variáveis de ambiente
 
@@ -27,7 +47,7 @@ compose); não há estado no disco, tudo vive no Postgres.
 
 | Variável | O que é |
 |---|---|
-| `AGENTS_CHANNEL` | `agents_runtime.channels.cloud_api:cloud_channel` |
+| `AGENTS_CHANNEL` | `agents_runtime.channels.cloud_api:from_env` |
 | `AGENTS_META_ACCESS_TOKEN` | Token de sistema Meta (fallback quando a conta Cloud da org não tem token próprio) |
 | `AGENTS_META_API_VERSION` | `v19.0` (default) |
 

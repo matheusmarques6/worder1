@@ -1,0 +1,58 @@
+# Render Blueprint — o runtime de agentes IA (runtime/) como web service.
+#
+# Deploy: Render Dashboard → New → Blueprint → este repo → preencher os 5
+# segredos (sync: false) → Apply. O serviço builda de runtime/Dockerfile,
+# expõe /healthz (o Render usa como health check) e o processo único asyncio
+# (coalescer + workers + sender + heartbeat + listener) sobe dormante: filas
+# vazias e rollout vazio = idle seguro até o cutover.
+#
+# ATENÇÃO à DSN (SUPABASE_DB_URL): usar o SESSION POOLER (IPv4) —
+#   postgresql://postgres.rqpmoavktzvxfcfsdkcc:[SENHA]@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
+# A conexão direta (db.<ref>.supabase.co) é IPv6 e o egress do Render é IPv4.
+# Transaction pooler (porta 6543) NÃO serve: o engine usa `set role` e leases
+# por sessão (runtime/DEPLOY.md).
+
+services:
+  - type: web
+    name: worder-agents-runtime
+    runtime: docker
+    rootDir: runtime
+    dockerfilePath: ./Dockerfile
+    # Região do Render mais próxima do Supabase sa-east-1 (São Paulo).
+    region: ohio
+    plan: starter
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      # -- o processo ---------------------------------------------------------
+      - key: AGENTS_HTTP_PORT
+        value: "10000" # o Render espera o serviço ouvindo em PORT=10000
+      - key: AGENTS_RESPONDER
+        value: agents_runtime.agent_core.responder:agent_responder
+      - key: AGENTS_TOUCHER
+        value: agents_runtime.agent_core.toucher:agent_toucher
+      - key: AGENTS_CHANNEL
+        value: agents_runtime.channels.cloud_api:from_env
+      - key: AGENTS_WORKER_SET_ROLE
+        value: worker_role
+      - key: AGENTS_SENDER_SET_ROLE
+        value: sender_role
+      - key: AGENTS_PROCESS_NAME
+        value: agents-runtime-render
+      - key: AGENTS_LOG_LEVEL
+        value: INFO
+      - key: DEPLOY_ENV
+        value: production
+      - key: AGENTS_META_API_VERSION
+        value: v19.0
+      # -- segredos (preenchidos no Apply do Blueprint; nunca no repo) --------
+      - key: SUPABASE_DB_URL # session pooler, ver cabeçalho
+        sync: false
+      - key: AGENTS_OPENROUTER_API_KEY # chave da PLATAFORMA (Judge 1 + embeddings)
+        sync: false
+      - key: ENCRYPTION_KEY # o MESMO secret do app Next.js (secret_box)
+        sync: false
+      - key: AGENTS_META_ACCESS_TOKEN # token de sistema Meta (fallback por conta)
+        sync: false
+      - key: AGENTS_PREVIEW_TOKEN # o mesmo valor vai na Vercel p/ o preview
+        sync: false
