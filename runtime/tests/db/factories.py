@@ -649,3 +649,24 @@ def create_moment(
         )
         (moment_id,) = cur.fetchone()
     return moment_id
+
+
+def create_store(
+    conn: psycopg.Connection,
+    organization_id: uuid.UUID,
+    *,
+    access_token: str = "shpat_teste_em_claro",
+) -> uuid.UUID:
+    """Uma loja Shopify conectada (token no formato legado, em claro — o
+    caminho cifrado é provado nos testes do secret_box)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.shopify_stores (organization_id, shop_domain, access_token)
+            values (%s, %s, %s)
+            returning id
+            """,
+            (organization_id, f"{unique_id('loja')}.myshopify.com", access_token),
+        )
+        (store_id,) = cur.fetchone()
+    return store_id

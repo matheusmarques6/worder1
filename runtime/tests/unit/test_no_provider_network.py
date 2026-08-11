@@ -33,11 +33,14 @@ import agents_runtime
 _SOURCE_ROOT = Path(agents_runtime.__file__).parent
 _TESTS_ROOT = Path(__file__).parents[1]
 
-# The two doors. Relative to the package root.
+# The doors. Relative to the package root.
 _ADAPTERS = {
     Path("channels/cloud_api.py"),
     Path("agent_core/openrouter.py"),
     Path("agent_core/direct_providers.py"),
+    # A porta das lojas: o braço que o offer_engine usa para materializar
+    # cupom. Provedor de comércio, mesma regra dos de LLM/canal.
+    Path("connectors/shopify.py"),
 }
 
 # Relative to tests/. The contract level is the one allowed to reach a provider,

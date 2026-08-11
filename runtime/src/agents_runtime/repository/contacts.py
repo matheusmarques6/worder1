@@ -32,6 +32,21 @@ class CustomerFacts:
     conversations: int
 
 
+async def contact_id_of_conversation(
+    conn: psycopg.AsyncConnection, *, conversation_id: UUID
+) -> UUID | None:
+    """Quem está do outro lado DESTA conversa — ou None quando não é nossa.
+
+    É o elo que o create_coupon usa para amarrar grant a contato: o id vem da
+    conversa do job, nunca dos argumentos do modelo."""
+    cursor = await conn.execute(
+        "select contact_id from public.conversations where id = %s",
+        (conversation_id,),
+    )
+    row = await cursor.fetchone()
+    return None if row is None else row[0]
+
+
 async def load_customer_facts(
     conn: psycopg.AsyncConnection, *, conversation_id: UUID
 ) -> CustomerFacts | None:
