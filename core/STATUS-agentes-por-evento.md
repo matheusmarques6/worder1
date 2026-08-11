@@ -45,7 +45,9 @@ Estados: `pendente | em curso | verde-local | verde-CI | aplicado-em-prod`.
 | 12 | f01a7511 | feat(runtime): mission_resolver — a cascata resolvida antes do prompt |
 | 13 | a413cdc9 | feat(runtime): prompt_compiler — blocos tipados com linha de IA estrutural |
 | 14 | c58f75f9 | feat(runtime): responder religado — arbitragem + merge + frame compilado |
-| 15 | (este) | test(runtime): suíte db/pipeline adaptada ao schema canônico; CI db vira bloqueante |
+| 15 | 9a68f7cb | test(runtime): suíte db/pipeline adaptada ao schema canônico; CI db vira bloqueante |
+| 16 | 97721fa8 | feat(runtime): secret_box — port byte-compatível do codec do app |
+| 17 | (este) | feat(runtime): cascata de provedores D4 — BYO-only com degrau de plataforma atrás de flag |
 
 Ajuste de plano: o flip do job `db-pipeline`→bloqueante fica para o início da
 Etapa 4, numa passada de iteração de CI que adapta os testes db restantes ao

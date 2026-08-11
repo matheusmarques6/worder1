@@ -37,6 +37,7 @@ _TESTS_ROOT = Path(__file__).parents[1]
 _ADAPTERS = {
     Path("channels/cloud_api.py"),
     Path("agent_core/openrouter.py"),
+    Path("agent_core/direct_providers.py"),
 }
 
 # Relative to tests/. The contract level is the one allowed to reach a provider,

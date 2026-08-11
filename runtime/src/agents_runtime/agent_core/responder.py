@@ -51,6 +51,7 @@ from agents_runtime.agent_core.prompt_compiler import (
     StateBlock,
     compile_prompt,
 )
+from agents_runtime.agent_core.providers import NoOrgLlmKey, resolve_agent_llm
 from agents_runtime.agent_core.think_gate import PendingMessage, should_think
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.evals.pack import load_rubrics
@@ -66,6 +67,7 @@ from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository import judge_scores as scores_repo
 from agents_runtime.repository import llm_calls as llm_repo
 from agents_runtime.repository import missions as missions_repo
+from agents_runtime.repository import provider_keys as keys_repo
 from agents_runtime.repository.scope import scope_to_organization
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.knowledge import SearchKnowledge
@@ -137,9 +139,13 @@ def build_responder(
     rubrics_directory: Path | None = None,
     set_role: str | None = None,
     knowledge_limit: int = 5,
+    agent_llm_from_org_keys: bool = False,
+    base_secret: str | None = None,
 ):
-    """O responder real. `llm` é a porta (S5) — dublê nos testes, OpenRouter em
-    produção; nada aqui sabe a diferença."""
+    """O responder real. `llm` é a porta da PLATAFORMA (Judge 1 + embeddings —
+    D4); com `agent_llm_from_org_keys` ligado (produção), a resposta do agente
+    sai pela cascata BYO de organization_api_keys. Nos testes, desligado: o
+    dublê injetado serve para tudo."""
     clock = clock or SystemClock()
     rubrics = load_rubrics(rubrics_directory or default_rubrics_directory())
 
@@ -185,6 +191,13 @@ def build_responder(
                 discovery_mission = await missions_repo.load_active_mission(
                     conn, event_type=DISCOVERY_EVENT
                 )
+                key_rows = (
+                    await keys_repo.load_org_provider_keys(
+                        conn, organization_id=job.organization_id
+                    )
+                    if agent_llm_from_org_keys
+                    else ()
+                )
 
             if version is None:
                 raise NoActiveVersion(f"tenant {job.organization_id} has no active agent version")
@@ -217,6 +230,31 @@ def build_responder(
             resolved = merge_mission(
                 winner, None, agent_tools=version.config.enabled_tools
             )
+
+            # --- cascata D4 (BYO-only): sem chave da org, o toque morre alto.
+            agent_llm: LlmPort = llm
+            if agent_llm_from_org_keys:
+                try:
+                    agent_llm = resolve_agent_llm(
+                        key_rows,
+                        agent_provider=version.provider,
+                        base_secret=base_secret,
+                    )
+                except NoOrgLlmKey as reason:
+                    async with conn.transaction():
+                        await scope_to_organization(conn, job.organization_id)
+                        await alerts_repo.open_alert(
+                            conn,
+                            organization_id=job.organization_id,
+                            type="no_org_llm_key",
+                            severity="critical",
+                            title="Sem chave de LLM da organização — agente não respondeu",
+                            payload={
+                                "conversation_id": str(job.conversation_id),
+                                "reason": str(reason),
+                            },
+                        )
+                    return None
 
             knowledge = await _knowledge(
                 conn,
@@ -278,7 +316,7 @@ def build_responder(
                 )
             conversation = _as_chat(transcript)
 
-            chat = metered("agent_reply")
+            chat = _metered(conn, job, agent_llm, clock, "agent_reply")
             judge = PreSendJudge(metered("judge_pre"), rubrics)
             context = JudgeContext(
                 conversation=tuple(f"{message.author}: {message.text}" for message in pending),
@@ -362,6 +400,8 @@ def agent_responder(dsn: str):
         dsn,
         llm=openrouter.from_env(),
         set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
+        agent_llm_from_org_keys=True,
+        base_secret=os.environ.get("ENCRYPTION_KEY") or None,
     )
 
 

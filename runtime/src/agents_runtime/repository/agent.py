@@ -34,6 +34,7 @@ class ActiveVersion:
     config: AgentConfig
     agent_id: UUID | None = None
     name: str = "Assistente"
+    provider: str = "openai"
     persona: dict | None = None
     settings: dict | None = None
 
@@ -83,7 +84,7 @@ async def load_active_version(
         """
         select v.id, a.model, coalesce(v.system_prompt, a.system_prompt),
                a.id, a.name, coalesce(v.persona, a.persona),
-               coalesce(v.settings, a.settings)
+               coalesce(v.settings, a.settings), coalesce(a.provider, 'openai')
           from public.ai_agent_versions v
           join public.ai_agents a on a.id = v.agent_id
          where v.status = 'produção'
@@ -112,6 +113,7 @@ async def load_active_version(
         ),
         agent_id=row[3],
         name=row[4],
+        provider=row[7],
         persona=persona,
         settings=settings,
     )
