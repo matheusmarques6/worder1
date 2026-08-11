@@ -17,6 +17,9 @@ from psycopg.types.json import Jsonb
 #: The alert Judge 1 opens when a draft never left (`alerts.type` CHECK).
 CRITICAL_VIOLATION = "critical_violation"
 
+#: Inbound (ou toque) sem missão ativa para assumir o turno (§3.4 inv. 8).
+NO_ACTIVE_MISSION = "no_active_mission"
+
 
 async def open_alert(
     conn: psycopg.AsyncConnection,
@@ -29,7 +32,7 @@ async def open_alert(
 ) -> UUID:
     cursor = await conn.execute(
         """
-        insert into public.alerts (organization_id, type, severity, title, payload)
+        insert into public.alerts (organization_id, type, severity, title, metadata)
         values (%s, %s, %s, %s, %s)
         returning id
         """,

@@ -19,7 +19,7 @@
 | 0 | Base git + doc + fork verbatim | 1–2 | **verde-local** (push feito) |
 | 1 | Fase 0 (baseline, rename org_id, roles/pgmq, CI) | 3–6 | **verde-local** (push feito) |
 | 2 | Identidade (conversations/messages/identities, ingest, branch webhook) | 7–9 | **verde-local** (migrations aplicadas; vitest 904 ✓; db/rls prova no CI) |
-| 3 | Missões + compiler + resolver | 10–14 | pendente |
+| 3 | Missões + compiler + resolver | 10–14 | **verde-local** (unit 615 ✓; db adapta no CI — ver pendência abaixo) |
 | 4 | Runner (secret-box, cascata, sender, obs/, preview) | 15–19 | pendente |
 | 5 | Momentos + offer engine + create_coupon | 20–23 | pendente |
 | 6 | Nó action_ai_mission + emit_ai_mission_job (fatia vertical) | 24–26 | pendente |
@@ -41,11 +41,18 @@ Estados: `pendente | em curso | verde-local | verde-CI | aplicado-em-prod`.
 | 8 | 7a3c9335 | feat(db): funções do motor adaptadas + ingest_inbound_message (F2) |
 | 9 | 91c6e3f4 | feat(whatsapp): branch por rollout no webhook + guarda no worker QStash |
 | 10 | 6faa1377 | feat(db): ai_missions — catálogo por evento com índice one-active |
-| 11 | (este) | feat(db): trilha interna llm/tool/judge + factories/testes e2 adaptados |
+| 11 | bb8414f0 | feat(db): trilha interna llm/tool/judge + factories/testes e2 adaptados |
+| 12 | f01a7511 | feat(runtime): mission_resolver — a cascata resolvida antes do prompt |
+| 13 | a413cdc9 | feat(runtime): prompt_compiler — blocos tipados com linha de IA estrutural |
+| 14 | (este) | feat(runtime): responder religado — arbitragem + merge + frame compilado |
 
-Ajuste de plano: o flip do job `db-pipeline` para bloqueante fica para o FIM da
-Etapa 3 (não commit 9) — os testes de agente/eval do motor ainda referenciam
-`agent_versions`/`knowledge_chunks`, adaptados na Etapa 3.
+Ajuste de plano: o flip do job `db-pipeline`→bloqueante fica para o início da
+Etapa 4, numa passada de iteração de CI que adapta os testes db restantes ao
+novo shape: `test_agent_loaders` (ActiveVersion/ConversationState novos),
+`test_responder_guards` e `test_real_responder` (precisam criar missão
+descoberta ativa via create_mission), `test_knowledge_retrieval`
+(ingest_chunk agora exige agente ativo; search escopa por
+current_app_organization_id — rodar como worker escopado).
 
 Nota de sequenciamento: a suíte `db`/`pipeline` do fork ainda referencia o schema
 do motor (factories criam `tenants` etc.) — adaptação em bloco na Etapa 2. Até lá,
@@ -82,4 +89,31 @@ obrigatório no commit 9.
 
 ## Próxima ação
 
-**Etapa 3, commit 10** — DDL `20260813000001_ai_missions.sql` (dicionário §3.3.3: índice parcial one-active por (org,event_type), concession default `{"kind":"none"}`, FK de conversations.owner_mission_version_id). Teste vermelho primeiro: `runtime/tests/db/test_ai_missions_schema.py` (one-active, append-only). Depois: seeds v0 (commit 11, 6 linhas draft), trilha interna llm/tool/judge (commit 12 — adaptar factories de eval/judge/tool/llm e `test_e2_schema`/`test_rls_e2`/`create_agent_version`→ai_missions), `mission_resolver.py` (commit 13, matriz de merge §1.3) e `prompt_compiler.py` + responder religado (commit 14). Ao fim da Etapa 3: flip do job `db-pipeline` do CI para bloqueante.
+**Etapa 4, commit 15 + passada de CI** — na ordem:
+1. **Iteração de CI (db→bloqueante):** adaptar os testes db restantes ao novo shape —
+   `test_agent_loaders` (ActiveVersion agora carrega agent_id/name/persona/settings e vem de
+   ai_agents+ai_agent_versions com status 'produção'; ConversationState virou flat com
+   status/last_channel/owner_mission_version_id/contact_id/contact_name/last_inbound_at),
+   `test_responder_guards` e `test_real_responder` (criar missão descoberta ativa:
+   `create_mission(admin, org, event_type="whatsapp.received", status="active")` — sem ela o
+   responder alerta `no_active_mission` e devolve None), `test_knowledge_retrieval`
+   (`ingest_chunk` exige agente ativo na org: criar `create_agent` antes; `search_knowledge`
+   escopa por `current_app_organization_id()` — buscar como worker escopado), e
+   `test_conclude_without_send`/`test_lease_and_cas` (conferir contra o conclude adaptado:
+   sem channel_account_id; canal por last_channel). Depois: remover `continue-on-error` do job
+   `tests-db` em `.github/workflows/runtime.yml`.
+2. **Commit 15:** `runtime/src/agents_runtime/crypto/secret_box.py` (scrypt N=16384/r=8/p=1 +
+   AES-256-GCM; formatos v2 5-partes e legado 3-partes + `is_encrypted`) com vetores
+   cross-language gerados de `src/lib/crypto/secret-box.ts` por `scripts/gen-secret-box-vectors.ts`
+   (Node) commitados em `runtime/tests/unit/fixtures/secret_box_vectors.json`. Teste vermelho
+   primeiro: `test_secret_box_vectors.py`.
+3. Commits 16–19 conforme o plano (cascata providers BYO-only + fitness atualizado; sender com
+   preflights + espelho no inbox + DDL channel_template_policies; obs/; server.py healthz+preview).
+
+Notas vivas para a retomada:
+- O responder anexa CONHECIMENTO ao frame fora dos blocos tipados (recuperação, não área) —
+  se o preview precisar exibir, expor via parâmetro opcional do compile_prompt.
+- `agent_core/prompt.py` (5 camadas do motor) ficou como legado testado e sem consumidor;
+  remoção junto com a limpeza pós-cutover.
+- `presentation_mode`/`client_adaptation` chegam em ai_agents na Etapa 7; o responder já lê
+  persona/settings e usa 'nome_funcao' como default estrutural.

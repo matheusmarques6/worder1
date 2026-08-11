@@ -20,7 +20,7 @@ from uuid import UUID
 
 import psycopg
 
-from agents_runtime.agent_core.prompt import AgentConfig, ConversationView, TenantPolicy
+from agents_runtime.agent_core.prompt import AgentConfig, TenantPolicy
 from agents_runtime.agent_core.think_gate import PendingMessage
 
 #: Quantas mensagens de histórico acompanham a pergunta. Conversa de meses não
@@ -32,6 +32,10 @@ DEFAULT_TRANSCRIPT_LIMIT = 20
 class ActiveVersion:
     id: UUID
     config: AgentConfig
+    agent_id: UUID | None = None
+    name: str = "Assistente"
+    persona: dict | None = None
+    settings: dict | None = None
 
     @property
     def base_prompt(self) -> str:
@@ -56,42 +60,60 @@ class TenantSettings:
 
 @dataclass(frozen=True, slots=True)
 class ConversationState:
-    view: ConversationView
+    status: str
+    last_channel: str | None
+    owner_mission_version_id: UUID | None
+    contact_id: UUID
+    contact_name: str | None
     last_processed_seq: int
-
-    @property
-    def occasion(self) -> str:
-        return self.view.occasion
-
-    @property
-    def contact_language(self) -> str | None:
-        return self.view.contact_language
+    last_inbound_at: datetime | None
 
 
 async def load_active_version(
     conn: psycopg.AsyncConnection, *, organization_id: UUID
 ) -> ActiveVersion | None:
     """A versão em produção deste tenant, ou None — que significa "esta conta
-    não pode responder", nunca "improvise um prompt"."""
+    não pode responder", nunca "improvise um prompt".
+
+    FORK: lê ai_agents + ai_agent_versions (status local 'produção'); tabelas
+    legadas têm RLS desligada, então o escopo por org é EXPLÍCITO na query
+    (FORK.md item 6). enabled_tools vem de settings->tools->enabled.
+    """
     cursor = await conn.execute(
         """
-        select id, model, base_prompt, scenario_prompts, enabled_tools
-          from public.agent_versions
-         where status = 'active'
-        """
+        select v.id, a.model, coalesce(v.system_prompt, a.system_prompt),
+               a.id, a.name, coalesce(v.persona, a.persona),
+               coalesce(v.settings, a.settings)
+          from public.ai_agent_versions v
+          join public.ai_agents a on a.id = v.agent_id
+         where v.status = 'produção'
+           and a.is_active
+           and a.organization_id = %s
+         order by v.created_at desc
+         limit 1
+        """,
+        (organization_id,),
     )
     row = await cursor.fetchone()
     if row is None:
         return None
 
+    persona = dict(row[5] or {})
+    settings = dict(row[6] or {})
+    enabled = tuple((settings.get("tools") or {}).get("enabled") or ())
+
     return ActiveVersion(
         id=row[0],
         config=AgentConfig(
-            model=row[1],
-            base_prompt=row[2],
-            scenario_prompts=dict(row[3] or {}),
-            enabled_tools=tuple(row[4] or ()),
+            model=row[1] or "gpt-4o-mini",
+            base_prompt=row[2] or "",
+            scenario_prompts={},
+            enabled_tools=enabled,
         ),
+        agent_id=row[3],
+        name=row[4],
+        persona=persona,
+        settings=settings,
     )
 
 
@@ -121,7 +143,10 @@ async def load_conversation_view(
 ) -> ConversationState | None:
     cursor = await conn.execute(
         """
-        select conversation.origin_occasion, contact.language, conversation.last_processed_seq
+        select conversation.status, conversation.last_channel,
+               conversation.owner_mission_version_id, conversation.contact_id,
+               nullif(trim(contact.full_name), ''),
+               conversation.last_processed_seq, conversation.last_inbound_at
           from public.conversations conversation
           join public.contacts contact on contact.id = conversation.contact_id
          where conversation.id = %s
@@ -133,8 +158,13 @@ async def load_conversation_view(
         return None
 
     return ConversationState(
-        view=ConversationView(occasion=row[0], contact_language=row[1]),
-        last_processed_seq=row[2],
+        status=row[0],
+        last_channel=row[1],
+        owner_mission_version_id=row[2],
+        contact_id=row[3],
+        contact_name=row[4],
+        last_processed_seq=row[5],
+        last_inbound_at=row[6],
     )
 
 

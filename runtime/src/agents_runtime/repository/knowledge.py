@@ -62,23 +62,40 @@ async def ingest_chunk(
     derived from a conversation enters the per-contact purge; a FAQ does not),
     so it is written from the first row instead of being backfilled later.
     """
+    # FORK: os chunks vivem em ai_agent_chunks (a base da SourcesTab) e
+    # penduram num agente + fonte da org — resolvidos/criados aqui.
     cursor = await conn.execute(
         """
-        insert into public.knowledge_chunks
-            (organization_id, source, title, content, embedding, metadata)
-        values (%s, %s, %s, %s, %s::vector, %s)
+        with agent as (
+            select id from public.ai_agents
+             where organization_id = %(org)s and is_active
+             order by created_at limit 1
+        ),
+        source as (
+            insert into public.ai_agent_sources
+                (organization_id, agent_id, source_type, name, status)
+            select %(org)s, agent.id, 'text', %(source)s, 'ready' from agent
+            returning id, agent_id
+        )
+        insert into public.ai_agent_chunks
+            (organization_id, agent_id, source_id, content, embedding, metadata)
+        select %(org)s, source.agent_id, source.id, %(content)s,
+               %(embedding)s::vector, %(metadata)s
+          from source
         returning id
         """,
-        (
-            organization_id,
-            source,
-            title,
-            content,
-            _vector_literal(embedding),
-            Jsonb(metadata if metadata is not None else {}),
-        ),
+        {
+            "org": organization_id,
+            "source": f"{source}: {title}" if title else source,
+            "content": content,
+            "embedding": _vector_literal(embedding),
+            "metadata": Jsonb(metadata if metadata is not None else {}),
+        },
     )
-    return (await cursor.fetchone())[0]
+    row = await cursor.fetchone()
+    if row is None:
+        raise LookupError(f"org {organization_id} has no active agent to attach knowledge to")
+    return row[0]
 
 
 async def search_knowledge(
@@ -93,13 +110,18 @@ async def search_knowledge(
     no measured distance at all, and putting them next to ones that do would be
     inventing an order.
     """
+    # FORK (desvio declarado, FORK.md item 6): ai_agent_chunks é tabela legada
+    # com RLS desligada no banco vivo — o escopo por org é EXPLÍCITO na query
+    # até a remediação de RLS das legadas ser aprovada.
     cursor = await conn.execute(
         """
-        select id, organization_id, source, title, content,
-               1 - (embedding <=> %(query)s::vector) as similarity
-          from public.knowledge_chunks
-         where embedding is not null
-         order by embedding <=> %(query)s::vector
+        select c.id, c.organization_id, s.name, null::text, c.content,
+               1 - (c.embedding <=> %(query)s::vector) as similarity
+          from public.ai_agent_chunks c
+          left join public.ai_agent_sources s on s.id = c.source_id
+         where c.embedding is not null
+           and c.organization_id = public.current_app_organization_id()
+         order by c.embedding <=> %(query)s::vector
          limit %(limit)s
         """,
         {"query": _vector_literal(embedding), "limit": limit},
@@ -108,7 +130,7 @@ async def search_knowledge(
         KnowledgeChunk(
             id=row[0],
             organization_id=row[1],
-            source=row[2],
+            source=row[2] or "fonte",
             title=row[3],
             content=row[4],
             similarity=float(row[5]),
