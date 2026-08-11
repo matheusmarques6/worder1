@@ -52,3 +52,11 @@ Este diretório é um **fork do motor `agents-worder-main`** dentro do monorepo 
    (`docs/observabilidade-e-monitoramento.md`), com no-op sem `AGENTS_LOGFIRE_TOKEN`.
 5. **`docker-compose.yml`** local vive DENTRO de `runtime/` (só o serviço runtime; o `hub`
    do upstream foi descartado).
+6. **RAG lê `ai_agent_chunks`** (a base que o lojista já alimenta pela SourcesTab), não uma
+   `knowledge_chunks` própria. Como as tabelas legadas do Worder seguem com RLS desligada
+   (remediação pendente), a query de knowledge escopa por `organization_id` EXPLÍCITO no SQL —
+   desvio declarado da regra do motor "repositório sem WHERE de tenant; a RLS escopa". Volta ao
+   padrão do motor quando a remediação de RLS das legadas for aprovada e aplicada.
+7. **Trilha dupla**: `internal.{llm_calls,tool_calls,judge_scores,scenarios,eval_runs}` (plataforma,
+   org-renamed) convive com `agent_traces` (lojista). `eval_runs.agent_version_id` aponta para
+   `ai_agent_versions` (a tabela local; `agent_versions` do motor não é portada).

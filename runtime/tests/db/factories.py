@@ -190,18 +190,19 @@ def make_due(
         )
 
 
-def create_agent_version(
+_VERSION_STATUS = {"draft": "rascunho", "active": "produção", "archived": "arquivada"}
+
+
+def create_agent(
     conn: psycopg.Connection,
     organization_id: uuid.UUID,
     *,
-    status: str = "draft",
-    origin: str = "onboarding",
     model: str | None = None,
     base_prompt: str = "Você é o atendente da loja.",
 ) -> uuid.UUID:
-    """One version of the agent. `model` left as None exercises the default."""
-    columns = ["organization_id", "status", "origin", "base_prompt"]
-    values: list[object] = [organization_id, status, origin, base_prompt]
+    """The org's agent row (Worder: ai_agents). `model` None exercises the default."""
+    columns = ["organization_id", "name", "system_prompt"]
+    values: list[object] = [organization_id, unique_id("agent"), base_prompt]
     if model is not None:
         columns.append("model")
         values.append(model)
@@ -210,11 +211,51 @@ def create_agent_version(
     with conn.cursor() as cur:
         cur.execute(
             f"""
-            insert into public.agent_versions ({", ".join(columns)})
+            insert into public.ai_agents ({", ".join(columns)})
             values ({placeholders})
             returning id
             """,
             tuple(values),
+        )
+        (agent_id,) = cur.fetchone()
+    return agent_id
+
+
+def create_agent_version(
+    conn: psycopg.Connection,
+    organization_id: uuid.UUID,
+    *,
+    status: str = "draft",
+    origin: str = "onboarding",  # kept for motor-API compat; Worder has no column
+    model: str | None = None,
+    base_prompt: str = "Você é o atendente da loja.",
+    agent_id: uuid.UUID | None = None,
+) -> uuid.UUID:
+    """One version of the agent (Worder: ai_agents + ai_agent_versions).
+
+    Keeps the motor's status vocabulary (draft/active/archived) and maps to the
+    local one ('rascunho'/'produção'/'arquivada'). `model` lives on ai_agents.
+    """
+    del origin
+    if agent_id is None:
+        agent_id = create_agent(conn, organization_id, model=model, base_prompt=base_prompt)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "select coalesce(max(version_number), 0) + 1 from public.ai_agent_versions"
+            " where agent_id = %s",
+            (agent_id,),
+        )
+        (next_number,) = cur.fetchone()
+        cur.execute(
+            """
+            insert into public.ai_agent_versions
+                (organization_id, agent_id, version_number, status, system_prompt)
+            values (%s, %s, %s, %s, %s)
+            returning id
+            """,
+            (organization_id, agent_id, next_number,
+             _VERSION_STATUS.get(status, status), base_prompt),
         )
         (version_id,) = cur.fetchone()
     return version_id
@@ -232,17 +273,35 @@ def create_knowledge_chunk(
     source: str = "faq",
     content: str = "Entregamos em todo o Brasil.",
     embedding: str | None = None,
+    agent_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
+    """A RAG chunk (Worder: ai_agent_chunks — the base the merchant already
+    feeds through SourcesTab). Creates the agent + source rows it hangs from."""
+    if agent_id is None:
+        agent_id = create_agent(conn, organization_id)
+
     with conn.cursor() as cur:
         cur.execute(
             """
-            insert into public.knowledge_chunks (organization_id, source, content, embedding)
-            values (%s, %s, %s, %s::vector)
+            insert into public.ai_agent_sources
+                (organization_id, agent_id, source_type, name, status)
+            values (%s, %s, 'text', %s, 'ready')
+            returning id
+            """,
+            (organization_id, agent_id, source),
+        )
+        (source_id,) = cur.fetchone()
+        cur.execute(
+            """
+            insert into public.ai_agent_chunks
+                (organization_id, agent_id, source_id, content, embedding)
+            values (%s, %s, %s, %s, %s::vector)
             returning id
             """,
             (
                 organization_id,
-                source,
+                agent_id,
+                source_id,
                 content,
                 embedding if embedding is not None else an_embedding(),
             ),

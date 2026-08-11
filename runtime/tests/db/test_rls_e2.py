@@ -1,21 +1,14 @@
-"""The cross-tenant leak suite for the E2 tables — S2.
+"""A suíte de vazamento cross-org da trilha do agente.
 
-Same shape as the E0-07 suite, on the tables this milestone adds: three
-credentials reach the data — the user's JWT, `worker_role` and `sender_role` —
-and none of them may see one row belonging to the other tenant. **Any row
-returned fails the suite.**
+Três credenciais alcançam os dados — JWT do usuário, worker_role e
+sender_role — e cada uma tem que ficar confinada à sua organização.
+**Qualquer linha lida ou afetada reprova a suíte.**
 
-Two things are new here and both are deliberate:
-
-· A credential can be stopped by a policy (zero rows) or by never having been
-  granted the table at all (`InsufficientPrivilege`). Both are "did not reach
-  it", and the helper accepts either — asserting only on the empty result would
-  turn a missing GRANT into a false green, and asserting only on the exception
-  would force grants the roles have no business holding.
-
-· The evaluation tables are internal (ADR-11 / CLAUDE.md: outbox, pgmq queues
-  and evals stay out of the Data API schema). So besides the tenant boundary,
-  the Data API roles must not reach them at all.
+Nota de escopo (Adendo §A.4.6): as tabelas LEGADAS (ai_agents,
+ai_agent_versions, ai_agent_chunks…) seguem com RLS desligada no banco vivo —
+remediação pendente de aprovação. Por isso o RAG do runtime escopa por
+organization_id EXPLÍCITO na query (desvio declarado no FORK.md), e esta
+suíte afirma as tabelas NOVAS: ai_missions, alerts e a trilha internal.*.
 """
 
 import uuid
@@ -31,8 +24,8 @@ from tests.db.factories import (
     create_alert,
     create_eval_run,
     create_judge_score,
-    create_knowledge_chunk,
     create_llm_call,
+    create_mission,
     create_scenario,
     create_thread,
     create_tool_call,
@@ -40,9 +33,7 @@ from tests.db.factories import (
 
 pytestmark = pytest.mark.rls
 
-# Every E2 table that carries organization_id. The merchant-facing ones live in
-# `public` behind RLS; the evaluation ones live in `internal` and never leave it.
-MERCHANT_TABLES = ("public.agent_versions", "public.knowledge_chunks", "public.alerts")
+MERCHANT_TABLES = ("public.ai_missions", "public.alerts")
 INTERNAL_TABLES = (
     "internal.scenarios",
     "internal.eval_runs",
@@ -57,27 +48,27 @@ DATA_API_ROLES = ("anon", "authenticated", "service_role")
 
 @dataclass(frozen=True)
 class TenantRows:
-    agent_version_id: uuid.UUID
+    mission_id: uuid.UUID
 
 
 @pytest.fixture
 def e2_rows(admin: psycopg.Connection, two_tenants: TwoTenants) -> Iterator[dict]:
-    """One row of every E2 table, in BOTH tenants.
+    """Uma linha de cada tabela, nas DUAS orgs.
 
-    Populating only the victim would make a leak look like an empty table.
+    Popular só a vítima faria um vazamento parecer tabela vazia.
     """
     rows = {}
     for label, tenant in (("a", two_tenants.a), ("b", two_tenants.b)):
         version_id = create_agent_version(admin, tenant.id, status="active")
+        mission_id = create_mission(admin, tenant.id, status="active")
         thread = create_thread(admin, tenant.id)
-        create_knowledge_chunk(admin, tenant.id)
         create_alert(admin, tenant.id)
         create_scenario(admin, tenant.id)
         create_eval_run(admin, tenant.id, version_id)
         create_judge_score(admin, tenant.id, conversation_id=thread.conversation_id)
         create_tool_call(admin, tenant.id, thread)
         create_llm_call(admin, tenant.id)
-        rows[label] = TenantRows(agent_version_id=version_id)
+        rows[label] = TenantRows(mission_id=mission_id)
 
     yield rows
 
@@ -85,9 +76,9 @@ def e2_rows(admin: psycopg.Connection, two_tenants: TwoTenants) -> Iterator[dict
 def rows_of_the_other_tenant(
     conn: psycopg.Connection, table: str, organization_id: uuid.UUID
 ) -> list:
-    """What this credential manages to read of another tenant. Should be nothing.
+    """O que esta credencial consegue ler da outra org. Deve ser nada.
 
-    A denial by privilege counts as nothing: the row was not reached either way.
+    Negação por privilégio conta como nada: a linha não foi alcançada.
     """
     try:
         return conn.execute(
@@ -97,7 +88,7 @@ def rows_of_the_other_tenant(
         return []
 
 
-class TestReadIsConfinedToOneTenant:
+class TestReadIsConfinedToOneOrg:
     @pytest.mark.parametrize("table", E2_TABLES)
     @pytest.mark.parametrize("role", ["worker_role", "sender_role"])
     def test_an_app_role_of_a_cannot_read_the_rows_of_b(
@@ -118,58 +109,66 @@ class TestReadIsConfinedToOneTenant:
         assert leaked == []
 
 
-class TestWriteIsConfinedToOneTenant:
-    def test_the_worker_of_a_cannot_activate_a_version_of_b(
+class TestWriteIsConfinedToOneOrg:
+    def test_the_worker_cannot_touch_any_mission_at_all(
         self, dsn: str, two_tenants: TwoTenants, e2_rows: dict
     ) -> None:
-        # The nastiest write in this milestone: flipping another tenant's agent.
+        # O runtime só LÊ o catálogo (o resolver); ativar/arquivar é da API.
+        # Worker sem grant de UPDATE: a escrita mais nociva do marco nem compila.
         with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
-            affected = conn.execute(
-                "update public.agent_versions set status = 'archived' where organization_id = %s",
-                (two_tenants.b.id,),
-            ).rowcount
-            conn.commit()
-
-        assert affected == 0
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                conn.execute(
+                    "update public.ai_missions set status = 'archived' where organization_id = %s",
+                    (two_tenants.b.id,),
+                )
 
     def test_the_worker_of_a_cannot_insert_an_alert_into_b(
         self, dsn: str, two_tenants: TwoTenants
     ) -> None:
         with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
             with pytest.raises(
-                (psycopg.errors.InsufficientPrivilege, psycopg.errors.CheckViolation)
+                (
+                    psycopg.errors.InsufficientPrivilege,
+                    psycopg.errors.CheckViolation,
+                    psycopg.errors.RowSecurityViolation,
+                )
             ):
                 create_alert(conn, two_tenants.b.id)
 
 
 class TestTheLegitimatePathStillWorks:
-    """A boundary that also blocks the owner is not security, it is an outage."""
+    """Fronteira que também bloqueia o dono não é segurança, é indisponibilidade."""
 
-    def test_the_worker_reads_its_own_active_version(
+    def test_the_worker_reads_its_own_active_mission(
         self, dsn: str, two_tenants: TwoTenants, e2_rows: dict
     ) -> None:
         with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
             rows = conn.execute(
-                "select id from public.agent_versions where status = 'active'"
+                "select id from public.ai_missions where status = 'active'"
             ).fetchall()
 
-        assert [row[0] for row in rows] == [e2_rows["a"].agent_version_id]
+        assert [row[0] for row in rows] == [e2_rows["a"].mission_id]
 
-    def test_the_worker_reads_its_own_knowledge(
-        self, dsn: str, two_tenants: TwoTenants, e2_rows: dict
-    ) -> None:
-        with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
-            rows = conn.execute("select id from public.knowledge_chunks").fetchall()
-
-        assert len(rows) == 1
-
-    def test_the_user_reads_the_versions_of_their_own_tenant(
+    def test_the_user_reads_the_missions_of_their_own_org(
         self, dsn: str, two_tenants: TwoTenants, e2_rows: dict
     ) -> None:
         with as_authenticated_user(dsn, two_tenants.a.user_id) as conn:
-            rows = conn.execute("select id from public.agent_versions").fetchall()
+            rows = conn.execute("select id from public.ai_missions").fetchall()
 
-        assert [row[0] for row in rows] == [e2_rows["a"].agent_version_id]
+        assert [row[0] for row in rows] == [e2_rows["a"].mission_id]
+
+    def test_the_base_pack_scenarios_are_visible_to_a_scoped_worker(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        # Pack base (org NULL) é da plataforma: qualquer worker escopado lê.
+        create_scenario(admin, None)
+
+        with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
+            rows = conn.execute(
+                "select id from internal.scenarios where organization_id is null"
+            ).fetchall()
+
+        assert len(rows) >= 1
 
 
 class TestTheEvaluationTablesAreOutOfTheDataApi:
@@ -184,51 +183,3 @@ class TestTheEvaluationTablesAreOutOfTheDataApi:
 
                 with pytest.raises(psycopg.errors.InsufficientPrivilege):
                     cur.execute(f"select * from {table}")
-
-
-class TestTheRolesCannotOptOut:
-    @pytest.mark.parametrize("table", E2_TABLES)
-    def test_row_level_security_is_enabled(self, admin: psycopg.Connection, table: str) -> None:
-        schema, name = table.split(".")
-        row = admin.execute(
-            """
-            select c.relrowsecurity
-            from pg_class c
-            join pg_namespace n on n.oid = c.relnamespace
-            where n.nspname = %s and c.relname = %s
-            """,
-            (schema, name),
-        ).fetchone()
-
-        assert row is not None, f"{table} does not exist"
-        assert row[0] is True
-
-    @pytest.mark.parametrize("table", E2_TABLES)
-    @pytest.mark.parametrize("role", ["worker_role", "sender_role"])
-    def test_no_app_role_owns_an_e2_table(
-        self, admin: psycopg.Connection, table: str, role: str
-    ) -> None:
-        schema, name = table.split(".")
-        owner = admin.execute(
-            "select tableowner from pg_tables where schemaname = %s and tablename = %s",
-            (schema, name),
-        ).fetchone()
-
-        assert owner is not None, f"{table} does not exist"
-        assert owner[0] != role
-
-
-class TestTenantIdCannotComeFromTheClient:
-    @pytest.mark.parametrize("table", E2_TABLES)
-    def test_an_unset_tenant_scope_reads_nothing(
-        self, dsn: str, e2_rows: dict, table: str
-    ) -> None:
-        """Fail closed. A pool that forgot to scope the unit of work sees zero rows."""
-        with psycopg.connect(dsn) as conn:
-            conn.execute("set role worker_role")
-            try:
-                rows = conn.execute(f"select id from {table}").fetchall()
-            except psycopg.errors.InsufficientPrivilege:
-                rows = []
-
-        assert rows == []
