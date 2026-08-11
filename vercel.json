@@ -1,4 +1,5 @@
 {
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- ':(exclude)runtime' ':(exclude)core' ':(exclude).github' ':(exclude)observability' ':(exclude)supabase/migrations-archive'",
   "crons": [
     {
       "path": "/api/workers/process-events",

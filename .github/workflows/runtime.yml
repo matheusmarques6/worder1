@@ -1,0 +1,101 @@
+# CI do runtime Python (fork do motor — ver runtime/FORK.md).
+# Path filters: só roda quando runtime/ ou as migrations canônicas mudam (D2).
+#
+# Jobs bloqueantes: lint, boundaries, tests-unit (inclui os fitness tests AST).
+# tests-db roda o stack local do Supabase e a suíte `db`/`rls`; está como
+# INFORMATIVO (continue-on-error) até a suíte ser adaptada ao schema do Worder
+# na Etapa 2 — flip rastreado em core/STATUS-agentes-por-evento.md.
+
+name: runtime
+
+on:
+  pull_request:
+    paths:
+      - "runtime/**"
+      - "supabase/migrations/**"
+      - "supabase/config.toml"
+      - ".github/workflows/runtime.yml"
+  push:
+    branches: ["**"]
+    paths:
+      - "runtime/**"
+      - "supabase/migrations/**"
+      - "supabase/config.toml"
+      - ".github/workflows/runtime.yml"
+
+concurrency:
+  group: runtime-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+  # Stack enxuto — tudo que as suítes `db` e `rls` tocam é Postgres, mais o
+  # GoTrue porque profiles.id referencia auth.users.
+  SUPABASE_EXCLUDE: realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: runtime/uv.lock
+          python-version: "3.13"
+      # Inclui o ban de `print` (ruff T20): logging é pelo SDK de observabilidade.
+      - run: uv run --directory runtime ruff check .
+
+  boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: runtime/uv.lock
+          python-version: "3.13"
+      # Fitness: SQL só na camada repository; módulos respeitam a tabela de
+      # fronteiras do pyproject (import-linter).
+      - run: uv run --directory runtime lint-imports
+
+  tests-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: runtime/uv.lock
+          python-version: "3.13"
+      - run: uv run --directory runtime pytest -m unit
+
+  tests-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # INFORMATIVO até a Etapa 2 (suíte db/rls ainda referencia o schema do
+    # motor). Flip para bloqueante no commit 9 — ver STATUS.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: runtime/uv.lock
+          python-version: "3.13"
+      - uses: supabase/setup-cli@v3
+        # Pinada: 'latest' resolve a cada run e a resolução já flakou no motor.
+        timeout-minutes: 3
+        with:
+          version: 2.111.0
+      # `supabase start` aplica supabase/migrations/ na subida — o schema sob
+      # teste é o que as migrations descrevem, nunca um dump.
+      - name: Start the lean stack
+        run: supabase start -x "$SUPABASE_EXCLUDE"
+      - run: uv run --directory runtime pytest -m "db"

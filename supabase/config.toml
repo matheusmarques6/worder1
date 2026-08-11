@@ -1,0 +1,57 @@
+# Supabase CLI — usado pelo CI (supabase start) e por dev local do runtime.
+# O projeto hospedado é gerenciado à parte; este arquivo existe para que
+# `supabase start` aplique supabase/migrations/ num stack local limpo.
+
+project_id = "worder1"
+
+[api]
+enabled = true
+port = 54321
+# INVARIANTE (herdada do motor, ADR-11): o schema `internal` (outbox, filas
+# pgmq, trilhas de plataforma) vive FORA dos schemas expostos. Adicionar um
+# schema interno a esta lista entregaria essas tabelas aos roles da Data API.
+# Quando um schema novo aparecer numa migration, a resposta padrão para
+# "entra na lista?" é NÃO.
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.pooler]
+enabled = false
+
+[db.migrations]
+enabled = true
+schema_paths = []
+
+[db.seed]
+enabled = false
+sql_paths = []
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = false
+
+[storage]
+enabled = false
+
+[auth]
+# GoTrue fica ligado porque profiles.id referencia auth.users.
+enabled = true
+site_url = "http://127.0.0.1:3000"
+jwt_expiry = 3600
+enable_signup = true
+enable_anonymous_sign_ins = false
+minimum_password_length = 6
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false

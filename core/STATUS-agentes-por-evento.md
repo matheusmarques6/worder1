@@ -35,7 +35,8 @@ Estados: `pendente | em curso | verde-local | verde-CI | aplicado-em-prod`.
 | 2 | 33f3737d | chore(runtime): fork do motor agents-worder em runtime/ (main@288be7f, inalterado) |
 | 3 | 1901a892 | chore(db): arquiva migrations legadas + baseline prereqs conformado ao banco vivo |
 | 4 | 52a6c0ee | refactor(runtime): tenant_id vira organization_id em todo o fork |
-| 5 | (este) | feat(db): roles do runtime, schema internal, pgmq + 8 filas |
+| 5 | 33da405c | feat(db): roles do runtime, schema internal, pgmq + 8 filas |
+| 6 | (este) | ci: workflows runtime/app com path filters + vercel ignoreCommand |
 
 Nota de sequenciamento: a suíte `db`/`pipeline` do fork ainda referencia o schema
 do motor (factories criam `tenants` etc.) — adaptação em bloco na Etapa 2. Até lá,
@@ -68,4 +69,4 @@ obrigatório no commit 9.
 
 ## Próxima ação
 
-**Commit 2**: copiar o motor verbatim para `runtime/` + `runtime/FORK.md`. Sem teste (cópia inalterada); a suíte `unit` do motor deve coletar (`uv sync` + `pytest --collect-only -m unit`) antes do commit.
+**Etapa 2, commit 7** — DDL `20260812000003_identity_conversations.sql` (conversations, messages, channel_identities, alerts, ai_runtime_rollout com RLS). Teste vermelho primeiro: adaptar `runtime/tests/db/factories.py` + `conftest.py` do schema do motor para o do Worder (organizations em vez de tenants) e escrever `tests/db/test_identity_schema.py` novo cobrindo as tabelas canônicas; a suíte `db` roda no CI (job informativo até o commit 9).

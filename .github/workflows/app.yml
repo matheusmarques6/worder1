@@ -1,0 +1,77 @@
+# CI do app Next.js (Vercel segue dono do deploy; aqui é o gate de teste).
+# Path filters complementares aos do runtime.yml (D2).
+#
+# Job bloqueante: vitest. O build é INFORMATIVO por ora (o repo nunca teve CI;
+# módulos podem exigir env no import) — flip quando provado verde, rastreado
+# em core/STATUS-agentes-por-evento.md.
+
+name: app
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "next.config.js"
+      - "vitest.config.ts"
+      - "tsconfig.json"
+      - "tailwind.config.ts"
+      - ".github/workflows/app.yml"
+  push:
+    branches: ["**"]
+    paths:
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "next.config.js"
+      - "vitest.config.ts"
+      - "tsconfig.json"
+      - "tailwind.config.ts"
+      - ".github/workflows/app.yml"
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # INFORMATIVO: primeiro CI da história do repo; flip quando provado verde.
+    continue-on-error: true
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-dummy-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-dummy-service-role-key
+      ENCRYPTION_KEY: ci-dummy-encryption-key-32-bytes!
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
