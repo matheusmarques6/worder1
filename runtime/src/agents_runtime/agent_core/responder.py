@@ -54,6 +54,7 @@ from agents_runtime.agent_core.prompt_compiler import (
 from agents_runtime.agent_core.providers import NoOrgLlmKey, resolve_agent_llm
 from agents_runtime.agent_core.think_gate import PendingMessage, should_think
 from agents_runtime.clock import Clock, SystemClock
+from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
 from agents_runtime.evals.pack import load_rubrics
 from agents_runtime.judges.pre_send import (
     JUDGE_MODEL,
@@ -67,6 +68,7 @@ from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository import judge_scores as scores_repo
 from agents_runtime.repository import llm_calls as llm_repo
 from agents_runtime.repository import missions as missions_repo
+from agents_runtime.repository import moments as moments_repo
 from agents_runtime.repository import provider_keys as keys_repo
 from agents_runtime.repository.scope import scope_to_organization
 from agents_runtime.tools.base import ToolContext, run_tool
@@ -191,6 +193,7 @@ def build_responder(
                 discovery_mission = await missions_repo.load_active_mission(
                     conn, event_type=DISCOVERY_EVENT
                 )
+                active_moments = await moments_repo.load_active_moments(conn)
                 key_rows = (
                     await keys_repo.load_org_provider_keys(
                         conn, organization_id=job.organization_id
@@ -230,6 +233,11 @@ def build_responder(
             resolved = merge_mission(
                 winner, None, agent_tools=version.config.enabled_tools
             )
+
+            # --- momentos (§3.3.4): fatos somam; a frase promocional só entra
+            # quando a missão vencedora promove; restrição acumula na missão.
+            moment_view = resolve_moments(active_moments, promote=resolved.promote_moment)
+            resolved = apply_moment_restrictions(resolved, moment_view)
 
             # --- cascata D4 (BYO-only): sem chave da org, o toque morre alto.
             agent_llm: LlmPort = llm
@@ -285,9 +293,9 @@ def build_responder(
                 agent=agent_block,
                 mission=resolved,
                 state=StateBlock(
-                    moment_ids=(),
-                    moment_facts=(),
-                    moment_public_claim=None,
+                    moment_ids=tuple(str(m) for m in moment_view.moment_ids),
+                    moment_facts=moment_view.facts,
+                    moment_public_claim=moment_view.public_claim,
                     grant_id=None,
                     grant_lines=(),
                     ledger_lines=(),

@@ -108,6 +108,7 @@ type = "forbidden"
 source_modules = [
     "agents_runtime.agent_core",
     "agents_runtime.channels",
+    "agents_runtime.commerce",
     "agents_runtime.connectors",
     "agents_runtime.dispatch",
     "agents_runtime.inbox",
