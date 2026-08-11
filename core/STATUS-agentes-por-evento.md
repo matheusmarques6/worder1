@@ -37,7 +37,8 @@ Estados: `pendente | em curso | verde-local | verde-CI | aplicado-em-prod`.
 | 4 | 52a6c0ee | refactor(runtime): tenant_id vira organization_id em todo o fork |
 | 5 | 33da405c | feat(db): roles do runtime, schema internal, pgmq + 8 filas |
 | 6 | 44cdfb46 | ci: workflows runtime/app com path filters + vercel ignoreCommand |
-| 7 | (este) | feat(db): identidade canônica + outbox com RLS; suíte db adaptada ao schema Worder |
+| 7 | 13c16789 | feat(db): identidade canônica + outbox com RLS; suíte db adaptada ao schema Worder |
+| 8 | (este) | feat(db): funções do motor adaptadas + ingest_inbound_message (F2) |
 
 Ajuste de plano: o flip do job `db-pipeline` para bloqueante fica para o FIM da
 Etapa 3 (não commit 9) — os testes de agente/eval do motor ainda referenciam
@@ -55,6 +56,7 @@ obrigatório no commit 9.
 | `20260812000001_agents_baseline_prereqs.sql` | 12/08/2026 via MCP (registrada como `20260811045406 agents_baseline_prereqs`) | `list_migrations` OK; no-op no vivo (tudo IF NOT EXISTS); índices `idx_agent_versions_*` criados (tabela tinha 0 linhas) |
 | `20260812000002_runtime_roles_and_internal.sql` | 12/08/2026 via MCP (`runtime_roles_and_internal`) | verificado: 8 filas em `pgmq.meta`, roles worker/sender criados, schema `internal` sem USAGE p/ anon, pgmq 1.5.1 instalado |
 | `20260812000003_identity_conversations.sql` | 12/08/2026 via MCP (`identity_conversations`) | conversations/messages/channel_identities/alerts/ai_runtime_rollout/internal.message_outbox criadas com RLS+policies; suíte db/rls reescrita cobre no CI |
+| `20260812000004_engine_functions.sql` | 12/08/2026 via MCP (`engine_functions`) | 14 funções: seq atômico, coalescer SECURITY DEFINER, claim/renew/release (invoker+RLS), conclude_turn (CAS estendido + branch NULL do juiz), claim_outbox_batch (resolve conta Cloud), marks/sweep/correlate/review/reprocess, heartbeats, public.ingest_inbound_message (EXECUTE só service_role) |
 
 ## Adiados / decisões em aberto
 
