@@ -16,8 +16,8 @@
 
 | # | Etapa | Commits planejados | Estado |
 |---|---|---|---|
-| 0 | Base git + doc + fork verbatim | 1–2 | **em curso** |
-| 1 | Fase 0 (baseline, rename org_id, roles/pgmq, CI) | 3–6 | pendente |
+| 0 | Base git + doc + fork verbatim | 1–2 | **verde-local** (unit 688 ✓, push feito) |
+| 1 | Fase 0 (baseline, rename org_id, roles/pgmq, CI) | 3–6 | **em curso** |
 | 2 | Identidade (conversations/messages/identities, ingest, branch webhook) | 7–9 | pendente |
 | 3 | Missões + compiler + resolver | 10–14 | pendente |
 | 4 | Runner (secret-box, cascata, sender, obs/, preview) | 15–19 | pendente |
@@ -31,7 +31,9 @@ Estados: `pendente | em curso | verde-local | verde-CI | aplicado-em-prod`.
 
 | # | SHA | Mensagem |
 |---|---|---|
-| — | — | — |
+| 1 | 848e8ca2 | docs(core): doc-fonte agentes por evento v1.0 + adendo de execução + STATUS |
+| 2 | 33f3737d | chore(runtime): fork do motor agents-worder em runtime/ (main@288be7f, inalterado) |
+| 3 | (este) | chore(db): arquiva migrations legadas + baseline prereqs conformado ao banco vivo |
 
 ## Migrations aplicadas (via MCP `apply_migration`)
 
