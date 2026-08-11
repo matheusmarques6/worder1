@@ -46,6 +46,7 @@ import {
   MessageCircle,
   List as ListIcon,
   Sparkles,
+  CalendarClock,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -90,6 +91,7 @@ const navigation: NavSection[] = [
     items: [
       { name: 'Início', href: '/dashboard', icon: LayoutDashboard },
       { name: 'Campanhas', href: '/campaigns', icon: Send },
+      { name: 'Momentos', href: '/moments', icon: CalendarClock },
       {
         name: 'Fluxos', href: '/automations', icon: Zap,
         children: [
