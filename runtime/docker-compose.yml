@@ -1,0 +1,35 @@
+# Compose local do runtime (fork — o serviço `hub` do upstream foi descartado; o app
+# Next.js do Worder roda com `pnpm dev` na raiz do monorepo). Ver FORK.md.
+services:
+  runtime:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL:-postgresql://postgres:postgres@host.docker.internal:54322/postgres}
+      AGENTS_PROCESS_NAME: ${AGENTS_PROCESS_NAME:-agents-runtime-docker}
+      AGENTS_WORKER_SET_ROLE: ${AGENTS_WORKER_SET_ROLE:-worker_role}
+      AGENTS_SENDER_SET_ROLE: ${AGENTS_SENDER_SET_ROLE:-sender_role}
+      # Required — the process refuses to start without it, so the default is
+      # the real responder rather than an empty value that only fails later.
+      AGENTS_RESPONDER: "${AGENTS_RESPONDER:-agents_runtime.agent_core.responder:agent_responder}"
+      AGENTS_OPENROUTER_API_KEY: ${AGENTS_OPENROUTER_API_KEY:-}
+      AGENTS_CHANNEL: ${AGENTS_CHANNEL:-}
+      AGENTS_META_ACCESS_TOKEN: ${AGENTS_META_ACCESS_TOKEN:-}
+      AGENTS_META_API_VERSION: ${AGENTS_META_API_VERSION:-v19.0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, psycopg; psycopg.connect(os.environ['SUPABASE_DB_URL'], connect_timeout=5).close()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
