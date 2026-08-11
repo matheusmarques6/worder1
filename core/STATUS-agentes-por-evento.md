@@ -100,6 +100,7 @@ ajustados nos testes.
 | `20260813000008_emit_ai_mission_job.sql` | 11/08/2026 via MCP (`emit_ai_mission_job`) | a RPC do nó (EXECUTE só service_role; rollout/contato/missão validados; conversa+job numa transação) + conclude_turn com kind/moment_ids na outbox |
 | `20260813000009_activate_ai_mission.sql` | 11/08/2026 via MCP (`activate_ai_mission`) | arquiva-e-ativa num comando; índice one-active é o juiz da corrida |
 | `20260813000010_mission_seeds_v0.sql` | 11/08/2026 via MCP (`mission_seeds_v0`) | seed_default_missions(org) — 6 drafts worder_default por org, idempotente (provado 6→0); ativar é ato explícito |
+| `20260813000011_grant_lifecycle.sql` | 11/08/2026 via MCP (`grant_lifecycle`) | fim de vida do grant (9.2): `consume_incentive_grant` (service_role; dedup por (grant, pedido) via UNIQUE parcial — reentrega = 'already') + `internal.expire_incentive_grants()` (sender_role; roda no housekeeping do sender) + `incentive_ledger.order_ref` |
 
 ## Adiados / decisões em aberto
 
@@ -147,7 +148,8 @@ outbox carregar o last inbound id (nota em 8.3).
 | 8.5 Seeds rodada 2 | **[GATE-Bruno]** | drafts já no banco |
 | 8.6 Rollout + smoke | aguardando 8.5 | runbook abaixo |
 | 8.7 Rollback provado | aguardando 8.6 | registrar horário aqui |
-| 9.1–9.4 | pendentes (antes da 2ª loja) | 9.x paralelos entre si |
+| 9.2 Ciclo do grant | **feito** | consume RPC (dedup por pedido no UNIQUE) + expire no housekeeping do sender + wire no webhook orders/paid; migration 0011 no vivo |
+| 9.1 / 9.3 / 9.4 | em execução (antes da 2ª loja) | 9.x paralelos entre si |
 | 10.1–10.8 | pendentes (paralelo pós-8.3) | contrato visual: zip do design |
 | RLS fase B/C (D11) | lotes contínuos, **[GATE-Bruno]** por lote | fase A feita |
 

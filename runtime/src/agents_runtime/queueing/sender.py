@@ -109,6 +109,7 @@ async def sender_pass(
     # the first pass of a fresh process is the sweep-at-boot.
     await engine.sweep_outbox_unknown(conn)
     await engine.review_stale_unknown(conn, review_after=config.unknown_review_after)
+    await engine.expire_incentive_grants(conn)
 
     token = uuid.uuid4()
     batch = await engine.claim_outbox_batch(

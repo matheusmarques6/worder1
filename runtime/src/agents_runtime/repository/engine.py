@@ -241,6 +241,13 @@ async def sender_preflight(
     return PreflightVerdict(verdict=row[0], template_name=row[1], template_language=row[2])
 
 
+async def expire_incentive_grants(conn: psycopg.AsyncConnection) -> int:
+    """O fim de vida por relógio (9.2): grants vencidos viram 'expired' com
+    entrada no ledger — no housekeeping do sender, como o sweep de outbox."""
+    cursor = await conn.execute("select internal.expire_incentive_grants()")
+    return int((await cursor.fetchone())[0])
+
+
 async def alert_moment_suppression(
     conn: psycopg.AsyncConnection,
     *,

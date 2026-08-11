@@ -1157,8 +1157,18 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
 
 async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
   console.log(`[Shopify] Processing order paid: ${order.order_number}`);
-  
+
   const supabase = getSupabase();
+
+  // Ciclo de vida do grant (9.2): cupom emitido pelo offer_engine que volta
+  // no pedido pago é consumido (uses++ → consumed + ledger). Best-effort e
+  // idempotente no banco — reentrega do webhook recebe 'already'.
+  try {
+    const { consumeGrantsForOrder } = await import('@/lib/ai/grant-consumption');
+    await consumeGrantsForOrder(store.organization_id, order);
+  } catch (grantErr: any) {
+    console.warn('[Shopify] grant consumption failed (best-effort):', grantErr?.message);
+  }
   
   // Atualizar pedido
   await supabase
