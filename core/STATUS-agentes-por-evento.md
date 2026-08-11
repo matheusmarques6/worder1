@@ -56,7 +56,11 @@ Estados: `pendente | em curso | verde-local | verde-CI | aplicado-em-prod`.
 | 23 | 9d7529c0 | feat(db+runtime): preflight de momento no sender — vida re-checada, template do momento, alerta na supressão. Fecha Etapa 5 |
 | 24 | d4e41156 | feat(db): emit_ai_mission_job — a porta do nó, escrita+fila numa transação |
 | 25 | 44d7f927 | feat(runtime): toucher — o toque de missão gerado, julgado e coroado |
-| 26 | (este) | feat(flows): executor action_ai_mission — o nó pede com UMA chamada. Fecha Etapa 6 |
+| 26 | 72d9e250 | feat(flows): executor action_ai_mission — o nó pede com UMA chamada. Fecha Etapa 6 |
+| 27 | 537f42e5 | feat(ui): IA Hub em /ai com a aba Missões — a casa nova dos agentes |
+| 28 | 48f3d5df | feat(ui): /moments — a campanha sazonal como estado, com kill switch e preview |
+| 29 | 95393866 | feat(flows): nó 'Toque de IA (Missão)' na palette; IA Responder sai (D8) |
+| 30 | (este) | feat(db+docs): seeds v0 por org + runbook do cutover. Fecha Etapa 7 — plano de 30 commits completo |
 
 Notas da Etapa 5: (a) o create_coupon existe como tool completa (registrada
 NÃO — o loop de tool escolhida pelo modelo chega com a Etapa 6/E3; hoje os
@@ -94,6 +98,8 @@ ajustados nos testes.
 | `20260813000006_store_credentials_port.sql` | 11/08/2026 via MCP (`store_credentials_port`) | internal.active_shopify_store (SECURITY DEFINER, org da sessão) — worker NÃO tem SELECT em shopify_stores |
 | `20260813000007_moment_template_preflight.sql` | 11/08/2026 via MCP (`moment_template_preflight`) | claimed_send ganha moment_ids; sender_preflight re-checa vida + template_readiness (moment_gone/moment_not_ready); template do momento líder vence o default da org |
 | `20260813000008_emit_ai_mission_job.sql` | 11/08/2026 via MCP (`emit_ai_mission_job`) | a RPC do nó (EXECUTE só service_role; rollout/contato/missão validados; conversa+job numa transação) + conclude_turn com kind/moment_ids na outbox |
+| `20260813000009_activate_ai_mission.sql` | 11/08/2026 via MCP (`activate_ai_mission`) | arquiva-e-ativa num comando; índice one-active é o juiz da corrida |
+| `20260813000010_mission_seeds_v0.sql` | 11/08/2026 via MCP (`mission_seeds_v0`) | seed_default_missions(org) — 6 drafts worder_default por org, idempotente (provado 6→0); ativar é ato explícito |
 
 ## Adiados / decisões em aberto
 
@@ -112,26 +118,46 @@ ajustados nos testes.
 | **Remediação RLS das 292 tabelas existentes** | **aguardando aprovação do usuário** | advisor crítico; ligar sem policies quebra app/realtime |
 | Deploy do runtime (Railway/Render) | pendente (DEPLOY.md escrito no commit 19) | envs documentadas; deploy real necessário antes do cutover da Etapa 7 |
 
-## Próxima ação
+## O plano de 30 commits está completo — o que falta é OPERAÇÃO
 
-**Etapa 7 — IA Hub UI + cutover (commits 27–30), doc-fonte PARTE IV:**
-1. **Commit 27:** navegação (`/ai` depois de Fluxos, `/moments` depois de Campanhas;
-   sai o child "Agentes IA" do WhatsApp) + página `/ai` com as 5 sub-abas (Agente,
-   Conhecimento, Missões, Limites, Atividade) reaproveitando PersonaTab/SourcesTab/
-   SettingsTab; aba Missões lê/edita `ai_missions` (catálogo por evento + concession).
-2. **Commit 28:** página `/moments` (lista + editor: janela, public_claim, oferta,
-   exclusões, temp_facts, forbidden, prioridade, template_readiness por canal,
-   aprovar/kill switch) + preview do prompt chamando `POST /internal/preview-prompt`.
-3. **Commit 29:** nó `action_ai_mission` na palette do builder (dropdown lendo o
-   catálogo de missões; campos delta/concession≤teto/canal) e `action_whatsapp_ai`
-   fora da palette (D8).
-4. **Commit 30:** punch list do cutover — seeds v0 das missões default (PENDENTE-2:
-   aprovar copy com Bruno), deploy do runtime (DEPLOY.md), inserir org piloto em
-   `ai_runtime_rollout`, e o restante do Adendo §A.5.
-Estado ao fechar a Etapa 6 (commit 26): **771 unit + 337 db/pipeline (Python) e 910
-testes TS verdes; tsc e ruff/import-linter limpos.** Notas: (a) toucher usa
-knowledge=() no Judge (RAG de toque fica para o loop de tools); (b) grant consumido
-(uses++) chega com o webhook de pedido correlacionando coupon_code — pós-E7.
+Estado final da suíte: **771 unit + 337 db/pipeline (Python), 912 testes TS;
+tsc, ruff e import-linter limpos.** Todas as 10 migrations aplicadas no vivo.
+
+### Runbook do cutover (a fatia vertical na loja piloto)
+
+1. **Deploy do runtime** (`runtime/DEPLOY.md`): container em Railway/Render/VPS
+   com `SUPABASE_DB_URL` (session pooler), `AGENTS_RESPONDER`+`AGENTS_TOUCHER`
+   reais, roles worker/sender, `AGENTS_OPENROUTER_API_KEY` (plataforma),
+   `ENCRYPTION_KEY` idêntico ao do app, `AGENTS_CHANNEL` (cloud_api) +
+   `AGENTS_META_ACCESS_TOKEN`, `AGENTS_HTTP_PORT`+`AGENTS_PREVIEW_TOKEN`.
+2. **Vercel:** setar `AGENTS_RUNTIME_URL` + `AGENTS_PREVIEW_TOKEN` (o preview
+   de /moments e /ai passa a funcionar).
+3. **Sonda:** healthz do runtime no monitor externo (503 = heartbeat parado).
+4. **Org piloto:** `select public.seed_default_missions('<org>')` →
+   revisar copy (PENDENTE-2, com Bruno) → ativar `cart.abandoned` e
+   `whatsapp.received` na UI (/ai → Missões) → conferir agente com versão em
+   produção e chave BYO em organization_api_keys (senão: alerta
+   no_org_llm_key e nada responde).
+5. **Rollout:** `insert into ai_runtime_rollout (organization_id, mode)
+   values ('<org>', 'runtime')` — a partir daqui o webhook desvia os inbounds
+   da org para o runtime e o nó novo emite toques para ela.
+6. **Smoke:** mandar mensagem real → conferir conversations/messages/outbox →
+   resposta no WhatsApp → espelho no inbox. Toque: fluxo de teste com o nó
+   novo → outbox funnel_touch → template/moment preflight.
+7. **Reverter é barato:** `update ai_runtime_rollout set mode='legacy'` — o
+   webhook volta ao caminho antigo na hora; nada mais precisa mudar.
+
+### Pendências conhecidas (fora do plano de 30)
+
+- PENDENTE-2: copy final dos seeds com Bruno (drafts já no banco por org via função).
+- PENDENTE-3: números de caps/arbitragem em `pending_defaults.py`.
+- Loop de tool escolhida pelo modelo (E3): create_coupon já existe e é chamado
+  pelo toucher; o responder conversacional ganha o loop depois.
+- Consumo de grant (uses++/consumed) via webhook de pedido correlacionando coupon_code.
+- Remediação RLS das ~290 tabelas legadas restantes (contacts/opt_status já feitas).
+- Humanização do sender (≤4 bolhas, typing) + send-guard tiers (roadmap declarado).
+- Sub-abas Limites (consolidado org) e radial do Agente (D6) — a UI atual reusa
+  as abas herdadas; o redesign radial é iteração de produto, não de motor.
 
 Notas vivas para a retomada:
 - O responder anexa CONHECIMENTO ao frame fora dos blocos tipados (recuperação, não área) —
