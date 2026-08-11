@@ -50,6 +50,7 @@ from agents_runtime.judges.pre_send import (
     PreSendJudge,
     guarded_reply,
 )
+from agents_runtime.obs.telemetry import annotate
 from agents_runtime.queueing.jobs import MissionTouchJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
@@ -178,6 +179,15 @@ def build_toucher(
             )
             moment_view = resolve_moments(active_moments, promote=resolved.promote_moment)
             resolved = apply_moment_restrictions(resolved, moment_view)
+            # 9.1: os IDs do toque no span aberto pelo worker (mission_touch).
+            annotate(
+                mission_version_id=resolved.mission_version_id,
+                moment_ids=(
+                    ",".join(str(m) for m in moment_view.moment_ids)
+                    if moment_view.moment_ids
+                    else None
+                ),
+            )
             mission_version_id = UUID(resolved.mission_version_id)
 
             # --- cascata D4 (BYO-only): sem chave da org, o toque morre alto.
@@ -234,6 +244,7 @@ def build_toucher(
                             grant=result.output["grant_id"],
                         ),
                     )
+                    annotate(grant_id=result.output["grant_id"])
                 # Negado ou provedor caído: o toque segue SEM benefício — a
                 # negativa já é ledger, e prometer sem cupom seria mentira.
 

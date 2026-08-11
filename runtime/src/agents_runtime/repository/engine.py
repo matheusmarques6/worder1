@@ -93,13 +93,15 @@ async def conclude_turn(
     idempotency_key: str,
     kind: str = "reply",
     moment_ids: tuple[UUID, ...] = (),
+    otel: dict[str, Any] | None = None,
 ) -> TurnOutcome:
     """`content=None` means Judge 1 refused the draft: the turn concludes, the
     sequence advances and NOTHING goes out (S8, migration 20260803000003).
     `kind`/`moment_ids` chegam com o toque de missão: a outbox precisa deles
-    para o preflight do sender (migrations 0007/0008)."""
+    para o preflight do sender (migrations 0007/0008). `otel` é o carrier do
+    turno — a linha de outbox o carrega até o sender (9.1b, migration 0012)."""
     cursor = await conn.execute(
-        "select * from internal.conclude_turn(%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        "select * from internal.conclude_turn(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (
             conversation_id,
             token,
@@ -113,6 +115,7 @@ async def conclude_turn(
             idempotency_key,
             kind,
             list(moment_ids),
+            Jsonb(otel) if otel is not None else None,
         ),
     )
     committed, outbound_seq, outbox_id = await cursor.fetchone()
@@ -164,11 +167,18 @@ async def set_conversation_owner(
 
 
 async def coalesce_due_conversations(
-    conn: psycopg.AsyncConnection, *, queue: str, limit: int = 100
+    conn: psycopg.AsyncConnection,
+    *,
+    queue: str,
+    limit: int = 100,
+    otel: dict[str, Any] | None = None,
 ) -> int:
-    """Returns how many jobs were created — the tick's only observable."""
+    """Returns how many jobs were created — the tick's only observable.
+    `otel` carimba o contexto do passe em cada job (9.1b): o worker retoma
+    como LINK, então o fan-out não vira um trace só."""
     cursor = await conn.execute(
-        "select count(*) from internal.coalesce_due_conversations(%s, %s)", (queue, limit)
+        "select count(*) from internal.coalesce_due_conversations(%s, %s, %s)",
+        (queue, limit, Jsonb(otel) if otel is not None else None),
     )
     return int((await cursor.fetchone())[0])
 
@@ -198,6 +208,7 @@ async def claim_outbox_batch(
             attempt_count=row[7],
             kind=row[8],
             moment_ids=tuple(row[9] or ()),
+            otel=row[10],
         )
         for row in await cursor.fetchall()
     ]

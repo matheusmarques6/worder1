@@ -77,18 +77,69 @@ def configure_telemetry(service_name: str = "agents-runtime") -> bool:
 
 
 @contextmanager
-def span(name: str, **attributes):
+def span(name: str, *, remote=None, remote_role: str = "link", **attributes):
     """`with span("turn", organization_id=..., outcome=...):` — no-op sem tracer.
 
     Atributos fora de SAFE_ATTRIBUTES são descartados (com aviso em debug):
     a lista é o cinto de PII de primeira linha.
+
+    `remote` (9.1b) é um carrier `{"traceparent": ...}` vindo do campo `otel`
+    de um payload/outbox; `remote_role` diz como retomar: "parent" continua o
+    MESMO trace (worker→sender), "link" abre trace novo apontando para o
+    antigo (coalescer→turno — fan-out não vira um trace só).
+
+    `None` não vira atributo (ausência não é a string 'None').
     """
-    safe = {key: str(value) for key, value in attributes.items() if key in SAFE_ATTRIBUTES}
-    dropped = set(attributes) - set(safe)
+    safe = {
+        key: str(value)
+        for key, value in attributes.items()
+        if key in SAFE_ATTRIBUTES and value is not None
+    }
+    dropped = {key for key in attributes if key not in SAFE_ATTRIBUTES}
     if dropped:
         logger.debug("atributos fora do vocabulário descartados", extra={"keys": sorted(dropped)})
     if _tracer is None:
         yield None
         return
-    with _tracer.start_as_current_span(name, attributes=safe) as current:
+
+    kwargs: dict = {"attributes": safe}
+    if remote is not None:
+        from agents_runtime.obs import carrier
+
+        resumed = carrier.resume(remote)
+        if resumed is not None:
+            context, span_context = resumed
+            if remote_role == "parent":
+                kwargs["context"] = context
+            else:
+                from opentelemetry.trace import Link
+
+                kwargs["links"] = [Link(span_context)]
+    with _tracer.start_as_current_span(name, **kwargs) as current:
         yield current
+
+
+def annotate(**attributes) -> None:
+    """Anota o span CORRENTE com atributos do vocabulário — o jeito de quem
+    descobre um ID no meio do turno (missão vencedora, grant, momentos) sem
+    carregar o span na assinatura. Mesmo cinto do `span()`; no-op sem SDK ou
+    sem span gravando. `None` não anota (ausência não vira a string 'None')."""
+    safe = {
+        key: str(value)
+        for key, value in attributes.items()
+        if key in SAFE_ATTRIBUTES and value is not None
+    }
+    dropped = {key for key in attributes if key not in SAFE_ATTRIBUTES}
+    if dropped:
+        logger.debug("atributos fora do vocabulário descartados", extra={"keys": sorted(dropped)})
+    if not safe:
+        return
+    try:
+        from opentelemetry import trace
+    except ImportError:
+        return
+    current = trace.get_current_span()
+    if not current.is_recording():
+        return
+    for key, value in safe.items():
+        current.set_attribute(key, value)

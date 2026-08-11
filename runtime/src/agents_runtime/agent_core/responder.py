@@ -70,6 +70,7 @@ from agents_runtime.judges.pre_send import (
     PreSendJudge,
     guarded_reply,
 )
+from agents_runtime.obs.telemetry import annotate
 from agents_runtime.queueing.jobs import InboundJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
@@ -384,6 +385,18 @@ def build_responder(
                 ),
                 mode="turn",
             )
+            # 9.1: o span do turno (aberto pelo worker) ganha os IDs que a
+            # trilha interna já tem — telemetria e banco contam UMA história.
+            annotate(
+                mission_version_id=resolved.mission_version_id,
+                moment_ids=(
+                    ",".join(str(m) for m in moment_view.moment_ids)
+                    if moment_view.moment_ids
+                    else None
+                ),
+                grant_id=str(valid_grants[0].id) if valid_grants else None,
+            )
+
             system = compiled.text
             if knowledge:
                 # Conhecimento é recuperação, não área de config — anexa ao

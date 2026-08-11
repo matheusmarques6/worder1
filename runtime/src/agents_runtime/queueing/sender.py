@@ -36,6 +36,7 @@ from agents_runtime.channels.humanize import compute_pacing, split_into_bubbles
 from agents_runtime.channels.port import ChannelPort, ClaimedSend
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
+from agents_runtime.obs.telemetry import annotate, span
 from agents_runtime.queueing.backoff import delay_for
 from agents_runtime.queueing.failures import Failure, classify
 from agents_runtime.randomness import Randomness
@@ -116,7 +117,7 @@ async def sender_pass(
         conn, token, lease=config.send_lease, limit=limit
     )
 
-    for send in batch:
+    async def deliver(send: ClaimedSend) -> None:
         # Preflight só para WhatsApp: opt-out e janela de 24h são regras desse
         # canal. Os adapters de email/instagram chegam com as suas próprias.
         if send.channel_type == "whatsapp":
@@ -146,7 +147,8 @@ async def sender_pass(
                         verdict=preflight.verdict,
                         moment_ids=send.moment_ids,
                     )
-                continue
+                annotate(outcome=f"suppressed:{preflight.verdict}")
+                return
             if preflight.verdict == "template":
                 # Janela fechada + toque de funil: o que sai é o template
                 # aprovado da org, nunca o texto livre que o payload carregava.
@@ -176,28 +178,44 @@ async def sender_pass(
                     send.attempt_count, config=config, randomness=randomness
                 ),
             )
-        else:
-            # O wamid da linha é o da 1ª bolha — paridade com o legado, e é
-            # ele que o webhook de status correlaciona primeiro.
-            await engine.mark_outbox_sent(conn, send.outbox_id, token, delivered[0][0])
-            # Espelho no inbox: CADA bolha vira uma linha, na ordem — só
-            # texto (um template não tem corpo renderizado aqui, e espelhar
-            # um chute mentiria para o operador).
-            if send.channel_type == "whatsapp" and "text" in send.payload:
-                for wamid, bubble in delivered:
-                    if not bubble:
-                        continue
-                    try:
-                        await engine.mirror_outbound_to_inbox(
-                            conn,
-                            send.organization_id,
-                            send.to_phone_e164,
-                            wamid,
-                            bubble,
-                        )
-                    except psycopg.Error:
-                        # O canônico já registrou o envio; o espelho se
-                        # recupera no próximo inbound (sync webhook → inbox).
-                        pass
+            annotate(outcome="failed")
+            return
+
+        # O wamid da linha é o da 1ª bolha — paridade com o legado, e é
+        # ele que o webhook de status correlaciona primeiro.
+        await engine.mark_outbox_sent(conn, send.outbox_id, token, delivered[0][0])
+        annotate(outcome="sent")
+        # Espelho no inbox: CADA bolha vira uma linha, na ordem — só
+        # texto (um template não tem corpo renderizado aqui, e espelhar
+        # um chute mentiria para o operador).
+        if send.channel_type == "whatsapp" and "text" in send.payload:
+            for wamid, bubble in delivered:
+                if not bubble:
+                    continue
+                try:
+                    await engine.mirror_outbound_to_inbox(
+                        conn,
+                        send.organization_id,
+                        send.to_phone_e164,
+                        wamid,
+                        bubble,
+                    )
+                except psycopg.Error:
+                    # O canônico já registrou o envio; o espelho se
+                    # recupera no próximo inbound (sync webhook → inbox).
+                    pass
+
+    for send in batch:
+        # O span do envio RETOMA o trace do turno (otel da linha de outbox,
+        # 9.1b): turno e envio são a mesma história, da fila ao wamid.
+        with span(
+            "send",
+            remote=send.otel,
+            remote_role="parent",
+            organization_id=send.organization_id,
+            channel=send.channel_type,
+            kind=send.kind,
+        ):
+            await deliver(send)
 
     return len(batch)

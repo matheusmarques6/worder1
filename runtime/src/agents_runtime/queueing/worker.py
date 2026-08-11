@@ -21,6 +21,8 @@ import psycopg
 
 from agents_runtime.clock import Clock
 from agents_runtime.config import QueueingConfig
+from agents_runtime.obs import carrier
+from agents_runtime.obs.telemetry import annotate, span
 from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from agents_runtime.repository import engine
 from agents_runtime.repository.queue import PgmqQueue
@@ -68,6 +70,32 @@ async def _keepalive(
 
 
 async def run_turn(
+    conn: psycopg.AsyncConnection,
+    job: InboundJob,
+    respond,
+    *,
+    config: QueueingConfig,
+    clock: Clock,
+    queue: PgmqQueue | None = None,
+    message_id: int | None = None,
+) -> TurnResult:
+    # O span do turno (9.1b): trace próprio, com LINK de volta ao passe do
+    # coalescer que criou o job (o otel do payload pgmq).
+    with span(
+        "turn",
+        remote=job.otel,
+        remote_role="link",
+        organization_id=job.organization_id,
+        conversation_id=job.conversation_id,
+    ):
+        result = await _turn(
+            conn, job, respond, config=config, clock=clock, queue=queue, message_id=message_id
+        )
+        annotate(outcome=result.name.lower())
+        return result
+
+
+async def _turn(
     conn: psycopg.AsyncConnection,
     job: InboundJob,
     respond,
@@ -137,6 +165,9 @@ async def run_turn(
             target_seq=job.target_seq,
             content=content,
             idempotency_key=f"reply-{job.conversation_id}-{job.generation}",
+            # O carrier do TURNO (span corrente); sem tracer, o do passe do
+            # coalescer segue viagem — o sender retoma o que houver.
+            otel=carrier.inject() or job.otel,
         )
 
     if outcome.committed:
@@ -166,6 +197,31 @@ async def run_touch(
     toque anterior saiu. Dedup por outbox: a reentrega do pgmq encontra a
     idempotency_key já escrita e arquiva sem segunda geração.
     """
+    with span(
+        "mission_touch",
+        remote=job.otel,
+        remote_role="link",
+        organization_id=job.organization_id,
+        conversation_id=job.conversation_id,
+        node_ref=job.node_ref,
+    ):
+        result = await _touch(
+            conn, job, toucher, config=config, clock=clock, queue=queue, message_id=message_id
+        )
+        annotate(outcome=result.name.lower())
+        return result
+
+
+async def _touch(
+    conn: psycopg.AsyncConnection,
+    job: MissionTouchJob,
+    toucher,
+    *,
+    config: QueueingConfig,
+    clock: Clock,
+    queue: PgmqQueue | None = None,
+    message_id: int | None = None,
+) -> TurnResult:
     token = uuid.uuid4()
     idempotency_key = f"touch-{job.conversation_id}-{message_id}"
 
@@ -217,6 +273,7 @@ async def run_touch(
             idempotency_key=idempotency_key,
             kind="funnel_touch",
             moment_ids=draft.moment_ids,
+            otel=carrier.inject() or job.otel,
         )
         if outcome.committed and outcome.outbox_id is not None and draft.mission_version_id:
             # O toque SAIU: a missão vira dona da conversa (§3.2.2) — na mesma

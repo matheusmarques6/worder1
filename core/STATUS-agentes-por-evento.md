@@ -101,6 +101,7 @@ ajustados nos testes.
 | `20260813000009_activate_ai_mission.sql` | 11/08/2026 via MCP (`activate_ai_mission`) | arquiva-e-ativa num comando; índice one-active é o juiz da corrida |
 | `20260813000010_mission_seeds_v0.sql` | 11/08/2026 via MCP (`mission_seeds_v0`) | seed_default_missions(org) — 6 drafts worder_default por org, idempotente (provado 6→0); ativar é ato explícito |
 | `20260813000011_grant_lifecycle.sql` | 11/08/2026 via MCP (`grant_lifecycle`) | fim de vida do grant (9.2): `consume_incentive_grant` (service_role; dedup por (grant, pedido) via UNIQUE parcial — reentrega = 'already') + `internal.expire_incentive_grants()` (sender_role; roda no housekeeping do sender) + `incentive_ledger.order_ref` |
+| `20260813000012_otel_carrier.sql` | 11/08/2026 via MCP (`otel_carrier`) | 9.1b: `message_outbox.otel` + `conclude_turn` 10-arg (p_otel default null; assinatura de 9 caiu) + `coalesce_due_conversations` 3-arg (p_otel) + `claimed_send.otel`/`claim_outbox_batch` devolvendo o carrier ao sender |
 
 ## Adiados / decisões em aberto
 
@@ -157,13 +158,13 @@ migrarem para SDK, com captura de conteúdo desligada explicitamente.
 | 8.7 Rollback provado | aguardando 8.6 | registrar horário aqui |
 | 9.2 Ciclo do grant | **feito** | consume RPC (dedup por pedido no UNIQUE) + expire no housekeeping do sender + wire no webhook orders/paid; migration 0011 no vivo |
 | 9.3 Dinheiro no inbound | **feito** | 9.3a: StateBlock com cupom vigente + ledger. 9.3b: porta LLM com tools (ToolSpec/ToolCall; OpenRouter + OpenAI-compat + Anthropic nativo traduzem o MESMO contrato) + tool-loop no responder (teto de 3 rodadas; esgotou = chamada final sem tools); create_coupon oferecida só se missão∩agente permitir. DoD provado em teste db: concessão none + grant do momento → `reused` na trilha, resposta com o cupom existente, zero grant novo |
-| 9.1 Logfire (D13) | **em curso** — 9.1a feito: `configure_logfire()` token-gated (AGENTS_LOGFIRE_TOKEN; render.yaml/DEPLOY.md atualizados), instrument httpx/psycopg/system_metrics guardadas, scrubbing extra p/ vocabulário de conteúdo, cinto ganha mission_version_id/node_ref/grant_id/moment_ids/contact_id | falta 9.1b: traceparent no otel do pgmq e do outbox + spans do turno nos call sites (coalescer↔worker↔sender) |
+| 9.1 Logfire (D13) | **feito no código** — DoD "conversa navegável no Logfire" confere no smoke pós-deploy (depende de 8.1/8.2 + token) | 9.1a: `configure_logfire()` token-gated + instrument httpx/psycopg/system_metrics + scrubbing (conteúdo GenAI fora em 3 linhas de defesa). 9.1b: traceparent viaja — passe do coalescer carimba o payload pgmq (turno retoma como LINK), conclude grava o carrier do turno na outbox (migration 0012) e o sender retoma como PARENT (turno+envio = um trace); spans coalesce_pass/turn/mission_touch/send com outcome; responder/toucher anotam mission_version_id/moment_ids/grant_id/node_ref; cinto de PII provado em teste p/ o vocabulário novo |
 | 9.4 Trilha única na UI | em execução (antes da 2ª loja) | 9.x paralelos entre si |
 | 10.1–10.8 | pendentes (paralelo pós-8.3) | contrato visual: zip do design |
 | RLS fase B/C (D11) | lotes contínuos, **[GATE-Bruno]** por lote | fase A feita |
 
-Estado da suíte após 9.1a: **820 unit + 355 db/pipeline (Python), 916 testes
-TS (+1 gerador de vetores, gated); tsc, ruff e import-linter limpos.** 15
+Estado da suíte após 9.1: **834 unit + 359 db/pipeline (Python), 916 testes
+TS (+1 gerador de vetores, gated); tsc, ruff e import-linter limpos.** 16
 migrations aplicadas no vivo.
 
 ### Runbook do cutover (a fatia vertical na loja piloto)

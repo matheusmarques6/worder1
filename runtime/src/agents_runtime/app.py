@@ -27,6 +27,8 @@ from agents_runtime.agent_core.toucher import fixed_toucher
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
+from agents_runtime.obs import carrier
+from agents_runtime.obs.telemetry import span
 from agents_runtime.queueing import DOMAIN_EVENTS, INBOUND
 from agents_runtime.queueing.engine_loop import Ack, EngineLoop, Handler
 from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
@@ -150,7 +152,12 @@ async def run(
 
         async def coalescer() -> None:
             while not stop.is_set():
-                await engine.coalesce_due_conversations(pulse, queue=INBOUND)
+                # O passe carimba seu contexto nos jobs (9.1b): cada turno
+                # nasce em trace próprio com um LINK de volta para o passe.
+                with span("coalesce_pass", queue=INBOUND):
+                    await engine.coalesce_due_conversations(
+                        pulse, queue=INBOUND, otel=carrier.inject()
+                    )
                 await _sleep_or_stop(clock, stop, config.coalescer_tick.total_seconds())
 
         async def heartbeat() -> None:

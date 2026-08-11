@@ -32,6 +32,9 @@ class ClaimedSend:
     # Toque de momento: o preflight re-checa vida + template_readiness de cada
     # um a cada envio (§3.3.4). Vazio = envio sem momento.
     moment_ids: tuple[UUID, ...] = ()
+    # Carrier W3C do turno que gerou a linha (9.1b): o sender retoma o trace
+    # como PARENT — turno e envio são a mesma história no Logfire.
+    otel: dict[str, Any] | None = None
 
 
 class ChannelPort(Protocol):
