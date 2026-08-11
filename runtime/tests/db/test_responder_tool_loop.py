@@ -150,6 +150,64 @@ class TestTheDoD:
         assert entry_kind == "reused"
 
 
+def custom_tool(
+    admin: psycopg.Connection,
+    organization_id: uuid.UUID,
+    *,
+    enabled: bool = True,
+    tested: bool = True,
+) -> None:
+    admin.execute(
+        """
+        insert into public.ai_agent_custom_tools
+            (organization_id, name, label, description, when_to_use,
+             endpoint, method, params, enabled, last_test_status)
+        values (%s, 'frete_kangu', 'Frete Kangu', 'Consulta frete.',
+                'Pedirem frete.', 'https://localhost/frete', 'GET',
+                '[{"name": "cep", "type": "string", "required": true}]',
+                %s, %s)
+        """,
+        (organization_id, enabled, "ok" if tested else None),
+    )
+
+
+class TestCustomTools:
+    async def test_an_enabled_tested_tool_is_offered_to_the_model(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        create_mission(
+            admin, tenant, event_type="whatsapp.received", status="active",
+            enabled_tools=[],
+        )
+        thread = create_thread(admin, tenant)
+        custom_tool(admin, tenant)
+
+        llm = ScriptedLlm(reply="Já consulto!")
+        result = await _respond(dsn, admin, tenant, thread, llm)
+
+        assert result == {"text": "Já consulto!"}
+        offered = [t.name for t in agent_calls(llm)[0].tools]
+        assert "frete_kangu" in offered
+        # A missão sem create_coupon continua sem create_coupon: a tool
+        # custom (read-only) não abre a porta do dinheiro.
+        assert "create_coupon" not in offered
+
+    async def test_a_disabled_tool_stays_out(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        create_mission(
+            admin, tenant, event_type="whatsapp.received", status="active",
+            enabled_tools=[],
+        )
+        thread = create_thread(admin, tenant)
+        custom_tool(admin, tenant, enabled=False, tested=False)
+
+        llm = ScriptedLlm(reply="Sem tools.")
+        await _respond(dsn, admin, tenant, thread, llm)
+
+        assert agent_calls(llm)[0].tools == ()
+
+
 class TestTheGates:
     async def test_a_mission_without_the_tool_offers_nothing(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Check, Plus, ShieldCheck, X } from 'lucide-react'
 import KnowledgeBasePanel from '@/components/agents/KnowledgeBasePanel'
 import ApiKeysManager from '@/components/whatsapp/ApiKeysManager'
+import CustomToolsSection from './CustomToolsSection'
 import {
   DISCOVERY_OBJECTIVES,
   type DiscoveryBias,
@@ -238,8 +239,10 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
           )
         })}
         <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
-          No runtime novo, a tool só chega ao modelo se a missão do turno também a permitir (interseção missão∩agente).
+          No runtime novo, create_coupon só chega ao modelo se a missão do turno também a permitir (interseção missão∩agente).
         </div>
+        {/* 10.7 — as tools custom, no mesmo drawer */}
+        <CustomToolsSection />
       </div>
     )
   }

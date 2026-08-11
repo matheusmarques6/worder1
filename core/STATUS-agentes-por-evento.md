@@ -105,6 +105,7 @@ ajustados nos testes.
 | `20260813000013_activity_compat_views.sql` | 11/08/2026 via MCP (`activity_compat_views`) | 9.4: views `ai_runtime_activity`/`_calls`/`_tools` (definer, dono postgres) sobre internal.* + conversations + missão; SELECT só para service_role — anon/authenticated revogados explicitamente (os defaults do Supabase dariam) |
 | `20260814000001_agent_presentation_adaptation.sql` | 11/08/2026 via MCP (`agent_presentation_adaptation`) | 10.4 (metade schema): `ai_agents.presentation_mode` (CHECK 3 modos, default nome_funcao) + `ai_agents.client_adaptation` jsonb (flags de ESTILO — dinheiro nunca entra) |
 | `20260814000002_active_commercial_moments_view.sql` | 11/08/2026 via MCP (`active_commercial_moments_view`) | 10.8: view `active_commercial_moments` (ativo COMPUTADO: approved + janela + kill intacto); SELECT só service_role, Data API revogada |
+| `20260814000003_ai_agent_custom_tools.sql` | 11/08/2026 via MCP (`ai_agent_custom_tools`) | 10.7: tabela das tools custom com a regra dupla NO SCHEMA — método só GET/POST, endpoint https, nome nunca sombreia nativa (create_coupon incluso), `enabled` exige `last_test_status='ok'` (testar antes de ligar é CHECK); RLS + worker_scoped |
 
 ## Adiados / decisões em aberto
 
@@ -170,14 +171,28 @@ migrarem para SDK, com captura de conteúdo desligada explicitamente.
 | 10.5 Preview "O que o agente sabe" | **feito** | o núcleo da radial abre a folha com os blocos REAIS de /api/ai/preview-prompt (mesma compile_prompt do turno, modo preview); runtime fora do ar = fantasmas MISSÃO/ESTADO/CANAL + aviso (§4.4-6); Juízes e Motor como cards FORA do box; o buildPrompt() do protótipo nunca virou produção |
 | 10.3 Fusão de abas + Limites | **feito** | as 5 sub-abas do doc-fonte: Agente · Missões · Conhecimento · Limites · Atividade. Atividade funde Reports+Eval (sub-views; a seção do runtime do 9.4 vive dentro); API Keys absorvida pelo drawer Motor da radial (ApiKeysManager real); LimitsTab edita os MESMOS campos da área Limites via agent-hub (um dado, N portas) + consolidado de concessão por missão em leitura (describeConcession compartilhado) + interruptor de desligar o agente; links antigos ?tab=reports/eval/api-keys aterrissam no lugar certo |
 | 10.8 Momento visível fora de Momentos | **feito** | view `active_commercial_moments` (migration 20260814000002, vivo+local) + rota `/api/ai/moments/active` (org da sessão) + `MomentBanner` de leitura em Campanhas e no editor de Fluxos ("momento X ativo até Y — a IA pode afirmar: …"); sem momento ativo, nada renderiza |
-| 10.7 Custom tools v1 | **pendente — a última da Etapa 10** | tabela ai_agent_custom_tools + executor HTTP read-only no tool-loop do responder (9.3b já deu o loop) + form com teste obrigatório antes de ligar; regra dupla (UI+código): NUNCA concede. Depois: conferir punch list §4.4 e declarar o DoD da etapa |
+| 10.7 Custom tools v1 | **feito** | tabela (migration acima) + `tools/custom_http.py` (valida args tipados ANTES da rede; GET/POST só; falha vira resposta legível; corpo truncado; auth via codec da casa) + `repository/custom_tools.py` + responder oferece só LIGADA (e ligar exigiu teste ok) — provado em db que a custom entra sem abrir a porta do create_coupon; rotas CRUD + `/test` (chamada real server-side, cap 10s, grava last_test_status; falhou = desliga) + seção na área Ferramentas com "nunca concede" na cara da UI. Decisão registrada: custom tools (read-only) entram por serem do agente, sem passar pela interseção de missão que governa create_coupon — dinheiro continua com UM emissor |
+
+**DoD da Etapa 10 — declarado contra o doc-fonte:** as 5 sub-abas navegáveis
+(10.3) · radial desktop + clássica mobile sobre o MESMO estado, breakpoint
+decide (10.2) · a tela antiga (AIAgentList na aba Agente) não existe mais —
+o print de 11/08 é irreproduzível (10.1) · punch list §4.4 1–8 verde: (1)
+sub-abas roteadas ✓ (2) sem toggle comparar ✓ (3) Missão descoberta na 9ª
+posição editando a missão whatsapp.received ✓ (4) linha fixa de IA nos 3
+modos, default nome_funcao (provada em teste) ✓ (5) 5 toggles de adaptação;
+benefício por perfil impossível por schema ✓ (6) preview real + fantasmas +
+Juízes/Motor fora do box ✓ (7) MissionsTab é o playbook de 10 campos ✓ (8)
+nós Conhecimento/Limites reusam os componentes das telas ✓. Confirmação
+visual (screenshot) fica para o smoke do Bruno no ambiente.
 | RLS fase B/C (D11) | lotes contínuos, **[GATE-Bruno]** por lote | fase A feita |
 
-Estado da suíte após 10.8: **838 unit + 367 db/pipeline (Python),
-925 testes TS (+1 gerador de vetores, gated); tsc, ruff, import-linter e
-next build limpos.** 19 migrations aplicadas no vivo. Próxima ação da
-Etapa 10: **10.7 (custom tools v1)** — a última; o DoD da etapa fecha com
-a punch list §4.4 conferida e o print de 11/08 irreproduzível. A Etapa 9 fecha com
+Estado da suíte após a Etapa 10 completa: **859 unit + 369 db/pipeline
+(Python), 925 testes TS (+1 gerador de vetores, gated); tsc, ruff,
+import-linter e next build limpos.** 20 migrations aplicadas no vivo.
+Etapas 9 e 10 completas no código. O que resta do plano vigente é o
+lado do usuário/Bruno: 8.1 Render Apply → 8.2 envs Vercel → 8.4 sonda →
+8.5 seeds [GATE-Bruno] → 8.6 rollout+smoke → 8.7 rollback provado; RLS
+fases B/C em lotes [GATE-Bruno]; 9.5 roadmap. A Etapa 9 fecha com
 9.1/9.2/9.3/9.4 feitos no código; o que resta dela é observação
 pós-deploy (9.1: conversa navegável no Logfire — depende de 8.1/8.2 +
 token) e 9.5 (roadmap, não bloqueia).

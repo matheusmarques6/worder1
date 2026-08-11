@@ -74,6 +74,7 @@ from agents_runtime.obs.telemetry import annotate
 from agents_runtime.queueing.jobs import InboundJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
+from agents_runtime.repository import custom_tools as custom_tools_repo
 from agents_runtime.repository import incentives as incentives_repo
 from agents_runtime.repository import judge_scores as scores_repo
 from agents_runtime.repository import llm_calls as llm_repo
@@ -83,6 +84,7 @@ from agents_runtime.repository import provider_keys as keys_repo
 from agents_runtime.repository.scope import scope_to_organization
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.coupon import BENEFIT_KINDS, OBJECT_KINDS, CreateCoupon
+from agents_runtime.tools.custom_http import CustomHttpTool, tool_spec_for
 from agents_runtime.tools.knowledge import SearchKnowledge
 
 #: A costura do motor, intocada desde o E1: o worker chama isto e nada mais.
@@ -264,6 +266,7 @@ def build_responder(
                 ledger_lines = await incentives_repo.recent_ledger_lines(
                     conn, contact_id=state.contact_id
                 )
+                custom_rows = await custom_tools_repo.load_enabled_custom_tools(conn)
                 key_rows = (
                     await keys_repo.load_org_provider_keys(
                         conn, organization_id=job.organization_id
@@ -430,6 +433,15 @@ def build_responder(
                     transport=shopify_transport,
                 )
                 tool_specs = (CREATE_COUPON_SPEC,)
+            # 10.7 — tools custom LIGADAS (ligar exigiu teste ok, CHECK do
+            # schema). Read-only por construção: nunca abrem a porta do
+            # dinheiro, então entram por serem do agente, sem passar pela
+            # interseção de missão que governa create_coupon.
+            for row in custom_rows:
+                if row.name in turn_tools:
+                    continue
+                turn_tools[row.name] = CustomHttpTool(row, base_secret=base_secret)
+                tool_specs = (*tool_specs, tool_spec_for(row))
 
             async def run_turn_tool(call: ToolCall) -> str:
                 tool = turn_tools.get(call.name)
