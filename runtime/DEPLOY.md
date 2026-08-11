@@ -17,6 +17,7 @@ compose); não há estado no disco, tudo vive no Postgres.
 |---|---|
 | `SUPABASE_DB_URL` | DSN Postgres (session pooler ou conexão direta; o processo abre ~N_workers+3 conexões longas — transaction pooler NÃO serve, o engine usa `set role` e leases por sessão) |
 | `AGENTS_RESPONDER` | `agents_runtime.agent_core.responder:agent_responder` (a fábrica real; o processo recusa largar sem ela) |
+| `AGENTS_TOUCHER` | `agents_runtime.agent_core.toucher:agent_toucher` — o toque de missão real (F1). Ausente = toque de andaime; obrigatório em produção |
 | `AGENTS_WORKER_SET_ROLE` | `worker_role` (RLS de runtime; sem isso o processo roda como o dono do DSN) |
 | `AGENTS_SENDER_SET_ROLE` | `sender_role` |
 | `AGENTS_OPENROUTER_API_KEY` | Chave da PLATAFORMA (Judge 1 + embeddings — D4). A resposta do agente usa as chaves BYO da org (`organization_api_keys`) |

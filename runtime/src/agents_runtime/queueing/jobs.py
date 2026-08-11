@@ -37,26 +37,6 @@ class InboundJob:
 
 
 @dataclass(frozen=True, slots=True)
-class DomainEventJob:
-    """Contrato do motor para q_domain_events — MORRE no commit do toucher:
-    internal.webhook_events não foi portada (FORK.md) e o payload canônico do
-    Worder é o MissionTouchJob abaixo. Vive só até o handler trocar."""
-
-    webhook_event_id: int
-    otel: dict[str, Any] | None = None
-
-    @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> "DomainEventJob":
-        try:
-            return cls(
-                webhook_event_id=int(payload["webhook_event_id"]),
-                otel=payload.get("otel"),
-            )
-        except (KeyError, TypeError, ValueError) as error:
-            raise ValueError(f"malformed domain event job: {payload!r}") from error
-
-
-@dataclass(frozen=True, slots=True)
 class MissionTouchJob:
     """O que `public.emit_ai_mission_job` enfileirou: o nó PEDIU um toque.
 

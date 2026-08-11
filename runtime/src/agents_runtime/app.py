@@ -22,16 +22,17 @@ from collections.abc import Mapping
 
 import psycopg
 
-from agents_runtime.agent_core.responder import FIXED_TOUCH, Responder, fixed_responder
+from agents_runtime.agent_core.responder import Responder, fixed_responder
+from agents_runtime.agent_core.toucher import fixed_toucher
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
 from agents_runtime.queueing import DOMAIN_EVENTS, INBOUND
 from agents_runtime.queueing.engine_loop import Ack, EngineLoop, Handler
-from agents_runtime.queueing.jobs import DomainEventJob, InboundJob
+from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from agents_runtime.queueing.sender import sender_pass
 from agents_runtime.queueing.tenant_slots import TenantSlots
-from agents_runtime.queueing.worker import TurnResult, run_turn
+from agents_runtime.queueing.worker import TurnResult, run_touch, run_turn
 from agents_runtime.randomness import Randomness, SystemRandomness
 from agents_runtime.repository import engine
 from agents_runtime.repository.queue import PgmqQueue
@@ -67,6 +68,7 @@ async def run(
     clock: Clock | None = None,
     randomness: Randomness | None = None,
     respond: Responder | None = None,
+    touch=None,
     channel: ChannelPort | None = None,
     extra_handlers: Mapping[str, Handler] | None = None,
     process_name: str = APPLICATION_NAME,
@@ -78,6 +80,7 @@ async def run(
     clock = clock or SystemClock()
     randomness = randomness or SystemRandomness()
     respond = respond or fixed_responder()
+    touch = touch or fixed_toucher()
 
     # Shared across every worker loop: the cap is per tenant, per PROCESS —
     # which is only the real cap because the process is single (ADR-2).
@@ -109,16 +112,31 @@ async def run(
 
         return handle
 
-    def domain_handler_for(conn: psycopg.AsyncConnection) -> Handler:
+    def domain_handler_for(
+        conn: psycopg.AsyncConnection, queues: dict[str, PgmqQueue]
+    ) -> Handler:
         async def handle(queue_name: str, message) -> Ack:
-            job = DomainEventJob.from_payload(message.payload)
+            # FORK: o payload canônico é o toque de missão (emit_ai_mission_job);
+            # o webhook_event do motor morreu com internal.webhook_events.
+            # Payload fora do contrato = ValueError = permanente = DLQ.
+            job = MissionTouchJob.from_payload(message.payload)
 
-            # Every outcome archives — outcomes are data, and their trail is
-            # the event row. Only an exception (bug, database down) climbs to
-            # the loop's retry ladder. No tenant slot: the cap exists for LLM
-            # turns, and this is one short SQL call.
-            await engine.apply_domain_event(conn, job.webhook_event_id, touch_text=FIXED_TOUCH)
-            return Ack.ARCHIVE
+            # Toque é turno de LLM inteiro: o cap por tenant vale aqui também.
+            if not slots.try_acquire(job.organization_id):
+                return Ack.RETRY_SHORT
+            try:
+                result = await run_touch(
+                    conn,
+                    job,
+                    touch,
+                    config=config,
+                    clock=clock,
+                    queue=queues.get(queue_name),
+                    message_id=message.id,
+                )
+            finally:
+                slots.release(job.organization_id)
+            return Ack.RETRY_SHORT if result is TurnResult.BUSY else Ack.ARCHIVE
 
         return handle
 
@@ -163,7 +181,7 @@ async def run(
             queues = {name: PgmqQueue(conn, name) for name in queue_names}
             handlers: dict[str, Handler] = {
                 INBOUND: await inbound_handler_for(conn, queues),
-                DOMAIN_EVENTS: domain_handler_for(conn),
+                DOMAIN_EVENTS: domain_handler_for(conn, queues),
             }
             if extra_handlers:
                 handlers.update(extra_handlers)

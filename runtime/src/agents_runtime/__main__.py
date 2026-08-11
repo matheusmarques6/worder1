@@ -93,6 +93,11 @@ async def _serve(dsn: str) -> None:
             # The responder seam, reachable from outside the process: cenário 4
             # holds a REAL subprocess inside FASE 2 through this.
             respond=_factory_from_env(RESPONDER_VARIABLE, dsn, required=True),
+            # O toucher segue a regra do canal, não a do responder: ausente =
+            # toque de andaime (nada chega a cliente sem o nó emitir E a org
+            # estar no rollout). Produção aponta para
+            # agents_runtime.agent_core.toucher:agent_toucher (DEPLOY.md).
+            touch=_factory_from_env("AGENTS_TOUCHER", dsn),
             process_name=os.environ.get("AGENTS_PROCESS_NAME", "agents-runtime"),
             worker_set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
             sender_set_role=os.environ.get("AGENTS_SENDER_SET_ROLE"),

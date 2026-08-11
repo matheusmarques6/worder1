@@ -80,10 +80,6 @@ Responder = Callable[[InboundJob], Awaitable[dict[str, Any] | None]]
 
 FIXED_REPLY = "Recebemos sua mensagem! Já estamos cuidando do seu pedido. 🧡"
 
-# The E1 touch — what an abandonment event says until the funnel copy (E3)
-# exists. Constant for the same reason the E1 reply was.
-FIXED_TOUCH = "Vimos que ficou algo no seu carrinho! Posso ajudar a finalizar? 🧡"
-
 #: Quantas mensagens de histórico acompanham a pergunta.
 TRANSCRIPT_LIMIT = 20
 

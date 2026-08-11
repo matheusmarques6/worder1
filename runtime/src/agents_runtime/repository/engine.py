@@ -91,11 +91,15 @@ async def conclude_turn(
     target_seq: int,
     content: dict[str, Any] | None,
     idempotency_key: str,
+    kind: str = "reply",
+    moment_ids: tuple[UUID, ...] = (),
 ) -> TurnOutcome:
     """`content=None` means Judge 1 refused the draft: the turn concludes, the
-    sequence advances and NOTHING goes out (S8, migration 20260803000003)."""
+    sequence advances and NOTHING goes out (S8, migration 20260803000003).
+    `kind`/`moment_ids` chegam com o toque de missão: a outbox precisa deles
+    para o preflight do sender (migrations 0007/0008)."""
     cursor = await conn.execute(
-        "select * from internal.conclude_turn(%s, %s, %s, %s, %s, %s, %s)",
+        "select * from internal.conclude_turn(%s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (
             conversation_id,
             token,
@@ -107,35 +111,53 @@ async def conclude_turn(
             # "there is no content" plainly is what this call means.
             Jsonb(content) if content is not None else None,
             idempotency_key,
+            kind,
+            list(moment_ids),
         ),
     )
     committed, outbound_seq, outbox_id = await cursor.fetchone()
     return TurnOutcome(committed=committed, outbound_seq=outbound_seq, outbox_id=outbox_id)
 
 
-# --- the domain event touch ----------------------------------------------------
+# --- the mission touch --------------------------------------------------------
 
 
-@dataclass(frozen=True, slots=True)
-class DomainEventOutcome:
-    """Outcomes are data (`applied`, `already_applied`, `discarded`,
-    `invalid_payload`, `no_channel`) — the handler archives on all of them.
-    A missing event raises instead: that is a bug, and bugs take the ladder."""
+async def turn_pointers(
+    conn: psycopg.AsyncConnection, conversation_id: UUID
+) -> tuple[int, int]:
+    """(processing_generation, next_inbound_seq) — o alvo do CAS de um toque.
 
-    status: str
-    conversation_id: UUID | None
-    outbox_id: UUID | None
-
-
-async def apply_domain_event(
-    conn: psycopg.AsyncConnection, webhook_event_id: int, *, touch_text: str
-) -> DomainEventOutcome:
+    O toque conclui contra o estado CORRENTE: qualquer inbound no meio bumpa
+    next_inbound_seq e o CAS recusa o rascunho (o turno de resposta assume)."""
     cursor = await conn.execute(
-        "select * from internal.apply_domain_event(%s, %s)",
-        (webhook_event_id, touch_text),
+        "select processing_generation, next_inbound_seq from public.conversations"
+        " where id = %s",
+        (conversation_id,),
     )
-    status, conversation_id, outbox_id = await cursor.fetchone()
-    return DomainEventOutcome(status=status, conversation_id=conversation_id, outbox_id=outbox_id)
+    row = await cursor.fetchone()
+    if row is None:
+        raise LookupError(f"conversation {conversation_id} is not this tenant's")
+    return int(row[0]), int(row[1])
+
+
+async def outbox_key_exists(conn: psycopg.AsyncConnection, idempotency_key: str) -> bool:
+    """O dedup do toque: reentrega do pgmq encontra a outbox já escrita."""
+    cursor = await conn.execute(
+        "select exists (select 1 from internal.message_outbox where idempotency_key = %s)",
+        (idempotency_key,),
+    )
+    return bool((await cursor.fetchone())[0])
+
+
+async def set_conversation_owner(
+    conn: psycopg.AsyncConnection, conversation_id: UUID, mission_version_id: UUID
+) -> None:
+    """O toque que SAIU torna a missão dona da conversa (§3.2.2): a resposta
+    do cliente engaja a família — trocada pelo resolver, nunca pelo modelo."""
+    await conn.execute(
+        "update public.conversations set owner_mission_version_id = %s where id = %s",
+        (mission_version_id, conversation_id),
+    )
 
 
 # --- the coalescer -----------------------------------------------------------

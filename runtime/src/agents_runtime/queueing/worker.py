@@ -21,7 +21,7 @@ import psycopg
 
 from agents_runtime.clock import Clock
 from agents_runtime.config import QueueingConfig
-from agents_runtime.queueing.jobs import InboundJob
+from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from agents_runtime.repository import engine
 from agents_runtime.repository.queue import PgmqQueue
 
@@ -138,6 +138,92 @@ async def run_turn(
             content=content,
             idempotency_key=f"reply-{job.conversation_id}-{job.generation}",
         )
+
+    if outcome.committed:
+        return TurnResult.DONE
+
+    async with conn.transaction():
+        await engine.scope_to_organization(conn, job.organization_id)
+        await engine.release_lease(conn, job.conversation_id, token)
+    return TurnResult.SUPERSEDED
+
+
+async def run_touch(
+    conn: psycopg.AsyncConnection,
+    job: MissionTouchJob,
+    toucher,
+    *,
+    config: QueueingConfig,
+    clock: Clock,
+    queue: PgmqQueue | None = None,
+    message_id: int | None = None,
+) -> TurnResult:
+    """O turno do TOQUE — as mesmas três fases do run_turn, sem inbound.
+
+    O CAS conclui contra o estado corrente (generation/next_inbound_seq lidos
+    na fase 1): qualquer inbound durante a geração bumpa o alvo e o rascunho
+    morre — o turno de RESPOSTA assume, com a missão já dona da conversa se um
+    toque anterior saiu. Dedup por outbox: a reentrega do pgmq encontra a
+    idempotency_key já escrita e arquiva sem segunda geração.
+    """
+    token = uuid.uuid4()
+    idempotency_key = f"touch-{job.conversation_id}-{message_id}"
+
+    # FASE 1 — claim + alvos do CAS, uma transação curta.
+    async with conn.transaction():
+        await engine.scope_to_organization(conn, job.organization_id)
+        claimed = await engine.claim_conversation(
+            conn, job.conversation_id, token, lease=config.conversation_lease
+        )
+        if claimed is not None:
+            if await engine.outbox_key_exists(conn, idempotency_key):
+                await engine.release_lease(conn, job.conversation_id, token)
+                return TurnResult.STALE
+            generation, target_seq = await engine.turn_pointers(conn, job.conversation_id)
+
+    if claimed is None:
+        return TurnResult.BUSY
+
+    # FASE 2 — trabalho fora de transação, com o keepalive respirando.
+    beat = asyncio.create_task(
+        _keepalive(
+            conn, job, token, config=config, clock=clock, queue=queue, message_id=message_id
+        )
+    )
+    try:
+        try:
+            draft = await toucher(job)
+        finally:
+            beat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await beat
+    except BaseException:
+        async with conn.transaction():
+            await engine.scope_to_organization(conn, job.organization_id)
+            await engine.release_lease(conn, job.conversation_id, token)
+        raise
+
+    # FASE 3 — o CAS estendido, com kind e moment_ids do toque.
+    async with conn.transaction():
+        await engine.scope_to_organization(conn, job.organization_id)
+        outcome = await engine.conclude_turn(
+            conn,
+            conversation_id=job.conversation_id,
+            token=token,
+            expected_version=claimed.version,
+            generation=generation,
+            target_seq=target_seq,
+            content=draft.content,
+            idempotency_key=idempotency_key,
+            kind="funnel_touch",
+            moment_ids=draft.moment_ids,
+        )
+        if outcome.committed and outcome.outbox_id is not None and draft.mission_version_id:
+            # O toque SAIU: a missão vira dona da conversa (§3.2.2) — na mesma
+            # transação do conclude, para nunca haver toque órfão de dona.
+            await engine.set_conversation_owner(
+                conn, job.conversation_id, draft.mission_version_id
+            )
 
     if outcome.committed:
         return TurnResult.DONE

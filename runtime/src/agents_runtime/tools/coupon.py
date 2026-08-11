@@ -135,6 +135,9 @@ class CreateCoupon:
                         object_ref=object_ref,
                         requested_kind=requested_kind,
                         requested_value=requested_value,
+                        # De onde veio o pedido: o nó do fluxo (toque) ou o
+                        # turno (missão sem nó) — a trilha do grant diz quem.
+                        node_ref=self._mission.node_ref,
                     ),
                     mission=self._mission,
                     moment=self._moment,
