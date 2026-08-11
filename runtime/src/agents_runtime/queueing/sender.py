@@ -65,7 +65,11 @@ async def sender_pass(
         # canal. Os adapters de email/instagram chegam com as suas próprias.
         if send.channel_type == "whatsapp":
             preflight = await engine.sender_preflight(
-                conn, send.organization_id, send.to_phone_e164, send.kind
+                conn,
+                send.organization_id,
+                send.to_phone_e164,
+                send.kind,
+                moment_ids=send.moment_ids,
             )
             if preflight.suppressed:
                 await engine.mark_outbox_failed(
@@ -76,6 +80,16 @@ async def sender_pass(
                     error=f"preflight: {preflight.verdict}",
                     retry_in=timedelta(0),
                 )
+                if preflight.moment_failure:
+                    # §3.3.4: falha de momento é "alerta + supressão" — o
+                    # lojista precisa saber que o toque dele não está saindo.
+                    await engine.alert_moment_suppression(
+                        conn,
+                        organization_id=send.organization_id,
+                        outbox_id=send.outbox_id,
+                        verdict=preflight.verdict,
+                        moment_ids=send.moment_ids,
+                    )
                 continue
             if preflight.verdict == "template":
                 # Janela fechada + toque de funil: o que sai é o template

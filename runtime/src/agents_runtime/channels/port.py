@@ -29,6 +29,9 @@ class ClaimedSend:
     # Alimenta o preflight: janela fechada suprime um 'reply' mas rebaixa um
     # toque de funil para template. Default para os construtores pré-preflight.
     kind: str = "reply"
+    # Toque de momento: o preflight re-checa vida + template_readiness de cada
+    # um a cada envio (§3.3.4). Vazio = envio sem momento.
+    moment_ids: tuple[UUID, ...] = ()
 
 
 class ChannelPort(Protocol):

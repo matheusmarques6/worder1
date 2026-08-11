@@ -25,7 +25,7 @@ from agents_runtime.channels.port import ClaimedSend
 # `repository.scope` because this module imports `channels.port`, and modules
 # that only needed the tenant scope were reaching the channel through it — the
 # boundary contract caught it the day the real responder was born (S9).
-from agents_runtime.repository.scope import scope_to_organization  # noqa: F401
+from agents_runtime.repository.scope import scope_to_organization
 
 # --- the conversation turn ---------------------------------------------------
 
@@ -175,6 +175,7 @@ async def claim_outbox_batch(
             idempotency_key=row[6],
             attempt_count=row[7],
             kind=row[8],
+            moment_ids=tuple(row[9] or ()),
         )
         for row in await cursor.fetchall()
     ]
@@ -190,7 +191,15 @@ class PreflightVerdict:
 
     @property
     def suppressed(self) -> bool:
-        return self.verdict in ("opt_out", "window_closed", "no_template")
+        return self.verdict in (
+            "opt_out", "window_closed", "no_template", "moment_gone", "moment_not_ready",
+        )
+
+    @property
+    def moment_failure(self) -> bool:
+        """As supressões que o doc manda ALERTAR (§3.3.4): o lojista precisa
+        saber que o toque do momento dele não está saindo naquele canal."""
+        return self.verdict in ("moment_gone", "moment_not_ready")
 
 
 async def sender_preflight(
@@ -200,13 +209,49 @@ async def sender_preflight(
     kind: str,
     *,
     channel: str = "whatsapp",
+    moment_ids: tuple[UUID, ...] = (),
 ) -> PreflightVerdict:
     cursor = await conn.execute(
-        "select * from internal.sender_preflight(%s, %s, %s, %s)",
-        (organization_id, to_phone, kind, channel),
+        "select * from internal.sender_preflight(%s, %s, %s, %s, %s)",
+        (organization_id, to_phone, kind, channel, list(moment_ids)),
     )
     row = await cursor.fetchone()
     return PreflightVerdict(verdict=row[0], template_name=row[1], template_language=row[2])
+
+
+async def alert_moment_suppression(
+    conn: psycopg.AsyncConnection,
+    *,
+    organization_id: UUID,
+    outbox_id: UUID,
+    verdict: str,
+    moment_ids: tuple[UUID, ...],
+) -> None:
+    """O alerta que acompanha a supressão de momento (§3.3.4).
+
+    A conexão do sender drena todas as orgs sem escopo fixo — o escopo entra
+    aqui, por operação, porque a policy de alerts exige a org da sessão."""
+    async with conn.transaction():
+        await scope_to_organization(conn, organization_id)
+        # 'moment_template_not_ready' é o tipo que a migration de identidade
+        # já previu para esta família; o veredito exato vai no metadata.
+        await conn.execute(
+            """
+            insert into public.alerts (organization_id, type, severity, title, metadata)
+            values (%s, 'moment_template_not_ready', 'warning',
+                    'Toque de momento suprimido no envio', %s)
+            """,
+            (
+                organization_id,
+                Jsonb(
+                    {
+                        "outbox_id": str(outbox_id),
+                        "verdict": verdict,
+                        "moment_ids": [str(moment) for moment in moment_ids],
+                    }
+                ),
+            ),
+        )
 
 
 async def mirror_outbound_to_inbox(

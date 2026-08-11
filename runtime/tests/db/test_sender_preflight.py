@@ -26,6 +26,7 @@ from tests.db.factories import (
     contact_phone,
     create_cloud_mirror,
     create_contact,
+    create_moment,
     create_opt_out,
     create_outbox_item,
     create_template_policy,
@@ -41,10 +42,11 @@ def preflight(
     organization_id: uuid.UUID,
     phone: str,
     kind: str = "reply",
+    moment_ids: list[uuid.UUID] | None = None,
 ) -> tuple:
     return conn.execute(
-        "select * from internal.sender_preflight(%s, %s, %s)",
-        (organization_id, phone, kind),
+        "select * from internal.sender_preflight(%s, %s, %s, 'whatsapp', %s)",
+        (organization_id, phone, kind, moment_ids or []),
     ).fetchone()
 
 
@@ -317,3 +319,144 @@ class TestSenderPassExecutesTheVerdict:
             )
 
         assert outbox_state(admin, outbox_id) == ("failed", "preflight: window_closed")
+
+
+READY = {"whatsapp": {"template_name": "toque_semana_cliente", "language": "pt_BR",
+                      "status": "approved"}}
+
+
+class TestMomentGate:
+    """§3.3.4: vida re-checada a cada envio; template do MOMENTO, não da org."""
+
+    def test_a_closed_window_moment_touch_uses_the_moments_template(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        phone = contact_phone(admin, thread.contact_id)
+        open_window(admin, thread.conversation_id, hours_ago=25)
+        # O default da org existe — e mesmo assim o template é o do momento.
+        create_template_policy(admin, org, template_name="retorno_padrao")
+        moment = create_moment(admin, org, template_readiness=READY)
+
+        with as_app_role(dsn, "sender_role", org) as sender:
+            verdict = preflight(sender, org, phone, kind="funnel_touch", moment_ids=[moment])
+        assert verdict == ("template", "toque_semana_cliente", "pt_BR")
+
+    def test_a_dead_moment_suppresses_even_with_the_window_open(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        phone = contact_phone(admin, thread.contact_id)
+        open_window(admin, thread.conversation_id, hours_ago=1)
+        moment = create_moment(admin, org, template_readiness=READY, killed=True)
+
+        with as_app_role(dsn, "sender_role", org) as sender:
+            verdict = preflight(sender, org, phone, kind="funnel_touch", moment_ids=[moment])
+        assert verdict[0] == "moment_gone"
+
+    def test_one_dead_moment_among_living_ones_still_suppresses(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        phone = contact_phone(admin, thread.contact_id)
+        alive = create_moment(admin, org, template_readiness=READY)
+        expired = create_moment(admin, org, starts_in_hours=-48, ends_in_hours=-24)
+
+        with as_app_role(dsn, "sender_role", org) as sender:
+            verdict = preflight(
+                sender, org, phone, kind="funnel_touch", moment_ids=[alive, expired]
+            )
+        assert verdict[0] == "moment_gone"
+
+    def test_missing_readiness_for_the_channel_is_not_ready(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        phone = contact_phone(admin, thread.contact_id)
+        open_window(admin, thread.conversation_id, hours_ago=25)
+        moment = create_moment(admin, org, template_readiness={})
+
+        with as_app_role(dsn, "sender_role", org) as sender:
+            verdict = preflight(sender, org, phone, kind="funnel_touch", moment_ids=[moment])
+        assert verdict[0] == "moment_not_ready"
+
+    def test_paused_readiness_is_not_ready_either(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        phone = contact_phone(admin, thread.contact_id)
+        open_window(admin, thread.conversation_id, hours_ago=25)
+        paused = {"whatsapp": {"template_name": "x", "language": "pt_BR", "status": "paused"}}
+        moment = create_moment(admin, org, template_readiness=paused)
+
+        with as_app_role(dsn, "sender_role", org) as sender:
+            verdict = preflight(sender, org, phone, kind="funnel_touch", moment_ids=[moment])
+        assert verdict[0] == "moment_not_ready"
+
+    def test_living_moments_inside_the_window_are_free_text(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        phone = contact_phone(admin, thread.contact_id)
+        open_window(admin, thread.conversation_id, hours_ago=1)
+        moment = create_moment(admin, org, template_readiness=READY)
+
+        with as_app_role(dsn, "sender_role", org) as sender:
+            verdict = preflight(sender, org, phone, kind="funnel_touch", moment_ids=[moment])
+        assert verdict[0] == "ok"
+
+
+class TestMomentSuppressionAlerts:
+    async def test_a_gone_moment_fails_the_row_and_alerts_the_merchant(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants, fake_channel
+    ) -> None:
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        open_window(admin, thread.conversation_id, hours_ago=1)
+        moment = create_moment(admin, org, template_readiness=READY, killed=True)
+        outbox_id = create_outbox_item(
+            admin, org, thread, kind="funnel_touch", moment_ids=[moment]
+        )
+
+        async with as_sender(dsn) as conn:
+            await sender_pass(
+                conn, fake_channel, config=QueueingConfig(), randomness=SystemRandomness()
+            )
+
+        assert outbox_state(admin, outbox_id) == ("failed", "preflight: moment_gone")
+        (alert,) = admin.execute(
+            "select type, metadata ->> 'verdict' from public.alerts"
+            " where organization_id = %s",
+            (org,),
+        ).fetchall()
+        assert alert == ("moment_template_not_ready", "moment_gone")
+
+    async def test_a_ready_moment_touch_goes_out_as_its_template(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants, fake_channel
+    ) -> None:
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        open_window(admin, thread.conversation_id, hours_ago=25)
+        moment = create_moment(admin, org, template_readiness=READY)
+        outbox_id = create_outbox_item(
+            admin, org, thread, kind="funnel_touch",
+            text="texto livre que nao pode sair", moment_ids=[moment],
+        )
+
+        async with as_sender(dsn) as conn:
+            await sender_pass(
+                conn, fake_channel, config=QueueingConfig(), randomness=SystemRandomness()
+            )
+
+        (payload,) = admin.execute(
+            "select payload from testing.fake_channel_sends where outbox_id = %s",
+            (outbox_id,),
+        ).fetchone()
+        assert payload["template"]["name"] == "toque_semana_cliente"
+        assert "texto livre" not in str(payload)

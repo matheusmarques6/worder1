@@ -146,14 +146,15 @@ def create_outbox_item(
     status: str = "pending",
     kind: str = "reply",
     text: str = "resposta",
+    moment_ids: list[uuid.UUID] | None = None,
 ) -> uuid.UUID:
     with conn.cursor() as cur:
         cur.execute(
             """
             insert into internal.message_outbox
                 (organization_id, conversation_id, contact_id, channel_account_id,
-                 kind, payload, idempotency_key, status)
-            values (%s, %s, %s, %s, %s, %s, %s, %s)
+                 kind, payload, idempotency_key, status, moment_ids)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             returning id
             """,
             (
@@ -165,6 +166,7 @@ def create_outbox_item(
                 psycopg.types.json.Jsonb({"text": text}),
                 unique_id("idem"),
                 status,
+                moment_ids or [],
             ),
         )
         (outbox_id,) = cur.fetchone()

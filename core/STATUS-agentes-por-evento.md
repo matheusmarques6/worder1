@@ -49,7 +49,19 @@ Estados: `pendente | em curso | verde-local | verde-CI | aplicado-em-prod`.
 | 16 | 97721fa8 | feat(runtime): secret_box — port byte-compatível do codec do app |
 | 17 | a0e27a5f | feat(runtime): cascata de provedores D4 — BYO-only com degrau de plataforma atrás de flag |
 | 18 | a35ab6ef | feat(runtime): sender preflight em SQL + channel_template_policies + espelho no inbox; suíte db+pipeline 276 verde |
-| 19 | (este) | feat(runtime): obs/ (JSON+OTel opcional+cinto de PII) + server.py (healthz/preview) + DEPLOY.md — fecha Etapa 4 |
+| 19 | d4fbc23a | feat(runtime): obs/ (JSON+OTel opcional+cinto de PII) + server.py (healthz/preview) + DEPLOY.md — fecha Etapa 4 |
+| 20 | 67521963 | feat(db): commercial_moments + incentive_grants/ledger — a concessão auditável |
+| 21 | c6e3f423 | feat(runtime): momentos no turno — fatos somam, postura é uma, missão gateia |
+| 22 | 9d6eb769 | feat(runtime): offer engine + create_coupon — o nó pede, o engine decide, a tool executa |
+| 23 | (este) | feat(db+runtime): preflight de momento no sender — vida re-checada, template do momento, alerta na supressão. Fecha Etapa 5 |
+
+Notas da Etapa 5: (a) o create_coupon existe como tool completa (registrada
+NÃO — o loop de tool escolhida pelo modelo chega com a Etapa 6/E3; hoje os
+chamadores são o caminho do nó e a suíte via run_tool); (b) Nuvemshop fica
+como segundo provedor do connector (mesma porta; NotImplemented explícito
+não existe — a tool responde "sem loja conectada" quando não há
+shopify_stores); (c) grant_lines/ledger_lines do StateBlock seguem vazios no
+responder — entram quando o loop de tools der ao agente o grant no turno.
 
 Nota do commit 18 (a primeira execução COMPLETA da suíte db/pipeline): ela
 revelou e este commit corrige três bugs reais de migration — (1)
@@ -75,6 +87,9 @@ ajustados nos testes.
 | `20260812000004_engine_functions.sql` | 12/08/2026 via MCP (`engine_functions`); **emenda 11/08/2026 via `execute_sql`**: `ingest_inbound_message` recriada com `#variable_conflict use_column` (a versão original quebrava em runtime com "contact_id is ambiguous") | 14 funções: seq atômico, coalescer SECURITY DEFINER, claim/renew/release (invoker+RLS), conclude_turn (CAS estendido + branch NULL do juiz), claim_outbox_batch (resolve conta Cloud), marks/sweep/correlate/review/reprocess, heartbeats, public.ingest_inbound_message (EXECUTE só service_role) |
 | `20260813000003_sender_preflight.sql` | 11/08/2026 via MCP (`sender_preflight`) | channel_template_policies (RLS+policies), claimed_send ganha `kind`, claim_outbox_batch recriada, internal.sender_preflight (opt-out→janela 24h→template), public.correlate_channel_status (wrapper p/ webhook de status, EXECUTE só service_role), internal.mirror_outbound_to_inbox |
 | `20260813000004_contacts_rls_for_runtime.sql` | 11/08/2026 via MCP (`contacts_rls_for_runtime`) | RLS LIGADA em `contacts` e `whatsapp_opt_status` (fatia consciente da remediação: policies legadas já existiam; service_role tem BYPASSRLS; worker/sender escopados por current_app_organization_id). Emenda via `execute_sql` no mesmo dia: `grant select on ai_agent_sources to worker_role` (delta da 0002) |
+| `20260813000005_commercial_moments_and_incentives.sql` | 11/08/2026 via MCP (`commercial_moments_and_incentives`) | momentos + grants + ledger com RLS total; ledger append-only por trigger; idempotency_key UNIQUE é a arma anti-corrida |
+| `20260813000006_store_credentials_port.sql` | 11/08/2026 via MCP (`store_credentials_port`) | internal.active_shopify_store (SECURITY DEFINER, org da sessão) — worker NÃO tem SELECT em shopify_stores |
+| `20260813000007_moment_template_preflight.sql` | 11/08/2026 via MCP (`moment_template_preflight`) | claimed_send ganha moment_ids; sender_preflight re-checa vida + template_readiness (moment_gone/moment_not_ready); template do momento líder vence o default da org |
 
 ## Adiados / decisões em aberto
 
@@ -95,21 +110,21 @@ ajustados nos testes.
 
 ## Próxima ação
 
-**Etapa 5 — Momentos comerciais + offer engine (commits 20–23), doc-fonte §5/§6:**
-1. **Commit 20 (DDL):** `commercial_moments` (fatos por contato+org com validade/fonte,
-   RLS total) + `offer_grants`/`offer_ledger` (a concessão auditável: quem pediu, qual
-   missão autorizou via `concession`, teto, uso) — tabelas novas nascem trancadas.
-2. **Commit 21:** `moments/` no runtime — leitura no turno (StateBlock ganha
-   moment_ids/facts/public_claim, hoje vazios no responder) + escrita pós-turno com
-   `promote_moment` da missão.
-3. **Commit 22:** offer engine — `create_coupon` (ferramenta com teto da `concession`;
-   Shopify/Nuvemshop via connectors) gravando grant+ledger ANTES do provedor
-   (idempotência por grant_id).
-4. **Commit 23:** preflight de template de MOMENTO no sender (o `event_type` da
-   `channel_template_policies` sai do NULL) + suíte.
-Estado da suíte ao fechar a Etapa 4 (commit 19): **694 unit + 284 db/pipeline verdes;
-ruff e import-linter limpos.** O runtime está funcionalmente completo para o caminho
-descoberta→resposta→envio; falta deploy (DEPLOY.md) e as camadas comerciais (E5+).
+**Etapa 6 — O nó do flow builder + emissão de jobs de missão (commits 24–26),
+doc-fonte §2/§3.3.7/§4.6:**
+1. **Commit 24 (DDL+RPC):** `public.emit_ai_mission_job` — a RPC "escrita+fila numa
+   transação" (invariante §3.4-9) que o executor do nó chama: valida missão ativa do
+   event_type, resolve conversa/contato, grava outbox `kind='funnel_touch'` (com
+   moment_ids do momento ativo se a missão promove) OU enfileira job de turno; payload
+   pgmq ganha `mission_ref`/`otel`.
+2. **Commit 25 (TS):** executor `action_ai_mission` no flow builder (core/) — o nó
+   PEDE (mission_ref + concession ≤ teto da missão via UI da Etapa 7); chama a RPC;
+   `action_whatsapp_ai` sai da palette (fica vivo para fluxos antigos, D8/pós-cutover).
+3. **Commit 26:** handler do runtime para o job de missão (fila `q_domain_events` já
+   existe) + suíte pipeline do caminho nó→RPC→outbox→sender com preflight de momento.
+Estado ao fechar a Etapa 5 (commit 23): **763 unit + 322 db/pipeline verdes; ruff e
+import-linter limpos.** Nota: o `event_type` por linha de `channel_template_policies`
+continua NULL-only até o toque de missão carregar seu event_type (commit 24).
 
 Notas vivas para a retomada:
 - O responder anexa CONHECIMENTO ao frame fora dos blocos tipados (recuperação, não área) —
