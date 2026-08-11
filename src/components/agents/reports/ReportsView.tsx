@@ -17,6 +17,7 @@ import { AgentsTheme } from '@/components/agents/ui/AgentsTheme'
 import { Button, Card, Gauge, RatingBar, DiffViewer } from '@/components/agents/ui/primitives'
 import type { DiffLine } from '@/components/agents/ui/primitives'
 import AgentSelect from '@/components/agents/ui/AgentSelect'
+import RuntimeActivitySection from './RuntimeActivitySection'
 
 /**
  * Relatórios (reports hub) — gauge (score de qualidade), satisfação ESTIMADA
@@ -197,7 +198,11 @@ export default function ReportsView({ organizationId }: ReportsViewProps) {
             </div>
           </div>
 
-          {/* states: no-agent / loading / error */}
+          {/* 9.4 — a trilha única do runtime, org-escopada (antes do legado) */}
+          <RuntimeActivitySection />
+
+          {/* states: no-agent / loading / error — daqui para baixo é o legado,
+              congelado para consulta histórica (agent_traces/ai_eval_*) */}
           {!agentId ? (
             <Card style={{ padding: 16 }}>
               <div className="empty-wrap" style={{ padding: '48px 20px' }}>

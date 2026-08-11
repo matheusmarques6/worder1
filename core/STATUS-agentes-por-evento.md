@@ -102,6 +102,7 @@ ajustados nos testes.
 | `20260813000010_mission_seeds_v0.sql` | 11/08/2026 via MCP (`mission_seeds_v0`) | seed_default_missions(org) — 6 drafts worder_default por org, idempotente (provado 6→0); ativar é ato explícito |
 | `20260813000011_grant_lifecycle.sql` | 11/08/2026 via MCP (`grant_lifecycle`) | fim de vida do grant (9.2): `consume_incentive_grant` (service_role; dedup por (grant, pedido) via UNIQUE parcial — reentrega = 'already') + `internal.expire_incentive_grants()` (sender_role; roda no housekeeping do sender) + `incentive_ledger.order_ref` |
 | `20260813000012_otel_carrier.sql` | 11/08/2026 via MCP (`otel_carrier`) | 9.1b: `message_outbox.otel` + `conclude_turn` 10-arg (p_otel default null; assinatura de 9 caiu) + `coalesce_due_conversations` 3-arg (p_otel) + `claimed_send.otel`/`claim_outbox_batch` devolvendo o carrier ao sender |
+| `20260813000013_activity_compat_views.sql` | 11/08/2026 via MCP (`activity_compat_views`) | 9.4: views `ai_runtime_activity`/`_calls`/`_tools` (definer, dono postgres) sobre internal.* + conversations + missão; SELECT só para service_role — anon/authenticated revogados explicitamente (os defaults do Supabase dariam) |
 
 ## Adiados / decisões em aberto
 
@@ -159,13 +160,16 @@ migrarem para SDK, com captura de conteúdo desligada explicitamente.
 | 9.2 Ciclo do grant | **feito** | consume RPC (dedup por pedido no UNIQUE) + expire no housekeeping do sender + wire no webhook orders/paid; migration 0011 no vivo |
 | 9.3 Dinheiro no inbound | **feito** | 9.3a: StateBlock com cupom vigente + ledger. 9.3b: porta LLM com tools (ToolSpec/ToolCall; OpenRouter + OpenAI-compat + Anthropic nativo traduzem o MESMO contrato) + tool-loop no responder (teto de 3 rodadas; esgotou = chamada final sem tools); create_coupon oferecida só se missão∩agente permitir. DoD provado em teste db: concessão none + grant do momento → `reused` na trilha, resposta com o cupom existente, zero grant novo |
 | 9.1 Logfire (D13) | **feito no código** — DoD "conversa navegável no Logfire" confere no smoke pós-deploy (depende de 8.1/8.2 + token) | 9.1a: `configure_logfire()` token-gated + instrument httpx/psycopg/system_metrics + scrubbing (conteúdo GenAI fora em 3 linhas de defesa). 9.1b: traceparent viaja — passe do coalescer carimba o payload pgmq (turno retoma como LINK), conclude grava o carrier do turno na outbox (migration 0012) e o sender retoma como PARENT (turno+envio = um trace); spans coalesce_pass/turn/mission_touch/send com outcome; responder/toucher anotam mission_version_id/moment_ids/grant_id/node_ref; cinto de PII provado em teste p/ o vocabulário novo |
-| 9.4 Trilha única na UI | em execução (antes da 2ª loja) | 9.x paralelos entre si |
+| 9.4 Trilha única na UI | **feito** | Atividade ganha a seção "Conversas do runtime" (missão · custo · judge) lendo `/api/ai/activity` → views de compatibilidade (migration 0013); detalhe por conversa com guarda anti-IDOR (`runtimeConversationDetail` só devolve conversa da org); legados (agent_traces/ai_eval_*) congelados e ainda visíveis abaixo — DoD dos dois universos atendido |
 | 10.1–10.8 | pendentes (paralelo pós-8.3) | contrato visual: zip do design |
 | RLS fase B/C (D11) | lotes contínuos, **[GATE-Bruno]** por lote | fase A feita |
 
-Estado da suíte após 9.1: **834 unit + 359 db/pipeline (Python), 916 testes
-TS (+1 gerador de vetores, gated); tsc, ruff e import-linter limpos.** 16
-migrations aplicadas no vivo.
+Estado da suíte após a Etapa 9 completa: **836 unit + 365 db/pipeline
+(Python), 920 testes TS (+1 gerador de vetores, gated); tsc, ruff e
+import-linter limpos.** 17 migrations aplicadas no vivo. A Etapa 9 fecha
+com 9.1/9.2/9.3/9.4 feitos no código; o que resta dela é observação
+pós-deploy (9.1: conversa navegável no Logfire — depende de 8.1/8.2 +
+token) e 9.5 (roadmap, não bloqueia).
 
 ### Runbook do cutover (a fatia vertical na loja piloto)
 
