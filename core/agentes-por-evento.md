@@ -405,3 +405,89 @@ Os 10 call sites de `graph.facebook.com` estão em: `src/app/api/instagram/auth/
 4. **Flag de migração**: `ai_runtime_rollout (organization_id PK, store_id NULL, mode legacy|runtime, migrated_at, notes)`.
 5. **Cascata D4**: adapters `openai-compatible` (chave direta com base_url) + `anthropic` nativo + OpenRouter; fitness test `test_no_provider_network` atualizado com os hostnames privilegiados escopados a `agent_core/providers*`. Port Python do `secret-box` (scrypt+AES-256-GCM, formatos v2 e legados) validado por vetores cross-language commitados.
 6. **RLS das 292 tabelas existentes**: advisor crítico do Supabase (tudo exposto a anon/authenticated). Remediação **fora deste plano** — exige aprovação explícita do usuário + plano de policies + regressão de inbox/realtime. Todas as tabelas novas nascem com RLS + policies.
+
+---
+
+# Adendo §B — Pós-auditoria: operação, divergências e a Etapa 7 como ela era
+
+**v1.0 · 11 ago 2026.** Nasce da auditoria do snapshot pós-"plano de 30 commits": o trabalho entregue é real e disciplinado — migrations aplicadas e verificadas, invariantes no código, test-first genuíno — mas a Etapa 7 foi re-escopada para "UI mínima funcional" sem registro prévio, e cinco divergências do motor ficaram abertas. Este adendo **fecha o escopo do que falta**: ratifica decisões, define as Etapas 8–10 com definition of done, e estabelece regras de relatório para o STATUS.
+
+**Para o agente implementador:** as etapas deste adendo são o plano vigente. Nada aqui é sugestão; o que depende do Bruno está marcado **[GATE-Bruno]** e bloqueia só o passo que o referencia. A ordem é: Etapa 8 primeiro (caminho crítico do piloto); 9 antes de escalar para a segunda loja; 10 pode correr em paralelo a partir do passo 8.3 concluído.
+
+## B.1 Decisões ratificadas (encerram pendências da auditoria)
+
+| # | Decisão | Detalhe |
+|---|---|---|
+| **D9** | **PENDENTE-1 ratificado: BYO-only.** | O degrau de plataforma permanece atrás de `AGENTS_PLATFORM_LLM_ENABLED=off` até decisão comercial futura. Consequência de UI: onde a tela de Budget exibir teto em R$ como se a Worder cobrasse, a copy vira controle informativo de gasto na chave do lojista (ajustar quando a tela for tocada na Etapa 10, não antes). Ativação de agente exige chave em `organization_api_keys` — o alerta `no_org_llm_key` já cobre. |
+| **D10** | **Humanização do sender é BLOQUEANTE do cutover piloto.** | O caminho runtime hoje responde em bloco único; o legado responde em bolhas com delay. Piloto não sai com regressão no coração do produto. Escopo em 8.3. Linha que não se cruza (mantida): nada de erro de digitação proposital nem typing falso prolongado. |
+| **D11** | **Remediação RLS: aprovada em fases, nunca "ligar tudo".** | Fase A (tabelas que o runtime toca): feita. Fase B: tabelas escritas só por service-role — lotes com policies geradas + teste RLS por lote no CI + rollback por lote. Fase C: tabelas lidas pelo app — policies por `organization_id` no padrão existente (`profiles`/`auth.uid()`), lote a lote, começando pelas de maior sensibilidade (contatos/pedidos/mensagens já cobertas na A, depois billing, depois analytics). Cada lote é uma migration própria; **nenhum lote sobe sem a prova no CI**. Advisor do Supabase re-rodado após cada fase. |
+| **D12** | **PENDENTE-2 segue aberto e é [GATE-Bruno].** | A copy dos 6 seeds `worder_default` (drafts já no banco) passa pela rodada 2 com o Bruno **antes** de qualquer `activate_ai_mission` na org piloto. Ativar é ato explícito e pós-revisão; primeira leva do piloto: `cart.abandoned` + `whatsapp.received` apenas. |
+| **D13** | **Logfire entra (Parte V do doc-fonte vale).** | O `obs/` atual (JSON + OTel opcional + cinto de PII) é a fundação, não o fim. Escopo em 9.1. Captura de conteúdo GenAI permanece desligada — o cinto de PII existente é a 1ª linha; scrubbing do Logfire é a 3ª. |
+| **D14** | **Higiene de relatório é regra vinculante.** | Ver B.5. Re-escopagem sem registro prévio foi o único defeito real desta execução; não se repete. |
+
+## B.2 Etapa 8 — Operação e piloto (caminho crítico)
+
+> Objetivo: a fatia vertical viva numa loja real — `cart.abandoned` + inbound, WhatsApp, com humanização — e rollback provado.
+
+| Passo | Escopo | DoD |
+|---|---|---|
+| 8.1 | **Deploy do runtime** conforme `runtime/DEPLOY.md` (Railway/Render/VPS): `SUPABASE_DB_URL` (session pooler), roles worker/sender, `AGENTS_RESPONDER`+`AGENTS_TOUCHER`, `AGENTS_OPENROUTER_API_KEY` (chave de plataforma — Judge/embeddings), `ENCRYPTION_KEY` idêntico ao do app, `AGENTS_CHANNEL=cloud_api` + `AGENTS_META_ACCESS_TOKEN`, `AGENTS_HTTP_PORT`+`AGENTS_PREVIEW_TOKEN` | container de pé; `/healthz` verde; logs JSON chegando |
+| 8.2 | **Vercel:** `AGENTS_RUNTIME_URL` + `AGENTS_PREVIEW_TOKEN` | preview de `/ai` e `/moments` funcionando de ponta a ponta |
+| 8.3 | **Humanização do sender (D10):** portar do `cloud-sender.ts` o algoritmo de quebra em bolhas (≤4) e o ritmo (delay por bolha proporcional ao tamanho, teto curto; typing on/off conforme Cloud API permitir) para o sender do runtime. Paridade de comportamento, não de bytes. O outbox já entrega a mensagem inteira; a quebra acontece no sender, e o espelho no inbox registra as bolhas como enviadas | teste com cassette: dado um texto longo, N bolhas com os mesmos cortes do legado (suíte compara com fixtures gerados pelo TS); envio real na loja de teste visivelmente "humano" |
+| 8.4 | **Sonda:** healthz no monitor externo (503 = heartbeat parado) — Grafana Synthetics ou equivalente já disponível | alerta dispara com runtime derrubado de propósito |
+| 8.5 | **[GATE-Bruno] Rodada 2 dos seeds:** revisar/editar a copy dos drafts com o Bruno; ativar `cart.abandoned` e `whatsapp.received` na org piloto via UI; conferir agente com versão em produção e chave BYO presente | duas missões `active`; `origin` reflete edição |
+| 8.6 | **Rollout + smoke** (runbook do STATUS): `insert into ai_runtime_rollout (org, 'runtime')` → mensagem real inbound → conversations/messages/outbox → resposta em bolhas no WhatsApp → espelho no inbox. Fluxo de teste com o nó novo → outbox `funnel_touch` → preflight de template/momento | os dois caminhos (F1 e F2) com trace completo dos IDs |
+| 8.7 | **Rollback provado uma vez de verdade:** `update ai_runtime_rollout set mode='legacy'` no meio de uma conversa de teste; conferir que o inbound seguinte volta ao caminho QStash sem mensagem perdida nem dupla | executado e registrado no STATUS com horário |
+
+**Critérios de saída do piloto (medir por 1 semana antes de escalar):** latência inbound→primeira bolha dentro do alvo do debounce; taxa de aprovação do Judge 1 (regenerações raras); **zero** cupom sem grant (query no ledger); zero mensagem sem trace navegável; nenhum alerta `outbox_unknown` sem resolução.
+
+## B.3 Etapa 9 — Fechar as divergências do motor
+
+> Antes da segunda loja. 9.1–9.4 podem paralelizar entre si.
+
+**9.1 Logfire (D13).** `logfire.configure(service_name="worder-runtime", environment=...)` + `instrument_openai()` (OpenRouter) + `instrument_anthropic()` (BYO direto) + `instrument_httpx()` + `instrument_psycopg()` + `instrument_system_metrics()`; cópia OTLP opcional via env (o `obs/` atual já prevê OTel). **Captura de conteúdo GenAI desligada.** Atributos de domínio em todo span do turno: `organization_id`, `conversation_id`, `mission_version_id`, `grant_id`, `moment_ids`, `channel`, `outcome` — espelhando a trilha interna. `traceparent` na coluna `otel` do payload pgmq; span links coalescer↔sender. DoD: uma conversa de teste navegável no Logfire da fila ao envio, sem nenhum conteúdo de mensagem na telemetria (teste automatizado do cinto de PII cobre os atributos novos).
+
+**9.2 Ciclo de vida do grant.** Consumo: webhook de pedido correlaciona `coupon_code` → `uses++`; `uses = max_uses` → `status='consumed'` + entrada `consumed` no ledger. Expiração: sweep periódico marca `expired` + entrada no ledger (o sweep de outbox existente é o padrão). DoD: teste e2e — grant emitido → cupom criado → pedido pago com o código → `consumed` no grant e no ledger; grant vencido → `expired` sem intervenção.
+
+**9.3 O dinheiro no inbound.** (a) `StateBlock` do responder passa a carregar `ledger_lines`/`grant_lines` (o "você já tem o OITO8" acontece no inbound, não só no toque); (b) loop de tool escolhida pelo modelo (E3 do motor) liberado para o responder com `create_coupon` no catálogo — o gate do grant já existe na tool, o loop só o expõe. DoD: conversa inbound onde o cliente pede desconto → engine nega emissão nova mas há grant do momento → a resposta menciona o cupom existente; trace mostra `reused`.
+
+**9.4 Uma trilha só na UI.** A Atividade herdada (Reports/Eval) passa a ler a trilha nova (`internal.llm_calls/tool_calls/judge_scores` + `conversations`) — via views de compatibilidade se preciso — para não existirem dois universos de trace durante a convivência. `ai_message_logs`/`agent_traces` legados ficam congelados para consulta histórica. DoD: uma conversa do runtime aparece na Atividade com missão, custo e judge; uma conversa legada continua visível.
+
+**9.5 (roadmap mantido, não bloqueia)** Unificação dos 10 call sites `graph.facebook.com` + fusão das libs de Instagram, conforme plano `phase5-unify-clients.md`; a regra "código novo só via `api-version.ts`" segue em vigor.
+
+## B.4 Etapa 10 — A Etapa 7 como ela era (IA Hub de verdade)
+
+> Pode iniciar em paralelo após 8.3. O contrato visual é o zip do design (`IA Hub.html` + `ia/*.jsx` + `agents/icons.jsx`) com a punch list abaixo; o tema é o `.agents-theme` existente. A `MissionsTab` entregue **já é** o "Editar playbook" (10 campos + concessão estruturada) — reusa, não reescreve.
+
+| Passo | Escopo |
+|---|---|
+| 10.1 | **Um agente por loja.** `AIAgentList` sai da aba Agente. Migração: org com 1 agente → vira o canônico automaticamente; org com N → tela única de escolha do canônico (os demais ficam `archived`, somente leitura, restauráveis). O resolver já assume o agente com versão em produção por org — a UI passa a refletir isso |
+| 10.2 | **Radial oficial + clássica mobile.** Portar `ia/{radial,classic,shell,data,tabs}.jsx` sobre dados reais (mesma `AreaFields`, um estado). Toggle "comparar propostas" morre; breakpoint decide. Nós Conhecimento/Limites da órbita abrem painel editável **reutilizando** os componentes das telas (um dado, N portas) |
+| 10.3 | **Sub-aba Limites** (a que falta): tópicos bloqueados + invariantes do lojista + **consolidado de concessão por missão (leitura — "edite dentro de cada missão")** + desligar o agente inteiro. Fusão de abas: **Avaliação e Atividade se fundem em "Atividade"** (Reports/Eval como sub-views); **API Keys é absorvida pela área Motor/Budget da radial** — até 10.2 aterrissar, as abas atuais ficam como estão para não quebrar uso |
+| 10.4 | **`presentation_mode` + `client_adaptation`** chegam em `ai_agents` (migration) e na UI: 3 opções de apresentação (default `nome_funcao`) — a linha fixa "nunca negue ser IA" **já está no compiler**, a UI só exibe; adaptação com os 5 toggles (espelhar tom/tamanho/emoji · insistir menos com quem já reclamou · saudação recorrente vs. primeira compra), lidos pelo `AgentBlock`/`StateBlock`. Regra na tela: adaptação nunca mexe em dinheiro |
+| 10.5 | **Preview "O que o agente sabe":** o painel chama `compile_prompt` em modo preview (endpoint `/api/ai/preview-prompt` existe; expor o parâmetro opcional de CONHECIMENTO anotado nas notas vivas) e exibe os blocos reais + fantasmas `MISSÃO — entra a cada conversa` / `ESTADO — momento ativo e promessas` / `CANAL`. **Juízes e Motor ficam fora do box** (cards ao lado) |
+| 10.6 | **Área "Missão descoberta (default)"** na radial: o viés vendedor/suporte/híbrido edita a missão de `whatsapp.received` (campo da missão, não do agente) — nada de "Seu papel é VENDER" global |
+| 10.7 | **Tool custom v1 (D7):** tabela `ai_agent_custom_tools` + executor HTTP genérico no tool-loop + form (nome, descrição, "quando usar", endpoint, método, auth como secret via codec, parâmetros tipados, timeout, **testar chamada obrigatório antes de ligar**). Regra dupla (UI + código): tool custom lê e consulta, **nunca concede** |
+| 10.8 | **Momentos visível fora de Momentos:** banner de leitura "momento X ativo até Y" em Campanhas e no editor de Fluxos, lendo a mesma view `active_commercial_moments` |
+
+DoD da etapa: as 5 sub-abas do doc-fonte navegáveis; radial no desktop e clássica no mobile sobre o mesmo estado; screenshot do print de 11/08 irreproduzível (a tela antiga não existe mais); punch list 1–8 do doc-fonte §4.4 toda verde.
+
+## B.5 Regras de relatório (higiene do STATUS — vinculante)
+
+1. A tabela de etapas do STATUS é atualizada **no mesmo commit** que muda o estado — commits e tabela nunca divergem.
+2. "Completo" só se declara **contra o doc-fonte** (incluindo adendos). Plano interno de commits é ferramenta, não referência de completude.
+3. **Re-escopagem exige registro prévio**: qualquer redução/adiamento de escopo entra em "Decisões em aberto" com marcação **[GATE-Bruno]** *antes* de executar — nunca descoberta a posteriori numa seção de pendências.
+4. Divergência deliberada do doc-fonte (ex.: obs sem Logfire) ganha uma linha própria "DIVERGÊNCIA v1" no STATUS no commit em que nasce, com o plano de fechamento.
+5. Toda migration aplicada em produção registra: arquivo, data, via (MCP/manual), verificação executada — o formato atual do STATUS está correto e permanece.
+
+## B.6 Ordem, dependências e gates
+
+```
+8.1 → 8.2 → 8.3 ─┬→ 8.4 → 8.5 [GATE-Bruno: copy seeds] → 8.6 → 8.7 → (piloto 1 semana)
+                 └→ Etapa 10 (paralelo a partir daqui)
+Etapa 9 (9.1–9.4 paralelos) → antes da 2ª loja
+9.5 → roadmap (não bloqueia)
+RLS fase B/C (D11) → em lotes contínuos, independente das etapas
+```
+
+**Gates do Bruno neste adendo:** 8.5 (copy dos seeds — rodada 2) · aprovação de cada lote RLS fase B/C conforme D11 · qualquer nova re-escopagem (B.5-3).

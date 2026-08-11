@@ -118,10 +118,42 @@ ajustados nos testes.
 | **Remediação RLS das 292 tabelas existentes** | **aguardando aprovação do usuário** | advisor crítico; ligar sem policies quebra app/realtime |
 | Deploy do runtime (Railway/Render) | pendente (DEPLOY.md escrito no commit 19) | envs documentadas; deploy real necessário antes do cutover da Etapa 7 |
 
-## O plano de 30 commits está completo — o que falta é OPERAÇÃO
+## Plano vigente: Adendo §B do doc-fonte (Etapas 8–10)
 
-Estado final da suíte: **771 unit + 337 db/pipeline (Python), 912 testes TS;
-tsc, ruff e import-linter limpos.** Todas as 10 migrations aplicadas no vivo.
+**Correção de registro (B.5-2/B.5-3, 11 ago):** a declaração anterior deste
+STATUS ("plano de 30 commits completo") media contra o plano interno de
+commits, não contra o doc-fonte — a Etapa 7 entregue foi "UI mínima
+funcional", uma re-escopagem sem registro prévio. O Adendo §B ratifica o que
+vale (D9–D14), define as Etapas 8–10 como plano vigente e torna as regras de
+relatório vinculantes. A Etapa 7 como o doc-fonte a descreve é agora a
+**Etapa 10**.
+
+**DIVERGÊNCIA v1 (registro B.5-4):** `obs/` sem Logfire — o entregue (JSON +
+OTel opcional + cinto de PII) é fundação; fechamento no passo 9.1 (D13).
+**DIVERGÊNCIA v1:** sender em bloco único vs. bolhas do legado — fechamento
+no passo 8.3 (D10, bloqueante do piloto). **DIVERGÊNCIA v1:** typing
+indicator não portado — o outbox não carrega o inbound wamid que a Meta
+exige para typing (o próprio legado pula sem ele); fica para quando o
+outbox carregar o last inbound id (nota em 8.3).
+
+### Etapas 8–10 — estado
+
+| Passo | Estado | Nota |
+|---|---|---|
+| 8.1 Deploy runtime | **aguardando Apply** (conta Render do usuário) | `render.yaml` no repo; DEPLOY.md com DSN/segredos |
+| 8.2 Vercel envs | aguardando 8.1 | URL + AGENTS_PREVIEW_TOKEN |
+| 8.3 Humanização do sender (D10) | **em execução** | porta de cloud-sender.ts + fixtures TS |
+| 8.4 Sonda healthz | aguardando 8.1 | |
+| 8.5 Seeds rodada 2 | **[GATE-Bruno]** | drafts já no banco |
+| 8.6 Rollout + smoke | aguardando 8.5 | runbook abaixo |
+| 8.7 Rollback provado | aguardando 8.6 | registrar horário aqui |
+| 9.1–9.4 | pendentes (antes da 2ª loja) | 9.x paralelos entre si |
+| 10.1–10.8 | pendentes (paralelo pós-8.3) | contrato visual: zip do design |
+| RLS fase B/C (D11) | lotes contínuos, **[GATE-Bruno]** por lote | fase A feita |
+
+Estado da suíte no registro deste adendo: **771 unit + 337 db/pipeline
+(Python), 912 testes TS; tsc, ruff e import-linter limpos.** 14 migrations
+aplicadas no vivo.
 
 ### Runbook do cutover (a fatia vertical na loja piloto)
 
