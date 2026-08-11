@@ -149,6 +149,8 @@ export async function PUT(
       'is_active',
       'persona',
       'settings',
+      'presentation_mode',
+      'client_adaptation',
     ]
 
     for (const field of allowedFields) {

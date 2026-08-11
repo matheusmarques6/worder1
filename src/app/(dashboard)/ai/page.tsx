@@ -10,7 +10,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores'
-import AIAgentList from '@/components/agents/AIAgentList'
+import AgentTab from '@/components/ai-hub/AgentTab'
 import ApiKeysManager from '@/components/whatsapp/ApiKeysManager'
 import KnowledgeBasePanel from '@/components/agents/KnowledgeBasePanel'
 import MissionsTab from '@/components/agents/MissionsTab'
@@ -102,7 +102,7 @@ function AiHubPageInner() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'agents' && <AIAgentList organizationId={organizationId} />}
+        {activeTab === 'agents' && <AgentTab organizationId={organizationId} />}
         {activeTab === 'missions' && <MissionsTab />}
         {activeTab === 'knowledge' && <KnowledgeBasePanel organizationId={organizationId} />}
         {activeTab === 'reports' && <ReportsView organizationId={organizationId} />}

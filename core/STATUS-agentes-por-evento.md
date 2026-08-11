@@ -103,6 +103,7 @@ ajustados nos testes.
 | `20260813000011_grant_lifecycle.sql` | 11/08/2026 via MCP (`grant_lifecycle`) | fim de vida do grant (9.2): `consume_incentive_grant` (service_role; dedup por (grant, pedido) via UNIQUE parcial — reentrega = 'already') + `internal.expire_incentive_grants()` (sender_role; roda no housekeeping do sender) + `incentive_ledger.order_ref` |
 | `20260813000012_otel_carrier.sql` | 11/08/2026 via MCP (`otel_carrier`) | 9.1b: `message_outbox.otel` + `conclude_turn` 10-arg (p_otel default null; assinatura de 9 caiu) + `coalesce_due_conversations` 3-arg (p_otel) + `claimed_send.otel`/`claim_outbox_batch` devolvendo o carrier ao sender |
 | `20260813000013_activity_compat_views.sql` | 11/08/2026 via MCP (`activity_compat_views`) | 9.4: views `ai_runtime_activity`/`_calls`/`_tools` (definer, dono postgres) sobre internal.* + conversations + missão; SELECT só para service_role — anon/authenticated revogados explicitamente (os defaults do Supabase dariam) |
+| `20260814000001_agent_presentation_adaptation.sql` | 11/08/2026 via MCP (`agent_presentation_adaptation`) | 10.4 (metade schema): `ai_agents.presentation_mode` (CHECK 3 modos, default nome_funcao) + `ai_agents.client_adaptation` jsonb (flags de ESTILO — dinheiro nunca entra) |
 
 ## Adiados / decisões em aberto
 
@@ -161,13 +162,17 @@ migrarem para SDK, com captura de conteúdo desligada explicitamente.
 | 9.3 Dinheiro no inbound | **feito** | 9.3a: StateBlock com cupom vigente + ledger. 9.3b: porta LLM com tools (ToolSpec/ToolCall; OpenRouter + OpenAI-compat + Anthropic nativo traduzem o MESMO contrato) + tool-loop no responder (teto de 3 rodadas; esgotou = chamada final sem tools); create_coupon oferecida só se missão∩agente permitir. DoD provado em teste db: concessão none + grant do momento → `reused` na trilha, resposta com o cupom existente, zero grant novo |
 | 9.1 Logfire (D13) | **feito no código** — DoD "conversa navegável no Logfire" confere no smoke pós-deploy (depende de 8.1/8.2 + token) | 9.1a: `configure_logfire()` token-gated + instrument httpx/psycopg/system_metrics + scrubbing (conteúdo GenAI fora em 3 linhas de defesa). 9.1b: traceparent viaja — passe do coalescer carimba o payload pgmq (turno retoma como LINK), conclude grava o carrier do turno na outbox (migration 0012) e o sender retoma como PARENT (turno+envio = um trace); spans coalesce_pass/turn/mission_touch/send com outcome; responder/toucher anotam mission_version_id/moment_ids/grant_id/node_ref; cinto de PII provado em teste p/ o vocabulário novo |
 | 9.4 Trilha única na UI | **feito** | Atividade ganha a seção "Conversas do runtime" (missão · custo · judge) lendo `/api/ai/activity` → views de compatibilidade (migration 0013); detalhe por conversa com guarda anti-IDOR (`runtimeConversationDetail` só devolve conversa da org); legados (agent_traces/ai_eval_*) congelados e ainda visíveis abaixo — DoD dos dois universos atendido |
-| 10.1–10.8 | pendentes (paralelo pós-8.3) | contrato visual: zip do design |
+| 10.1 Um agente por loja | **feito** | zip do design recebido 11/08. `AIAgentList` saiu da aba Agente; `/api/ai/agents/canonical` (GET estado, POST escolhe — demais arquivam is_active=false, restauráveis); org com N ativos cai na tela única de escolha |
+| 10.2 Radial + clássica | **feito (núcleo)** | `src/components/ai-hub/` (AgentTab/RadialView/ClassicView/AreaFields) + model `agent-hub.ts` (área↔coluna REAL com round-trip testado; merge preserva o que a órbita não conhece); breakpoint lg decide radial/clássica sobre o MESMO HubState (sem toggle, §4.4-2); 9 áreas nas 9 posições; CSS do zip escopado em agents-theme.css; nó Conhecimento abre o KnowledgeBasePanel real no drawer (§4.4-8) |
+| 10.6 Missão descoberta na radial | **feito** | área "Missão descoberta (default)" (ex-Papel, §4.4-3): viés vendedor/suporte/híbrido = OBJECTIVE da missão whatsapp.received (3 textos canônicos; um dado, N portas); salvar cria versão nova + ativa (append-only) — nada de papel global |
+| 10.4 presentation/adaptation | **metade feita** | schema no vivo (migration 0014) + UI (identidade com 3 modos e linha fixa exibida; adaptação com os 5 toggles, §4.4-4/5); falta o runtime LER (AgentBlock.presentation_mode/adaptation + StateBlock) |
+| 10.3 / 10.5 / 10.7 / 10.8 | pendentes | fusão de abas + Limites sub-aba; preview real no painel; custom tools v1; banner de momentos |
 | RLS fase B/C (D11) | lotes contínuos, **[GATE-Bruno]** por lote | fase A feita |
 
-Estado da suíte após a Etapa 9 completa: **836 unit + 365 db/pipeline
-(Python), 920 testes TS (+1 gerador de vetores, gated); tsc, ruff e
-import-linter limpos.** 17 migrations aplicadas no vivo. A Etapa 9 fecha
-com 9.1/9.2/9.3/9.4 feitos no código; o que resta dela é observação
+Estado da suíte após 10.1/10.2: **836 unit + 365 db/pipeline (Python),
+925 testes TS (+1 gerador de vetores, gated); tsc, ruff, import-linter e
+next build limpos.** 18 migrations aplicadas no vivo. A Etapa 9 fecha com
+9.1/9.2/9.3/9.4 feitos no código; o que resta dela é observação
 pós-deploy (9.1: conversa navegável no Logfire — depende de 8.1/8.2 +
 token) e 9.5 (roadmap, não bloqueia).
 
