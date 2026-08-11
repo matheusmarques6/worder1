@@ -149,12 +149,13 @@ outbox carregar o last inbound id (nota em 8.3).
 | 8.6 Rollout + smoke | aguardando 8.5 | runbook abaixo |
 | 8.7 Rollback provado | aguardando 8.6 | registrar horário aqui |
 | 9.2 Ciclo do grant | **feito** | consume RPC (dedup por pedido no UNIQUE) + expire no housekeeping do sender + wire no webhook orders/paid; migration 0011 no vivo |
-| 9.1 / 9.3 / 9.4 | em execução (antes da 2ª loja) | 9.x paralelos entre si |
+| 9.3 Dinheiro no inbound | **em curso** — 9.3a feito: StateBlock do responder carrega cupom vigente (só grant vivo COM código) + histórico do ledger, escopado ao contato | falta 9.3b: tool-loop (porta LLM com tools + create_coupon no turno inbound) — o DoD do adendo fecha lá |
+| 9.1 / 9.4 | em execução (antes da 2ª loja) | 9.x paralelos entre si |
 | 10.1–10.8 | pendentes (paralelo pós-8.3) | contrato visual: zip do design |
 | RLS fase B/C (D11) | lotes contínuos, **[GATE-Bruno]** por lote | fase A feita |
 
-Estado da suíte após 8.3: **798 unit + 340 db/pipeline (Python), 912 testes
-TS (+1 gerador de vetores, gated); tsc, ruff e import-linter limpos.** 14
+Estado da suíte após 9.3a: **801 unit + 352 db/pipeline (Python), 916 testes
+TS (+1 gerador de vetores, gated); tsc, ruff e import-linter limpos.** 15
 migrations aplicadas no vivo.
 
 ### Runbook do cutover (a fatia vertical na loja piloto)

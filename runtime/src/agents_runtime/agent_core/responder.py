@@ -65,6 +65,7 @@ from agents_runtime.judges.pre_send import (
 from agents_runtime.queueing.jobs import InboundJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
+from agents_runtime.repository import incentives as incentives_repo
 from agents_runtime.repository import judge_scores as scores_repo
 from agents_runtime.repository import llm_calls as llm_repo
 from agents_runtime.repository import missions as missions_repo
@@ -85,6 +86,26 @@ TRANSCRIPT_LIMIT = 20
 
 #: Variável de ambiente que sobrescreve de onde as rubricas do Judge 1 são lidas.
 RUBRICS_DIRECTORY_VARIABLE = "AGENTS_RUBRICS_DIR"
+
+
+def _money_lines(grants: Sequence[incentives_repo.Grant]) -> tuple[str, ...]:
+    """Grants vigentes como linhas do bloco de ESTADO (9.3a). O vocabulário
+    espelha o do toucher (kind/value crus) — o agente lê os dois blocos com a
+    mesma gramática; a diferença é o tempo verbal: aqui o benefício JÁ existe."""
+    return tuple(
+        "Cupom vigente {code}: {kind} {value}, válido até {until} "
+        "— uso {uses}/{max_uses} ({object_kind} {object_ref})".format(
+            code=grant.coupon_code,
+            kind=grant.kind,
+            value=grant.value,
+            until=grant.validity_until.strftime("%d/%m"),
+            uses=grant.uses,
+            max_uses=grant.max_uses,
+            object_kind=grant.object_kind,
+            object_ref=grant.object_ref,
+        )
+        for grant in grants
+    )
 
 
 def fixed_responder(text: str = FIXED_REPLY):
@@ -190,6 +211,16 @@ def build_responder(
                     conn, event_type=DISCOVERY_EVENT
                 )
                 active_moments = await moments_repo.load_active_moments(conn)
+                # 9.3a — o dinheiro no inbound: o agente conhece o benefício
+                # que JÁ existe (e a memória de pedidos negados) antes de
+                # decidir o que dizer. Validade pelo relógio do banco, como
+                # todo o resto do estado lido nesta transação.
+                valid_grants = await incentives_repo.valid_grants_for_contact(
+                    conn, contact_id=state.contact_id
+                )
+                ledger_lines = await incentives_repo.recent_ledger_lines(
+                    conn, contact_id=state.contact_id
+                )
                 key_rows = (
                     await keys_repo.load_org_provider_keys(
                         conn, organization_id=job.organization_id
@@ -292,9 +323,9 @@ def build_responder(
                     moment_ids=tuple(str(m) for m in moment_view.moment_ids),
                     moment_facts=moment_view.facts,
                     moment_public_claim=moment_view.public_claim,
-                    grant_id=None,
-                    grant_lines=(),
-                    ledger_lines=(),
+                    grant_id=str(valid_grants[0].id) if valid_grants else None,
+                    grant_lines=_money_lines(valid_grants),
+                    ledger_lines=ledger_lines,
                     contact_facts=(
                         (("nome", state.contact_name),) if state.contact_name else ()
                     ),

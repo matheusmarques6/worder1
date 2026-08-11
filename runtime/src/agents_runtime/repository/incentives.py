@@ -152,6 +152,30 @@ async def find_reusable_grant(
     return None if row is None else _as_grant(row)
 
 
+async def valid_grants_for_contact(
+    conn: psycopg.AsyncConnection, *, contact_id: UUID, limit: int = 3
+) -> tuple[Grant, ...]:
+    """Os benefícios de pé deste contato — o que o agente PODE mencionar no
+    inbound (9.3a). Só grant vivo E com código: um grant sem cupom (crash na
+    janela grant→provedor) não vira promessa na boca do agente."""
+    cursor = await conn.execute(
+        f"""
+        select {_GRANT_COLUMNS}
+          from public.incentive_grants
+         where contact_id = %(contact)s
+           and status = 'issued'
+           and validity_until > now()
+           and uses < max_uses
+           and coupon_code is not null
+         order by created_at desc
+         limit %(limit)s
+        """,
+        {"contact": contact_id, "limit": limit},
+    )
+    rows = await cursor.fetchall()
+    return tuple(_as_grant(row) for row in rows)
+
+
 async def append_ledger(
     conn: psycopg.AsyncConnection,
     *,
