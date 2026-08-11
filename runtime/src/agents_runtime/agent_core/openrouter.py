@@ -18,12 +18,21 @@ secrets (the Meta token, E4). Absent, the process dies at startup instead of
 discovering it on the first customer message.
 """
 
+import json
 import os
 from collections.abc import Sequence
 
 import httpx
 
-from agents_runtime.agent_core.llm import ChatRequest, ChatResult, EmbeddingResult, Usage
+from agents_runtime.agent_core.llm import (
+    ChatRequest,
+    ChatResult,
+    EmbeddingResult,
+    Message,
+    ToolCall,
+    ToolSpec,
+    Usage,
+)
 
 BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -52,9 +61,7 @@ class OpenRouterLlm:
     async def chat(self, request: ChatRequest) -> ChatResult:
         body: dict = {
             "model": request.model,
-            "messages": [
-                {"role": message.role, "content": message.content} for message in request.messages
-            ],
+            "messages": [openai_message(message) for message in request.messages],
             # Cost only comes back when it is asked for, and the trail records
             # what was billed instead of guessing from a price table.
             "usage": {"include": True},
@@ -63,6 +70,8 @@ class OpenRouterLlm:
             # Only when the gate said so: paying for reasoning on every reply is
             # exactly the cost the think-gate exists to avoid.
             body["reasoning"] = {"enabled": True}
+        if request.tools:
+            body["tools"] = [openai_tool(tool) for tool in request.tools]
 
         data = await self._post("/chat/completions", body)
 
@@ -70,10 +79,12 @@ class OpenRouterLlm:
         if not choices:
             raise ValueError(f"openrouter: 2xx with no choice ({str(data)[:200]})")
 
+        message = choices[0]["message"]
         return ChatResult(
-            text=choices[0]["message"]["content"],
+            text=message.get("content") or "",
             usage=_usage_of(data),
             model=data.get("model") or request.model,
+            tool_calls=openai_tool_calls(message),
         )
 
     async def embed(self, texts: Sequence[str], *, model: str) -> EmbeddingResult:
@@ -101,6 +112,58 @@ class OpenRouterLlm:
             raise RuntimeError(f"HTTP {response.status_code} {response.text[:300]}")
 
         return response.json()
+
+
+def openai_message(message: Message) -> dict:
+    """Uma Message da porta no dialeto OpenAI — inclusive as duas pontas do
+    tool-loop (assistant pedindo, role="tool" respondendo). Compartilhado com
+    os adapters de chave direta OpenAI-compatível: um dialeto, uma tradução."""
+    wire: dict = {"role": message.role, "content": message.content}
+    if message.tool_calls:
+        wire["tool_calls"] = [
+            {
+                "id": call.id,
+                "type": "function",
+                "function": {
+                    "name": call.name,
+                    "arguments": json.dumps(dict(call.arguments), ensure_ascii=False),
+                },
+            }
+            for call in message.tool_calls
+        ]
+    if message.tool_call_id is not None:
+        wire["tool_call_id"] = message.tool_call_id
+    return wire
+
+
+def openai_tool(tool: ToolSpec) -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": dict(tool.parameters),
+        },
+    }
+
+
+def openai_tool_calls(message: dict) -> tuple[ToolCall, ...]:
+    """As tool calls da resposta, já com argumentos parseados. JSON quebrado é
+    `ValueError` — 2xx com argumentos ilegíveis é resposta inutilizável, e o
+    classificador de falhas já chama isso de permanente."""
+    calls = []
+    for entry in message.get("tool_calls") or ():
+        function = entry.get("function") or {}
+        raw = function.get("arguments") or "{}"
+        try:
+            arguments = json.loads(raw)
+        except json.JSONDecodeError as error:
+            raise ValueError(f"tool call com argumentos ilegíveis: {raw[:200]}") from error
+        calls.append(
+            ToolCall(id=str(entry.get("id") or ""), name=function.get("name") or "",
+                     arguments=arguments)
+        )
+    return tuple(calls)
 
 
 def _usage_of(data: dict) -> Usage:

@@ -327,16 +327,24 @@ def create_agent_version(
     model: str | None = None,
     base_prompt: str = "Você é o atendente da loja.",
     agent_id: uuid.UUID | None = None,
+    enabled_tools: list[str] | None = None,
 ) -> uuid.UUID:
     """One version of the agent (Worder: ai_agents + ai_agent_versions).
 
     Keeps the motor's status vocabulary (draft/active/archived) and maps to the
     local one ('rascunho'/'produção'/'arquivada'). `model` lives on ai_agents.
+    `enabled_tools` lands in settings->tools->enabled — the version half of the
+    intersection that gates what the model may call (9.3b).
     """
     del origin
     if agent_id is None:
         agent_id = create_agent(conn, organization_id, model=model, base_prompt=base_prompt)
 
+    settings = (
+        psycopg.types.json.Jsonb({"tools": {"enabled": enabled_tools}})
+        if enabled_tools is not None
+        else None
+    )
     with conn.cursor() as cur:
         cur.execute(
             "select coalesce(max(version_number), 0) + 1 from public.ai_agent_versions"
@@ -347,12 +355,12 @@ def create_agent_version(
         cur.execute(
             """
             insert into public.ai_agent_versions
-                (organization_id, agent_id, version_number, status, system_prompt)
-            values (%s, %s, %s, %s, %s)
+                (organization_id, agent_id, version_number, status, system_prompt, settings)
+            values (%s, %s, %s, %s, %s, %s)
             returning id
             """,
             (organization_id, agent_id, next_number,
-             _VERSION_STATUS.get(status, status), base_prompt),
+             _VERSION_STATUS.get(status, status), base_prompt, settings),
         )
         (version_id,) = cur.fetchone()
     return version_id

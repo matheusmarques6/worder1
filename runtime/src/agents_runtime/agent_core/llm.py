@@ -20,7 +20,7 @@ D1 (decisão 79) is written into the types:
 port asks for extended reasoning, it never decides that it is warranted.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -37,9 +37,33 @@ EMBEDDING_MODEL = "openai/text-embedding-3-small"
 
 
 @dataclass(frozen=True, slots=True)
+class ToolSpec:
+    """Uma tool OFERECIDA ao modelo (9.3b). `parameters` é JSON Schema — o
+    formato neutro; cada adapter traduz para o dialeto do provedor."""
+
+    name: str
+    description: str
+    parameters: Mapping
+
+
+@dataclass(frozen=True, slots=True)
+class ToolCall:
+    """Uma tool PEDIDA pelo modelo. `arguments` já chega parseado — o JSON em
+    string é dialeto de provedor, e dialeto não atravessa a porta."""
+
+    id: str
+    name: str
+    arguments: Mapping
+
+
+@dataclass(frozen=True, slots=True)
 class Message:
     role: str
     content: str
+    #: role="assistant" pedindo tools nesta fala (a volta do loop reapresenta).
+    tool_calls: tuple[ToolCall, ...] = ()
+    #: role="tool" respondendo à chamada com este id.
+    tool_call_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +71,8 @@ class ChatRequest:
     model: str
     messages: tuple[Message, ...]
     think: bool = False
+    #: Vazio = turno sem tools (o corpo enviado nem menciona a chave).
+    tools: tuple[ToolSpec, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +93,8 @@ class ChatResult:
     #: always the string the caller asked for.
     model: str
     provider: str = PROVIDER
+    #: Não-vazio = o modelo quer tools antes de concluir; `text` pode ser "".
+    tool_calls: tuple[ToolCall, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -24,6 +24,7 @@ o espelho de pedidos chega no E3 — inventar um "cliente sem histórico" para
 quem já conversou três vezes seria pior que a ausência (decisão 86d).
 """
 
+import json
 import os
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import timedelta
@@ -32,11 +33,18 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import httpx
 import psycopg
 
 import agents_runtime
 from agents_runtime.agent_core import openrouter
-from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message
+from agents_runtime.agent_core.llm import (
+    ChatRequest,
+    LlmPort,
+    Message,
+    ToolCall,
+    ToolSpec,
+)
 from agents_runtime.agent_core.metering import CallRecord, MeteredLlm
 from agents_runtime.agent_core.mission_resolver import (
     DISCOVERY_EVENT,
@@ -73,6 +81,7 @@ from agents_runtime.repository import moments as moments_repo
 from agents_runtime.repository import provider_keys as keys_repo
 from agents_runtime.repository.scope import scope_to_organization
 from agents_runtime.tools.base import ToolContext, run_tool
+from agents_runtime.tools.coupon import BENEFIT_KINDS, OBJECT_KINDS, CreateCoupon
 from agents_runtime.tools.knowledge import SearchKnowledge
 
 #: A costura do motor, intocada desde o E1: o worker chama isto e nada mais.
@@ -86,6 +95,38 @@ TRANSCRIPT_LIMIT = 20
 
 #: Variável de ambiente que sobrescreve de onde as rubricas do Judge 1 são lidas.
 RUBRICS_DIRECTORY_VARIABLE = "AGENTS_RUBRICS_DIR"
+
+#: Rodadas de tool por TENTATIVA de geração (9.3b). Esgotou, a chamada final
+#: sai sem tools — o modelo é obrigado a concluir em texto. Regeneração do
+#: Judge reabre o loop, e o dinheiro aguenta: o offer engine reusa antes de
+#: emitir e o idempotency_key mata a duplicata no banco.
+MAX_TOOL_ROUNDS = 3
+
+#: O que o modelo lê antes de decidir pedir. A autoridade está no texto: quem
+#: decide é o engine — o modelo só PEDE (§3.3.5).
+CREATE_COUPON_SPEC = ToolSpec(
+    name="create_coupon",
+    description=(
+        "Pede um benefício (cupom) para o objeto comercial da conversa. Quem "
+        "decide é o offer engine: a resposta traz decision reused (já havia "
+        "cupom vigente — use esse), issued (novo) ou denied (sem autorização; "
+        "diga um não honesto). Use apenas quando o cliente pedir desconto ou "
+        "benefício."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "object_kind": {"type": "string", "enum": list(OBJECT_KINDS)},
+            "object_ref": {
+                "type": "string",
+                "description": "A referência do objeto, como aparece no ESTADO.",
+            },
+            "kind": {"type": "string", "enum": list(BENEFIT_KINDS)},
+            "value": {"type": "number"},
+        },
+        "required": ["object_kind", "object_ref"],
+    },
+)
 
 
 def _money_lines(grants: Sequence[incentives_repo.Grant]) -> tuple[str, ...]:
@@ -160,6 +201,7 @@ def build_responder(
     knowledge_limit: int = 5,
     agent_llm_from_org_keys: bool = False,
     base_secret: str | None = None,
+    shopify_transport: httpx.AsyncBaseTransport | None = None,
 ):
     """O responder real. `llm` é a porta da PLATAFORMA (Judge 1 + embeddings —
     D4); com `agent_llm_from_org_keys` ligado (produção), a resposta do agente
@@ -360,6 +402,43 @@ def build_responder(
                 never_say_ai=True,
             )
 
+            # --- 9.3b: as tools que o modelo pode PEDIR neste turno. A grade é
+            # a interseção missão∩agente (permissão estreita); o dinheiro segue
+            # decidido pelo offer engine dentro da própria tool.
+            turn_tools: dict[str, Any] = {}
+            tool_specs: tuple[ToolSpec, ...] = ()
+            if "create_coupon" in resolved.tools:
+                turn_tools["create_coupon"] = CreateCoupon(
+                    mission=resolved,
+                    moment=active_moments[0] if active_moments else None,
+                    base_secret=base_secret,
+                    clock=clock,
+                    transport=shopify_transport,
+                )
+                tool_specs = (CREATE_COUPON_SPEC,)
+
+            async def run_turn_tool(call: ToolCall) -> str:
+                tool = turn_tools.get(call.name)
+                if tool is None:
+                    payload: dict[str, Any] = {"error": f"tool desconhecida: {call.name}"}
+                else:
+                    result = await run_tool(
+                        conn,
+                        tool,
+                        ToolContext(
+                            organization_id=job.organization_id,
+                            conversation_id=job.conversation_id,
+                        ),
+                        dict(call.arguments),
+                        clock=clock,
+                    )
+                    payload = (
+                        dict(result.output or {})
+                        if result.success
+                        else {"error": result.error}
+                    )
+                return json.dumps(payload, ensure_ascii=False)
+
             async def generate(attempt: int, feedback: tuple[str, ...]) -> str:
                 messages = [Message(role="system", content=system), *conversation]
                 if feedback:
@@ -373,6 +452,37 @@ def build_responder(
                             ),
                         )
                     )
+                for _ in range(MAX_TOOL_ROUNDS):
+                    answer = await chat.chat(
+                        ChatRequest(
+                            model=version.config.model,
+                            messages=tuple(messages),
+                            think=gate.think,
+                            tools=tool_specs,
+                        )
+                    )
+                    if not answer.tool_calls:
+                        return answer.text
+                    # A volta do loop: o pedido do modelo e a resposta da tool
+                    # entram na conversa; nenhuma transação fica aberta aqui
+                    # (run_tool abre e fecha as suas — ADR-6 vale no loop).
+                    messages.append(
+                        Message(
+                            role="assistant",
+                            content=answer.text,
+                            tool_calls=answer.tool_calls,
+                        )
+                    )
+                    for call in answer.tool_calls:
+                        messages.append(
+                            Message(
+                                role="tool",
+                                content=await run_turn_tool(call),
+                                tool_call_id=call.id,
+                            )
+                        )
+                # Rodadas esgotadas: a última chamada sai SEM tools — concluir
+                # em texto deixa de ser opcional.
                 answer = await chat.chat(
                     ChatRequest(
                         model=version.config.model,

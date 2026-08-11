@@ -42,18 +42,27 @@ class ScriptedLlm:
         reply: str = "Claro! O frete é grátis acima de duzentos reais. 🧡",
         verdicts: dict[str, bool] | None = None,
         rationale: str = "dublê roteirizado",
+        tool_rounds: Sequence[tuple] = (),
     ) -> None:
         self._reply = reply
         self._verdicts = verdicts
         self._rationale = rationale
+        #: Roteiro do tool-loop (9.3b): cada item é a tupla de ToolCalls de UMA
+        #: rodada. Como um modelo real, o dublê só pede tool se ela foi
+        #: OFERECIDA no request — pedido sem oferta cai no texto final.
+        self._tool_rounds = list(tool_rounds)
         self.asked: list = []
 
     async def chat(self, request) -> ChatResult:
         self.asked.append(request)
 
+        tool_calls: tuple = ()
         if request.model == JUDGE_MODEL:
             verdicts = self._verdicts if self._verdicts is not None else self._all_good()
             text = json.dumps({"verdicts": verdicts, "rationale": self._rationale})
+        elif self._tool_rounds and getattr(request, "tools", ()):
+            tool_calls = tuple(self._tool_rounds.pop(0))
+            text = ""
         else:
             text = self._reply
 
@@ -61,6 +70,7 @@ class ScriptedLlm:
             text=text,
             usage=Usage(input_tokens=120, output_tokens=40, cost_usd=0.00018),
             model=f"stand-in/{request.model}",
+            tool_calls=tool_calls,
         )
 
     def _all_good(self) -> dict[str, bool]:
