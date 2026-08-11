@@ -45,6 +45,7 @@ import {
   Palette,
   MessageCircle,
   List as ListIcon,
+  Sparkles,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -97,6 +98,7 @@ const navigation: NavSection[] = [
           { name: 'Monitoramento', href: '/automations/monitoring' },
         ],
       },
+      { name: 'IA', href: '/ai', icon: Sparkles },
     ],
   },
   {
@@ -113,7 +115,6 @@ const navigation: NavSection[] = [
         children: [
           { name: 'Inbox', href: '/whatsapp/inbox' },
           { name: 'Templates', href: '/whatsapp/templates' },
-          { name: 'Agentes IA', href: '/whatsapp/ai-agents' },
           { name: 'Listas', href: '/whatsapp/phonebooks' },
           { name: 'Configurações', href: '/whatsapp/settings' },
         ],
