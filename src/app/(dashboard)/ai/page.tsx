@@ -11,26 +11,39 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores'
 import AgentTab from '@/components/ai-hub/AgentTab'
-import ApiKeysManager from '@/components/whatsapp/ApiKeysManager'
+import ActivityTab from '@/components/ai-hub/ActivityTab'
+import LimitsTab from '@/components/ai-hub/LimitsTab'
 import KnowledgeBasePanel from '@/components/agents/KnowledgeBasePanel'
 import MissionsTab from '@/components/agents/MissionsTab'
-import ReportsView from '@/components/agents/reports/ReportsView'
-import EvalView from '@/components/agents/eval/EvalView'
 import { AgentsTheme } from '@/components/agents/ui/AgentsTheme'
-import { Bot, Key, BookOpen, BarChart3, ClipboardCheck, Loader2, Target } from 'lucide-react'
+import { Bot, BookOpen, BarChart3, Loader2, Shield, Target } from 'lucide-react'
 
-type TabId = 'agents' | 'missions' | 'knowledge' | 'reports' | 'eval' | 'api-keys'
+// 10.3 — as 5 sub-abas do doc-fonte. Avaliação fundiu com Atividade
+// (sub-views); API Keys foi absorvida pela área Motor & budget da radial.
+type TabId = 'agents' | 'missions' | 'knowledge' | 'limits' | 'activity'
 
 const TABS: { id: TabId; label: string; icon: typeof Bot }[] = [
   { id: 'agents', label: 'Agente', icon: Bot },
   { id: 'missions', label: 'Missões', icon: Target },
   { id: 'knowledge', label: 'Conhecimento', icon: BookOpen },
-  { id: 'reports', label: 'Atividade', icon: BarChart3 },
-  { id: 'eval', label: 'Avaliação', icon: ClipboardCheck },
-  { id: 'api-keys', label: 'API Keys', icon: Key },
+  { id: 'limits', label: 'Limites', icon: Shield },
+  { id: 'activity', label: 'Atividade', icon: BarChart3 },
 ]
 
 const VALID_TABS = TABS.map(t => t.id)
+
+// Links antigos continuam aterrissando no lugar certo.
+const LEGACY_TABS: Record<string, TabId> = {
+  reports: 'activity',
+  eval: 'activity',
+  'api-keys': 'agents',
+}
+
+function resolveTab(raw: string | null | undefined): TabId {
+  if (raw && VALID_TABS.includes(raw as TabId)) return raw as TabId
+  if (raw && LEGACY_TABS[raw]) return LEGACY_TABS[raw]
+  return 'agents'
+}
 
 function AiHubPageInner() {
   const router = useRouter()
@@ -38,21 +51,14 @@ function AiHubPageInner() {
   const { user, isLoading } = useAuthStore()
   const [mounted, setMounted] = useState(false)
 
-  const paramTab = searchParams?.get('tab')
-  const initialTab = (paramTab && VALID_TABS.includes(paramTab as TabId) ? paramTab : 'agents') as TabId
-  const [activeTab, setActiveTab] = useState<TabId>(initialTab)
+  const [activeTab, setActiveTab] = useState<TabId>(resolveTab(searchParams?.get('tab')))
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
   useEffect(() => {
-    const t = searchParams?.get('tab')
-    if (t && VALID_TABS.includes(t as TabId)) {
-      setActiveTab(t as TabId)
-    } else if (!t) {
-      setActiveTab('agents')
-    }
+    setActiveTab(resolveTab(searchParams?.get('tab')))
   }, [searchParams])
 
   if (!mounted || isLoading) {
@@ -105,9 +111,8 @@ function AiHubPageInner() {
         {activeTab === 'agents' && <AgentTab organizationId={organizationId} />}
         {activeTab === 'missions' && <MissionsTab />}
         {activeTab === 'knowledge' && <KnowledgeBasePanel organizationId={organizationId} />}
-        {activeTab === 'reports' && <ReportsView organizationId={organizationId} />}
-        {activeTab === 'eval' && <EvalView organizationId={organizationId} />}
-        {activeTab === 'api-keys' && <ApiKeysManager />}
+        {activeTab === 'limits' && <LimitsTab organizationId={organizationId} />}
+        {activeTab === 'activity' && <ActivityTab organizationId={organizationId} />}
       </div>
     </AgentsTheme>
   )

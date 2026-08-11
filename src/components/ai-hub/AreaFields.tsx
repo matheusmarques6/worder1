@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Check, Plus, ShieldCheck, X } from 'lucide-react'
 import KnowledgeBasePanel from '@/components/agents/KnowledgeBasePanel'
+import ApiKeysManager from '@/components/whatsapp/ApiKeysManager'
 import {
   DISCOVERY_OBJECTIVES,
   type DiscoveryBias,
@@ -312,9 +313,11 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
         <input className="field" value={hub.budget.model}
           onChange={(e) => patch('budget', { ...hub.budget, model: e.target.value })} />
         <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 7 }}>
-          Provedor: <b>{hub.budget.provider}</b> — a chave da organização (BYO) vive em API Keys; sem chave, o agente não ativa no runtime novo.
+          Provedor: <b>{hub.budget.provider}</b> — sem chave da organização (BYO), o agente não ativa no runtime novo.
         </div>
       </div>
+      {/* 10.3: API Keys absorvida pela área Motor — o gerenciador real, aqui. */}
+      <ApiKeysManager />
     </div>
   )
 }

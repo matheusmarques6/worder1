@@ -45,6 +45,18 @@ export interface Mission {
   activated_at: string | null
 }
 
+// 10.3 — o consolidado de concessão fala uma língua só (LimitsTab e
+// MissionsTab leem daqui; editar é sempre dentro da missão).
+export function describeConcession(concession: Mission['concession'] | null | undefined): string {
+  const kind = concession?.kind ?? 'none'
+  if (kind === 'none') return 'Sem concessão automática'
+  const uses = concession?.max_uses ? ` · ${concession.max_uses} uso(s)` : ''
+  const validity = concession?.validity_hours ? ` · válido ${concession.validity_hours}h` : ''
+  if (kind === 'percent') return `Cupom de até ${concession?.max_value ?? 0}%${uses}${validity}`
+  if (kind === 'fixed') return `Desconto de até R$ ${concession?.max_value ?? 0}${uses}${validity}`
+  return `Frete grátis${uses}${validity}`
+}
+
 const EDITABLE_FIELDS = [
   'situation',
   'objective',

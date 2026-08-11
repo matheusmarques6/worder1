@@ -167,14 +167,16 @@ migrarem para SDK, com captura de conteúdo desligada explicitamente.
 | 10.6 Missão descoberta na radial | **feito** | área "Missão descoberta (default)" (ex-Papel, §4.4-3): viés vendedor/suporte/híbrido = OBJECTIVE da missão whatsapp.received (3 textos canônicos; um dado, N portas); salvar cria versão nova + ativa (append-only) — nada de papel global |
 | 10.4 presentation/adaptation | **feito** | schema no vivo (migration 0014) + UI (3 modos, linha fixa exibida; 5 toggles §4.4-4/5) + runtime LÊ: load_active_version carrega as colunas, responder e toucher montam AgentBlock com presentation_mode e adaptation_flags (ponte emoji_if_client→emoji); provado em teste db que o modo escolhido muda o prompt e a linha fixa de IA fica em qualquer modo |
 | 10.5 Preview "O que o agente sabe" | **feito** | o núcleo da radial abre a folha com os blocos REAIS de /api/ai/preview-prompt (mesma compile_prompt do turno, modo preview); runtime fora do ar = fantasmas MISSÃO/ESTADO/CANAL + aviso (§4.4-6); Juízes e Motor como cards FORA do box; o buildPrompt() do protótipo nunca virou produção |
-| 10.3 / 10.7 / 10.8 | pendentes — próxima ação da Etapa 10 | 10.3: fusão Atividade+Avaliação e API Keys→área Motor + sub-aba Limites (reusar AreaFields de limits + consolidado de concessão por missão em leitura); 10.7: custom tools v1 (tabela + executor HTTP no tool-loop + teste obrigatório; nunca concede); 10.8: view active_commercial_moments + banner em Campanhas e no editor de Fluxos |
+| 10.3 Fusão de abas + Limites | **feito** | as 5 sub-abas do doc-fonte: Agente · Missões · Conhecimento · Limites · Atividade. Atividade funde Reports+Eval (sub-views; a seção do runtime do 9.4 vive dentro); API Keys absorvida pelo drawer Motor da radial (ApiKeysManager real); LimitsTab edita os MESMOS campos da área Limites via agent-hub (um dado, N portas) + consolidado de concessão por missão em leitura (describeConcession compartilhado) + interruptor de desligar o agente; links antigos ?tab=reports/eval/api-keys aterrissam no lugar certo |
+| 10.7 / 10.8 | pendentes — próxima ação da Etapa 10 | 10.7: custom tools v1 (tabela ai_agent_custom_tools + executor HTTP read-only no tool-loop do responder + form com teste obrigatório antes de ligar; regra dupla: NUNCA concede); 10.8: view active_commercial_moments (migration) + banner de leitura em Campanhas e no editor de Fluxos |
 | RLS fase B/C (D11) | lotes contínuos, **[GATE-Bruno]** por lote | fase A feita |
 
-Estado da suíte após 10.4: **838 unit + 367 db/pipeline (Python),
+Estado da suíte após 10.3: **838 unit + 367 db/pipeline (Python),
 925 testes TS (+1 gerador de vetores, gated); tsc, ruff, import-linter e
 next build limpos.** 18 migrations aplicadas no vivo. Próxima ação da
-Etapa 10: 10.3 (fusão de abas + sub-aba Limites), depois 10.5 (preview
-real no painel), 10.7 (custom tools v1) e 10.8 (banner de momentos). A Etapa 9 fecha com
+Etapa 10: 10.8 (view active_commercial_moments + banners) e 10.7
+(custom tools v1) — o DoD da etapa fecha com a punch list §4.4 conferida
+e o print de 11/08 irreproduzível. A Etapa 9 fecha com
 9.1/9.2/9.3/9.4 feitos no código; o que resta dela é observação
 pós-deploy (9.1: conversa navegável no Logfire — depende de 8.1/8.2 +
 token) e 9.5 (roadmap, não bloqueia).
