@@ -9,7 +9,7 @@ linha de defesa de PII e vive como teste, não como intenção.
 import json
 import logging
 
-from agents_runtime.obs import SAFE_ATTRIBUTES, configure_logging, span
+from agents_runtime.obs import SAFE_ATTRIBUTES, configure_logging, logfire_setup, span
 from agents_runtime.obs import telemetry as telemetry_module
 from agents_runtime.obs.logging import JsonFormatter
 
@@ -108,6 +108,111 @@ class TestTheAttributeBelt:
         assert "phone" not in SAFE_ATTRIBUTES
         assert "text" not in SAFE_ATTRIBUTES
 
+    def test_the_turn_vocabulary_of_9_1_is_in(self) -> None:
+        # Adendo §B 9.1: os IDs que tornam a conversa navegável no Logfire.
+        for attribute in (
+            "mission_version_id", "node_ref", "grant_id", "moment_ids", "contact_id"
+        ):
+            assert attribute in SAFE_ATTRIBUTES
+
+    def test_the_new_ids_cross_the_belt(self, monkeypatch) -> None:
+        recorder = _SpanRecorder()
+        monkeypatch.setattr(telemetry_module, "_tracer", recorder)
+
+        with span(
+            "turn",
+            mission_version_id="mv-1",
+            grant_id="g-1",
+            moment_ids="m-1,m-2",
+            contact_id="c-1",
+            node_ref="flow:node",
+        ):
+            pass
+
+        ((_, attributes),) = recorder.calls
+        assert attributes == {
+            "mission_version_id": "mv-1",
+            "grant_id": "g-1",
+            "moment_ids": "m-1,m-2",
+            "contact_id": "c-1",
+            "node_ref": "flow:node",
+        }
+
     def test_without_endpoint_configure_declines(self, monkeypatch) -> None:
         monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
         assert telemetry_module.configure_telemetry() is False
+
+
+class _FakeLogfire:
+    """Um módulo logfire de mentira: grava o que foi chamado e nada mais."""
+
+    def __init__(self, *, broken: set[str] | None = None) -> None:
+        self.configured: dict | None = None
+        self.instrumented: list[str] = []
+        self._broken = broken or set()
+
+    class ScrubbingOptions:
+        def __init__(self, extra_patterns=None) -> None:
+            self.extra_patterns = list(extra_patterns or [])
+
+    def configure(self, **kwargs) -> None:
+        self.configured = kwargs
+
+    def __getattr__(self, name: str):
+        if not name.startswith("instrument_"):
+            raise AttributeError(name)
+
+        def hook(*args, **kwargs):
+            if name.removeprefix("instrument_") in self._broken:
+                raise RuntimeError("instrumentação sem dependência")
+            self.instrumented.append(name.removeprefix("instrument_"))
+
+        return hook
+
+
+class TestConfigureLogfire:
+    def test_without_a_token_it_declines_at_zero_cost(self, monkeypatch) -> None:
+        monkeypatch.delenv("AGENTS_LOGFIRE_TOKEN", raising=False)
+        assert logfire_setup.configure_logfire() == ()
+
+    def test_with_a_token_it_configures_and_instruments_the_real_stack(
+        self, monkeypatch
+    ) -> None:
+        fake = _FakeLogfire()
+        monkeypatch.setenv("AGENTS_LOGFIRE_TOKEN", "lf-token")
+        monkeypatch.setenv("DEPLOY_ENV", "prod")
+        monkeypatch.setattr(logfire_setup, "_import_logfire", lambda: fake)
+
+        enabled = logfire_setup.configure_logfire()
+
+        assert fake.configured is not None
+        assert fake.configured["token"] == "lf-token"
+        assert fake.configured["service_name"] == "worder-runtime"
+        assert fake.configured["environment"] == "prod"
+        assert fake.configured["console"] is False
+        # D13, 3ª linha: o scrubbing cobre vocabulário de conteúdo GenAI.
+        patterns = " ".join(fake.configured["scrubbing"].extra_patterns)
+        assert "prompt" in patterns and "completion" in patterns
+        # As instrumentações do runtime REAL (adapters são httpx puro):
+        assert fake.instrumented == ["httpx", "psycopg", "system_metrics"]
+        assert enabled == ("logfire", "httpx", "psycopg", "system_metrics")
+        # instrument_openai/anthropic NÃO são chamadas (D13: a captura de
+        # conteúdo delas viola a regra, e não há SDK para instrumentar —
+        # divergência registrada no STATUS).
+        assert "openai" not in fake.instrumented
+        assert "anthropic" not in fake.instrumented
+
+    def test_a_broken_instrumentation_never_kills_the_boot(self, monkeypatch) -> None:
+        fake = _FakeLogfire(broken={"psycopg"})
+        monkeypatch.setenv("AGENTS_LOGFIRE_TOKEN", "lf-token")
+        monkeypatch.setattr(logfire_setup, "_import_logfire", lambda: fake)
+
+        enabled = logfire_setup.configure_logfire()
+
+        assert "psycopg" not in enabled
+        assert "httpx" in enabled and "system_metrics" in enabled
+
+    def test_token_without_the_package_declines_loudly(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGENTS_LOGFIRE_TOKEN", "lf-token")
+        monkeypatch.setattr(logfire_setup, "_import_logfire", lambda: None)
+        assert logfire_setup.configure_logfire() == ()

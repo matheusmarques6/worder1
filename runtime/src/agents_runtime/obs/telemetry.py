@@ -31,6 +31,13 @@ SAFE_ATTRIBUTES = frozenset(
         "provider",
         "model",
         "event_type",
+        # 9.1 (Adendo §B): os IDs que tornam o turno navegável no Logfire,
+        # espelhando a trilha interna. IDs e rótulos — nunca conteúdo.
+        "mission_version_id",
+        "node_ref",
+        "grant_id",
+        "moment_ids",
+        "contact_id",
     }
 )
 

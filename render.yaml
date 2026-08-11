@@ -56,3 +56,5 @@ services:
         sync: false
       - key: AGENTS_PREVIEW_TOKEN # o mesmo valor vai na Vercel p/ o preview
         sync: false
+      - key: AGENTS_LOGFIRE_TOKEN # opcional (D13): vazio = Logfire desligado
+        sync: false

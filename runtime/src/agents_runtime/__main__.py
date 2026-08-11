@@ -12,6 +12,7 @@ adapters land at the end of E1; the pipeline suite points this at its fake.
 
 import asyncio
 import importlib
+import logging
 import os
 import signal
 import sys
@@ -20,7 +21,7 @@ from agents_runtime import server
 from agents_runtime.app import run
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.config import config_from_env
-from agents_runtime.obs import configure_logging, configure_telemetry
+from agents_runtime.obs import configure_logfire, configure_logging, configure_telemetry
 
 DSN_VARIABLE = "SUPABASE_DB_URL"
 
@@ -117,6 +118,11 @@ def main() -> None:
 
     configure_logging(os.environ.get("AGENTS_LOG_LEVEL"))
     configure_telemetry()
+    enabled = configure_logfire()
+    if enabled:
+        logging.getLogger("agents_runtime").info(
+            "logfire ligado", extra={"instrumented": list(enabled)}
+        )
 
     dsn = os.environ.get(DSN_VARIABLE)
     if not dsn:

@@ -58,7 +58,8 @@ Qualquer outra plataforma que rode container long-lived serve igualmente
 | `AGENTS_HTTP_PORT` | Porta do listener (`/healthz` + `POST /internal/preview-prompt`). Ausente = sem listener |
 | `AGENTS_PREVIEW_TOKEN` | Token de serviço do preview. Ausente = endpoint de preview não existe (healthz continua) |
 | `AGENTS_LOG_LEVEL` | `INFO` default; logs saem em JSON por linha no stdout |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Endpoint OTLP (Alloy sidecar ou gateway). Ausente = telemetria no-op. Exige SDK OTel instalado na imagem (não é dependência do lockfile — adicionar quando o stack Logfire/Grafana entrar) |
+| `AGENTS_LOGFIRE_TOKEN` | Token de write do Logfire (D13/9.1). Presente = `logfire.configure` + instrument httpx/psycopg/system_metrics, com captura de conteúdo GenAI desligada e scrubbing extra. Ausente = Logfire dormente, custo zero |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Cópia OTLP opcional (Alloy sidecar ou gateway). Ausente = telemetria OTLP no-op. O SDK OTel já vem na imagem (dependência do logfire) |
 | `DEPLOY_ENV` | `dev`/`staging`/`production` — vira `deployment.environment` nos spans |
 | `AGENTS_PROCESS_NAME` | Nome no heartbeat (`internal.runtime_heartbeats`); default `agents-runtime` |
 

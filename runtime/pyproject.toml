@@ -16,6 +16,10 @@ dependencies = [
     # behaviours to reason about.
     "httpx>=0.27",
     "cryptography>=50.0.0",
+    # D13 (Adendo §B): Logfire com as instrumentações que o runtime usa de
+    # verdade — httpx (provedores), psycopg (banco) e métricas de sistema.
+    # A ativação é por token (AGENTS_LOGFIRE_TOKEN); sem token, custo zero.
+    "logfire[httpx,psycopg,system-metrics]>=3.5",
 ]
 
 [dependency-groups]

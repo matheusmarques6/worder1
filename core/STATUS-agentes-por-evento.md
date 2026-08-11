@@ -131,11 +131,18 @@ relatório vinculantes. A Etapa 7 como o doc-fonte a descreve é agora a
 
 **DIVERGÊNCIA v1 (registro B.5-4):** `obs/` sem Logfire — o entregue (JSON +
 OTel opcional + cinto de PII) é fundação; fechamento no passo 9.1 (D13).
+*Fechada em 9.1a:* `configure_logfire()` por token + instrument
+httpx/psycopg/system_metrics, conteúdo GenAI fora (cinto + scrubbing).
 **DIVERGÊNCIA v1:** sender em bloco único vs. bolhas do legado — fechamento
 no passo 8.3 (D10, bloqueante do piloto). **DIVERGÊNCIA v1:** typing
 indicator não portado — o outbox não carrega o inbound wamid que a Meta
 exige para typing (o próprio legado pula sem ele); fica para quando o
-outbox carregar o last inbound id (nota em 8.3).
+outbox carregar o last inbound id (nota em 8.3). **DIVERGÊNCIA v1 (9.1):**
+`instrument_openai`/`instrument_anthropic` do 9.1 NÃO são chamadas — os
+adapters daqui são httpx puro (não há SDK para instrumentar; os spans de
+provedor saem do `instrument_httpx`) e a captura de prompt/completion
+dessas instrumentações é o que D13 proíbe. Fecha se/quando os adapters
+migrarem para SDK, com captura de conteúdo desligada explicitamente.
 
 ### Etapas 8–10 — estado
 
@@ -150,11 +157,12 @@ outbox carregar o last inbound id (nota em 8.3).
 | 8.7 Rollback provado | aguardando 8.6 | registrar horário aqui |
 | 9.2 Ciclo do grant | **feito** | consume RPC (dedup por pedido no UNIQUE) + expire no housekeeping do sender + wire no webhook orders/paid; migration 0011 no vivo |
 | 9.3 Dinheiro no inbound | **feito** | 9.3a: StateBlock com cupom vigente + ledger. 9.3b: porta LLM com tools (ToolSpec/ToolCall; OpenRouter + OpenAI-compat + Anthropic nativo traduzem o MESMO contrato) + tool-loop no responder (teto de 3 rodadas; esgotou = chamada final sem tools); create_coupon oferecida só se missão∩agente permitir. DoD provado em teste db: concessão none + grant do momento → `reused` na trilha, resposta com o cupom existente, zero grant novo |
-| 9.1 / 9.4 | em execução (antes da 2ª loja) | 9.x paralelos entre si |
+| 9.1 Logfire (D13) | **em curso** — 9.1a feito: `configure_logfire()` token-gated (AGENTS_LOGFIRE_TOKEN; render.yaml/DEPLOY.md atualizados), instrument httpx/psycopg/system_metrics guardadas, scrubbing extra p/ vocabulário de conteúdo, cinto ganha mission_version_id/node_ref/grant_id/moment_ids/contact_id | falta 9.1b: traceparent no otel do pgmq e do outbox + spans do turno nos call sites (coalescer↔worker↔sender) |
+| 9.4 Trilha única na UI | em execução (antes da 2ª loja) | 9.x paralelos entre si |
 | 10.1–10.8 | pendentes (paralelo pós-8.3) | contrato visual: zip do design |
 | RLS fase B/C (D11) | lotes contínuos, **[GATE-Bruno]** por lote | fase A feita |
 
-Estado da suíte após 9.3: **809 unit + 355 db/pipeline (Python), 916 testes
+Estado da suíte após 9.1a: **820 unit + 355 db/pipeline (Python), 916 testes
 TS (+1 gerador de vetores, gated); tsc, ruff e import-linter limpos.** 15
 migrations aplicadas no vivo.
 
