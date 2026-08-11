@@ -15,6 +15,7 @@ dependencies = [
     # A second HTTP client would be a second set of timeout and pooling
     # behaviours to reason about.
     "httpx>=0.27",
+    "cryptography>=50.0.0",
 ]
 
 [dependency-groups]
