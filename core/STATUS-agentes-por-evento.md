@@ -142,7 +142,7 @@ outbox carregar o last inbound id (nota em 8.3).
 |---|---|---|
 | 8.1 Deploy runtime | **aguardando Apply** (conta Render do usuário) | `render.yaml` no repo; DEPLOY.md com DSN/segredos |
 | 8.2 Vercel envs | aguardando 8.1 | URL + AGENTS_PREVIEW_TOKEN |
-| 8.3 Humanização do sender (D10) | **em execução** | porta de cloud-sender.ts + fixtures TS |
+| 8.3 Humanização do sender (D10) | **feito** (código+fixtures; falta o "visivelmente humano" na loja de teste, que depende de 8.1) | split portado com paridade PROVADA (10 vetores gerados pelo TS real); ritmo proporcional c/ teto por bolha e orçamento agregado; 1ª bolha falhou = retry, bolha do meio = o que saiu vale (ADR-8); espelho por bolha; wamid da linha = 1ª bolha |
 | 8.4 Sonda healthz | aguardando 8.1 | |
 | 8.5 Seeds rodada 2 | **[GATE-Bruno]** | drafts já no banco |
 | 8.6 Rollout + smoke | aguardando 8.5 | runbook abaixo |
@@ -151,9 +151,9 @@ outbox carregar o last inbound id (nota em 8.3).
 | 10.1–10.8 | pendentes (paralelo pós-8.3) | contrato visual: zip do design |
 | RLS fase B/C (D11) | lotes contínuos, **[GATE-Bruno]** por lote | fase A feita |
 
-Estado da suíte no registro deste adendo: **771 unit + 337 db/pipeline
-(Python), 912 testes TS; tsc, ruff e import-linter limpos.** 14 migrations
-aplicadas no vivo.
+Estado da suíte após 8.3: **798 unit + 340 db/pipeline (Python), 912 testes
+TS (+1 gerador de vetores, gated); tsc, ruff e import-linter limpos.** 14
+migrations aplicadas no vivo.
 
 ### Runbook do cutover (a fatia vertical na loja piloto)
 

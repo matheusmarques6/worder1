@@ -79,6 +79,9 @@ class QueueingConfig:
     # The outbox claim lease. Expired mid-'sending' means the sender died with
     # the outcome unknown — the sweep turns that into state, never a resend.
     send_lease: timedelta = timedelta(seconds=60)
+    # Humanização (Adendo §B 8.3): bolhas sempre; os DELAYS entre elas são
+    # opt-out — a suíte desliga para não medir ritmo em teste de regra.
+    humanize_delays: bool = True
     # How long an unknown may wait for correlation evidence before a human is
     # asked. DECISION, not canon: 5 minutes chosen here (status webhooks land
     # in seconds); the canonical table should absorb or veto it (pendência).
@@ -111,6 +114,10 @@ def config_from_env(environ: "dict[str, str]") -> QueueingConfig:
             "AGENTS_PROCESS_HEARTBEAT_MS", base.process_heartbeat_every
         ),
         send_lease=_ms("AGENTS_SEND_LEASE_MS", base.send_lease),
+        humanize_delays=(
+            environ.get("AGENTS_HUMANIZE_DELAYS", "").strip().lower()
+            not in ("off", "0", "false")
+        ),
         unknown_review_after=_ms("AGENTS_REVIEW_MS", base.unknown_review_after),
         backoff_base=_ms("AGENTS_BACKOFF_BASE_MS", base.backoff_base),
         backoff_cap=_ms("AGENTS_BACKOFF_CAP_MS", base.backoff_cap),

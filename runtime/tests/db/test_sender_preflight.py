@@ -240,7 +240,10 @@ class TestSenderPassExecutesTheVerdict:
 
         async with as_sender(dsn) as conn:
             await sender_pass(
-                conn, fake_channel, config=QueueingConfig(), randomness=SystemRandomness()
+                conn,
+                fake_channel,
+                config=QueueingConfig(humanize_delays=False),
+                randomness=SystemRandomness(),
             )
 
         assert outbox_state(admin, outbox_id) == ("failed", "preflight: opt_out")
@@ -262,7 +265,10 @@ class TestSenderPassExecutesTheVerdict:
 
         async with as_sender(dsn) as conn:
             await sender_pass(
-                conn, fake_channel, config=QueueingConfig(), randomness=SystemRandomness()
+                conn,
+                fake_channel,
+                config=QueueingConfig(humanize_delays=False),
+                randomness=SystemRandomness(),
             )
 
         status, wamid = admin.execute(
@@ -294,7 +300,10 @@ class TestSenderPassExecutesTheVerdict:
 
         async with as_sender(dsn) as conn:
             await sender_pass(
-                conn, fake_channel, config=QueueingConfig(), randomness=SystemRandomness()
+                conn,
+                fake_channel,
+                config=QueueingConfig(humanize_delays=False),
+                randomness=SystemRandomness(),
             )
 
         assert outbox_state(admin, outbox_id)[0] == "sent"
@@ -315,7 +324,10 @@ class TestSenderPassExecutesTheVerdict:
 
         async with as_sender(dsn) as conn:
             await sender_pass(
-                conn, fake_channel, config=QueueingConfig(), randomness=SystemRandomness()
+                conn,
+                fake_channel,
+                config=QueueingConfig(humanize_delays=False),
+                randomness=SystemRandomness(),
             )
 
         assert outbox_state(admin, outbox_id) == ("failed", "preflight: window_closed")
@@ -426,7 +438,10 @@ class TestMomentSuppressionAlerts:
 
         async with as_sender(dsn) as conn:
             await sender_pass(
-                conn, fake_channel, config=QueueingConfig(), randomness=SystemRandomness()
+                conn,
+                fake_channel,
+                config=QueueingConfig(humanize_delays=False),
+                randomness=SystemRandomness(),
             )
 
         assert outbox_state(admin, outbox_id) == ("failed", "preflight: moment_gone")
@@ -451,7 +466,10 @@ class TestMomentSuppressionAlerts:
 
         async with as_sender(dsn) as conn:
             await sender_pass(
-                conn, fake_channel, config=QueueingConfig(), randomness=SystemRandomness()
+                conn,
+                fake_channel,
+                config=QueueingConfig(humanize_delays=False),
+                randomness=SystemRandomness(),
             )
 
         (payload,) = admin.execute(

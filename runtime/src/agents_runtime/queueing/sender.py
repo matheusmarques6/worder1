@@ -25,18 +25,71 @@ of cenários C, where it has tests; a hand-rolled version now would be the
 blind resend ADR-8 forbids.
 """
 
+import logging
 import uuid
 from dataclasses import replace
 from datetime import timedelta
 
 import psycopg
 
-from agents_runtime.channels.port import ChannelPort
+from agents_runtime.channels.humanize import compute_pacing, split_into_bubbles
+from agents_runtime.channels.port import ChannelPort, ClaimedSend
+from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
 from agents_runtime.queueing.backoff import delay_for
 from agents_runtime.queueing.failures import Failure, classify
 from agents_runtime.randomness import Randomness
 from agents_runtime.repository import engine
+
+logger = logging.getLogger(__name__)
+
+
+async def send_humanized(
+    channel: ChannelPort,
+    send: ClaimedSend,
+    *,
+    humanize_delays: bool,
+    clock: Clock,
+) -> list[tuple[str, str]]:
+    """Entrega UMA linha da outbox como bolhas (8.3/D10). Devolve os pares
+    (wamid, texto) que SAÍRAM, na ordem.
+
+    A semântica de falha é a do legado, que já era ADR-8 avant la lettre:
+    a 1ª bolha falhou = nada saiu = a exceção sobe e a escada normal decide
+    retry; uma bolha SEGUINTE falhou = o que saiu VALE — aborta o resto e
+    nunca re-tenta, porque re-entregar a linha repetiria as bolhas 1..k na
+    tela do cliente.
+    """
+    text = send.payload.get("text")
+    bubbles = split_into_bubbles(text) if isinstance(text, str) else []
+    if len(bubbles) <= 1:
+        # Template, payload não-texto ou bolha única: um envio, como sempre.
+        wamid = await channel.send(send)
+        body = bubbles[0] if bubbles else None
+        return [(wamid, body)] if body is not None else [(wamid, "")]
+
+    pacing = compute_pacing(bubbles, enabled=humanize_delays)
+    delivered: list[tuple[str, str]] = []
+    for index, bubble in enumerate(bubbles):
+        delay_ms = pacing.delays_ms[index]
+        if delay_ms:
+            await clock.sleep(delay_ms / 1000)
+        try:
+            wamid = await channel.send(replace(send, payload={"text": bubble}))
+        except Exception:
+            if index == 0:
+                raise
+            logger.warning(
+                "bolha falhou no meio; o que saiu vale, sem re-envio",
+                extra={
+                    "outbox_id": str(send.outbox_id),
+                    "delivered": len(delivered),
+                    "of": len(bubbles),
+                },
+            )
+            break
+        delivered.append((wamid, bubble))
+    return delivered
 
 
 async def sender_pass(
@@ -45,9 +98,11 @@ async def sender_pass(
     *,
     config: QueueingConfig,
     randomness: Randomness,
+    clock: Clock | None = None,
     limit: int = 50,
 ) -> int:
     """Returns how many sends were attempted — the pass's only observable."""
+    clock = clock or SystemClock()
     # House-keeping before claiming: a dead sender's 'sending' rows become
     # unknown (state only, NEVER a resend), and unknowns past the review
     # window go to a human. Running here covers the startup case for free —
@@ -105,7 +160,9 @@ async def sender_pass(
                 )
 
         try:
-            provider_message_id = await channel.send(send)
+            delivered = await send_humanized(
+                channel, send, humanize_delays=config.humanize_delays, clock=clock
+            )
         except Exception as error:  # the classifier is the policy
             failure = classify(error)
             await engine.mark_outbox_failed(
@@ -119,21 +176,27 @@ async def sender_pass(
                 ),
             )
         else:
-            await engine.mark_outbox_sent(conn, send.outbox_id, token, provider_message_id)
-            # Espelho no inbox: só bolhas de texto — um template não tem corpo
-            # renderizado aqui, e espelhar um chute mentiria para o operador.
+            # O wamid da linha é o da 1ª bolha — paridade com o legado, e é
+            # ele que o webhook de status correlaciona primeiro.
+            await engine.mark_outbox_sent(conn, send.outbox_id, token, delivered[0][0])
+            # Espelho no inbox: CADA bolha vira uma linha, na ordem — só
+            # texto (um template não tem corpo renderizado aqui, e espelhar
+            # um chute mentiria para o operador).
             if send.channel_type == "whatsapp" and "text" in send.payload:
-                try:
-                    await engine.mirror_outbound_to_inbox(
-                        conn,
-                        send.organization_id,
-                        send.to_phone_e164,
-                        provider_message_id,
-                        str(send.payload["text"]),
-                    )
-                except psycopg.Error:
-                    # O canônico já registrou o envio; o espelho se recupera
-                    # no próximo inbound do contato (sync webhook → inbox).
-                    pass
+                for wamid, bubble in delivered:
+                    if not bubble:
+                        continue
+                    try:
+                        await engine.mirror_outbound_to_inbox(
+                            conn,
+                            send.organization_id,
+                            send.to_phone_e164,
+                            wamid,
+                            bubble,
+                        )
+                    except psycopg.Error:
+                        # O canônico já registrou o envio; o espelho se
+                        # recupera no próximo inbound (sync webhook → inbox).
+                        pass
 
     return len(batch)

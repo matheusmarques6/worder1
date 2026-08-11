@@ -88,7 +88,11 @@ class FakeChannel:
 
             await asyncio.sleep(0.05)
 
-        return f"fake-wamid-{send.idempotency_key}"
+        # Um wamid ÚNICO por chamada, como o provedor real: as bolhas de um
+        # mesmo envio (8.3) compartilham a idempotency_key mas cada mensagem
+        # aceita ganha o seu id — o espelho deduplica por ele.
+        self._sent = getattr(self, "_sent", 0) + 1
+        return f"fake-wamid-{send.idempotency_key}-{self._sent}"
 
 
 def create_channel(dsn: str) -> ChannelPort:

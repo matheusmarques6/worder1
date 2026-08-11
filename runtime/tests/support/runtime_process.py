@@ -28,6 +28,9 @@ TINY_INTERVALS = {
     "AGENTS_SENDER_POLL_MS": "50",
     "AGENTS_PROCESS_HEARTBEAT_MS": "100",
     "AGENTS_BUSY_RETRY_MS": "100",
+    # Cenários provam REGRA, não ritmo: os delays humanizados (8.3) ficam
+    # fora do relógio da suíte. A quebra em bolhas continua ativa.
+    "AGENTS_HUMANIZE_DELAYS": "off",
 }
 
 
