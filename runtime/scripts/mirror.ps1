@@ -1,12 +1,12 @@
 # Espelha o banco de produção (Supabase nuvem) no db local do compose.
 # Repetível: rodar de novo re-espelha por cima. O dump vive só em /tmp do
-# container — dados sensíveis não tocam o disco do host.
+# container - dados sensíveis não tocam o disco do host.
 # Uso:  cd runtime; powershell -ExecutionPolicy Bypass -File scripts\mirror.ps1
 $ErrorActionPreference = 'Stop'
 $runtimeDir = Split-Path -Parent $PSScriptRoot
 Set-Location $runtimeDir
 
-# 1. DSN da nuvem — fonte única: .env.piloto
+# 1. DSN da nuvem - fonte única: .env.piloto
 $envFile = Join-Path $runtimeDir '.env.piloto'
 if (-not (Test-Path $envFile)) { throw "Crie runtime/.env.piloto a partir do .env.piloto.example antes de espelhar." }
 $dsnLine = (Select-String -Path $envFile -Pattern '^SUPABASE_DB_URL=').Line
@@ -27,14 +27,17 @@ if ($health -ne 'healthy') { throw "db nao ficou healthy em 3 min (status: $heal
 
 # 3. runtime-bancada parado durante o restore (conexoes abertas travam DROPs)
 docker compose --profile bancada stop runtime-bancada
+if ($LASTEXITCODE -ne 0) { throw "docker compose stop runtime-bancada falhou." }
 
 # 4. dump da nuvem, dentro do container (pg_dump 17 da propria imagem)
+# Risco aceito: a DSN (com senha) aparece como argumento de processo dentro do container durante o dump (docker top). PC de dev de uso único.
 Write-Host ">> pg_dump (public, internal, auth) da nuvem..."
 docker compose exec -T db pg_dump "$cloudDsn" -Fc -n public -n internal -n auth --no-owner -f /tmp/mirror.dump
-if ($LASTEXITCODE -ne 0) { throw "pg_dump falhou — confira a senha/DSN do .env.piloto (session pooler 5432)." }
+if ($LASTEXITCODE -ne 0) { throw "pg_dump falhou - confira a senha/DSN do .env.piloto (session pooler 5432)." }
 
 # 5. pre-restore: roles + extensoes
 docker compose cp scripts/pre-restore.sql db:/tmp/pre-restore.sql
+if ($LASTEXITCODE -ne 0) { throw "docker compose cp pre-restore.sql falhou." }
 docker compose exec -T db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/pre-restore.sql
 if ($LASTEXITCODE -ne 0) { throw "pre-restore.sql falhou." }
 
@@ -45,17 +48,36 @@ Write-Host ">> pg_restore terminou (exit $LASTEXITCODE; avisos tolerados, valida
 
 # 7. post-restore: filas vazias + heartbeats zerados + grants pgmq
 docker compose cp scripts/post-restore.sql db:/tmp/post-restore.sql
+if ($LASTEXITCODE -ne 0) { throw "docker compose cp post-restore.sql falhou." }
 docker compose exec -T db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/post-restore.sql
 if ($LASTEXITCODE -ne 0) { throw "post-restore.sql falhou." }
 docker compose exec -T db rm -f /tmp/mirror.dump /tmp/pre-restore.sql /tmp/post-restore.sql
 
 # 8. validacao de fidelidade: contagens local x nuvem nas tabelas que o runtime le
 $checkSql = "select 'organizations', count(*) from public.organizations union all select 'contacts', count(*) from public.contacts union all select 'organization_api_keys', count(*) from public.organization_api_keys order by 1;"
-Write-Host "`n== NUVEM =="
-docker compose exec -T db psql "$cloudDsn" -t -c "$checkSql"
-Write-Host "== LOCAL =="
-docker compose exec -T db psql -U postgres -d postgres -t -c "$checkSql"
-Write-Host "== filas (esperado 8) e heartbeats (esperado 0) =="
-docker compose exec -T db psql -U postgres -d postgres -t -c "select count(*) from pgmq.meta; select count(*) from internal.runtime_heartbeats;"
+Write-Host "`n>> Capturando contagens da NUVEM..."
+$cloudCounts = docker compose exec -T db psql "$cloudDsn" -t -A -c "$checkSql" | ForEach-Object { $_.Trim() }
+if ($LASTEXITCODE -ne 0) { throw "Consulta de contagens da nuvem falhou." }
 
-Write-Host "`nCompare as contagens acima. Se baterem: docker compose --profile bancada up -d  (religa o runtime)"
+Write-Host ">> Capturando contagens do LOCAL..."
+$localCounts = docker compose exec -T db psql -U postgres -d postgres -t -A -c "$checkSql" | ForEach-Object { $_.Trim() }
+if ($LASTEXITCODE -ne 0) { throw "Consulta de contagens local falhou." }
+
+$cloudCountsStr = $cloudCounts -join "`n"
+$localCountsStr = $localCounts -join "`n"
+
+if ($cloudCountsStr -ne $localCountsStr) {
+  Write-Host "`n== ERRO: Contagens diferem! =="
+  Write-Host "NUVEM:`n$cloudCountsStr"
+  Write-Host "`nLOCAL:`n$localCountsStr"
+  throw "Fidelidade do mirror falhou: contagens não batem."
+}
+
+Write-Host "`n== OK: Contagens batem =="
+Write-Host $localCountsStr
+
+Write-Host "`n>> Verificando filas (esperado 8) e heartbeats (esperado 0)..."
+docker compose exec -T db psql -U postgres -d postgres -t -c "select count(*) from pgmq.meta; select count(*) from internal.runtime_heartbeats;"
+if ($LASTEXITCODE -ne 0) { throw "Consulta de filas/heartbeats falhou." }
+
+Write-Host "`nMirror bem-sucedido! Para religar o runtime: docker compose --profile bancada up -d"
