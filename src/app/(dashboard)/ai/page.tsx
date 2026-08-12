@@ -89,7 +89,16 @@ function AiHubPageInner() {
   }
 
   return (
-    <AgentsTheme className="h-full flex flex-col" style={{ background: 'var(--bg)' }}>
+    // O layout do dashboard embrulha toda página em `p-4 lg:p-6` de fluxo
+    // normal — bom para listas, ruim para uma bancada: `h-full` não resolvia
+    // contra nada, o radial colapsava no mínimo e sobrava um mar de branco.
+    // Margens negativas devolvem as bordas e o calc prende a altura ao
+    // viewport (72px = top bar mobile; 61px = header sticky do desktop);
+    // cada aba rola por dentro do próprio painel.
+    <AgentsTheme
+      className="flex flex-col -m-4 lg:-m-6 h-[calc(100dvh-72px)] lg:h-[calc(100dvh-61px)]"
+      style={{ background: 'var(--bg)' }}
+    >
       <div className="tabs-row">
         {TABS.map(tab => {
           const Icon = tab.icon

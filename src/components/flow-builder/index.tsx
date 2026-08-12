@@ -110,12 +110,19 @@ export function FlowBuilder({
       else if (node.type?.startsWith('condition_') || node.type?.startsWith('logic_condition') || node.type?.startsWith('logic_split') || node.type?.startsWith('logic_filter')) category = 'condition';
       else if (node.type?.startsWith('control_') || node.type?.startsWith('logic_delay')) category = 'control';
 
+      // Default aposentado: fluxo salvo antes do rename mostra o rótulo
+      // novo; um nome que o lojista personalizou fica como está.
+      const savedLabel =
+        node.type === 'action_ai_mission' && node.data?.label === 'Toque de IA (Missão)'
+          ? undefined
+          : node.data?.label;
+
       return {
         id: node.id,
         type: node.type,
         position: node.position,
         data: {
-          label: node.data?.label || definition?.label || '',
+          label: savedLabel || definition?.label || '',
           description: node.data?.description || definition?.description || '',
           category,
           nodeType: node.type,

@@ -481,7 +481,7 @@ export const actionTypes: NodeTypeDefinition[] = [
   },
   {
     type: 'action_ai_mission',
-    label: 'Toque de IA (Missão)',
+    label: 'IA',
     description: 'Runtime gera o toque pela missão do evento',
     icon: Bot,
     category: 'action',
