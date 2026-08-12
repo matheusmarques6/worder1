@@ -29,6 +29,52 @@ o `docker-compose.yml` é o espelho local dela.
 Qualquer outra plataforma que rode container long-lived serve igualmente
 (Railway/Fly/VPS com compose); não há estado no disco, tudo vive no Postgres.
 
+## Rodando no PC (bancada e piloto)
+
+Dois modos no `docker-compose.yml` deste diretório, que coexistem:
+
+| Modo | Sobe | Banco | Envia? | healthz |
+|---|---|---|---|---|
+| `bancada` | `db` + `runtime-bancada` | local (espelho de produção) | NÃO (sem canal) | `:10000` |
+| `piloto` | `runtime-piloto` | nuvem (session pooler) | SIM (Meta) | `:10001` |
+
+Setup: copiar `.env.bancada.example`→`.env.bancada` e `.env.piloto.example`→
+`.env.piloto`, preencher os segredos (nunca commitar os reais).
+
+**Bancada** (espelhar + subir):
+
+    powershell -ExecutionPolicy Bypass -File scripts\mirror.ps1
+    docker compose --profile bancada up -d --build
+
+Provas: logs JSON sem exceção; `http://localhost:10000/healthz` = 200;
+`select process_name, beat_at from internal.runtime_heartbeats order by beat_at desc`
+no banco LOCAL (`docker compose exec db psql -U postgres`) mostrando
+`runtime-pc-bancada` recente.
+
+O espelho contém dados reais de clientes: o volume `db_data` é dado sensível.
+Destruir: `docker compose --profile bancada down -v`. A bancada é MUDA por
+contrato — nunca adicionar `AGENTS_CHANNEL`/`AGENTS_META_ACCESS_TOKEN` ao
+`.env.bancada`; para envio real existe o piloto.
+
+**Piloto** (envio REAL — runtime de produção rodando no PC):
+
+    docker compose --profile piloto up -d --build
+
+Provas: healthz em `:10001`; heartbeat `runtime-pc-piloto` na NUVEM (SQL Editor
+do Supabase). O rollout por org (`ai_runtime_rollout`) continua sendo o
+interruptor — subir o piloto não liga org nenhuma.
+
+**Erros comuns** (`docker compose logs runtime-bancada|runtime-piloto`):
+
+| Sintoma no log | Causa | Correção |
+|---|---|---|
+| `password authentication failed` | senha errada na DSN | resetar em Settings → Database e atualizar o `.env` |
+| `Tenant or user not found` | usuário sem sufixo do projeto | usar `postgres.rqpmoavktzvxfcfsdkcc` |
+| `could not translate host name` | host errado | `aws-0-sa-east-1.pooler.supabase.com:5432` (piloto) / `db:5432` (bancada) |
+| `AGENTS_... is not set` | linha faltando no `.env` | conferir contra o `.example` e `docker compose restart <serviço>` |
+| `port is already allocated` | 54322/10000/10001 ocupadas | trocar a porta do HOST no compose (lado esquerdo do mapa) |
+| container em loop de restart | qualquer uma acima | a última linha do log antes de morrer diz qual |
+
 ## Variáveis de ambiente
 
 ### Obrigatórias
