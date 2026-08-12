@@ -25,6 +25,8 @@ export interface Mission {
   id: string
   organization_id: string
   event_type: string
+  /** Nome livre do lojista; null = UI mostra o rótulo da família. */
+  display_name?: string | null
   parent_version_id: string | null
   status: 'draft' | 'active' | 'archived'
   origin: 'worder_default' | 'lojista' | 'flywheel'
@@ -58,6 +60,7 @@ export function describeConcession(concession: Mission['concession'] | null | un
 }
 
 const EDITABLE_FIELDS = [
+  'display_name',
   'situation',
   'objective',
   'success_criteria',

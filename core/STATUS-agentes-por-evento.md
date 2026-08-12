@@ -149,6 +149,24 @@ provedor saem do `instrument_httpx`) e a captura de prompt/completion
 dessas instrumentações é o que D13 proíbe. Fecha se/quando os adapters
 migrarem para SDK, com captura de conteúdo desligada explicitamente.
 
+### Etapa 11 — Missões no nó (plano do usuário, 12/08)
+
+Decisões do usuário (chat, 12/08): (1) nó aponta FAMÍLIA + ajustes locais
+(mantém one-active); (2) desconto POR NÓ **até o teto da missão** (o teto
+continua auditável num lugar; nó acima do teto = negado + alerta); (3) missão
+ganha `display_name` livre; (4) dados FIXOS no prompt = dados do cliente +
+histórico de compras; variáveis do fluxo = configuráveis no nó (via
+delta.context, encanamento existente); (5) missão do nó segue dona da
+conversa, respondendo dúvidas gerais no caminho (topic_change_policy é o
+botão); (6) criar missão DENTRO do builder, integrada por construção.
+
+| Entrega | Estado | Escopo |
+|---|---|---|
+| E1 nome livre | **feito** (migration 20260814000004 vivo+local; campo no form; header da família mostra o nome da ativa) | |
+| E2 painel do nó completo | pendente — próxima ação | desconto do fluxo (kind/value até o teto, teto visível ao lado) + lista de variáveis chave/valor → delta.context + criar/ativar missão inline quando a família não tem ativa (AiMissionActionConfig + executor já envia concession_request/delta) |
+| E3 dados fixos no prompt | pendente | contact_facts ricos (tags/campos) + histórico de compras (repo orders → StateBlock; runtime não lê pedidos hoje — a maior peça, test-first) |
+| E4 polimento | pendente | validação no builder (desconto > teto marca o nó) + teto na aba Limites |
+
 ### Etapas 8–10 — estado
 
 | Passo | Estado | Nota |

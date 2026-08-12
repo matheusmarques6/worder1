@@ -51,6 +51,7 @@ const STATUS_LABELS: Record<Mission['status'], string> = {
 
 interface DraftForm {
   event_type: string
+  display_name: string
   objective: string
   situation: string
   success_criteria: string
@@ -72,6 +73,7 @@ interface DraftForm {
 const EMPTY_FORM: DraftForm = {
   event_type: EVENT_FAMILIES[0],
   objective: '',
+  display_name: '',
   situation: '',
   success_criteria: '',
   failure_criteria: '',
@@ -92,6 +94,7 @@ const EMPTY_FORM: DraftForm = {
 function formFrom(mission: Mission, asNewVersion: boolean): DraftForm {
   return {
     event_type: mission.event_type,
+    display_name: mission.display_name ?? '',
     objective: mission.objective,
     situation: mission.situation ?? '',
     success_criteria: mission.success_criteria ?? '',
@@ -122,6 +125,7 @@ function payloadFrom(form: DraftForm) {
   }
   return {
     event_type: form.event_type,
+    display_name: form.display_name.trim() || null,
     objective: form.objective.trim(),
     situation: form.situation.trim() || null,
     success_criteria: form.success_criteria.trim() || null,
@@ -319,7 +323,9 @@ export default function MissionsTab() {
             <header className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <div>
                 <h3 className="text-sm font-semibold text-gray-900">
-                  {FAMILY_LABELS[family] ?? family}
+                  {rows.find(m => m.status === 'active')?.display_name
+                    || FAMILY_LABELS[family]
+                    || family}
                 </h3>
                 <p className="text-xs text-gray-400 font-mono">{family}</p>
               </div>
@@ -426,6 +432,16 @@ export default function MissionsTab() {
                     <option key={f} value={f}>{FAMILY_LABELS[f] ?? f}</option>
                   ))}
                 </select>
+              </label>
+
+              <label className="text-sm">
+                <span className="mb-1 block text-gray-600">Nome da missão (livre — como aparece nas listas)</span>
+                <input
+                  value={form.display_name}
+                  onChange={e => setForm({ ...form, display_name: e.target.value })}
+                  placeholder="ex.: Recuperação VIP"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                />
               </label>
 
               <label className="text-sm">
