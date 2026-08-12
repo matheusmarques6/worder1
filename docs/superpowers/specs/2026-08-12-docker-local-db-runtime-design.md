@@ -51,6 +51,7 @@ Arquivos novos/alterados:
 - `runtime/.env.bancada.example` e `runtime/.env.piloto.example` — templates
   versionados; `.env.bancada`/`.env.piloto` reais entram no `.gitignore`.
 - `runtime/scripts/mirror.ps1` — dump da nuvem → restore no local.
+- `runtime/scripts/pre-restore.sql` — roles + extensões antes do restore.
 - `runtime/scripts/post-restore.sql` — salvaguardas pós-restore.
 - `runtime/DEPLOY.md` — nova seção "Rodando no PC (bancada e piloto)".
 
@@ -101,19 +102,28 @@ docker compose --profile piloto  up -d --build   # piloto
 
 `runtime/scripts/mirror.ps1`, repetível (re-espelha por cima):
 
-1. **Dump** — `pg_dump` rodando **dentro de um container** (mesma imagem do
-   `db`; nada a instalar no Windows), contra o session pooler da nuvem,
-   formato custom (`-Fc`), schemas `public`, `internal`, `pgmq`, `auth`,
-   `--no-owner --no-acl`. A DSN da nuvem é lida do `.env.piloto` (única fonte
-   da senha).
-2. **Restore** — `pg_restore --clean --if-exists --no-owner --no-acl` no `db`
-   local (serviço do compose já de pé).
-3. **`post-restore.sql`**:
-   - Garante roles `worker_role`/`sender_role` + grants de `set role` para
-     `postgres` (espelho da migration `…0002_runtime_roles_and_internal.sql`).
-   - **Purga todas as filas pgmq** herdadas do dump — impede o runtime de
-     processar jobs antigos apontando para clientes reais.
-   - Limpa `internal.runtime_heartbeats` e leases/locks pendentes.
+1. **Dump** — `pg_dump` rodando **dentro do container `db`** (nada a instalar
+   no Windows; o arquivo fica em `/tmp` do container, sem tocar o disco do
+   host), contra o session pooler da nuvem, formato custom (`-Fc`), schemas
+   `public`, `internal`, `auth`, `--no-owner` e **com ACLs** — os grants de
+   `worker_role`/`sender_role` vêm no próprio dump, por isso os roles nascem
+   ANTES do restore (`pre-restore.sql`). O schema `pgmq` fica **fora** do
+   dump de propósito. A DSN da nuvem é lida do `.env.piloto` (única fonte da
+   senha).
+2. **`pre-restore.sql`** — cria roles `worker_role`/`sender_role` (+ grant a
+   `postgres`, espelho da migration `…0002`) e as extensões que o dump
+   referencia (`uuid-ossp`, `pgcrypto`, `vector` no schema `extensions`,
+   `pgmq`).
+3. **Restore** — `pg_restore --clean --if-exists --no-owner` no `db` local
+   (serviço do compose já de pé, runtime parado durante o restore).
+4. **`post-restore.sql`**:
+   - Recria as **8 filas pgmq vazias** (`pgmq.create`) e purga em re-espelhos
+     — como o dump não traz filas, a salvaguarda contra reprocessar jobs de
+     produção vale por construção; grants do mundo pgmq reaplicados.
+   - Limpa `internal.runtime_heartbeats`. Leases pendentes morrem junto com
+     as filas vazias; `internal.message_outbox` restaurada é inofensiva na
+     bancada porque o modo é mudo por contrato (sem `AGENTS_CHANNEL`, o
+     sender não envia).
 
 **Risco conhecido:** restaurar `auth` por cima do schema que a imagem
 inicializa pode conflitar. Mitigação: `--clean --if-exists` + validação de
