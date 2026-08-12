@@ -153,7 +153,7 @@ migrarem para SDK, com captura de conteúdo desligada explicitamente.
 
 | Passo | Estado | Nota |
 |---|---|---|
-| 8.1 Deploy runtime | **aguardando Apply** (conta Render do usuário) | `render.yaml` no repo; DEPLOY.md com DSN/segredos |
+| 8.1 Deploy runtime | **Apply feito 12/08 — deploy NÃO conectou** | sonda (12/08 ~02:00Z): zero batidas em runtime_heartbeats e zero conexões novas em pg_stat_activity ~30min pós-Apply. Causa está no log do Render (build em andamento, env vazia, DSN errada ou senha) — checklist entregue ao usuário; egress daqui bloqueia onrender.com, a sonda é pelo banco |
 | 8.2 Vercel envs | aguardando 8.1 | URL + AGENTS_PREVIEW_TOKEN |
 | 8.3 Humanização do sender (D10) | **feito** (código+fixtures; falta o "visivelmente humano" na loja de teste, que depende de 8.1) | split portado com paridade PROVADA (10 vetores gerados pelo TS real); ritmo proporcional c/ teto por bolha e orçamento agregado; 1ª bolha falhou = retry, bolha do meio = o que saiu vale (ADR-8); espelho por bolha; wamid da linha = 1ª bolha |
 | 8.4 Sonda healthz | aguardando 8.1 | |
