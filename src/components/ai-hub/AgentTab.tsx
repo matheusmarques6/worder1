@@ -92,7 +92,10 @@ export default function AgentTab({ organizationId }: { organizationId: string })
 
       if (canonicalData.canonical) {
         const next = agentToHub(canonicalData.canonical)
-        next.discovery.bias = biasFromObjective(discovery?.objective)
+        next.discovery = {
+          bias: biasFromObjective(discovery?.objective),
+          has_mission: discovery !== null,
+        }
         setHub(next)
         setSavedHub(JSON.stringify(next))
       } else {

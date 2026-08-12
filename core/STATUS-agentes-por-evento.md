@@ -157,7 +157,7 @@ migrarem para SDK, com captura de conteúdo desligada explicitamente.
 | 8.2 Vercel envs | aguardando 8.1 | URL + AGENTS_PREVIEW_TOKEN |
 | 8.3 Humanização do sender (D10) | **feito** (código+fixtures; falta o "visivelmente humano" na loja de teste, que depende de 8.1) | split portado com paridade PROVADA (10 vetores gerados pelo TS real); ritmo proporcional c/ teto por bolha e orçamento agregado; 1ª bolha falhou = retry, bolha do meio = o que saiu vale (ADR-8); espelho por bolha; wamid da linha = 1ª bolha |
 | 8.4 Sonda healthz | aguardando 8.1 | |
-| 8.5 Seeds rodada 2 | **[GATE-Bruno]** | drafts já no banco |
+| 8.5 Seeds rodada 2 | **[GATE-Bruno]** | CORREÇÃO (12/08): a nota anterior "drafts já no banco" estava ERRADA — ai_missions estava vazia no vivo (os seeds só tinham sido provados no stack local). Consertado: rota POST /api/ai/missions/seed + CTA na aba Missões quando a org tem zero missões (self-service p/ toda org nova); seeds rodados 12/08 para a org piloto 425db1ba (6 rascunhos). Ativar segue ato explícito por missão, gate do Bruno |
 | 8.6 Rollout + smoke | aguardando 8.5 | runbook abaixo |
 | 8.7 Rollback provado | aguardando 8.6 | registrar horário aqui |
 | 9.2 Ciclo do grant | **feito** | consume RPC (dedup por pedido no UNIQUE) + expire no housekeeping do sender + wire no webhook orders/paid; migration 0011 no vivo |

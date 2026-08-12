@@ -56,7 +56,10 @@ export type DiscoveryBias = 'vendedor' | 'suporte' | 'hibrido';
 
 export interface HubState {
   identity: { name: string; voice: Voice; presentation: Presentation };
-  discovery: { bias: DiscoveryBias | null };
+  // bias null + has_mission true = missão ativa com objetivo personalizado;
+  // bias null + has_mission false = a família ainda NEM TEM missão ativa.
+  // Dois estados que a UI precisa distinguir para não mentir.
+  discovery: { bias: DiscoveryBias | null; has_mission: boolean };
   adapt: {
     mirror_tone: boolean;
     mirror_length: boolean;
@@ -101,7 +104,7 @@ export function agentToHub(agent: AgentRow): HubState {
       voice: (persona.tone as Voice) ?? 'friendly',
       presentation,
     },
-    discovery: { bias: null },
+    discovery: { bias: null, has_mission: false },
     adapt: {
       mirror_tone: Boolean(adaptation.mirror_tone),
       mirror_length: Boolean(adaptation.mirror_length),
@@ -176,7 +179,9 @@ export function hubAreaDone(hub: HubState, area: HubAreaId): boolean {
     case 'identity':
       return hub.identity.name.trim().length > 0;
     case 'discovery':
-      return hub.discovery.bias !== null;
+      // Missão ativa com objetivo personalizado É configuração — o nó não
+      // pode dizer "a preencher" enquanto o drawer fala de missão existente.
+      return hub.discovery.bias !== null || hub.discovery.has_mission;
     case 'adapt':
       return (
         hub.adapt.mirror_tone ||

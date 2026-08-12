@@ -153,6 +153,7 @@ export default function MissionsTab() {
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<DraftForm | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [seeding, setSeeding] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -171,6 +172,21 @@ export default function MissionsTab() {
 
   useEffect(() => {
     load()
+  }, [load])
+
+  const seedDefaults = useCallback(async () => {
+    setSeeding(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/ai/missions/seed', { method: 'POST' })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || 'Falha ao criar as missões padrão')
+      await load()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setSeeding(false)
+    }
   }, [load])
 
   const families = useMemo(() => {
@@ -271,6 +287,29 @@ export default function MissionsTab() {
         </div>
       )}
 
+      {!loading && missions.length === 0 && (
+        <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-4 flex items-center gap-4">
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-orange-900">
+              Esta loja ainda não tem nenhuma missão.
+            </p>
+            <p className="text-xs text-orange-800 mt-1">
+              Crie as 6 missões padrão como rascunho — nada é ativado sozinho: você
+              revisa o texto de cada uma e ativa quando quiser. É o mesmo dado que a
+              área &quot;Missão descoberta&quot; da radial edita.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={seeding}
+            onClick={seedDefaults}
+            className="shrink-0 rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+          >
+            {seeding ? 'Criando…' : 'Criar missões padrão'}
+          </button>
+        </div>
+      )}
+
       {families.map(family => {
         const rows = missions
           .filter(m => m.event_type === family)
@@ -286,7 +325,9 @@ export default function MissionsTab() {
               </div>
               {rows.every(m => m.status !== 'active') && (
                 <span className="text-xs text-amber-600">
-                  sem missão ativa — toques desta família não saem
+                  {family === 'whatsapp.received'
+                    ? 'sem missão ativa — o agente NÃO responde mensagens recebidas'
+                    : 'sem missão ativa — toques desta família não saem'}
                 </span>
               )}
             </header>

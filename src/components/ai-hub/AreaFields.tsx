@@ -164,19 +164,28 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
           <div className="optrow">
             {BIASES.map((o) => (
               <button key={o.v} type="button" className={`hub-opt${hub.discovery.bias === o.v ? ' on' : ''}`}
-                onClick={() => patch('discovery', { bias: o.v })}>
+                onClick={() => patch('discovery', { ...hub.discovery, bias: o.v })}>
                 <div><div>{o.t}</div><div className="od">{o.d}</div></div>
               </button>
             ))}
           </div>
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.5 }}>
-          Este campo edita o <b>objetivo da missão whatsapp.received</b> (o mesmo dado da aba Missões — salvar cria uma versão nova e ativa).
-          Nada aqui vira um &quot;papel global&quot; do agente.
+          Este campo edita o <b>objetivo da missão whatsapp.received</b> — o mesmo
+          dado da família &quot;Descoberta&quot; na aba Missões (salvar cria uma
+          versão nova e ativa). Nada aqui vira um &quot;papel global&quot; do agente.
         </div>
-        {hub.discovery.bias === null && (
+        {!hub.discovery.has_mission && hub.discovery.bias === null && (
+          <div style={{ fontSize: 11.5, color: 'var(--red, #E5484D)', lineHeight: 1.5 }}>
+            Esta loja ainda <b>não tem missão de descoberta ativa</b> — sem ela, o
+            agente não responde mensagens recebidas. Escolher um viés acima e salvar
+            cria e ativa a primeira versão.
+          </div>
+        )}
+        {hub.discovery.has_mission && hub.discovery.bias === null && (
           <div style={{ fontSize: 11.5, color: 'var(--amber, #E0930B)' }}>
-            O objetivo atual da missão é personalizado — escolher um viés acima o substitui.
+            A missão ativa tem um objetivo personalizado (editado na aba Missões) —
+            escolher um viés acima o substitui por um dos três padrões.
           </div>
         )}
       </div>
