@@ -68,12 +68,18 @@ def create_channel_account(
     return ChannelAccount(id=account_id, phone_e164=phone, external_account_id=external_account_id)
 
 
-def create_contact(conn: psycopg.Connection, organization_id: uuid.UUID) -> uuid.UUID:
+def create_contact(
+    conn: psycopg.Connection,
+    organization_id: uuid.UUID,
+    *,
+    email: str | None = None,
+    tags: list[str] | None = None,
+) -> uuid.UUID:
     with conn.cursor() as cur:
         cur.execute(
-            "insert into public.contacts (organization_id, phone)"
-            " values (%s, %s) returning id",
-            (organization_id, unique_phone()),
+            "insert into public.contacts (organization_id, phone, email, tags)"
+            " values (%s, %s, %s, %s) returning id",
+            (organization_id, unique_phone(), email, tags or []),
         )
         (contact_id,) = cur.fetchone()
     return contact_id
@@ -680,3 +686,52 @@ def create_store(
         )
         (store_id,) = cur.fetchone()
     return store_id
+
+
+def create_order(
+    conn: psycopg.Connection,
+    organization_id: uuid.UUID,
+    store_id: uuid.UUID,
+    *,
+    contact_id: uuid.UUID | None = None,
+    email: str | None = None,
+    name: str | None = None,
+    total: float = 100.0,
+    refunded: float = 0.0,
+    financial_status: str = "paid",
+    fulfillment_status: str | None = "fulfilled",
+    line_items: list | None = None,
+    placed_days_ago: int = 1,
+) -> uuid.UUID:
+    """Um pedido no espelho (shopify_orders). O elo com o contato é como no
+    app: `contact_id` quando o sync ligou, ou só `email` (bulk antigo)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.shopify_orders
+                (organization_id, store_id, shopify_order_id, name, contact_id, email,
+                 total_price, total_refunded, financial_status, fulfillment_status,
+                 line_items, shopify_created_at)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    now() - make_interval(days => %s))
+            returning id
+            """,
+            (
+                organization_id,
+                store_id,
+                unique_id("ord"),
+                name or f"#{str(uuid.uuid4().int)[:4]}",
+                contact_id,
+                email,
+                total,
+                refunded,
+                financial_status,
+                fulfillment_status,
+                psycopg.types.json.Jsonb(
+                    line_items if line_items is not None else [{"title": "Camiseta", "quantity": 1}]
+                ),
+                placed_days_ago,
+            ),
+        )
+        (order_id,) = cur.fetchone()
+    return order_id

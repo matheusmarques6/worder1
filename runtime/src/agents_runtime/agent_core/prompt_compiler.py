@@ -73,6 +73,9 @@ class StateBlock:
     grant_lines: tuple[str, ...]
     ledger_lines: tuple[str, ...]
     contact_facts: tuple[tuple[str, str], ...]
+    purchase_lines: tuple[str, ...] = ()
+    """Histórico de compras já projetado (repository.orders.history_lines).
+    Vazio = sem espelho: o prompt não afirma nada (decisão 81b)."""
 
 
 @dataclass(frozen=True)
@@ -196,6 +199,7 @@ def _state_block(state: StateBlock | None) -> RenderedBlock:
     lines.extend(state.grant_lines)
     lines.extend(f"Histórico de incentivo: {line}" for line in state.ledger_lines)
     lines.extend(f"Contato — {key}: {value}" for key, value in state.contact_facts)
+    lines.extend(state.purchase_lines)
     if len(lines) == 1:
         lines.append("Sem momento ativo, sem promessas pendentes.")
     source_ids: dict = {}

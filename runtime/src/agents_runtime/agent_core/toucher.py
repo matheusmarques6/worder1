@@ -57,6 +57,7 @@ from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository import judge_scores as scores_repo
 from agents_runtime.repository import missions as missions_repo
 from agents_runtime.repository import moments as moments_repo
+from agents_runtime.repository import orders as orders_repo
 from agents_runtime.repository import provider_keys as keys_repo
 from agents_runtime.repository.scope import scope_to_organization
 from agents_runtime.tools.base import ToolContext, run_tool
@@ -141,6 +142,13 @@ def build_toucher(
                     conn, conversation_id=job.conversation_id, limit=TRANSCRIPT_LIMIT
                 )
                 active_moments = await moments_repo.load_active_moments(conn)
+                # E3 — o toque também fala com quem já comprou (ou nunca
+                # comprou): mesmo dado fixo do responder, mesma decisão 81b.
+                purchase = await orders_repo.load_purchase_history(
+                    conn,
+                    organization_id=job.organization_id,
+                    contact_id=state.contact_id,
+                )
                 key_rows = (
                     await keys_repo.load_org_provider_keys(
                         conn, organization_id=job.organization_id
@@ -274,9 +282,8 @@ def build_toucher(
                     grant_id=None,
                     grant_lines=grant_lines,
                     ledger_lines=(),
-                    contact_facts=(
-                        (("nome", state.contact_name),) if state.contact_name else ()
-                    ),
+                    contact_facts=agent_repo.contact_fact_pairs(state),
+                    purchase_lines=orders_repo.history_lines(purchase),
                 ),
                 channel=ChannelBlock(
                     channel=job.preferred_channel,

@@ -7,9 +7,9 @@ for a connection scoped to another tenant. That is the whole guard, and
 
 What is NOT here is as important as what is: no orders. `total_orders`,
 `avg_ticket` and `first_order_at` — the fields RF-010 injects into the prompt —
-come from the store mirror, and the order tables arrive in E3. Returning a zero
-for them today would be inventing data, and the prompt already distinguishes
-"no record" from "no history" (decisão 81b).
+come from the store mirror, and that is `repository/orders.py` (E3), which owns
+the "no record" vs "no history" distinction (decisão 81b) so nobody here is
+tempted to return an invented zero.
 """
 
 from dataclasses import dataclass

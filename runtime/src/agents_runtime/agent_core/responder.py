@@ -80,6 +80,7 @@ from agents_runtime.repository import judge_scores as scores_repo
 from agents_runtime.repository import llm_calls as llm_repo
 from agents_runtime.repository import missions as missions_repo
 from agents_runtime.repository import moments as moments_repo
+from agents_runtime.repository import orders as orders_repo
 from agents_runtime.repository import provider_keys as keys_repo
 from agents_runtime.repository.scope import scope_to_organization
 from agents_runtime.tools.base import ToolContext, run_tool
@@ -266,6 +267,13 @@ def build_responder(
                 ledger_lines = await incentives_repo.recent_ledger_lines(
                     conn, contact_id=state.contact_id
                 )
+                # E3 — dado fixo do prompt: o que este contato JÁ comprou.
+                # None = org sem espelho; o prompt fica calado (decisão 81b).
+                purchase = await orders_repo.load_purchase_history(
+                    conn,
+                    organization_id=job.organization_id,
+                    contact_id=state.contact_id,
+                )
                 custom_rows = await custom_tools_repo.load_enabled_custom_tools(conn)
                 key_rows = (
                     await keys_repo.load_org_provider_keys(
@@ -373,9 +381,8 @@ def build_responder(
                     grant_id=str(valid_grants[0].id) if valid_grants else None,
                     grant_lines=_money_lines(valid_grants),
                     ledger_lines=ledger_lines,
-                    contact_facts=(
-                        (("nome", state.contact_name),) if state.contact_name else ()
-                    ),
+                    contact_facts=agent_repo.contact_fact_pairs(state),
+                    purchase_lines=orders_repo.history_lines(purchase),
                 ),
                 channel=ChannelBlock(
                     channel=state.last_channel or "whatsapp",

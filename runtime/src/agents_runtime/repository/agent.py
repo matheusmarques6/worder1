@@ -82,6 +82,23 @@ class ConversationState:
     contact_name: str | None
     last_processed_seq: int
     last_inbound_at: datetime | None
+    contact_tags: tuple[str, ...] = ()
+    """Etiquetas que o LOJISTA pôs no contato ("vip", "atacado") — dado fixo
+    do prompt (E3), nunca texto que o contato escreveu."""
+    contact_since: datetime | None = None
+
+
+def contact_fact_pairs(state: ConversationState) -> tuple[tuple[str, str], ...]:
+    """Os fatos fixos do contato para o bloco ESTADO (E3). Só o que existe:
+    um par ausente é ausência de dado, não um "não informado" inventado."""
+    pairs: list[tuple[str, str]] = []
+    if state.contact_name:
+        pairs.append(("nome", state.contact_name))
+    if state.contact_since is not None:
+        pairs.append(("cliente desde", f"{state.contact_since:%m/%Y}"))
+    if state.contact_tags:
+        pairs.append(("etiquetas da loja", ", ".join(state.contact_tags)))
+    return tuple(pairs)
 
 
 async def load_active_version(
@@ -165,7 +182,8 @@ async def load_conversation_view(
         select conversation.status, conversation.last_channel,
                conversation.owner_mission_version_id, conversation.contact_id,
                nullif(trim(contact.full_name), ''),
-               conversation.last_processed_seq, conversation.last_inbound_at
+               conversation.last_processed_seq, conversation.last_inbound_at,
+               contact.tags, contact.created_at
           from public.conversations conversation
           join public.contacts contact on contact.id = conversation.contact_id
          where conversation.id = %s
@@ -184,6 +202,8 @@ async def load_conversation_view(
         contact_name=row[4],
         last_processed_seq=row[5],
         last_inbound_at=row[6],
+        contact_tags=tuple(row[7] or ()),
+        contact_since=row[8],
     )
 
 
