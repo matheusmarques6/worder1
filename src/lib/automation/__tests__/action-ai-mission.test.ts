@@ -111,6 +111,60 @@ describe('action_ai_mission executor', () => {
   });
 });
 
+// E2 (plano missões-no-nó, 12/08): o painel guarda variáveis como linhas
+// {key, value} — amigável para editar e para o engine interpolar {{tags}} —
+// e o executor dobra as linhas válidas em delta.context (o formato que o
+// runtime lê e vira "Contexto: chave = valor" no prompt).
+describe('node variables → delta.context', () => {
+  beforeEach(() => {
+    rpc.mockResolvedValue({
+      data: [{ status: 'queued', conversation_id: 'c', msg_id: 1 }],
+      error: null,
+    });
+  });
+
+  it('contextVars rows fold into delta.context, blank keys skipped', async () => {
+    await execute({
+      eventFamily: 'cart.abandoned',
+      contextVars: [
+        { key: 'cupom_do_dia', value: 'FRETE10' },
+        { key: '   ', value: 'ignorado' },
+        { key: 'total_carrinho', value: 199.9 },
+      ],
+    });
+
+    const [, args] = rpc.mock.calls[0];
+    expect(args.p_delta.context).toEqual({
+      cupom_do_dia: 'FRETE10',
+      total_carrinho: '199.9',
+    });
+  });
+
+  it('contextVars merge over a legacy context object, node rows win', async () => {
+    await execute({
+      eventFamily: 'cart.abandoned',
+      context: { origem: 'automação legada', cupom_do_dia: 'ANTIGO' },
+      contextVars: [{ key: 'cupom_do_dia', value: 'NOVO' }],
+    });
+
+    const [, args] = rpc.mock.calls[0];
+    expect(args.p_delta.context).toEqual({
+      origem: 'automação legada',
+      cupom_do_dia: 'NOVO',
+    });
+  });
+
+  it('blank rows alone leave the delta without context', async () => {
+    await execute({
+      eventFamily: 'cart.abandoned',
+      contextVars: [{ key: '', value: 'x' }, { key: null, value: 'y' }],
+    });
+
+    const [, args] = rpc.mock.calls[0];
+    expect(args.p_delta).toEqual({});
+  });
+});
+
 describe('object binding from the trigger', () => {
   it('a concession without an object borrows it from the trigger data', async () => {
     rpc.mockResolvedValue({

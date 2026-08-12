@@ -1777,7 +1777,19 @@ const actionExecutors: Record<string, NodeExecutor> = {
         if (config.objective) delta.objective = config.objective;
         if (config.tone) delta.tone = config.tone;
         if (Array.isArray(config.forbidden) && config.forbidden.length) delta.forbidden = config.forbidden;
-        if (config.context && typeof config.context === 'object') delta.context = config.context;
+        if (config.context && typeof config.context === 'object') delta.context = { ...config.context };
+        // O painel guarda variáveis como linhas {key, value} (editáveis, com
+        // {{tags}} já interpoladas pela engine); linhas com chave vazia são
+        // rascunho e não viajam. Valores viram string: é texto de prompt.
+        if (Array.isArray(config.contextVars)) {
+          const vars: Record<string, string> = {};
+          for (const row of config.contextVars) {
+            const key = typeof row?.key === 'string' ? row.key.trim() : '';
+            if (!key) continue;
+            vars[key] = String(row?.value ?? '');
+          }
+          if (Object.keys(vars).length) delta.context = { ...(delta.context ?? {}), ...vars };
+        }
 
         // O benefício precisa de OBJETO para amarrar (grant é por carrinho/
         // checkout/pedido) — e o objeto é dado do GATILHO, não da config: o

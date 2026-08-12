@@ -163,7 +163,7 @@ botão); (6) criar missão DENTRO do builder, integrada por construção.
 | Entrega | Estado | Escopo |
 |---|---|---|
 | E1 nome livre | **feito** (migration 20260814000004 vivo+local; campo no form; header da família mostra o nome da ativa) | |
-| E2 painel do nó completo | pendente — próxima ação | desconto do fluxo (kind/value até o teto, teto visível ao lado) + lista de variáveis chave/valor → delta.context + criar/ativar missão inline quando a família não tem ativa (AiMissionActionConfig + executor já envia concession_request/delta) |
+| E2 painel do nó completo | **feito** (AiMissionActionConfig: variáveis chave/valor `config.contextVars` → executor dobra em delta.context [{{tags}} interpoladas pela engine antes do executor]; dropdown mostra o display_name da ativa + linha "Este nó usa …"; família sem ativa vira ação inline — ativar o rascunho mais novo OU criar nome+objetivo e ativar via POST /api/ai/missions → PATCH {status:active}; teto/kind/value já existiam. Testes: +3 no action-ai-mission.test [fold, merge com context legado, linhas em branco]; tsc/vitest 985/build verdes) | |
 | E3 dados fixos no prompt | pendente | contact_facts ricos (tags/campos) + histórico de compras (repo orders → StateBlock; runtime não lê pedidos hoje — a maior peça, test-first) |
 | E4 polimento | pendente | validação no builder (desconto > teto marca o nó) + teto na aba Limites |
 
