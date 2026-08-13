@@ -110,4 +110,41 @@ describe('a órbita sobre dados reais', () => {
     expect(hubAreaDone(empty, 'identity')).toBe(false);
     expect(hubAreaDone(empty, 'judges')).toBe(true); // Judge 1 é sempre real
   });
+
+  it('juízes do lojista: agente → área → patch, lixo saneado no caminho', () => {
+    const agent = {
+      ...AGENT,
+      settings: {
+        ...AGENT.settings,
+        judges: {
+          custom: [
+            { id: 'j1', name: 'Tom formal', criterion: 'Nunca usar gíria.', active: true },
+            { id: 'j2', name: 'Vazio', criterion: '   ', active: true }, // sem critério → fora
+            'texto', // shape errado → fora
+            { name: 'Sem id nem active', criterion: 'Não escrever em CAIXA ALTA.' },
+          ],
+        },
+      },
+    } as any;
+
+    const hub = agentToHub(agent);
+    expect(hub.judges.custom).toHaveLength(2);
+    expect(hub.judges.custom[0]).toEqual({
+      id: 'j1', name: 'Tom formal', criterion: 'Nunca usar gíria.', active: true,
+    });
+    // Entrada legada sem id/active ganha id estável e nasce ativa.
+    expect(hub.judges.custom[1].criterion).toBe('Não escrever em CAIXA ALTA.');
+    expect(hub.judges.custom[1].active).toBe(true);
+    expect(hub.judges.custom[1].id).toBeTruthy();
+
+    hub.judges.custom = [
+      ...hub.judges.custom,
+      { id: 'j9', name: 'Novo', criterion: 'Sempre citar o prazo oficial.', active: false },
+    ];
+    const patch = hubToAgentPatch(agent, hub);
+    expect(patch.settings.judges.custom).toHaveLength(3);
+    expect(patch.settings.judges.custom[2]).toMatchObject({ id: 'j9', active: false });
+    // Merge, nunca replace: o resto de settings sobrevive.
+    expect(patch.settings.schedule).toEqual({ always_active: true });
+  });
 });

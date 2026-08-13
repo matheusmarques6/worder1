@@ -28,14 +28,19 @@ the build if this module ever reads a model off a configuration object.
 """
 
 import json
+import re
+import unicodedata
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 
 from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message
-from agents_runtime.evals.rubrics import Rubric, score
+from agents_runtime.evals.rubrics import Criterion, Rubric, score
 
 #: Platform-fixed (D1, decisão 79). Never per tenant.
 JUDGE_MODEL = "claude-haiku-4-5"
+
+#: The one rubric a merchant writes (settings.judges.custom, radial → Juízes).
+MERCHANT_RUBRIC = "lojista"
 
 #: Canonical default (CLAUDE.md): two regenerations, then the decision above.
 REGENERATION_LIMIT = 2
@@ -48,6 +53,58 @@ _SEVERITY = {PASS: 0, FAIL: 1, CRITICAL: 2}
 
 class JudgeError(Exception):
     """The judge did not produce a judgement. Never means "approved"."""
+
+
+def _slug(text: str) -> str:
+    folded = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-")[:28]
+
+
+def with_merchant_judges(
+    rubrics: Mapping[str, Rubric], settings: Mapping | None
+) -> Mapping[str, Rubric]:
+    """The judges the MERCHANT created (radial → Juízes) as one extra rubric.
+
+    Every criterion is `standard`, unconditionally: merchant text fails a
+    draft and regenerates it (with the criterion named in the feedback), and
+    when regenerations run out the best version still goes out. The silence
+    veto (`critical`) stays a platform lever (D1) — free text saved through a
+    settings form must never become a way to mute the agent.
+
+    Malformed settings degrade to "no judges", never to an exception: the
+    reply path cannot die because of garbage in a jsonb column.
+    """
+    judges = settings.get("judges") if isinstance(settings, Mapping) else None
+    entries = judges.get("custom") if isinstance(judges, Mapping) else None
+    if not isinstance(entries, list):
+        return rubrics
+
+    criteria: list[Criterion] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, Mapping) or entry.get("active") is False:
+            continue
+        criterion = entry.get("criterion")
+        if not isinstance(criterion, str) or not criterion.strip():
+            continue
+        name = entry.get("name")
+        suffix = _slug(name) if isinstance(name, str) else ""
+        # The index keeps ids unique even for twin names; the slug keeps the
+        # regeneration feedback readable ("lojista-1-tom-formal").
+        cid = f"lojista-{index + 1}" + (f"-{suffix}" if suffix else "")
+        criteria.append(Criterion(id=cid, severity="standard", description=criterion.strip()))
+
+    if not criteria:
+        return rubrics
+    return {
+        **rubrics,
+        MERCHANT_RUBRIC: Rubric(
+            name=MERCHANT_RUBRIC,
+            version=1,
+            rfs=("RF-015",),
+            threshold=1.0,
+            criteria=tuple(criteria),
+        ),
+    }
 
 
 @dataclass(frozen=True, slots=True)

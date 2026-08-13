@@ -7,6 +7,7 @@ import ApiKeysManager from '@/components/whatsapp/ApiKeysManager'
 import CustomToolsSection from './CustomToolsSection'
 import {
   DISCOVERY_OBJECTIVES,
+  type CustomJudge,
   type DiscoveryBias,
   type HubAreaId,
   type HubState,
@@ -299,7 +300,7 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
 
   if (area === 'judges') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div className="act-row on">
           <div style={{ flex: 1 }}>
             <div className="act-t" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -311,8 +312,16 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
           </div>
           <Check size={16} style={{ color: 'var(--green)' }} />
         </div>
+
+        <MerchantJudges
+          judges={hub.judges.custom}
+          onChange={(custom) => patch('judges', { custom })}
+        />
+
         <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
-          Juízes adicionais (pós-hoc, por amostra) chegam com o executor deles — aqui só entra o que roda de verdade.
+          Seu juiz entra no MESMO portão pré-envio: reprovou, o agente reescreve
+          (até 2x) sabendo qual critério falhou. Ele nunca silencia o agente — o
+          veto de segurança é só da plataforma. Vale após Salvar.
         </div>
       </div>
     )
@@ -330,6 +339,112 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
       </div>
       {/* 10.3: API Keys absorvida pela área Motor — o gerenciador real, aqui. */}
       <ApiKeysManager />
+    </div>
+  )
+}
+
+// Os juízes do lojista (settings.judges.custom). Cada um vira critério REAL
+// do Judge 1 no runtime — severidade sempre standard: reprova e regenera,
+// nunca silencia (o veto crítico é da plataforma, D1).
+function MerchantJudges({
+  judges, onChange,
+}: {
+  judges: CustomJudge[]
+  onChange: (next: CustomJudge[]) => void
+}) {
+  const [draft, setDraft] = useState<{ name: string; criterion: string } | null>(null)
+
+  const create = () => {
+    if (!draft || !draft.criterion.trim()) return
+    onChange([
+      ...judges,
+      {
+        id: `judge-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
+        name: draft.name.trim(),
+        criterion: draft.criterion.trim(),
+        active: true,
+      },
+    ])
+    setDraft(null)
+  }
+
+  return (
+    <div>
+      <Label>Seus juízes</Label>
+      {judges.length === 0 && !draft && (
+        <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 9px' }}>
+          Nenhum ainda. Crie um critério que toda resposta deve cumprir — ex.: nunca usar gíria.
+        </p>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {judges.map((judge) => (
+          <div key={judge.id} className={`act-row${judge.active ? ' on' : ''}`}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="act-t">{judge.name || 'Juiz sem nome'}</div>
+              <div className="act-d">{judge.criterion}</div>
+            </div>
+            <button
+              type="button"
+              className={`tog${judge.active ? ' on' : ''}`}
+              title={judge.active ? 'Pausar este juiz' : 'Reativar este juiz'}
+              onClick={() =>
+                onChange(judges.map((j) => (j.id === judge.id ? { ...j, active: !j.active } : j)))
+              }
+            />
+            <button
+              type="button"
+              className="btn btn-soft btn-icon btn-sm"
+              title="Excluir este juiz"
+              onClick={() => onChange(judges.filter((j) => j.id !== judge.id))}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+
+        {draft ? (
+          <div className="card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input
+              className="field"
+              style={{ height: 34, fontSize: 12.5 }}
+              autoFocus
+              placeholder="Nome (ex.: Tom formal)"
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            />
+            <textarea
+              className="field"
+              rows={3}
+              style={{ fontSize: 12.5, resize: 'vertical', height: 'auto', paddingTop: 9 }}
+              placeholder="O critério que toda resposta deve cumprir — ex.: Nunca usar gíria; tratar o cliente por você."
+              value={draft.criterion}
+              onChange={(e) => setDraft({ ...draft, criterion: e.target.value })}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn-soft btn-sm" onClick={() => setDraft(null)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={!draft.criterion.trim()}
+                onClick={create}
+              >
+                <Plus size={14} />Criar juiz
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-soft btn-sm"
+            style={{ alignSelf: 'flex-start' }}
+            onClick={() => setDraft({ name: '', criterion: '' })}
+          >
+            <Plus size={14} />Criar juiz
+          </button>
+        )}
+      </div>
     </div>
   )
 }

@@ -54,6 +54,33 @@ export type Voice = 'casual' | 'friendly' | 'professional' | 'luxury';
 export type Presentation = 'transparente' | 'nome_funcao' | 'discreta';
 export type DiscoveryBias = 'vendedor' | 'suporte' | 'hibrido';
 
+// Um juiz criado pelo lojista (settings.judges.custom). No runtime ele vira
+// critério REAL do Judge 1 pré-envio — severidade sempre `standard`: reprova
+// e regenera, nunca silencia (o veto crítico é da plataforma, D1).
+export interface CustomJudge {
+  id: string;
+  name: string;
+  criterion: string;
+  active: boolean;
+}
+
+function sanitizeJudges(raw: unknown): CustomJudge[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CustomJudge[] = [];
+  raw.forEach((entry, index) => {
+    if (!entry || typeof entry !== 'object') return;
+    const judge = entry as Record<string, unknown>;
+    if (typeof judge.criterion !== 'string' || !judge.criterion.trim()) return;
+    out.push({
+      id: typeof judge.id === 'string' && judge.id ? judge.id : `judge-${index + 1}`,
+      name: typeof judge.name === 'string' ? judge.name : '',
+      criterion: judge.criterion,
+      active: judge.active !== false,
+    });
+  });
+  return out;
+}
+
 export interface HubState {
   identity: { name: string; voice: Voice; presentation: Presentation };
   // bias null + has_mission true = missão ativa com objetivo personalizado;
@@ -72,7 +99,7 @@ export interface HubState {
   tools: { enabled: string[] };
   limits: { blocked: string[]; invariants: string[] };
   handoff: { keywords: string[]; message: string };
-  judges: Record<string, never>;
+  judges: { custom: CustomJudge[] };
   budget: { model: string; provider: string };
 }
 
@@ -123,7 +150,7 @@ export function agentToHub(agent: AgentRow): HubState {
       keywords: [...(safety.handoff_keywords ?? [])],
       message: safety.handoff_confirmation_message ?? '',
     },
-    judges: {},
+    judges: { custom: sanitizeJudges(settings.judges?.custom) },
     budget: {
       model: agent.model ?? 'gpt-4o-mini',
       provider: agent.provider ?? 'openai',
@@ -154,6 +181,10 @@ export function hubToAgentPatch(agent: AgentRow, hub: HubState): AgentHubPatch {
     blocked_topics: [...hub.limits.blocked],
     handoff_keywords: [...hub.handoff.keywords],
     handoff_confirmation_message: hub.handoff.message,
+  };
+  settings.judges = {
+    ...(settings.judges ?? {}),
+    custom: hub.judges.custom.map((judge) => ({ ...judge })),
   };
 
   return {

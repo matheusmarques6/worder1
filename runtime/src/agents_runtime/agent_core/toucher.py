@@ -49,6 +49,7 @@ from agents_runtime.judges.pre_send import (
     JudgeContext,
     PreSendJudge,
     guarded_reply,
+    with_merchant_judges,
 )
 from agents_runtime.obs.telemetry import annotate
 from agents_runtime.queueing.jobs import MissionTouchJob
@@ -299,7 +300,10 @@ def build_toucher(
             )
 
             chat = _metered(conn, job, agent_llm, clock, "agent_reply")
-            judge = PreSendJudge(_metered(conn, job, llm, clock, "judge_pre"), rubrics)
+            judge = PreSendJudge(
+                _metered(conn, job, llm, clock, "judge_pre"),
+                with_merchant_judges(rubrics, version.settings),
+            )
             context = JudgeContext(
                 conversation=tuple(f"{m.author}: {m.text}" for m in transcript[-5:]),
                 knowledge=(),

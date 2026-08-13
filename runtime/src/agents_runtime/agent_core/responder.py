@@ -69,6 +69,7 @@ from agents_runtime.judges.pre_send import (
     JudgeContext,
     PreSendJudge,
     guarded_reply,
+    with_merchant_judges,
 )
 from agents_runtime.obs.telemetry import annotate
 from agents_runtime.queueing.jobs import InboundJob
@@ -418,7 +419,11 @@ def build_responder(
             conversation = _as_chat(transcript)
 
             chat = _metered(conn, job, agent_llm, clock, "agent_reply")
-            judge = PreSendJudge(metered("judge_pre"), rubrics)
+            # Juízes do lojista (radial → Juízes) entram como rubrica extra,
+            # sempre standard — o veto de silêncio segue só da plataforma.
+            judge = PreSendJudge(
+                metered("judge_pre"), with_merchant_judges(rubrics, version.settings)
+            )
             context = JudgeContext(
                 conversation=tuple(f"{message.author}: {message.text}" for message in pending),
                 knowledge=tuple(knowledge),
