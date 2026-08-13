@@ -2,8 +2,11 @@
 
 // =============================================
 // WORDER: API Keys Manager
-// Reskin Bloco C: usa o design system escopado `.agents-theme` (renderizado
-// dentro do <AgentsTheme> da page). SÓ-UI — handlers/fetch/state inalterados.
+// Vive DENTRO do drawer "Motor & budget" da radial (único consumidor desde
+// a 10.3) — uma coluna estreita, então o layout é lista vertical: header
+// magro, cards empilhados. Nada de page/ph/grid por breakpoint de viewport,
+// que num drawer de ~360px viravam mosaico quebrado.
+// SÓ-UI — handlers/fetch/state inalterados.
 // =============================================
 
 import { useState, useEffect } from 'react'
@@ -84,45 +87,41 @@ export default function ApiKeysManager() {
   const availableProviders = Object.keys(providerConfig).filter(p => !configuredProviders.includes(p))
 
   return (
-    <div className="page">
-      <div className="page-inner">
-        {/* Header */}
-        <div className="ph">
-          <div className="ph-ico">
-            <Key />
-          </div>
-          <div style={{ flex: 1 }}>
-            <h1>API Keys</h1>
-            <p>Configure suas chaves de API para usar modelos de IA</p>
-          </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            disabled={availableProviders.length === 0}
-            className="btn btn-primary"
-          >
-            <Plus />
-            Adicionar Key
-          </button>
+    <div>
+      {/* Header magro — o título da área quem dá é o drawer */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 800 }}>
+          <Key size={15} style={{ color: 'var(--text-3)' }} />
+          API Keys
         </div>
+        <button
+          onClick={() => setShowAddModal(true)}
+          disabled={availableProviders.length === 0}
+          className="btn btn-primary btn-sm"
+        >
+          <Plus />
+          Adicionar
+        </button>
+      </div>
 
-        {/* Info callout */}
-        <div className="callout brand" style={{ flexDirection: 'column', gap: 4, marginBottom: 22 }}>
-          <p style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 7 }}>
-            <Info className="w-4 h-4" />
-            Como funciona
-          </p>
-          <p>
-            Voce usa suas proprias API keys e paga diretamente aos providers (OpenAI, Anthropic, etc).
-            A Worder nao cobra nada pelo uso de IA - voce tem controle total sobre seus custos.
-          </p>
+      {/* Info callout */}
+      <div className="callout brand" style={{ flexDirection: 'column', gap: 4, marginBottom: 14 }}>
+        <p style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 7 }}>
+          <Info className="w-4 h-4" />
+          Como funciona
+        </p>
+        <p>
+          Voce usa suas proprias API keys e paga diretamente aos providers (OpenAI, Anthropic, etc).
+          A Worder nao cobra nada pelo uso de IA - voce tem controle total sobre seus custos.
+        </p>
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '28px 0' }}>
+          <Loader2 className="animate-spin" style={{ width: 26, height: 26, color: 'var(--brand)' }} />
         </div>
-
-        {loading ? (
-          <div className="empty-wrap">
-            <Loader2 className="animate-spin" style={{ width: 32, height: 32, color: 'var(--brand)' }} />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {apiKeys.map((key) => {
               const config = providerConfig[key.provider] || {
                 name: key.provider, icon: '🔑', description: '', docsUrl: '', createKeyUrl: '',
@@ -212,59 +211,60 @@ export default function ApiKeysManager() {
               )
             })}
 
-            {availableProviders.length > 0 && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="kb-add"
-                style={{ flexDirection: 'column', minHeight: 200, gap: 12 }}
-              >
-                <div className="act-ico" style={{ width: 48, height: 48, background: 'var(--brand-tint)', color: 'var(--brand)' }}>
-                  <Plus className="w-6 h-6" />
-                </div>
-                <p style={{ fontWeight: 700, color: 'var(--text)' }}>Adicionar API Key</p>
-                <p style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{availableProviders.length} providers disponiveis</p>
-              </button>
-            )}
-          </div>
-        )}
-
-        {!loading && apiKeys.length === 0 && (
-          <div className="empty-wrap">
-            <div className="empty-ico">
-              <Key />
-            </div>
-            <h2>Nenhuma API key configurada</h2>
-            <p>
-              Configure suas API keys para usar agentes de IA. Voce paga diretamente aos providers.
-            </p>
+          {apiKeys.length > 0 && availableProviders.length > 0 && (
             <button
               onClick={() => setShowAddModal(true)}
-              className="btn btn-primary btn-lg"
+              className="kb-add"
+              style={{ flexDirection: 'row', minHeight: 52, gap: 10, justifyContent: 'center' }}
             >
-              <Plus />
-              Adicionar Primeira Key
+              <div className="act-ico" style={{ width: 30, height: 30, background: 'var(--brand-tint)', color: 'var(--brand)' }}>
+                <Plus className="w-4 h-4" />
+              </div>
+              <p style={{ fontWeight: 700, color: 'var(--text)', fontSize: 12.5 }}>
+                Adicionar API Key
+                <span style={{ fontWeight: 500, color: 'var(--text-3)' }}> · {availableProviders.length} providers</span>
+              </p>
             </button>
-          </div>
-        )}
-
-        <AnimatePresence>
-          {showAddModal && (
-            <AddApiKeyModal
-              selectedProvider={selectedProvider}
-              availableProviders={selectedProvider ? [selectedProvider] : availableProviders}
-              onClose={() => {
-                setShowAddModal(false)
-                setSelectedProvider(null)
-              }}
-              onSuccess={() => {
-                setShowAddModal(false)
-                setSelectedProvider(null)
-                fetchApiKeys()
-              }}
-            />
           )}
-        </AnimatePresence>
-      </div>
+        </div>
+      )}
+
+      {!loading && apiKeys.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '18px 8px 6px' }}>
+          <div className="empty-ico" style={{ margin: '0 auto 10px' }}>
+            <Key />
+          </div>
+          <div style={{ fontSize: 13.5, fontWeight: 800 }}>Nenhuma API key configurada</div>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '5px 0 12px' }}>
+            Configure suas API keys para usar agentes de IA. Voce paga diretamente aos providers.
+          </p>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="btn btn-primary btn-sm"
+          >
+            <Plus />
+            Adicionar Primeira Key
+          </button>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {showAddModal && (
+          <AddApiKeyModal
+            selectedProvider={selectedProvider}
+            availableProviders={selectedProvider ? [selectedProvider] : availableProviders}
+            onClose={() => {
+              setShowAddModal(false)
+              setSelectedProvider(null)
+            }}
+            onSuccess={() => {
+              setShowAddModal(false)
+              setSelectedProvider(null)
+              fetchApiKeys()
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
