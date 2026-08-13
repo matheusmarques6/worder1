@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Check, Plus, ShieldCheck, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, Plus, Power, ShieldCheck, X } from 'lucide-react'
 import KnowledgeBasePanel from '@/components/agents/KnowledgeBasePanel'
 import ApiKeysManager from '@/components/whatsapp/ApiKeysManager'
 import CustomToolsSection from './CustomToolsSection'
@@ -275,6 +275,8 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
             Cada invariante vira uma linha do prompt (guidelines). Limites de dinheiro moram nas missões.
           </div>
         </div>
+        {/* Corte 13/08: a aba Limites morreu — o interruptor mora aqui agora. */}
+        <AgentPowerSwitch />
       </div>
     )
   }
@@ -339,6 +341,64 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
       </div>
       {/* 10.3: API Keys absorvida pela área Motor — o gerenciador real, aqui. */}
       <ApiKeysManager />
+    </div>
+  )
+}
+
+// O interruptor do agente inteiro (ai_agents.is_active) — morava na aba
+// Limites, que morreu no corte 13/08. Kill-switch não espera Salvar: o PATCH
+// é imediato, como era lá.
+function AgentPowerSwitch() {
+  const [agentId, setAgentId] = useState<string | null>(null)
+  const [active, setActive] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/ai/agents/canonical')
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        setAgentId(data.canonical?.id ?? null)
+        setActive(data.canonical ? data.canonical.is_active !== false : null)
+      })
+      .catch(() => { if (!cancelled) setActive(null) })
+    return () => { cancelled = true }
+  }, [])
+
+  if (agentId === null || active === null) return null
+
+  const toggle = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/ai/agents/${agentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !active }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || 'Falha ao mudar o estado do agente')
+      setActive(!active)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className={`act-row${active ? ' on' : ''}`}>
+      <Power size={17} style={{ color: active ? 'var(--green)' : 'var(--red)' }} />
+      <div style={{ flex: 1 }}>
+        <div className="act-t">{active ? 'Agente ligado' : 'Agente desligado'}</div>
+        <div className="act-d">
+          {error ?? 'Desligado, nenhuma missão responde — toque pedido vira alerta, nada sai.'}
+        </div>
+      </div>
+      <button type="button" className={`tog${active ? ' on' : ''}`} disabled={busy}
+        onClick={() => void toggle()} />
     </div>
   )
 }

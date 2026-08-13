@@ -12,21 +12,18 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores'
 import AgentTab from '@/components/ai-hub/AgentTab'
 import ActivityTab from '@/components/ai-hub/ActivityTab'
-import LimitsTab from '@/components/ai-hub/LimitsTab'
 import KnowledgeBasePanel from '@/components/agents/KnowledgeBasePanel'
-import MissionsTab from '@/components/agents/MissionsTab'
 import { AgentsTheme } from '@/components/agents/ui/AgentsTheme'
-import { Bot, BookOpen, BarChart3, Loader2, Shield, Target } from 'lucide-react'
+import { Bot, BookOpen, BarChart3, Loader2 } from 'lucide-react'
 
-// 10.3 — as 5 sub-abas do doc-fonte. Avaliação fundiu com Atividade
-// (sub-views); API Keys foi absorvida pela área Motor & budget da radial.
-type TabId = 'agents' | 'missions' | 'knowledge' | 'limits' | 'activity'
+// Corte 13/08: Missões saiu daqui — missão vive no fluxo, dentro do nó IA
+// (painel do nó é o editor completo). Limites saiu como aba — a área Limites
+// da radial é a única porta (mesmos campos). Sobram 3 abas.
+type TabId = 'agents' | 'knowledge' | 'activity'
 
 const TABS: { id: TabId; label: string; icon: typeof Bot }[] = [
   { id: 'agents', label: 'Agente', icon: Bot },
-  { id: 'missions', label: 'Missões', icon: Target },
   { id: 'knowledge', label: 'Conhecimento', icon: BookOpen },
-  { id: 'limits', label: 'Limites', icon: Shield },
   { id: 'activity', label: 'Atividade', icon: BarChart3 },
 ]
 
@@ -37,6 +34,8 @@ const LEGACY_TABS: Record<string, TabId> = {
   reports: 'activity',
   eval: 'activity',
   'api-keys': 'agents',
+  missions: 'agents',
+  limits: 'agents',
 }
 
 function resolveTab(raw: string | null | undefined): TabId {
@@ -118,9 +117,7 @@ function AiHubPageInner() {
 
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'agents' && <AgentTab organizationId={organizationId} />}
-        {activeTab === 'missions' && <MissionsTab />}
         {activeTab === 'knowledge' && <KnowledgeBasePanel organizationId={organizationId} />}
-        {activeTab === 'limits' && <LimitsTab organizationId={organizationId} />}
         {activeTab === 'activity' && <ActivityTab organizationId={organizationId} />}
       </div>
     </AgentsTheme>

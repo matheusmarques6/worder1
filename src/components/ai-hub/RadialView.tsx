@@ -108,7 +108,7 @@ export default function RadialView({ hub, onChange, organizationId, agentId }: R
             </button>
           )
         })}
-        <div className="ocore" style={{ left: '50%', top: '47%' }}
+        <button type="button" className="ocore" style={{ left: '50%', top: '47%' }}
           onClick={() => { if (showPrompt) { setShowPrompt(false) } else { void openPreview() } }}>
           <div className="ring-wrap">
             <svg className="ring" width="172" height="172">
@@ -130,7 +130,7 @@ export default function RadialView({ hub, onChange, organizationId, agentId }: R
             </div>
           </div>
           <div className="ctag"><Eye size={13} />{showPrompt ? 'Ocultar prompt' : 'O que o agente sabe'}</div>
-        </div>
+        </button>
         <div className="orbit-legend">
           <span><span className="sw" />&nbsp; área configurada</span>
           <span><span className="sw dash" />&nbsp; a preencher</span>

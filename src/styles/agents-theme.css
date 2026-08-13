@@ -501,7 +501,11 @@
 .agents-theme .onode.done .nlabel { color: var(--text); }
 .agents-theme .onode .nsub { font-size: 10.5px; color: var(--text-4); font-weight: 600; margin-top: -3px; }
 .agents-theme .onode.done .nsub { color: var(--text-3); }
-.agents-theme .ocore { position: absolute; transform: translate(-50%,-50%); z-index: 4; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+/* É um <button> de verdade (a11y), mas sem NENHUM anel de foco/tap do
+   navegador — o quadrado azul nativo em volta do núcleo era exatamente isso.
+   O affordance fica no hover do nucleus + no pill "O que o agente sabe". */
+.agents-theme .ocore { position: absolute; transform: translate(-50%,-50%); z-index: 4; display: flex; flex-direction: column; align-items: center; cursor: pointer; background: none; border: 0; padding: 0; outline: none !important; -webkit-tap-highlight-color: transparent; user-select: none; }
+.agents-theme .ocore:focus, .agents-theme .ocore:focus-visible { outline: none !important; }
 .agents-theme .ocore .ring-wrap { position: relative; width: 172px; height: 172px; display: flex; align-items: center; justify-content: center; }
 .agents-theme .ocore .ring-wrap svg.ring { position: absolute; inset: 0; transform: rotate(-90deg); }
 .agents-theme .ocore .nucleus { width: 126px; height: 126px; border-radius: 50%; background: var(--surface); box-shadow: 0 10px 34px rgba(247,107,28,.18), var(--sh-md); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; position: relative; transition: .2s; }

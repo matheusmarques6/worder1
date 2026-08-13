@@ -8,10 +8,13 @@
 // o teto de concessão é da missão: o nó pede ATÉ ele, e quem capa é o offer
 // engine. Família sem missão ativa não é beco: dá para ativar o rascunho ou
 // criar uma missão nova AQUI (decisão do usuário 12/08 — "criar sem sair").
+// Corte 13/08: a aba IA → Missões morreu — este painel é a ÚNICA porta da
+// missão, incluindo o editor completo (MissionEditorModal).
 
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle2, Loader2, Plus, ShieldAlert, Target, Trash2 } from 'lucide-react'
+import { CheckCircle2, Loader2, Pencil, Plus, ShieldAlert, Target, Trash2 } from 'lucide-react'
 import { FAMILY_LABELS, type Mission } from '@/lib/ai/missions'
+import MissionEditorModal from './MissionEditorModal'
 
 interface Props {
   config: Record<string, any>
@@ -34,6 +37,9 @@ export default function AiMissionActionConfig({ config, onUpdate }: Props) {
   const [newObjective, setNewObjective] = useState('')
   const [saving, setSaving] = useState(false)
   const [inlineError, setInlineError] = useState<string | null>(null)
+  // Corte 13/08: a aba IA → Missões morreu — o editor completo é AQUI.
+  // null = fechado; { mission: null } = nova; { mission } = editar/nova versão.
+  const [editor, setEditor] = useState<{ mission: Mission | null } | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/ai/missions')
@@ -173,16 +179,49 @@ export default function AiMissionActionConfig({ config, onUpdate }: Props) {
         </select>
 
         {selected && (
-          <p className="flex items-start gap-1.5 text-[11px] text-gray-500">
-            <CheckCircle2 className="mt-0.5 w-3.5 h-3.5 shrink-0 text-emerald-500" />
-            <span>
-              Este nó usa{' '}
-              <span className="font-medium text-gray-600">
-                {selected.display_name || FAMILY_LABELS[selected.event_type] || selected.event_type}
+          <div className="space-y-1.5">
+            <p className="flex items-start gap-1.5 text-[11px] text-gray-500">
+              <CheckCircle2 className="mt-0.5 w-3.5 h-3.5 shrink-0 text-emerald-500" />
+              <span>
+                Este nó usa{' '}
+                <span className="font-medium text-gray-600">
+                  {selected.display_name || FAMILY_LABELS[selected.event_type] || selected.event_type}
+                </span>
+                : “{selected.objective}”
               </span>
-              : “{selected.objective}”
-            </span>
-          </p>
+            </p>
+            <button
+              type="button"
+              onClick={() => setEditor({ mission: selected })}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-[11px] text-gray-600 hover:bg-gray-50"
+            >
+              <Pencil className="w-3 h-3" /> Editar missão (proibições, concessão, turnos…)
+            </button>
+            {latestDraft && (
+              <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50/60 px-2.5 py-1.5">
+                <p className="flex-1 truncate text-[11px] text-amber-800">
+                  Rascunho aguardando: “{latestDraft.objective}”
+                </p>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setEditor({ mission: latestDraft })}
+                  className="text-[11px] text-amber-700 underline underline-offset-2"
+                >
+                  editar
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => activateMission(latestDraft.id)}
+                  className="rounded-md bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {saving ? 'Ativando…' : 'Ativar'}
+                </button>
+              </div>
+            )}
+            {inlineError && <p className="text-[11px] text-red-600">{inlineError}</p>}
+          </div>
         )}
 
         {config.eventFamily && !selected && (
@@ -214,10 +253,18 @@ export default function AiMissionActionConfig({ config, onUpdate }: Props) {
                   <button
                     type="button"
                     disabled={saving}
+                    onClick={() => setEditor({ mission: latestDraft })}
+                    className="text-[11px] text-amber-700 underline underline-offset-2"
+                  >
+                    editar antes
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
                     onClick={() => setShowCreate(true)}
                     className="text-[11px] text-amber-700 underline underline-offset-2"
                   >
-                    ou criar uma nova
+                    ou criar nova
                   </button>
                 </div>
               </div>
@@ -260,7 +307,8 @@ export default function AiMissionActionConfig({ config, onUpdate }: Props) {
                   )}
                 </div>
                 <p className="text-[11px] text-amber-700/80">
-                  Detalhes finos (critérios, limites de desconto) você ajusta depois em IA → Missões.
+                  Detalhes finos (critérios, limites de desconto) você ajusta aqui
+                  mesmo, em “Editar missão”, depois de criar.
                 </p>
               </div>
             )}
@@ -394,6 +442,18 @@ export default function AiMissionActionConfig({ config, onUpdate }: Props) {
           <option value="instagram" disabled>Instagram (em breve)</option>
         </select>
       </div>
+
+      {editor && config.eventFamily && (
+        <MissionEditorModal
+          family={config.eventFamily}
+          mission={editor.mission}
+          onClose={() => setEditor(null)}
+          onSaved={async () => {
+            setEditor(null)
+            await load()
+          }}
+        />
+      )}
     </div>
   )
 }
