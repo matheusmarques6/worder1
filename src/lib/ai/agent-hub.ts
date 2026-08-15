@@ -34,7 +34,7 @@ export type HubAreaId =
 // As 9 posições do protótipo (ORBIT_POS) — a ordem daqui é a ordem da órbita.
 export const HUB_AREAS: HubArea[] = [
   { id: 'identity', label: 'Identidade', sub: 'nome, voz, apresentação', color: 'var(--orange, #F97316)', tint: '#FFF3EA' },
-  { id: 'discovery', label: 'Missão descoberta (default)', sub: 'o viés do inbound espontâneo', color: '#3B6EF6', tint: '#EEF3FF' },
+  { id: 'discovery', label: 'Missão · WhatsApp direto', sub: 'quando o cliente chama a loja', color: '#3B6EF6', tint: '#EEF3FF' },
   { id: 'adapt', label: 'Adaptação', sub: 'ao jeito do cliente', color: '#7C5CFC', tint: '#F2EFFF' },
   { id: 'knowledge', label: 'Conhecimento', sub: 'fontes e catálogo', color: '#0E9384', tint: '#E6F5F3' },
   { id: 'tools', label: 'Ferramentas', sub: 'o que ele sabe operar', color: '#0B7285', tint: '#E3F3F6' },
@@ -52,7 +52,6 @@ export const ORBIT_POS: Array<{ x: number; y: number }> = [
 
 export type Voice = 'casual' | 'friendly' | 'professional' | 'luxury';
 export type Presentation = 'transparente' | 'nome_funcao' | 'discreta';
-export type DiscoveryBias = 'vendedor' | 'suporte' | 'hibrido';
 
 // Um juiz criado pelo lojista (settings.judges.custom). No runtime ele vira
 // critério REAL do Judge 1 pré-envio — severidade sempre `standard`: reprova
@@ -83,10 +82,10 @@ function sanitizeJudges(raw: unknown): CustomJudge[] {
 
 export interface HubState {
   identity: { name: string; voice: Voice; presentation: Presentation };
-  // bias null + has_mission true = missão ativa com objetivo personalizado;
-  // bias null + has_mission false = a família ainda NEM TEM missão ativa.
-  // Dois estados que a UI precisa distinguir para não mentir.
-  discovery: { bias: DiscoveryBias | null; has_mission: boolean };
+  // A missão é a ESPECIFICAÇÃO do evento (correção do usuário 13/08): a área
+  // "WhatsApp direto" edita o playbook completo de whatsapp.received via
+  // MissionEditorModal — o hub só carrega se a família tem ativa (o ponto).
+  discovery: { has_mission: boolean };
   adapt: {
     mirror_tone: boolean;
     mirror_length: boolean;
@@ -131,7 +130,7 @@ export function agentToHub(agent: AgentRow): HubState {
       voice: (persona.tone as Voice) ?? 'friendly',
       presentation,
     },
-    discovery: { bias: null, has_mission: false },
+    discovery: { has_mission: false },
     adapt: {
       mirror_tone: Boolean(adaptation.mirror_tone),
       mirror_length: Boolean(adaptation.mirror_length),
@@ -210,9 +209,7 @@ export function hubAreaDone(hub: HubState, area: HubAreaId): boolean {
     case 'identity':
       return hub.identity.name.trim().length > 0;
     case 'discovery':
-      // Missão ativa com objetivo personalizado É configuração — o nó não
-      // pode dizer "a preencher" enquanto o drawer fala de missão existente.
-      return hub.discovery.bias !== null || hub.discovery.has_mission;
+      return hub.discovery.has_mission;
     case 'adapt':
       return (
         hub.adapt.mirror_tone ||
@@ -240,19 +237,6 @@ export function hubDoneCount(hub: HubState): number {
   return HUB_AREAS.filter((a) => hubAreaDone(hub, a.id)).length;
 }
 
-// 10.6 — o viés da missão descoberta vive no OBJECTIVE da missão
-// whatsapp.received (um dado, N portas: a radial e a MissionsTab editam o
-// mesmo campo). Três textos canônicos; objective fora deles = personalizado.
-export const DISCOVERY_OBJECTIVES: Record<DiscoveryBias, string> = {
-  vendedor: 'Conduzir à compra: recomendar, tirar dúvida de produto e fechar o pedido.',
-  suporte: 'Resolver o problema primeiro, sempre: status, trocas e pagamentos.',
-  hibrido: 'Vender quando houver intenção, dar suporte quando houver problema.',
-};
-
-export function biasFromObjective(objective: string | null | undefined): DiscoveryBias | null {
-  if (!objective) return null;
-  const found = (Object.entries(DISCOVERY_OBJECTIVES) as Array<[DiscoveryBias, string]>).find(
-    ([, text]) => text === objective.trim(),
-  );
-  return found ? found[0] : null;
-}
+// O seletor de "viés" (vendedor/suporte/híbrido) morreu na correção 13/08:
+// missão é a especificação do EVENTO, e a área WhatsApp direto abre o editor
+// completo — o objetivo é texto livre do lojista, não um de três papéis.

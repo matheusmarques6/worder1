@@ -4,10 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Bot, Check, Loader2, Save } from 'lucide-react'
 import { AgentsTheme } from '@/components/agents/ui/AgentsTheme'
 import { Card } from '@/components/agents/ui/primitives'
-import {
-  DISCOVERY_OBJECTIVES, agentToHub, biasFromObjective, hubToAgentPatch,
-  type HubState,
-} from '@/lib/ai/agent-hub'
+import { agentToHub, hubToAgentPatch, type HubState } from '@/lib/ai/agent-hub'
 import RadialView from './RadialView'
 import ClassicView from './ClassicView'
 
@@ -20,9 +17,9 @@ import ClassicView from './ClassicView'
  * mobile, MESMO estado; o breakpoint decide, sem toggle (§4.4-2).
  *
  * Salvar: PATCH do agente (name/persona/settings/presentation_mode/
- * client_adaptation/model) e, se o viés da missão descoberta mudou, versão
- * nova da missão whatsapp.received + ativação (append-only, como manda a lei
- * das missões).
+ * client_adaptation/model). A missão do WhatsApp direto NÃO passa por aqui:
+ * a área "discovery" edita a especificação do evento pelo editor completo
+ * (MissionEditorModal), com salvar/ativar próprios — correção 13/08.
  */
 
 interface AgentSummary {
@@ -59,7 +56,6 @@ export default function AgentTab({ organizationId }: { organizationId: string })
   const [agents, setAgents] = useState<AgentSummary[]>([])
   const [canonical, setCanonical] = useState<any | null>(null)
   const [needsChoice, setNeedsChoice] = useState(false)
-  const [discoveryMission, setDiscoveryMission] = useState<Mission | null>(null)
   const [hub, setHub] = useState<HubState | null>(null)
   const [savedHub, setSavedHub] = useState<string>('')
   const [saving, setSaving] = useState(false)
@@ -88,14 +84,10 @@ export default function AgentTab({ organizationId }: { organizationId: string })
       setAgents(canonicalData.agents ?? [])
       setCanonical(canonicalData.canonical)
       setNeedsChoice(Boolean(canonicalData.needsChoice))
-      setDiscoveryMission(discovery)
 
       if (canonicalData.canonical) {
         const next = agentToHub(canonicalData.canonical)
-        next.discovery = {
-          bias: biasFromObjective(discovery?.objective),
-          has_mission: discovery !== null,
-        }
+        next.discovery = { has_mission: discovery !== null }
         setHub(next)
         setSavedHub(JSON.stringify(next))
       } else {
@@ -149,32 +141,6 @@ export default function AgentTab({ organizationId }: { organizationId: string })
       if (!res.ok) {
         const d = await res.json().catch(() => null)
         throw new Error(d?.error || 'Erro ao salvar o agente')
-      }
-
-      const previousBias = biasFromObjective(discoveryMission?.objective)
-      if (hub.discovery.bias && hub.discovery.bias !== previousBias) {
-        // A lei das missões: versão nova (draft) + ativação explícita.
-        const createRes = await fetch('/api/ai/missions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            event_type: 'whatsapp.received',
-            objective: DISCOVERY_OBJECTIVES[hub.discovery.bias],
-            parent_version_id: discoveryMission?.id ?? null,
-            change_summary: `Viés da missão descoberta: ${hub.discovery.bias} (via radial)`,
-          }),
-        })
-        if (createRes.ok) {
-          const created = await createRes.json()
-          const newId = created.mission?.id ?? created.id
-          if (newId) {
-            await fetch(`/api/ai/missions/${newId}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: 'active' }),
-            })
-          }
-        }
       }
 
       await load()

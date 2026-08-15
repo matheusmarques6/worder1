@@ -6,13 +6,13 @@ import KnowledgeBasePanel from '@/components/agents/KnowledgeBasePanel'
 import ApiKeysManager from '@/components/whatsapp/ApiKeysManager'
 import CustomToolsSection from './CustomToolsSection'
 import {
-  DISCOVERY_OBJECTIVES,
   type CustomJudge,
-  type DiscoveryBias,
   type HubAreaId,
   type HubState,
 } from '@/lib/ai/agent-hub'
 import { TOOL_CATALOG } from '@/lib/ai/tools/catalog'
+import MissionEditorModal from '@/components/flow-builder/panels/MissionEditorModal'
+import { describeConcession, type Mission } from '@/lib/ai/missions'
 
 /**
  * Os campos de cada área da órbita (10.2) — os MESMOS campos na radial (drawer)
@@ -32,12 +32,6 @@ const PRESENTATIONS = [
   { v: 'nome_funcao', t: 'Nome + função', d: '"Oi, aqui é a Duda, do time" — sem citar IA espontaneamente' },
   { v: 'discreta', t: 'Discreta', d: 'Só responde; se apresenta apenas se perguntarem' },
 ] as const
-
-const BIASES: Array<{ v: DiscoveryBias; t: string; d: string }> = [
-  { v: 'vendedor', t: 'Vendedor', d: DISCOVERY_OBJECTIVES.vendedor },
-  { v: 'suporte', t: 'Suporte', d: DISCOVERY_OBJECTIVES.suporte },
-  { v: 'hibrido', t: 'Híbrido', d: DISCOVERY_OBJECTIVES.hibrido },
-]
 
 const ADAPT_TOGGLES: Array<{ k: keyof HubState['adapt']; t: string; d: string }> = [
   { k: 'mirror_tone', t: 'Espelhar o tom do cliente', d: 'Formal com quem é formal, leve com quem é leve' },
@@ -158,39 +152,10 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
   }
 
   if (area === 'discovery') {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div>
-          <Label>Viés do inbound espontâneo</Label>
-          <div className="optrow">
-            {BIASES.map((o) => (
-              <button key={o.v} type="button" className={`hub-opt${hub.discovery.bias === o.v ? ' on' : ''}`}
-                onClick={() => patch('discovery', { ...hub.discovery, bias: o.v })}>
-                <div><div>{o.t}</div><div className="od">{o.d}</div></div>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.5 }}>
-          Este campo edita o <b>objetivo da missão whatsapp.received</b> — o mesmo
-          dado da família &quot;Descoberta&quot; na aba Missões (salvar cria uma
-          versão nova e ativa). Nada aqui vira um &quot;papel global&quot; do agente.
-        </div>
-        {!hub.discovery.has_mission && hub.discovery.bias === null && (
-          <div style={{ fontSize: 11.5, color: 'var(--red, #E5484D)', lineHeight: 1.5 }}>
-            Esta loja ainda <b>não tem missão de descoberta ativa</b> — sem ela, o
-            agente não responde mensagens recebidas. Escolher um viés acima e salvar
-            cria e ativa a primeira versão.
-          </div>
-        )}
-        {hub.discovery.has_mission && hub.discovery.bias === null && (
-          <div style={{ fontSize: 11.5, color: 'var(--amber, #E0930B)' }}>
-            A missão ativa tem um objetivo personalizado (editado na aba Missões) —
-            escolher um viés acima o substitui por um dos três padrões.
-          </div>
-        )}
-      </div>
-    )
+    // Correção 13/08: missão é a ESPECIFICAÇÃO do evento — aqui o evento é
+    // "o cliente chamou a loja direto no WhatsApp", e o que se edita é o
+    // playbook completo dele, não um seletor de persona.
+    return <DiscoveryMissionArea />
   }
 
   if (area === 'adapt') {
@@ -341,6 +306,158 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
       </div>
       {/* 10.3: API Keys absorvida pela área Motor — o gerenciador real, aqui. */}
       <ApiKeysManager />
+    </div>
+  )
+}
+
+// A missão do evento "cliente chamou a loja direto no WhatsApp"
+// (whatsapp.received). Correção 13/08: missão é especificação POR EVENTO —
+// esta área mostra a especificação vigente e abre o MESMO editor completo do
+// nó de fluxo (MissionEditorModal). Salvar cria rascunho; ativar é explícito
+// e arquiva a anterior. Sem ativa, o agente não responde inbound.
+function DiscoveryMissionArea() {
+  const FAMILY = 'whatsapp.received'
+  const [missions, setMissions] = useState<Mission[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [editorOpen, setEditorOpen] = useState<{ mission: Mission | null } | null>(null)
+
+  const load = async () => {
+    try {
+      const res = await fetch('/api/ai/missions')
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || 'Falha ao carregar a missão')
+      setMissions(
+        (body.missions ?? []).filter((m: Mission) => m.event_type === FAMILY)
+      )
+      setError(null)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const active = missions.find((m) => m.status === 'active') ?? null
+  const latestDraft = missions.find((m) => m.status === 'draft') ?? null
+
+  const activate = async (missionId: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/ai/missions/${missionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || 'Falha ao ativar')
+      await load()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (loading) {
+    return <Loader2AreaSpinner />
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>
+        A especificação deste <b>evento</b>: o cliente chamou a loja direto no
+        WhatsApp. É ela que dirige a resposta — objetivo, critérios, o que
+        nunca fazer, concessão, insistência.
+      </div>
+
+      {active ? (
+        <div className="act-row on" style={{ alignItems: 'flex-start' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="act-t">{active.display_name || 'Missão ativa'}</div>
+            <div className="act-d" style={{ marginTop: 2 }}>{active.objective}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
+              {describeConcession(active.concession)} · até {active.max_turns} turnos ·{' '}
+              {active.topic_change_policy}
+              {(active.forbidden ?? []).length > 0 &&
+                ` · ${(active.forbidden ?? []).length} proibição(ões)`}
+            </div>
+          </div>
+          <Check size={16} style={{ color: 'var(--green)', flexShrink: 0 }} />
+        </div>
+      ) : (
+        <div className="callout red" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+          <p style={{ fontWeight: 700 }}>Sem missão ativa para este evento</p>
+          <p>O agente NÃO responde quem chama a loja — de propósito: sem especificação, silêncio e alerta, nunca improviso.</p>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {active && (
+          <button type="button" className="btn btn-soft btn-sm" disabled={busy}
+            onClick={() => setEditorOpen({ mission: active })}>
+            Editar especificação (nova versão)
+          </button>
+        )}
+        {!active && !latestDraft && (
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy}
+            onClick={() => setEditorOpen({ mission: null })}>
+            <Plus size={14} />Criar a missão deste evento
+          </button>
+        )}
+      </div>
+
+      {latestDraft && (
+        <div className="act-row" style={{ borderColor: 'var(--amber, #E0930B)' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="act-t">Rascunho aguardando</div>
+            <div className="act-d">{latestDraft.objective}</div>
+          </div>
+          <button type="button" className="btn btn-soft btn-sm" disabled={busy}
+            onClick={() => setEditorOpen({ mission: latestDraft })}>
+            Editar
+          </button>
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy}
+            onClick={() => void activate(latestDraft.id)}>
+            {busy ? 'Ativando…' : 'Ativar'}
+          </button>
+        </div>
+      )}
+
+      {error && <p style={{ fontSize: 12, color: 'var(--red)' }}>{error}</p>}
+
+      <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+        Mesma lei das missões dos fluxos: editar cria uma versão rascunho;
+        ativar arquiva a anterior. Toques disparados por fluxo têm cada um a
+        SUA missão, no próprio nó.
+      </div>
+
+      {editorOpen && (
+        <MissionEditorModal
+          family={FAMILY}
+          mission={editorOpen.mission}
+          onClose={() => setEditorOpen(null)}
+          onSaved={async () => {
+            setEditorOpen(null)
+            await load()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function Loader2AreaSpinner() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '22px 0' }}>
+      <span className="animate-spin" style={{ width: 20, height: 20, border: '2px solid var(--border-strong)', borderTopColor: 'var(--brand)', borderRadius: '50%' }} />
     </div>
   )
 }
