@@ -60,6 +60,14 @@ services:
     <<: *runtime-base
     profiles: ["piloto"]
     env_file: .env.piloto
+    # O resolver interno do Docker Desktop (192.168.65.7) cai sozinho de vez em
+    # quando: em 17/ago o pooler do Supabase E o host do Logfire ficaram
+    # irresolvíveis ao mesmo tempo por ~1min, e o runtime reiniciou 8 vezes.
+    # Aqui todo destino é externo (nuvem), não há service discovery do compose
+    # para preservar — resolver direto tira esse ponto de falha do caminho.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
