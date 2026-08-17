@@ -27,6 +27,7 @@ quem já conversou três vezes seria pior que a ausência (decisão 86d).
 import json
 import logging
 import os
+import re
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import timedelta
 from functools import partial
@@ -92,6 +93,30 @@ from agents_runtime.tools.custom_http import CustomHttpTool, tool_spec_for
 from agents_runtime.tools.knowledge import SearchKnowledge
 
 logger = logging.getLogger(__name__)
+
+
+def unwrap_model_reply(text: str) -> str:
+    """Desembrulha envelopes óbvios da resposta do modelo (17/08): o histórico
+    backfilled ensinou o formato Meta e o Gemini respondeu '{"body": …}' — que
+    foi entregue cru no WhatsApp. Só desembrulha objeto JSON de UMA chave
+    body/text/message com valor string; qualquer outra coisa passa intocada —
+    desembrulhar demais seria reescrever a resposta do agente."""
+    raw = (text or "").strip()
+    candidate = raw
+    if candidate.startswith("```"):
+        candidate = re.sub(r"^```[a-zA-Z]*\s*", "", candidate)
+        candidate = re.sub(r"\s*```$", "", candidate).strip()
+    if not (candidate.startswith("{") and candidate.endswith("}")):
+        return text
+    try:
+        parsed = json.loads(candidate)
+    except ValueError:
+        return text
+    if isinstance(parsed, dict) and len(parsed) == 1:
+        key, value = next(iter(parsed.items()))
+        if key in ("body", "text", "message") and isinstance(value, str):
+            return value
+    return text
 
 #: A costura do motor, intocada desde o E1: o worker chama isto e nada mais.
 #: `None` significa "conclua o turno e não envie nada" (S8).
@@ -524,7 +549,7 @@ def build_responder(
                         )
                     )
                     if not answer.tool_calls:
-                        return answer.text
+                        return unwrap_model_reply(answer.text)
                     # A volta do loop: o pedido do modelo e a resposta da tool
                     # entram na conversa; nenhuma transação fica aberta aqui
                     # (run_tool abre e fecha as suas — ADR-6 vale no loop).
@@ -552,7 +577,7 @@ def build_responder(
                         think=gate.think,
                     )
                 )
-                return answer.text
+                return unwrap_model_reply(answer.text)
 
             await note_step("started", f"{version.name} assumiu a conversa")
 

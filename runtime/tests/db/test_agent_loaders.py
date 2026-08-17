@@ -216,3 +216,58 @@ class TestTheTranscript:
             )
 
         assert [message.text for message in transcript] == ["m4", "m5"]
+
+
+class TestLegacyShapedHistory:
+    """O backfill copiou o formato Meta ({"text": {"body": …}}) e o extrator
+    entregava o JSON cru ao prompt — o modelo IMITOU o envelope e a resposta
+    saiu crua no WhatsApp (visto ao vivo em 17/08). O extrator entende os dois
+    formatos: objeto vira o body; string segue string."""
+
+    def _legacy_row(
+        self,
+        admin: psycopg.Connection,
+        tenant: uuid.UUID,
+        thread,
+        *,
+        direction: str,
+        body: str,
+    ) -> None:
+        admin.execute(
+            """
+            insert into public.messages
+                (organization_id, conversation_id, direction, seq, channel,
+                 author_type, content)
+            values (%s, %s, %s, 1, 'whatsapp',
+                    case when %s = 'inbound' then 'contact' else 'agent' end,
+                    jsonb_build_object('text', jsonb_build_object('body', %s::text)))
+            """,
+            (tenant, thread.conversation_id, direction, direction, body),
+        )
+
+    async def test_the_transcript_flattens_the_meta_shape(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        thread = create_thread(admin, tenant)
+        self._legacy_row(admin, tenant, thread, direction="outbound", body="Bom dia, tudo bem?")
+        create_message(admin, tenant, thread, direction="inbound", seq=1, text="boa tarde")
+
+        async with as_worker(dsn, tenant) as conn:
+            transcript = await agent_repo.load_recent_transcript(
+                conn, conversation_id=thread.conversation_id
+            )
+
+        assert [message.text for message in transcript] == ["Bom dia, tudo bem?", "boa tarde"]
+
+    async def test_the_pending_window_flattens_too(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        thread = create_thread(admin, tenant)
+        self._legacy_row(admin, tenant, thread, direction="inbound", body="qual o horário?")
+
+        async with as_worker(dsn, tenant) as conn:
+            pending = await agent_repo.load_pending_messages(
+                conn, conversation_id=thread.conversation_id, after_seq=0, target_seq=1
+            )
+
+        assert [message.text for message in pending] == ["qual o horário?"]

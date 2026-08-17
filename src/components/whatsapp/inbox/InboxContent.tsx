@@ -26,6 +26,7 @@ import WhatsAppConnectionManager from '@/components/whatsapp/inbox/WhatsAppConne
 import WhatsAppConnectUnified from '@/components/whatsapp/WhatsAppConnectUnified'
 
 // Hooks
+import { authedFetch } from '@/lib/api/authed-fetch'
 import { useInboxConversations } from '@/hooks/useInboxConversations'
 import { useInboxMessages } from '@/hooks/useInboxMessages'
 import { useInboxContact } from '@/hooks/useInboxContact'
@@ -200,9 +201,26 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
     })
   }, [])
 
-  // Trocar de conversa nao deve carregar o progresso da anterior.
+  // Trocar de conversa nao deve carregar o progresso da anterior — e abrir
+  // uma conversa CARREGA a trilha gravada (defeito 3 de 17/08: os passos
+  // estao no banco, mas so o Realtime alimentava o painel e um refresh
+  // zerava tudo). A carga inicial semeia; o Realtime segue dali.
   useEffect(() => {
     setAgentSteps([])
+    const conversationId = selectedConversation?.id
+    if (!conversationId) return
+    let cancelled = false
+    authedFetch(`/api/whatsapp/inbox/conversations/${conversationId}/ai-steps`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && Array.isArray(d?.steps) && d.steps.length > 0) {
+          setAgentSteps(d.steps)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
   }, [selectedConversation?.id])
 
   // Rede de seguranca do nao-lidas, cobrindo o caminho de POLLING: se o canal

@@ -226,7 +226,14 @@ async def load_pending_messages(
     """
     cursor = await conn.execute(
         """
-        select author_type, content ->> 'text'
+        select author_type,
+               case when jsonb_typeof(content -> 'text') = 'object'
+                    -- Formato Meta copiado do inbox legado pelo backfill
+                    -- ({"text": {"body": …}}): entregar o JSON cru ao prompt
+                    -- ensinou o modelo a IMITÁ-LO (17/08). O extrator fala
+                    -- os dois dialetos.
+                    then content #>> '{text,body}'
+                    else content ->> 'text' end
           from public.messages
          where conversation_id = %s
            and direction = 'inbound'
@@ -256,7 +263,14 @@ async def load_recent_transcript(
     """
     cursor = await conn.execute(
         """
-        select author_type, content ->> 'text'
+        select author_type,
+               case when jsonb_typeof(content -> 'text') = 'object'
+                    -- Formato Meta copiado do inbox legado pelo backfill
+                    -- ({"text": {"body": …}}): entregar o JSON cru ao prompt
+                    -- ensinou o modelo a IMITÁ-LO (17/08). O extrator fala
+                    -- os dois dialetos.
+                    then content #>> '{text,body}'
+                    else content ->> 'text' end
           from (
             select author_type, content, created_at, direction
               from public.messages
