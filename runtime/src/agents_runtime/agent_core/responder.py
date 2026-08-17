@@ -602,9 +602,19 @@ def build_responder(
                             "attempts": outcome.attempts,
                             "think": gate.think,
                             "think_reason": gate.reason,
+                            # "Quero ver o que ela iria mandar" (17/08): o veto
+                            # segura o envio, não a evidência.
+                            "draft": outcome.last_draft,
+                            "judge_rationale": (
+                                outcome.judgement.rationale if outcome.judgement else None
+                            ),
                         },
                     )
-                await note_step("skipped", "Resposta retida pela verificação de qualidade")
+                retained = (outcome.last_draft or "").strip()
+                preview = f" — ia enviar: “{retained[:120]}”" if retained else ""
+                await note_step(
+                    "skipped", "Resposta retida pela verificação de qualidade" + preview
+                )
                 return None
 
             return {"text": outcome.draft}

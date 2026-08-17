@@ -321,6 +321,21 @@ o legado escrevia os passos, o runtime não: chat mudo enquanto trabalhava.
 - Testes: +3 db (cancela com/sem '+', telefone alheio = 0, grants); 381
   db/rls/pipeline + 986 vitest + tsc verdes.
 
+### Régua do juiz alinhada ao produto + rascunho retido visível (17/08, 3ª leva)
+
+Primeiro "boa tarde" real foi vetado como CRITICAL por `never-say-ai-respeitado`
+— o critério herdado do motor ("jamais se descreve como IA") lido como "não
+personifique humano" derrubou a apresentação `nome_funcao` legítima ("Matheus,
+do time da loja"). Era conflito de régua, não capricho:
+- Critério reescrito (tom_e_idioma.json) com a regra do WORDER: violação é
+  NEGAR ser IA ou alegar ser humano; nome+função configurados é permitido;
+  descrever-se como IA também. Severidade critical mantida.
+- A linha do caso do juiz ("a loja exige que nunca admita ser IA") morreu —
+  virou a regra fixa verdadeira (nunca nega; apresentação permitida).
+- `GuardedOutcome.last_draft`: bloqueio guarda o último rascunho — vai no
+  payload do alerta (com judge_rationale) e como prévia no chip ("ia enviar:
+  …"). Teste-primeiro (2 vermelhos→verdes). 891 unit + 381 db/pipeline ✓.
+
 ### Pendências conhecidas (fora do plano de 30)
 
 - PENDENTE-2: copy final dos seeds com Bruno (drafts já no banco por org via função).

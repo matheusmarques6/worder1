@@ -266,6 +266,29 @@ class TestTheRealJudge:
             await judge("rascunho", a_context())
 
 
+class TestTheRetainedDraftIsVisible:
+    """"Quero ver o que ela iria mandar" (lojista, 17/08): um bloqueio guarda
+    o último rascunho em `last_draft` — o veto continua valendo, mas o texto
+    não evapora mais; o responder o leva ao alerta e ao chip do chat."""
+
+    async def test_a_critical_block_keeps_the_last_draft(self) -> None:
+        generate, judge = Generator(), ScriptedJudge(critical_failure())
+
+        outcome = await guarded_reply(generate, judge)
+
+        assert outcome.draft is None
+        assert outcome.last_draft == "rascunho 0"
+
+    async def test_an_unjudgeable_run_keeps_the_last_draft(self) -> None:
+        generate = Generator()
+        judge = ScriptedJudge(JudgeError("resposta ilegível"))
+
+        outcome = await guarded_reply(generate, judge)
+
+        assert outcome.draft is None
+        assert outcome.last_draft == f"rascunho {REGENERATION_LIMIT}"
+
+
 class TestJudgeAnswerTolerance:
     """Haiku 4.5 via OpenRouter devolve o JSON embrulhado — cerca de código ou
     preâmbulo — e foi exatamente isso ao vivo em 17/08: três "judge unusable"

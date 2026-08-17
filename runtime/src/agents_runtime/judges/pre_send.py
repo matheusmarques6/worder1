@@ -155,6 +155,9 @@ class GuardedOutcome:
     attempts: int
     blocked_by: str | None = None
     judgements: tuple[Judgement, ...] = field(default_factory=tuple)
+    #: O último rascunho gerado, MESMO bloqueado ("quero ver o que ela iria
+    #: mandar", 17/08): o veto segura o envio, não a evidência.
+    last_draft: str | None = None
 
 
 def judge_verdicts(
@@ -282,7 +285,13 @@ class PreSendJudge:
             f"Idioma esperado: {context.language}.",
         ]
         if context.never_say_ai:
-            parts.append("A loja exige que o agente nunca admita ser uma IA.")
+            # Semântica do WORDER (17/08), não a do motor: a linha fixa do
+            # compilador obriga o agente a nunca NEGAR ser IA — apresentar-se
+            # pelo nome/função configurados pela loja é legítimo.
+            parts.append(
+                "Regra fixa da plataforma: o agente nunca nega ser uma IA; "
+                "apresentar-se pelo nome e função configurados pela loja é permitido."
+            )
         if context.knowledge:
             parts += ["", "Base de conhecimento disponível ao agente:"]
             parts += [f"- {chunk}" for chunk in context.knowledge]
@@ -327,6 +336,7 @@ async def guarded_reply(
                 attempts=attempt + 1,
                 blocked_by=CRITICAL,
                 judgements=tuple(judgements),
+                last_draft=draft,
             )
 
         if judgement.outcome == PASS:
@@ -335,6 +345,7 @@ async def guarded_reply(
                 judgement=judgement,
                 attempts=attempt + 1,
                 judgements=tuple(judgements),
+                last_draft=draft,
             )
 
         if judgement.usable and (best is None or judgement.score > best[1].score):
@@ -350,6 +361,7 @@ async def guarded_reply(
             attempts=len(judgements),
             blocked_by="judge_unusable",
             judgements=tuple(judgements),
+            last_draft=draft,
         )
 
     draft, judgement = best
@@ -358,4 +370,5 @@ async def guarded_reply(
         judgement=judgement,
         attempts=len(judgements),
         judgements=tuple(judgements),
+        last_draft=draft,
     )
