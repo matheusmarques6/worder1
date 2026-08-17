@@ -305,6 +305,22 @@ o legado escrevia os passos, o runtime não: chat mudo enquanto trabalhava.
 - Testes: db 3 novos (canônica→cloud · telefone±'+' · toque frio = false);
   888 unit + 378 db/rls/pipeline + 986 vitest + tsc verdes.
 
+### Freio do atendente + bloqueios visíveis (pedido 17/08, 2ª leva)
+
+- `public.cancel_pending_ai_response(org, phone)` (migration `20260817000003`,
+  SECURITY DEFINER, grant service_role): zera `pending_response_at` da
+  canônica pelo telefone (tolerante a '+'). NÃO alcança turno em voo (lease)
+  — dívida registrada.
+- Botão do inbox agora VALE no runtime: webhook com `ai_enabled=false` ingere
+  o histórico mas cancela o agendamento + chip "Agente desativado nesta
+  conversa". Toggle OFF cancela + chip "desativado pelo atendente"; ON chip
+  "reativado". Mensagem manual do atendente (org runtime) cancela a resposta
+  agendada + chip "Atendente entrou na conversa" (chip só se cancelou algo).
+- Botão renomeado: "Agente ‹Nome› Ativo/Off" (nome do agente canônico — o
+  atrelado ao WhatsApp nas missões); fallback "Bot Ativo/Off" sem canônico.
+- Testes: +3 db (cancela com/sem '+', telefone alheio = 0, grants); 381
+  db/rls/pipeline + 986 vitest + tsc verdes.
+
 ### Pendências conhecidas (fora do plano de 30)
 
 - PENDENTE-2: copy final dos seeds com Bruno (drafts já no banco por org via função).

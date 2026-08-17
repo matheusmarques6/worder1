@@ -447,6 +447,17 @@ async function processMessage(
         });
         if (ingestError) throw new Error(ingestError.message);
 
+        // O botão do inbox vale também no runtime: com o agente desligado o
+        // ingest continua (histórico na canônica), mas a resposta agendada é
+        // CANCELADA — o freio é a mesma RPC do toggle e do envio manual.
+        const botOff = conversation?.ai_enabled === false;
+        if (botOff) {
+          await supabase.rpc('cancel_pending_ai_response', {
+            p_organization_id: account.organization_id,
+            p_phone: String(phoneNumber ?? ''),
+          });
+        }
+
         // Progresso ao vivo no chat, igual ao caminho legado: o debounce do
         // coalescer é justamente o trecho em que o inbox ficaria mudo. Os
         // passos seguintes (assumiu/gerando/verificando/enviada) vêm do
@@ -458,8 +469,10 @@ async function processMessage(
             organizationId: account.organization_id,
             conversationId: conversation.id,
             runId: randomUUID(),
-            step: AI_RUN_STEPS.QUEUED,
-            detail: 'Agente vai responder',
+            step: botOff ? AI_RUN_STEPS.SKIPPED : AI_RUN_STEPS.QUEUED,
+            detail: botOff
+              ? 'Agente desativado nesta conversa — não vai responder'
+              : 'Agente vai responder',
             metadata: { debounce_seconds: AI_DEBOUNCE_SECONDS, runtime: true },
           });
         }

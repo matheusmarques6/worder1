@@ -107,7 +107,7 @@ export async function POST(
       .update(updateData)
       .eq('id', conversationId)
       .eq('organization_id', orgId)
-      .select('id, ai_enabled, ai_agent_id, ai_disabled_at, ai_disabled_reason')
+      .select('id, ai_enabled, ai_agent_id, ai_disabled_at, ai_disabled_reason, wa_id')
       .single()
 
     if (updateError) {
@@ -115,7 +115,35 @@ export async function POST(
       throw updateError
     }
 
-    return NextResponse.json({ 
+    // O clique vira estado VISÍVEL no chat + freio real (pedido 17/08):
+    // desligar cancela a resposta automática já agendada na canônica (org em
+    // runtime; no legado a RPC é no-op) e o chip conta o que aconteceu.
+    // Try/catch: adereço e freio jamais quebram o toggle em si.
+    try {
+      if (newAiEnabled === false && updatedConversation.wa_id) {
+        await supabase.rpc('cancel_pending_ai_response', {
+          p_organization_id: orgId,
+          p_phone: updatedConversation.wa_id,
+        })
+      }
+      if (newAiEnabled !== undefined) {
+        const { recordAiStep, AI_RUN_STEPS } = await import('@/lib/ai/run-steps')
+        const { randomUUID } = await import('crypto')
+        await recordAiStep({
+          organizationId: orgId,
+          conversationId,
+          runId: randomUUID(),
+          step: AI_RUN_STEPS.SKIPPED,
+          detail: newAiEnabled
+            ? 'Agente reativado — responde a partir da próxima mensagem'
+            : 'Agente desativado pelo atendente',
+        })
+      }
+    } catch (stepError) {
+      console.error('Error recording bot-toggle step:', stepError)
+    }
+
+    return NextResponse.json({
       success: true,
       conversation: {
         ...updatedConversation,

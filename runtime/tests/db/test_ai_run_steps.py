@@ -12,7 +12,7 @@ import uuid
 import psycopg
 
 from tests.db.conftest import as_app_role
-from tests.db.factories import contact_phone, create_cloud_mirror, create_thread
+from tests.db.factories import contact_phone, create_cloud_mirror, create_thread, make_due
 
 
 def emit(
@@ -93,6 +93,78 @@ class TestEmitFromTheWorker:
             ok = emit(worker, org, conversation_id=thread.conversation_id)
 
         assert ok is False
+
+
+class TestCancelPendingAiResponse:
+    """O freio do atendente (pedido 17/08): botão desligado ou mensagem manual
+    cancela a resposta automática já AGENDADA — o humano tem a palavra. Um
+    turno em voo não é alcançado (lease é cirurgia própria, dívida)."""
+
+    def _pending(self, admin, conversation_id: uuid.UUID):
+        with admin.cursor() as cur:
+            cur.execute(
+                "select pending_response_at from public.conversations where id = %s",
+                (conversation_id,),
+            )
+            (pending,) = cur.fetchone()
+        return pending
+
+    def test_cancels_the_scheduled_response_across_the_plus_prefix(
+        self, admin, two_tenants
+    ) -> None:
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        phone = contact_phone(admin, thread.contact_id)
+        link_identity(admin, org, thread.contact_id, phone)
+        make_due(admin, thread.conversation_id)
+        assert self._pending(admin, thread.conversation_id) is not None
+
+        with admin.cursor() as cur:
+            cur.execute(
+                "select public.cancel_pending_ai_response(%s, %s)",
+                (org, "+" + phone.lstrip("+")),
+            )
+            (count,) = cur.fetchone()
+
+        assert count == 1
+        assert self._pending(admin, thread.conversation_id) is None
+
+    def test_a_stranger_phone_cancels_nothing(self, admin, two_tenants) -> None:
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        phone = contact_phone(admin, thread.contact_id)
+        link_identity(admin, org, thread.contact_id, phone)
+        make_due(admin, thread.conversation_id)
+
+        with admin.cursor() as cur:
+            cur.execute(
+                "select public.cancel_pending_ai_response(%s, %s)",
+                (org, "5500000000000"),
+            )
+            (count,) = cur.fetchone()
+
+        assert count == 0
+        assert self._pending(admin, thread.conversation_id) is not None
+
+    def test_service_role_holds_the_grant_and_the_public_does_not(self, admin) -> None:
+        with admin.cursor() as cur:
+            cur.execute(
+                """
+                select has_function_privilege(
+                           'service_role',
+                           'public.cancel_pending_ai_response(uuid, text)',
+                           'execute'
+                       ),
+                       has_function_privilege(
+                           'authenticated',
+                           'public.cancel_pending_ai_response(uuid, text)',
+                           'execute'
+                       )
+                """
+            )
+            service, authenticated = cur.fetchone()
+        assert service is True
+        assert authenticated is False
 
 
 class TestEmitFromTheSender:

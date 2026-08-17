@@ -230,6 +230,34 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         last_message_direction: 'outbound',
       }).eq('id', conversationId)
 
+      // Atendente entrou na conversa (pedido 17/08): em org no runtime, o
+      // humano tem a palavra — cancela a resposta automática agendada e o
+      // chip conta o porquê do silêncio do agente. Chip só quando havia algo
+      // a cancelar; no legado a RPC é no-op. Nunca quebra o envio manual.
+      try {
+        const { getRuntimeMode } = await import('@/lib/ai/runtime-rollout')
+        const mode = await getRuntimeMode(supabase, cloudConv.organization_id)
+        if (mode === 'runtime') {
+          const { data: cancelled } = await supabase.rpc('cancel_pending_ai_response', {
+            p_organization_id: cloudConv.organization_id,
+            p_phone: String(phoneNumber ?? ''),
+          })
+          if ((cancelled ?? 0) > 0) {
+            const { recordAiStep, AI_RUN_STEPS } = await import('@/lib/ai/run-steps')
+            const { randomUUID } = await import('crypto')
+            await recordAiStep({
+              organizationId: cloudConv.organization_id,
+              conversationId,
+              runId: randomUUID(),
+              step: AI_RUN_STEPS.SKIPPED,
+              detail: 'Atendente entrou na conversa — resposta automática cancelada',
+            })
+          }
+        }
+      } catch (takeoverError) {
+        console.error('Error cancelling pending AI response:', takeoverError)
+      }
+
       return NextResponse.json({
         message: {
           id: saved?.id,

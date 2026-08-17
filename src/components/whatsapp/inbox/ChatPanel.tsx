@@ -420,6 +420,23 @@ export function ChatPanel({
     detail?: string
   } | null>(null)
 
+  // Nome do agente de IA da loja (o canônico — o mesmo atrelado ao WhatsApp
+  // direto nas missões): o botão diz "Agente Matheus Ativo", não "Bot Ativo"
+  // (pedido 17/08). Sem canônico, cai no rótulo genérico.
+  const [aiAgentName, setAiAgentName] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/ai/agents/canonical')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.canonical?.name) setAiAgentName(d.canonical.name)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   useEffect(() => {
     if (!conversation?.id) {
       setAiStatus(null)
@@ -737,10 +754,14 @@ export function ChatPanel({
             )}
             <span className="hidden sm:inline">
               {!conversation.is_bot_active
-                ? 'Bot Off'
+                ? aiAgentName
+                  ? `Agente ${aiAgentName} Off`
+                  : 'Bot Off'
                 : aiStatus && !aiStatus.willRespond
                   ? aiStatus.label
-                  : 'Bot Ativo'}
+                  : aiAgentName
+                    ? `Agente ${aiAgentName} Ativo`
+                    : 'Bot Ativo'}
             </span>
           </button>
 
