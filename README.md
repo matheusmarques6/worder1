@@ -190,3 +190,6 @@ coalescer + workers + sender + heartbeat). Mapa do trabalho:
 - **Migrations:** `supabase/migrations/2026081*` (identidade canônica, missões, outbox, preflight do sender)
 - **Cutover:** por org via `ai_runtime_rollout` — tabela vazia = nada muda no app; o webhook
   só desvia para o runtime quem estiver nela.
+- **Deploy do app (Vercel):** produção builda da branch `claude/debug-console-error-FWrLE`
+  (deploy automático a cada push). A branch-espelho `claude/debug-console-error-0tshhm`
+  nunca gera build — o `ignoreCommand` do `vercel.json` a pula por nome.
