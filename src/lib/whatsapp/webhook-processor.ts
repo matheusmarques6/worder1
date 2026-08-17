@@ -446,6 +446,23 @@ async function processMessage(
           p_debounce_seconds: AI_DEBOUNCE_SECONDS,
         });
         if (ingestError) throw new Error(ingestError.message);
+
+        // Progresso ao vivo no chat, igual ao caminho legado: o debounce do
+        // coalescer é justamente o trecho em que o inbox ficaria mudo. Os
+        // passos seguintes (assumiu/gerando/verificando/enviada) vêm do
+        // próprio runtime via internal.emit_ai_run_step.
+        if (conversation?.id) {
+          const { recordAiStep, AI_RUN_STEPS } = await import('@/lib/ai/run-steps');
+          const { randomUUID } = await import('crypto');
+          await recordAiStep({
+            organizationId: account.organization_id,
+            conversationId: conversation.id,
+            runId: randomUUID(),
+            step: AI_RUN_STEPS.QUEUED,
+            detail: 'Agente vai responder',
+            metadata: { debounce_seconds: AI_DEBOUNCE_SECONDS, runtime: true },
+          });
+        }
       }
     } catch (err: any) {
       wlog.error('whatsapp.runtime.ingest_error', {

@@ -162,6 +162,21 @@ async def sender_pass(
                     },
                 )
 
+        # Chip de progresso no chat (pedido 17/08) — adereço de UI, nunca
+        # motivo de falha do envio.
+        if send.channel_type == "whatsapp":
+            try:
+                await engine.emit_ai_run_step(
+                    conn,
+                    organization_id=send.organization_id,
+                    run_id=uuid.uuid4(),
+                    step="sending",
+                    detail="Enviando resposta",
+                    phone=send.to_phone_e164,
+                )
+            except psycopg.Error:
+                pass
+
         try:
             delivered = await send_humanized(
                 channel, send, humanize_delays=config.humanize_delays, clock=clock
@@ -179,6 +194,18 @@ async def sender_pass(
                 ),
             )
             annotate(outcome="failed")
+            if send.channel_type == "whatsapp" and failure is Failure.PERMANENT:
+                try:
+                    await engine.emit_ai_run_step(
+                        conn,
+                        organization_id=send.organization_id,
+                        run_id=uuid.uuid4(),
+                        step="failed",
+                        detail="Falha no envio da resposta",
+                        phone=send.to_phone_e164,
+                    )
+                except psycopg.Error:
+                    pass
             return
 
         # O wamid da linha é o da 1ª bolha — paridade com o legado, e é
@@ -204,6 +231,18 @@ async def sender_pass(
                     # O canônico já registrou o envio; o espelho se
                     # recupera no próximo inbound (sync webhook → inbox).
                     pass
+        if send.channel_type == "whatsapp":
+            try:
+                await engine.emit_ai_run_step(
+                    conn,
+                    organization_id=send.organization_id,
+                    run_id=uuid.uuid4(),
+                    step="sent",
+                    detail="Resposta enviada",
+                    phone=send.to_phone_e164,
+                )
+            except psycopg.Error:
+                pass
 
     for send in batch:
         # O span do envio RETOMA o trace do turno (otel da linha de outbox,

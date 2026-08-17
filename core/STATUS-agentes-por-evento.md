@@ -287,6 +287,24 @@ Dois bugs do fork no Judge 1, achados ao vivo na primeira conversa real:
   prompt do juiz endurecido ("sem cercas, sem texto fora do JSON").
 Teste-primeiro (3 vermelhos → verdes); 885 unit + 375 db/rls/pipeline ✓.
 
+### Chips de progresso no chat pelo runtime (pedido 17/08)
+
+O inbox mostra o andamento do agente (whatsapp_ai_run_steps via Realtime) —
+o legado escrevia os passos, o runtime não: chat mudo enquanto trabalhava.
+- Migration `20260817000002`: `internal.emit_ai_run_step` (SECURITY DEFINER,
+  receita do espelho) — resolve a conversa CLOUD pela canônica (worker, via
+  channel_identities) ou pelo telefone (sender); sem palco = false silencioso.
+  CREATE TABLE IF NOT EXISTS da run_steps para o CI. Grants worker+sender.
+- Responder emite: started ("‹agente› assumiu"), generating/refinando,
+  judging ("verificando antes de enviar"), skipped (sem missão · sem chave ·
+  retida pela verificação). Sender: sending/sent/failed(permanente).
+  Webhook (branch runtime): queued "Agente vai responder" — mesmo helper do
+  legado. Tudo adereço: try/except, chip perdido nunca custa turno.
+- A migration dos crons legados (…000001) ganhou guarda to_regclass: no
+  Postgres limpo do CI aquelas tabelas nem existem — no-op lá, vivo igual.
+- Testes: db 3 novos (canônica→cloud · telefone±'+' · toque frio = false);
+  888 unit + 378 db/rls/pipeline + 986 vitest + tsc verdes.
+
 ### Pendências conhecidas (fora do plano de 30)
 
 - PENDENTE-2: copy final dos seeds com Bruno (drafts já no banco por org via função).

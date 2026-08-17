@@ -308,6 +308,28 @@ async def mirror_outbound_to_inbox(
     return bool((await cursor.fetchone())[0])
 
 
+async def emit_ai_run_step(
+    conn: psycopg.AsyncConnection,
+    *,
+    organization_id: UUID,
+    run_id: UUID,
+    step: str,
+    detail: str | None = None,
+    agent_id: UUID | None = None,
+    conversation_id: UUID | None = None,
+    phone: str | None = None,
+) -> bool:
+    """Um chip de progresso no chat do inbox (whatsapp_ai_run_steps, lida por
+    Realtime). Resolve a conversa CLOUD pela canônica (worker) ou pelo telefone
+    (sender). Adereço de UI: quem chama embrulha em try/except — um chip
+    perdido jamais custa um turno."""
+    cursor = await conn.execute(
+        "select internal.emit_ai_run_step(%s, %s, %s, %s, %s, null, %s, %s)",
+        (organization_id, run_id, step, detail, agent_id, conversation_id, phone),
+    )
+    return bool((await cursor.fetchone())[0])
+
+
 async def mark_outbox_sent(
     conn: psycopg.AsyncConnection, outbox_id: UUID, token: UUID, provider_message_id: str
 ) -> bool:

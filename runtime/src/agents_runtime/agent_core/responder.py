@@ -25,13 +25,14 @@ quem já conversou três vezes seria pior que a ausência (decisão 86d).
 """
 
 import json
+import logging
 import os
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 import psycopg
@@ -76,6 +77,7 @@ from agents_runtime.queueing.jobs import InboundJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository import custom_tools as custom_tools_repo
+from agents_runtime.repository import engine as engine_repo
 from agents_runtime.repository import incentives as incentives_repo
 from agents_runtime.repository import judge_scores as scores_repo
 from agents_runtime.repository import llm_calls as llm_repo
@@ -88,6 +90,8 @@ from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.coupon import BENEFIT_KINDS, OBJECT_KINDS, CreateCoupon
 from agents_runtime.tools.custom_http import CustomHttpTool, tool_spec_for
 from agents_runtime.tools.knowledge import SearchKnowledge
+
+logger = logging.getLogger(__name__)
 
 #: A costura do motor, intocada desde o E1: o worker chama isto e nada mais.
 #: `None` significa "conclua o turno e não envie nada" (S8).
@@ -295,6 +299,24 @@ def build_responder(
             metered = partial(_metered, conn, job, llm, clock)
             gate = should_think(pending)
 
+            # --- progresso no chat (pedido 17/08): os chips do inbox. Adereço
+            # de UI por contrato — um chip perdido jamais custa um turno.
+            run_id = uuid4()
+
+            async def note_step(step_name: str, step_detail: str | None = None) -> None:
+                try:
+                    await engine_repo.emit_ai_run_step(
+                        conn,
+                        organization_id=job.organization_id,
+                        run_id=run_id,
+                        step=step_name,
+                        detail=step_detail,
+                        agent_id=version.agent_id,
+                        conversation_id=job.conversation_id,
+                    )
+                except Exception:  # adereço nunca vira causa de morte do turno
+                    logger.debug("run-step emit failed", exc_info=True)
+
             # --- arbitragem: uma missão vence o turno; sem nenhuma, alerta e
             # silêncio deliberado (a conversa avança; §3.4 inv. 8).
             try:
@@ -310,6 +332,7 @@ def build_responder(
                         title="Inbound sem missão ativa — nada foi respondido",
                         payload={"conversation_id": str(job.conversation_id)},
                     )
+                await note_step("skipped", "Sem missão ativa para este evento — nada respondido")
                 return None
 
             resolved = merge_mission(
@@ -344,6 +367,7 @@ def build_responder(
                                 "reason": str(reason),
                             },
                         )
+                    await note_step("skipped", "Sem chave de LLM da loja — agente não respondeu")
                     return None
 
             knowledge = await _knowledge(
@@ -530,7 +554,22 @@ def build_responder(
                 )
                 return answer.text
 
-            outcome = await guarded_reply(generate, judge, context=context)
+            await note_step("started", f"{version.name} assumiu a conversa")
+
+            async def traced_generate(attempt: int, feedback: tuple[str, ...]) -> str:
+                await note_step(
+                    "generating",
+                    "Gerando resposta"
+                    if attempt == 0
+                    else "Refinando a resposta (ajustes da verificação)",
+                )
+                return await generate(attempt, feedback)
+
+            async def traced_judge(draft: str, *args: Any, **kwargs: Any):
+                await note_step("judging", "Verificando a resposta antes de enviar")
+                return await judge(draft, *args, **kwargs)
+
+            outcome = await guarded_reply(traced_generate, traced_judge, context=context)
 
             # --- o rastro: uma nota por tentativa (RNF-050), transação própria
             for judgement in outcome.judgements:
@@ -565,6 +604,7 @@ def build_responder(
                             "think_reason": gate.reason,
                         },
                     )
+                await note_step("skipped", "Resposta retida pela verificação de qualidade")
                 return None
 
             return {"text": outcome.draft}

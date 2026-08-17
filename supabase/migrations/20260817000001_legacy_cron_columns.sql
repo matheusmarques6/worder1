@@ -9,33 +9,45 @@
 --      last_notification_at.
 --
 -- Expand puro (ambas as tabelas estão vazias no vivo em 17/08/2026).
+--
+-- GUARDA por to_regclass: essas tabelas são do app LEGADO e não fazem parte
+-- do baseline do runtime — num Postgres limpo (CI) elas nem existem, e esta
+-- migration precisa ser um no-op lá, não um erro.
 
-alter table public.whatsapp_campaign_recipients
-  add column if not exists sending_at timestamptz;
+do $$
+begin
+    if to_regclass('public.whatsapp_campaign_recipients') is not null then
+        alter table public.whatsapp_campaign_recipients
+            add column if not exists sending_at timestamptz;
 
-create index if not exists idx_wcr_stuck_sending
-  on public.whatsapp_campaign_recipients (sending_at)
-  where status = 'sending';
+        create index if not exists idx_wcr_stuck_sending
+            on public.whatsapp_campaign_recipients (sending_at)
+            where status = 'sending';
+    end if;
 
-alter table public.abandoned_carts
-  add column if not exists status text not null default 'abandoned',
-  add column if not exists abandoned_at timestamptz,
-  add column if not exists notified_at timestamptz,
-  add column if not exists notification_count integer not null default 0,
-  add column if not exists last_notification_at timestamptz;
+    if to_regclass('public.abandoned_carts') is not null then
+        alter table public.abandoned_carts
+            add column if not exists status text not null default 'abandoned',
+            add column if not exists abandoned_at timestamptz,
+            add column if not exists notified_at timestamptz,
+            add column if not exists notification_count integer not null default 0,
+            add column if not exists last_notification_at timestamptz;
 
-alter table public.abandoned_carts
-  alter column abandoned_at set default now();
+        alter table public.abandoned_carts
+            alter column abandoned_at set default now();
 
--- Backfill (no-op com a tabela vazia; correto se algum dia rodar com dados)
-update public.abandoned_carts
-   set abandoned_at = detected_at
- where abandoned_at is null and detected_at is not null;
+        -- Backfill (no-op com a tabela vazia; correto se rodar com dados)
+        update public.abandoned_carts
+           set abandoned_at = detected_at
+         where abandoned_at is null and detected_at is not null;
 
-update public.abandoned_carts
-   set status = 'recovered'
- where recovered_at is not null;
+        update public.abandoned_carts
+           set status = 'recovered'
+         where recovered_at is not null;
 
-create index if not exists idx_abandoned_carts_cron
-  on public.abandoned_carts (organization_id, abandoned_at)
-  where status = 'abandoned' and notified_at is null;
+        create index if not exists idx_abandoned_carts_cron
+            on public.abandoned_carts (organization_id, abandoned_at)
+            where status = 'abandoned' and notified_at is null;
+    end if;
+end
+$$;
