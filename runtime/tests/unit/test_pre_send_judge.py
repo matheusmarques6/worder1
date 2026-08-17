@@ -268,7 +268,16 @@ class TestTheRealJudge:
 
 class TestThePlatformGate:
     def test_the_judge_model_is_the_platform_one(self) -> None:
-        assert JUDGE_MODEL == "claude-haiku-4-5"
+        assert JUDGE_MODEL == "anthropic/claude-haiku-4.5"
+
+    def test_the_judge_model_is_a_routable_slug(self) -> None:
+        """O adapter manda JUDGE_MODEL cru no `model` do corpo e a OpenRouter
+        não tem um único id sem `provedor/` (0 de 414). Um slug sem namespace
+        volta 400: a geração já foi paga, o juiz morre, e o turno é descartado
+        sem enviar nada — foi o que aconteceu em 17/ago. Fixar o literal acima
+        não pega isso; a forma pega.
+        """
+        assert "/" in JUDGE_MODEL, "slug do juiz sem namespace de provedor"
 
     def test_the_module_never_reads_a_model_from_configuration(self) -> None:
         """A safety gate a customer can reconfigure is not a gate (D1). The

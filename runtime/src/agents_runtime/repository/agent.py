@@ -138,7 +138,10 @@ async def load_active_version(
     return ActiveVersion(
         id=row[0],
         config=AgentConfig(
-            model=row[1] or "gpt-4o-mini",
+            # Slug da OpenRouter: sem `provedor/` o adapter leva 400 e o turno
+            # morre. O fallback só vale quando a linha do tenant vem sem modelo,
+            # então quebrava calado — mesma falha do juiz (17/ago).
+            model=row[1] or "openai/gpt-4o-mini",
             base_prompt=row[2] or "",
             scenario_prompts={},
             enabled_tools=enabled,

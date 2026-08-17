@@ -37,7 +37,11 @@ from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message
 from agents_runtime.evals.rubrics import Criterion, Rubric, score
 
 #: Platform-fixed (D1, decisão 79). Never per tenant.
-JUDGE_MODEL = "claude-haiku-4-5"
+#: Slug DA OPENROUTER, com namespace: o adapter manda esta string crua no
+#: `model` do corpo (openrouter.py), e lá nenhum id existe sem `provedor/`.
+#: Sem o prefixo a resposta é 400 "not a valid model ID" — a geração passa, o
+#: juiz morre, e o turno é descartado sem enviar nada (visto em 17/ago).
+JUDGE_MODEL = "anthropic/claude-haiku-4.5"
 
 #: The one rubric a merchant writes (settings.judges.custom, radial → Juízes).
 MERCHANT_RUBRIC = "lojista"
