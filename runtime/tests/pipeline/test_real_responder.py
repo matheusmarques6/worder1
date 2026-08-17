@@ -207,7 +207,7 @@ async def test_the_merchants_knowledge_reaches_the_model(
     )
 
     agent_request = next(
-        request for request in llm.asked if not request.model.startswith("claude-haiku")
+        request for request in llm.asked if "claude-haiku" not in request.model
     )
     system = agent_request.messages[0].content
     assert FRETE in system

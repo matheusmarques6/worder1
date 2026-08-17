@@ -206,6 +206,24 @@ def judge_verdicts(
     )
 
 
+def _judge_payload(text: str) -> object:
+    """O contrato pede JSON puro, mas o modelo real embrulha — cerca de código
+    ou preâmbulo (visto ao vivo em 17/08: três "judge unusable" e o turno
+    mudo). Aceitar o embrulho não afrouxa o portão: texto sem UM objeto JSON
+    dentro continua ilegível, e ilegível continua reprovando (fail-closed)."""
+    raw = (text or "").strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```[a-zA-Z]*\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw).strip()
+    try:
+        return json.loads(raw)
+    except ValueError:
+        start, end = raw.find("{"), raw.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        return json.loads(raw[start : end + 1])
+
+
 class PreSendJudge:
     """The judge that calls a model. Wrap it in `MeteredLlm(purpose="judge_pre")`
     at composition and the gate's cost shows up separately from the agent's."""
@@ -225,7 +243,7 @@ class PreSendJudge:
         answer = await self._llm.chat(request)
 
         try:
-            parsed = json.loads(answer.text)
+            parsed = _judge_payload(answer.text)
         except (TypeError, ValueError) as error:
             raise JudgeError(f"judge answer is not JSON: {error}") from error
 
@@ -244,6 +262,7 @@ class PreSendJudge:
             "Você avalia se uma resposta pode ser enviada a um cliente no WhatsApp.",
             "Responda APENAS com JSON no formato "
             '{"verdicts": {"<id-do-criterio>": true|false}, "rationale": "<texto curto>"}.',
+            "Sem cercas de código (```), sem texto antes ou depois do JSON.",
             "true significa que o critério foi cumprido.",
             "Julgue todos os critérios abaixo e nenhum outro:",
         ]

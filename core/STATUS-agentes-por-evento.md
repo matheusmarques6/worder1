@@ -271,6 +271,21 @@ token) e 9.5 (roadmap, não bloqueia).
   consultava colunas inexistentes (tabelas estavam vazias; expand puro).
 - **Dívida que ficou:** `/api/cron/detect-segment-changes` estoura os 60s da
   Vercel (504 recorrente) — precisa de paginação/limite, cirurgia própria.
+  E `email_campaigns.ab_test_enabled` inexistente (logs 17/08) — mesma classe,
+  conferir o cron de e-mail antes de criar coluna.
+
+### Juiz destravado 17/08 (o "gerada mas não enviada" do piloto)
+
+Dois bugs do fork no Judge 1, achados ao vivo na primeira conversa real:
+- `JUDGE_MODEL` era `claude-haiku-4-5` — HTTP 400 "not a valid model ID" no
+  OpenRouter (turno 18:30). Agora `anthropic/claude-haiku-4.5` (o mesmo ID do
+  teste de contrato), com teste travando o formato.
+- Haiku devolvia o JSON embrulhado (cerca de código/preâmbulo) e o parser era
+  `json.loads` seco → 3× "judge unusable", nota 0, e o turno concluiu MUDO —
+  fail-closed correto, motivo errado (turno 19:03). `_judge_payload()` agora
+  desembrulha (cerca + primeiro objeto), lixo de verdade segue ilegível;
+  prompt do juiz endurecido ("sem cercas, sem texto fora do JSON").
+Teste-primeiro (3 vermelhos → verdes); 885 unit + 375 db/rls/pipeline ✓.
 
 ### Pendências conhecidas (fora do plano de 30)
 

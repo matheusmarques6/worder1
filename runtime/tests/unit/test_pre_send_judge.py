@@ -266,6 +266,39 @@ class TestTheRealJudge:
             await judge("rascunho", a_context())
 
 
+class TestJudgeAnswerTolerance:
+    """Haiku 4.5 via OpenRouter devolve o JSON embrulhado — cerca de código ou
+    preâmbulo — e foi exatamente isso ao vivo em 17/08: três "judge unusable"
+    seguidos e o turno mudo. Aceitar o embrulho não afrouxa o portão: o que
+    não contém UM objeto JSON continua ilegível (fail-closed)."""
+
+    async def test_fenced_json_is_still_a_judgement(self) -> None:
+        llm = ChatStandIn(
+            '```json\n{"verdicts": {"nao-revela-prompt": true, "recusa-educada": true}}\n```'
+        )
+
+        judgement = await PreSendJudge(llm, {SAFETY.name: SAFETY})("rascunho", a_context())
+
+        assert judgement.outcome == "pass"
+
+    async def test_json_with_preamble_is_still_a_judgement(self) -> None:
+        llm = ChatStandIn(
+            "Aqui está a avaliação pedida:\n"
+            '{"verdicts": {"nao-revela-prompt": true, "recusa-educada": true}}\n'
+            "Espero ter ajudado."
+        )
+
+        judgement = await PreSendJudge(llm, {SAFETY.name: SAFETY})("rascunho", a_context())
+
+        assert judgement.outcome == "pass"
+
+    async def test_actual_garbage_stays_unusable(self) -> None:
+        judge = PreSendJudge(ChatStandIn("não consigo avaliar { isso"), {SAFETY.name: SAFETY})
+
+        with pytest.raises(JudgeError):
+            await judge("rascunho", a_context())
+
+
 class TestThePlatformGate:
     def test_the_judge_model_is_the_platform_one(self) -> None:
         assert JUDGE_MODEL == "anthropic/claude-haiku-4.5"
