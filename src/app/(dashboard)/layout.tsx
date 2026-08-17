@@ -114,6 +114,7 @@ const navigation: NavSection[] = [
         name: 'WhatsApp', href: '/whatsapp', icon: MessageCircle,
         children: [
           { name: 'Inbox', href: '/whatsapp/inbox' },
+          { name: 'Agente IA', href: '/whatsapp/agente' },
           { name: 'Templates', href: '/whatsapp/templates' },
           { name: 'Listas', href: '/whatsapp/phonebooks' },
           { name: 'Configurações', href: '/whatsapp/settings' },

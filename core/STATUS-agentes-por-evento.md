@@ -242,6 +242,25 @@ token) e 9.5 (roadmap, não bloqueia).
 7. **Reverter é barato:** `update ai_runtime_rollout set mode='legacy'` — o
    webhook volta ao caminho antigo na hora; nada mais precisa mudar.
 
+### Cutover EXECUTADO na loja piloto (17/08/2026)
+
+- **Fase 1 ✓** — runtime `piloto` no PC do usuário (Docker, `runtime-pc-piloto`):
+  heartbeat vivo na nuvem desde 17/08 ~13:45 UTC. `ENCRYPTION_KEY` foi
+  ROTACIONADA (a antiga era irrecuperável na Vercel — sensitive): chave nova na
+  Vercel + `.env.piloto`, token WABA re-salvo (agora secret-box v2). Logfire
+  ligado via `AGENTS_LOGFIRE_TOKEN` (write token do projeto /worder).
+- **Fase 2 ✓** — missão `whatsapp.received` da org Dr. Groot ativada 14:02 UTC
+  (seed draft → active, sem anterior para arquivar).
+- **Fase 3 ✓** — org `425db1ba-…` em `ai_runtime_rollout` mode=`runtime`
+  (14:03 UTC). Rollback = delete da linha.
+- **Fase 4 em curso** — smoke com mensagem real. Suspeita aberta: chave
+  OpenRouter da org falha em 1–2s no caminho legado (modelo
+  `google/gemini-3.5-flash` existe no catálogo; hipótese = conta sem créditos);
+  o runtime registra o erro exato em `internal.llm_calls` quando testar.
+- **UI 17/08** — aba WhatsApp ganhou o child **"Agente IA"**
+  (`/whatsapp/agente`): `AgentPowerSwitch` + `DiscoveryMissionArea` exportados
+  de `ai-hub/AreaFields` (um dado, N portas — mesma missão da órbita).
+
 ### Pendências conhecidas (fora do plano de 30)
 
 - PENDENTE-2: copy final dos seeds com Bruno (drafts já no banco por org via função).

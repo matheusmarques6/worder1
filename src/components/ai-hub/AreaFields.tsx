@@ -315,7 +315,7 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
 // esta área mostra a especificação vigente e abre o MESMO editor completo do
 // nó de fluxo (MissionEditorModal). Salvar cria rascunho; ativar é explícito
 // e arquiva a anterior. Sem ativa, o agente não responde inbound.
-function DiscoveryMissionArea() {
+export function DiscoveryMissionArea() {
   const FAMILY = 'whatsapp.received'
   const [missions, setMissions] = useState<Mission[]>([])
   const [loading, setLoading] = useState(true)
@@ -465,7 +465,7 @@ function Loader2AreaSpinner() {
 // O interruptor do agente inteiro (ai_agents.is_active) — morava na aba
 // Limites, que morreu no corte 13/08. Kill-switch não espera Salvar: o PATCH
 // é imediato, como era lá.
-function AgentPowerSwitch() {
+export function AgentPowerSwitch() {
   const [agentId, setAgentId] = useState<string | null>(null)
   const [active, setActive] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
