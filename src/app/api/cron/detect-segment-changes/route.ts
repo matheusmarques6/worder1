@@ -1,17 +1,24 @@
 /**
- * CRON: Detect segment entry/exit
+ * CRON: Detect segment entry
  * /api/cron/detect-segment-changes
  *
  * Para cada segmento dinâmico em customer_segments, compara membros atuais
- * com snapshot anterior. Para cada NOVO membro, dispara automações.
+ * com o snapshot anterior e dispara a automação de entrada para cada NOVO
+ * membro. Roda a cada 15 min.
  *
- * Roda a cada 15 min.
+ * A rota é adaptador: a política (orçamento de parede, rotação por cursor,
+ * concorrência, progresso parcial) vive em `@/lib/segments/change-detection`
+ * e é provada em teste sem banco. Aqui só moram as portas de I/O.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { dispatchTrigger } from '@/lib/automation/trigger-dispatcher'
 import { resolveSegment } from '@/lib/segments'
+import {
+  detectSegmentChanges,
+  type SegmentRef,
+} from '@/lib/segments/change-detection'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -23,84 +30,124 @@ function isAuthorized(req: NextRequest): boolean {
   return req.headers.get('authorization') === `Bearer ${secret}`
 }
 
+/**
+ * O deploy da Vercel é automático no push; a migration `20260817000005` é
+ * aplicada à mão. Entre uma coisa e outra o banco não tem
+ * `last_change_check_at`, e sem esta guarda o cron responderia 500 a cada
+ * 15 min — trocando um 504 conhecido por um 500 novo.
+ *
+ * Coluna ausente (42703) degrada para o comportamento ANTIGO (ordenar pelo
+ * cursor do vizinho) em vez de falhar, e a rodada segue entregando o resto
+ * do conserto: orçamento, concorrência e progresso parcial não dependem da
+ * coluna. Some quando a migration estiver no vivo.
+ */
+let cursorColumnAvailable = true
+
+function isUndefinedColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  return error.code === '42703' || /last_change_check_at/.test(error.message || '')
+}
+
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const start = Date.now()
-
   try {
-    const { data: segments, error } = await supabaseAdmin
-      .from('customer_segments')
-      .select('id, organization_id, rules, rules_logic, rfm_segments, segment_type')
-      .in('segment_type', ['dynamic', 'rfm'])
-      // Rotate through ALL segments run-over-run instead of always re-checking
-      // the arbitrary first 200. last_evaluated_at is the "least recently
-      // evaluated" timestamp maintained on customer_segments (segments_v2
-      // foundation migration); ordering ascending nullsFirst drains the
-      // never-evaluated and stalest segments first so entry/exit detection
-      // eventually reaches every segment.
-      .order('last_evaluated_at', { ascending: true, nullsFirst: true })
-      .limit(200)
+    const report = await detectSegmentChanges({
+      listStaleSegments: async (limit) => {
+        // Cursor próprio do detector (migration 20260817000005). Antes
+        // ordenava por last_evaluated_at, que só o cron recompute-segments
+        // escreve — a rotação era do vizinho e a cauda podia nunca ser
+        // detectada. nullsFirst drena o que nunca foi visto.
+        const byCursor = (column: string) =>
+          supabaseAdmin
+            .from('customer_segments')
+            .select('id, organization_id')
+            .in('segment_type', ['dynamic', 'rfm'])
+            .order(column, { ascending: true, nullsFirst: true })
+            .limit(limit)
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        if (cursorColumnAvailable) {
+          const { data, error } = await byCursor('last_change_check_at')
+          if (!error) return (data || []) as SegmentRef[]
+          if (!isUndefinedColumn(error)) throw new Error(error.message)
+          cursorColumnAvailable = false
+          console.warn('[detect-segment] last_change_check_at ausente — migration 20260817000005 pendente')
+        }
 
-    let totalEntries = 0
-    let segmentsChecked = 0
+        const { data, error } = await byCursor('last_evaluated_at')
+        if (error) throw new Error(error.message)
+        return (data || []) as SegmentRef[]
+      },
 
-    for (const seg of segments || []) {
-      try {
-        // Dispatcher handles v1→v2 normalization. Without this the v1
-        // resolver was reading v2 JSONB blobs as if they were v1 Rule
-        // arrays, which produced empty member sets and false
-        // "exit" automations for every v2 segment.
+      resolveMembers: async (seg) => {
+        // Dispatcher path: normaliza v1→v2. Sem ele o resolver v1 lia blobs
+        // JSONB v2 como arrays de Rule, devolvia conjunto vazio e produzia
+        // "saída" falsa para todo segmento v2.
         const resolved = await resolveSegment(supabaseAdmin, seg.id, seg.organization_id)
-        const currentMembers = resolved.contactIds
+        return resolved.contactIds
+      },
 
-        // Snapshot anterior
-        const { data: previousSnapshot } = await supabaseAdmin
+      loadSnapshot: async (seg) => {
+        const { data, error } = await supabaseAdmin
           .from('segment_memberships_snapshot')
           .select('contact_ids')
           .eq('segment_id', seg.id)
           .maybeSingle()
 
-        const previousSet = new Set<string>((previousSnapshot?.contact_ids as string[]) || [])
-        const newEntries = currentMembers.filter((id) => !previousSet.has(id))
+        if (error) throw new Error(error.message)
+        // `null` (nunca observado) e `[]` (observado vazio) são estados
+        // diferentes para o detector — não colapsar num só.
+        if (!data) return null
+        return (data.contact_ids as string[]) || []
+      },
 
-        for (const contactId of newEntries) {
-          await dispatchTrigger({
-            organizationId: seg.organization_id,
-            triggerType: 'trigger_segment',
-            contactId,
-            triggerData: { segment_id: seg.id, event: 'entered' },
-            matchConfig: (cfg) => !cfg?.segment_id || cfg.segment_id === seg.id,
-            idempotencyKey: `segment_entry:${seg.id}:${contactId}`,
-          })
-          totalEntries++
-        }
-
-        await supabaseAdmin
+      saveSnapshot: async (seg, contactIds) => {
+        const { error } = await supabaseAdmin
           .from('segment_memberships_snapshot')
           .upsert({
             segment_id: seg.id,
             organization_id: seg.organization_id,
-            contact_ids: currentMembers,
+            contact_ids: contactIds,
             snapshotted_at: new Date().toISOString(),
           })
+        if (error) throw new Error(error.message)
+      },
 
-        segmentsChecked++
-      } catch (e: any) {
-        console.error(`[detect-segment] segment ${seg.id} error:`, e?.message)
-      }
-    }
+      dispatchEntry: async (seg, contactId) => {
+        await dispatchTrigger({
+          organizationId: seg.organization_id,
+          triggerType: 'trigger_segment',
+          contactId,
+          triggerData: { segment_id: seg.id, event: 'entered' },
+          matchConfig: (cfg) => !cfg?.segment_id || cfg.segment_id === seg.id,
+          idempotencyKey: `segment_entry:${seg.id}:${contactId}`,
+        })
+      },
 
-    return NextResponse.json({
-      success: true,
-      segmentsChecked,
-      entriesDispatched: totalEntries,
-      durationMs: Date.now() - start,
+      markChecked: async (seg) => {
+        if (!cursorColumnAvailable) return
+        const { error } = await supabaseAdmin
+          .from('customer_segments')
+          .update({ last_change_check_at: new Date().toISOString() })
+          .eq('id', seg.id)
+        if (!error) return
+        if (!isUndefinedColumn(error)) throw new Error(error.message)
+        cursorColumnAvailable = false
+      },
+
+      onError: (scope, seg, error) => {
+        console.error(
+          `[detect-segment] ${scope} ${seg?.id ?? '-'}:`,
+          error instanceof Error ? error.message : error,
+        )
+      },
     })
+
+    // Resposta honesta: uma rodada que cortou por orçamento diz isso e diz
+    // quanto ficou para trás. Antes, um 504 era a única pista.
+    return NextResponse.json({ success: true, ...report })
   } catch (err: any) {
     console.error('[detect-segment-changes] error:', err)
     return NextResponse.json({ error: err?.message }, { status: 500 })

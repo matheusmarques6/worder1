@@ -269,10 +269,41 @@ token) e 9.5 (roadmap, não bloqueia).
 - `abandoned_carts` ganhou `status`/`abandoned_at`/`notified_at`/
   `notification_count`/`last_notification_at` — o cron check-abandoned-carts
   consultava colunas inexistentes (tabelas estavam vazias; expand puro).
-- **Dívida que ficou:** `/api/cron/detect-segment-changes` estoura os 60s da
-  Vercel (504 recorrente) — precisa de paginação/limite, cirurgia própria.
-  E `email_campaigns.ab_test_enabled` inexistente (logs 17/08) — mesma classe,
-  conferir o cron de e-mail antes de criar coluna.
+- **Dívida que ficou:** `email_campaigns.ab_test_enabled` inexistente (logs
+  17/08) — mesma classe, conferir o cron de e-mail antes de criar coluna.
+  (O 504 do `detect-segment-changes` saiu desta lista — ver a seção abaixo.)
+
+### Cron de segmentos: o 504 e o cursor do vizinho (17/08)
+
+`/api/cron/detect-segment-changes` estourava os 60s. A cirurgia achou três
+causas somadas, e uma delas era pior que o timeout:
+
+- **Rotação que não rotacionava.** A rota ordenava seu lote de 200 por
+  `last_evaluated_at` e **nunca escrevia** essa coluna — quem escreve é o cron
+  irmão `recompute-segments` (lote de 500, mesma cadência). O cursor era do
+  vizinho: com mais de 200 segmentos dinâmicos a cauda podia nunca ser
+  detectada, silenciosamente. Cursor próprio agora
+  (`customer_segments.last_change_check_at`, migration `20260817000005`,
+  índice parcial no mesmo recorte da consulta).
+- **Sem orçamento de parede.** Morrer no corte da plataforma perdia o trabalho
+  feito. Agora: 45s de orçamento, corte checado entre segmentos e entre levas
+  de despacho, e resposta que diz `stoppedBy` + `segmentsSkipped` — um 504 era
+  a única pista que existia antes.
+- **Despacho serial por contato.** `await dispatchTrigger` um por vez. Agora em
+  levas de 5, com teto de 2.000 por rodada para um segmento gigante não comer
+  o turno sozinho.
+
+O contrato do progresso parcial é o que torna o corte seguro: segmento
+interrompido grava `anterior ∪ despachados` e **não** avança o cursor —
+ninguém é notificado duas vezes, ninguém é esquecido, e ele volta na frente da
+fila. Falha de despacho de um contato conta como parcial pela mesma razão:
+gravar o retrato atual marcaria como notificado quem não foi.
+
+A política saiu da rota para `src/lib/segments/change-detection.ts` com
+dependências injetadas (relógio inclusive) — 16 testes rodam o laço inteiro
+sem banco. A rota virou adaptador de I/O, com degradação para o cursor antigo
+enquanto a migration não estiver no vivo (deploy é automático no push, a
+migration é manual). **Pendente: aplicar `20260817000005` no vivo.**
 
 ### Juiz destravado 17/08 (o "gerada mas não enviada" do piloto)
 
