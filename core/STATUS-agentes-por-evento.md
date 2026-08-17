@@ -261,6 +261,17 @@ token) e 9.5 (roadmap, não bloqueia).
   (`/whatsapp/agente`): `AgentPowerSwitch` + `DiscoveryMissionArea` exportados
   de `ai-hub/AreaFields` (um dado, N portas — mesma missão da órbita).
 
+### Crons legados consertados 17/08 (migration `20260817000001_legacy_cron_columns`)
+
+- `whatsapp_campaign_recipients.sending_at` criada — o claim anti-double-send
+  (Fase 0/0D) falhava FECHADO sem ela: campanha pulava todo destinatário em
+  silêncio, e o sweep de quarentena errava a cada minuto no cron.
+- `abandoned_carts` ganhou `status`/`abandoned_at`/`notified_at`/
+  `notification_count`/`last_notification_at` — o cron check-abandoned-carts
+  consultava colunas inexistentes (tabelas estavam vazias; expand puro).
+- **Dívida que ficou:** `/api/cron/detect-segment-changes` estoura os 60s da
+  Vercel (504 recorrente) — precisa de paginação/limite, cirurgia própria.
+
 ### Pendências conhecidas (fora do plano de 30)
 
 - PENDENTE-2: copy final dos seeds com Bruno (drafts já no banco por org via função).
