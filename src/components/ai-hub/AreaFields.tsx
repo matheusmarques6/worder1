@@ -112,7 +112,9 @@ export interface AreaFieldsProps {
 }
 
 export default function AreaFields({ area, hub, onChange, organizationId, agentId }: AreaFieldsProps) {
-  const patch = <K extends HubAreaId>(key: K, value: HubState[K]) =>
+  // keyof HubState (não HubAreaId): "delivery" é dado do hub sem nó próprio
+  // na órbita — mora dentro da área Adaptação (Pacote B 17/08).
+  const patch = <K extends keyof HubState>(key: K, value: HubState[K]) =>
     onChange({ ...hub, [key]: value })
 
   if (area === 'identity') {
@@ -178,6 +180,51 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
               <button key={o.v} type="button" className={hub.adapt.base_length === o.v ? 'on' : ''}
                 onClick={() => patch('adapt', { ...hub.adapt, base_length: o.v })}>{o.t}</button>
             ))}
+          </div>
+        </div>
+        {/* Entrega (Pacote B 17/08): COMO a resposta chega — agrupamento de
+            rajada e humanização, por loja (settings.delivery). */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          <Label>Entrega</Label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+            <div className="act-row on" style={{ alignItems: 'center' }}>
+              <div style={{ flex: 1 }}>
+                <div className="act-t">Esperar para agrupar mensagens</div>
+                <div className="act-d">
+                  Rajada do cliente vira UMA resposta com contexto — segundos de espera.
+                </div>
+              </div>
+              <input
+                className="field"
+                type="number"
+                min={3}
+                max={60}
+                style={{ width: 76, textAlign: 'center' }}
+                value={hub.delivery.debounce_seconds}
+                onChange={(e) =>
+                  patch('delivery', {
+                    ...hub.delivery,
+                    debounce_seconds: Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <div className={`act-row${hub.delivery.split_bubbles ? ' on' : ''}`}>
+              <div style={{ flex: 1 }}>
+                <div className="act-t">Dividir respostas em bolhas</div>
+                <div className="act-d">Parágrafos viram mensagens separadas (até 4).</div>
+              </div>
+              <button type="button" className={`tog${hub.delivery.split_bubbles ? ' on' : ''}`}
+                onClick={() => patch('delivery', { ...hub.delivery, split_bubbles: !hub.delivery.split_bubbles })} />
+            </div>
+            <div className={`act-row${hub.delivery.typing_rhythm ? ' on' : ''}`}>
+              <div style={{ flex: 1 }}>
+                <div className="act-t">Ritmo de digitação humano</div>
+                <div className="act-d">Pausa proporcional ao tamanho entre uma bolha e outra.</div>
+              </div>
+              <button type="button" className={`tog${hub.delivery.typing_rhythm ? ' on' : ''}`}
+                onClick={() => patch('delivery', { ...hub.delivery, typing_rhythm: !hub.delivery.typing_rhythm })} />
+            </div>
           </div>
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>

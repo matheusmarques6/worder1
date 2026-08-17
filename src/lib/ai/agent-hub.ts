@@ -63,6 +63,31 @@ export interface CustomJudge {
   active: boolean;
 }
 
+// Entrega (Pacote B 17/08): os knobs de COMO a resposta chega — janela de
+// agrupamento de rajada e humanização. Moram em settings.delivery; o webhook
+// lê o debounce por org e o runtime carrega as flags em cada envio.
+export interface DeliveryPrefs {
+  debounce_seconds: number;
+  split_bubbles: boolean;
+  typing_rhythm: boolean;
+}
+
+export const DELIVERY_DEBOUNCE_MIN = 3;
+export const DELIVERY_DEBOUNCE_MAX = 60;
+export const DELIVERY_DEBOUNCE_DEFAULT = 8;
+
+export function sanitizeDelivery(raw: unknown): DeliveryPrefs {
+  const record = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const seconds = Number(record.debounce_seconds);
+  return {
+    debounce_seconds: Number.isFinite(seconds)
+      ? Math.min(DELIVERY_DEBOUNCE_MAX, Math.max(DELIVERY_DEBOUNCE_MIN, Math.round(seconds)))
+      : DELIVERY_DEBOUNCE_DEFAULT,
+    split_bubbles: record.split_bubbles !== false,
+    typing_rhythm: record.typing_rhythm !== false,
+  };
+}
+
 function sanitizeJudges(raw: unknown): CustomJudge[] {
   if (!Array.isArray(raw)) return [];
   const out: CustomJudge[] = [];
@@ -100,6 +125,7 @@ export interface HubState {
   handoff: { keywords: string[]; message: string };
   judges: { custom: CustomJudge[] };
   budget: { model: string; provider: string };
+  delivery: DeliveryPrefs;
 }
 
 type AgentRow = {
@@ -154,6 +180,7 @@ export function agentToHub(agent: AgentRow): HubState {
       model: agent.model ?? 'gpt-4o-mini',
       provider: agent.provider ?? 'openai',
     },
+    delivery: sanitizeDelivery(settings.delivery),
   };
 }
 
@@ -185,6 +212,7 @@ export function hubToAgentPatch(agent: AgentRow, hub: HubState): AgentHubPatch {
     ...(settings.judges ?? {}),
     custom: hub.judges.custom.map((judge) => ({ ...judge })),
   };
+  settings.delivery = { ...sanitizeDelivery(hub.delivery) };
 
   return {
     name: hub.identity.name,

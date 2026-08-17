@@ -148,3 +148,34 @@ describe('a órbita sobre dados reais', () => {
     expect(patch.settings.schedule).toEqual({ always_active: true });
   });
 });
+
+describe('entrega (Pacote B 17/08) — settings.delivery', () => {
+  it('defaults: 8s de agrupamento e humanização toda ligada', () => {
+    const hub = agentToHub(AGENT);
+    expect(hub.delivery).toEqual({
+      debounce_seconds: 8,
+      split_bubbles: true,
+      typing_rhythm: true,
+    });
+  });
+
+  it('round-trip: os knobs voltam em settings.delivery, saneados', () => {
+    const hub = agentToHub(AGENT);
+    hub.delivery = { debounce_seconds: 900, split_bubbles: false, typing_rhythm: true };
+
+    const patch = hubToAgentPatch(AGENT, hub);
+
+    expect(patch.settings.delivery).toEqual({
+      debounce_seconds: 60, // clamp no teto
+      split_bubbles: false,
+      typing_rhythm: true,
+    });
+    // O resto de settings sobrevive (merge, nunca replace).
+    expect(patch.settings.schedule).toEqual({ always_active: true });
+  });
+
+  it('lixo em settings.delivery degrada para o default', () => {
+    const dirty = { ...AGENT, settings: { ...AGENT.settings, delivery: 'sim' } };
+    expect(agentToHub(dirty).delivery.debounce_seconds).toBe(8);
+  });
+});

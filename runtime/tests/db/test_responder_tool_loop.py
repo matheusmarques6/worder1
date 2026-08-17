@@ -121,7 +121,10 @@ class TestTheDoD:
         result = await _respond(dsn, admin, tenant, thread, llm)
 
         # A resposta menciona o cupom existente.
-        assert result == {"text": "Você já tem um cupom ativo: WD-DOMOMENTO 🧡"}
+        assert result == {
+            "text": "Você já tem um cupom ativo: WD-DOMOMENTO 🧡",
+            "humanize": {"split": True, "rhythm": True},
+        }
 
         # O modelo LEU o resultado da tool: a volta do loop carrega o código.
         final = agent_calls(llm)[-1]
@@ -185,7 +188,10 @@ class TestCustomTools:
         llm = ScriptedLlm(reply="Já consulto!")
         result = await _respond(dsn, admin, tenant, thread, llm)
 
-        assert result == {"text": "Já consulto!"}
+        assert result == {
+            "text": "Já consulto!",
+            "humanize": {"split": True, "rhythm": True},
+        }
         offered = [t.name for t in agent_calls(llm)[0].tools]
         assert "frete_kangu" in offered
         # A missão sem create_coupon continua sem create_coupon: a tool
@@ -221,7 +227,10 @@ class TestTheGates:
         llm = ScriptedLlm(tool_rounds=[(ASK_COUPON,)], reply="Vou verificar!")
         result = await _respond(dsn, admin, tenant, thread, llm)
 
-        assert result == {"text": "Vou verificar!"}
+        assert result == {
+            "text": "Vou verificar!",
+            "humanize": {"split": True, "rhythm": True},
+        }
         assert all(call.tools == () for call in agent_calls(llm))
         (calls,) = admin.execute(
             "select count(*) from internal.tool_calls where conversation_id = %s",
@@ -246,6 +255,9 @@ class TestTheGates:
         )
         result = await _respond(dsn, admin, tenant, thread, llm)
 
-        assert result == {"text": "Fechando: seu cupom é WD-DOMOMENTO."}
+        assert result == {
+            "text": "Fechando: seu cupom é WD-DOMOMENTO.",
+            "humanize": {"split": True, "rhythm": True},
+        }
         final = agent_calls(llm)[-1]
         assert final.tools == (), "a rodada de encerramento deveria sair SEM tools"

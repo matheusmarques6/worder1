@@ -336,6 +336,26 @@ do time da loja"). Era conflito de régua, não capricho:
   payload do alerta (com judge_rationale) e como prévia no chip ("ia enviar:
   …"). Teste-primeiro (2 vermelhos→verdes). 891 unit + 381 db/pipeline ✓.
 
+### Pacotes A+B de 17/08 (plano aprovado pelo usuário)
+
+**A — defeitos do primeiro atendimento real:** (1) resposta saiu '{"body":…}'
+cru — o backfill copiava o formato Meta, o extrator entregava o JSON cru ao
+prompt e o modelo IMITAVA. Três camadas: extratores falam os dois dialetos;
+`unwrap_model_reply` desembrulha envelope óbvio antes do juiz;
+backfill prefere text_body (migration `20260817000004`) + 19 linhas achatadas
+no vivo (e a resposta enveloped das 20:11). (2) Bolhas: consequência — nada a
+mudar no divisor. (3) Chips morriam no refresh: rota GET ai-steps + carga
+inicial no inbox; Realtime segue como o vivo.
+
+**B — entrega configurável por loja (órbita → Adaptação → Entrega):**
+`settings.delivery` {debounce_seconds 3..60 (padrão 8), split_bubbles,
+typing_rhythm}. Webhook lê o debounce da org (delivery-settings.ts, cache
+30s, fail-safe) e passa ao ingest; o responder embarca as flags em cada
+payload de outbox e o sender obedece POR ENVIO (`send_humanized(split=…)`,
+ritmo componente com o env global). Lixo degrada para humanização ligada.
+Testes: 5 unit runtime + 7 vitest novos; 905 unit + 383 db/pipeline + 993
+vitest + build verdes.
+
 ### Pendências conhecidas (fora do plano de 30)
 
 - PENDENTE-2: copy final dos seeds com Bruno (drafts já no banco por org via função).

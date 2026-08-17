@@ -28,7 +28,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
@@ -117,6 +117,19 @@ def unwrap_model_reply(text: str) -> str:
         if key in ("body", "text", "message") and isinstance(value, str):
             return value
     return text
+
+def delivery_flags(settings: Mapping | None) -> tuple[bool, bool]:
+    """(dividir em bolhas, ritmo de digitação) de settings.delivery — os knobs
+    da loja (órbita → Adaptação → Entrega, Pacote B 17/08). Lixo degrada para
+    o padrão LIGADO: entrega humanizada é o default do produto."""
+    delivery = settings.get("delivery") if isinstance(settings, Mapping) else None
+    if not isinstance(delivery, Mapping):
+        return (True, True)
+    return (
+        delivery.get("split_bubbles") is not False,
+        delivery.get("typing_rhythm") is not False,
+    )
+
 
 #: A costura do motor, intocada desde o E1: o worker chama isto e nada mais.
 #: `None` significa "conclua o turno e não envie nada" (S8).
@@ -642,7 +655,10 @@ def build_responder(
                 )
                 return None
 
-            return {"text": outcome.draft}
+            # As flags de entrega viajam COM o envio (payload da outbox): o
+            # sender obedece por linha, sem env global (Pacote B 17/08).
+            split, rhythm = delivery_flags(version.settings)
+            return {"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}}
 
     return respond
 

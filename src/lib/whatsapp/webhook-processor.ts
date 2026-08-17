@@ -436,6 +436,13 @@ async function processMessage(
     try {
       const isSelf = phoneNumber && account.phone_number && phoneNumber === account.phone_number;
       if (!isSelf) {
+        // Janela de agrupamento POR LOJA (órbita → Adaptação → Entrega),
+        // com cache de 30s e fail-safe para o default — Pacote B 17/08.
+        const { getDeliveryDebounceSeconds } = await import('@/lib/ai/delivery-settings');
+        const debounceSeconds = await getDeliveryDebounceSeconds(
+          supabase,
+          account.organization_id,
+        );
         const { error: ingestError } = await supabase.rpc('ingest_inbound_message', {
           p_organization_id: account.organization_id,
           p_channel: 'whatsapp',
@@ -443,7 +450,7 @@ async function processMessage(
           p_contact_name: contact?.profile_name || contact?.name || null,
           p_content: { type: messageType, text: textBody ?? null },
           p_provider_message_id: message.id,
-          p_debounce_seconds: AI_DEBOUNCE_SECONDS,
+          p_debounce_seconds: debounceSeconds,
         });
         if (ingestError) throw new Error(ingestError.message);
 
@@ -473,7 +480,7 @@ async function processMessage(
             detail: botOff
               ? 'Agente desativado nesta conversa — não vai responder'
               : 'Agente vai responder',
-            metadata: { debounce_seconds: AI_DEBOUNCE_SECONDS, runtime: true },
+            metadata: { debounce_seconds: debounceSeconds, runtime: true },
           });
         }
       }

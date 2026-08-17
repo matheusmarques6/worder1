@@ -51,6 +51,7 @@ async def send_humanized(
     *,
     humanize_delays: bool,
     clock: Clock,
+    split: bool = True,
 ) -> list[tuple[str, str]]:
     """Entrega UMA linha da outbox como bolhas (8.3/D10). Devolve os pares
     (wamid, texto) que SAÍRAM, na ordem.
@@ -62,7 +63,11 @@ async def send_humanized(
     tela do cliente.
     """
     text = send.payload.get("text")
-    bubbles = split_into_bubbles(text) if isinstance(text, str) else []
+    if isinstance(text, str) and not split:
+        # Knob da loja desligado (settings.delivery): uma bolha só, inteira.
+        bubbles = [text.strip()] if text.strip() else []
+    else:
+        bubbles = split_into_bubbles(text) if isinstance(text, str) else []
     if len(bubbles) <= 1:
         # Template, payload não-texto ou bolha única: um envio, como sempre.
         wamid = await channel.send(send)
@@ -177,9 +182,15 @@ async def sender_pass(
             except psycopg.Error:
                 pass
 
+        flags = send.payload.get("humanize")
+        flags = flags if isinstance(flags, dict) else {}
         try:
             delivered = await send_humanized(
-                channel, send, humanize_delays=config.humanize_delays, clock=clock
+                channel,
+                send,
+                humanize_delays=config.humanize_delays and flags.get("rhythm") is not False,
+                clock=clock,
+                split=flags.get("split") is not False,
             )
         except Exception as error:  # the classifier is the policy
             failure = classify(error)
