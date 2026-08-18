@@ -31,30 +31,22 @@ const ROOT = path.resolve(SRC, '..');
 // ---------------------------------------------------------------------------
 
 /**
- * Órfãos confirmados: o editor antigo inteiro e o que só ele alcançava.
- * Prefixo = diretório inteiro.
+ * Órfãos confirmados, prontos para sair. Prefixo terminado em `/` = diretório
+ * inteiro. Editar esta lista É a revisão da leva: ela só pode crescer com
+ * caminho que o teste abaixo prove inalcançável.
  */
-const DELETION_SET = [
-  'src/components/agents/AIAgentEditor.tsx',
-  'src/components/agents/AIAgentList.tsx',
-  'src/components/agents/AgentPreview.tsx',
-  'src/components/agents/PermissionsEditor.tsx',
-  'src/components/agents/MaxTokensSlider.tsx',
-  'src/components/agents/ModelSelector.tsx',
-  'src/components/agents/tabs/',
-  'src/components/agents/create/',
-  'src/components/agents/playground/',
-  'src/components/agents/dashboard/',
-  'src/lib/ai/store-analyzer.ts',
+const DELETION_SET: string[] = [
+  // Leva 1 executada: o editor antigo inteiro saiu do repo. A lista fica aqui,
+  // vazia, porque é ela que a próxima rodada preenche — e porque o teste de
+  // "todo caminho listado existe" impede que ela apodreça com nome de arquivo
+  // que já morreu.
 ];
 
 /**
  * Rotas de API do mesmo conjunto. Não têm importador — a prova é que nenhum
  * código vivo cita a URL.
  */
-const DELETION_SET_ROUTES = [
-  'src/app/api/ai/analyze-store/route.ts',
-];
+const DELETION_SET_ROUTES: string[] = [];
 
 /**
  * Segunda ordem: peças cujo ÚNICO sustentáculo é outra peça morta que só
