@@ -43,11 +43,10 @@ const ROOT = path.resolve(SRC, '..');
  * inteiro. Editar esta lista É a revisão da leva: ela só pode crescer com
  * caminho que o teste abaixo prove inalcançável.
  */
-const DELETION_SET = [
-  // Onda 3, grupo B — duas peças de uma geração anterior, ambas sem importador.
-  // Corroborado por docs/AUDITORIA-LEGADO-WHATSAPP-IA.md (A1 e adendo P1).
-  'src/lib/services/whatsapp/webhook-processor.ts', // duplicata do processador vivo
-  'src/lib/services/whatsapp/ai-chat-service.ts',   // gêmeo morto do ai-chatbot-service
+const DELETION_SET: string[] = [
+  // Onda 3 executada. A lista fica aqui, vazia, porque é ela que a próxima
+  // rodada preenche — e porque o teste de "todo caminho listado existe" impede
+  // que ela apodreça com nome de arquivo que já morreu.
 ];
 
 /**
