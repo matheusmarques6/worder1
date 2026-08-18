@@ -33,7 +33,6 @@ export {
 // Agent hooks
 export { useAgents, useAIModels, useApiKeys } from './useAgents';
 export type { Agent, AIConfig, AgentPermissions, CreateAgentData, UpdateAgentData } from './useAgents';
-export { useAgent, useAgentsList } from './useAgent';
 export { useAgentPermissions, AgentPermissionsProvider, useAgentPermissionsContext } from './useAgentPermissions';
 export type { UseAgentPermissionsReturn, AgentPermissions as AgentPermissionsType } from './useAgentPermissions';
 

@@ -50,15 +50,16 @@ const DELETION_SET_ROUTES: string[] = [];
 
 /**
  * Segunda ordem: peças cujo ÚNICO sustentáculo é outra peça morta que só
- * sobrevive por um barril de re-export. Elas caem junto, mas exigem uma
- * decisão emparelhada (apagar o módulo E a linha do barril), então ficam numa
- * lista própria em vez de escorregar para dentro da leva principal.
+ * sobrevive por um barril de re-export. Elas caem junto, mas exigem uma decisão
+ * emparelhada (apagar o módulo E a linha do barril), então ficam numa lista
+ * própria em vez de escorregar para dentro da leva principal.
  *
- * `useAgent.ts` é o caso: nenhum componente o usa, mas `hooks/index.ts` o
- * re-exporta, e é ele quem mantém `/api/ai/agents/[id]/test` "chamada".
+ * Leva 2 executada: `useAgent.ts` era o caso — nenhum componente o usava, mas
+ * `hooks/index.ts` o re-exportava, e era ele quem mantinha
+ * `/api/ai/agents/[id]/test` "chamada".
  */
-const DELETION_SET_PENDING = ['src/hooks/useAgent.ts'];
-const DELETION_SET_PENDING_ROUTES = ['src/app/api/ai/agents/[id]/test/route.ts'];
+const DELETION_SET_PENDING: string[] = [];
+const DELETION_SET_PENDING_ROUTES: string[] = [];
 
 /**
  * O contra-teste. Cada linha aqui é uma peça que o dossiê mandou apagar e que
