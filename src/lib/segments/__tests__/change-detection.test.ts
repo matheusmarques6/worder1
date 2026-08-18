@@ -101,19 +101,7 @@ describe('detectSegmentChanges — passe completo', () => {
     expect(world.saved.a).toEqual(['c1']);
   });
 
-  it('segmento nunca observado trata todo membro como entrada', async () => {
-    const { world, deps } = makeWorld({
-      segments: [seg('a')],
-      members: { a: ['c1', 'c2'] },
-    });
-
-    const report = await detectSegmentChanges(deps);
-
-    expect(report.entriesDispatched).toBe(2);
-    expect(world.saved.a).toEqual(['c1', 'c2']);
-  });
-
-  it('snapshot vazio NÃO é o mesmo que ausência de snapshot', async () => {
+  it('snapshot vazio dispara: o segmento estava vazio e ganhou membro', async () => {
     const { deps } = makeWorld({
       segments: [seg('a')],
       members: { a: ['c1'] },
@@ -122,12 +110,62 @@ describe('detectSegmentChanges — passe completo', () => {
 
     const report = await detectSegmentChanges(deps);
 
-    // Mesmo número de entradas dos dois lados, por caminhos distintos: aqui
-    // o conjunto anterior EXISTE e está vazio. A distinção precisa
-    // sobreviver ao adaptador da rota, senão `maybeSingle()` sem linha e
-    // segmento realmente vazio viram o mesmo estado.
     expect(report.entriesDispatched).toBe(1);
     expect(report.segmentsChecked).toBe(1);
+    expect(report.segmentsSeeded).toBe(0);
+  });
+});
+
+describe('detectSegmentChanges — primeira observação', () => {
+  it('segmento nunca observado é SEMEADO, não disparado', async () => {
+    const { world, deps } = makeWorld({
+      segments: [seg('a')],
+      members: { a: ['c1', 'c2'] },
+    });
+
+    const report = await detectSegmentChanges(deps);
+
+    // Quem já estava no segmento quando começamos a olhar não entrou.
+    // Disparar aqui seria automação retroativa em massa — irreversível.
+    expect(world.dispatched).toEqual([]);
+    expect(report.entriesDispatched).toBe(0);
+    expect(report.segmentsSeeded).toBe(1);
+    expect(report.segmentsChecked).toBe(0);
+    // O retrato fica gravado e o cursor avança: a próxima rodada já compara.
+    expect(world.saved.a).toEqual(['c1', 'c2']);
+    expect(world.checked).toEqual(['a']);
+  });
+
+  it('a rodada seguinte à semeadura dispara só o que entrou depois', async () => {
+    const { world, deps } = makeWorld({
+      segments: [seg('a')],
+      members: { a: ['c1', 'c2', 'c3'] },
+      snapshots: { a: ['c1', 'c2'] },
+    });
+
+    const report = await detectSegmentChanges(deps);
+
+    expect(world.dispatched).toEqual(['c3']);
+    expect(report.segmentsSeeded).toBe(0);
+    expect(report.segmentsChecked).toBe(1);
+  });
+
+  it('semear 21 mil membros custa uma gravação, não 21 mil despachos', async () => {
+    const many = Array.from({ length: 21_000 }, (_, i) => `c${i}`);
+    const { world, deps } = makeWorld({
+      segments: [seg('a')],
+      members: { a: many },
+      msPerDispatch: 5,
+    });
+
+    const report = await detectSegmentChanges(deps, { budgetMs: 45_000 });
+
+    // O caso real da org piloto: dois segmentos de ~21 mil. Semear cabe
+    // numa rodada; despachar não caberia em nenhuma.
+    expect(world.dispatched).toHaveLength(0);
+    expect(report.segmentsSeeded).toBe(1);
+    expect(report.stoppedBy).toBe('drained');
+    expect(world.saved.a).toHaveLength(21_000);
   });
 });
 
@@ -136,6 +174,7 @@ describe('detectSegmentChanges — rotação (o bug do cursor do vizinho)', () =
     const { world, deps } = makeWorld({
       segments: [seg('a'), seg('b'), seg('c')],
       members: { a: ['c1'], b: [], c: ['c9'] },
+      snapshots: { a: [], b: [], c: [] },
     });
 
     await detectSegmentChanges(deps);
@@ -147,6 +186,7 @@ describe('detectSegmentChanges — rotação (o bug do cursor do vizinho)', () =
     const { world, deps } = makeWorld({
       segments: [seg('a')],
       members: { a: ['c1', 'c2', 'c3', 'c4'] },
+      snapshots: { a: [] },
       msPerDispatch: 40,
     });
 
@@ -166,6 +206,7 @@ describe('detectSegmentChanges — orçamento de parede', () => {
     const { world, deps } = makeWorld({
       segments: [seg('a'), seg('b'), seg('c')],
       members: { a: ['c1'], b: ['c2'], c: ['c3'] },
+      snapshots: { a: [], b: [], c: [] },
       msPerDispatch: 60,
     });
 
@@ -224,6 +265,7 @@ describe('detectSegmentChanges — teto de despacho', () => {
     const { world, deps } = makeWorld({
       segments: [seg('a'), seg('b')],
       members: { a: many, b: ['z1'] },
+      snapshots: { a: [], b: [] },
     });
 
     const report = await detectSegmentChanges(deps, {
@@ -246,6 +288,7 @@ describe('detectSegmentChanges — falhas', () => {
     const { world, deps } = makeWorld({
       segments: [seg('a'), seg('b')],
       members: { a: ['c1'], b: ['c2'] },
+      snapshots: { a: [], b: [] },
       failResolve: (id) => id === 'a',
     });
 
@@ -286,6 +329,7 @@ describe('detectSegmentChanges — falhas', () => {
     const { world, deps } = makeWorld({
       segments: [seg('a'), seg('b')],
       members: { a: ['c1'], b: ['c2'] },
+      snapshots: { a: [], b: [] },
       failDispatch: (id) => id === 'c1',
     });
 
@@ -304,6 +348,7 @@ describe('detectSegmentChanges — concorrência', () => {
     const { world, deps } = makeWorld({
       segments: [seg('a')],
       members: { a: Array.from({ length: 20 }, (_, i) => `c${i}`) },
+      snapshots: { a: [] },
     });
 
     await detectSegmentChanges(deps, { dispatchConcurrency: 4 });
@@ -316,6 +361,7 @@ describe('detectSegmentChanges — concorrência', () => {
     const { world, deps } = makeWorld({
       segments: [seg('a')],
       members: { a: ['c1', 'c2'] },
+      snapshots: { a: [] },
     });
 
     const report = await detectSegmentChanges(deps, { dispatchConcurrency: 0 });

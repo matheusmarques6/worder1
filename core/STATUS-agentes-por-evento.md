@@ -273,25 +273,54 @@ token) e 9.5 (roadmap, não bloqueia).
   17/08) — mesma classe, conferir o cron de e-mail antes de criar coluna.
   (O 504 do `detect-segment-changes` saiu desta lista — ver a seção abaixo.)
 
-### Cron de segmentos: o 504 e o cursor do vizinho (17/08)
+### Cron de segmentos: a tabela que nunca existiu (17–18/08)
 
-`/api/cron/detect-segment-changes` estourava os 60s. A cirurgia achou três
-causas somadas, e uma delas era pior que o timeout:
+`/api/cron/detect-segment-changes` estourava os 60s (504 recorrente). O
+conserto foi em duas rodadas, e a **medição no vivo desmentiu o diagnóstico da
+primeira**.
 
-- **Rotação que não rotacionava.** A rota ordenava seu lote de 200 por
-  `last_evaluated_at` e **nunca escrevia** essa coluna — quem escreve é o cron
-  irmão `recompute-segments` (lote de 500, mesma cadência). O cursor era do
-  vizinho: com mais de 200 segmentos dinâmicos a cauda podia nunca ser
-  detectada, silenciosamente. Cursor próprio agora
+**Causa raiz (achada só ao aplicar a migration):**
+`segment_memberships_snapshot` **não existia no banco vivo** — a migration que
+a cria está em `supabase/migrations-archive/20260415_segment_snapshots.sql`,
+arquivada e portanto nunca aplicada. `to_regclass` devolvia NULL em 18/08.
+
+O código antigo descartava o erro da leitura (`const { data } = await …`), então
+"tabela inexistente" virava "nenhum snapshot" e **todo membro de todo segmento
+contava como entrada NOVA a cada 15 minutos**. Medido: 8 segmentos na org
+piloto, dois deles com 21.371 e 21.286 contatos → ~42,6 mil chamadas de
+`dispatchTrigger` por rodada, cada uma com dois round-trips ao Postgres
+(idempotência + busca de automações) antes de desistir. Isso é o 504. A
+gravação do snapshot falhava do mesmo jeito silencioso, então o ciclo se
+repetia para sempre. Nada chegou a disparar porque a org não tem automação
+`trigger_segment` ativa (0 runs) — no dia em que tivesse, 42,6 mil de uma vez.
+
+**Correção de registro:** a mensagem do commit `6ff790b` atribuía o 504 à
+rotação. A rotação É um bug real (abaixo), mas com 8 segmentos e lote de 200
+ela nunca foi a causa do timeout — é hazard latente, não ativo.
+
+O que entrou:
+
+- **A tabela, com o recorte certo** (migration `20260817000006`). A versão
+  arquivada trazia `FOR ALL USING (true)`, que com a Data API por cima
+  exporia `contact_ids` de todas as orgs; agora é RLS sem policy permissiva,
+  Data API revogada, `service_role` (BYPASSRLS) como único caminho, FK com
+  ON DELETE CASCADE.
+- **Primeira observação SEMEIA, não dispara.** Quem já estava no segmento
+  quando a observação começou não entrou. Sem essa porta, ligar a detecção nos
+  dois segmentos de 21 mil dispararia 42,6 mil automações retroativas — e
+  mensagem enviada não volta. A `idempotencyKey` do dispatcher não protegeria:
+  ela trava o reenvio, não o primeiro envio, e só olha 24h para trás. Por isso
+  `loadSnapshot` devolve `null` para "nunca observado" e `[]` para "observado
+  vazio" — colapsar os dois É o disparo em massa.
+- **Rotação que não rotacionava.** A rota ordenava por `last_evaluated_at` e
+  nunca escrevia essa coluna — quem escreve é o cron irmão
+  `recompute-segments`. Cursor próprio agora
   (`customer_segments.last_change_check_at`, migration `20260817000005`,
-  índice parcial no mesmo recorte da consulta).
-- **Sem orçamento de parede.** Morrer no corte da plataforma perdia o trabalho
-  feito. Agora: 45s de orçamento, corte checado entre segmentos e entre levas
-  de despacho, e resposta que diz `stoppedBy` + `segmentsSkipped` — um 504 era
-  a única pista que existia antes.
-- **Despacho serial por contato.** `await dispatchTrigger` um por vez. Agora em
-  levas de 5, com teto de 2.000 por rodada para um segmento gigante não comer
-  o turno sozinho.
+  índice parcial no mesmo recorte). Latente hoje (8 segmentos), garantido
+  acima de 200.
+- **Orçamento de parede** de 45s, checado entre segmentos e entre levas;
+  resposta diz `stoppedBy` e `segmentsSkipped` em vez de um 504 mudo.
+- **Despacho em levas de 5**, teto de 2.000 por rodada.
 
 O contrato do progresso parcial é o que torna o corte seguro: segmento
 interrompido grava `anterior ∪ despachados` e **não** avança o cursor —
@@ -300,10 +329,14 @@ fila. Falha de despacho de um contato conta como parcial pela mesma razão:
 gravar o retrato atual marcaria como notificado quem não foi.
 
 A política saiu da rota para `src/lib/segments/change-detection.ts` com
-dependências injetadas (relógio inclusive) — 16 testes rodam o laço inteiro
-sem banco. A rota virou adaptador de I/O, com degradação para o cursor antigo
-enquanto a migration não estiver no vivo (deploy é automático no push, a
-migration é manual). **Pendente: aplicar `20260817000005` no vivo.**
+dependências injetadas (relógio inclusive) — 18 testes rodam o laço inteiro sem
+banco. A rota virou adaptador de I/O e degrada para o cursor antigo se a coluna
+faltar (deploy é automático no push, migration é manual).
+
+**Migrations `20260817000005` e `20260817000006` aplicadas no vivo em 18/08 via
+MCP** — coluna+índice conferidos; tabela com RLS ligada, 0 policies, 0 grants
+para anon/authenticated. Próxima rodada do cron semeia os 8 segmentos (uma
+gravação cada, zero despachos) e a detecção passa a valer da rodada seguinte.
 
 ### Juiz destravado 17/08 (o "gerada mas não enviada" do piloto)
 

@@ -64,6 +64,8 @@ export type DetectOptions = {
 
 export type DetectReport = {
   segmentsChecked: number;
+  /** Primeira observação: retrato gravado, ninguém notificado. */
+  segmentsSeeded: number;
   segmentsPartial: number;
   segmentsFailed: number;
   /** Segmentos do lote que nem começaram: acabou o orçamento ou o teto. */
@@ -98,6 +100,7 @@ export async function detectSegmentChanges(
 
   const report: DetectReport = {
     segmentsChecked: 0,
+    segmentsSeeded: 0,
     segmentsPartial: 0,
     segmentsFailed: 0,
     segmentsSkipped: 0,
@@ -144,6 +147,11 @@ export async function detectSegmentChanges(
     report.entriesDispatched += outcome.dispatched;
     report.entriesFailed += outcome.failed;
 
+    if (outcome.seeded) {
+      report.segmentsSeeded++;
+      continue;
+    }
+
     if (outcome.interrupted) {
       report.segmentsPartial++;
       report.stoppedBy = outcome.interrupted;
@@ -167,6 +175,8 @@ type SegmentOutcome = {
   failed: number;
   /** `null` = percorreu todas as entradas; caso contrário, o motivo do corte. */
   interrupted: null | 'budget' | 'dispatch_cap';
+  /** Primeira observação: só o retrato foi gravado. */
+  seeded: boolean;
 };
 
 async function processSegment(
@@ -176,7 +186,28 @@ async function processSegment(
 ): Promise<SegmentOutcome> {
   const current = await deps.resolveMembers(segment);
   const previous = await deps.loadSnapshot(segment);
-  const previousSet = new Set(previous ?? []);
+
+  // PRIMEIRA OBSERVAÇÃO — o retrato inicial é gravado e ninguém é notificado.
+  //
+  // "Entrou no segmento" é um evento de transição: quem já estava lá quando
+  // começamos a olhar não entrou, só existia. Sem esta porta, ligar a
+  // detecção num segmento de 21 mil membros dispararia 21 mil automações
+  // retroativas — e mensagem enviada não volta.
+  //
+  // Não é hipótese: a tabela de snapshot nunca existiu no banco vivo
+  // (migration 20260817000006), então TODO segmento da org está exatamente
+  // neste estado. A `idempotencyKey` do dispatcher não protegeria — ela é a
+  // trava do reenvio, não do primeiro envio, e só olha 24h para trás.
+  //
+  // Por isso `loadSnapshot` devolve `null` para "nunca observado" e `[]` para
+  // "observado vazio": colapsar os dois é justamente o disparo em massa.
+  if (previous === null) {
+    await deps.saveSnapshot(segment, current);
+    await deps.markChecked(segment);
+    return { dispatched: 0, failed: 0, interrupted: null, seeded: true };
+  }
+
+  const previousSet = new Set(previous);
   const entries = current.filter((id) => !previousSet.has(id));
 
   const dispatched: string[] = [];
@@ -225,7 +256,7 @@ async function processSegment(
     await deps.saveSnapshot(segment, union(previousSet, dispatched));
   }
 
-  return { dispatched: dispatched.length, failed, interrupted };
+  return { dispatched: dispatched.length, failed, interrupted, seeded: false };
 }
 
 function union(base: Set<string>, extra: string[]): string[] {
