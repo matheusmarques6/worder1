@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "worker:dev": "npx ts-node --project worker/tsconfig.json worker/campaign-worker.ts",

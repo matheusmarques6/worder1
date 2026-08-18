@@ -53,6 +53,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
+  # BLOQUEANTE: o unico mecanismo capaz de pegar um import orfao depois de uma
+  # delecao (pacote F1). Nao precisa de env — `tsc` nao executa modulo nenhum,
+  # ao contrario do `next build`, que e por isso que este job existe separado.
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
