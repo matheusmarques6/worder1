@@ -1,9 +1,9 @@
 # CI do app Next.js (Vercel segue dono do deploy; aqui é o gate de teste).
 # Path filters complementares aos do runtime.yml (D2).
 #
-# Job bloqueante: vitest. O build é INFORMATIVO por ora (o repo nunca teve CI;
-# módulos podem exigir env no import) — flip quando provado verde, rastreado
-# em core/STATUS-agentes-por-evento.md.
+# Três jobs, os três bloqueantes: vitest (comportamento), tsc (import órfão e
+# re-export de barril) e next build (falha em tempo de módulo, que o tsc não vê).
+# O build ficou informativo até 18/08 por não se saber se era verde; é.
 
 name: app
 
@@ -74,8 +74,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # INFORMATIVO: primeiro CI da história do repo; flip quando provado verde.
-    continue-on-error: true
+    # BLOQUEANTE desde 18/08: nasceu informativo porque o repo nunca tinha tido
+    # CI e ninguém sabia se passava. Passou — run 32094491364, 3m13s, no push da
+    # onda 3 da limpeza. O `build` pega o que o `tsc` não pega: falha de import
+    # em tempo de módulo, que só aparece quando o Next carrega a rota de fato.
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-dummy-anon-key
