@@ -44,13 +44,6 @@ const ROOT = path.resolve(SRC, '..');
  * caminho que o teste abaixo prove inalcançável.
  */
 const DELETION_SET = [
-  // Onda 3, grupo A — engrenagens que só o editor apagado na onda 1 usava.
-  'src/lib/ai/templates/',                    // os 10 templates de loja do wizard
-  'src/lib/ai/annotations.ts',                // o flywheel; a aba que anotava morreu
-  'src/lib/ai/index.ts',                      // barril: ninguém importa '@/lib/ai'
-  'src/components/agents/ui/index.ts',        // barril: os vivos importam fundo
-  'src/lib/agents-redesign-flag.ts',          // flag sem nenhum leitor
-  'src/components/whatsapp/BotSelector.tsx',  // único consumidor de /api/ai-agents
   // Onda 3, grupo B — duas peças de uma geração anterior, ambas sem importador.
   // Corroborado por docs/AUDITORIA-LEGADO-WHATSAPP-IA.md (A1 e adendo P1).
   'src/lib/services/whatsapp/webhook-processor.ts', // duplicata do processador vivo
@@ -61,14 +54,7 @@ const DELETION_SET = [
  * Rotas de API do mesmo conjunto. Não têm importador — a prova é que nenhum
  * código vivo cita a URL.
  */
-const DELETION_SET_ROUTES = [
-  'src/app/api/ai/agents/[id]/actions/route.ts',
-  'src/app/api/ai/agents/[id]/actions/[actionId]/route.ts',
-  'src/app/api/ai/agents/[id]/annotations/route.ts',
-  'src/app/api/ai/agents/[id]/versions/route.ts',
-  'src/app/api/ai/agents/[id]/versions/[versionId]/rollback/route.ts',
-  'src/app/api/ai-agents/route.ts',
-];
+const DELETION_SET_ROUTES: string[] = [];
 
 /**
  * Segunda ordem: peças cujo ÚNICO sustentáculo é outra peça morta que só
