@@ -43,6 +43,12 @@ export async function getAccessTokenViaClientCredentials(
     let message = 'Erro ao gerar access token';
     if (response.status === 401 || response.status === 403) {
       message = 'Client ID ou Client Secret inválidos';
+    } else if (error.includes('shop_not_permitted')) {
+      // Shopify: client_credentials só funciona para app criado na MESMA
+      // organização que é dona da loja E já instalado nela. App de
+      // parceiro/colaborador em loja de cliente cai exatamente aqui.
+      message =
+        'A Shopify recusou (shop_not_permitted): o app precisa ter sido criado no Dev Dashboard da MESMA organização que é dona desta loja e estar instalado nela. Apps criados na organização de um parceiro/colaborador não geram token para lojas de clientes. Crie o app na organização dona da loja, instale-o na loja e tente novamente.';
     } else if (error.includes('application_cannot_be_found')) {
       message =
         'App não encontrado. Verifique se o app está instalado na loja e se o Client ID está correto.';
