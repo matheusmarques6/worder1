@@ -13,6 +13,12 @@ import { extractDependencies } from '@/lib/segments/dsl';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+// Stop picking up new segments after this much wall-clock so the run
+// returns a partial result instead of Vercel killing it at maxDuration
+// (504 in the logs). The stalest-first order below already makes the
+// next run continue exactly where this one stopped.
+const TIME_BUDGET_MS = 50_000;
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
@@ -49,8 +55,13 @@ export async function GET(request: NextRequest) {
     }
 
     const results: { id: string; count: number; ok: boolean }[] = [];
+    let truncated = false;
 
     for (const seg of segments || []) {
+      if (Date.now() - start > TIME_BUDGET_MS) {
+        truncated = true;
+        break;
+      }
       try {
         // Dispatcher path: handles both v1 (via adapter) and v2 rules
         // uniformly. Drops the wrong-resolver hazard that earlier had
@@ -94,6 +105,7 @@ export async function GET(request: NextRequest) {
       total: results.length,
       ok: results.filter((r) => r.ok).length,
       failed: results.filter((r) => !r.ok).length,
+      truncated,
       durationMs: Date.now() - start,
     });
   } catch (error: any) {

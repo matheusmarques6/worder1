@@ -103,12 +103,15 @@ export async function GET(req: NextRequest) {
     if (!store?.access_token) continue;
 
     try {
-      const op = await getCurrentBulkOperation({
-        id: store.id,
-        organization_id: store.organization_id,
-        shop_domain: store.shop_domain,
-        access_token: store.access_token,
-      });
+      const op = await getCurrentBulkOperation(
+        {
+          id: store.id,
+          organization_id: store.organization_id,
+          shop_domain: store.shop_domain,
+          access_token: store.access_token,
+        },
+        { throwOnAuthError: true }
+      );
 
       if (!op) continue;
 
@@ -145,7 +148,42 @@ export async function GET(req: NextRequest) {
         polledStillRunning.push(job.id);
       }
     } catch (err: any) {
-      console.warn(`[ResumeStalledBulk] poll ${job.id} failed:`, err?.message);
+      // 401/403 from Shopify is permanent (token revoked / app
+      // uninstalled) — the job can never complete, and leaving it
+      // 'pending' means this cron re-polls the same dead store every
+      // 2 minutes forever. Fail the job and flag the store with the
+      // same status the health-checker writes, so the UI asks the
+      // merchant to reconnect.
+      const authStatus =
+        err?.statusCode === 401 || err?.statusCode === 403 ? err.statusCode : null;
+      if (authStatus) {
+        await supabaseAdmin
+          .from('shopify_import_jobs')
+          .update({
+            status: 'failed',
+            last_error: `shopify auth ${authStatus}: access token inválido ou app desinstalado`,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', job.id);
+        await supabaseAdmin
+          .from('shopify_stores')
+          .update({
+            connection_status: authStatus === 401 ? 'expired' : 'error',
+            status_code: String(authStatus),
+            status_message:
+              authStatus === 401
+                ? 'Token de acesso expirado ou inválido. Gere um novo token no painel do Shopify.'
+                : 'Acesso negado. O app pode ter sido desinstalado ou as permissões foram revogadas.',
+            health_checked_at: new Date().toISOString(),
+          })
+          .eq('id', store.id);
+        polledFailed.push(job.id);
+        console.warn(
+          `[ResumeStalledBulk] job ${job.id} failed permanently: shopify auth ${authStatus} (${store.shop_domain})`
+        );
+      } else {
+        console.warn(`[ResumeStalledBulk] poll ${job.id} failed:`, err?.message);
+      }
     }
   }
 

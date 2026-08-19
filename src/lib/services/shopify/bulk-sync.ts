@@ -22,7 +22,7 @@
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { shopifyGraphQL } from '@/lib/shopify/graphql-client';
+import { shopifyGraphQL, ShopifyGraphQLError } from '@/lib/shopify/graphql-client';
 import type { ShopifyStoreConfig } from '@/lib/shopify/graphql-client';
 
 export const BULK_OPERATION_RUN_QUERY = `
@@ -153,12 +153,27 @@ export async function startOrdersBulkExport(store: ShopifyStoreConfig): Promise<
 }
 
 /** Poll the current bulk operation. Shopify allows ONE per shop at a
- *  time, so this is enough — no id lookup needed. */
-export async function getCurrentBulkOperation(store: ShopifyStoreConfig): Promise<BulkOperation | null> {
+ *  time, so this is enough — no id lookup needed.
+ *
+ *  Errors collapse to null ("nothing running, ask again later") — fine
+ *  for transient failures, but a 401/403 is permanent (token revoked /
+ *  app uninstalled) and null makes pollers retry it forever. Callers
+ *  that loop on this set throwOnAuthError to tell the two apart. */
+export async function getCurrentBulkOperation(
+  store: ShopifyStoreConfig,
+  opts?: { throwOnAuthError?: boolean }
+): Promise<BulkOperation | null> {
   try {
     const result = await shopifyGraphQL(store, BULK_OPERATION_STATUS_QUERY, {});
     return result.data?.currentBulkOperation || null;
   } catch (err: any) {
+    if (
+      opts?.throwOnAuthError &&
+      err instanceof ShopifyGraphQLError &&
+      (err.statusCode === 401 || err.statusCode === 403)
+    ) {
+      throw err;
+    }
     console.warn('[BulkSync] getCurrentBulkOperation failed:', err?.message);
     return null;
   }
