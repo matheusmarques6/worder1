@@ -1109,6 +1109,17 @@ export default function ShopifyConnect() {
             </p>
           </div>
 
+          {/* Error repeated here on purpose: the page-top banner sits
+              above the fold when the merchant is down at this button,
+              so a failed connect looked like "clicked and nothing
+              happened". */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start gap-2 text-sm">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              {error}
+            </div>
+          )}
+
           <button
             onClick={handleManualConnect}
             disabled={manualConnecting || !manualDomain.trim() || !manualClientId.trim() || !manualClientSecret.trim()}
