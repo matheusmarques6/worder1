@@ -208,13 +208,20 @@ export async function GET(request: NextRequest) {
     if (error) throw error;
 
     const stores = (allStores || []).filter((s: any) => {
-      if (s.is_active === false) return false;
-      if (s.status === 'disconnected') return false;
       const dom: string = s.shop_domain || '';
       // Cleanup tombstones we keep around so old foreign keys still
       // resolve. They use the .worder.local TLD and either an
-      // "archived-" or "manual-based-" prefix when soft-deleted.
+      // "archived-" or "manual-" prefix when soft-deleted.
       if (dom.endsWith('.worder.local')) return false;
+      // REAL stores stay listed whatever the connection state. This
+      // used to also drop is_active=false / status='disconnected'
+      // rows, but this endpoint feeds the same zustand list as the
+      // sidebar switcher — the moment any page refreshed through it,
+      // a disconnected loja (Dr. Groot, 17/08) vanished from the
+      // switcher and the selection silently jumped to another store,
+      // even though all her contacts/automations/history still exist.
+      // Disconnecting Shopify must flag the loja (isActive:false,
+      // connectionStatus:'disconnected'), never hide it.
       return true;
     });
 

@@ -576,6 +576,11 @@ export default function DashboardLayout({
                           <p className="text-sm font-medium truncate">{store.name}</p>
                           <p className="text-[11px] text-gray-500 truncate">{store.domain}</p>
                         </div>
+                        {store.isActive === false && (
+                          <span className="text-[9px] font-semibold uppercase tracking-wide text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded flex-shrink-0">
+                            Desconectada
+                          </span>
+                        )}
                         {currentStore?.id === store.id && <Check className="w-4 h-4 text-brand-400 flex-shrink-0" />}
                       </button>
                     ))}
