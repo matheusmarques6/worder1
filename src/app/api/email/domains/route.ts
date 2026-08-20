@@ -90,6 +90,18 @@ export async function POST(request: NextRequest) {
     // Create domain in Resend
     const resendDomain = await createDomain(domain);
 
+    // Tracking da Resend desligado por padrão: o tracking primário é o
+    // da Worder (/api/t/*, com atribuição). Ligado junto, cada clique
+    // vira redirect duplo e cada abertura conta duas vezes.
+    if (resendDomain?.id) {
+      try {
+        const { setDomainTracking } = await import('@/lib/email/resend');
+        await setDomainTracking(resendDomain.id, { clickTracking: false, openTracking: false });
+      } catch (e: any) {
+        console.warn('[EmailDomains] setDomainTracking failed (segue sem bloquear):', e?.message);
+      }
+    }
+
     // Persist scoped to the store. storeId is optional — null means
     // the domain is shared across every store in the org.
     const { data: dbDomain, error } = await supabaseAdmin

@@ -209,12 +209,21 @@ export async function sendCampaignEmail({
       htmlWithProducts = resolveTriggerSmartTags(htmlWithProducts, eventData, mergeData.store_url, { escapeHtml: true });
     }
 
-    // 3. Prepare HTML with merge tags, tracking, unsubscribe
+    // 3. Prepare HTML with merge tags, tracking, unsubscribe.
+    // tracking_domain da loja/org (quando configurado) substitui o
+    // baseUrl recebido — links de clique/abertura/unsubscribe saem num
+    // host alinhado ao remetente em vez do domínio do app.
+    let trackingBaseUrl = baseUrl;
+    try {
+      const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url');
+      trackingBaseUrl = await getTrackingBaseUrl(organizationId, storeId || null);
+    } catch { /* mantém o baseUrl do caller */ }
+
     const finalHtml = prepareEmailHtml({
       html: htmlWithProducts,
       mergeData,
       emailSendId,
-      baseUrl,
+      baseUrl: trackingBaseUrl,
     });
 
     // 4. Render subject merge tags — the subject must go through the SAME
@@ -244,7 +253,9 @@ export async function sendCampaignEmail({
     // URL the visible footer link uses so one-click and manual
     // unsubscribe both resolve through the same signed-token path.
     const { buildUnsubscribeUrl, buildListUnsubscribeHeaders } = await import('@/lib/email/render');
-    const unsubUrl = buildUnsubscribeUrl(emailSendId, baseUrl, resolvedContactId || undefined, organizationId, campaignId || undefined);
+    // Mesmo host dos demais links de tracking — o List-Unsubscribe do
+    // header e o link do rodapé precisam apontar pro mesmo lugar.
+    const unsubUrl = buildUnsubscribeUrl(emailSendId, trackingBaseUrl, resolvedContactId || undefined, organizationId, campaignId || undefined);
     const listUnsubHeaders = buildListUnsubscribeHeaders(unsubUrl);
 
     // Plain-text alternative — when caller supplied one (text-based

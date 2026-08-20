@@ -65,9 +65,25 @@ export async function POST(request: NextRequest) {
 
     const payload: ResendWebhookPayload = JSON.parse(body);
     const { type, data } = payload;
-    const resendId = data.email_id;
+    const resendId = data.email_id || (data as any).id || null;
 
-    if (!resendId) {
+    // Tags voltam no payload como mapa {nome: valor} OU como array
+    // [{name, value}] dependendo da versão do evento — normalizar.
+    const tagValue = (tags: any, name: string): string | null => {
+      if (!tags) return null;
+      if (Array.isArray(tags)) {
+        const t = tags.find((x: any) => x?.name === name);
+        return t?.value ? String(t.value) : null;
+      }
+      if (typeof tags === 'object') return tags[name] ? String(tags[name]) : null;
+      return null;
+    };
+    const sendIdFromTag = tagValue((data as any).tags, 'email_send_id');
+    const isUuid = (v: any) =>
+      typeof v === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+    if (!resendId && !sendIdFromTag) {
       return NextResponse.json({ error: 'Missing email_id' }, { status: 400 });
     }
 
@@ -75,16 +91,54 @@ export async function POST(request: NextRequest) {
     // has organization_id NOT NULL on the production schema — load it
     // here directly so we don't lose orgId for flow sends (which have
     // contact_id but no campaign_id) or for sends whose campaign was
-    // later deleted. Previous code fell back to null silently and the
-    // CDP guard then dropped every event from those sends.
-    const { data: emailSend, error: findError } = await supabaseAdmin
-      .from('email_sends')
-      .select('id, campaign_id, contact_id, ab_variant, organization_id')
-      .eq('resend_id', resendId)
-      .maybeSingle();
+    // later deleted.
+    //
+    // Cascata de matching: resend_id → provider_message_id → tag
+    // email_send_id (que toda mensagem da Worder carrega). A conta da
+    // Resend também transporta emails que NÃO nasceram na Worder
+    // (Broadcasts/Audiences do painel) — para esses, matched:false é o
+    // comportamento correto. Mas um envio NOSSO nunca pode se perder só
+    // porque o formato do id divergiu ou o mapeamento do batch falhou:
+    // a tag é o identificador à prova disso.
+    const SEND_COLS = 'id, campaign_id, contact_id, ab_variant, organization_id';
+    let emailSend: any = null;
+    if (resendId) {
+      const { data: byResendId } = await supabaseAdmin
+        .from('email_sends')
+        .select(SEND_COLS)
+        .eq('resend_id', resendId)
+        .maybeSingle();
+      emailSend = byResendId || null;
+    }
+    if (!emailSend && resendId) {
+      const { data: byProviderId } = await supabaseAdmin
+        .from('email_sends')
+        .select(SEND_COLS)
+        .eq('provider_message_id', resendId)
+        .maybeSingle();
+      emailSend = byProviderId || null;
+    }
+    if (!emailSend && isUuid(sendIdFromTag)) {
+      const { data: byTag } = await supabaseAdmin
+        .from('email_sends')
+        .select(SEND_COLS)
+        .eq('id', sendIdFromTag)
+        .maybeSingle();
+      emailSend = byTag || null;
+      // O id salvo divergiu do email_id do evento — corrigir a linha para
+      // os próximos eventos deste mesmo email casarem direto.
+      if (emailSend && resendId) {
+        await supabaseAdmin
+          .from('email_sends')
+          .update({ resend_id: resendId, provider_message_id: resendId })
+          .eq('id', emailSend.id);
+      }
+    }
 
-    if (findError || !emailSend) {
-      console.log(`[ResendWebhook] No email_send found for resend_id: ${resendId}`);
+    if (!emailSend) {
+      console.log(
+        `[ResendWebhook] unmatched ${type} email_id=${resendId} tag_send_id=${sendIdFromTag} from=${data.from || '?'} — provavelmente email fora da Worder (Broadcast/Audience)`
+      );
       return NextResponse.json({ received: true, matched: false });
     }
 

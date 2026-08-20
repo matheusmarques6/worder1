@@ -154,8 +154,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const { getAppBaseUrl } = await import('@/lib/app-url');
-    const baseUrl = getAppBaseUrl();
+    // Base dos links de tracking/unsubscribe: tracking_domain da loja/org
+    // quando configurado (host alinhado ao remetente), senão o app.
+    const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url');
+    const baseUrl = await getTrackingBaseUrl(organizationId, campaign.store_id || null);
 
     // ──────────────────────────────────────────
     // Suppression list

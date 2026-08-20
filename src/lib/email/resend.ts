@@ -89,6 +89,38 @@ export async function verifyDomain(domainId: string) {
   return await res.json().catch(() => ({}));
 }
 
+/**
+ * Liga/desliga o click/open tracking DA RESEND para um domínio.
+ * O tracking primário é o da Worder (/api/t/*): carrega worderContactID/
+ * SendID/CampaignID + UTMs (atribuição de vendas), detecta Apple MPP e
+ * sobrevive a uma troca de provedor. Com o da Resend ligado junto, cada
+ * link vira redirect duplo (click.<dominio> → worder → loja) e cada
+ * abertura conta duas vezes — então domínios gerenciados pela Worder
+ * ficam com o tracking da Resend desligado.
+ */
+export async function setDomainTracking(
+  domainId: string,
+  opts: { clickTracking: boolean; openTracking: boolean }
+) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const res = await fetch(`https://api.resend.com/domains/${domainId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      click_tracking: opts.clickTracking,
+      open_tracking: opts.openTracking,
+    }),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json?.message || `Domain tracking update failed: ${res.status}`);
+  }
+  return await res.json().catch(() => ({}));
+}
+
 export async function getDomain(domainId: string) {
   const apiKey = process.env.RESEND_API_KEY;
   const res = await fetch(`https://api.resend.com/domains/${domainId}`, {
