@@ -38,9 +38,13 @@ async function recordOpen(emailSendId: string, headers: Headers) {
   try {
     const { supabaseAdmin } = await import('@/lib/supabase-admin');
 
+    // select('*') em vez de lista de colunas: com lista explícita, uma
+    // coluna ausente no schema vivo (mpp_opened_at ficou meses sem a
+    // migration) erra o SELECT inteiro, send fica null e o open é
+    // engolido sem log — 372 envios com zero aberturas registradas.
     const { data: send } = await supabaseAdmin
       .from('email_sends')
-      .select('id, campaign_id, contact_id, ab_variant, sent_at, opened_at, mpp_opened_at')
+      .select('*')
       .eq('id', emailSendId).maybeSingle();
     if (!send) return;
 
@@ -58,8 +62,14 @@ async function recordOpen(emailSendId: string, headers: Headers) {
     // mpp_opened_at so dashboards + the attribution RPC can ignore
     // them by default. Genuine opens land in opened_at as before.
     if (mpp.isMpp) {
-      await supabaseAdmin.from('email_sends')
+      const { error: mppErr } = await supabaseAdmin.from('email_sends')
         .update({ mpp_opened_at: now }).eq('id', emailSendId).is('mpp_opened_at', null);
+      // Schema sem mpp_opened_at: melhor contar como abertura normal do
+      // que perder o evento (é o que acontecia antes da coluna existir).
+      if (mppErr) {
+        await supabaseAdmin.from('email_sends')
+          .update({ opened_at: now }).eq('id', emailSendId).is('opened_at', null);
+      }
     } else {
       await supabaseAdmin.from('email_sends')
         .update({ opened_at: now }).eq('id', emailSendId).is('opened_at', null);

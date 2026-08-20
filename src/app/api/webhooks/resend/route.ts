@@ -162,10 +162,10 @@ export async function POST(request: NextRequest) {
           .update({ status: 'delivered', delivered_at: now })
           .eq('id', emailSendId);
         await cdpEvent('email_delivered');
-        if (campaignId) {
-          const { error } = await supabaseAdmin.rpc('increment_campaign_opens', { campaign_id: campaignId });
-          // increment_campaign_delivered RPC pode não existir — silenciar
-        }
+        // NÃO incrementar contador aqui: uma versão anterior chamava
+        // increment_campaign_opens neste case e cada entrega virava uma
+        // "abertura" na campanha. Delivered fica em email_sends
+        // (delivered_at) e no CDP; abertura só no case email.opened.
         break;
 
       case 'email.bounced':

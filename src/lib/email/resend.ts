@@ -130,6 +130,10 @@ export async function registerWebhook(endpointUrl: string) {
       'email.delivery_delayed',
       'email.bounced',
       'email.complained',
+      // Rejeição pré-envio (suppression list, domínio não verificado).
+      // O handler trata email.failed como supressão dura — sem assinar
+      // o evento aqui ele nunca chegava.
+      'email.failed',
       'email.opened',
       'email.clicked',
     ],
