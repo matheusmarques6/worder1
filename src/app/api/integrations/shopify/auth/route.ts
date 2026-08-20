@@ -44,18 +44,33 @@ export async function GET(request: NextRequest) {
     // Generate secure random state
     const state = crypto.randomBytes(32).toString('hex');
 
-    // Save state in oauth_states table (correct column: state_token)
+    // Save state in oauth_states. O schema VIVO é (state, provider,
+    // organization_id, metadata, expires_at); o formato antigo era
+    // (state_token, data). O insert antigo falhava silencioso em 42703 e
+    // o callback caía nos fallbacks de resolução de org — gravar no vivo
+    // primeiro, formato antigo como fallback (CI/dev).
     const supabase = getSupabaseAdmin();
-    await supabase.from('oauth_states').insert({
-      state_token: state,
-      data: {
-        organization_id: auth.user.organization_id,
-        user_id: auth.user.id,
-        provider: 'shopify',
-        shop: normalizedShop,
-      },
-      expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    const statePayload = {
+      organization_id: auth.user.organization_id,
+      user_id: auth.user.id,
+      provider: 'shopify',
+      shop: normalizedShop,
+    };
+    const stateExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const { error: stateErr } = await supabase.from('oauth_states').insert({
+      state,
+      provider: 'shopify',
+      organization_id: auth.user.organization_id,
+      metadata: statePayload,
+      expires_at: stateExpiresAt,
     });
+    if (stateErr) {
+      await supabase.from('oauth_states').insert({
+        state_token: state,
+        data: statePayload,
+        expires_at: stateExpiresAt,
+      });
+    }
 
     // Build OAuth authorization URL
     const redirectUri = `${APP_URL}/api/integrations/shopify/callback`;

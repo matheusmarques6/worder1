@@ -66,19 +66,36 @@ export async function GET(request: NextRequest) {
     // =============================================
     let organizationId: string | null = null;
 
-    // Try 1: State saved in oauth_states (Worder OAuth flow)
+    // Try 1: State saved in oauth_states (Worder OAuth flow).
+    // Schema vivo: (state, metadata); formato antigo: (state_token, data).
     if (state) {
-      const { data: oauthState } = await supabase
-        .from('oauth_states')
-        .select('data')
-        .eq('state_token', state)
-        .gte('expires_at', new Date().toISOString())
-        .maybeSingle();
+      const nowIso = new Date().toISOString();
+      let statePayload: any = null;
 
-      if (oauthState?.data?.organization_id) {
-        organizationId = oauthState.data.organization_id;
-        // Delete used state
-        await supabase.from('oauth_states').delete().eq('state_token', state);
+      const { data: modernRow, error: modernErr } = await supabase
+        .from('oauth_states')
+        .select('metadata')
+        .eq('state', state)
+        .gte('expires_at', nowIso)
+        .maybeSingle();
+      if (!modernErr && modernRow?.metadata) statePayload = modernRow.metadata;
+      if (modernErr) {
+        const { data: legacyRow } = await supabase
+          .from('oauth_states')
+          .select('data')
+          .eq('state_token', state)
+          .gte('expires_at', nowIso)
+          .maybeSingle();
+        if (legacyRow?.data) statePayload = legacyRow.data;
+      }
+
+      if (statePayload?.organization_id) {
+        organizationId = statePayload.organization_id;
+        // Delete used state (nos dois formatos, best-effort)
+        const del = await supabase.from('oauth_states').delete().eq('state', state);
+        if (del.error) {
+          await supabase.from('oauth_states').delete().eq('state_token', state);
+        }
         console.log('[Shopify Callback] Resolved org via oauth_states:', organizationId);
       }
     }
