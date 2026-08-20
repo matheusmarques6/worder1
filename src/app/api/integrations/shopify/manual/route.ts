@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { domain, clientId, clientSecret } = body || {};
+    const { domain, clientId, clientSecret, storeId: targetStoreId } = body || {};
 
     if (!domain || !clientId || !clientSecret) {
       return NextResponse.json(
@@ -211,7 +211,25 @@ export async function POST(request: NextRequest) {
     // and add the new domain as an alias.
     let existingStore: { id: string; shop_domain: string; shop_domain_aliases?: string[] } | null = null;
 
-    if (shopifyShopId) {
+    // Alvo explícito (storeId): conectar/trocar a integração DESTA loja.
+    // A loja é a entidade permanente na Worder; a Shopify é um atributo
+    // trocável. Sem o alvo, o dedup abaixo criava uma loja NOVA sempre
+    // que a Shopify era outra (novo shop_id) — incidente Dr. Groot
+    // 20/08: loja duplicada do zero + histórico órfão na original.
+    if (targetStoreId) {
+      const { data: target } = await supabase
+        .from('shopify_stores')
+        .select('id, shop_domain, shop_domain_aliases')
+        .eq('id', targetStoreId)
+        .eq('organization_id', organizationId)
+        .maybeSingle();
+      if (!target) {
+        return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });
+      }
+      existingStore = target as any;
+    }
+
+    if (!existingStore && shopifyShopId) {
       const { data } = await supabase
         .from('shopify_stores')
         .select('id, shop_domain, shop_domain_aliases')
@@ -317,6 +335,30 @@ export async function POST(request: NextRequest) {
         tracking_endpoint: `${APP_URL}/api/shopify/track`,
       },
     };
+
+    // Outra linha com o MESMO shopify_shop_id: ativa → a Shopify já está
+    // conectada em outra loja (conflito real); inativa (tombstone de
+    // fusão) → limpa o shop_id para o dedup futuro não achar duas.
+    if (shopifyShopId) {
+      const { data: shopIdRows } = await supabase
+        .from('shopify_stores')
+        .select('id, is_active')
+        .eq('organization_id', organizationId)
+        .eq('shopify_shop_id', shopifyShopId)
+        .neq('id', existingStore?.id || '00000000-0000-0000-0000-000000000000');
+      for (const r of (shopIdRows || []) as any[]) {
+        if (r.is_active) {
+          return NextResponse.json(
+            {
+              error: 'Esta Shopify já está conectada em outra loja ativa desta organização. Desative ou troque a integração daquela loja antes.',
+              collidingStoreId: r.id,
+            },
+            { status: 409 }
+          );
+        }
+        await supabase.from('shopify_stores').update({ shopify_shop_id: null }).eq('id', r.id);
+      }
+    }
 
     // Free up the canonical primaryDomain if any OTHER inactive row is
     // sitting on it. Without this the unique constraint idx_shopify_domain
@@ -521,28 +563,13 @@ export async function POST(request: NextRequest) {
     }
 
     // ──────────────────────────────────────────
-    // 6. Clean up placeholder stores (.worder.local) in this org.
-    //    These are created by AddStoreModal Step 1 and should be removed
-    //    once a real Shopify connection succeeds.
+    // 6. NUNCA apagar lojas aqui. A limpeza antiga deletava TODOS os
+    //    placeholders manual-%.worder.local da org — ou seja, apagava
+    //    lojas que o usuário criou e ainda não conectou (20/08: dois
+    //    placeholders "Based" e um "Dr. Groot" sumiram ao conectar outra
+    //    loja). Com o storeId alvo, o placeholder VIRA a loja conectada
+    //    (mesmo id); os demais ficam até o usuário excluí-los.
     // ──────────────────────────────────────────
-    try {
-      // Only the manual-* placeholders from AddStoreModal Step 1.
-      // archived-*.worder.local rows are REAL former stores renamed by
-      // the domain-release logic above — they can still hold history
-      // (contact_events, automations) and must never be deleted here.
-      const { data: placeholders } = await supabase
-        .from('shopify_stores')
-        .select('id, shop_domain')
-        .eq('organization_id', organizationId)
-        .like('shop_domain', 'manual-%.worder.local')
-        .neq('id', storeId);
-      for (const p of (placeholders || []) as any[]) {
-        await supabase.from('shopify_stores').delete().eq('id', p.id);
-      }
-      if ((placeholders || []).length > 0) {
-        console.log(`[Shopify Manual] Cleaned up ${placeholders!.length} placeholder store(s)`);
-      }
-    } catch { /* best-effort */ }
 
     // ──────────────────────────────────────────
     // 7. Trigger initial sync (fire-and-forget)

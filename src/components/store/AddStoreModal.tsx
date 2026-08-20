@@ -138,6 +138,10 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
           domain: fullDomain,
           clientId: clientId.trim(),
           clientSecret: clientSecret.trim(),
+          // A loja criada no passo 1 É a loja: a integração conecta NELA
+          // (mesmo id). Antes, conectava numa linha nova e deletava o
+          // placeholder — a loja do usuário "sumia" e nascia outra do zero.
+          storeId: createdStoreId || undefined,
         }),
       })
       const data = await res.json()
@@ -150,11 +154,6 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
         setError(errorMsg)
         setConnecting(false)
         return
-      }
-
-      // Clean up placeholder
-      if (createdStoreId) {
-        fetch(`/api/stores/${createdStoreId}`, { method: 'DELETE' }).catch(() => {})
       }
 
       const realStore = data.store

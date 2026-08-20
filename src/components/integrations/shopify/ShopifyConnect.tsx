@@ -195,6 +195,10 @@ export default function ShopifyConnect() {
           domain,
           clientId: manualClientId.trim(),
           clientSecret: manualClientSecret.trim(),
+          // A integração pertence à LOJA selecionada: conectar aqui troca
+          // a Shopify desta loja, nunca cria uma loja nova. Só sem loja
+          // no contexto (?add=1) o backend cria/dedupa.
+          storeId: !forceAdd && currentStore?.id ? currentStore.id : undefined,
         }),
       });
       const data = await res.json();
@@ -1219,7 +1223,12 @@ export default function ShopifyConnect() {
               </button>
             </div>
             <button
-              onClick={() => startManualOAuth({ domain: manualDomain, clientId: manualClientId, clientSecret: manualClientSecret })}
+              onClick={() => startManualOAuth({
+                domain: manualDomain,
+                clientId: manualClientId,
+                clientSecret: manualClientSecret,
+                storeId: !forceAdd && currentStore?.id ? currentStore.id : undefined,
+              })}
               disabled={oauthConnecting || manualConnecting || !manualDomain.trim() || !manualClientId.trim() || !manualClientSecret.trim()}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
             >

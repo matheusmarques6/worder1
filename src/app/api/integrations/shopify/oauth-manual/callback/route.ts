@@ -234,6 +234,24 @@ export async function GET(request: NextRequest) {
     if (shop !== canonicalDomain) aliasSet.add(shop);
     aliasSet.delete(canonicalDomain);
 
+    // Outra linha com o MESMO shopify_shop_id: ativa → a Shopify já está
+    // em outra loja (conflito); inativa (tombstone) → limpa o shop_id
+    // para o dedup futuro achar só uma.
+    if (shopifyShopId) {
+      const { data: shopIdRows } = await supabase
+        .from('shopify_stores')
+        .select('id, is_active')
+        .eq('organization_id', organizationId)
+        .eq('shopify_shop_id', shopifyShopId)
+        .neq('id', existingStore?.id || '00000000-0000-0000-0000-000000000000');
+      for (const r of (shopIdRows || []) as any[]) {
+        if (r.is_active) {
+          return redirectTo(APP_URL, '/integrations/shopify?error=domain_conflict');
+        }
+        await supabase.from('shopify_stores').update({ shopify_shop_id: null }).eq('id', r.id);
+      }
+    }
+
     // Liberar o domínio canônico se outra linha (inativa) o segura —
     // linha ATIVA de outra loja é conflito real.
     {
@@ -390,18 +408,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ── Limpeza de placeholders do AddStoreModal (nunca archived-*) ──
-    try {
-      const { data: placeholders } = await supabase
-        .from('shopify_stores')
-        .select('id')
-        .eq('organization_id', organizationId)
-        .like('shop_domain', 'manual-%.worder.local')
-        .neq('id', storeId);
-      for (const p of (placeholders || []) as any[]) {
-        await supabase.from('shopify_stores').delete().eq('id', p.id);
-      }
-    } catch { /* best-effort */ }
+    // NUNCA apagar placeholders de outras lojas aqui — são lojas que o
+    // usuário criou e ainda não conectou. Com storeId alvo, o placeholder
+    // vira a própria loja conectada (mesmo id).
 
     // ── Sync inicial (fire-and-forget) ──
     try {
