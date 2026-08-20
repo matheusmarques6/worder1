@@ -84,8 +84,12 @@ export async function GET(request: NextRequest) {
     // 4. Atualizar status da loja como ativa - RLS filtra automaticamente
     await supabase
       .from('shopify_stores')
-      .update({ 
-        is_active: true,
+      .update({
+        // NÃO reativa a loja: um teste de conexão é diagnóstico, não
+        // reconexão. Antes, checar uma loja que o usuário acabou de
+        // desconectar a marcava ativa de novo (20/08: Dr. Groot
+        // desconectada às 19:06 voltou "ativa" às 19:14 sozinha).
+        // Só os fluxos explícitos de conectar/reativar mudam is_active.
         shop_name: shopData.shop?.name || store.shop_name,
         shop_email: shopData.shop?.email || store.shop_email,
         last_error: null,

@@ -112,6 +112,15 @@ export async function POST(request: NextRequest) {
   }
 
   if (!store) return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });
+  // Loja desconectada não recebe manutenção: as cascatas de pós-conexão
+  // são fire-and-forget e podiam chegar DEPOIS de o usuário desconectar,
+  // reinstalando webhooks/pixel numa Shopify que ele acabou de remover.
+  if (store.is_active === false) {
+    return NextResponse.json(
+      { error: 'Loja desconectada. Reconecte a Shopify antes de reinstalar webhooks e pixel.' },
+      { status: 409 }
+    );
+  }
   if (!store.access_token) {
     return NextResponse.json({ error: 'Token de acesso ausente' }, { status: 400 });
   }

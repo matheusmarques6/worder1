@@ -350,6 +350,17 @@ export default function DashboardLayout({
     initializeUser()
   }, [user, setUser, setLoading])
 
+  // O domínio da Shopify só faz sentido enquanto a integração existe.
+  // Depois de desconectar, exibir o myshopify antigo dá a impressão de
+  // que a loja segue ligada nele (o domínio continua guardado no banco
+  // só para a reativação). Placeholders internos (.worder.local) nunca
+  // aparecem para o usuário.
+  const displayStoreDomain = (domain?: string, isActive?: boolean): string => {
+    if (!domain || domain.endsWith('.worder.local')) return 'Sem integração'
+    if (isActive === false) return 'Sem integração'
+    return domain
+  }
+
   const getInitials = (name: string) =>
     name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)
 
@@ -421,12 +432,15 @@ export default function DashboardLayout({
           }))
           setStores(formattedStores)
 
-          // Check if current store still exists in the list
-          const currentExists = currentStore && formattedStores.some((s: any) => s.id === currentStore.id)
-          if (!currentExists) {
-            // Select the first (most recently installed) store
-            setCurrentStore(formattedStores[0])
-          }
+          // A seleção é PERSISTIDA no navegador. Se a loja atual ainda
+          // existe, SUBSTITUIR o objeto pelo fresco — sem isso, nome/
+          // domínio antigos (ex.: pyz3m9 depois da troca pra ufnij1-ex)
+          // ficavam congelados no rodapé até o usuário trocar de loja.
+          // Mesmo id → setCurrentStore não limpa caches de CRM/inbox.
+          const fresh = currentStore
+            ? formattedStores.find((s: any) => s.id === currentStore.id)
+            : null
+          setCurrentStore(fresh || formattedStores[0])
         }
       } catch (error) {
         console.error('Error loading stores:', error)
@@ -574,13 +588,10 @@ export default function DashboardLayout({
                         </div>
                         <div className="flex-1 text-left min-w-0">
                           <p className="text-sm font-medium truncate">{store.name}</p>
-                          <p className="text-[11px] text-gray-500 truncate">{store.domain}</p>
+                          <p className="text-[11px] text-gray-500 truncate">
+                            {displayStoreDomain(store.domain, store.isActive)}
+                          </p>
                         </div>
-                        {store.isActive === false && (
-                          <span className="text-[9px] font-semibold uppercase tracking-wide text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded flex-shrink-0">
-                            Desconectada
-                          </span>
-                        )}
                         {currentStore?.id === store.id && <Check className="w-4 h-4 text-brand-400 flex-shrink-0" />}
                       </button>
                     ))}
@@ -608,7 +619,9 @@ export default function DashboardLayout({
             <>
               <div className="flex-1 min-w-0 text-left">
                 <p className="text-[13px] font-medium text-gray-300 truncate">{currentStore?.name || 'Selecionar Loja'}</p>
-                <p className="text-[11px] text-gray-500 truncate">{currentStore?.domain || 'Nenhuma loja'}</p>
+                <p className="text-[11px] text-gray-500 truncate">
+                  {currentStore ? displayStoreDomain(currentStore.domain, currentStore.isActive) : 'Nenhuma loja'}
+                </p>
               </div>
               <ChevronDown className={cn('w-4 h-4 text-gray-500 transition-transform flex-shrink-0', storeDropdownOpen && 'rotate-180')} />
             </>

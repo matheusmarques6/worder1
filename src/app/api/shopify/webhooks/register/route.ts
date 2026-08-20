@@ -176,14 +176,21 @@ export async function POST(request: NextRequest) {
     // current URL). The dashboard uses this flag to render a "reconnect
     // your store" prompt when sync goes silent.
     const fullyRegistered = (created + existing) >= REQUIRED_WEBHOOKS.length
+    const statusUpdate: Record<string, any> = {
+      webhooks_registered: fullyRegistered,
+      webhooks_registered_at: fullyRegistered ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }
+    // connection_status='active' só para loja que JÁ está conectada:
+    // registrar webhooks é manutenção, não reconexão. Sem esta guarda,
+    // um install-extras disparado em background ressuscitava a loja que
+    // o usuário tinha acabado de desconectar.
+    if (store.is_active !== false) {
+      statusUpdate.connection_status = 'active'
+    }
     await supabase
       .from('shopify_stores')
-      .update({
-        connection_status: 'active',
-        webhooks_registered: fullyRegistered,
-        webhooks_registered_at: fullyRegistered ? new Date().toISOString() : null,
-        updated_at: new Date().toISOString(),
-      })
+      .update(statusUpdate)
       .eq('id', store.id)
 
     return NextResponse.json({

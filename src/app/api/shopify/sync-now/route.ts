@@ -96,6 +96,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nenhuma loja encontrada' }, { status: 404 });
     }
 
+    // Desconectada = sem sync. Antes, um sync em background disparado
+    // antes da desconexão continuava rodando (e outras rotas marcavam a
+    // loja ativa de novo no caminho).
+    if (store.is_active === false) {
+      return NextResponse.json(
+        { error: 'Loja desconectada. Reconecte a Shopify para sincronizar.' },
+        { status: 409 }
+      );
+    }
+
     if (!store.access_token) {
       console.error(`[Sync] Store ${store.shop_domain} has no access_token`);
       return NextResponse.json({ error: 'Token de acesso não encontrado' }, { status: 400 });
