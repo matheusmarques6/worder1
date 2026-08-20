@@ -23,6 +23,10 @@ const publicApiRoutes = [
   '/api/track',
   '/api/t/',
   '/api/integrations/shopify/callback',
+  // OAuth com app próprio (modelo agência): o clique final de
+  // autorização pode vir do navegador do DONO da loja, sem sessão
+  // Worder — o callback valida por state de uso único + HMAC.
+  '/api/integrations/shopify/oauth-manual/callback',
   '/api/email/track',
   '/api/email/unsubscribe',
   '/api/email/view',

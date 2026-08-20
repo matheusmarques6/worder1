@@ -49,6 +49,7 @@ export default function ShopifyConnect() {
   const [manualClientId, setManualClientId] = useState('');
   const [manualClientSecret, setManualClientSecret] = useState('');
   const [manualConnecting, setManualConnecting] = useState(false);
+  const [oauthConnecting, setOauthConnecting] = useState(false);
   const [manualResult, setManualResult] = useState<any>(null);
   const [pixelCode, setPixelCode] = useState<string | null>(null);
   const [copiedPixel, setCopiedPixel] = useState(false);
@@ -239,6 +240,48 @@ export default function ShopifyConnect() {
       setError('Erro ao conectar. Tente novamente.');
     } finally {
       setManualConnecting(false);
+    }
+  }
+
+  // OAuth com app próprio (authorization code). Serve o modelo agência:
+  // o client_credentials da conexão manual exige app e loja na MESMA
+  // organização Shopify (shop_not_permitted quando não são); o OAuth
+  // funciona entre organizações e devolve token que não expira. O app
+  // precisa ter a Redirect URL {origin}/api/integrations/shopify/
+  // oauth-manual/callback cadastrada no Dev Dashboard.
+  async function startManualOAuth(opts: {
+    domain: string;
+    clientId: string;
+    clientSecret: string;
+    storeId?: string;
+  }) {
+    if (!opts.domain.trim() || !opts.clientId.trim() || !opts.clientSecret.trim()) {
+      setError('Preencha domínio, Client ID e Client Secret.');
+      return;
+    }
+    setOauthConnecting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/integrations/shopify/oauth-manual/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: opts.domain.trim(),
+          clientId: opts.clientId.trim(),
+          clientSecret: opts.clientSecret.trim(),
+          storeId: opts.storeId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || 'Erro ao iniciar a autorização OAuth.');
+        setOauthConnecting(false);
+        return;
+      }
+      window.location.href = data.authUrl;
+    } catch {
+      setError('Erro ao conectar. Tente novamente.');
+      setOauthConnecting(false);
     }
   }
 
@@ -478,6 +521,7 @@ export default function ShopifyConnect() {
       save_failed: 'Falha ao salvar. Tente novamente.',
       hmac_invalid: 'Validação de segurança falhou.',
       no_organization: 'Organização não encontrada. Faça login novamente.',
+      domain_conflict: 'Outra loja ATIVA desta organização já usa esse domínio Shopify. Mescle ou desative a duplicada antes de conectar.',
     };
     return m[code] || `Erro: ${code}`;
   }
@@ -993,13 +1037,30 @@ export default function ShopifyConnect() {
                       </div>
                       <button
                         onClick={() => handleReactivate(s.id)}
-                        disabled={reactivating || !reactivateDomain.trim() || !reactivateClientId.trim() || !reactivateClientSecret.trim()}
+                        disabled={reactivating || oauthConnecting || !reactivateDomain.trim() || !reactivateClientId.trim() || !reactivateClientSecret.trim()}
                         className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
                       >
                         {reactivating ? (
                           <><Loader2 className="w-4 h-4 animate-spin" /> Validando e reativando…</>
                         ) : (
                           <>Reativar com esta Shopify</>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => startManualOAuth({
+                          domain: reactivateDomain,
+                          clientId: reactivateClientId,
+                          clientSecret: reactivateClientSecret,
+                          storeId: s.id,
+                        })}
+                        disabled={reactivating || oauthConnecting || !reactivateDomain.trim() || !reactivateClientId.trim() || !reactivateClientSecret.trim()}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-blue-300 text-blue-700 bg-white rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed text-[13px] font-medium transition-colors"
+                        title="Use quando o app foi criado em outra organização Shopify (shop_not_permitted no botão acima). Requer a Redirect URL do OAuth cadastrada no app."
+                      >
+                        {oauthConnecting ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Redirecionando…</>
+                        ) : (
+                          <>Reativar via OAuth (app de outra organização)</>
                         )}
                       </button>
                     </div>
@@ -1122,7 +1183,7 @@ export default function ShopifyConnect() {
 
           <button
             onClick={handleManualConnect}
-            disabled={manualConnecting || !manualDomain.trim() || !manualClientId.trim() || !manualClientSecret.trim()}
+            disabled={manualConnecting || oauthConnecting || !manualDomain.trim() || !manualClientId.trim() || !manualClientSecret.trim()}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#95BF47] text-white rounded-lg hover:bg-[#7da03a] disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
           >
             {manualConnecting ? (
@@ -1131,6 +1192,44 @@ export default function ShopifyConnect() {
               <>Conectar Loja</>
             )}
           </button>
+
+          {/* App criado em OUTRA organização Shopify (modelo agência):
+              client_credentials devolve shop_not_permitted — o caminho é
+              OAuth com o mesmo Client ID/Secret. */}
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+            <p className="text-[11.5px] text-blue-800 leading-relaxed">
+              <strong>App criado em outra organização</strong> (ex.: agência conectando a loja de um cliente)?
+              O botão acima retorna <code className="font-mono text-[10.5px]">shop_not_permitted</code>.
+              Use OAuth: cadastre a Redirect URL abaixo nas configurações do app no Dev Dashboard e clique em conectar —
+              quem estiver logado na loja só precisa autorizar a instalação.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-[10.5px] bg-white border border-blue-200 rounded px-2 py-1.5 text-gray-800 break-all font-mono">
+                {(typeof window !== 'undefined' ? window.location.origin : '')}/api/integrations/shopify/oauth-manual/callback
+              </code>
+              <button
+                onClick={() => {
+                  try {
+                    navigator.clipboard.writeText(`${window.location.origin}/api/integrations/shopify/oauth-manual/callback`);
+                  } catch { /* noop */ }
+                }}
+                className="px-2 py-1.5 bg-blue-100 text-blue-700 text-xs font-medium rounded hover:bg-blue-200 flex-shrink-0"
+              >
+                Copiar
+              </button>
+            </div>
+            <button
+              onClick={() => startManualOAuth({ domain: manualDomain, clientId: manualClientId, clientSecret: manualClientSecret })}
+              disabled={oauthConnecting || manualConnecting || !manualDomain.trim() || !manualClientId.trim() || !manualClientSecret.trim()}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            >
+              {oauthConnecting ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Redirecionando para autorização…</>
+              ) : (
+                <>Conectar via OAuth (app de outra organização)</>
+              )}
+            </button>
+          </div>
 
           {manualResult && (
             <div className="space-y-4 pt-4">

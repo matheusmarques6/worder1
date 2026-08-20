@@ -18,6 +18,11 @@ import { refreshStoreToken } from './client-credentials';
 
 export async function ensureFreshToken(store: any): Promise<{ ok: true; store: any } | { ok: false; error: string }> {
   if (store.connection_type !== 'manual') return { ok: true, store };
+  // Loja conectada via authorization code (app de outra organização):
+  // o token é offline e NÃO pode ser renovado via client_credentials —
+  // a Shopify devolveria shop_not_permitted e este helper derrubaria
+  // uma conexão perfeitamente válida.
+  if (store.settings?.auth_mode === 'oauth') return { ok: true, store };
   if (!store.client_id || !store.api_secret) return { ok: true, store };
 
   try {

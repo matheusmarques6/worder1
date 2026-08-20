@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAccessTokenViaClientCredentials } from '@/lib/shopify/client-credentials';
+import { resolveShopDomainInput } from '@/lib/shopify/resolve-domain';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -49,35 +50,8 @@ const REQUIRED_WEBHOOKS = [
   'app/uninstalled',
 ];
 
-function cleanDomainInput(input: string): string {
-  return input.trim().toLowerCase().replace(/\s+/g, '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-}
-
-// Merchants routinely paste the PUBLIC storefront domain (shopnow-
-// drgroot.store) instead of the canonical <shop>.myshopify.com — but
-// the client_credentials exchange only works against the canonical
-// domain. Shopify 301s the storefront's /admin to the canonical admin
-// (older tenants) or to admin.shopify.com/store/<slug> (newer ones),
-// so one redirect:'manual' request recovers it from Location.
-async function resolveMyshopifyFromCustomDomain(domain: string): Promise<string | null> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10_000);
-    const res = await fetch(`https://${domain}/admin`, {
-      redirect: 'manual',
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    const loc = res.headers.get('location') || '';
-    const direct = loc.match(/^https?:\/\/([a-z0-9][a-z0-9-]*\.myshopify\.com)/i);
-    if (direct) return direct[1].toLowerCase();
-    const newAdmin = loc.match(/^https?:\/\/admin\.shopify\.com\/store\/([a-z0-9][a-z0-9-]*)/i);
-    if (newAdmin) return `${newAdmin[1].toLowerCase()}.myshopify.com`;
-    return null;
-  } catch {
-    return null;
-  }
-}
+// Resolução de domínio compartilhada com o fluxo OAuth manual —
+// ver src/lib/shopify/resolve-domain.ts.
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthClient();
@@ -95,33 +69,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const cleanedDomain = cleanDomainInput(String(domain));
-    let shopDomain: string;
-    if (cleanedDomain.endsWith('.myshopify.com')) {
-      shopDomain = cleanedDomain;
-    } else if (!cleanedDomain.includes('.')) {
-      // Bare slug ("minhaloja") — same behavior as before.
-      shopDomain = `${cleanedDomain}.myshopify.com`;
-    } else if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(cleanedDomain)) {
-      // Full non-myshopify domain — the storefront's custom domain.
-      // Appending .myshopify.com here (old behavior) fabricated a shop
-      // that doesn't exist and dead-ended the token exchange with 404.
-      const resolved = await resolveMyshopifyFromCustomDomain(cleanedDomain);
-      if (!resolved) {
-        return NextResponse.json(
-          {
-            error: `Não foi possível descobrir o domínio .myshopify.com a partir de "${cleanedDomain}". Use o domínio técnico da loja (Shopify Admin → Configurações → Domínios), ex: minhaloja.myshopify.com.`,
-          },
-          { status: 400 }
-        );
-      }
-      shopDomain = resolved;
-    } else {
-      return NextResponse.json(
-        { error: `Domínio inválido: "${cleanedDomain}". Use o formato minhaloja.myshopify.com.` },
-        { status: 400 }
-      );
+    const resolvedDomain = await resolveShopDomainInput(String(domain));
+    if (!resolvedDomain.ok) {
+      return NextResponse.json({ error: resolvedDomain.error }, { status: 400 });
     }
+    const shopDomain = resolvedDomain.shopDomain;
     const cleanClientId = String(clientId).trim();
     const cleanClientSecret = String(clientSecret).trim();
 
