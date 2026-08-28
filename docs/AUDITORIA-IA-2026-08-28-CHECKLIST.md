@@ -58,10 +58,16 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `DEPLOY.md` corrigido: a env deixou de ser degradável e virou recusa na partida.
   TDD, 4 testes assistidos falhar antes de cada implementação. CI run `33205469109` verde.
 
-- [ ] **2. Autenticação em `/api/agents/status`** `[confirmado]`
-  `src/app/api/agents/status/route.ts` — zero chamadas de auth, `supabaseAdmin`, `organization_id` e
-  `user_id` da query (GET) e do body (PUT). O PUT escreve e dispara `assign_next_conversation`.
-  Ação: `requireOrgFromAuth` e ignorar o `organization_id` do cliente.
+- [x] **2. Autenticação em `/api/agents/status`** `[confirmado]` · commit `4a32aee8`
+  Os dois identificadores passam a vir de `requireOrgFromAuth`. O que o cliente manda é **ignorado, não
+  rejeitado**: um 400 viraria oráculo de "esse par org/usuário existe", e os chamadores atuais seguem
+  enviando sem quebrar.
+  TDD, 5 testes assistidos falhar — o mais eloquente foi `expected 'org-de-outra-loja' to be
+  'org-da-sessao'`, a rota gravando com service_role na org que o corpo pedisse.
+  tsc ✓ · vitest ✓ · next build ✓ · CI run `33207440153` verde.
+  **Mudança observável:** chamada sem sessão agora recebe 401 onde antes recebia 200. Os únicos
+  chamadores no repo são hooks do próprio front (mandam cookie); integração externa, se existir, precisa
+  passar a mandar `Authorization: Bearer`.
 
 - [ ] **3. Autenticação em `/api/queue/agents`** `[confirmado]`
   `src/app/api/queue/agents/route.ts:8,15-23` — mesmo padrão, vaza roster de atendentes de qualquer org.
@@ -372,6 +378,33 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   bug de tipo latente — `toucher.py:92` passa tupla onde `mission_resolver.py:63` declara `str | None`);
   paridade preview↔turno; contagem de duplicação do transcript; ciclo de vida dos clientes httpx; teto de
   chamadas por turno; 429/5xx/timeout dos provedores; `server._read_request` malformado.
+
+---
+
+## Descobertos durante a execução (não renumerados — a fila de 63 é estável)
+
+Achados que apareceram ao trabalhar os itens e que não pertenciam a nenhum deles. Ficam aqui até
+você decidir se entram na fila.
+
+- [ ] **`useHeartbeat.ts` chama `/api/agents/status` por POST — rota não tem handler POST.**
+  Três pontos (`:21`, `:49`, `:71`) mandam `{agent_id, status}`; a resposta é sempre 405 e o código
+  descarta a falha em silêncio. O heartbeat de presença do atendente nunca funcionou.
+  *(descoberto no item 2)*
+
+- [ ] **`Header.tsx:418` faz GET esperando uma lista `agents` que a rota nunca devolveu.**
+  A rota responde `{status}` de um agente só. Antes dava 400, agora responde 200 com a forma errada —
+  o efeito visível é o mesmo (lista vazia), então não houve regressão, mas a tela de agentes do header
+  nunca mostrou ninguém. *(descoberto no item 2)*
+
+- [ ] **`formatDate` mostra o dia anterior para todo usuário em fuso negativo.**
+  `src/lib/reports/utils.ts:43` faz `new Date('2024-01-15')` — string ISO só-data é parseada como
+  meia-noite UTC — e a linha 45 formata no fuso local. Em UTC−3 vira 14/01. O teste
+  (`src/tests/reports-utils.test.ts`) está CERTO e falha localmente; passa no CI só porque o runner é
+  UTC. O fuso dos usuários do produto é o mesmo da máquina de dev. *(descoberto na Fase 0)*
+
+- [ ] **`supabase/.branches/` e `supabase/.temp/` não estão no `.gitignore`.**
+  Aparecem no `git status` de quem rodar o stack local — e agora todo mundo deve rodar.
+  *(descoberto na Fase 0)*
 
 ---
 
