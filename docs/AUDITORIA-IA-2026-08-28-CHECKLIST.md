@@ -69,8 +69,15 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   chamadores no repo são hooks do próprio front (mandam cookie); integração externa, se existir, precisa
   passar a mandar `Authorization: Bearer`.
 
-- [ ] **3. Autenticação em `/api/queue/agents`** `[confirmado]`
-  `src/app/api/queue/agents/route.ts:8,15-23` — mesmo padrão, vaza roster de atendentes de qualquer org.
+- [x] **3. Autenticação em `/api/queue/agents`** `[confirmado]` · commit `662cf6eb`
+  A org passa a vir de `requireOrgFromAuth`. O que vazava, concretamente: `agent_status` com join em
+  `profiles` — nome, e-mail e avatar de cada atendente de qualquer loja, mais o consolidado de
+  capacidade da operação. Um UUID de organização era tudo que precisava.
+  **A distinção que este item forçou, agora escrita no cabeçalho do arquivo:** `status` é filtro de
+  consulta legítimo e continua vindo do cliente; `organization_id` é fronteira de tenancy e nunca
+  deveria ter estado ali. O defeito não era aceitar parâmetro, era não distinguir os dois — há um teste
+  dedicado a isso, porque a correção óbvia-mas-errada seria varrer todos os parâmetros e quebrar o filtro.
+  TDD, 4 testes assistidos falhar. tsc ✓ · vitest ✓ · next build ✓ · CI run `33211636702` verde.
 
 - [ ] **4. Escopo de org no histórico enviado ao LLM** `[relatado]`
   `src/app/api/whatsapp/ai/route.ts:245-250` e `:298-303` — `.eq('conversation_id', …)` com service-role
