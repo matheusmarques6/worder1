@@ -38,6 +38,7 @@ from agents_runtime.queueing.worker import TurnResult, run_touch, run_turn
 from agents_runtime.randomness import Randomness, SystemRandomness
 from agents_runtime.repository import engine
 from agents_runtime.repository.queue import PgmqQueue
+from agents_runtime.repository.scope import assert_rls_enforced
 
 APPLICATION_NAME = "agents-runtime"
 
@@ -47,10 +48,19 @@ async def _connect(dsn: str, set_role: str | None) -> psycopg.AsyncConnection:
         dsn, autocommit=True, application_name=APPLICATION_NAME
     )
     if set_role:
-        # Local and CI only: the suite exercises the production role's actual
-        # privileges. In production each pool logs in AS its role and this is
-        # never set.
+        # SET ROLE é o ÚNICO caminho, aqui e em produção: worker_role e
+        # sender_role são NOLOGIN de propósito (20260812000002) — senha em
+        # migration seria segredo em git —, então "logar COMO o role" não
+        # existe. O comentário anterior afirmava justamente isso, e a env que
+        # aplica o SET ROLE é opcional: o par era uma porta aberta silenciosa.
         await conn.execute("set role " + set_role)
+
+    # Toda conexão de pool nasce aqui — pulse, workers e sender. Sem a env o
+    # processo fica sendo o dono do DSN, que no Supabase tem BYPASSRLS mesmo
+    # sem ser superuser, e a camada de repositório (escrita sem
+    # `where organization_id` porque "a RLS escopa") passa a ler cross-org sem
+    # erro nenhum. Falha alta na partida, antes de qualquer trabalho.
+    await assert_rls_enforced(conn)
     return conn
 
 

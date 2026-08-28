@@ -23,6 +23,42 @@ from uuid import UUID
 import psycopg
 
 
+class RlsNotEnforced(RuntimeError):
+    """A conexão enxerga o banco inteiro: a RLS não vale para ela."""
+
+
+async def assert_rls_enforced(conn: psycopg.AsyncConnection) -> None:
+    """Recusa uma conexão que a RLS não alcança. Morre alto, nunca degrada.
+
+    `rolbypassrls` é a pergunta decisiva, não `rolsuper`: no Supabase o dono do
+    DSN (`postgres`) não é superuser e mesmo assim ignora toda policy. Uma guarda
+    que olhasse só para superuser passaria batido no caso real.
+    """
+    row = await (
+        await conn.execute(
+            """
+            select current_user,
+                   coalesce((select rolsuper from pg_roles
+                              where rolname = current_user), false),
+                   coalesce((select rolbypassrls from pg_roles
+                              where rolname = current_user), false)
+            """
+        )
+    ).fetchone()
+
+    role, is_super, bypasses = row
+    if not (is_super or bypasses):
+        return
+
+    raise RlsNotEnforced(
+        f"o runtime conectou como '{role}', que "
+        f"{'é superuser' if is_super else 'tem BYPASSRLS'} — toda leitura sem "
+        "`where organization_id` vira leitura cross-org. Defina "
+        "AGENTS_WORKER_SET_ROLE=worker_role e AGENTS_SENDER_SET_ROLE=sender_role "
+        "(worker_role/sender_role são NOLOGIN: SET ROLE é o único caminho)."
+    )
+
+
 async def scope_to_organization(conn: psycopg.AsyncConnection, organization_id: UUID) -> None:
     """Escopo de tenant local à transação — a disciplina `SET LOCAL` do ADR-11."""
     await conn.execute(
