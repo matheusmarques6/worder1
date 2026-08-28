@@ -434,6 +434,12 @@ Duas causas, ambas fechadas neste ciclo:
   bloco `DO $phase0$` guardado por `to_regclass`, e `whatsapp_campaign_recipients`
   não existe num banco limpo (vem de `campaigns-schema.sql`, que não é migration).
   O `IF NOT EXISTS` fala sobre o índice, nunca sobre a tabela.
+  Consertada essa, o stack avançou 40 migrations e parou na
+  `20260817000006_segment_memberships_snapshot.sql`, que cria a tabela com FK
+  para `public.customer_segments` — outra tabela do app legado, criada em lugar
+  nenhum do repositório. A migration IRMÃ (`...005`, do mesmo dia) tem a guarda
+  `to_regclass` e explica o motivo em comentário; a `...006` esqueceu. Mesma
+  guarda aplicada.
 - **`boundaries`** — o contrato "nada chama a API do WhatsApp exceto os senders"
   reprovava por `agent_core.responder -> repository.engine -> channels.port`.
   A causa era `repository.engine` importar `ClaimedSend` de `channels.port`; o
@@ -446,6 +452,13 @@ Baseline local aferido em 28/08 (worktree `claude/auditoria-ia` sobre `a7749f32`
 911 unit ✓ / 2 ✗ (as duas são fixture lido sem `encoding="utf-8"` — falham só no
 Windows, verdes em CI Linux), ruff ✓, import-linter 3/3 ✓, tsc ✓, vitest 1074 ✓ / 5 ✗
 (pré-existentes: 3 de fuso em `reports/utils.ts`, 2 do extrator de PDF).
+
+**Prova de ponta a ponta, 28/08:** `supabase start` com a lista de exclusão do CI
+subiu o stack e aplicou as 42 migrations sem erro, e `pytest -m "db or pipeline"`
+fechou **382 ✓ / 1 skip** (o skip é do Windows: `terminate()` é TerminateProcess,
+sem sinal limpo; o CI Linux roda). É a primeira vez que a suíte de banco é provada
+executável a partir de um banco limpo — os números registrados antes vinham de
+ambientes que já tinham as tabelas legadas.
 
 Auditoria completa e fila de 63 correções: `docs/AUDITORIA-IA-2026-08-28-CHECKLIST.md`.
 

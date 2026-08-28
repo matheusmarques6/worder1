@@ -33,22 +33,36 @@
 --      quando observou pela última vez; nulo não significa nada aqui.
 -- ============================================================================
 
-create table if not exists public.segment_memberships_snapshot (
-    segment_id      uuid primary key
-                    references public.customer_segments(id) on delete cascade,
-    organization_id uuid not null,
-    contact_ids     uuid[] not null default '{}',
-    snapshotted_at  timestamptz not null default now()
-);
+--   4. GUARDA por to_regclass, a mesma da migration irmã 20260817000005:
+--      `customer_segments` é tabela do app legado e não faz parte do baseline
+--      do runtime — no Postgres limpo do CI ela não existe. A FK do item 2
+--      torna esta migration dependente dela, então aqui precisa ser no-op, não
+--      erro. Sem a guarda, `supabase start` morria com 42P01 e o job tests-db
+--      nunca chegava a rodar a suíte.
 
-create index if not exists segment_snapshot_org_idx
-    on public.segment_memberships_snapshot (organization_id);
+do $$
+begin
+    if to_regclass('public.customer_segments') is null then
+        return;
+    end if;
 
-alter table public.segment_memberships_snapshot enable row level security;
+    create table if not exists public.segment_memberships_snapshot (
+        segment_id      uuid primary key
+                        references public.customer_segments(id) on delete cascade,
+        organization_id uuid not null,
+        contact_ids     uuid[] not null default '{}',
+        snapshotted_at  timestamptz not null default now()
+    );
 
--- Sem policy: authenticated/anon não leem nem escrevem. service_role passa
--- por BYPASSRLS, que é como o cron chega aqui.
-drop policy if exists "Service role full access" on public.segment_memberships_snapshot;
+    create index if not exists segment_snapshot_org_idx
+        on public.segment_memberships_snapshot (organization_id);
 
-revoke all on public.segment_memberships_snapshot from public, anon, authenticated;
-grant select, insert, update, delete on public.segment_memberships_snapshot to service_role;
+    alter table public.segment_memberships_snapshot enable row level security;
+
+    -- Sem policy: authenticated/anon não leem nem escrevem. service_role passa
+    -- por BYPASSRLS, que é como o cron chega aqui.
+    drop policy if exists "Service role full access" on public.segment_memberships_snapshot;
+
+    revoke all on public.segment_memberships_snapshot from public, anon, authenticated;
+    grant select, insert, update, delete on public.segment_memberships_snapshot to service_role;
+end $$;
