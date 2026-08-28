@@ -9,6 +9,38 @@
 
 ---
 
+## Fase 0 — CI verde (CONCLUÍDA em 28/08)
+
+Não estava na fila original: apareceu ao verificar a pipeline antes de começar. O
+workflow `runtime` falhou em **15 de 15** execuções — nunca esteve verde, e os números
+de suíte registrados no STATUS sempre vieram de execução local. Sem isto, "acompanhar o
+CI" não distingue uma quebra nova do vermelho herdado.
+
+Branch `claude/auditoria-ia`, run `33203217236`: **lint ✓ · boundaries ✓ · tests-unit ✓ · tests-db ✓**
+
+- [x] **0a. `CREATE INDEX` fora do bloco guardado** — `20260621_phase0_foundations.sql:52` · commit `153d6f2c`
+  O passo 3 ficava fora do `DO $phase0$` que `to_regclass` guarda. Num banco limpo
+  `whatsapp_campaign_recipients` não existe (vem de `campaigns-schema.sql`, que não é
+  migration) e o `supabase start` morria com 42P01 — `IF NOT EXISTS` fala sobre o índice,
+  nunca sobre a tabela.
+
+- [x] **0a-bis. A guarda que a irmã tinha e esta esqueceu** — `20260817000006_segment_memberships_snapshot.sql` · commit `3672dfc7`
+  Só apareceu depois de consertar o 0a: FK para `public.customer_segments`, tabela do app
+  legado criada em lugar nenhum do repositório. A migration irmã `...005`, do mesmo dia,
+  tem a guarda e explica o porquê em comentário.
+
+- [x] **0b. `ClaimedSend` vai morar no repositório** — `repository/outbox.py` (novo) · commit `52e43477`
+  O contrato *"nada chama a API do WhatsApp exceto os senders"* reprovava por
+  `agent_core.responder → repository.engine → channels.port`. O conserto do S9 (mover
+  `scope_to_organization`) tratou o sintoma e a seta invertida continuou de pé.
+  `ClaimedSend` é linha de `claim_outbox_batch` — dado do banco. Sem reexport: os 9 call
+  sites apontam para o lar real. import-linter 3/3, era 2/3.
+
+**Prova local, primeira vez a partir de banco limpo:** `supabase start` aplicou as 42
+migrations e `pytest -m "db or pipeline"` fechou **382 ✓ / 1 skip** (o skip é do Windows).
+
+---
+
 ## Fase 1 — Parar o sangramento
 
 Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 valem na loja piloto agora.
