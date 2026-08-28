@@ -79,9 +79,18 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   dedicado a isso, porque a correção óbvia-mas-errada seria varrer todos os parâmetros e quebrar o filtro.
   TDD, 4 testes assistidos falhar. tsc ✓ · vitest ✓ · next build ✓ · CI run `33211636702` verde.
 
-- [ ] **4. Escopo de org no histórico enviado ao LLM** `[relatado]`
-  `src/app/api/whatsapp/ai/route.ts:245-250` e `:298-303` — `.eq('conversation_id', …)` com service-role
-  e sem `organization_id`. Manda transcript de outro tenant para o provedor.
+- [x] **4. Escopo de org no histórico enviado ao LLM** `[confirmado na execução]` · commit `6e02dc15`
+  **A confirmação mudou a correção.** `whatsapp_messages` NÃO tem coluna `organization_id` — só
+  `conversation_id`, com FK para `whatsapp_conversations`, que é onde a tenancy mora. O `.eq()` que o
+  item pedia teria falhado contra coluna inexistente. Virou checagem de posse da conversa antes de
+  qualquer leitura, com os dois handlers passando pelo mesmo `loadOwnHistory` — uma guarda, não duas.
+  Duas decisões de desenho: conversa alheia é tratada como inexistente (vazio, sem 403 — um erro
+  distinto viraria oráculo de "esse UUID existe e não é seu"); e o `whatsapp_messages` sequer é
+  consultado, porque ler o segredo alheio para descartar depois passa no teste de vazamento mas deixa o
+  dado trafegando.
+  Decisão do usuário: **escopar, não apagar** — as duas ações não têm chamador no repo e leem hierarquia
+  declarada morta, mas seguem vivas como endpoint. Candidato ao item 61.
+  TDD, 5 testes (os 2 que importam assistidos falhar). CI run `33218454219` verde.
 
 - [ ] **5. Unificar o modelo de embedding** `[confirmado]`
   TS grava `text-embedding-ada-002` (`src/lib/ai/embeddings.ts:10`); Python busca
@@ -412,6 +421,19 @@ você decidir se entram na fila.
 - [ ] **`supabase/.branches/` e `supabase/.temp/` não estão no `.gitignore`.**
   Aparecem no `git status` de quem rodar o stack local — e agora todo mundo deve rodar.
   *(descoberto na Fase 0)*
+
+---
+
+## Teto de prova: a família de tabelas fora do stream versionado
+
+Padrão que já apareceu três vezes e limita o que dá para provar:
+`whatsapp_messages`, `whatsapp_campaign_recipients` e `customer_segments` existem apenas em `.sql`
+fora de `supabase/migrations/` (`complete-schema.sql`, `schema.sql`, `campaigns-schema.sql`). O
+`tests-db` sobe um Postgres a partir das migrations — onde elas **não existem**.
+
+Consequência prática: **nenhum item que toque essas tabelas pode ter prova de banco.** O teto é vitest
+com mocks. Vale para o item 4 (feito) e para qualquer outro da mesma família. É a forma operacional do
+item 49 — e a razão pela qual o item 49 importa mais do que parece.
 
 ---
 
