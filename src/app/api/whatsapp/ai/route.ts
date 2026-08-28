@@ -239,18 +239,7 @@ async function handleGenerate(body: any, organizationId: string) {
   // P1.3: leitura dual + re-encrypt preguicoso
   const apiKey = await readConfigApiKey(config)
 
-  // Buscar historico de conversa
-  let conversationHistory: any[] = []
-  if (conversation_id) {
-    const { data: messages } = await supabase
-      .from('whatsapp_messages')
-      .select('direction, content')
-      .eq('conversation_id', conversation_id)
-      .order('created_at', { ascending: true })
-      .limit(20)
-
-    conversationHistory = messages || []
-  }
+  const conversationHistory = await loadOwnHistory(conversation_id, organizationId, 20)
 
   // Gerar resposta
   const response = await generateWhatsAppResponse({
@@ -292,18 +281,7 @@ async function handleSuggest(body: any, organizationId: string) {
   // P1.3: leitura dual + re-encrypt preguicoso
   const apiKey = await readConfigApiKey(config)
 
-  // Buscar historico de conversa
-  let conversationHistory: any[] = []
-  if (conversation_id) {
-    const { data: messages } = await supabase
-      .from('whatsapp_messages')
-      .select('direction, content')
-      .eq('conversation_id', conversation_id)
-      .order('created_at', { ascending: true })
-      .limit(10)
-
-    conversationHistory = messages || []
-  }
+  const conversationHistory = await loadOwnHistory(conversation_id, organizationId, 10)
 
   // Gerar sugestoes
   const suggestions = await suggestResponse({
@@ -361,6 +339,44 @@ async function handleTest(body: any) {
 // Durante a transicao ha linhas base64 no banco; ao ler uma,
 // re-gravamos ja encriptada. Guard .eq no valor antigo => idempotente.
 // =============================================
+/**
+ * O histórico da conversa — e só se a conversa for desta org.
+ *
+ * `whatsapp_messages` NÃO tem `organization_id`: a tenancy mora no pai,
+ * `whatsapp_conversations`. Por isso a posse é checada lá antes de qualquer
+ * leitura de mensagem, em vez de um `.eq()` a mais numa coluna que não existe.
+ *
+ * Conversa de outra loja é tratada como conversa inexistente — vazio, sem 403.
+ * Um erro distinto viraria oráculo de "esse UUID existe e não é seu". E o
+ * `whatsapp_messages` sequer é consultado: o segredo alheio não é lido para
+ * depois ser descartado.
+ */
+async function loadOwnHistory(
+  conversationId: string | undefined,
+  organizationId: string,
+  limit: number,
+): Promise<any[]> {
+  if (!conversationId) return []
+
+  const { data: conversation } = await supabase
+    .from('whatsapp_conversations')
+    .select('id')
+    .eq('id', conversationId)
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+
+  if (!conversation) return []
+
+  const { data: messages } = await supabase
+    .from('whatsapp_messages')
+    .select('direction, content')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+    .limit(limit)
+
+  return messages || []
+}
+
 async function readConfigApiKey(config: { id: string; api_key_encrypted: string }): Promise<string> {
   const { apiKey, legacyBase64 } = decodeApiKey(config.api_key_encrypted)
   if (legacyBase64 && apiKey) {
