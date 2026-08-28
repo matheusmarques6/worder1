@@ -45,13 +45,18 @@ migrations e `pytest -m "db or pipeline"` fechou **382 ✓ / 1 skip** (o skip é
 
 Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 valem na loja piloto agora.
 
-- [ ] **1. Assert de `current_user` no startup do runtime** `[confirmado]`
-  `runtime/src/agents_runtime/app.py:47-56` — `SET ROLE` está atrás de `if set_role:` numa env var opcional,
-  mas `worker_role`/`sender_role` são NOLOGIN (`20260812000002:23,26`), então logar como eles é impossível
-  e o `SET ROLE` é obrigatório. Sem ele o processo roda como dono do DSN (`postgres`, BYPASSRLS) e toda
-  query sem `where organization_id` — que é a maioria, por desenho — vira cross-org silenciosa.
-  Ação: ler `current_user`/`is_superuser` no boot e matar o processo se não for o role esperado.
-  Corrigir junto o comentário mentiroso de `app.py:50-52`.
+- [x] **1. Assert de `current_user` no startup do runtime** `[confirmado]` · commit `83bc6da9`
+  `repository/scope.py` ganhou `assert_rls_enforced`, chamada em `app._connect` — o seam por onde nascem
+  TODAS as conexões de pool (pulse, workers, sender). Sem a env o processo era o dono do DSN e toda query
+  sem `where organization_id` — a maioria, por desenho — virava cross-org silenciosa.
+  **A checagem mudou de forma durante a execução:** eu ia olhar `rolsuper`, mas o stack local mostrou que
+  no Supabase o `postgres` NÃO é superuser (`rolsuper = f`) e mesmo assim ignora toda policy
+  (`rolbypassrls = t`). A guarda baseada em superuser passaria batido no caso real. `rolbypassrls` é a
+  pergunta decisiva.
+  Brinde: `tests/db/conftest.py` afirmava que as propriedades dos roles eram *"asserted separately in the
+  leak suite"* — não existia assert de `rolsuper`/`rolbypassrls` em lugar nenhum. Agora existe.
+  `DEPLOY.md` corrigido: a env deixou de ser degradável e virou recusa na partida.
+  TDD, 4 testes assistidos falhar antes de cada implementação. CI run `33205469109` verde.
 
 - [ ] **2. Autenticação em `/api/agents/status`** `[confirmado]`
   `src/app/api/agents/status/route.ts` — zero chamadas de auth, `supabaseAdmin`, `organization_id` e
