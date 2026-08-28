@@ -4,33 +4,33 @@
 // GET - Buscar status do agente logado
 // PUT - Atualizar status
 // =============================================
-// ⚠️ SEGURANÇA: OBRIGATÓRIO validar organization_id
-// NUNCA permitir acesso a dados de outra organização
+// SEGURANÇA: organization_id e user_id vêm da SESSÃO, nunca do cliente.
+//
+// Até 28/08 esta rota lia os dois da query string (GET) e do corpo (PUT), sem
+// nenhuma chamada de auth, e consultava com service_role — que passa por cima
+// da RLS. O comentário aqui dizia "OBRIGATÓRIO validar organization_id" e o
+// código só conferia PRESENÇA, nunca posse: dois UUIDs bastavam para ler e
+// ESCREVER a presença de qualquer atendente de qualquer loja, e o PUT ainda
+// dispara assign_next_conversation na fila daquela org.
+//
+// O que o cliente mandar nesses campos é IGNORADO, não rejeitado: um 400
+// viraria oráculo de "esse par existe".
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // =============================================
-// GET - Buscar status do agente
+// GET - Buscar status do agente logado
 // =============================================
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
-    const userId = searchParams.get('user_id');
+    const auth = await requireOrgFromAuth(request);
+    if (auth instanceof NextResponse) return auth;
+    const { orgId: organizationId, userId } = auth;
 
-    // ⚠️ CRÍTICO: organization_id é OBRIGATÓRIO para isolamento de dados
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
-
-    if (!userId) {
-      return NextResponse.json({ error: 'user_id é obrigatório' }, { status: 400 });
-    }
-
-    // ⚠️ SEGURANÇA: Buscar status FILTRADO por organization_id
     let { data: status, error } = await supabaseAdmin
       .from('agent_status')
       .select('*')
@@ -68,10 +68,14 @@ export async function GET(request: NextRequest) {
 // =============================================
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireOrgFromAuth(request);
+    if (auth instanceof NextResponse) return auth;
+    // A sessão manda. `organization_id` e `user_id` do corpo, se vierem, são
+    // descartados aqui — os clientes ainda os enviam e podem seguir enviando.
+    const { orgId: organization_id, userId: user_id } = auth;
+
     const body = await request.json();
     const {
-      organization_id, // ⚠️ OBRIGATÓRIO
-      user_id,
       status,
       status_message,
       max_conversations,
@@ -79,15 +83,6 @@ export async function PUT(request: NextRequest) {
       break_reason,
       skills,
     } = body;
-
-    // ⚠️ CRÍTICO: organization_id é OBRIGATÓRIO para isolamento de dados
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
-
-    if (!user_id) {
-      return NextResponse.json({ error: 'user_id é obrigatório' }, { status: 400 });
-    }
 
     // Preparar updates
     const updates: Record<string, any> = {
