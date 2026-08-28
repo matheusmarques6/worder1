@@ -420,6 +420,35 @@ ritmo componente com o env global). Lixo degrada para humanização ligada.
 Testes: 5 unit runtime + 7 vitest novos; 905 unit + 383 db/pipeline + 993
 vitest + build verdes.
 
+### CI do runtime destravado (28/08) — item 0 da auditoria
+
+O workflow `runtime` falhou em **15 de 15 execuções** nesta branch: nunca esteve
+verde. Os números de suíte registrados acima sempre foram de execução LOCAL —
+`tests-db` jamais chegou a rodar no CI, o que significa que as 385 provas de
+`db`/`rls`/`pipeline` (RLS, tenancy, claim functions) nunca guardaram um push.
+
+Duas causas, ambas fechadas neste ciclo:
+
+- **`tests-db`** — `supabase start` abortava com 42P01 ao aplicar
+  `20260621_phase0_foundations.sql`: o `CREATE INDEX` do passo 3 estava FORA do
+  bloco `DO $phase0$` guardado por `to_regclass`, e `whatsapp_campaign_recipients`
+  não existe num banco limpo (vem de `campaigns-schema.sql`, que não é migration).
+  O `IF NOT EXISTS` fala sobre o índice, nunca sobre a tabela.
+- **`boundaries`** — o contrato "nada chama a API do WhatsApp exceto os senders"
+  reprovava por `agent_core.responder -> repository.engine -> channels.port`.
+  A causa era `repository.engine` importar `ClaimedSend` de `channels.port`; o
+  conserto do S9 (mover `scope_to_organization` para `repository.scope`) tratou o
+  sintoma e a seta continuou invertida. `ClaimedSend` passou a morar em
+  `repository.outbox` — é uma linha de `claim_outbox_batch`, dado do banco, e
+  agora é `channels` que importa dele.
+
+Baseline local aferido em 28/08 (worktree `claude/auditoria-ia` sobre `a7749f32`):
+911 unit ✓ / 2 ✗ (as duas são fixture lido sem `encoding="utf-8"` — falham só no
+Windows, verdes em CI Linux), ruff ✓, import-linter 3/3 ✓, tsc ✓, vitest 1074 ✓ / 5 ✗
+(pré-existentes: 3 de fuso em `reports/utils.ts`, 2 do extrator de PDF).
+
+Auditoria completa e fila de 63 correções: `docs/AUDITORIA-IA-2026-08-28-CHECKLIST.md`.
+
 ### Pendências conhecidas (fora do plano de 30)
 
 - PENDENTE-2: copy final dos seeds com Bruno (drafts já no banco por org via função).

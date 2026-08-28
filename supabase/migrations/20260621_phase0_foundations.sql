@@ -11,6 +11,12 @@
 -- onde `status VARCHAR(20) DEFAULT 'pending'` NÃO possui CHECK no schema base.
 -- Ambientes podem ter recebido um CHECK fora de banda; por isso o ALTER é
 -- idempotente (DROP IF EXISTS + ADD) e guardado por to_regclass.
+--
+-- Os TRÊS passos vivem DENTRO do bloco guardado. O índice do passo 3 ficou de
+-- fora até 28/08 e derrubava `supabase start` num banco limpo com 42P01: o
+-- `IF NOT EXISTS` fala sobre o índice, nunca sobre a tabela. Como
+-- campaigns-schema.sql não é migration, a tabela não existe no stack do CI —
+-- e o job tests-db (a suíte db/rls/pipeline inteira) nunca chegou a rodar.
 -- =====================================================
 
 DO $phase0$
@@ -44,11 +50,11 @@ BEGIN
       'failed',
       'skipped'
     ));
+
+  -- 3) Índice parcial para o sweep de quarentena (linhas 'sending' antigas).
+  --    Mantém o flip O(janela) barato e o re-read pending|queued seletivo.
+  CREATE INDEX IF NOT EXISTS idx_recipients_sending_at
+    ON whatsapp_campaign_recipients(sending_at)
+    WHERE status = 'sending';
 END
 $phase0$;
-
--- 3) Índice parcial para o sweep de quarentena (linhas 'sending' antigas).
---    Mantém o flip O(janela) barato e o re-read pending|queued seletivo.
-CREATE INDEX IF NOT EXISTS idx_recipients_sending_at
-  ON whatsapp_campaign_recipients(sending_at)
-  WHERE status = 'sending';
