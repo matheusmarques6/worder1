@@ -19,7 +19,7 @@ from uuid import UUID
 import psycopg
 from psycopg.types.json import Jsonb
 
-from agents_runtime.channels.port import ClaimedSend
+from agents_runtime.repository.outbox import ClaimedSend
 
 # Re-exported so every caller from E1 keeps its import. The definition moved to
 # `repository.scope` because this module imports `channels.port`, and modules

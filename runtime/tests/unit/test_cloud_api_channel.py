@@ -16,8 +16,8 @@ import httpx
 import pytest
 
 from agents_runtime.channels.cloud_api import CloudApiChannel, from_env
-from agents_runtime.channels.port import ClaimedSend
 from agents_runtime.queueing.failures import Failure, classify
+from agents_runtime.repository.outbox import ClaimedSend
 
 
 def a_send(**overrides) -> ClaimedSend:

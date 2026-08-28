@@ -12,7 +12,8 @@ the real provider does uninvited.
 
 import psycopg
 
-from agents_runtime.channels.port import ChannelPort, ClaimedSend
+from agents_runtime.channels.port import ChannelPort
+from agents_runtime.repository.outbox import ClaimedSend
 
 SCHEMA_SQL = """
 create schema if not exists testing;

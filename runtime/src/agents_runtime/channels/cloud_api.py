@@ -22,7 +22,8 @@ import os
 
 import httpx
 
-from agents_runtime.channels.port import ChannelPort, ClaimedSend
+from agents_runtime.channels.port import ChannelPort
+from agents_runtime.repository.outbox import ClaimedSend
 
 # v19.0 is the version worder1 ran in production — proven, not newest.
 # Overridable per environment because Meta retires versions on a schedule.

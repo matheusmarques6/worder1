@@ -23,9 +23,9 @@ from agents_runtime.channels.humanize import (
     compute_pacing,
     split_into_bubbles,
 )
-from agents_runtime.channels.port import ClaimedSend
 from agents_runtime.clock import SystemClock
 from agents_runtime.queueing.sender import send_humanized
+from agents_runtime.repository.outbox import ClaimedSend
 
 VECTORS = json.loads(
     (Path(__file__).parent / "fixtures" / "bubble_vectors.json").read_text()

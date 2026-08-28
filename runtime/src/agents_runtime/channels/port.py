@@ -7,34 +7,16 @@ it with a fake that records into the database.
 
 Nothing outside `channels` may call a provider API — that is the import-linter
 contract, and this protocol is why nobody needs to.
+
+`ClaimedSend` mora em `repository.outbox`: é a linha que o banco devolve, e o
+canal apenas a consome. O import aponta para lá, nunca o contrário — ver a
+docstring de `repository/outbox.py` para as duas vezes que a seta invertida
+reprovou no CI.
 """
 
-from dataclasses import dataclass
-from typing import Any, Protocol
-from uuid import UUID
+from typing import Protocol
 
-
-@dataclass(frozen=True, slots=True)
-class ClaimedSend:
-    """One row from `claim_outbox_batch` — everything a send needs, no second query."""
-
-    outbox_id: UUID
-    organization_id: UUID
-    channel_type: str
-    channel_external_id: str
-    to_phone_e164: str
-    payload: dict[str, Any]
-    idempotency_key: str
-    attempt_count: int
-    # Alimenta o preflight: janela fechada suprime um 'reply' mas rebaixa um
-    # toque de funil para template. Default para os construtores pré-preflight.
-    kind: str = "reply"
-    # Toque de momento: o preflight re-checa vida + template_readiness de cada
-    # um a cada envio (§3.3.4). Vazio = envio sem momento.
-    moment_ids: tuple[UUID, ...] = ()
-    # Carrier W3C do turno que gerou a linha (9.1b): o sender retoma o trace
-    # como PARENT — turno e envio são a mesma história no Logfire.
-    otel: dict[str, Any] | None = None
+from agents_runtime.repository.outbox import ClaimedSend
 
 
 class ChannelPort(Protocol):

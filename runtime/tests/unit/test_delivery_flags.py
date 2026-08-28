@@ -10,9 +10,9 @@ produto, nunca um efeito colateral de jsonb malformado.
 import uuid
 
 from agents_runtime.agent_core.responder import delivery_flags
-from agents_runtime.channels.port import ClaimedSend
 from agents_runtime.clock import SystemClock
 from agents_runtime.queueing.sender import send_humanized
+from agents_runtime.repository.outbox import ClaimedSend
 
 
 class FakeChannel:

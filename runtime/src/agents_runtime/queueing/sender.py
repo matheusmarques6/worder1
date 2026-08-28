@@ -33,7 +33,7 @@ from datetime import timedelta
 import psycopg
 
 from agents_runtime.channels.humanize import compute_pacing, split_into_bubbles
-from agents_runtime.channels.port import ChannelPort, ClaimedSend
+from agents_runtime.channels.port import ChannelPort
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
 from agents_runtime.obs.telemetry import annotate, span
@@ -41,6 +41,7 @@ from agents_runtime.queueing.backoff import delay_for
 from agents_runtime.queueing.failures import Failure, classify
 from agents_runtime.randomness import Randomness
 from agents_runtime.repository import engine
+from agents_runtime.repository.outbox import ClaimedSend
 
 logger = logging.getLogger(__name__)
 
