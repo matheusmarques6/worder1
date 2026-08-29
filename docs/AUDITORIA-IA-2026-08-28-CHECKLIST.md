@@ -434,6 +434,35 @@ Documentei comportamento que não implementei.
 
 ---
 
+## REABERTO de novo — item 1, segunda rodada de review (29/08) · FECHADO em `8a0e5b97`
+
+Duas falhas que a primeira correção não pegou. **A segunda é culpa de verificação minha:** eu afirmei
+que `server.py` estava "coberto transitivamente" depois de checar que roda no mesmo processo. Não
+checei a ORDEM nem se ele chamava a guarda. Não chama.
+
+- [x] **1-ter-a. A expectativa de role não pode vir da mesma env que ela valida**
+  `app.py:46` — `_connect` aplica `set role $env` e depois pergunta se `current_user == $env`. É
+  tautológico: só falharia se o `SET ROLE` não pegasse, o que já erraria antes.
+  `AGENTS_WORKER_SET_ROLE=sender_role` faz o pool de worker rodar como sender_role e a guarda aprova —
+  e aí o processo morre de permission denied no meio do primeiro turno, que é exatamente o que o item 1
+  existia para impedir.
+  O teste `test_it_refuses_a_role_that_is_not_the_expected_one` passa porque EU passo valores
+  diferentes na mão. Prova que a função compara; não prova que a comparação significa algo.
+  **Correção:** cada pool declara seu role esperado como constante (`worker_role`/`sender_role`), e a
+  env é validada CONTRA ela.
+
+- [x] **1-ter-b. O listener HTTP sobe antes da guarda e nunca passa por ela**
+  `__main__.py:82` — `await server.serve(...)` vem ANTES de `await run(...)`, então o HTTP atende
+  requisições antes de qualquer `_connect`. E `server.py:90`/`:130` abrem conexão própria com
+  `if set_role:` e nada mais — `grep assert_rls_enforced` no arquivo devolve zero. Mesmo num processo
+  saudável essas conexões nunca são verificadas; sem a env, elas rodam como dono do DSN e o preview
+  faz `scope_to_organization` sobre uma conexão com BYPASSRLS, onde escopo não significa nada.
+  **Correção:** preflight de role antes de servir HTTP (morre na partida, não serve 503 para sempre)
+  **e** a guarda dentro do ponto único onde `server.py` abre conexão, para que um próximo entrypoint
+  não consiga escapar.
+
+---
+
 ## Plano combinado para o item 5 (não perder — decidido antes do desvio)
 
 Dimensionamento em produção (leitura apenas, 28/08): `ai_agent_chunks` **0 linhas**, `ai_agent_sources`
