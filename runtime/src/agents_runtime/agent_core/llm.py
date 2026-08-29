@@ -35,6 +35,24 @@ PROVIDER = "openrouter"
 #: ingestion. Confirmed against the provider by the `contract` suite.
 EMBEDDING_MODEL = "openai/text-embedding-3-small"
 
+#: O espaço vetorial que ESTE embedador produz, qualificado por provedor — é o
+#: que `ai_agent_chunks.embedding_model` carimba quando o próprio runtime
+#: ingere (migration 20260828000001).
+EMBEDDING_SPACE = f"{PROVIDER}:{EMBEDDING_MODEL}"
+
+#: Os espaços que a busca deste runtime sabe consultar. A lista existe porque as
+#: duas pontas chegam ao MESMO modelo por rotas diferentes: o app embeda pela
+#: OpenAI direta com a chave da org (`openai:text-embedding-3-small`), este
+#: runtime consulta pela OpenRouter com a chave de plataforma.
+#:
+#: SUPOSIÇÃO — declarada aqui em vez de ficar invisível: a OpenRouter é passagem
+#: pura para a OpenAI neste modelo, logo os dois rótulos nomeiam o MESMO espaço.
+#: Se um dia deixar de ser, é esta linha que muda; e a coluna `embedding_model` é
+#: que dirá exatamente quais chunks precisam ser reindexados. Sem a lista, uma
+#: divergência de provedor voltaria a ser o bug silencioso que a coluna existe
+#: para tornar visível.
+SEARCHABLE_SPACES = ("openai:text-embedding-3-small", EMBEDDING_SPACE)
+
 
 @dataclass(frozen=True, slots=True)
 class ToolSpec:

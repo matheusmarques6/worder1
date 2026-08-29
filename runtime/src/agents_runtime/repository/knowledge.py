@@ -29,6 +29,8 @@ from uuid import UUID
 import psycopg
 from psycopg.types.json import Jsonb
 
+from agents_runtime.agent_core.llm import EMBEDDING_SPACE, SEARCHABLE_SPACES
+
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeChunk:
@@ -78,9 +80,10 @@ async def ingest_chunk(
             returning id, agent_id
         )
         insert into public.ai_agent_chunks
-            (organization_id, agent_id, source_id, content, embedding, metadata)
+            (organization_id, agent_id, source_id, content, embedding,
+             embedding_model, metadata)
         select %(org)s, source.agent_id, source.id, %(content)s,
-               %(embedding)s::vector, %(metadata)s
+               %(embedding)s::vector, %(space)s, %(metadata)s
           from source
         returning id
         """,
@@ -89,6 +92,9 @@ async def ingest_chunk(
             "source": f"{source}: {title}" if title else source,
             "content": content,
             "embedding": _vector_literal(embedding),
+            # Quem escreve declara o espaço; o CHECK da 20260828000001 recusa
+            # vetor sem procedência, e é essa declaração que a busca filtra.
+            "space": EMBEDDING_SPACE,
             "metadata": Jsonb(metadata if metadata is not None else {}),
         },
     )
@@ -120,11 +126,20 @@ async def search_knowledge(
           from public.ai_agent_chunks c
           left join public.ai_agent_sources s on s.id = c.source_id
          where c.embedding is not null
+           and c.embedding_model = any(%(spaces)s)
            and c.organization_id = public.current_app_organization_id()
          order by c.embedding <=> %(query)s::vector
          limit %(limit)s
         """,
-        {"query": _vector_literal(embedding), "limit": limit},
+        {
+            "query": _vector_literal(embedding),
+            "limit": limit,
+            # Um chunk de OUTRO espaço vetorial não é um vizinho distante: é um
+            # sem relação com esta query. A distância cosseno o rankeia do
+            # mesmo jeito, sem erro — foi assim que a divergência
+            # ada-002 contra 3-small passou despercebida.
+            "spaces": list(SEARCHABLE_SPACES),
+        },
     )
     return tuple(
         KnowledgeChunk(

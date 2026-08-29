@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chunkText } from '@/lib/ai/processors/text-processor'
-import { generateEmbeddingsBatch } from '@/lib/ai/embeddings'
+import { generateEmbeddingsBatch, EMBEDDING_SPACE } from '@/lib/ai/embeddings'
 import { resolveEmbeddingKey } from '@/lib/ai/embedding-key'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
@@ -147,6 +147,9 @@ export async function POST(
         source_type: integration.integration_type,
       },
       embedding: `[${embeddings[i].join(',')}]`,
+      // Mesmo contrato do process/document: quem escreve declara o espaço
+      // vetorial, e o CHECK da 20260828000001 recusa vetor sem procedência.
+      embedding_model: EMBEDDING_SPACE,
     }))
 
     // Inserir em batches

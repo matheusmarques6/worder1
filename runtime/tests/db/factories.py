@@ -385,9 +385,14 @@ def create_knowledge_chunk(
     content: str = "Entregamos em todo o Brasil.",
     embedding: str | None = None,
     agent_id: uuid.UUID | None = None,
+    embedding_space: str = "openai:text-embedding-3-small",
 ) -> uuid.UUID:
     """A RAG chunk (Worder: ai_agent_chunks — the base the merchant already
-    feeds through SourcesTab). Creates the agent + source rows it hangs from."""
+    feeds through SourcesTab). Creates the agent + source rows it hangs from.
+
+    `embedding_space` é o espaço vetorial declarado (migration 20260828000001).
+    O default é o que o app grava; passar outro é como se escreve o teste de um
+    chunk que a busca deve IGNORAR por ser de outro espaço."""
     if agent_id is None:
         agent_id = create_agent(conn, organization_id)
 
@@ -405,8 +410,9 @@ def create_knowledge_chunk(
         cur.execute(
             """
             insert into public.ai_agent_chunks
-                (organization_id, agent_id, source_id, content, embedding)
-            values (%s, %s, %s, %s, %s::vector)
+                (organization_id, agent_id, source_id, content, embedding,
+                 embedding_model)
+            values (%s, %s, %s, %s, %s::vector, %s)
             returning id
             """,
             (
@@ -415,6 +421,7 @@ def create_knowledge_chunk(
                 source_id,
                 content,
                 embedding if embedding is not None else an_embedding(),
+                embedding_space,
             ),
         )
         (chunk_id,) = cur.fetchone()

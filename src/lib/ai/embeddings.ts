@@ -1,13 +1,23 @@
 // =====================================================
 // SERVIÇO DE EMBEDDINGS COM CACHE REDIS
-// Gera embeddings usando OpenAI text-embedding-ada-002
+// Gera embeddings usando OpenAI text-embedding-3-small
 // Cache via Upstash Redis para economia de custos
+// =====================================================
+// 28/08: era `text-embedding-ada-002` enquanto o runtime Python BUSCAVA com
+// `text-embedding-3-small`. Os dois têm 1536 dimensões, então o `vector(1536)`
+// aceitava ambos, a distância cosseno calculava normalmente e a busca devolvia
+// vizinhos errados SEM ERRO NENHUM. Trocar aqui unifica os dois lados: este
+// módulo é o único caminho de ingestão (travado por hub-runtime-parity).
+//
+// A troca saiu de graça porque a base estava VAZIA em produção — 0 chunks, 0
+// fontes, medido em 28/08. Depois do primeiro dado, custaria reindexação e
+// janela.
 // =====================================================
 
 import crypto from 'crypto'
 import { getRedis, isRedisConfigured, CACHE_TTL, CACHE_PREFIX } from '@/lib/redis'
 
-const OPENAI_EMBEDDING_MODEL = 'text-embedding-ada-002'
+const OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small'
 const OPENAI_EMBEDDING_DIMENSIONS = 1536
 const MAX_TOKENS_PER_REQUEST = 8191
 
@@ -291,6 +301,19 @@ export function cosineSimilarity(a: number[], b: number[]): number {
  */
 export const EMBEDDING_MODEL = OPENAI_EMBEDDING_MODEL
 export const EMBEDDING_DIMENSIONS = OPENAI_EMBEDDING_DIMENSIONS
+
+/**
+ * O espaço vetorial que ESTE embedador produz, qualificado pelo provedor.
+ *
+ * É o valor que vai em `ai_agent_chunks.embedding_model` (migration
+ * 20260828000001, que recusa vetor sem procedência). O provedor entra no rótulo
+ * porque as duas pontas chegam ao mesmo modelo por rotas diferentes: daqui pela
+ * OpenAI direta com a chave da org, e do runtime Python pela OpenRouter com a
+ * chave de plataforma. Se um dia divergirem, é esta coluna que diz o que
+ * precisa ser reindexado — o lado que consulta declara os espaços que sabe ler
+ * em `agent_core/llm.py::SEARCHABLE_SPACES`.
+ */
+export const EMBEDDING_SPACE = `openai:${OPENAI_EMBEDDING_MODEL}`
 
 /**
  * Retorna estatísticas do cache de embeddings

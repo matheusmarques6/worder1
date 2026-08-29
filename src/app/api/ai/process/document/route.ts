@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chunkText, cleanTextForIndexing, extractTextMetadata } from '@/lib/ai/processors/text-processor'
-import { generateEmbeddingsBatch } from '@/lib/ai/embeddings'
+import { generateEmbeddingsBatch, EMBEDDING_SPACE } from '@/lib/ai/embeddings'
 import { resolveEmbeddingKey } from '@/lib/ai/embedding-key'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { checkAiBudget } from '@/lib/ai/budget';
@@ -169,6 +169,10 @@ export async function POST(request: NextRequest) {
         source_type: source.source_type,
       },
       embedding: `[${embeddings[i].join(',')}]`, // Formato para pgvector
+      // Quem escreve declara o espaço vetorial. O CHECK da migration
+      // 20260828000001 recusa vetor sem procedência, e é este rótulo que a
+      // busca do runtime filtra para não misturar espaços.
+      embedding_model: EMBEDDING_SPACE,
     }))
 
     // Inserir em batches para evitar timeout
