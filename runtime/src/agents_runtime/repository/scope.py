@@ -22,6 +22,13 @@ from uuid import UUID
 
 import psycopg
 
+#: Os roles do runtime, fixados pela migration 20260812000002 e pelas policies
+#: (`to worker_role` / `to sender_role`). São CONSTANTES de propósito: o valor
+#: esperado por cada pool não pode vir da mesma env que o pool aplica, senão a
+#: checagem de identidade pergunta "o role que apliquei é o role que apliquei?".
+WORKER_ROLE = "worker_role"
+SENDER_ROLE = "sender_role"
+
 
 class RlsNotEnforced(RuntimeError):
     """A conexão enxerga o banco inteiro: a RLS não vale para ela."""

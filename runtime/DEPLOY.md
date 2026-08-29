@@ -85,7 +85,7 @@ interruptor — subir o piloto não liga org nenhuma.
 | `AGENTS_RESPONDER` | `agents_runtime.agent_core.responder:agent_responder` (a fábrica real; o processo recusa largar sem ela) |
 | `AGENTS_TOUCHER` | `agents_runtime.agent_core.toucher:agent_toucher` — o toque de missão real (F1). Ausente = toque de andaime; obrigatório em produção |
 | `AGENTS_WORKER_SET_ROLE` | `worker_role`. **O processo recusa subir sem ela** (28/08). Sem `SET ROLE` ele fica sendo o dono do DSN — que no Supabase tem BYPASSRLS mesmo sem ser superuser — e a camada de repositório, escrita sem `where organization_id` porque a RLS escopa, passaria a ler cross-org em silêncio. `worker_role` é NOLOGIN de propósito: `SET ROLE` é o único caminho, não existe "logar COMO o role" |
-| `AGENTS_SENDER_SET_ROLE` | `sender_role` — mesma regra, mesma recusa na partida |
+| `AGENTS_SENDER_SET_ROLE` | `sender_role` — mesma regra, mesma recusa na partida. As duas NÃO são intercambiáveis: cada pool cobra o seu role por constante do código, então trocá-las de lugar também mata a partida. Com `AGENTS_HTTP_PORT` definida a checagem acontece ANTES de o listener abrir a porta |
 | `AGENTS_OPENROUTER_API_KEY` | Chave da PLATAFORMA (Judge 1 + embeddings — D4). A resposta do agente usa as chaves BYO da org (`organization_api_keys`) |
 | `ENCRYPTION_KEY` | O mesmo secret do app Next.js — o secret_box (scrypt+AES-GCM) descriptografa as chaves BYO com ele |
 

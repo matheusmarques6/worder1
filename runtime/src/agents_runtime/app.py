@@ -38,12 +38,22 @@ from agents_runtime.queueing.worker import TurnResult, run_touch, run_turn
 from agents_runtime.randomness import Randomness, SystemRandomness
 from agents_runtime.repository import engine
 from agents_runtime.repository.queue import PgmqQueue
-from agents_runtime.repository.scope import assert_rls_enforced
+from agents_runtime.repository.scope import SENDER_ROLE, WORKER_ROLE, assert_rls_enforced
 
 APPLICATION_NAME = "agents-runtime"
 
 
-async def _connect(dsn: str, set_role: str | None) -> psycopg.AsyncConnection:
+async def _connect(
+    dsn: str, set_role: str | None, expected_role: str
+) -> psycopg.AsyncConnection:
+    """Abre uma conexão de pool e prova que ela é o role que o pool exige.
+
+    `expected_role` é a CONSTANTE do pool (`WORKER_ROLE`/`SENDER_ROLE`), nunca
+    o valor da env: a env é o que se aplica, a constante é o que se cobra. Com
+    os dois vindo do mesmo lugar a checagem de identidade era tautológica e
+    `AGENTS_WORKER_SET_ROLE=sender_role` subia aprovado, para morrer de
+    `permission denied` no meio do primeiro turno.
+    """
     conn = await psycopg.AsyncConnection.connect(
         dsn, autocommit=True, application_name=APPLICATION_NAME
     )
@@ -57,11 +67,11 @@ async def _connect(dsn: str, set_role: str | None) -> psycopg.AsyncConnection:
 
     # Toda conexão de pool nasce aqui — pulse, workers e sender. A guarda recebe
     # o role esperado e cobra as três coisas: que a env exista, que o role não
-    # ignore a RLS, e que o SET ROLE tenha de fato pegado. Sem ela o processo
+    # ignore a RLS, e que a env seja a do pool certo. Sem ela o processo
     # ficava sendo o dono do DSN (BYPASSRLS no Supabase mesmo sem superuser) e a
     # camada de repositório — escrita sem `where organization_id` porque "a RLS
     # escopa" — lia cross-org calada. Falha alta na partida, antes do trabalho.
-    await assert_rls_enforced(conn, set_role)
+    await assert_rls_enforced(conn, expected_role)
     return conn
 
 
@@ -158,7 +168,7 @@ async def run(
     try:
         # -- coalescer + heartbeat share one connection: both are one-statement
         # ticks, and neither may starve the other for longer than a statement.
-        pulse = await _connect(dsn, worker_set_role)
+        pulse = await _connect(dsn, worker_set_role, WORKER_ROLE)
         connections.append(pulse)
 
         async def coalescer() -> None:
@@ -192,7 +202,7 @@ async def run(
         # -- workers: one connection and one loop each, so a slow turn on one
         # never blocks a claim on another (and cenários B get real concurrency).
         for index in range(workers):
-            conn = await _connect(dsn, worker_set_role)
+            conn = await _connect(dsn, worker_set_role, WORKER_ROLE)
             connections.append(conn)
 
             queue_names = {INBOUND, DOMAIN_EVENTS, *(extra_handlers or {})}
@@ -218,7 +228,7 @@ async def run(
         # E1's final stretch, and a sender with nowhere to send would either
         # spin or lie.
         if channel is not None:
-            sender_conn = await _connect(dsn, sender_set_role)
+            sender_conn = await _connect(dsn, sender_set_role, SENDER_ROLE)
             connections.append(sender_conn)
 
             async def sender() -> None:

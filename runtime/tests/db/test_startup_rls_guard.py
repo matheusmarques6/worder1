@@ -22,10 +22,19 @@ Supabase o `postgres` NÃO é superuser (`rolsuper = f`) mas TEM BYPASSRLS
 exatamente no caso perigoso.
 """
 
+import uuid
+
 import pytest
 
+from agents_runtime import server
+from agents_runtime.__main__ import _serve
 from agents_runtime.app import _connect
-from agents_runtime.repository.scope import RlsNotEnforced, assert_rls_enforced
+from agents_runtime.repository.scope import (
+    SENDER_ROLE,
+    WORKER_ROLE,
+    RlsNotEnforced,
+    assert_rls_enforced,
+)
 from tests.support.database import as_platform, as_runtime_worker
 
 
@@ -62,10 +71,10 @@ class TestTheGuardIsWiredIntoTheOnlySeam:
 
     async def test_a_missing_role_env_never_becomes_a_running_process(self, dsn: str) -> None:
         with pytest.raises(RlsNotEnforced):
-            await _connect(dsn, None)
+            await _connect(dsn, None, WORKER_ROLE)
 
     async def test_the_configured_role_connects_normally(self, dsn: str) -> None:
-        conn = await _connect(dsn, "worker_role")
+        conn = await _connect(dsn, WORKER_ROLE, WORKER_ROLE)
         try:
             assert not conn.closed
         finally:
@@ -105,3 +114,58 @@ class TestTheGuardDemandsAnIdentity:
         # Os DOIS nomes: o que o processo virou e o que ele deveria ter virado.
         assert "worker_role" in message
         assert "sender_role" in message
+
+
+class TestTheExpectationIsAConstantNotTheEnv:
+    """A checagem de identidade só vale se a expectativa NÃO vier da env.
+
+    `_connect(dsn, set_role)` passava o valor aplicado como valor esperado: a
+    pergunta era "o role que apliquei é o role que apliquei?". Trocar as duas
+    envs de lugar passava batido, o pool de workers subia como `sender_role`, e
+    o processo morria de `permission denied` no meio do primeiro turno — o
+    exato desastre que a guarda existe para impedir.
+    """
+
+    async def test_the_worker_pool_refuses_the_sender_env(self, dsn: str) -> None:
+        """`AGENTS_WORKER_SET_ROLE=sender_role` — o pool inteiro no role errado."""
+        with pytest.raises(RlsNotEnforced) as caught:
+            await _connect(dsn, SENDER_ROLE, WORKER_ROLE)
+
+        message = str(caught.value)
+        assert SENDER_ROLE in message
+        assert WORKER_ROLE in message
+
+    async def test_the_sender_pool_refuses_the_worker_env(self, dsn: str) -> None:
+        """E o contrário: as duas envs trocadas de lugar morrem dos dois lados."""
+        with pytest.raises(RlsNotEnforced):
+            await _connect(dsn, WORKER_ROLE, SENDER_ROLE)
+
+
+class TestTheHttpListenerIsBehindTheGuard:
+    """O listener subia ANTES de qualquer `_connect` e abria conexão própria.
+
+    Duas metades do mesmo buraco: `_serve` servia HTTP antes da guarda de
+    partida, e `server.py` abria conexão em dois lugares com `if set_role:` e
+    nada mais — sem a env, o preview escopava por organização uma conexão do
+    dono do DSN, onde escopo não significa nada.
+    """
+
+    async def test_no_socket_is_opened_before_the_role_is_proven(
+        self, dsn: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Env de role ausente tem que matar a partida, não servir 503 para sempre."""
+
+        async def _must_not_be_called(*args, **kwargs):
+            raise AssertionError("o listener HTTP subiu antes da guarda de role")
+
+        monkeypatch.setattr(server, "serve", _must_not_be_called)
+        monkeypatch.setenv("AGENTS_HTTP_PORT", "0")
+        monkeypatch.delenv("AGENTS_WORKER_SET_ROLE", raising=False)
+
+        with pytest.raises(RlsNotEnforced):
+            await _serve(dsn)
+
+    async def test_the_preview_never_runs_on_an_unguarded_connection(self, dsn: str) -> None:
+        """`scope_to_organization` sobre o dono do DSN é escopo decorativo."""
+        with pytest.raises(RlsNotEnforced):
+            await server._preview(dsn, set_role=None, body={"organization_id": str(uuid.uuid4())})

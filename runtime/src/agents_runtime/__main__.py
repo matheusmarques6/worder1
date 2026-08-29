@@ -18,10 +18,11 @@ import signal
 import sys
 
 from agents_runtime import server
-from agents_runtime.app import run
+from agents_runtime.app import _connect, run
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.config import config_from_env
 from agents_runtime.obs import configure_logfire, configure_logging, configure_telemetry
+from agents_runtime.repository.scope import WORKER_ROLE
 
 DSN_VARIABLE = "SUPABASE_DB_URL"
 
@@ -79,6 +80,14 @@ async def _serve(dsn: str) -> None:
     http_server = None
     port_spec = os.environ.get("AGENTS_HTTP_PORT", "").strip()
     if port_spec:
+        # Preflight ANTES do primeiro socket: o listener abre conexão própria e
+        # atende requisições antes de qualquer `_connect`, então sem isto um
+        # processo com a env de role errada (ou sem env) subia e servia — o
+        # preview escopando uma conexão do dono do DSN. Morrer na partida é a
+        # única resposta útil; servir 503 para sempre não é.
+        preflight = await _connect(dsn, os.environ.get("AGENTS_WORKER_SET_ROLE"), WORKER_ROLE)
+        await preflight.close()
+
         http_server = await server.serve(
             dsn,
             port=int(port_spec),

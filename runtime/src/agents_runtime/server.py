@@ -23,6 +23,7 @@ import contextlib
 import hmac
 import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 from uuid import UUID
 
@@ -39,7 +40,11 @@ from agents_runtime.agent_core.prompt_compiler import (
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import engine as engine_repo
 from agents_runtime.repository import missions as missions_repo
-from agents_runtime.repository.scope import scope_to_organization
+from agents_runtime.repository.scope import (
+    WORKER_ROLE,
+    assert_rls_enforced,
+    scope_to_organization,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,11 +91,26 @@ async def _read_request(reader: asyncio.StreamReader) -> tuple[str, str, dict, b
     return method, path, headers, body
 
 
+@contextlib.asynccontextmanager
+async def _connection(dsn: str, set_role: str | None) -> AsyncIterator[psycopg.AsyncConnection]:
+    """O ÚNICO lugar onde o listener abre conexão — com a guarda de RLS dentro.
+
+    Eram dois lugares com `if set_role:` e nada mais: sem a env, ambos rodavam
+    como o dono do DSN (BYPASSRLS no Supabase mesmo sem superuser) e o preview
+    chamava `scope_to_organization` sobre uma conexão para quem escopo não
+    significa nada. Um ponto só para que o próximo endpoint não consiga escapar.
+    """
+    async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+        if set_role:
+            await conn.execute("set role " + set_role)
+        # O listener lê como worker: a constante é do código, não da env.
+        await assert_rls_enforced(conn, WORKER_ROLE)
+        yield conn
+
+
 async def _healthz(dsn: str, *, set_role: str | None, max_age_s: float) -> bytes:
     try:
-        async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
-            if set_role:
-                await conn.execute("set role " + set_role)
+        async with _connection(dsn, set_role) as conn:
             age = await engine_repo.heartbeat_age_seconds(conn)
     except Exception:
         logger.exception("healthz não alcançou o banco")
@@ -127,9 +147,7 @@ async def _preview(dsn: str, *, set_role: str | None, body: dict[str, Any]) -> b
         (str(author), str(text)) for author, text in (body.get("transcript") or ())
     )
 
-    async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
-        if set_role:
-            await conn.execute("set role " + set_role)
+    async with _connection(dsn, set_role) as conn:
         async with conn.transaction():
             await scope_to_organization(conn, organization_id)
             settings = await agent_repo.load_tenant_policy(conn, organization_id=organization_id)
