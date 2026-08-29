@@ -449,7 +449,7 @@ Duas causas, ambas fechadas neste ciclo:
   agora é `channels` que importa dele.
 
 Baseline local aferido em 28/08 (worktree `claude/auditoria-ia` sobre `a7749f32`):
-911 unit ✓ / 2 ✗ (as duas são fixture lido sem `encoding="utf-8"` — falham só no
+912 unit ✓ / 2 ✗ (as duas são fixture lido sem `encoding="utf-8"` — falham só no
 Windows, verdes em CI Linux), ruff ✓, import-linter 3/3 ✓, tsc ✓, vitest 1074 ✓ / 5 ✗
 (pré-existentes: 3 de fuso em `reports/utils.ts`, 2 do extrator de PDF).
 

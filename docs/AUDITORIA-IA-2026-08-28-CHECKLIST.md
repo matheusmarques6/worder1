@@ -397,6 +397,64 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
 ---
 
+## REABERTO — item 1 reprovado em review (28/08)
+
+A guarda entregue em `83bc6da9` recusa apenas roles privilegiadas (`rolsuper`/`rolbypassrls`).
+Um role comum passa.
+
+**Severidade real, verificada:** não é vazamento. As policies são `to worker_role` / `to sender_role`
+(`20260812000003:265,270`, confirmado em `pg_policies`), então um role qualquer não casa com policy
+nenhuma e a RLS nega tudo — fail-closed.
+
+**Por que reprova mesmo assim:** o `DEPLOY.md` escrito no MESMO commit afirma *"O processo recusa subir
+sem ela"* e a implementação não recusa. Sem `AGENTS_WORKER_SET_ROLE`, com um dono de DSN não
+privilegiado, o processo sobe e quebra depois com permission denied — em vez de falhar alto na partida.
+Documentei comportamento que não implementei.
+
+- [x] **1-bis. A guarda exige identidade, não só ausência de privilégio** · commit `590c0135`
+  Aditivo: a checagem de BYPASSRLS ficou (é ela que pega o caso real do Supabase, e pegaria alguém
+  concedendo BYPASSRLS ao próprio `worker_role`). Entraram (a) `expected_role` ausente = env ausente =
+  erro de partida; (b) `current_user` tem que ser o role esperado.
+  A **ordem** das três importa e está travada em teste: para o dono do DSN, (b) e (c) seriam ambas
+  verdadeiras, e "tem BYPASSRLS" é o diagnóstico útil — então vem antes.
+  Cobertura verificada: `responder.py`, `toucher.py` e `server.py` abrem conexão fora do `_connect`, mas
+  leem a MESMA env e rodam no mesmo processo (`__main__.py:82`) — sem ela o processo já morreu na
+  partida. A guarda no seam cobre os três; não é lacuna pendente.
+  TDD, 2 testes novos (vermelho semântico, não `TypeError`). ruff ✓ · import-linter 3/3 ✓ · 912 unit ✓ ·
+  388 db/pipeline ✓.
+  *Correção de registro:* o baseline unit que eu vinha citando como 911 é **912** — medido com stash no
+  HEAD limpo. O reviewer apontou e conferi.
+
+---
+
+## Plano combinado para o item 5 (não perder — decidido antes do desvio)
+
+Dimensionamento em produção (leitura apenas, 28/08): `ai_agent_chunks` **0 linhas**, `ai_agent_sources`
+**0 linhas**, `ai_agents` 1 linha. **Nenhuma loja jamais alimentou a base.** Isso remove reindexação,
+janela, custo e risco sobre dado real — e faz deste o melhor momento para trocar, antes do primeiro dado.
+
+*Correção de registro:* a auditoria afirmava que o RAG do piloto "responde com trechos irrelevantes
+agora". O defeito de código é real; esse efeito não existe, porque não há base.
+
+Decisões do usuário: modelo **`text-embedding-3-small`** · **manter** o filtro por modelo na busca ·
+**carimbar provedor** junto do modelo.
+
+Conflito entre as duas últimas, e a resolução: se o carimbo do que se grava
+(`openai:text-embedding-3-small`) diferir do que o Python consulta
+(`openrouter:openai/text-embedding-3-small`), o filtro não casa com nada e a busca volta sempre vazia.
+Portanto: `embedding_model` guarda a identidade do **espaço vetorial** qualificada por provedor, e o
+Python filtra por uma lista dos espaços que **o embedador dele sabe consultar** — hoje
+`('openai:text-embedding-3-small',)`, com a suposição de passagem pura da OpenRouter escrita ali, nomeada
+e grepável. Se um dia não for passagem pura, o conserto é aquela linha + reindexar, e a coluna diz o que.
+
+Passos: (1) migration `embedding_model text not null` — a tabela está vazia, dá para exigir desde já —
+mais o índice HNSW, instantâneo em tabela vazia (é o item 8, commit separado);
+(2) `embeddings.ts` vai para `text-embedding-3-small` e os dois escritores carimbam;
+(3) busca do Python filtra pelos espaços que sabe ler;
+(4) `hub-runtime-parity.test.ts` vira asserção de convergência (o próprio teste já prescreve isso).
+
+---
+
 ## Descobertos durante a execução (não renumerados — a fila de 63 é estável)
 
 Achados que apareceram ao trabalhar os itens e que não pertenciam a nenhum deles. Ficam aqui até
@@ -417,6 +475,12 @@ você decidir se entram na fila.
   meia-noite UTC — e a linha 45 formata no fuso local. Em UTC−3 vira 14/01. O teste
   (`src/tests/reports-utils.test.ts`) está CERTO e falha localmente; passa no CI só porque o runner é
   UTC. O fuso dos usuários do produto é o mesmo da máquina de dev. *(descoberto na Fase 0)*
+
+- [ ] **`pnpm test` não roda sem `pnpm approve-builds` (esbuild, unrs-resolver).**
+  O deps-check do pnpm aborta antes do script e a suíte Node não executa. Bloqueou o reviewer de 28/08,
+  que fez só revisão estática dos itens 2–4. Contorno usado aqui: chamar `node_modules/.bin/vitest`
+  direto. Aprovar os builds muda política local de execução — decisão do dono da máquina, não minha.
+  *(descoberto no review do item 1)*
 
 - [ ] **`supabase/.branches/` e `supabase/.temp/` não estão no `.gitignore`.**
   Aparecem no `git status` de quem rodar o stack local — e agora todo mundo deve rodar.
