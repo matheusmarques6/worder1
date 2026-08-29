@@ -27,12 +27,21 @@ class RlsNotEnforced(RuntimeError):
     """A conexão enxerga o banco inteiro: a RLS não vale para ela."""
 
 
-async def assert_rls_enforced(conn: psycopg.AsyncConnection) -> None:
+async def assert_rls_enforced(conn: psycopg.AsyncConnection, expected_role: str | None) -> None:
     """Recusa uma conexão que a RLS não alcança. Morre alto, nunca degrada.
 
-    `rolbypassrls` é a pergunta decisiva, não `rolsuper`: no Supabase o dono do
-    DSN (`postgres`) não é superuser e mesmo assim ignora toda policy. Uma guarda
-    que olhasse só para superuser passaria batido no caso real.
+    Três perguntas, nesta ordem:
+
+    · `expected_role` ausente É a env ausente: nenhum `SET ROLE` foi aplicado e o
+      processo ficou sendo o dono do DSN. Não é diagnóstico, é configuração que
+      falta — e antes disto o processo subia calado;
+    · `rolbypassrls` é a pergunta decisiva, não `rolsuper`: no Supabase o dono do
+      DSN (`postgres`) não é superuser e mesmo assim ignora toda policy. Uma
+      guarda que olhasse só para superuser passaria batido no caso real;
+    · identidade: um role comum não tem privilégio, então não vaza — mas as
+      policies são `to worker_role`/`to sender_role`, e o processo subiria só
+      para morrer de `permission denied` no meio do primeiro turno. Na partida é
+      mais barato, e o log diz qual role veio e qual era esperado.
     """
     row = await (
         await conn.execute(
@@ -47,16 +56,33 @@ async def assert_rls_enforced(conn: psycopg.AsyncConnection) -> None:
     ).fetchone()
 
     role, is_super, bypasses = row
-    if not (is_super or bypasses):
-        return
 
-    raise RlsNotEnforced(
-        f"o runtime conectou como '{role}', que "
-        f"{'é superuser' if is_super else 'tem BYPASSRLS'} — toda leitura sem "
-        "`where organization_id` vira leitura cross-org. Defina "
-        "AGENTS_WORKER_SET_ROLE=worker_role e AGENTS_SENDER_SET_ROLE=sender_role "
-        "(worker_role/sender_role são NOLOGIN: SET ROLE é o único caminho)."
-    )
+    if expected_role is None:
+        raise RlsNotEnforced(
+            f"o runtime conectou como '{role}' e nenhum SET ROLE foi aplicado — a "
+            "camada de repositório é escrita sem `where organization_id` porque a "
+            "RLS escopa. Defina AGENTS_WORKER_SET_ROLE=worker_role e "
+            "AGENTS_SENDER_SET_ROLE=sender_role (worker_role/sender_role são "
+            "NOLOGIN: SET ROLE é o único caminho)."
+        )
+
+    if is_super or bypasses:
+        raise RlsNotEnforced(
+            f"o runtime conectou como '{role}', que "
+            f"{'é superuser' if is_super else 'tem BYPASSRLS'} — toda leitura sem "
+            "`where organization_id` vira leitura cross-org. Defina "
+            "AGENTS_WORKER_SET_ROLE=worker_role e AGENTS_SENDER_SET_ROLE=sender_role "
+            "(worker_role/sender_role são NOLOGIN: SET ROLE é o único caminho)."
+        )
+
+    if role != expected_role:
+        raise RlsNotEnforced(
+            f"o runtime conectou como '{role}', mas o role esperado era "
+            f"'{expected_role}' — as policies são `to worker_role`/`to sender_role`, "
+            "então esta conexão não lê nada e o processo morreria de permission "
+            "denied no primeiro turno. Confira AGENTS_WORKER_SET_ROLE / "
+            "AGENTS_SENDER_SET_ROLE."
+        )
 
 
 async def scope_to_organization(conn: psycopg.AsyncConnection, organization_id: UUID) -> None:

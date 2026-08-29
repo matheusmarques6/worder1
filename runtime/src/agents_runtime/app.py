@@ -51,16 +51,17 @@ async def _connect(dsn: str, set_role: str | None) -> psycopg.AsyncConnection:
         # SET ROLE é o ÚNICO caminho, aqui e em produção: worker_role e
         # sender_role são NOLOGIN de propósito (20260812000002) — senha em
         # migration seria segredo em git —, então "logar COMO o role" não
-        # existe. O comentário anterior afirmava justamente isso, e a env que
-        # aplica o SET ROLE é opcional: o par era uma porta aberta silenciosa.
+        # existe. O `if` não é mais uma porta aberta: sem role a guarda abaixo
+        # recusa a conexão — ele só existe porque `set role None` não é SQL.
         await conn.execute("set role " + set_role)
 
-    # Toda conexão de pool nasce aqui — pulse, workers e sender. Sem a env o
-    # processo fica sendo o dono do DSN, que no Supabase tem BYPASSRLS mesmo
-    # sem ser superuser, e a camada de repositório (escrita sem
-    # `where organization_id` porque "a RLS escopa") passa a ler cross-org sem
-    # erro nenhum. Falha alta na partida, antes de qualquer trabalho.
-    await assert_rls_enforced(conn)
+    # Toda conexão de pool nasce aqui — pulse, workers e sender. A guarda recebe
+    # o role esperado e cobra as três coisas: que a env exista, que o role não
+    # ignore a RLS, e que o SET ROLE tenha de fato pegado. Sem ela o processo
+    # ficava sendo o dono do DSN (BYPASSRLS no Supabase mesmo sem superuser) e a
+    # camada de repositório — escrita sem `where organization_id` porque "a RLS
+    # escopa" — lia cross-org calada. Falha alta na partida, antes do trabalho.
+    await assert_rls_enforced(conn, set_role)
     return conn
 
 
