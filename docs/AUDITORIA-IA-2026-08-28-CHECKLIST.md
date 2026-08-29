@@ -92,12 +92,19 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   declarada morta, mas seguem vivas como endpoint. Candidato ao item 61.
   TDD, 5 testes (os 2 que importam assistidos falhar). CI run `33218454219` verde.
 
-- [ ] **5. Unificar o modelo de embedding** `[confirmado]`
-  TS grava `text-embedding-ada-002` (`src/lib/ai/embeddings.ts:10`); Python busca
-  `openai/text-embedding-3-small` (`runtime/src/agents_runtime/agent_core/llm.py:36`). Mesma tabela
-  `ai_agent_chunks`, mesma `vector(1536)` — o `<=>` calcula sem erro e devolve vizinho errado.
-  Ação: escolher um modelo, adicionar coluna `embedding_model`, reindexar a base do piloto.
-  Já registrado como divergência conhecida em `src/lib/ai/__tests__/hub-runtime-parity.test.ts:104`.
+- [x] **5. Unificar o modelo de embedding** `[confirmado]` · commit `e1d3a1a8`
+  Feito conforme o plano combinado, com **três desvios forçados por evidência**:
+  (a) virou UM commit, não quatro passos — a constraint e os escritores são unidade atômica: no instante
+  em que o CHECK existe, escritor que não carimbe quebra;
+  (b) o `not null` combinado virou um **par** `check ((embedding is null) = (embedding_model is null))` —
+  um upload já chunkado e ainda não embedado seria obrigado a mentir um espaço que não tem;
+  (c) o teste do filtro nasceu depois da implementação (furo meu), e por isso foi provado **removendo o
+  filtro**: sem ele o chunk de espaço alheio volta com vetor idêntico ao da query.
+  A suposição sobre a OpenRouter mora nomeada em `agent_core/llm.py::SEARCHABLE_SPACES`.
+  `hub-runtime-parity.test.ts`, que prescrevia esta ordem, virou asserção de convergência.
+  Gates: ruff ✓ · import-linter 3/3 ✓ · 914 unit ✓ · 394 db/pipeline ✓ · tsc ✓ · vitest 1091 ✓ ·
+  next build ✓ · CI `33229985114` (app) e `33229985117` (runtime), sete jobs verdes.
+
 
 - [ ] **6. Mídia no payload do ingest** `[confirmado]`
   `src/lib/whatsapp/webhook-processor.ts:451` manda só `{type, text}`. O runtime nunca vê o áudio/imagem
