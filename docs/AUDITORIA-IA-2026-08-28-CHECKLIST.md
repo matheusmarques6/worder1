@@ -241,9 +241,28 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   turno morre em `NoActiveVersion` e vai para a DLQ. É anterior a esta mudança e não
   é guard portável — não deve ser absorvido pelo item 30 sem alguém olhar.
 
-- [ ] **13. Banner de religar IA em massa** `[relatado]`
+- [x] **13. Banner de religar IA em massa** `[relatado]` · commit `0fc5f634`
   `src/app/api/whatsapp/inbox/conversations/reactivate-ai/route.ts:23-27` — whitelist de motivos que só
   o `cloud-runner` grava. Para org migrada o banner fica permanentemente em zero.
+
+  **Achado de produto, registrado e NÃO implementado** (a premissa do item não se
+  sustenta): `runtime/src/agents_runtime/` nunca grava `ai_enabled`/`ai_disabled_reason`
+  — grep no pacote inteiro dá zero. Quando o runtime não consegue responder (sem
+  missão ativa, sem chave LLM da org, sem versão de agente, Judge 1 reprova), ele abre
+  uma linha em `public.alerts` e retorna silêncio (`responder.py:374-387,407-422,639-669`)
+  — a conversa nunca é marcada como pausada na tabela que este banner lê. Não há motivo
+  nenhum pra incluir na whitelist; incluir um valor que ninguém grava seria cosmético.
+  Escopo redefinido para o defeito real e verificável no mesmo arquivo: consolidar a
+  whitelist com `src/lib/ai/disabled-reasons.ts` (ver "Entregue" abaixo).
+
+  **Entregue.** A rota tinha sua própria cópia hard-coded de `AUTO_DISABLED_REASONS`,
+  em paralelo à lista canônica de `disabled-reasons.ts` (a mesma que o badge/label do
+  inbox usa). As duas listas eram idênticas hoje — sem bug ao vivo — mas duas cópias do
+  mesmo vocabulário é como este item foi achado em primeiro lugar: motivo novo escrito
+  num lugar e esquecido no outro. A rota agora importa `AUTO_DISABLED_REASONS` do módulo
+  canônico; `'manual'` continua fora porque o módulo já o exclui, sem reimplementar a
+  exclusão. Mudança preventiva, não corretiva. 8 testes no arquivo (3 novos, provando
+  com um motivo sintético que a rota reage a mudanças na lista canônica) · `tsc` limpo.
 
 - [ ] **14. Fechar o double-send do fallback síncrono** `[relatado]`
   `src/lib/whatsapp/webhook-processor.ts:554` chama o runner direto quando QStash não está configurado,
