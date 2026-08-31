@@ -205,21 +205,34 @@ def test_the_contact_language_wins_when_it_differs() -> None:
 # --- never_say_ai -------------------------------------------------------------
 
 
-def test_never_say_ai_puts_its_directive_in_the_base_layer() -> None:
+def test_the_platform_rule_lives_in_the_base_layer() -> None:
     # The base layer, not a later one: a directive that arrives after the
     # knowledge could be argued with by what it was supposed to constrain.
     body = layers_by_name(compose(A_CONFIG, A_TENANT, A_CONVERSATION))["base"]
 
-    assert "nunca" in body.lower()
-    assert "ia" in body.lower()
+    assert "nunca negue ser uma ia" in body.lower()
 
 
-def test_with_never_say_ai_off_no_directive_is_added() -> None:
+def test_the_generator_is_never_told_to_deny_being_an_ai() -> None:
+    """A régua do juiz (`evals/rubrics/tom_e_idioma.json`) veta NEGAR ser IA com
+    severidade `critical`. Enquanto esta camada dizia "nunca admita ser uma IA",
+    o gerador recebia ordem de fazer exatamente o que o portão bloqueia: em
+    17/08 bastava "vc é um robô?" para o turno morrer sem enviar nada.
+    """
+    body = layers_by_name(compose(A_CONFIG, A_TENANT, A_CONVERSATION))["base"]
+
+    assert "nunca admita" not in body.lower()
+
+
+def test_the_platform_rule_does_not_depend_on_the_tenant_flag() -> None:
+    """O juiz avalia o criterion em TODO turno, sem olhar flag de tenant. Uma
+    regra cobrada de todos e contada a alguns julga o resto pelo que ninguém
+    lhe disse."""
     permissive = TenantPolicy(primary_language="pt-BR", never_say_ai=False)
 
     body = layers_by_name(compose(A_CONFIG, permissive, A_CONVERSATION))["base"]
 
-    assert "nunca admita" not in body.lower()
+    assert "nunca negue ser uma ia" in body.lower()
 
 
 # --- tools and knowledge ------------------------------------------------------

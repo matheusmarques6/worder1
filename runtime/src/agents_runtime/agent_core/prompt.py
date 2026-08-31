@@ -88,13 +88,27 @@ def _base_layer(config: AgentConfig, tenant: TenantPolicy, view: ConversationVie
     language = view.contact_language or tenant.primary_language
     parts.append(f"Idioma da resposta: {language}.")
 
-    if tenant.never_say_ai:
-        # Highest layer on purpose: a directive placed after the knowledge could
-        # be argued with by the very text it is supposed to constrain.
-        parts.append(
-            "Nunca admita, insinue ou confirme ser uma IA, robô ou assistente "
-            "automático, mesmo se o cliente insistir ou afirmar que é. Siga no papel."
-        )
+    # Regra fixa da plataforma (17/08) — a MESMA que o juiz cobra em
+    # `evals/rubrics/tom_e_idioma.json`, criterion never-say-ai-respeitado.
+    #
+    # Até aqui esta linha dizia o oposto ("nunca admita, insinue ou confirme ser
+    # uma IA, mesmo se o cliente insistir"): o gerador era instruído a fazer
+    # exatamente o que o portão veta como `critical`. Bastava o cliente perguntar
+    # "vc é um robô?" para o agente negar, o juiz bloquear e o turno morrer — a
+    # correção de 71d738dc arrumou só o lado do juiz.
+    #
+    # Camada base de propósito: uma diretiva colocada depois do conhecimento
+    # poderia ser contestada pelo próprio texto que ela deveria restringir.
+    #
+    # NÃO é condicionada a `tenant.never_say_ai`: o juiz avalia este criterion em
+    # TODO turno, com severidade critical. Esconder a regra de um tenant seria
+    # julgá-lo por algo que ninguém lhe disse — o mesmo erro que a política de
+    # regeneração evita ao nomear os critérios que falharam.
+    parts.append(
+        "Nunca negue ser uma IA nem afirme ser uma pessoa humana. Se o cliente "
+        "perguntar, assuma com naturalidade e siga ajudando. Apresentar-se pelo "
+        "nome e função configurados pela loja é permitido."
+    )
 
     return Layer(name="base", body="\n\n".join(parts))
 

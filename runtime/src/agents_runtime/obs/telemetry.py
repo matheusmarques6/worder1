@@ -38,6 +38,11 @@ SAFE_ATTRIBUTES = frozenset(
         "grant_id",
         "moment_ids",
         "contact_id",
+        # 17/08: o modelo respondeu '{"body": …}' e o envelope foi entregue cru
+        # ao cliente. O desembrulho conserta a entrega e, com isso, esconde a
+        # regressão — este rótulo é o que a mantém visível. Booleano, nunca o
+        # texto: o cinto continua fechado.
+        "reply_unwrapped",
     }
 )
 

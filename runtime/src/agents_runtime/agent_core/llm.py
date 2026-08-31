@@ -20,6 +20,7 @@ D1 (decisão 79) is written into the types:
 port asks for extended reasoning, it never decides that it is warranted.
 """
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
@@ -132,3 +133,21 @@ class EmbedderPort(Protocol):
 
 class LlmPort(EmbedderPort, Protocol):
     async def chat(self, request: ChatRequest) -> ChatResult: ...
+
+
+def strip_code_fence(text: str) -> str:
+    """`ChatResult.text` sem a cerca de código que o modelo põe em volta.
+
+    Mora aqui, junto de `ChatResult`, porque é um fato sobre o que ATRAVESSA a
+    porta — o modelo embrulha a saída em ```…``` mesmo quando o contrato pede
+    texto puro (visto ao vivo em 17/08 nas duas pontas: o veredito do juiz e a
+    resposta do agente). Dois call sites descobriram isso separadamente e cada
+    um escreveu a própria regex; o fato é um só e passa a ser declarado uma vez.
+
+    Sem cerca, devolve o texto intocado — quem chama decide o que fazer com ele.
+    """
+    raw = (text or "").strip()
+    if not raw.startswith("```"):
+        return raw
+    raw = re.sub(r"^```[a-zA-Z]*\s*", "", raw)
+    return re.sub(r"\s*```$", "", raw).strip()

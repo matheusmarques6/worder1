@@ -33,7 +33,7 @@ import unicodedata
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 
-from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message
+from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message, strip_code_fence
 from agents_runtime.evals.rubrics import Criterion, Rubric, score
 
 #: Platform-fixed (D1, decisão 79). Never per tenant.
@@ -214,10 +214,7 @@ def _judge_payload(text: str) -> object:
     ou preâmbulo (visto ao vivo em 17/08: três "judge unusable" e o turno
     mudo). Aceitar o embrulho não afrouxa o portão: texto sem UM objeto JSON
     dentro continua ilegível, e ilegível continua reprovando (fail-closed)."""
-    raw = (text or "").strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```[a-zA-Z]*\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw).strip()
+    raw = strip_code_fence(text)
     try:
         return json.loads(raw)
     except ValueError:

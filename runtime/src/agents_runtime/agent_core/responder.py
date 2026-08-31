@@ -27,7 +27,6 @@ quem já conversou três vezes seria pior que a ausência (decisão 86d).
 import json
 import logging
 import os
-import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import timedelta
 from functools import partial
@@ -46,6 +45,7 @@ from agents_runtime.agent_core.llm import (
     Message,
     ToolCall,
     ToolSpec,
+    strip_code_fence,
 )
 from agents_runtime.agent_core.metering import CallRecord, MeteredLlm
 from agents_runtime.agent_core.mission_resolver import (
@@ -101,11 +101,7 @@ def unwrap_model_reply(text: str) -> str:
     foi entregue cru no WhatsApp. Só desembrulha objeto JSON de UMA chave
     body/text/message com valor string; qualquer outra coisa passa intocada —
     desembrulhar demais seria reescrever a resposta do agente."""
-    raw = (text or "").strip()
-    candidate = raw
-    if candidate.startswith("```"):
-        candidate = re.sub(r"^```[a-zA-Z]*\s*", "", candidate)
-        candidate = re.sub(r"\s*```$", "", candidate).strip()
+    candidate = strip_code_fence(text)
     if not (candidate.startswith("{") and candidate.endswith("}")):
         return text
     try:
@@ -117,6 +113,23 @@ def unwrap_model_reply(text: str) -> str:
         if key in ("body", "text", "message") and isinstance(value, str):
             return value
     return text
+
+
+def _unwrapped(text: str) -> str:
+    """`unwrap_model_reply` mais o registro de que ele PRECISOU agir.
+
+    O desembrulho conserta a entrega e, exatamente por isso, esconde a
+    regressão: o modelo voltar a responder em envelope deixa de ser reprovado e
+    passa a ser invisível. Consertar calado e contar alto — o atributo é um
+    rótulo booleano, nunca o texto, então atravessa o cinto de PII de
+    `SAFE_ATTRIBUTES` sem levar conteúdo junto.
+    """
+    clean = unwrap_model_reply(text)
+    if clean != text:
+        logger.warning("resposta do modelo veio embrulhada em envelope JSON — desembrulhada")
+        annotate(reply_unwrapped=True)
+    return clean
+
 
 def delivery_flags(settings: Mapping | None) -> tuple[bool, bool]:
     """(dividir em bolhas, ritmo de digitação) de settings.delivery — os knobs
@@ -562,7 +575,7 @@ def build_responder(
                         )
                     )
                     if not answer.tool_calls:
-                        return unwrap_model_reply(answer.text)
+                        return _unwrapped(answer.text)
                     # A volta do loop: o pedido do modelo e a resposta da tool
                     # entram na conversa; nenhuma transação fica aberta aqui
                     # (run_tool abre e fecha as suas — ADR-6 vale no loop).
@@ -590,7 +603,7 @@ def build_responder(
                         think=gate.think,
                     )
                 )
-                return unwrap_model_reply(answer.text)
+                return _unwrapped(answer.text)
 
             await note_step("started", f"{version.name} assumiu a conversa")
 
