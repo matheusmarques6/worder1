@@ -45,6 +45,18 @@ const STATUS_ORDINAL: Record<string, number> = {
 // via env; default 8s. Cada inbound EMPURRA a janela p/ frente (reschedule).
 const AI_DEBOUNCE_SECONDS = Number(process.env.WHATSAPP_AI_DEBOUNCE_SECONDS) || 8;
 
+// internal.correlate_outbox_status (20260812000004) só entende 'sent' e
+// 'failed' — qualquer outro valor derruba a função com exceção. delivered/read
+// da Meta são "chegou", que pro outbox já é 'sent' desde o primeiro status
+// recebido (o outbox não distingue entrega de leitura). A tradução mora aqui,
+// explícita, porque o vocabulário de quem chama nunca é o de quem responde.
+const OUTBOX_STATUS_BY_META_STATUS: Record<string, 'sent' | 'failed'> = {
+  sent: 'sent',
+  delivered: 'sent',
+  read: 'sent',
+  failed: 'failed',
+};
+
 export interface ProcessResult {
   processed: number;
   skipped: number;
@@ -613,7 +625,15 @@ async function processMessage(
 // ============================================================
 
 async function processStatus(account: any, status: any) {
-  const { id: messageId, status: newStatus, timestamp, errors, conversation, pricing } = status;
+  const {
+    id: messageId,
+    status: newStatus,
+    timestamp,
+    errors,
+    conversation,
+    pricing,
+    biz_opaque_callback_data: idempotencyKey,
+  } = status;
 
   // B2: guard contra retrograde. Meta as vezes entrega o webhook de 'sent'
   // depois do 'delivered'; sem o guard a row volta pra 'sent'. failed sempre
@@ -678,6 +698,40 @@ async function processStatus(account: any, status: any) {
       errorCode: errors?.[0]?.code?.toString(),
       errorMessage: errors?.[0]?.message || errors?.[0]?.title,
     });
+  }
+
+  // item 10 da auditoria: liga o webhook de status à outbox do runtime
+  // Python. biz_opaque_callback_data só vem preenchido quando o envio saiu
+  // pelo runtime (cloud_api.py grava a idempotency_key nele) — sem a chave
+  // não existe linha de outbox pra correlacionar, e nada muda.
+  if (idempotencyKey) {
+    const outboxStatus = OUTBOX_STATUS_BY_META_STATUS[newStatus];
+    if (outboxStatus) {
+      const { data: correlated, error: correlateError } = await supabase.rpc('correlate_channel_status', {
+        p_idempotency_key: idempotencyKey,
+        p_status: outboxStatus,
+        p_provider_message_id: messageId,
+      });
+
+      if (correlateError) {
+        // Nunca derruba o webhook: a Meta reentrega o mesmo status pra
+        // sempre se o processamento falhar.
+        wlog.error('whatsapp.webhook.correlate_channel_status_error', {
+          idempotency_key: idempotencyKey,
+          status: newStatus,
+          error: correlateError.message,
+        });
+      } else if (correlated === false) {
+        // false não é erro: nenhuma linha de outbox 'sending'/'unknown' com
+        // essa chave — mensagem que não saiu pelo runtime, ou status que já
+        // chegou antes (delivered/read repetindo o 'sent' de uma row que já
+        // saiu do estado correlacionável).
+        wlog.info('whatsapp.webhook.correlate_channel_status_no_match', {
+          idempotency_key: idempotencyKey,
+          status: newStatus,
+        });
+      }
+    }
   }
 }
 
