@@ -137,3 +137,93 @@ class TestTheErrorReachesLastError:
                 "select internal.correlate_outbox_status(%s, 'delivered')",
                 (key,),
             )
+
+
+class TestCorrelationFromAnAlreadySentRow:
+    """Review final, item 10: o caminho real de produção.
+
+    `mark_outbox_sent` move a row para 'sent' assim que a Meta API responde
+    200 — antes de qualquer webhook de status existir. O webhook de FALHA de
+    entrega chega depois, encontrando a row já 'sent'. Os testes acima nunca
+    provaram esse caminho: todos semeavam 'sending'/'unknown'.
+    """
+
+    def test_a_failure_reported_after_a_sent_row_is_recorded(
+        self, admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread
+    ) -> None:
+        outbox_id = create_outbox_item(admin, two_tenants.a.id, thread, status="sent")
+        key = idempotency_key_of(admin, outbox_id)
+
+        found = admin.execute(
+            "select internal.correlate_outbox_status(%s, 'failed', %s, %s)",
+            (key, "wamid.late-failure", "131026 - Message undeliverable"),
+        ).fetchone()[0]
+        assert found is True
+
+        row = outbox_status_row(admin, outbox_id)
+        assert row["status"] == "failed"
+        assert row["last_error"] == "131026 - Message undeliverable"
+
+    def test_a_redundant_success_on_an_already_sent_row_does_not_clobber(
+        self, admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread
+    ) -> None:
+        # Um 'sent' redundante (webhook reentregue, corrida) não pode apagar
+        # um erro já registrado nem é licença para "confirmar" de novo — a
+        # row já está no estado terminal certo, nada anda pra trás.
+        outbox_id = create_outbox_item(admin, two_tenants.a.id, thread, status="sent")
+        admin.execute(
+            "update internal.message_outbox set last_error = %s where id = %s",
+            ("previous failure", outbox_id),
+        )
+        key = idempotency_key_of(admin, outbox_id)
+
+        found = admin.execute(
+            "select internal.correlate_outbox_status(%s, 'sent', %s)",
+            (key, "wamid.redundant"),
+        ).fetchone()[0]
+        assert found is False
+
+        row = outbox_status_row(admin, outbox_id)
+        assert row["status"] == "sent"
+        assert row["last_error"] == "previous failure"
+
+    def test_a_failed_row_does_not_walk_backward_to_sent(
+        self, admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread
+    ) -> None:
+        outbox_id = create_outbox_item(admin, two_tenants.a.id, thread, status="failed")
+        admin.execute(
+            "update internal.message_outbox set last_error = %s where id = %s",
+            ("131026 - Message undeliverable", outbox_id),
+        )
+        key = idempotency_key_of(admin, outbox_id)
+
+        found = admin.execute(
+            "select internal.correlate_outbox_status(%s, 'sent', %s)",
+            (key, "wamid.late-success"),
+        ).fetchone()[0]
+        assert found is False
+
+        row = outbox_status_row(admin, outbox_id)
+        assert row["status"] == "failed"
+        assert row["last_error"] == "131026 - Message undeliverable"
+
+    def test_manual_review_is_left_alone_by_either_status(
+        self, admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread
+    ) -> None:
+        outbox_id = create_outbox_item(admin, two_tenants.a.id, thread, status="manual_review")
+        key = idempotency_key_of(admin, outbox_id)
+
+        found_failed = admin.execute(
+            "select internal.correlate_outbox_status(%s, 'failed', %s, %s)",
+            (key, "wamid.mr", "any error"),
+        ).fetchone()[0]
+        assert found_failed is False
+
+        found_sent = admin.execute(
+            "select internal.correlate_outbox_status(%s, 'sent', %s)",
+            (key, "wamid.mr"),
+        ).fetchone()[0]
+        assert found_sent is False
+
+        row = outbox_status_row(admin, outbox_id)
+        assert row["status"] == "manual_review"
