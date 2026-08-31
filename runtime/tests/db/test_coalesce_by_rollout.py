@@ -107,3 +107,32 @@ class TestOnlyRuntimeOrgsAreCoalesced:
         assert [job[0] for job in jobs] == [runtime_thread.conversation_id]
         assert conversation_state(admin, runtime_thread.conversation_id) == (1, True)
         assert conversation_state(admin, legacy_thread.conversation_id) == (0, True)
+
+    def test_the_runtime_budget_is_not_starved_by_older_legacy_rows(
+        self, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        """Achado do review de bb9acd8d: `due` ordenava TODO mundo (legacy e
+        runtime) por `pending_response_at` e só depois aplicava `p_limit` —
+        um único orçamento disputado pelos dois lados. Bem depois de um flip
+        para legacy, que é o cenário que este item existe para proteger, as
+        conversas legacy carregam os prazos MAIS VELHOS: um tique podia gastar
+        o limite inteiro limpando legacy e deixar a runtime devida esperando o
+        próximo tique — a resposta ao vivo atrasava na exata janela que o
+        item foi escrito para proteger.
+
+        Três legacy mais velhas que a runtime, com limite 2: sem contabilidade
+        separada por modo, a runtime perde a vez.
+        """
+        set_runtime_mode(admin, two_tenants.a.id, "runtime")
+        runtime_thread = create_thread(admin, two_tenants.a.id)
+        make_due(admin, runtime_thread.conversation_id, overdue_seconds=1)
+
+        # two_tenants.b sem linha em ai_runtime_rollout = legacy (fail-closed).
+        for overdue_seconds in (300, 200, 100):
+            legacy_thread = create_thread(admin, two_tenants.b.id)
+            make_due(admin, legacy_thread.conversation_id, overdue_seconds=overdue_seconds)
+
+        jobs = coalesce(admin, limit=2)
+
+        assert [job[0] for job in jobs] == [runtime_thread.conversation_id]
+        assert conversation_state(admin, runtime_thread.conversation_id) == (1, True)
