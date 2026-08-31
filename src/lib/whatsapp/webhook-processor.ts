@@ -635,6 +635,15 @@ async function processStatus(account: any, status: any) {
     biz_opaque_callback_data: idempotencyKey,
   } = status;
 
+  // Motivo da falha, num valor só — last_error da outbox (fix round 1 do
+  // item 10) é uma coluna de texto, sem code/message separados. Mesmo
+  // formato "code - message" que este arquivo já usa do lado de fora
+  // (message-service.ts) pra unir os dois.
+  const errorCode = errors?.[0]?.code?.toString();
+  const errorMessage = errors?.[0]?.message || errors?.[0]?.title;
+  const errorText =
+    errorCode && errorMessage ? `${errorCode} - ${errorMessage}` : errorCode || errorMessage || null;
+
   // B2: guard contra retrograde. Meta as vezes entrega o webhook de 'sent'
   // depois do 'delivered'; sem o guard a row volta pra 'sent'. failed sempre
   // se aplica porque carrega error_code que precisa ser persistido.
@@ -668,8 +677,8 @@ async function processStatus(account: any, status: any) {
   };
 
   if (errors && errors.length > 0) {
-    updateData.error_code = errors[0].code?.toString();
-    updateData.error_message = errors[0].message || errors[0].title;
+    updateData.error_code = errorCode;
+    updateData.error_message = errorMessage;
   }
 
   if (conversation) {
@@ -695,8 +704,8 @@ async function processStatus(account: any, status: any) {
   // revisar este gate.
   if (!currentRow) {
     await applyCampaignRecipientWebhookStatus(messageId, newStatus, {
-      errorCode: errors?.[0]?.code?.toString(),
-      errorMessage: errors?.[0]?.message || errors?.[0]?.title,
+      errorCode,
+      errorMessage,
     });
   }
 
@@ -711,6 +720,10 @@ async function processStatus(account: any, status: any) {
         p_idempotency_key: idempotencyKey,
         p_status: outboxStatus,
         p_provider_message_id: messageId,
+        // Só grava quando p_status = 'failed' (regra em SQL,
+        // internal.correlate_outbox_status) — um sucesso nunca some com o
+        // erro anterior. Passar sempre é seguro pelo mesmo motivo.
+        p_error: errorText,
       });
 
       if (correlateError) {

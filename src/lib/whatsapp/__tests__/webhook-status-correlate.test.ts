@@ -27,14 +27,21 @@ interface Recorded {
 
 const rec: Recorded = { rpcs: [] };
 
+// null = sem mirror local (mensagem pura do runtime, o caso comum nos testes
+// de correlação). Fix round 1 no guard anti-retrógrado usa isto pra simular
+// uma row já em 'delivered' quando um 'sent' atrasado chega depois.
+const cloudMessagesState: { currentRow: { status: string; delivered_at?: string | null; read_at?: string | null } | null } = {
+  currentRow: null,
+};
+
 function resultFor(table: string) {
   if (table === 'whatsapp_business_accounts') {
     return { data: [ACCOUNT], error: null };
   }
-  // Sem mirror local (mensagem pura do runtime): a leitura do currentRow e o
-  // update final ambos caem aqui — nenhum dos dois importa pra correlação.
+  // A leitura do currentRow e o update final ambos caem aqui — o update não
+  // precisa de um retorno específico pra estes testes.
   if (table === 'whatsapp_cloud_messages') {
-    return { data: null, error: null };
+    return { data: cloudMessagesState.currentRow, error: null };
   }
   return { data: null, error: null };
 }
@@ -102,6 +109,7 @@ const correlateCalls = () => rec.rpcs.filter((r) => r.name === 'correlate_channe
 
 beforeEach(() => {
   rec.rpcs = [];
+  cloudMessagesState.currentRow = null;
   rpc.mockClear();
   rpc.mockImplementation(async (name: string, args: any) => {
     rec.rpcs.push({ name, args });
@@ -122,6 +130,7 @@ describe('status COM biz_opaque_callback_data — chama correlate_channel_status
       p_idempotency_key: 'idem-key-1',
       p_status: 'sent',
       p_provider_message_id: 'wamid.OUT1',
+      p_error: null,
     });
   });
 
@@ -183,5 +192,70 @@ describe('status SEM biz_opaque_callback_data — caminho de hoje intacto', () =
 
     expect(correlateCalls()).toHaveLength(0);
     expect(result.errors).toBe(0);
+  });
+});
+
+describe('fix round 1 — o motivo da falha chega em p_error', () => {
+  it('status failed manda code e message da Meta juntos em p_error', async () => {
+    await processWebhookPayload(
+      statusPayload({
+        status: 'failed',
+        biz_opaque_callback_data: 'idem-falha-1',
+        errors: [{ code: 131047, message: 'Re-engagement message' }],
+      }),
+    );
+
+    expect(correlateCalls()[0].args.p_error).toBe('131047 - Re-engagement message');
+  });
+
+  it('sem errors[] no status, p_error vai null — não inventa motivo', async () => {
+    await processWebhookPayload(
+      statusPayload({ status: 'sent', biz_opaque_callback_data: 'idem-ok-1' }),
+    );
+
+    expect(correlateCalls()[0].args.p_error).toBeNull();
+  });
+
+  it('code sem message (ou vice-versa) ainda manda o que existe, sem "undefined" colado', async () => {
+    await processWebhookPayload(
+      statusPayload({
+        status: 'failed',
+        biz_opaque_callback_data: 'idem-falha-2',
+        errors: [{ code: 131047 }],
+      }),
+    );
+
+    expect(correlateCalls()[0].args.p_error).toBe('131047');
+  });
+});
+
+describe('fix round 1 — guarda anti-retrógrado não vaza uma correlação de status velho', () => {
+  it('status retrógrado (chega depois de um mais avançado) NÃO chama correlate_channel_status, mesmo com a chave', async () => {
+    // A row já está em 'delivered' (ordinal 2); um 'sent' (ordinal 1) chega
+    // atrasado — o guard de webhook-processor.ts:659 dá `return` ANTES do
+    // bloco de correlação. Hoje isso não perde nada de verdade (sent/
+    // delivered/read colapsam no mesmo 'sent' da outbox), mas o guard corta
+    // o caminho inteiro — inclusive a correlação — sem saber disso. Este
+    // teste fixa esse comportamento: se o vocabulário da outbox um dia
+    // ganhar um status próprio para 'delivered'/'read', é aqui que a
+    // regressão aparece primeiro.
+    cloudMessagesState.currentRow = { status: 'delivered' };
+
+    const result = await processWebhookPayload(
+      statusPayload({ status: 'sent', biz_opaque_callback_data: 'idem-retrogrado' }),
+    );
+
+    expect(correlateCalls()).toHaveLength(0);
+    expect(result.errors).toBe(0);
+  });
+
+  it('status NÃO retrógrado com a mesma chave chama a RPC normalmente (controle)', async () => {
+    cloudMessagesState.currentRow = { status: 'sent' };
+
+    await processWebhookPayload(
+      statusPayload({ status: 'delivered', biz_opaque_callback_data: 'idem-avanco' }),
+    );
+
+    expect(correlateCalls()).toHaveLength(1);
   });
 });
