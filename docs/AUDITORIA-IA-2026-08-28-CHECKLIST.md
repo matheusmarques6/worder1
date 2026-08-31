@@ -122,6 +122,14 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   chip de progresso juntos, igual ao legado. O histórico não depende disso — a
   gravação em `whatsapp_cloud_messages` acontece antes e para todos os tipos.
   Transcrição e visão seguem fora: são o item 31.
+
+  **Corrigido depois, pelo review de branch inteira (`31200c28`).** A justificativa
+  acima estava ERRADA e era minha: `whatsapp_cloud_messages` é a tabela legada. O
+  histórico que o runtime lê é `public.messages`, populada só pelo
+  `ingest_inbound_message` — então pular o ingest apagava a mensagem do transcrito do
+  modelo. PDF seguido de "conseguiu abrir?" chegava sem o PDF. Agora tipo não
+  suportado é INGERIDO e tem o agendamento cancelado (o padrão do `botOff`): entra no
+  histórico, não agenda turno. O teste que fixava o buraco como contrato foi reescrito.
   TDD, 6 testes novos vermelhos antes. `webhook-rollout-fork.test.ts` 21/21 ·
   suíte de `src/lib/whatsapp/` 286/288 (2 skips anteriores) · `tsc --noEmit` limpo.
 
@@ -190,6 +198,14 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   o item pede. A migration `20260828000005` acrescenta um `p_error` opcional no fim
   das duas assinaturas (interna e wrapper público), com grants recriados; os
   chamadores de 3 argumentos seguem funcionando. O erro só é gravado em falha.
+
+  **Corrigido depois, pelo review de branch inteira (`564d024b`).** A correlação não
+  disparava no caminho quente: `correlate_outbox_status` só tocava linha em
+  `sending`/`unknown`, mas `mark_outbox_sent` marca `sent` assim que a Meta responde
+  200 — muito antes do webhook de status chegar. Os 5 testes semeavam `sending`, então
+  passavam honestamente e não provavam produção. A `20260828000006` faz `failed`
+  correlacionar também em linha `sent`; `sent → sent` não anda, `failed` e
+  `manual_review` são terminais e nada os ressuscita.
 
   **Decisão registrada:** status de sucesso deixou de LIMPAR `last_error` (o corpo
   antigo zerava em `sent`). Um envio que falhou e depois teve sucesso mantém o motivo
@@ -646,6 +662,29 @@ mais o índice HNSW, instantâneo em tabela vazia (é o item 8, commit separado)
 ---
 
 ## Descobertos durante a execução (não renumerados — a fila de 63 é estável)
+
+- [ ] **Nada limpa o `ai_pending` no flip para runtime.** O item 09 limpa
+  `pending_response_at` quando a org volta para legacy; o caminho espelho não tem dono.
+  Na virada legacy→runtime, o cron (item 11) e o guard do worker desistem ANTES do
+  claim, então linhas `ai_pending = true` sobrevivem para sempre. Num flip de volta
+  para legacy o cron reenfileira e o runner responde mensagem de semanas atrás.
+  Achado do review de branch inteira; precisa de decisão de quem limpa (cron, migration
+  ou o próprio flip).
+
+- [ ] **`caption` viaja no payload e ninguém lê.** O item 06 passou a mandar
+  `media_id`/`mime_type`/`caption`; o extrator de histórico do runtime lê
+  `content ->> 'text'`, que é nulo para mídia. `media_id` espera o item 31 por desenho,
+  mas `caption` é texto do cliente que já está lá e some do transcrito.
+
+- [ ] **Atomicidade do claim de `ai_pending` sem prova contra banco real.** Lacuna
+  anterior — o worker também nunca teve esse teste — mas o raio de alcance dobrou agora
+  que dois chamadores dividem o mesmo guard (item 14).
+
+- [ ] **A janela de 30s do cache de `getRuntimeMode` alarga o buraco do flip.** O
+  coalescer lê a tabela sem cache; por até 30s depois do flip para legacy o webhook
+  ainda ingere enquanto o coalescer já limpa, e essas mensagens não são respondidas por
+  nenhum dos dois motores. O cabeçalho da migration aceita a perda de uma rodada; não
+  contava com o cache alargando a janela.
 
 Achados que apareceram ao trabalhar os itens e que não pertenciam a nenhum deles. Ficam aqui até
 você decidir se entram na fila.
