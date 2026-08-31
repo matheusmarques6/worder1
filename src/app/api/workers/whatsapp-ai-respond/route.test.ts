@@ -26,8 +26,14 @@ vi.mock('@/lib/whatsapp/alerts', () => ({
 }))
 
 const mockRunner = vi.fn()
+// Fix (item 14 da auditoria): o claim atômico foi extraído pra cloud-runner.ts
+// pra ser o MESMO guard do fallback síncrono do webhook. Mockado aqui como
+// sempre bem-sucedido — o comportamento do claim em si (already_consumed)
+// não é o que esta suíte cobre; ver __tests__/webhook-ai-sync-claim.test.ts.
+const mockClaim = vi.fn(async (..._a: any[]) => true)
 vi.mock('@/lib/ai/cloud-runner', () => ({
   maybeRunAgentForCloudConversation: (...args: any[]) => mockRunner(...args),
+  claimAiPendingResponse: (...args: any[]) => mockClaim(...args),
 }))
 
 // Chain thenable por TABELA: cada `.from(table)` seleciona o resultado
@@ -43,6 +49,8 @@ function resetMocks() {
   currentTable = ''
   mockRunner.mockReset()
   mockRunner.mockResolvedValue({ replied: true })
+  mockClaim.mockReset()
+  mockClaim.mockResolvedValue(true)
 }
 function track(name: string, args: any[]) {
   calls[name] = calls[name] || []

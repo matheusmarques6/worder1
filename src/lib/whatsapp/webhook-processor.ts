@@ -592,24 +592,45 @@ async function processMessage(
       // Fallback: QStash não configurado => roda síncrono (caminho legado 2a)
       // p/ não perder a resposta em ambientes sem fila. Relê a row p/ pegar
       // media_* (preenchidas pelo pipeline de mídia inbound).
+      //
+      // Item 14 da auditoria: este caminho chamava o runner direto, sem
+      // passar pelo CLAIM atômico de ai_pending que o worker QStash usa —
+      // duas entregas do mesmo webhook (Meta reentrega) viravam duas
+      // respostas. Agora usa o MESMO guard (claimAiPendingResponse,
+      // extraído de cloud-runner.ts): só quem consegue o claim roda o
+      // runner. Se o runner falhar no meio do caminho, releaseAiPendingClaim
+      // repõe ai_pending — senão a conversa fica muda pra sempre (QStash
+      // fora do ar, ninguém mais reprocessa essa linha).
       if (!messageId) {
-        const { maybeRunAgentForCloudConversation } = await import('@/lib/ai/cloud-runner');
-        const { buildRunnerMediaInput } = await import('@/lib/ai/media/router');
-        const { data: freshMsg } = await supabase
-          .from('whatsapp_cloud_messages')
-          .select('message_type, caption, media_url, media_storage_path, media_mime_type')
-          .eq('message_id', message.id)
-          .maybeSingle();
-        await maybeRunAgentForCloudConversation({
-          account,
-          conversation,
-          contact,
-          text: textBody,
-          inboundMessageId: message.id,
-          messageType,
-          phoneNumber,
-          inboundMedia: freshMsg ? buildRunnerMediaInput(freshMsg) || undefined : undefined,
-        });
+        const {
+          maybeRunAgentForCloudConversation,
+          claimAiPendingResponse,
+          releaseAiPendingClaim,
+        } = await import('@/lib/ai/cloud-runner');
+        const claimed = await claimAiPendingResponse(conversation.id);
+        if (claimed) {
+          try {
+            const { buildRunnerMediaInput } = await import('@/lib/ai/media/router');
+            const { data: freshMsg } = await supabase
+              .from('whatsapp_cloud_messages')
+              .select('message_type, caption, media_url, media_storage_path, media_mime_type')
+              .eq('message_id', message.id)
+              .maybeSingle();
+            await maybeRunAgentForCloudConversation({
+              account,
+              conversation,
+              contact,
+              text: textBody,
+              inboundMessageId: message.id,
+              messageType,
+              phoneNumber,
+              inboundMedia: freshMsg ? buildRunnerMediaInput(freshMsg) || undefined : undefined,
+            });
+          } catch (runErr) {
+            await releaseAiPendingClaim(conversation.id);
+            throw runErr;
+          }
+        }
       }
     }
   } catch (err: any) {

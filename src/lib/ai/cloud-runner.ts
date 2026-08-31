@@ -319,6 +319,41 @@ export interface CloudRunnerResult {
   failure?: 'transient' | 'permanent';
 }
 
+/**
+ * CLAIM atômico anti-double-send (Fase 2d): só 1 caller consegue zerar
+ * ai_pending true->false para uma conversa; os demais (retries QStash,
+ * jobs concorrentes, ou — item 14 da auditoria — o fallback síncrono do
+ * webhook quando QStash não está configurado) não afetam linha e devem
+ * desistir sem rodar o runner. Extraído do worker
+ * (api/workers/whatsapp-ai-respond/route.ts) para ser o MESMO guard nos
+ * dois lugares — dois guards divergentes é exatamente como o double-send
+ * nasceu.
+ */
+export async function claimAiPendingResponse(conversationId: string): Promise<boolean> {
+  const { data: claimed } = await supabaseAdmin
+    .from('whatsapp_cloud_conversations')
+    .update({ ai_pending: false })
+    .eq('id', conversationId)
+    .eq('ai_pending', true)
+    .select('id')
+    .maybeSingle();
+  return Boolean(claimed);
+}
+
+/**
+ * Repõe ai_pending=true depois de um claim que não terminou em resposta
+ * (exceção no meio do processamento do fallback síncrono). Sem isso a
+ * conversa fica muda para sempre: com QStash fora do ar, nada além do sweep
+ * do cron (pending_whatsapp_ai_responses_for_reprocess) volta a olhar para
+ * uma linha com ai_pending=false, e esse sweep também exige ai_pending=true.
+ */
+export async function releaseAiPendingClaim(conversationId: string): Promise<void> {
+  await supabaseAdmin
+    .from('whatsapp_cloud_conversations')
+    .update({ ai_pending: true })
+    .eq('id', conversationId);
+}
+
 export async function maybeRunAgentForCloudConversation(
   params: CloudRunnerParams,
 ): Promise<CloudRunnerResult> {

@@ -122,14 +122,11 @@ export async function POST(req: NextRequest) {
 
     // ---------- 3. CLAIM atômico (anti double-send) ----------
     // Só 1 job consegue zerar ai_pending=true->false. Os demais (retries/
-    // concorrentes) não afetam linha e saem sem rodar.
-    const { data: claimed } = await supabaseAdmin
-      .from('whatsapp_cloud_conversations')
-      .update({ ai_pending: false })
-      .eq('id', conversationId)
-      .eq('ai_pending', true)
-      .select('id')
-      .maybeSingle();
+    // concorrentes) não afetam linha e saem sem rodar. Guard compartilhado
+    // com o fallback síncrono do webhook (item 14 da auditoria) — vive em
+    // cloud-runner.ts para não divergir entre os dois lugares.
+    const { claimAiPendingResponse } = await import('@/lib/ai/cloud-runner');
+    const claimed = await claimAiPendingResponse(conversationId);
 
     if (!claimed) {
       return NextResponse.json({ ok: true, skipped: 'already_consumed' }, { status: 200 });
