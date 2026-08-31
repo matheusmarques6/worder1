@@ -286,7 +286,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Registrado, não fechado:** a atomicidade do UPDATE não é provada contra banco
   real — nem aqui nem no worker, que nunca teve esse teste. Lacuna anterior.
 
-- [ ] **15. Corrigir o comentário de `runtime-rollout.ts`** `[confirmado]`
+- [x] **15. Corrigir o comentário de `runtime-rollout.ts`** `[confirmado]` · commits `6e4dbfad` + `16a5f11b`
   `src/lib/ai/runtime-rollout.ts:11-12,45,52` — o docstring afirma "erro de leitura = legacy"; o código
   devolve `hit?.mode ?? 'legacy'`, ou seja o cache stale. O comportamento é melhor (evita flapping), o
   texto é que está errado — e o mesmo texto está repetido no webhook e num `it.todo`.
