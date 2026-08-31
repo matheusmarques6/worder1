@@ -776,10 +776,12 @@ async function processStatus(account: any, status: any) {
           error: correlateError.message,
         });
       } else if (correlated === false) {
-        // false não é erro: nenhuma linha de outbox 'sending'/'unknown' com
-        // essa chave — mensagem que não saiu pelo runtime, ou status que já
-        // chegou antes (delivered/read repetindo o 'sent' de uma row que já
-        // saiu do estado correlacionável).
+        // false não é erro: nenhuma linha de outbox correlacionável com essa
+        // chave — mensagem que não saiu pelo runtime, ou transição que a
+        // 20260828000006 não move (delivered/read repetindo o 'sent', ou
+        // qualquer status chegando em linha já 'failed'/'manual_review').
+        // Falha da Meta em linha 'sent' É correlacionável desde aquela
+        // migration: é o caminho quente, não o de exceção.
         wlog.info('whatsapp.webhook.correlate_channel_status_no_match', {
           idempotency_key: idempotencyKey,
           status: newStatus,
