@@ -218,10 +218,28 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   segue só em `supabase/migrations-archive/20260619_whatsapp_ai_retry.sql`, fora do
   stream que o CI aplica. Não foi promovida aqui — é o item 49.
 
-- [ ] **12. Badge "vai responder?" alinhado à régua certa** `[relatado]`
+- [x] **12. Badge "vai responder?" alinhado à régua certa** `[relatado]` · commit `ae34087c`
   `src/lib/ai/conversation-ai-status.ts:106-171` avalia guards que o runtime não lê e não consulta o
   rollout. O próprio teste admite e deixa 5 `it.todo` em
   `src/lib/ai/__tests__/conversation-ai-status.test.ts:210-215`.
+
+  **Entregue.** Para org em `runtime` o badge para de emprestar guard do cloud-runner:
+  `responder.py` não lê `activate_on`, `cooldown_after_transfer`,
+  `max_messages_per_conversation` nem `stop_on_human_reply` — nenhum deles decide nada
+  para quem migrou, e pesá-los era a origem do "bot pausado" eterno. O que decide de
+  verdade é `ai_enabled` na conversa e o agendamento em `pending_response_at`
+  (`cancel_pending_ai_response` é o freio). Modo legacy fica idêntico: a mudança é um
+  early return atrás de `runtimeMode === 'runtime'`. Os 5 `it.todo` viraram testes de
+  verdade — dois deles empilham TODAS as condições de guard ao mesmo tempo e provam
+  que nenhuma aparece. 19 testes no arquivo · `tsc` limpo.
+
+  **Achado de produto, registrado e NÃO implementado** (fora do escopo do item):
+  o badge e o runtime resolvem "agente ativo" por caminhos diferentes. O badge olha
+  `ai_agents.is_active` via `get_active_agent_for_conversation`; o runtime exige uma
+  versão em `ai_agent_versions.status = 'produção'` (`repository/agent.py:104-134`).
+  Loja com agente ativo e nenhuma versão em produção vê "bot ativo" enquanto todo
+  turno morre em `NoActiveVersion` e vai para a DLQ. É anterior a esta mudança e não
+  é guard portável — não deve ser absorvido pelo item 30 sem alguém olhar.
 
 - [ ] **13. Banner de religar IA em massa** `[relatado]`
   `src/app/api/whatsapp/inbox/conversations/reactivate-ai/route.ts:23-27` — whitelist de motivos que só
