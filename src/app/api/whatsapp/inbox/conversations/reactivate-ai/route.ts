@@ -14,17 +14,17 @@ import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireOrgFromAuth } from '@/lib/auth/require-org'
 import { wlog } from '@/lib/observability/whatsapp-logger'
+import { AUTO_DISABLED_REASONS } from '@/lib/ai/disabled-reasons'
 
 export const dynamic = 'force-dynamic'
 
-// Whitelist hard-coded: o que o sistema desligou sozinho, o user pode religar
-// em massa. NUNCA incluir 'manual' / 'Desativado manualmente' / 'manual_pause'
-// (escolha do atendente) nem 'transferred_to_human' (handoff intencional).
-const AUTO_DISABLED_REASONS = [
-  'no_valid_api_key',
-  'budget_exceeded',
-  'ai_permanent_error',
-] as const
+// Whitelist: o que o sistema desligou sozinho, o user pode religar em massa.
+// Vem de src/lib/ai/disabled-reasons.ts — fonte UNICA (o mesmo vocabulario
+// que o badge/label do inbox usa). Antes esta rota tinha sua propria copia
+// hard-coded do mesmo array: motivo novo escrito la e esquecido aqui e o
+// banner mente por omissao. NUNCA incluir 'manual' (escolha do atendente)
+// nem 'transferred_to_human' (handoff intencional) — o modulo canonico já
+// os deixa de fora de AUTO_DISABLED_REASONS, não precisa reimplementar aqui.
 
 export async function GET(request: NextRequest) {
   const auth = await requireOrgFromAuth(request)
