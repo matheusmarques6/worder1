@@ -113,20 +113,37 @@ type = "forbidden"
 # efetivamente fala com o banco, e com `include_external_packages = true`
 # (acima) o linter agora o enxerga como qualquer outro módulo.
 #
+# Fix round 1 (revisão de 6255fc18): a primeira versão desta lista só cobria
+# os pacotes que já tinham import de psycopg conhecido, deixando `crypto/`,
+# `evals/`, `obs/` e os módulos soltos (`clock.py`, `config.py`,
+# `randomness.py`, `__main__.py`) sem checagem — um `import psycopg` ali
+# ficaria verde. A lista agora é TODO módulo/pacote de primeiro nível de
+# `agents_runtime`, exceto os dois exemptos abaixo, para que o nome do
+# contrato ("only the repository layer reaches the database") corresponda ao
+# que ele de fato cobre.
+#
 # `agents_runtime.app` continua deliberadamente ausente: é a composition root
 # onde os pools são criados e entregues a todo mundo, então é o único módulo
-# que precisa conhecer o driver.
+# que precisa conhecer o driver. `agents_runtime.repository` é o próprio alvo
+# do contrato (source e forbidden não podem se sobrepor).
 source_modules = [
+    "agents_runtime.__main__",
     "agents_runtime.agent_core",
     "agents_runtime.channels",
+    "agents_runtime.clock",
     "agents_runtime.commerce",
+    "agents_runtime.config",
     "agents_runtime.connectors",
+    "agents_runtime.crypto",
     "agents_runtime.dispatch",
+    "agents_runtime.evals",
     "agents_runtime.inbox",
     "agents_runtime.judges",
+    "agents_runtime.obs",
     "agents_runtime.onboarding",
     "agents_runtime.queueing",
     "agents_runtime.quota",
+    "agents_runtime.randomness",
     "agents_runtime.server",
     "agents_runtime.tools",
 ]
