@@ -264,9 +264,27 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   exclusão. Mudança preventiva, não corretiva. 8 testes no arquivo (3 novos, provando
   com um motivo sintético que a rota reage a mudanças na lista canônica) · `tsc` limpo.
 
-- [ ] **14. Fechar o double-send do fallback síncrono** `[relatado]`
+- [x] **14. Fechar o double-send do fallback síncrono** `[relatado]` · commits `91d51603` + `7908ff27`
   `src/lib/whatsapp/webhook-processor.ts:554` chama o runner direto quando QStash não está configurado,
   sem passar pelo guard anti-double-send do worker.
+
+  **Entregue.** O claim atômico de `ai_pending` que morava dentro do worker QStash
+  virou `claimAiPendingResponse`/`releaseAiPendingClaim` em `src/lib/ai/cloud-runner.ts`,
+  e o caminho síncrono passa por ele. O UPDATE do worker ficou byte a byte igual —
+  só mudou de casa. Ramo `runtime` intocado.
+
+  O review pegou que o claim só era liberado quando o agente LANÇAVA: falha
+  transitória devolvida sem exceção consumia o claim e a conversa ficava muda até o
+  cliente escrever de novo. Agora `failure === 'transient'` libera e `permanent`
+  consome — a mesma distinção que o worker faz, lendo o mesmo campo, com um único
+  produtor. Toda saída transitória acontece com `sendResult.sent === false`, então
+  liberar nunca reabre uma conversa que já recebeu mensagem.
+
+  33 testes nos três arquivos; um deles encadeia duas entregas e prova que a segunda
+  só passa porque a primeira liberou. `tsc` limpo.
+
+  **Registrado, não fechado:** a atomicidade do UPDATE não é provada contra banco
+  real — nem aqui nem no worker, que nunca teve esse teste. Lacuna anterior.
 
 - [ ] **15. Corrigir o comentário de `runtime-rollout.ts`** `[confirmado]`
   `src/lib/ai/runtime-rollout.ts:11-12,45,52` — o docstring afirma "erro de leitura = legacy"; o código
