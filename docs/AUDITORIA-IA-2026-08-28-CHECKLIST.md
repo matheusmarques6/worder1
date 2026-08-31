@@ -106,13 +106,24 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   next build ✓ · CI `33229985114` (app) e `33229985117` (runtime), sete jobs verdes.
 
 
-- [ ] **6. Mídia no payload do ingest** `[confirmado]`
+- [x] **6. Mídia no payload do ingest** `[confirmado]` · commit `cc2a8dcb`
   `src/lib/whatsapp/webhook-processor.ts:451` manda só `{type, text}`. O runtime nunca vê o áudio/imagem
   que já foi baixado para `whatsapp_cloud_messages`.
 
-- [ ] **7. Filtro de tipos não suportados no ramo runtime** `[confirmado]`
+- [x] **7. Filtro de tipos não suportados no ramo runtime** `[confirmado]` · commit `cc2a8dcb`
   Mesmo arquivo — o ramo legado barra `document/sticker/location/video` via `aiRoute !== 'unsupported'`;
   o ramo runtime tem só o guarda `isSelf`. Um sticker agenda resposta a nada.
+
+  **Entregues juntos** (mesmo arquivo, mesmo bloco): `p_content` passa a carregar
+  `media_id`/`mime_type`/`caption` quando a mensagem tem mídia — texto mantém a forma
+  exata de antes, provada com `toEqual` e não `toMatchObject`. O `routeInboundForAi`
+  que o ramo legado já usava passou a ser calculado UMA vez e reusado pelos dois
+  ramos: tipo não suportado agora pula o `ingest_inbound_message`, o cancelamento e o
+  chip de progresso juntos, igual ao legado. O histórico não depende disso — a
+  gravação em `whatsapp_cloud_messages` acontece antes e para todos os tipos.
+  Transcrição e visão seguem fora: são o item 31.
+  TDD, 6 testes novos vermelhos antes. `webhook-rollout-fork.test.ts` 21/21 ·
+  suíte de `src/lib/whatsapp/` 286/288 (2 skips anteriores) · `tsc --noEmit` limpo.
 
 - [ ] **8. Índice vetorial e índice de org em `ai_agent_chunks`** `[confirmado]`
   `grep -rniE "hnsw|ivfflat|vector_cosine" supabase/` → zero. `repository/knowledge.py:116-128` faz
