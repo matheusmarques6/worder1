@@ -11,7 +11,9 @@
  * exatamente uma coisa — a resposta para org em `runtime` — e não mexeu no
  * caminho legado, que continua atendendo todas as outras orgs.
  *
- * O contrato de DEPOIS do conserto está no fim do arquivo, como `it.todo`.
+ * O contrato de DEPOIS do conserto está no fim do arquivo, no describe "L1 —
+ * o badge precisa responder pela régua do caminho certo" — já são testes
+ * reais, não mais `it.todo`.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -213,8 +215,8 @@ describe('ordem dos guards — o caminho legado, como está hoje', () => {
 });
 
 // ---------------------------------------------------------------------------
-// O contrato DEPOIS do conserto do L1. Cada linha vira um `it` quando
-// `resolveConversationAiStatus` passar a consultar `getRuntimeMode`.
+// O contrato DEPOIS do conserto do L1: resolveConversationAiStatus já
+// consulta getRuntimeMode; cada `it` abaixo prova uma linha do contrato.
 // ---------------------------------------------------------------------------
 
 describe('L1 — o badge precisa responder pela régua do caminho certo', () => {

@@ -5,10 +5,14 @@
  *   - 'legacy'  → debounce ai_debounce_until/ai_pending + QStash + cloud-runner
  *   - 'runtime' → RPC ingest_inbound_message + coalescer do runtime Python
  *
- * A fonte é a tabela ai_runtime_rollout (linha ausente = legacy). FAIL-CLOSED
- * PARA LEGACY: erro de leitura nunca silencia o bot atual de uma org não
- * migrada, nem migra uma org por acidente. Cache por org com TTL curto — o
- * flip de rollout é raro e a guarda no worker QStash cobre jobs em voo.
+ * A fonte é a tabela ai_runtime_rollout (linha ausente = legacy). Erro de
+ * leitura devolve o modo cacheado da org quando existe, mesmo vencido — só
+ * cai para 'legacy' se ainda não há nada em cache. Preferir o cache stale
+ * evita o flapping de modo (legacy → runtime → legacy) numa indisponibilidade
+ * momentânea do banco, sem risco de migrar uma org por acidente: o cache só
+ * guarda um modo que já veio de uma leitura bem-sucedida. Cache por org com
+ * TTL curto — o flip de rollout é raro e a guarda no worker QStash cobre
+ * jobs em voo.
  */
 
 export type RuntimeMode = 'legacy' | 'runtime';

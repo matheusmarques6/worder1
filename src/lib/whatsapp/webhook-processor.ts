@@ -454,7 +454,8 @@ async function processMessage(
   // atômico + pending_response_at e NÃO enfileira — o coalescer do runtime
   // Python cria o job único da rajada. O bloco de debounce legado abaixo é
   // PULADO por inteiro (uma conversa nunca está nos dois mecanismos). Org sem
-  // linha em ai_runtime_rollout = legacy; erro de leitura = legacy.
+  // linha em ai_runtime_rollout = legacy; erro de leitura reaproveita o cache
+  // stale da org (getRuntimeMode), senão legacy.
   // ============================================================
   const { getRuntimeMode } = await import('@/lib/ai/runtime-rollout');
   const runtimeMode = await getRuntimeMode(supabase, account.organization_id);
