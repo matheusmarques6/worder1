@@ -74,7 +74,20 @@ export async function GET(req: NextRequest) {
   } else {
     const rows = (aiPending as any[]) || [];
     aiScanned = rows.length;
+    // Rollout do runtime (Agentes por Evento, D3): org em 'runtime' não tem
+    // quem consuma este job no caminho TS — a resposta dela é agendada por
+    // pending_response_at e coalescida pelo runtime Python. Reenfileirar no
+    // QStash aqui seria um segundo mecanismo respondendo à mesma conversa,
+    // do jeito que o item 09 corrigiu no coalescer para o sentido inverso.
+    // Erro de leitura do rollout = legacy (getRuntimeMode já é fail-closed) —
+    // reenfileira, nunca silencia quem não migrou. Linha pulada aqui NÃO tem
+    // ai_pending zerado: o cron não é dono desse estado e a org pode voltar
+    // para legacy.
+    const { getRuntimeMode } = await import('@/lib/ai/runtime-rollout');
     for (const row of rows) {
+      if ((await getRuntimeMode(supabaseAdmin, row.organization_id)) === 'runtime') {
+        continue;
+      }
       try {
         await enqueueWhatsAppAiRespond(
           {
