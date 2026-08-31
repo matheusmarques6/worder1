@@ -142,7 +142,15 @@ vi.mock('@/lib/ai/runtime-rollout', () => ({
 // O guard em si é caixa-preta aqui — o que se prova é que webhook-processor
 // obedece o resultado dele, não a atomicidade da query (já provada no
 // código original do worker, só extraído).
-const maybeRunAgentForCloudConversation = vi.fn(async (..._a: any[]) => ({ replied: true, transferred: false }));
+type MockRunnerResult = {
+  replied: boolean;
+  transferred: boolean;
+  failure?: 'transient' | 'permanent';
+  error?: string;
+};
+const maybeRunAgentForCloudConversation = vi.fn(
+  async (..._a: any[]): Promise<MockRunnerResult> => ({ replied: true, transferred: false }),
+);
 const claimAiPendingResponse = vi.fn(async (..._a: any[]) => true);
 const releaseAiPendingClaim = vi.fn(async (..._a: any[]) => undefined);
 vi.mock('@/lib/ai/cloud-runner', () => ({
@@ -229,6 +237,77 @@ describe('fallback síncrono (QStash indisponível) — claim compartilhado com 
     expect(releaseAiPendingClaim).toHaveBeenCalledWith(CONVERSATION_ID);
     expect(result.errors).toBe(0);
     expect(result.processed).toBe(1);
+  });
+
+  // Fix round 1 (review de 91d51603): result.failure === 'transient' volta
+  // SEM lançar exceção — o cloud-runner devolve isso normalmente (é assim
+  // que o worker QStash também detecta transient, ver route.ts:214). Sem
+  // este release, essa saída deixava a conversa muda até a próxima mensagem
+  // do cliente, exatamente o que a prova (c) do brief cobre.
+  it('(d) runner retorna failure=transient (sem lançar): libera o claim — igual a uma exceção', async () => {
+    claimAiPendingResponse.mockResolvedValueOnce(true);
+    maybeRunAgentForCloudConversation.mockResolvedValueOnce({
+      replied: false,
+      transferred: false,
+      failure: 'transient',
+      error: 'timeout do provider',
+    });
+
+    const result = await processWebhookPayload(inboundTextPayload('wamid.D-transient'));
+
+    // Distingue "liberou pra uma entrega futura tentar de novo" de "nunca
+    // chegou a reivindicar": o claim FOI tomado (chamado com o id certo) e o
+    // runner FOI chamado — só depois disso é que o release acontece.
+    expect(claimAiPendingResponse).toHaveBeenCalledWith(CONVERSATION_ID);
+    expect(maybeRunAgentForCloudConversation).toHaveBeenCalledTimes(1);
+    expect(releaseAiPendingClaim).toHaveBeenCalledTimes(1);
+    expect(releaseAiPendingClaim).toHaveBeenCalledWith(CONVERSATION_ID);
+    expect(result.errors).toBe(0);
+  });
+
+  // Falha PERMANENTE == vai falhar de novo do mesmo jeito. Liberar aqui
+  // convida o mesmo trabalho fadado na próxima reentrega da Meta — o worker
+  // QStash também não reabre o claim pra isso (route.ts só reabre quando
+  // failure === 'transient'; permanent cai direto no fluxo de "consumido").
+  it('(e) runner retorna failure=permanent: NÃO libera — evita repetir o trabalho fadado numa reentrega', async () => {
+    claimAiPendingResponse.mockResolvedValueOnce(true);
+    maybeRunAgentForCloudConversation.mockResolvedValueOnce({
+      replied: false,
+      transferred: false,
+      failure: 'permanent',
+      error: 'sem agente ativo',
+    });
+
+    await processWebhookPayload(inboundTextPayload('wamid.E-permanent'));
+
+    expect(maybeRunAgentForCloudConversation).toHaveBeenCalledTimes(1);
+    expect(releaseAiPendingClaim).not.toHaveBeenCalled();
+  });
+
+  it('sucesso normal (sem failure): também não libera — o claim fica consumido', async () => {
+    claimAiPendingResponse.mockResolvedValueOnce(true);
+    maybeRunAgentForCloudConversation.mockResolvedValueOnce({ replied: true, transferred: false });
+
+    await processWebhookPayload(inboundTextPayload('wamid.F-success'));
+
+    expect(releaseAiPendingClaim).not.toHaveBeenCalled();
+  });
+
+  it('(f) após liberar por transient, uma entrega seguinte consegue reivindicar de novo e rodar — release não é double-send', async () => {
+    claimAiPendingResponse
+      .mockResolvedValueOnce(true) // 1ª entrega: reivindica
+      .mockResolvedValueOnce(true); // 2ª entrega: reivindica de novo (o release da 1ª reabriu o ai_pending)
+    maybeRunAgentForCloudConversation
+      .mockResolvedValueOnce({ replied: false, transferred: false, failure: 'transient', error: 'timeout' })
+      .mockResolvedValueOnce({ replied: true, transferred: false });
+
+    await processWebhookPayload(inboundTextPayload('wamid.F1'));
+    await processWebhookPayload(inboundTextPayload('wamid.F2'));
+
+    expect(claimAiPendingResponse).toHaveBeenCalledTimes(2);
+    expect(maybeRunAgentForCloudConversation).toHaveBeenCalledTimes(2);
+    // só a 1ª (transient) libera — a 2ª terminou bem, claim fica consumido.
+    expect(releaseAiPendingClaim).toHaveBeenCalledTimes(1);
   });
 });
 

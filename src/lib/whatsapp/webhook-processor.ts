@@ -616,7 +616,7 @@ async function processMessage(
               .select('message_type, caption, media_url, media_storage_path, media_mime_type')
               .eq('message_id', message.id)
               .maybeSingle();
-            await maybeRunAgentForCloudConversation({
+            const result = await maybeRunAgentForCloudConversation({
               account,
               conversation,
               contact,
@@ -626,6 +626,14 @@ async function processMessage(
               phoneNumber,
               inboundMedia: freshMsg ? buildRunnerMediaInput(freshMsg) || undefined : undefined,
             });
+            // failure='transient' volta SEM lançar (mesmo sinal que o worker
+            // QStash usa em route.ts pra decidir retry) — libera pro cliente
+            // não ficar mudo. failure='permanent' (ou sucesso) NÃO libera:
+            // vai falhar do mesmo jeito de novo, e reabrir o claim só convida
+            // o mesmo trabalho fadado numa reentrega da Meta.
+            if (result.failure === 'transient') {
+              await releaseAiPendingClaim(conversation.id);
+            }
           } catch (runErr) {
             await releaseAiPendingClaim(conversation.id);
             throw runErr;
