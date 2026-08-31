@@ -82,7 +82,7 @@ select = [
 # module table of arquitetura §3 an enforced boundary instead of a convention.
 [tool.importlinter]
 root_packages = ["agents_runtime"]
-include_external_packages = false
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "channels and connectors never know about each other"
@@ -106,9 +106,16 @@ forbidden_modules = ["agents_runtime.channels"]
 [[tool.importlinter.contracts]]
 name = "only the repository layer reaches the database"
 type = "forbidden"
-# `agents_runtime.app` is deliberately absent: the composition root is where the
-# pools are built and handed to everyone else, so it is the one module that has
-# to know the driver exists. Every module that receives them is listed here.
+# Auditoria 2026-08-28 item 16: a versão anterior proibia importar
+# `agents_runtime.repository.driver`, um módulo que nunca existiu de verdade
+# (só docstring, nenhum chamador — ele foi apagado). Ninguém importava esse
+# nome, então o contrato passava verde sem checar nada. `psycopg` é o que
+# efetivamente fala com o banco, e com `include_external_packages = true`
+# (acima) o linter agora o enxerga como qualquer outro módulo.
+#
+# `agents_runtime.app` continua deliberadamente ausente: é a composition root
+# onde os pools são criados e entregues a todo mundo, então é o único módulo
+# que precisa conhecer o driver.
 source_modules = [
     "agents_runtime.agent_core",
     "agents_runtime.channels",
@@ -120,6 +127,32 @@ source_modules = [
     "agents_runtime.onboarding",
     "agents_runtime.queueing",
     "agents_runtime.quota",
+    "agents_runtime.server",
     "agents_runtime.tools",
 ]
-forbidden_modules = ["agents_runtime.repository.driver"]
+forbidden_modules = ["psycopg"]
+# `repository/*` importa psycopg de propósito — é o ponto único que fala com o
+# driver — então qualquer módulo que chama uma função do repository "alcança"
+# psycopg indiretamente. Proibir isso também derrubaria a arquitetura inteira
+# (todo módulo que usa `repository.agent`, por exemplo). O que a fronteira
+# proíbe é o IMPORT DIRETO de psycopg fora de repository/; a cadeia indireta
+# via repository é o desenho pretendido, não a violação.
+allow_indirect_imports = "true"
+# Dívida pré-existente: 10 módulos (fora `agents_runtime.app`, já exempto acima)
+# abrem conexões psycopg diretamente em vez de passar pelo `repository/`. Ligar
+# a checagem de verdade (linha acima) sem consertar os 11 de uma vez deixaria a
+# tarefa virar uma refatoração arquitetural fora de escopo — então cada um vira
+# uma exceção NOMEADA aqui, visível e contável, em vez de a trava ficar muda.
+# Encolher esta lista é o trabalho de uma tarefa futura, não apagar a linha.
+ignore_imports = [
+    "agents_runtime.agent_core.responder -> psycopg",
+    "agents_runtime.agent_core.toucher -> psycopg",
+    "agents_runtime.commerce.offer_engine -> psycopg",
+    "agents_runtime.queueing.sender -> psycopg",
+    "agents_runtime.queueing.worker -> psycopg",
+    "agents_runtime.server -> psycopg",
+    "agents_runtime.tools.base -> psycopg",
+    "agents_runtime.tools.coupon -> psycopg",
+    "agents_runtime.tools.customer -> psycopg",
+    "agents_runtime.tools.knowledge -> psycopg",
+]
