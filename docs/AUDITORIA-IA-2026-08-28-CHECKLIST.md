@@ -125,10 +125,25 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   TDD, 6 testes novos vermelhos antes. `webhook-rollout-fork.test.ts` 21/21 ·
   suíte de `src/lib/whatsapp/` 286/288 (2 skips anteriores) · `tsc --noEmit` limpo.
 
-- [ ] **8. Índice vetorial e índice de org em `ai_agent_chunks`** `[confirmado]`
+- [x] **8. Índice vetorial e índice de org em `ai_agent_chunks`** `[confirmado]` · commit `55972096`
   `grep -rniE "hnsw|ivfflat|vector_cosine" supabase/` → zero. `repository/knowledge.py:116-128` faz
   `order by embedding <=> …` por turno numa tabela sem índice vetorial e sem índice em `organization_id`.
   O docstring afirma casar com um HNSW que não existe no repo.
+
+  **Entregue:** migration `20260828000002_ai_agent_chunks_indexes.sql` — HNSW com
+  `vector_cosine_ops` (a classe do `<=>` que a query usa; `vector_l2_ops` seria um
+  índice que o planner nunca escolheria) mais btree em `organization_id`, tudo dentro
+  do bloco guardado por `to_regclass`. Sem `CONCURRENTLY`: migration roda em transação
+  e a base media 0 chunks em produção. O docstring de `search_knowledge` passa a nomear
+  a migration em vez de prometer um índice inexistente; a query em si não mudou.
+  Teste `runtime/tests/db/test_ai_agent_chunks_indexes.py` afirma o `indexdef`
+  (tipo + opclass, não só o nome) e roda `explain` sobre a query COPIADA verbatim do
+  `knowledge.py`. `pytest -m db` 370 ✓ em Postgres real.
+
+  **Adiado com decisão:** um índice composto `(organization_id, embedding_model)`
+  serviria melhor o filtro desta query. Fica fora porque a base está vazia — escolher
+  forma de índice sem dado é chute, e o composto custa escrita. Revisitar quando a
+  primeira loja alimentar a base.
 
 ---
 
