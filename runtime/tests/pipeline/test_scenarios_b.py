@@ -26,6 +26,7 @@ from tests.db.factories import (
     create_tenant,
     create_thread,
     make_due,
+    set_runtime_mode,
     unique_id,
     unique_phone,
 )
@@ -74,6 +75,7 @@ async def test_scenario_2_a_message_during_generation_invalidates_the_draft(
     ZERO sends from it reach the provider. Generation 2 answers all six.
     """
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
@@ -167,6 +169,7 @@ async def test_scenario_5_an_expired_lease_is_assumed_and_the_late_worker_sends_
     )
 
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     thread = create_thread(sync_admin, organization_id)
     make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
 
@@ -255,6 +258,7 @@ async def test_scenario_6_the_keepalive_prevents_redelivery_during_long_work(
     )
 
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     thread = create_thread(sync_admin, organization_id)
     make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
     arm_gate(sync_admin, thread.conversation_id, holds=1)
@@ -317,7 +321,9 @@ async def test_scenario_9_a_full_tenant_postpones_its_own_jobs_and_nobody_elses(
     internal order never.
     """
     tenant_a = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, tenant_a, "runtime")
     tenant_b = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, tenant_b, "runtime")
     threads_a = [create_thread(sync_admin, tenant_a) for _ in range(4)]
     thread_b = create_thread(sync_admin, tenant_b)
     for thread in (*threads_a, thread_b):

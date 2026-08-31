@@ -28,6 +28,7 @@ from tests.db.factories import (
     create_knowledge_chunk,
     create_mission,
     create_tenant,
+    set_runtime_mode,
     unique_id,
     unique_phone,
 )
@@ -62,6 +63,7 @@ def ingest_message(sync_admin: psycopg.Connection, organization_id, phone: str, 
 
 def a_tenant_with_an_agent(sync_admin: psycopg.Connection, *, tools=("search_knowledge",)):
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     create_agent_version(
         sync_admin,
         organization_id,

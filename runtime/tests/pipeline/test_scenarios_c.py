@@ -25,6 +25,7 @@ from tests.db.factories import (
     create_tenant,
     create_thread,
     make_due,
+    set_runtime_mode,
 )
 from tests.support.fake_channel import FakeChannel
 from tests.support.holdable import arm_gate, holders_started
@@ -60,6 +61,7 @@ def test_scenario_4a_a_kill_mid_turn_loses_nothing_and_doubles_nothing(
     concludes. The customer sees exactly one reply and no trace of the death.
     """
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     thread = create_thread(sync_admin, organization_id)
     make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
     arm_gate(sync_admin, thread.conversation_id, holds=1)
@@ -140,6 +142,7 @@ async def test_scenario_4b_a_crash_between_conclusion_and_archive_converges(
     the pending send goes out once.
     """
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     thread = create_thread(sync_admin, organization_id)
 
     sync_admin.execute(
@@ -238,6 +241,7 @@ async def test_scenario_7_a_poisoned_job_goes_to_the_dlq_and_comes_back(
     """Permanent failure → the right DLQ, payload intact → manual reprocess →
     the same job concludes. A waiting room, not a cemetery."""
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     thread = create_thread(sync_admin, organization_id)
     make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
 
@@ -321,6 +325,7 @@ async def test_scenario_7_exhaustion_also_ends_in_the_dlq(
         }
     )
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     thread = create_thread(sync_admin, organization_id)
     make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
 
@@ -360,6 +365,7 @@ def test_scenario_10_a_dead_sender_never_causes_a_resend(
     the idempotency_key) is what resolves it to sent. Never a resend.
     """
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     thread = create_thread(sync_admin, organization_id)
     outbox_id = create_outbox_item(sync_admin, organization_id, thread)
     key = q(dsn, "select idempotency_key from internal.message_outbox where id = %s", (outbox_id,))[
@@ -435,6 +441,7 @@ async def test_scenario_10_variant_no_evidence_ends_in_manual_review(
         {**TINY_INTERVALS, "AGENTS_SEND_LEASE_MS": "300", "AGENTS_REVIEW_MS": "500"}
     )
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     thread = create_thread(sync_admin, organization_id)
     outbox_id = create_outbox_item(sync_admin, organization_id, thread, status="sending")
     sync_admin.execute(

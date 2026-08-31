@@ -14,7 +14,7 @@ import pytest
 
 from agents_runtime.app import run
 from agents_runtime.config import QueueingConfig
-from tests.db.factories import create_tenant, create_thread, make_due
+from tests.db.factories import create_tenant, create_thread, make_due, set_runtime_mode
 
 DEADLINE = 15
 
@@ -32,6 +32,7 @@ async def eventually(check, *, deadline_s: float = DEADLINE, note: str = ""):
 @pytest.fixture
 def world(sync_admin: psycopg.Connection):
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     thread = create_thread(sync_admin, organization_id)
     return organization_id, thread
 

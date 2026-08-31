@@ -570,8 +570,34 @@ def create_llm_call(
     return call_id
 
 
+def set_runtime_mode(
+    conn: psycopg.Connection, organization_id: uuid.UUID, mode: str = "runtime"
+) -> None:
+    """Grava (ou substitui) a linha da org em `ai_runtime_rollout` (D3).
+
+    Linha ausente já é 'legacy' por contrato (fail-closed, ver
+    src/lib/ai/runtime-rollout.ts) — este helper só existe para os testes que
+    precisam da outra metade, 'runtime', ou de um 'legacy' EXPLÍCITO (linha
+    presente, não ausente)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.ai_runtime_rollout (organization_id, mode)
+            values (%s, %s)
+            on conflict (organization_id) do update set mode = excluded.mode
+            """,
+            (organization_id, mode),
+        )
+
+
 def create_tenant(conn: psycopg.Connection, label: str | None = None) -> uuid.UUID:
-    """A bare organization — enough for the runtime's RLS scope, no hub user."""
+    """A bare organization — enough for the runtime's RLS scope, no hub user.
+
+    Bare de propósito: `test_emit_mission_job.py` já usa a AUSÊNCIA de linha em
+    `ai_runtime_rollout` como o próprio caso de teste ("org fora do rollout").
+    Quem precisa da org em 'runtime' (a suíte `pipeline`, que exercita
+    `internal.coalesce_due_conversations` de ponta a ponta) chama
+    `set_runtime_mode` explicitamente."""
     name = label or unique_id("org")
     with conn.cursor() as cur:
         cur.execute(

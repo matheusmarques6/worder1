@@ -13,7 +13,7 @@ import pytest
 from psycopg.types.json import Jsonb
 
 from tests.db.conftest import TwoTenants
-from tests.db.factories import create_thread, unique_id
+from tests.db.factories import create_thread, set_runtime_mode, unique_id
 
 TRACEPARENT = {"traceparent": "00-11111111111111111111111111111111-2222222222222222-01"}
 
@@ -88,6 +88,9 @@ class TestTheCoalescerStampsTheBatch:
     def test_the_queued_job_carries_the_pass_context(
         self, admin: psycopg.Connection, two_tenants: TwoTenants
     ) -> None:
+        # O filtro por rollout (item 09) tem suíte própria; aqui a org
+        # precisa estar em 'runtime' só para o job continuar sendo gerado.
+        set_runtime_mode(admin, two_tenants.a.id, "runtime")
         thread = create_thread(admin, two_tenants.a.id)
         admin.execute(
             "update public.conversations set pending_response_at = now() - interval '1s'"
@@ -114,6 +117,7 @@ class TestTheCoalescerStampsTheBatch:
     def test_the_two_arg_call_still_coalesces_with_null(
         self, admin: psycopg.Connection, two_tenants: TwoTenants
     ) -> None:
+        set_runtime_mode(admin, two_tenants.a.id, "runtime")
         thread = create_thread(admin, two_tenants.a.id)
         admin.execute(
             "update public.conversations set pending_response_at = now() - interval '1s'"

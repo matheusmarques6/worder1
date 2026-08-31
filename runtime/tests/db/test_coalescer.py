@@ -17,7 +17,7 @@ import psycopg
 import pytest
 
 from tests.db.conftest import TwoTenants, as_app_role
-from tests.db.factories import Thread, create_thread, make_due
+from tests.db.factories import Thread, create_thread, make_due, set_runtime_mode
 
 QUEUE = "q_inbound"
 
@@ -55,6 +55,11 @@ def empty_inbound(admin: psycopg.Connection):
 
 @pytest.fixture
 def due_thread(admin: psycopg.Connection, two_tenants: TwoTenants) -> Thread:
+    # Este arquivo prova o MECANISMO de coalescência (transação única, SKIP
+    # LOCKED, gerações) — não o filtro por rollout, que tem suíte própria em
+    # test_coalesce_by_rollout.py. A org precisa estar em 'runtime' para que
+    # esses testes continuem exercitando o que sempre exercitaram.
+    set_runtime_mode(admin, two_tenants.a.id, "runtime")
     thread = create_thread(admin, two_tenants.a.id)
     make_due(admin, thread.conversation_id, last_inbound_seq=3)
     return thread
@@ -215,6 +220,7 @@ def test_a_new_message_produces_a_second_generation_and_a_second_job(
 def test_what_does_not_fit_stays_due_for_the_next_tick(
     admin: psycopg.Connection, two_tenants: TwoTenants
 ) -> None:
+    set_runtime_mode(admin, two_tenants.a.id, "runtime")
     threads = [create_thread(admin, two_tenants.a.id) for _ in range(3)]
     for thread in threads:
         make_due(admin, thread.conversation_id)

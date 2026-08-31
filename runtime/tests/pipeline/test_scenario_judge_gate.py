@@ -21,7 +21,13 @@ from psycopg.types.json import Jsonb
 
 from agents_runtime.app import run
 from agents_runtime.config import QueueingConfig
-from tests.db.factories import create_channel_account, create_tenant, unique_id, unique_phone
+from tests.db.factories import (
+    create_channel_account,
+    create_tenant,
+    set_runtime_mode,
+    unique_id,
+    unique_phone,
+)
 from tests.support.fake_channel import FakeChannel
 from tests.support.judged import judged_responder
 
@@ -106,6 +112,7 @@ async def test_a_critical_violation_never_reaches_the_outbox(
     viraria um moedor de tokens em vez de um alerta.
     """
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
@@ -141,6 +148,7 @@ async def test_an_approved_reply_still_goes_all_the_way_out(
     """A outra metade: aprovado atravessa o motor inteiro e chega ao provedor,
     com a nota do Judge gravada. Sem este teste, "bloquear tudo" passaria."""
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 

@@ -25,6 +25,7 @@ from tests.db.factories import (
     create_channel_account,
     create_tenant,
     create_thread,
+    set_runtime_mode,
     unique_id,
     unique_phone,
 )
@@ -60,6 +61,7 @@ async def test_scenario_1_a_burst_of_five_becomes_exactly_one_reply(
     tiny_config: QueueingConfig,
 ) -> None:
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     create_channel_account(sync_admin, organization_id)
     phone = unique_phone()
 
@@ -134,6 +136,7 @@ async def test_scenario_3_a_redelivered_job_is_archived_without_a_second_generat
     tiny_config: QueueingConfig,
 ) -> None:
     organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
     thread = create_thread(sync_admin, organization_id)
 
     # A conversation already answered up to seq 3 — and then pgmq redelivers
