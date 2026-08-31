@@ -283,6 +283,10 @@ async function processMessage(
   const messageType = getMessageType(message);
   const textBody = extractWebhookMessageText(message);
   const content = buildMessageContent(message);
+  // Régua única de tipos suportados pela IA (document/sticker/location/video
+  // ficam de fora) — calculada uma vez e usada tanto pelo ramo runtime
+  // quanto pelo legado logo abaixo, para as duas bifurcações nunca divergirem.
+  const aiRoute = routeInboundForAi(messageType, textBody);
 
   const mediaId =
     message.image?.id ||
@@ -290,6 +294,19 @@ async function processMessage(
     message.audio?.id ||
     message.document?.id ||
     message.sticker?.id;
+
+  // Conhecidos no instante do ingest (webhook cru), ao contrário de
+  // media_url/media_storage_path que só existem depois do download
+  // assíncrono abaixo — usados no p_content do runtime (item 06).
+  const mediaCaption =
+    message.image?.caption || message.video?.caption || message.document?.caption;
+  const mediaMimeType =
+    message.image?.mime_type ||
+    message.video?.mime_type ||
+    message.audio?.mime_type ||
+    message.document?.mime_type ||
+    message.sticker?.mime_type ||
+    null;
 
   const { data: insertedMsg, error: insertError } = await supabase
     .from('whatsapp_cloud_messages')
@@ -305,8 +322,7 @@ async function processMessage(
       message_type: messageType,
       content,
       text_body: textBody,
-      caption:
-        message.image?.caption || message.video?.caption || message.document?.caption,
+      caption: mediaCaption,
       media_id: mediaId,
       media_download_status: mediaId ? 'pending' : null,
       status: 'received',
@@ -435,7 +451,11 @@ async function processMessage(
     // Try/catch que NUNCA quebra o webhook — mesmo contrato do bloco legado.
     try {
       const isSelf = phoneNumber && account.phone_number && phoneNumber === account.phone_number;
-      if (!isSelf) {
+      // Mesma régua do legado (routeInboundForAi): document/sticker/location/
+      // video não agendam IA em nenhum dos dois ramos. Aqui isso significa
+      // nem chamar ingest_inbound_message — a mensagem já está no histórico
+      // via whatsapp_cloud_messages acima, ingest é só o caminho da IA.
+      if (!isSelf && aiRoute !== 'unsupported') {
         // Janela de agrupamento POR LOJA (órbita → Adaptação → Entrega),
         // com cache de 30s e fail-safe para o default — Pacote B 17/08.
         const { getDeliveryDebounceSeconds } = await import('@/lib/ai/delivery-settings');
@@ -443,12 +463,23 @@ async function processMessage(
           supabase,
           account.organization_id,
         );
+        // Mídia conhecida no instante do ingest (media_id/mime_type/caption
+        // do webhook cru) — o download é assíncrono e pode não ter terminado
+        // ainda, então não esperamos por media_url/storage_path aqui. O
+        // consumidor resolve o resto por p_provider_message_id (item 06).
+        // Texto continua saindo com a mesma forma de sempre.
+        const ingestContent: Record<string, unknown> = { type: messageType, text: textBody ?? null };
+        if (mediaId) {
+          ingestContent.media_id = mediaId;
+          ingestContent.mime_type = mediaMimeType;
+          ingestContent.caption = mediaCaption ?? null;
+        }
         const { error: ingestError } = await supabase.rpc('ingest_inbound_message', {
           p_organization_id: account.organization_id,
           p_channel: 'whatsapp',
           p_external_id: String(phoneNumber ?? ''),
           p_contact_name: contact?.profile_name || contact?.name || null,
-          p_content: { type: messageType, text: textBody ?? null },
+          p_content: ingestContent,
           p_provider_message_id: message.id,
           p_debounce_seconds: debounceSeconds,
         });
@@ -510,7 +541,6 @@ async function processMessage(
     // video seguem fora — rota 'unsupported'), fora de auto-conversa, com IA
     // habilitada. Mesma janela de debounce para todos os tipos.
     const isSelf = phoneNumber && account.phone_number && phoneNumber === account.phone_number;
-    const aiRoute = routeInboundForAi(messageType, textBody);
     // runtimeMode === 'legacy': org migrada já foi atendida pelo bloco acima.
     if (runtimeMode === 'legacy' && aiRoute !== 'unsupported' && !isSelf && conversation?.ai_enabled !== false) {
       const debounceSeconds = AI_DEBOUNCE_SECONDS;

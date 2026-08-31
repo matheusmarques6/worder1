@@ -197,6 +197,62 @@ function inboundTextPayload(text = 'boa tarde') {
   };
 }
 
+function inboundMediaPayload(message: any) {
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: 'waba-1',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              metadata: { phone_number_id: PHONE_NUMBER_ID, display_phone_number: '5511999990000' },
+              contacts: [{ wa_id: '5511988887777', profile: { name: 'Matheus' } }],
+              messages: [
+                {
+                  id: 'wamid.TESTE1',
+                  from: '5511988887777',
+                  timestamp: String(Math.floor(Date.now() / 1000)),
+                  ...message,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function inboundAudioPayload() {
+  return inboundMediaPayload({
+    type: 'audio',
+    audio: { id: 'media-audio-1', mime_type: 'audio/ogg', sha256: 'x' },
+  });
+}
+
+function inboundImagePayload(overrides: { caption?: string } = {}) {
+  return inboundMediaPayload({
+    type: 'image',
+    image: { id: 'media-img-1', mime_type: 'image/jpeg', sha256: 'x', ...overrides },
+  });
+}
+
+const UNSUPPORTED_MESSAGES: Record<string, any> = {
+  sticker: { type: 'sticker', sticker: { id: 'media-sticker-1', mime_type: 'image/webp', sha256: 'x' } },
+  document: {
+    type: 'document',
+    document: { id: 'media-doc-1', filename: 'nota.pdf', mime_type: 'application/pdf', sha256: 'x' },
+  },
+  location: { type: 'location', location: { latitude: -23.5, longitude: -46.6 } },
+  video: { type: 'video', video: { id: 'media-video-1', mime_type: 'video/mp4', sha256: 'x' } },
+};
+
+function inboundUnsupportedPayload(type: keyof typeof UNSUPPORTED_MESSAGES) {
+  return inboundMediaPayload(UNSUPPORTED_MESSAGES[type]);
+}
+
 const ingestCalls = () => rec.rpcs.filter((r) => r.name === 'ingest_inbound_message');
 const cancelCalls = () => rec.rpcs.filter((r) => r.name === 'cancel_pending_ai_response');
 const legacyDebounceUpdates = () =>
@@ -244,6 +300,11 @@ describe('org NÃO migrada (legacy) — o cinto de segurança', () => {
     await processWebhookPayload(inboundTextPayload('   '));
     expect(enqueueWhatsAppAiRespond).not.toHaveBeenCalled();
   });
+
+  it('sticker não agenda no legado — paridade com o filtro do runtime (item 07)', async () => {
+    await processWebhookPayload(inboundUnsupportedPayload('sticker'));
+    expect(enqueueWhatsAppAiRespond).not.toHaveBeenCalled();
+  });
 });
 
 describe('org migrada (runtime) — o caminho canônico', () => {
@@ -261,6 +322,42 @@ describe('org migrada (runtime) — o caminho canônico', () => {
     });
     expect(getDeliveryDebounceSeconds).toHaveBeenCalled();
   });
+
+  it('texto mantém o payload de hoje — sem campos de mídia (item 06)', async () => {
+    await processWebhookPayload(inboundTextPayload('boa tarde'));
+
+    expect(ingestCalls()[0].args.p_content).toEqual({ type: 'text', text: 'boa tarde' });
+  });
+
+  it('áudio leva media_id e mime_type conhecidos no ingest (item 06)', async () => {
+    await processWebhookPayload(inboundAudioPayload());
+
+    expect(ingestCalls()).toHaveLength(1);
+    expect(ingestCalls()[0].args.p_content).toMatchObject({
+      type: 'audio',
+      media_id: 'media-audio-1',
+      mime_type: 'audio/ogg',
+    });
+  });
+
+  it('imagem leva media_id, mime_type e caption quando existir (item 06)', async () => {
+    await processWebhookPayload(inboundImagePayload({ caption: 'olha isso' }));
+
+    expect(ingestCalls()[0].args.p_content).toMatchObject({
+      type: 'image',
+      media_id: 'media-img-1',
+      mime_type: 'image/jpeg',
+      caption: 'olha isso',
+    });
+  });
+
+  it.each(['sticker', 'document', 'location', 'video'] as const)(
+    '%s não chama ingest_inbound_message — tipo não suportado no runtime (item 07)',
+    async (type) => {
+      await processWebhookPayload(inboundUnsupportedPayload(type));
+      expect(ingestCalls()).toHaveLength(0);
+    },
+  );
 
   it('NÃO marca ai_debounce_until nem enfileira QStash — o bloco legado é pulado inteiro', async () => {
     await processWebhookPayload(inboundTextPayload());
