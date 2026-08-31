@@ -174,10 +174,31 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `limit=2` — falha contra o corpo anterior, passa com o novo.
   `pytest -m "db or pipeline"` 407 ✓ / 1 skip.
 
-- [ ] **10. Chamar `correlate_channel_status` no webhook de status** `[confirmado]`
+- [x] **10. Chamar `correlate_channel_status` no webhook de status** `[confirmado]` · commits `70503186` + `0b515ba8`
   Função criada e granted em `20260813000003:207-226`, declarada em `DEPLOY.md:135` e `FORK.md §2`,
   com **zero chamadores** em `src/`. O Python já manda a `idempotency_key` em `biz_opaque_callback_data`.
   Sem isso a outbox nunca sai de `sent` e falha de entrega da Meta não vira `last_error` nem alerta.
+
+  **Entregue.** O webhook de status passa a chamar a RPC quando a entrada traz
+  `biz_opaque_callback_data` — a chave que o Python já mandava e ninguém lia. Sem a
+  chave nada muda: mensagem que não saiu pelo runtime não tem linha de outbox.
+  `delivered` e `read` colapsam em `sent` porque a outbox não tem esses estados
+  (`status in ('pending','sending','sent','failed','unknown','manual_review')`);
+  `failed` mapeia 1:1 e é isento do guard anti-retrógrado, então falha sempre chega.
+
+  O review pegou que a linha chegava a `failed` com o MOTIVO perdido — metade do que
+  o item pede. A migration `20260828000005` acrescenta um `p_error` opcional no fim
+  das duas assinaturas (interna e wrapper público), com grants recriados; os
+  chamadores de 3 argumentos seguem funcionando. O erro só é gravado em falha.
+
+  **Decisão registrada:** status de sucesso deixou de LIMPAR `last_error` (o corpo
+  antigo zerava em `sent`). Um envio que falhou e depois teve sucesso mantém o motivo
+  antigo ao lado de `sent`. Preferi manter o histórico a apagá-lo; se incomodar na
+  operação, é uma linha de `case`. Alertas continuam fora — outro dono.
+
+  vitest 42/42 · `tsc --noEmit` limpo · `pytest -m "db or pipeline"` 412 ✓ / 1 skip,
+  rodado pelo controlador contra o stack correto (o implementador tinha caído no
+  Postgres de outro projeto).
 
 - [ ] **11. Cron `reprocess-whatsapp-pending` precisa conhecer o rollout** `[relatado]`
   `src/app/api/cron/reprocess-whatsapp-pending/route.ts:70-89` reenfileira `ai_pending` órfão; o worker
