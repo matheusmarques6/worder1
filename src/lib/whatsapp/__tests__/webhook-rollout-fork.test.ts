@@ -353,10 +353,18 @@ describe('org migrada (runtime) — o caminho canônico', () => {
   });
 
   it.each(['sticker', 'document', 'location', 'video'] as const)(
-    '%s não chama ingest_inbound_message — tipo não suportado no runtime (item 07)',
+    '%s: ingere no histórico canônico mas NÃO agenda turno (item 07 fix)',
     async (type) => {
       await processWebhookPayload(inboundUnsupportedPayload(type));
-      expect(ingestCalls()).toHaveLength(0);
+      // A mensagem precisa chegar em public.messages — é a única fonte de
+      // histórico do runtime Python (ingest_inbound_message). O buraco
+      // anterior deixava o transcript sem essas mensagens.
+      expect(ingestCalls()).toHaveLength(1);
+      // …mas nenhum turno pode ficar agendado: mesmo freio do botão do
+      // inbox (cancel_pending_ai_response), que zera pending_response_at
+      // antes do coalescer enfileirar qualquer job.
+      expect(cancelCalls()).toHaveLength(1);
+      expect(cancelCalls()[0].args).toMatchObject({ p_organization_id: ORG });
     },
   );
 

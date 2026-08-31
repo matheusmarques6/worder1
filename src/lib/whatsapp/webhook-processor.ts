@@ -465,10 +465,15 @@ async function processMessage(
     try {
       const isSelf = phoneNumber && account.phone_number && phoneNumber === account.phone_number;
       // Mesma régua do legado (routeInboundForAi): document/sticker/location/
-      // video não agendam IA em nenhum dos dois ramos. Aqui isso significa
-      // nem chamar ingest_inbound_message — a mensagem já está no histórico
-      // via whatsapp_cloud_messages acima, ingest é só o caminho da IA.
-      if (!isSelf && aiRoute !== 'unsupported') {
+      // video não agendam IA em nenhum dos dois ramos. Mas ingest_inbound_
+      // message é a ÚNICA porta para public.messages — o histórico que o
+      // runtime Python lê (whatsapp_cloud_messages é só o espelho legado).
+      // Pular o RPC inteiro para tipos não suportados (ruling original do
+      // item 07) furava esse histórico: uma mensagem sem texto some do
+      // transcript mesmo quando a próxima mensagem de texto a referencia.
+      // Corrigido: ingere sempre; para 'unsupported' cancela o turno logo
+      // depois — mesma forma do freio de bot desligado, três linhas abaixo.
+      if (!isSelf) {
         // Janela de agrupamento POR LOJA (órbita → Adaptação → Entrega),
         // com cache de 30s e fail-safe para o default — Pacote B 17/08.
         const { getDeliveryDebounceSeconds } = await import('@/lib/ai/delivery-settings');
@@ -500,9 +505,14 @@ async function processMessage(
 
         // O botão do inbox vale também no runtime: com o agente desligado o
         // ingest continua (histórico na canônica), mas a resposta agendada é
-        // CANCELADA — o freio é a mesma RPC do toggle e do envio manual.
+        // CANCELADA — o freio é a mesma RPC do toggle e do envio manual. Tipo
+        // não suportado usa o MESMO freio: ingest_inbound_message sempre
+        // agenda (pending_response_at), então unsupported precisa cancelar
+        // de volta — sem isso o coalescer criaria um turno para uma mensagem
+        // que a IA nunca soube responder.
         const botOff = conversation?.ai_enabled === false;
-        if (botOff) {
+        const unsupported = aiRoute === 'unsupported';
+        if (botOff || unsupported) {
           await supabase.rpc('cancel_pending_ai_response', {
             p_organization_id: account.organization_id,
             p_phone: String(phoneNumber ?? ''),
@@ -512,8 +522,9 @@ async function processMessage(
         // Progresso ao vivo no chat, igual ao caminho legado: o debounce do
         // coalescer é justamente o trecho em que o inbox ficaria mudo. Os
         // passos seguintes (assumiu/gerando/verificando/enviada) vêm do
-        // próprio runtime via internal.emit_ai_run_step.
-        if (conversation?.id) {
+        // próprio runtime via internal.emit_ai_run_step. Unsupported não
+        // entra: nunca houve turno de IA em voo para narrar.
+        if (conversation?.id && !unsupported) {
           const { recordAiStep, AI_RUN_STEPS } = await import('@/lib/ai/run-steps');
           const { randomUUID } = await import('crypto');
           await recordAiStep({
