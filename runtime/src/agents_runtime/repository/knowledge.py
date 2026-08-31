@@ -13,9 +13,10 @@ while dropping the policy fails the leak suite. The scope arrives through the
 connection, and `tests/db/test_knowledge_retrieval.py` watches the policy doing
 the work.
 
-Cosine is the measure (`<=>`), matching the HNSW index built in S2 and the
-embedding model D2 chose. Distance is turned into similarity at the edge so
-call sites never have to remember which direction is better.
+Cosine is the measure (`<=>`), matching the HNSW index on `embedding`
+(`vector_cosine_ops`, migration `20260828000002_ai_agent_chunks_indexes`) and
+the embedding model D2 chose. Distance is turned into similarity at the edge
+so call sites never have to remember which direction is better.
 
 The vector is rendered as a literal and cast rather than adapted by a driver
 extension: it is five lines against a new production dependency, and the burden
