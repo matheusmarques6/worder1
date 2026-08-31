@@ -200,11 +200,23 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   rodado pelo controlador contra o stack correto (o implementador tinha caído no
   Postgres de outro projeto).
 
-- [ ] **11. Cron `reprocess-whatsapp-pending` precisa conhecer o rollout** `[relatado]`
+- [x] **11. Cron `reprocess-whatsapp-pending` precisa conhecer o rollout** `[relatado]` · commit `e957b389`
   `src/app/api/cron/reprocess-whatsapp-pending/route.ts:70-89` reenfileira `ai_pending` órfão; o worker
   retorna em `:87` antes do claim que zeraria a flag. Linhas sobreviventes do cutover são reenfileiradas
   no QStash a cada minuto, para sempre. Conferir também se a RPC
   `pending_whatsapp_ai_responses_for_reprocess` foi aplicada (só existe em `migrations-archive/`).
+
+  **Entregue.** A fase 2 do cron decide POR LINHA, com `getRuntimeMode` da própria
+  `runtime-rollout.ts` — o lote de 50 mistura orgs, então um modo por lote seria o
+  mesmo bug com outro rosto. Org em runtime é pulada; erro de leitura cai para legacy
+  e reenfileira, igual ao resto do sistema. A flag `ai_pending` da linha pulada NÃO é
+  apagada: cron que zera estado alheio é destrutivo, e a org pode voltar.
+  Linha pulada conta em `aiScanned` e não em `aiEnqueued`/`aiFailed` — pular não é
+  falhar. Fases 1 e de quarentena intocadas. vitest 13/13 · `tsc` limpo.
+
+  **Confirmado de passagem:** a RPC `pending_whatsapp_ai_responses_for_reprocess`
+  segue só em `supabase/migrations-archive/20260619_whatsapp_ai_retry.sql`, fora do
+  stream que o CI aplica. Não foi promovida aqui — é o item 49.
 
 - [ ] **12. Badge "vai responder?" alinhado à régua certa** `[relatado]`
   `src/lib/ai/conversation-ai-status.ts:106-171` avalia guards que o runtime não lê e não consulta o
