@@ -3,9 +3,11 @@
  * inbound vai pro caminho legado (QStash + cloud-runner) ou pro canônico
  * (ingest_inbound_message + coalescer do runtime Python).
  *
- * O contrato que importa: FAIL-CLOSED PARA LEGACY. Erro de leitura, linha
- * ausente ou valor desconhecido jamais podem silenciar o bot atual de uma org
- * não migrada — e jamais podem migrar uma org por acidente.
+ * O contrato que importa: linha ausente ou valor desconhecido caem para
+ * legacy. Erro de leitura devolve o modo já cacheado da org quando existe,
+ * mesmo vencido, e só cai para legacy se ainda não há nada em cache — evita
+ * silenciar o bot de uma org não migrada e evita migrar uma org por
+ * acidente numa falha transitória do banco.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { getRuntimeMode, clearRuntimeModeCache } from '../runtime-rollout';

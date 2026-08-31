@@ -9,9 +9,10 @@
  *
  * O contrato provado aqui, nos dois sentidos:
  *   - uma conversa NUNCA está nos dois mecanismos ao mesmo tempo;
- *   - org sem linha de rollout, ou com erro de leitura, continua no legado
- *     (fail-closed — nunca migra ninguém por acidente, nunca silencia o bot
- *     de quem não migrou);
+ *   - org sem linha de rollout usa o legado (ausência = legacy); erro de
+ *     leitura tem contrato próprio, provado em runtime-rollout.test.ts — usa
+ *     o cache da org quando existe, senão cai pro legado — e aqui o que se
+ *     prova é só que o processor obedece o que getRuntimeMode devolver;
  *   - falha do caminho runtime não derruba a ingestão da mensagem.
  *
  * Enquanto o legado for o plano de rollback, esta suíte é o que autoriza

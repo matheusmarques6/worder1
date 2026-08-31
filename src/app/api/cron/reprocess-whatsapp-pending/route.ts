@@ -79,10 +79,12 @@ export async function GET(req: NextRequest) {
     // pending_response_at e coalescida pelo runtime Python. Reenfileirar no
     // QStash aqui seria um segundo mecanismo respondendo à mesma conversa,
     // do jeito que o item 09 corrigiu no coalescer para o sentido inverso.
-    // Erro de leitura do rollout = legacy (getRuntimeMode já é fail-closed) —
-    // reenfileira, nunca silencia quem não migrou. Linha pulada aqui NÃO tem
-    // ai_pending zerado: o cron não é dono desse estado e a org pode voltar
-    // para legacy.
+    // Erro de leitura do rollout devolve o modo cacheado da org quando existe
+    // (o cron reenfileira ou pula do jeito de sempre) e só cai para legacy —
+    // reenfileirando — quando ainda não havia nada em cache; evita
+    // reenfileirar em duplicidade uma org já confirmada em runtime só porque
+    // o banco falhou uma vez. Linha pulada aqui NÃO tem ai_pending zerado: o
+    // cron não é dono desse estado e a org pode voltar para legacy.
     const { getRuntimeMode } = await import('@/lib/ai/runtime-rollout');
     for (const row of rows) {
       if ((await getRuntimeMode(supabaseAdmin, row.organization_id)) === 'runtime') {
