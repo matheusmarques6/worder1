@@ -14,10 +14,19 @@
 // vivem AQUI e sao importadas pelo cloud-runner. Reimplementa-las nos dois
 // lados garantiria que um dia divergissem — e um badge que mente sobre o
 // motivo e pior que um badge que so diz "ativo".
+//
+// Item 12 (28/08): os guards acima sao do cloud-runner (legacy) e o runtime
+// Python nunca os le. Para uma org em modo `runtime` (ai_runtime_rollout),
+// esses guards saem do caminho — o freio que sobra e o mesmo dos dois lados:
+// conversation.ai_enabled (a RPC cancel_pending_ai_response usa a MESMA flag
+// pra cancelar a resposta agendada). Sem isso, a loja migrada via badge verde
+// com o agente mudo, OU badge "pausado" com o agente respondendo do mesmo
+// jeito — o achado mentia nas duas direcoes.
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { isTransferCooldownActive } from './guards';
+import { getRuntimeMode } from './runtime-rollout';
 
 export type AiBlockerReason =
   | 'ai_disabled'
@@ -145,6 +154,19 @@ export async function resolveConversationAiStatus(params: {
   if (!agent) return blocked('agent_not_found', { agentId });
 
   const agentMeta = { agentId, agentName: agent.name as string | undefined };
+
+  // Item 12 da auditoria: daqui pra baixo só existem guards do cloud-runner
+  // (agent.settings.behavior — activate_on, cooldown de transferência,
+  // max_messages_per_conversation, stop_on_human_reply). O runtime Python
+  // nunca lê essa coluna: `responder.py` gera e envia sem consultá-la, e o
+  // coalescer só olha `pending_response_at` + `ai_runtime_rollout` (já
+  // resolvido acima pelo ai_enabled). Numa org `runtime` esses guards não
+  // decidem nada — pesá-los no badge era o achado do L1: "bot pausado" pra
+  // sempre enquanto o agente respondia do mesmo jeito.
+  if ((await getRuntimeMode(supabaseAdmin, organizationId)) === 'runtime') {
+    return { willRespond: true, reason: null, label: 'Bot ativo', ...agentMeta };
+  }
+
   const behavior = (agent.settings as any)?.behavior || {};
 
   if (behavior.activate_on === 'manual' && conversation.ai_agent_id !== agentId) {

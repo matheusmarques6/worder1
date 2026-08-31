@@ -26,6 +26,8 @@ interface DbState {
   agent: { id: string; name: string; settings: any } | null;
   botMessages: number;
   hasHumanReply: boolean;
+  /** 'legacy' | 'runtime' | null — null simula erro de leitura (fail-closed). */
+  runtimeMode: 'legacy' | 'runtime' | null;
 }
 
 const db: DbState = {
@@ -33,6 +35,7 @@ const db: DbState = {
   agent: null,
   botMessages: 0,
   hasHumanReply: false,
+  runtimeMode: 'legacy',
 };
 
 const rpc = vi.fn(async (name: string, _args?: any): Promise<{ data: any; error: any }> => {
@@ -46,6 +49,10 @@ function resultFor(table: string, calls: Array<{ m: string; a: any[] }>) {
     const isCount = calls.some((c) => c.m === 'select' && c.a[1]?.head === true);
     if (isCount) return { count: db.botMessages, error: null };
     return { data: db.hasHumanReply ? { id: 'msg-humana' } : null, error: null };
+  }
+  if (table === 'ai_runtime_rollout') {
+    if (db.runtimeMode === null) return { data: null, error: { message: 'leitura falhou' } };
+    return { data: { mode: db.runtimeMode }, error: null };
   }
   return { data: null, error: null };
 }
@@ -75,6 +82,7 @@ vi.mock('@/lib/supabase-admin', () => ({
 }));
 
 import { resolveConversationAiStatus, AI_BLOCKER_LABELS } from '../conversation-ai-status';
+import { clearRuntimeModeCache } from '../runtime-rollout';
 
 // ---------------------------------------------------------------------------
 
@@ -98,10 +106,12 @@ function ask(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   rpc.mockClear();
+  clearRuntimeModeCache();
   db.activeAgentRows = [{ agent_id: AGENT }];
   db.agent = { id: AGENT, name: 'Matheus', settings: { behavior: {} } };
   db.botMessages = 0;
   db.hasHumanReply = false;
+  db.runtimeMode = 'legacy';
 });
 
 describe('ordem dos guards — o caminho legado, como está hoje', () => {
@@ -208,9 +218,87 @@ describe('ordem dos guards — o caminho legado, como está hoje', () => {
 // ---------------------------------------------------------------------------
 
 describe('L1 — o badge precisa responder pela régua do caminho certo', () => {
-  it.todo('org em runtime: nenhum guard do cloud-runner bloqueia o badge');
-  it.todo('org em runtime: ai_enabled=false continua sendo o freio (a RPC é a mesma nos dois)');
-  it.todo('org em runtime: a resposta reflete o freio manual do inbox, não max_messages');
-  it.todo('org em legacy: a matriz acima continua idêntica, guard por guard');
-  it.todo('erro ao ler ai_runtime_rollout: badge cai para a régua legacy (fail-closed)');
+  it('org em runtime: nenhum guard do cloud-runner bloqueia o badge', async () => {
+    db.runtimeMode = 'runtime';
+    // Cenário desenhado pra bloquear em TODOS os guards do cloud-runner ao
+    // mesmo tempo, se algum deles ainda pesasse: activate_on manual sem
+    // atribuição, cooldown de transferência correndo, max_messages estourado
+    // e humano já respondeu. Nenhum desses campos existe do lado do runtime
+    // Python — só ai_enabled e ter versão ativa (checados antes) importam lá.
+    db.agent!.settings.behavior = {
+      activate_on: 'manual',
+      cooldown_after_transfer: 300,
+      max_messages_per_conversation: 1,
+    };
+    db.botMessages = 999;
+    db.hasHumanReply = true;
+    const status = await ask({
+      ai_agent_id: null,
+      ai_transferred_at: new Date(Date.now() - 60_000).toISOString(),
+    });
+    expect(status).toMatchObject({
+      willRespond: true,
+      reason: null,
+      label: 'Bot ativo',
+      agentId: AGENT,
+      agentName: 'Matheus',
+    });
+  });
+
+  it('org em runtime: ai_enabled=false continua sendo o freio (a RPC é a mesma nos dois)', async () => {
+    db.runtimeMode = 'runtime';
+    const status = await ask({ ai_enabled: false });
+    expect(status).toMatchObject({ willRespond: false, reason: 'ai_disabled' });
+    // O curto-circuito acontece ANTES de sequer perguntar o modo do rollout —
+    // é o mesmo código, sem ramificação, para os dois mecanismos.
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('org em runtime: a resposta reflete o freio manual do inbox, não max_messages', async () => {
+    db.runtimeMode = 'runtime';
+    db.agent!.settings.behavior = { max_messages_per_conversation: 1 };
+    db.botMessages = 5; // bem acima do limite — irrelevante para o runtime
+    // Com o freio manual (ai_enabled) desligado, o motivo tem que ser
+    // ai_disabled — o freio de verdade — nunca max_messages, que o runtime
+    // não lê e portanto não pode aparecer como explicação.
+    expect(await ask({ ai_enabled: false })).toMatchObject({
+      willRespond: false,
+      reason: 'ai_disabled',
+    });
+    // Com o freio manual ligado (ai_enabled=true, o default), a contagem que
+    // estouraria o limite no legado não bloqueia nada no runtime.
+    expect(await ask({ ai_enabled: true })).toMatchObject({ willRespond: true, reason: null });
+  });
+
+  it('org em legacy: a matriz acima continua idêntica, guard por guard', async () => {
+    db.runtimeMode = 'legacy';
+
+    db.agent!.settings.behavior = { activate_on: 'manual' };
+    expect(await ask({ ai_agent_id: null })).toMatchObject({
+      reason: 'manual_activation_required',
+    });
+
+    db.agent!.settings.behavior = { cooldown_after_transfer: 300 };
+    expect(
+      await ask({ ai_transferred_at: new Date(Date.now() - 60_000).toISOString() }),
+    ).toMatchObject({ reason: 'transfer_cooldown' });
+
+    db.agent!.settings.behavior = { max_messages_per_conversation: 5 };
+    db.botMessages = 5;
+    expect(await ask()).toMatchObject({ reason: 'max_messages' });
+    db.botMessages = 0;
+
+    db.agent!.settings.behavior = {};
+    db.hasHumanReply = true;
+    expect(await ask()).toMatchObject({ reason: 'stop_on_human' });
+  });
+
+  it('erro ao ler ai_runtime_rollout: badge cai para a régua legacy (fail-closed)', async () => {
+    db.runtimeMode = null; // resultFor devolve error para a leitura de ai_runtime_rollout
+    db.agent!.settings.behavior = { max_messages_per_conversation: 1 };
+    db.botMessages = 5;
+    // getRuntimeMode falha aberto para 'legacy' — o guard do cloud-runner
+    // continua valendo, do jeito que valia antes desta tarefa existir.
+    expect(await ask()).toMatchObject({ willRespond: false, reason: 'max_messages' });
+  });
 });
