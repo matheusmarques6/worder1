@@ -149,11 +149,30 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
 ## Fase 2 — Tornar o cutover reversível de verdade
 
-- [ ] **9. Coalescer precisa filtrar por `ai_runtime_rollout`** `[confirmado]`
+- [x] **9. Coalescer precisa filtrar por `ai_runtime_rollout`** `[confirmado]` · commits `bb9acd8d` + `e9995c1d`
   `grep -rn "ai_runtime_rollout" runtime/src/` retorna só um comentário — o runtime nunca lê o rollout.
   `internal.coalesce_due_conversations` é SECURITY DEFINER cross-org e não conhece o modo.
   Voltar uma org para `legacy` não para o Python: jobs em `q_inbound` seguem sendo consumidos e
   `pending_response_at` já gravado segue sendo coalescido enquanto o TS já retomou.
+
+  **Entregue** em duas migrations. A `20260828000003` ensina o `due` a enxergar o
+  modo: org sem linha no rollout é legacy e não vira job, e a linha pendente de org
+  legacy tem `pending_response_at` limpo no mesmo passe — sem bump de geração, sem
+  enfileirar — porque o agendamento é do runtime e quem responde agora é o TS, com o
+  próprio debounce. A checagem mora no SQL, não no Python: a função é `security
+  definer` e cross-org, chamada uma vez por passe para todas as lojas; filtro no
+  cliente seria por-org e chegaria tarde.
+
+  A `20260828000004` conserta o que o review pegou: as duas coisas disputavam o mesmo
+  `p_limit`. Logo depois de um flip-back as linhas legacy são justamente as MAIS
+  VELHAS, então um passe podia gastar o lote inteiro limpando legado enquanto conversa
+  viva de org migrada esperava o próximo tique. Agora `p_limit` conta só o que vira
+  job e a limpeza tem orçamento próprio. Custo aceito: uma chamada toca até 2×`p_limit`
+  linhas.
+
+  5 testes de banco, o quinto com 3 linhas legacy velhas contra 1 runtime nova e
+  `limit=2` — falha contra o corpo anterior, passa com o novo.
+  `pytest -m "db or pipeline"` 407 ✓ / 1 skip.
 
 - [ ] **10. Chamar `correlate_channel_status` no webhook de status** `[confirmado]`
   Função criada e granted em `20260813000003:207-226`, declarada em `DEPLOY.md:135` e `FORK.md §2`,
