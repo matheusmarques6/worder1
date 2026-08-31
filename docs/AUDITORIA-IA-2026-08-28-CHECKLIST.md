@@ -291,16 +291,37 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   devolve `hit?.mode ?? 'legacy'`, ou seja o cache stale. O comportamento é melhor (evita flapping), o
   texto é que está errado — e o mesmo texto está repetido no webhook e num `it.todo`.
 
-- [ ] **16. Dar conteúdo a `repository/driver.py` ou apagar o contrato** `[confirmado]`
+- [x] **16. Dar conteúdo a `repository/driver.py` ou apagar o contrato** `[confirmado]` · commits `6255fc18` + `2f55f367`
   `runtime/src/agents_runtime/repository/driver.py` tem 10 linhas de docstring e zero código; o contrato
   do import-linter que proíbe importá-lo não proíbe nada. `include_external_packages = false`
   (`pyproject.toml:105`) faz o linter não enxergar `import psycopg`, que é como 11 módulos fora de
   `repository/` alcançam o banco. Trava vazia é pior que trava ausente.
 
-- [ ] **17. `SET ROLE` no detector de SQL fora de `repository/`** `[relatado]`
+  **Entregue.** `driver.py` foi apagado — não tinha chamador, e módulo escrito para
+  satisfazer contrato é o mesmo defeito com outro nome. A fronteira passou a valer com
+  `include_external_packages` e `allow_indirect_imports = "true"`: o que continua
+  proibido é `import psycopg` DIRETO em módulo coberto; a cadeia
+  `domain → repository → psycopg` nunca foi a violação. Os 10 imports que acenderam
+  viraram exceções nomeadas, uma linha cada, marcadas como dívida — não foram
+  refatorados.
+
+  O review não acreditou no verde: plantou `import psycopg` num módulo coberto e viu
+  `2 kept, 1 broken`. E achou o que faltava — `source_modules` não listava `evals/`,
+  `obs/`, `crypto/` nem os arquivos de topo, então a trava tinha cômodos sem cobrir.
+  O `2f55f367` fecha isso: os 19 pacotes/módulos de topo entram, com `app`
+  (raiz de composição) e `repository` (o próprio alvo) exemptos e justificados.
+  Plantar `import psycopg` em `obs/telemetry.py`, antes cego, agora quebra.
+
+- [x] **17. `SET ROLE` no detector de SQL fora de `repository/`** `[relatado]` · commit `b927016d`
   `runtime/tests/unit/test_no_sql_outside_repository.py:25-29` — o regex só casa statements que começam
   com `SELECT|INSERT|UPDATE|…|SET LOCAL`, não `SET ROLE`. É exatamente o comando do item 1, e passa verde
   em `responder.py:263`, `toucher.py:123`, `app.py:53`, `server.py:93,132`.
+
+  **Entregue.** O detector enxerga `SET ROLE`. Os 4 call sites legítimos viraram
+  dívida NOMEADA com contagem exata por arquivo, e qualquer SQL fora do dicionário
+  continua reprovando — o regex não foi afrouxado até o verde voltar. Prova no estilo
+  da casa: `SET ROLE` plantado, detector acusando (`esperava 0 ... achou 1`).
+  `pytest -m unit` 922 ✓ (as 2 falhas são o item 54) · `lint-imports` 3/3 · ruff limpo.
 
 ---
 
