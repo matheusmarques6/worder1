@@ -27,6 +27,11 @@ import httpx
 import psycopg
 
 from agents_runtime.agent_core import openrouter
+from agents_runtime.agent_core.guards import (
+    evaluate_inbound_guards,
+    resolve_blocked_topic,
+    schedule_silence,
+)
 from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message
 from agents_runtime.agent_core.mission_resolver import (
     NodeDelta,
@@ -40,7 +45,12 @@ from agents_runtime.agent_core.prompt_compiler import (
     compile_prompt,
 )
 from agents_runtime.agent_core.providers import NoOrgLlmKey, resolve_agent_llm
-from agents_runtime.agent_core.responder import TRANSCRIPT_LIMIT, _as_chat, _metered
+from agents_runtime.agent_core.responder import (
+    TRANSCRIPT_LIMIT,
+    _as_chat,
+    _metered,
+    transfer_to_human,
+)
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
 from agents_runtime.evals.pack import load_rubrics
@@ -143,6 +153,13 @@ def build_toucher(
                     conn, conversation_id=job.conversation_id, limit=TRANSCRIPT_LIMIT
                 )
                 active_moments = await moments_repo.load_active_moments(conn)
+                # Item 30: o toque é o SEGUNDO produtor de fala do runtime, e
+                # lê o mesmo estado que o turno de resposta lê.
+                guard_state = await agent_repo.load_legacy_guard_state(
+                    conn,
+                    organization_id=job.organization_id,
+                    conversation_id=job.conversation_id,
+                )
                 # E3 — o toque também fala com quem já comprou (ou nunca
                 # comprou): mesmo dado fixo do responder, mesma decisão 81b.
                 purchase = await orders_repo.load_purchase_history(
@@ -167,6 +184,29 @@ def build_toucher(
                     title="Toque pedido sem versão de agente ativa",
                     payload={"event_family": job.event_family, "node_ref": job.node_ref},
                 )
+                return TouchDraft(None, (), None)
+
+            # --- guards de comportamento (item 30): o MESMO módulo puro do
+            # turno de resposta. O toque nasce de `emit_ai_mission_job`, fora
+            # do ingest, então nada do que o webhook freia vale para ele — sem
+            # isto, o toque desfazia pela outra porta a transferência que o
+            # próprio item 30 construiu.
+            #
+            # Handoff por keyword é o único que não se aplica: não há inbound
+            # num toque. Todo o resto vale, e vale MAIS aqui: falar por cima do
+            # atendente, ou às 3h da manhã, é pior quando ninguém pediu nada.
+            #
+            # Silêncio de guard não abre alerta: é comportamento que a loja
+            # configurou, não anomalia — ao contrário de "sem missão ativa".
+            if (
+                evaluate_inbound_guards(
+                    version.settings,
+                    guard_state,
+                    agent_id=version.agent_id,
+                    now=clock.now(),
+                )
+                or schedule_silence(version.settings, now=clock.now())
+            ) is not None:
                 return TouchDraft(None, (), None)
 
             if mission is None:
@@ -358,6 +398,27 @@ def build_toucher(
                         "node_ref": job.node_ref,
                         "blocked_by": outcome.blocked_by,
                         "attempts": outcome.attempts,
+                    },
+                )
+                return TouchDraft(None, (), mission_version_id)
+
+            # --- blocked_topics (item 30): o toque é uma SAÍDA, e o ruling do
+            # brief põe este guard do lado da saída. Transfere como no
+            # responder — marca o handoff, abre o alerta, não envia.
+            topic = resolve_blocked_topic(version.settings, outcome.draft)
+            if topic is not None:
+                await transfer_to_human(
+                    conn,
+                    organization_id=job.organization_id,
+                    conversation_id=job.conversation_id,
+                    reason="blocked_topic",
+                    severity="critical",
+                    title="Toque tocou num assunto proibido — nada foi enviado",
+                    payload={
+                        "topic": topic,
+                        "node_ref": job.node_ref,
+                        # O bloqueio segura o envio, não a evidência.
+                        "draft": outcome.draft,
                     },
                 )
                 return TouchDraft(None, (), mission_version_id)

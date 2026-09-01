@@ -27,12 +27,14 @@ transfere, ou segue.
 """
 
 import uuid
+from datetime import UTC, datetime
 
 import psycopg
 import pytest
 
 from agents_runtime.agent_core.responder import NoActiveVersion, build_responder
-from agents_runtime.queueing.jobs import InboundJob
+from agents_runtime.agent_core.toucher import build_toucher
+from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from tests.db.factories import (
     contact_phone,
     create_agent_version,
@@ -42,7 +44,11 @@ from tests.db.factories import (
     create_tenant,
     create_thread,
 )
+from tests.support.clock import FrozenClock
 from tests.support.llm import ScriptedLlm
+
+#: A família de evento do toque proativo — a mesma de `tests/db/test_toucher.py`.
+FAMILY = "cart.abandoned"
 
 
 @pytest.fixture
@@ -66,6 +72,22 @@ def a_job(
 
 def responder(dsn: str, llm: ScriptedLlm | None = None):
     return build_responder(dsn, llm=llm or ScriptedLlm(), set_role="worker_role")
+
+
+def toucher(dsn: str, llm: ScriptedLlm | None = None, **kwargs):
+    return build_toucher(dsn, llm=llm or ScriptedLlm(), set_role="worker_role", **kwargs)
+
+
+def a_touch(organization_id: uuid.UUID, thread) -> MissionTouchJob:
+    return MissionTouchJob(
+        organization_id=organization_id,
+        contact_id=thread.contact_id,
+        conversation_id=thread.conversation_id,
+        event_family=FAMILY,
+        node_ref="flow-1:node-2",
+        delta=None,
+        concession_request=None,
+    )
 
 
 def configure(conn: psycopg.Connection, organization_id: uuid.UUID, settings: dict) -> None:
@@ -352,3 +374,115 @@ class TestATransferThatDoesNotStick:
             (tenant,),
         ).fetchone()
         assert alerts == 1
+
+
+class TestTheTouchConsultsTheSameGuards:
+    """O outro produtor de fala do runtime — item 30, correção do achado 1.
+
+    O toque de missão nasce fora do ingest (`emit_ai_mission_job`), então nada
+    do que o webhook freia vale para ele. Sem consultar os guards, ele desfazia
+    pela outra porta a transferência que o próprio item construiu: o cliente
+    pedia um humano e o bot voltava a falar no toque seguinte.
+    """
+
+    async def test_a_transferred_conversation_gets_no_proactive_touch(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type=FAMILY, status="active")
+        thread = create_thread(admin, tenant)
+        mirror = mirrored(admin, tenant, thread)
+        admin.execute(
+            "update public.whatsapp_cloud_conversations set ai_enabled = false where id = %s",
+            (mirror.conversation_id,),
+        )
+        llm = ScriptedLlm()
+
+        draft = await toucher(dsn, llm)(a_touch(tenant, thread))
+
+        assert draft.content is None
+        # Guard que cala é comportamento configurado, não anomalia: nada de
+        # alerta. E nada de LLM — silenciar cedo não custa uma geração.
+        assert llm.asked == []
+        (alerts,) = admin.execute(
+            "select count(*) from public.alerts where organization_id = %s", (tenant,)
+        ).fetchone()
+        assert alerts == 0
+
+    async def test_a_touch_outside_business_hours_stays_quiet(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """Um toque às 3h numa loja 08:00-18:00 é o caso que o knob existe para
+        impedir — e o toque é a hora em que ele mais importa, porque ninguém
+        do outro lado pediu nada."""
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type=FAMILY, status="active")
+        configure(
+            admin,
+            tenant,
+            {
+                "schedule": {
+                    "timezone": "America/Sao_Paulo",
+                    "hours": {"start": "08:00", "end": "18:00"},
+                    "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+                }
+            },
+        )
+        thread = create_thread(admin, tenant)
+        mirrored(admin, tenant, thread)
+        # 06:00Z = 03:00 em Sao Paulo, numa segunda-feira.
+        clock = FrozenClock(datetime(2026, 8, 31, 6, 0, tzinfo=UTC))
+
+        draft = await toucher(dsn, ScriptedLlm(), clock=clock)(a_touch(tenant, thread))
+
+        assert draft.content is None
+
+    async def test_a_blocked_topic_in_the_touch_transfers_instead_of_speaking(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """O ruling do brief: `blocked_topics` fica do lado da SAÍDA, e o toque
+        é uma saída. O Judge 1 não substitui — ele tem rubricas próprias e não
+        conhece a lista deste lojista."""
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type=FAMILY, status="active")
+        configure(admin, tenant, {"safety": {"blocked_topics": ["processo judicial"]}})
+        thread = create_thread(admin, tenant)
+        mirror = mirrored(admin, tenant, thread)
+        llm = ScriptedLlm(reply="Sobre o seu Processo Judicial, melhor conversarmos.")
+
+        draft = await toucher(dsn, llm)(a_touch(tenant, thread))
+
+        assert draft.content is None
+        (enabled,) = admin.execute(
+            "select ai_enabled from public.whatsapp_cloud_conversations where id = %s",
+            (mirror.conversation_id,),
+        ).fetchone()
+        assert enabled is False
+        (metadata,) = admin.execute(
+            "select metadata from public.alerts"
+            " where organization_id = %s and type = 'handoff'",
+            (tenant,),
+        ).fetchone()
+        assert metadata["topic"] == "processo judicial"
+        assert metadata["mirrored"] is True
+
+    async def test_with_nothing_tripped_the_touch_still_goes_out(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type=FAMILY, status="active")
+        configure(
+            admin,
+            tenant,
+            {
+                "behavior": {"max_messages_per_conversation": 5, "stop_on_human_reply": True},
+                "safety": {"blocked_topics": ["jurídico"]},
+                "schedule": {"always_active": True},
+            },
+        )
+        thread = create_thread(admin, tenant)
+        mirrored(admin, tenant, thread)
+
+        draft = await toucher(dsn, ScriptedLlm())(a_touch(tenant, thread))
+
+        assert draft.content is not None and draft.content.get("text")
