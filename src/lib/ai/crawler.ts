@@ -131,7 +131,15 @@ async function discoverSitemapUrls(origin: string): Promise<string[]> {
  */
 export async function crawlSite(rawUrl: string): Promise<string> {
   const start = Date.now()
-  const rootUrl = new URL(rawUrl)
+  let rootUrl: URL
+  try {
+    rootUrl = new URL(rawUrl)
+  } catch {
+    // sem isto, `new URL` propagava um TypeError cru em inglês ("Invalid
+    // URL") direto pro error_message que o lojista vê — mensagem clara aqui,
+    // no mesmo padrão do ssrf-guard.
+    throw new Error('esse endereço não pode ser usado como fonte: endereço inválido')
+  }
   const origin = rootUrl.origin
 
   let rootHtml: string

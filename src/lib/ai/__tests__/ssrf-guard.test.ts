@@ -31,6 +31,18 @@ describe('isPrivateOrReservedIp', () => {
     ['::ffff:169.254.169.254', true], // IPv4-mapped — metadata cloud
     ['::ffff:8.8.8.8', false], // IPv4-mapped mas público
     ['2001:4860:4860::8888', false], // público (Google DNS IPv6)
+    // fix round 1 — faixas que passavam direto
+    ['64:ff9b::a9fe:a9fe', true], // NAT64: gateway traduz pro IPv4 embutido (aqui, 169.254.169.254)
+    ['2002:0101:0101::1', true], // 6to4
+    ['::7f00:1', true], // IPv4-compatível (deprecated) em forma HEX — new URL() normaliza ::127.0.0.1 pra isto
+    ['::a9fe:a9fe', true], // IPv4-compatível de 169.254.169.254, forma hex
+    ['::808:808', false], // IPv4-compatível de 8.8.8.8 — público, não deve bloquear
+    ['100.64.0.1', true], // CGNAT — onde internals de VPC de nuvem vivem
+    ['255.255.255.255', true], // broadcast
+    ['224.0.0.1', true], // multicast
+    ['240.0.0.1', true], // reservado
+    ['192.0.0.1', true], // atribuição de protocolo IETF
+    ['198.18.0.1', true], // benchmarking
   ])('%s → %s', (ip, expected) => {
     expect(isPrivateOrReservedIp(ip as string)).toBe(expected)
   })
@@ -60,6 +72,13 @@ describe('assertSafeUrl', () => {
 
   it('recusa IPv6 loopback literal ([::1])', async () => {
     await expect(assertSafeUrl('http://[::1]:3000/')).rejects.toThrow(/não pode ser usado como fonte/)
+  })
+
+  it('recusa NAT64 apontando pro metadata endpoint via gateway de tradução', async () => {
+    await expect(assertSafeUrl('http://[64:ff9b::a9fe:a9fe]/latest/meta-data/')).rejects.toThrow(
+      /não pode ser usado como fonte/
+    )
+    expect(mockLookup).not.toHaveBeenCalled() // IP literal não precisa resolver
   })
 
   it('recusa localhost (resolve para loopback)', async () => {
@@ -125,5 +144,35 @@ describe('safeFetch', () => {
     mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
     fetchMock.mockResolvedValue(new Response(null, { status: 302, headers: { location: 'https://loja.com/loop' } }))
     await expect(safeFetch('https://loja.com/', {}, 2)).rejects.toThrow(/não pode ser usado como fonte/)
+  })
+
+  it('recusa quando SÓ UM dos múltiplos registros A resolvidos é interno', async () => {
+    // host com round-robin DNS: um IP público, um interno — qualquer um dos
+    // dois pode ser o que o socket real usa, então basta um ser privado.
+    mockLookup.mockResolvedValue([
+      { address: '93.184.216.34', family: 4 },
+      { address: '10.0.0.9', family: 4 },
+    ])
+    await expect(safeFetch('https://loja.com/')).rejects.toThrow(/não pode ser usado como fonte/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('segue Location relativo do redirect resolvendo contra a URL atual', async () => {
+    mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: '/nova-pagina' } }))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+    const res = await safeFetch('https://loja.com/antiga')
+    expect(res.status).toBe(200)
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://loja.com/nova-pagina', expect.anything())
+  })
+
+  it('chamador não consegue sobrescrever redirect:"follow" via init', async () => {
+    mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    fetchMock.mockResolvedValue(new Response('ok', { status: 200 }))
+    await safeFetch('https://loja.com/', { redirect: 'follow' } as RequestInit)
+    // se o "follow" do chamador vazasse pro fetch real, o guard perderia a
+    // visão de cada salto — o portão sempre força 'manual'.
+    expect(fetchMock).toHaveBeenCalledWith('https://loja.com/', expect.objectContaining({ redirect: 'manual' }))
   })
 })

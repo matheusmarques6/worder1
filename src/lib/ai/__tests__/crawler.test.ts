@@ -174,4 +174,10 @@ describe('crawlSite', () => {
     })
     await expect(crawlSite('https://loja.com/')).rejects.toThrow(/não pode ser usado como fonte/)
   })
+
+  // fix round 1: `new URL(rawUrl)` estava fora do try — URL malformada
+  // vazava um TypeError cru em inglês pro lojista em vez de mensagem clara.
+  it('URL malformada → mensagem clara, não TypeError cru', async () => {
+    await expect(crawlSite('não é uma url')).rejects.toThrow(/não pode ser usado como fonte/)
+  })
 })
