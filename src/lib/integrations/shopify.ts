@@ -253,6 +253,15 @@ export function verifyShopifyWebhook(
   hmacHeader: string,
   secret: string
 ): boolean {
+  // Item 26 da auditoria: `createHmac` do Node aceita chave de tamanho zero
+  // sem lançar — sem este guard, secret '' produzia um HMAC de verdade
+  // sobre uma chave vazia, e qualquer um que soubesse (ou adivinhasse) que
+  // o secret está ausente forjava a assinatura sozinho. Sem secret ou sem
+  // header, a resposta é sempre inválida (ambiente não é credencial, item
+  // 25) — esta função não tem chamador hoje, mas fica pronta para o
+  // próximo sem depender dele lembrar de checar isso antes.
+  if (!secret || !hmacHeader) return false;
+
   try {
     const hash = crypto
       .createHmac('sha256', secret)
