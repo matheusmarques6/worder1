@@ -24,6 +24,7 @@ import { markCheckoutRecovered } from '@/lib/services/shopify/jobs/abandoned-car
 import { enrichContactAfterOrder } from '@/lib/shopify/profile-enricher';
 import { scheduleRecomputeStoreTotals } from '@/lib/services/shopify/store-totals';
 import { scheduleSegmentReeval } from '@/lib/segments/realtime';
+import { verifyShopifyWebhook } from './verify';
 export const dynamic = 'force-dynamic';
 
 // Escape LIKE/ILIKE wildcards so a customer email containing `_` or `%`
@@ -261,40 +262,6 @@ function buildShopifyWebhookMeta(
       name: store.shop_name ?? store.shop_domain,
     },
   };
-}
-
-// ============================================
-// VERIFICAÇÃO DE ASSINATURA
-// ============================================
-
-async function verifyShopifyWebhook(
-  body: string,
-  hmacHeader: string | null,
-  secret: string
-): Promise<boolean> {
-  if (!hmacHeader) return false;
-  
-  try {
-    const encoder = new TextEncoder();
-    const keyData = encoder.encode(secret);
-    const bodyData = encoder.encode(body);
-
-    const cryptoKey = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-
-    const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, bodyData);
-    const generatedHmac = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
-    
-    return generatedHmac === hmacHeader;
-  } catch (error) {
-    console.error('[Shopify Webhook] Signature verification error:', error);
-    return false;
-  }
 }
 
 // ============================================
@@ -2613,8 +2580,12 @@ export async function POST(request: NextRequest) {
     // 4. Verificar assinatura HMAC
     //    - Se api_secret existe no store, valida contra ele.
     //    - Caso contrário, tenta SHOPIFY_API_SECRET global (apps monolíticas).
-    //    - Em produção sem nenhum secret → REJEITA (fail closed).
-    //    - Em dev, permite passar para facilitar testes.
+    //    - Sem nenhum secret → REJEITA sempre (fail closed), inclusive fora
+    //      de produção. Item 26 da auditoria: "permite passar em dev para
+    //      facilitar testes" era um webhook não verificável sendo
+    //      processado — ambiente não é credencial (mesma decisão do item
+    //      25). Quem depende de rodar isto localmente configura
+    //      SHOPIFY_API_SECRET (ou o api_secret da loja) no seu ambiente.
     //
     // Failures here used to silently 401 without any DB trace, which made
     // "webhooks aren't arriving" debugging impossible. We now record the
@@ -2652,19 +2623,15 @@ export async function POST(request: NextRequest) {
         );
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
       }
-    } else if (process.env.NODE_ENV === 'production') {
+    } else {
       console.error(
-        `[Shopify Webhook] No secret configured (store=${store.id}, shop=${shopDomain}) — REJECTING in production`
+        `[Shopify Webhook] No secret configured (store=${store.id}, shop=${shopDomain}) — REJECTING`
       );
       await logRejectedDelivery(
         'no_secret',
         'Store has no api_secret and SHOPIFY_API_SECRET env is unset — cannot verify HMAC.'
       );
       return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
-    } else {
-      console.warn(
-        `[Shopify Webhook] No secret configured for ${shopDomain} — allowing in DEV mode only`
-      );
     }
 
     // 5. Verificar idempotência via shopify_webhook_log
