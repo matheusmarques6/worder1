@@ -11,34 +11,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
-import crypto from 'crypto';
 import { enqueueShopifyWebhook, isQStashConfigured } from '@/lib/queue';
-
-// =============================================
-// Verificação HMAC do Shopify (timing-safe)
-// =============================================
-function verifyShopifyWebhook(rawBody: string, hmacHeader: string, secret: string): boolean {
-  if (!secret || !hmacHeader) return true; // Dev mode
-  
-  try {
-    const hash = crypto
-      .createHmac('sha256', secret)
-      .update(rawBody, 'utf8')
-      .digest('base64');
-    
-    // Timing-safe comparison
-    if (hash.length !== hmacHeader.length) {
-      return false;
-    }
-    
-    return crypto.timingSafeEqual(
-      Buffer.from(hash),
-      Buffer.from(hmacHeader)
-    );
-  } catch {
-    return false;
-  }
-}
+import { verifyShopifyWebhook } from './verify';
 
 // =============================================
 // POST - Receber e Enfileirar Webhook
@@ -103,11 +77,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true, skipped: true, reason: 'store_inactive' });
     }
 
-    // 5. Verificar HMAC (segurança) — FAIL-CLOSED.
+    // 5. Verificar HMAC (segurança) — FAIL-CLOSED, sem exceção de ambiente.
     //    Quando existe secret (por loja ou env-fallback), o header é
     //    OBRIGATÓRIO e a assinatura precisa ser válida. Header ausente
-    //    ou inválido => 401. Mantém consistência com
-    //    /api/tracking/shopify-webhook.
+    //    ou inválido => 401. Sem secret configurado, item 26 da auditoria:
+    //    recusa sempre — inclusive fora de produção, que era o caminho
+    //    "aceita e loga" (na prática nem logava) que este item fecha.
+    //    Mantém consistência com /api/tracking/shopify-webhook.
     const secret = store.api_secret || process.env.SHOPIFY_API_SECRET || '';
     if (secret) {
       const isValid = !!hmacHeader && verifyShopifyWebhook(rawBody, hmacHeader, secret);
@@ -118,7 +94,7 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         );
       }
-    } else if (process.env.NODE_ENV === 'production') {
+    } else {
       console.error(`No webhook secret configured for ${shopDomain}`);
       return NextResponse.json(
         { error: 'Webhook not configured' },
