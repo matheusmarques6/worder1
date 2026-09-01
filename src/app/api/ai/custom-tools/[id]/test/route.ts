@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAuthClient } from '@/lib/api-utils'
 import { decryptSecret, isEncryptedSecret } from '@/lib/crypto/secret-box'
+import { safeFetch } from '@/lib/ai/ssrf-guard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -43,7 +44,12 @@ export async function POST(
     if (tool.method === 'GET') {
       for (const [key, value] of Object.entries(args)) url.searchParams.set(key, String(value))
     }
-    const response = await fetch(url.toString(), {
+    // item 19 do audit: o único filtro até aqui era o CHECK do schema
+    // (endpoint https://), que não impede apontar pra rede interna — e esta
+    // rota DEVOLVE O CORPO pro lojista, o que faz do SSRF aqui uma leitura
+    // direta (não precisa do agente repetir o conteúdo). safeFetch valida
+    // pra onde o host resolve (e revalida a cada redirect) antes de buscar.
+    const response = await safeFetch(url.toString(), {
       method: tool.method,
       headers:
         tool.method === 'POST'
