@@ -259,6 +259,55 @@ class TestRecentReplyCooldown:
         assert silence.reason == "transfer_cooldown"
 
 
+class TestMaxMessagesPerConversation:
+    """`behavior.max_messages_per_conversation` — cloud-runner.ts:537-548."""
+
+    def test_at_the_ceiling_is_silent(self) -> None:
+        silence = evaluate_inbound_guards(
+            {"behavior": {"max_messages_per_conversation": 3}},
+            state(bot_message_count=3),
+            agent_id=AGENT,
+            now=NOW,
+        )
+
+        assert silence is not None
+        assert silence.reason == "max_messages"
+
+    def test_below_the_ceiling_answers(self) -> None:
+        assert (
+            evaluate_inbound_guards(
+                {"behavior": {"max_messages_per_conversation": 3}},
+                state(bot_message_count=2),
+                agent_id=AGENT,
+                now=NOW,
+            )
+            is None
+        )
+
+    def test_zero_means_no_ceiling(self) -> None:
+        """`Number(x || 0)` e `if (maxMessages > 0)`: só um positivo liga o guard."""
+        assert (
+            evaluate_inbound_guards(
+                {"behavior": {"max_messages_per_conversation": 0}},
+                state(bot_message_count=99),
+                agent_id=AGENT,
+                now=NOW,
+            )
+            is None
+        )
+
+    def test_the_detail_names_the_configured_ceiling(self) -> None:
+        silence = evaluate_inbound_guards(
+            {"behavior": {"max_messages_per_conversation": 3}},
+            state(bot_message_count=5),
+            agent_id=AGENT,
+            now=NOW,
+        )
+
+        assert silence is not None
+        assert "3" in silence.detail
+
+
 class TestSettingsGarbageNeverSilences:
     """jsonb malformado degrada para "responde" — nunca para um mudo sem motivo."""
 

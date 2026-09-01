@@ -284,4 +284,13 @@ def evaluate_inbound_guards(
     ):
         return Silence("cooldown", "Cooldown: o agente acabou de responder")
 
+    # max_messages_per_conversation — cloud-runner.ts:537-548. Só um positivo
+    # liga o teto (`Number(x || 0)` + `> 0`): ausente ou zero é "sem teto".
+    ceiling = _number(behavior.get("max_messages_per_conversation"), 0)
+    if ceiling is not None and ceiling > 0 and state.bot_message_count >= ceiling:
+        return Silence(
+            "max_messages",
+            f"Limite de {int(ceiling)} resposta(s) por conversa atingido",
+        )
+
     return None
