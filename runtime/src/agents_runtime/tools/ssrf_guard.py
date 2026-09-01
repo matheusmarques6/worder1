@@ -52,6 +52,15 @@ _ALLOWED_SCHEMES = {"http", "https"}
 # própria, é a única faixa do achado que o stdlib não cobre sozinho.
 _CGNAT = ipaddress.ip_network("100.64.0.0/10")
 
+# Fix round 1 (review do item 19) — IMPORTANT 1: o stdlib carrega
+# `_private_networks_exceptions = [192.0.0.9/32, 192.0.0.10/32]` (PCP e o
+# anycast de descoberta NAT64/DNS64, RFC 7723/7050) e por isso `is_private`
+# é `False` pra esses dois endereços dentro de `192.0.0.0/24` — o guard
+# deixava os dois passarem, divergindo do TS (`ssrf-guard.ts`), que bloqueia
+# a faixa inteira sem exceção. Mesmo tratamento do CGNAT acima: faixa
+# própria, checada à parte de `is_private`.
+_PROTOCOL_ASSIGNMENT = ipaddress.ip_network("192.0.0.0/24")
+
 #: Resolve um hostname para os endereços que ele aponta. Injetável pra teste
 #: (nunca toca DNS de verdade numa suíte `-m unit`); em produção, o resolver
 #: padrão usa o resolvedor assíncrono do próprio event loop.
@@ -67,7 +76,13 @@ def _blocked(reason: str) -> SsrfBlocked:
 
 
 def _is_blocked_v4(ip: ipaddress.IPv4Address) -> bool:
-    return ip.is_private or ip.is_reserved or ip.is_multicast or ip in _CGNAT
+    return (
+        ip.is_private
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip in _CGNAT
+        or ip in _PROTOCOL_ASSIGNMENT
+    )
 
 
 def is_private_or_reserved_ip(ip_text: str) -> bool:

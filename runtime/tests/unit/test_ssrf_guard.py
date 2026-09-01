@@ -47,6 +47,13 @@ class TestIsPrivateOrReservedIp:
             ("224.0.0.1", True),  # multicast
             ("240.0.0.1", True),  # reservado
             ("198.18.0.1", True),  # benchmarking
+            # fix round 1 (review): stdlib exclui estes dois de `is_private`
+            # (`_private_networks_exceptions` — PCP e o anycast de descoberta
+            # NAT64/DNS64) mesmo dentro de 192.0.0.0/24. O TS bloqueia a
+            # faixa inteira sem exceção — sem `_PROTOCOL_ASSIGNMENT`, o guard
+            # deixava os dois passarem.
+            ("192.0.0.9", True),  # PCP anycast
+            ("192.0.0.10", True),  # NAT64/DNS64 discovery anycast
             ("8.8.8.8", False),
             ("93.184.216.34", False),
             # IPv6
