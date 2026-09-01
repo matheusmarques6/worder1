@@ -33,6 +33,7 @@ import psycopg
 
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.crypto.secret_box import base_secret_from_env
+from agents_runtime.queueing.failures import meta_error_code
 from agents_runtime.repository.outbox import ClaimedSend
 from agents_runtime.repository.whatsapp_accounts import load_active_account, resolve_token
 
@@ -79,7 +80,16 @@ class CloudApiChannel:
             # The classifier reads the status out of this message; the body is
             # kept for the outbox's last_error forensics. NUNCA o token — só o
             # corpo que a Meta devolveu.
-            raise RuntimeError(f"HTTP {response.status_code} {response.text[:300]}")
+            #
+            # Item 32, ruling R: o `code` da Meta é lido do corpo INTEIRO e vai
+            # à FRENTE, etiquetado. A truncagem existe para o log, e a decisão
+            # de pôr o número em cooldown não pode depender do comprimento do
+            # texto que a Meta escolheu mandar — numa mensagem longa o `code`
+            # cai além do corte, e num corte infeliz `"code":470` vira
+            # `"code":4`, que é um código de excesso.
+            code = meta_error_code(response.text)
+            tag = f" meta_code={code}" if code else ""
+            raise RuntimeError(f"HTTP {response.status_code}{tag} {response.text[:300]}")
 
         # `or`, not a default: an empty list is present-but-useless, and the
         # 2xx-without-wamid test caught the IndexError the naive version hid.

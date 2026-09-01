@@ -22,7 +22,7 @@ import httpx
 import pytest
 
 from agents_runtime.channels.cloud_api import CloudApiChannel, from_env
-from agents_runtime.queueing.failures import Failure, classify
+from agents_runtime.queueing.failures import Failure, classify, is_rate_limited
 from agents_runtime.repository.outbox import ClaimedSend
 
 
@@ -221,3 +221,76 @@ def test_missing_encryption_key_dies_at_startup(monkeypatch: pytest.MonkeyPatch)
 
     with pytest.raises(RuntimeError, match="ENCRYPTION_KEY"):
         from_env("postgresql://x")
+
+
+# --- item 32, ruling R: o sinal de excesso não pode depender do comprimento ---
+#
+# `send` trunca o corpo em 300 caracteres para o `last_error`, e o cooldown do
+# número lê o código de erro DESSA string. A truncagem existe para o log; uma
+# decisão não pode depender do tamanho do texto que a Meta escolheu mandar.
+
+
+def meta_error_body(message: str, code: int = 131048) -> dict:
+    """A forma real de um erro da Meta: `code` vem DEPOIS de `message`, então
+    quanto mais longa a mensagem, mais fundo o código."""
+    return {
+        "error": {
+            "message": message,
+            "type": "OAuthException",
+            "code": code,
+            "error_subcode": 2494055,
+            "fbtrace_id": "A1bC2dE3fG4",
+        }
+    }
+
+
+async def test_a_long_meta_message_does_not_bury_the_rate_limit_code() -> None:
+    """O corpo de 381 B que o revisor mediu: mesma falha de excesso, mensagem
+    completa, e o `code` cai depois do caractere 300."""
+    body = meta_error_body(
+        "(#131048) Spam rate limit hit. Message failed to send because there are"
+        " restrictions on how many messages can be sent from this phone number."
+        " This may be because too many previous messages were blocked or flagged"
+        " as spam. Please check the quality rating of your phone number."
+    )
+    # A fatia de 300 de fato enterra o código — se deixar de enterrar, o teste
+    # está provando outra coisa e precisa ser recalibrado.
+    assert '"code":131048' not in httpx.Response(400, json=body).text[:300]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json=body)
+
+    with pytest.raises(RuntimeError) as failure:
+        await channel_answering(handler).send(None, a_send())
+
+    assert is_rate_limited(failure.value) is True
+
+
+async def test_a_truncated_number_is_not_read_as_another_code() -> None:
+    """A direção oposta, e mais traiçoeira: a truncagem pode partir um número.
+    `"code":470` cortado vira `"code":4`, e o 4 ESTÁ na lista de excesso — um
+    número entraria em cooldown por um erro que não é de limite."""
+    body = meta_error_body("x" * 245, code=470)
+    truncated = httpx.Response(400, json=body).text[:300]
+    # A fatia de fato parte o número — se deixar de partir, o teste está
+    # provando outra coisa e precisa ser recalibrado.
+    assert truncated.endswith('"code":4')
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json=body)
+
+    with pytest.raises(RuntimeError) as failure:
+        await channel_answering(handler).send(None, a_send())
+
+    assert is_rate_limited(failure.value) is False
+
+
+async def test_a_short_body_still_works_the_old_way() -> None:
+    """Controle: o caso que já passava continua passando."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json=meta_error_body("limite"))
+
+    with pytest.raises(RuntimeError) as failure:
+        await channel_answering(handler).send(None, a_send())
+
+    assert is_rate_limited(failure.value) is True

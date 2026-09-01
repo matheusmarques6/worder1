@@ -44,6 +44,23 @@ _RATE_LIMIT_CODES = frozenset({"4", "429", "80007", "130429", "131048", "131049"
 # 429 (valores comuns) throttlaria o número por um erro que não é de limite.
 _META_CODE = re.compile(r'"code"\s*:\s*(\d+)')
 
+#: A etiqueta que o canal põe na FRENTE da mensagem, lida do corpo INTEIRO
+#: antes de qualquer truncagem. Formato próprio de propósito: `"code":N` também
+#: aparece no corpo truncado que viaja atrás, e a truncagem pode ter partido um
+#: número lá (`"code":470` virando `"code":4`). Quando a etiqueta existe, ela é
+#: a palavra final; sem ela não há como saber, e aí vale o que dá para ler.
+_TAGGED_CODE = re.compile(r"\bmeta_code=(\d+)\b")
+
+
+def meta_error_code(body: str) -> str | None:
+    """O `code` do erro da Meta, lido do corpo COMPLETO. `None` se não houver.
+
+    Mora aqui, e não no canal, porque a regex é a mesma que `is_rate_limited`
+    usa — duas cópias divergiriam no dia em que alguém ajustasse uma delas.
+    """
+    match = _META_CODE.search(body)
+    return match.group(1) if match else None
+
 
 def is_rate_limited(error: BaseException) -> bool:
     """A Meta sinalizou EXCESSO neste número?
@@ -56,6 +73,12 @@ def is_rate_limited(error: BaseException) -> bool:
     status = _STATUS.search(text)
     if status is not None and status.group(1) == "429":
         return True
+    tagged = _TAGGED_CODE.search(text)
+    if tagged is not None:
+        # Etiquetado: o canal já leu o corpo inteiro, e o que ele leu decide —
+        # sem cair no corpo truncado que vem atrás e pode mentir nos dois
+        # sentidos (código enterrado além do corte, ou número partido no meio).
+        return tagged.group(1) in _RATE_LIMIT_CODES
     return any(code in _RATE_LIMIT_CODES for code in _META_CODE.findall(text))
 
 
