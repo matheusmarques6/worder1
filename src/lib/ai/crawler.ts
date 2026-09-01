@@ -12,6 +12,11 @@
 // extractInternalLinks. Orquestração com fetch: crawlSite.
 // =============================================
 
+// item 18 do audit: nenhuma URL chega ao `fetch` sem passar por este portão
+// (esquema, credenciais embutidas, IP privado/link-local — e redirect
+// verificado salto a salto, não só a URL de entrada).
+import { safeFetch } from './ssrf-guard'
+
 export const MIN_USEFUL_CHARS = 200
 export const MAX_SITEMAP_PAGES = 20
 export const MAX_LINK_PAGES = 8
@@ -94,10 +99,9 @@ export function extractInternalLinks(html: string, pageUrl: string): string[] {
 interface CrawlPageResult { url: string; title: string; text: string }
 
 async function fetchPage(url: string, timeoutMs: number): Promise<string> {
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     headers: { 'User-Agent': CRAWLER_USER_AGENT, Accept: 'text/html,application/xhtml+xml,application/xml' },
     signal: AbortSignal.timeout(timeoutMs),
-    redirect: 'follow',
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return await res.text()

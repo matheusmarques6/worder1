@@ -80,7 +80,15 @@ describe('MIN_USEFUL_CHARS', () => {
 // crawlSite — testes com fetch mockado
 // =============================================
 import { vi, beforeEach, afterEach } from 'vitest'
+
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}))
+
+import { lookup } from 'node:dns/promises'
 import { crawlSite, SPA_ERROR_MESSAGE } from '../crawler'
+
+const mockLookup = lookup as unknown as ReturnType<typeof vi.fn>
 
 function htmlPage(body: string, title = 'T') {
   return `<html><head><title>${title}</title></head><body>${body}</body></html>`
@@ -89,7 +97,15 @@ const LONG = 'Produto excelente para o dia a dia com tecido confortável. '.repe
 
 describe('crawlSite', () => {
   const fetchMock = vi.fn()
-  beforeEach(() => { fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock) })
+  beforeEach(() => {
+    fetchMock.mockReset()
+    vi.stubGlobal('fetch', fetchMock)
+    // hostnames dos testes abaixo são todos "públicos" para o portão SSRF —
+    // o que estas suítes exercitam é a lógica de crawl, não o guard (esse
+    // tem suíte própria em ssrf-guard.test.ts).
+    mockLookup.mockReset()
+    mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+  })
   afterEach(() => { vi.unstubAllGlobals() })
 
   function respond(map: Record<string, { status?: number; body: string }>) {
@@ -137,5 +153,25 @@ describe('crawlSite', () => {
   it('página inicial com erro HTTP → lança erro com status', async () => {
     respond({ 'https://down.com/': { status: 500, body: 'x' } })
     await expect(crawlSite('https://down.com/')).rejects.toThrow(/500/)
+  })
+
+  // item 18 do audit: SSRF — o portão (ssrf-guard.ts) tem suíte própria e
+  // exaustiva; aqui só provamos que o crawlSite de ponta a ponta recusa e
+  // que a mensagem que chega ao lojista é clara, não stack trace.
+  it('URL apontando pro metadata endpoint da nuvem → recusa com mensagem clara', async () => {
+    await expect(crawlSite('http://169.254.169.254/latest/meta-data/')).rejects.toThrow(
+      /não pode ser usado como fonte/
+    )
+  })
+
+  it('host público que redireciona para IP interno → recusa, nunca busca o destino', async () => {
+    fetchMock.mockImplementation(async (input: any) => {
+      const url = String(input)
+      if (url === 'https://loja.com/') {
+        return new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/latest/meta-data/' } })
+      }
+      throw new Error(`fetch inesperado em teste: ${url}`)
+    })
+    await expect(crawlSite('https://loja.com/')).rejects.toThrow(/não pode ser usado como fonte/)
   })
 })
