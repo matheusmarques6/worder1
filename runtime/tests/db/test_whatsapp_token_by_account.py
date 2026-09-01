@@ -7,6 +7,20 @@ função faz é recusar se a org pedida não é a org da sessão, ANTES de
 qualquer leitura. É esse teste — a recusa — que este item existe para provar;
 o resto é o caminho feliz que confirma que a porta ainda entrega a conta
 certa depois de fechada para as outras.
+
+Fix round 1: a 1ª entrega deste arquivo tinha um teste
+(`test_an_org_with_no_session_scope_is_refused_too`) que abria uma conexão
+NUNCA escopada — exatamente a forma do `sender_conn` real de produção
+(`app.py:231-240` abre uma conexão só, para a fila inteira, e
+`repository/engine.py` documenta isso: "a conexão do sender drena todas as
+orgs sem escopo fixo") — e afirmava a RECUSA como o desfecho correto. Era o
+desfecho da função crua, mas não do caminho de produção: o review provou ao
+vivo que, sem escopo em lugar nenhum, TODO envio recusava. O conserto (agora
+em `repository/whatsapp_accounts.py`) escopa por operação, dentro do
+repository — `TestTheRepositoryScopesPerOperationNotTheWholeConnection`
+abaixo prova as duas metades: a função crua CONTINUA recusando sem escopo (é
+a garantia de fronteira, não regride), e o repository, na MESMA conexão nunca
+escopada por fora, SUCEDE.
 """
 
 import uuid
@@ -14,6 +28,7 @@ import uuid
 import psycopg
 import pytest
 
+from agents_runtime.repository.whatsapp_accounts import load_active_account
 from tests.db.conftest import TwoTenants, as_app_role
 from tests.db.factories import create_channel_account
 
@@ -46,17 +61,48 @@ class TestTheOrgMismatchIsRefusedBeforeAnyRead:
         assert str(two_tenants.a.id) in message
         assert "a-secret-token" not in message
 
-    def test_an_org_with_no_session_scope_is_refused_too(
+
+class TestTheRepositoryScopesPerOperationNotTheWholeConnection:
+    """A conexão do sender é aberta UMA vez para todas as orgs (`app.py`) e
+    NUNCA passa por `scope_to_organization` por fora — a mesma forma que
+    `repository/engine.py:alert_moment_suppression` já assume para o alerta
+    de momento, nesta MESMA conexão. Uma função que só recusa sem escopo por
+    fora não é uma guarda: em produção ela recusaria SEMPRE. As duas metades
+    do fix ficam lado a lado aqui de propósito."""
+
+    def test_the_raw_function_still_refuses_an_unscoped_call(
         self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
     ) -> None:
-        """`current_app_organization_id()` ausente (nenhum `set_config`) não é
-        um passe livre — é só mais um valor que não bate com o pedido."""
+        """Garantia de fronteira, sem o repository no meio: a função SQL
+        sozinha não vira passe livre só porque ninguém escopou por fora —
+        `current_app_organization_id()` ausente é só mais um valor que não
+        bate com o pedido."""
         create_channel_account(admin, two_tenants.a.id, access_token="a-secret-token")
 
         with psycopg.connect(dsn) as conn:
             conn.execute("set role sender_role")
             with pytest.raises(psycopg.errors.RaiseException):
                 active_account(conn, two_tenants.a.id)
+
+    async def test_the_repository_succeeds_on_the_exact_shape_of_the_sender_conn(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        """A prova que fecha o Critical do fix round 1: numa conexão idêntica
+        à que `app._connect(dsn, sender_set_role, SENDER_ROLE)` produz de
+        verdade — autocommit, role setada, `scope_to_organization` JAMAIS
+        chamado por fora —, `load_active_account` tem que devolver a
+        credencial da própria org. Ele escopa por operação, dentro de si."""
+        create_channel_account(admin, two_tenants.a.id, access_token="a-secret-token")
+
+        conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True)
+        try:
+            await conn.execute("set role sender_role")
+            account = await load_active_account(conn, organization_id=two_tenants.a.id)
+        finally:
+            await conn.close()
+
+        assert account is not None
+        assert account.access_token == "a-secret-token"
 
 
 class TestTheHappyPathStillWorksBehindTheGuard:

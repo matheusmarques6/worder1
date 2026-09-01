@@ -8,8 +8,19 @@ Duas colunas, não uma: `access_token_encrypted` (v2 secret-box) e o legado
 `access_token` em claro, exatamente como `getAccessToken` do TS lê
 (`src/lib/whatsapp/account-loader.ts:25-33`) — cifrada primeiro, texto puro
 como fallback de transição. `resolve_token` decide qual vale e decifra;
-`load_active_account` só busca a linha, cru, como `stores.py` faz para a
+`load_active_account` busca a linha, cru, como `stores.py` faz para a
 Shopify — quem fala com o banco não é quem interpreta o formato do segredo.
+
+Fix round 1 (item 20): a conexão que chama esta função é a do SENDER, e ela
+NUNCA vem escopada para uma org — `app.py` abre um `sender_conn` só, para a
+fila inteira, e `repository/engine.py` diz isso com todas as letras
+(`alert_moment_suppression`: "a conexão do sender drena todas as orgs sem
+escopo fixo — o escopo entra aqui, por operação"). A 1ª entrega deste item
+não escopava em lugar nenhum: a review provou ao vivo que
+`internal.active_whatsapp_business_account` recusava TODO envio em produção,
+porque `current_app_organization_id()` vinha sempre NULL. O conserto é o
+MESMO padrão de `alert_moment_suppression`, só que aqui — não em cada
+chamador, que teria uma chance a mais de esquecer.
 """
 
 from dataclasses import dataclass
@@ -18,6 +29,7 @@ from uuid import UUID
 import psycopg
 
 from agents_runtime.crypto.secret_box import decrypt_secret, is_encrypted_secret
+from agents_runtime.repository.scope import scope_to_organization
 
 
 class NoUsableToken(RuntimeError):
@@ -36,12 +48,17 @@ class WhatsAppAccountRow:
 async def load_active_account(
     conn: psycopg.AsyncConnection, *, organization_id: UUID
 ) -> WhatsAppAccountRow | None:
-    cursor = await conn.execute(
-        "select id, phone_number_id, access_token, access_token_encrypted"
-        " from internal.active_whatsapp_business_account(%s)",
-        (organization_id,),
-    )
-    row = await cursor.fetchone()
+    """Escopa a org NESTA operação, dentro da própria função — não confia em
+    nenhum chamador ter escopado a conexão por fora (a do sender não escopa;
+    ver docstring do módulo)."""
+    async with conn.transaction():
+        await scope_to_organization(conn, organization_id)
+        cursor = await conn.execute(
+            "select id, phone_number_id, access_token, access_token_encrypted"
+            " from internal.active_whatsapp_business_account(%s)",
+            (organization_id,),
+        )
+        row = await cursor.fetchone()
     if row is None:
         return None
     return WhatsAppAccountRow(

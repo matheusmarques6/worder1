@@ -223,8 +223,9 @@ token) e 9.5 (roadmap, não bloqueia).
 1. **Deploy do runtime** (`runtime/DEPLOY.md`): container em Railway/Render/VPS
    com `SUPABASE_DB_URL` (session pooler), `AGENTS_RESPONDER`+`AGENTS_TOUCHER`
    reais, roles worker/sender, `AGENTS_OPENROUTER_API_KEY` (plataforma),
-   `ENCRYPTION_KEY` idêntico ao do app, `AGENTS_CHANNEL` (cloud_api) +
-   `AGENTS_META_ACCESS_TOKEN`, `AGENTS_HTTP_PORT`+`AGENTS_PREVIEW_TOKEN`.
+   `ENCRYPTION_KEY` idêntico ao do app (abre também a credencial Meta por
+   conta — item 20 da auditoria, sem env global de token), `AGENTS_CHANNEL`
+   (cloud_api), `AGENTS_HTTP_PORT`+`AGENTS_PREVIEW_TOKEN`.
 2. **Vercel:** setar `AGENTS_RUNTIME_URL` + `AGENTS_PREVIEW_TOKEN` (o preview
    de /moments e /ai passa a funcionar).
 3. **Sonda:** healthz do runtime no monitor externo (503 = heartbeat parado).
