@@ -78,4 +78,29 @@ describe('WhatsAppCloudAPI.downloadMedia — SSRF (fix round 1)', () => {
     const mediaCallInit = fetchMock.mock.calls[1][1]
     expect(mediaCallInit.headers.Authorization).toBe('Bearer token-secreto')
   })
+
+  // Fix round 2 (review): o caminho FELIZ de produção é a Meta redirecionar
+  // a mídia pra um CDN de outra origem — sem o fix, o token vazava exatamente
+  // aqui, não só num ataque. Prova ponta a ponta com o encadeamento real do
+  // método: Graph API → media_url → redirect cross-origin → CDN final.
+  it('media_url redireciona pra CDN de outra origem: token não vaza no salto, download continua funcionando', async () => {
+    const fetchMock = vi.fn()
+    fetchMock.mockResolvedValueOnce(graphMediaInfoResponse('https://cdn.fbcdn.net/x.jpg'))
+    fetchMock.mockResolvedValueOnce(
+      new Response(null, { status: 302, headers: { location: 'https://outro-cdn.exemplo.net/x.jpg' } }),
+    )
+    fetchMock.mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await client().downloadMedia('media-1')
+
+    expect(result.data).toEqual(new Uint8Array([1, 2, 3]))
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    // salto 1 (cdn.fbcdn.net → mesma origem da chamada inicial): token presente
+    const firstHopInit = fetchMock.mock.calls[1][1]
+    expect(new Headers(firstHopInit.headers).get('authorization')).toBe('Bearer token-secreto')
+    // salto 2 (redirect pra outro-cdn.exemplo.net → origem diferente): token cai
+    const secondHopInit = fetchMock.mock.calls[2][1]
+    expect(new Headers(secondHopInit.headers).get('authorization')).toBeNull()
+  })
 })

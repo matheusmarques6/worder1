@@ -175,4 +175,74 @@ describe('safeFetch', () => {
     // visão de cada salto — o portão sempre força 'manual'.
     expect(fetchMock).toHaveBeenCalledWith('https://loja.com/', expect.objectContaining({ redirect: 'manual' }))
   })
+
+  // Fix round 2 (review): fetch nativo com redirect:'follow' remove
+  // Authorization num salto cross-origin (WHATWG fetch spec) — nosso loop
+  // manual não fazia isso, e até agora nenhum chamador passava credencial
+  // (item 19 mudou isso: cloud-api.ts/meta-api.ts levam o Bearer token do
+  // WhatsApp). Sem esta checagem, o caminho FELIZ de produção (Meta
+  // redireciona a mídia pra um CDN de outra origem) entrega o token da loja
+  // pro host que o redirect nomear.
+  describe('credenciais não atravessam salto cross-origin (fix round 2)', () => {
+    it('remove Authorization/Cookie/Proxy-Authorization no salto pra origem diferente', async () => {
+      mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+      fetchMock
+        .mockResolvedValueOnce(
+          new Response(null, { status: 302, headers: { location: 'https://outracdn.com/x' } })
+        )
+        .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+
+      await safeFetch('https://cdn.loja.com/x', {
+        headers: {
+          Authorization: 'Bearer segredo-da-loja',
+          Cookie: 'sid=1',
+          'Proxy-Authorization': 'Basic xyz',
+        },
+      })
+
+      const segundoInit = fetchMock.mock.calls[1][1]
+      const headers = new Headers(segundoInit.headers)
+      expect(headers.get('authorization')).toBeNull()
+      expect(headers.get('cookie')).toBeNull()
+      expect(headers.get('proxy-authorization')).toBeNull()
+    })
+
+    it('mantém Authorization num salto pra MESMA origem', async () => {
+      mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+      fetchMock
+        .mockResolvedValueOnce(
+          new Response(null, { status: 302, headers: { location: 'https://cdn.loja.com/y' } })
+        )
+        .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+
+      await safeFetch('https://cdn.loja.com/x', {
+        headers: { Authorization: 'Bearer segredo-da-loja' },
+      })
+
+      const segundoInit = fetchMock.mock.calls[1][1]
+      const headers = new Headers(segundoInit.headers)
+      expect(headers.get('authorization')).toBe('Bearer segredo-da-loja')
+    })
+
+    it('cadeia de dois saltos: mantém na origem igual, derruba na diferente', async () => {
+      mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+      fetchMock
+        .mockResolvedValueOnce(
+          new Response(null, { status: 302, headers: { location: 'https://cdn.loja.com/y' } }) // mesma origem
+        )
+        .mockResolvedValueOnce(
+          new Response(null, { status: 302, headers: { location: 'https://outracdn.com/z' } }) // origem diferente
+        )
+        .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+
+      await safeFetch('https://cdn.loja.com/x', {
+        headers: { Authorization: 'Bearer segredo-da-loja' },
+      })
+
+      expect(new Headers(fetchMock.mock.calls[1][1].headers).get('authorization')).toBe(
+        'Bearer segredo-da-loja'
+      )
+      expect(new Headers(fetchMock.mock.calls[2][1].headers).get('authorization')).toBeNull()
+    })
+  })
 })

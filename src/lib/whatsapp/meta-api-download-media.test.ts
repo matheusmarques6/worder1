@@ -65,4 +65,26 @@ describe('downloadMedia (meta-api.ts) — SSRF (fix round 1)', () => {
     const mediaCallInit = fetchMock.mock.calls[1][1]
     expect(mediaCallInit.headers.Authorization).toBe('Bearer token-secreto')
   })
+
+  // Fix round 2 (review): mesmo caminho feliz de produção do teste análogo
+  // em cloud-api-download-media.test.ts — a Meta redireciona a mídia pra um
+  // CDN de outra origem, e o token não pode atravessar esse salto.
+  it('url redireciona pra CDN de outra origem: token não vaza no salto, download continua funcionando', async () => {
+    const fetchMock = vi.fn()
+    fetchMock.mockResolvedValueOnce(graphMediaInfoResponse('https://cdn.fbcdn.net/x.jpg'))
+    fetchMock.mockResolvedValueOnce(
+      new Response(null, { status: 302, headers: { location: 'https://outro-cdn.exemplo.net/x.jpg' } }),
+    )
+    fetchMock.mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await downloadMedia({ mediaId: 'media-1', accessToken: 'token-secreto' })
+
+    expect(result).toContain('data:image/jpeg;base64,')
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    const firstHopInit = fetchMock.mock.calls[1][1]
+    expect(new Headers(firstHopInit.headers).get('authorization')).toBe('Bearer token-secreto')
+    const secondHopInit = fetchMock.mock.calls[2][1]
+    expect(new Headers(secondHopInit.headers).get('authorization')).toBeNull()
+  })
 })

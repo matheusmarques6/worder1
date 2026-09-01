@@ -141,10 +141,31 @@ export async function assertSafeUrl(rawUrl: string): Promise<URL> {
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 
+// Fix round 2 (item 19): fetch nativo com redirect:'follow' remove
+// Authorization (e afins) num salto cross-origin — é a WHATWG fetch spec
+// (confirmado experimentalmente pela review contra servidor local). Nosso
+// loop manual reenviava o mesmo `init` em todo salto, sem essa checagem —
+// inofensivo enquanto nenhum chamador levava credencial, mas cloud-api.ts/
+// meta-api.ts (item 19) passaram a levar o Bearer token do WhatsApp, e o
+// caminho FELIZ de produção é a Meta redirecionar a mídia pra um CDN de
+// outra origem. Sem isso, o token da loja vazava pro host que o redirect
+// escolhesse. Mesmas três headers que os navegadores tratam como
+// credencial: Authorization, Cookie, Proxy-Authorization.
+const CREDENTIAL_HEADERS = ['authorization', 'cookie', 'proxy-authorization']
+
+function stripCredentialHeaders(init: RequestInit): RequestInit {
+  const headers = new Headers(init.headers)
+  for (const name of CREDENTIAL_HEADERS) headers.delete(name)
+  return { ...init, headers }
+}
+
 /**
  * fetch seguro contra SSRF: valida a URL (e, a cada redirect, o DESTINO do
  * redirect) antes de buscar. Nunca usa redirect:'follow' — cada salto passa
- * pelo mesmo portão que a URL de entrada.
+ * pelo mesmo portão que a URL de entrada. Num salto pra origem diferente da
+ * anterior, derruba as headers de credencial antes de seguir — mesmo
+ * comportamento do fetch nativo, só que feito à mão porque o loop também é
+ * à mão.
  */
 export async function safeFetch(
   rawUrl: string,
@@ -152,9 +173,14 @@ export async function safeFetch(
   maxRedirects = 5
 ): Promise<Response> {
   let currentUrl = rawUrl
+  let currentInit = init
+  let previousOrigin: string | null = null
   for (let hop = 0; ; hop++) {
     const url = await assertSafeUrl(currentUrl)
-    const res = await fetch(url.toString(), { ...init, redirect: 'manual' })
+    if (previousOrigin !== null && url.origin !== previousOrigin) {
+      currentInit = stripCredentialHeaders(currentInit)
+    }
+    const res = await fetch(url.toString(), { ...currentInit, redirect: 'manual' })
     const location = res.headers.get('location')
     if (!REDIRECT_STATUSES.has(res.status) || !location) return res
     // Não vamos ler o corpo deste redirect — cancela pra liberar o socket
@@ -169,6 +195,7 @@ export async function safeFetch(
     if (hop >= maxRedirects) {
       throw blocked('excesso de redirecionamentos ao seguir a URL')
     }
+    previousOrigin = url.origin
     currentUrl = new URL(location, url).toString()
   }
 }
