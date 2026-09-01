@@ -53,7 +53,7 @@ vi.mock('node:dns/promises', () => ({ lookup: vi.fn() }))
 import { lookup } from 'node:dns/promises'
 const mockLookup = lookup as unknown as ReturnType<typeof vi.fn>
 
-import { POST } from './route'
+import { POST, GENERIC_REFUSAL_MESSAGE } from './route'
 
 const AUTH = { user: { id: 'u1', email: 'a@b.com', organization_id: 'org-1' } }
 
@@ -98,7 +98,7 @@ describe('POST /api/ai/custom-tools/[id]/test — portão SSRF', () => {
     expect(fetchMock).not.toHaveBeenCalled()
     expect(json.status).toBe('failed')
     expect(JSON.stringify(json.detail)).not.toContain('segredo-da-vpc')
-    expect(json.detail.error).toContain('não pode ser usado como fonte')
+    expect(json.detail.error).toBe(GENERIC_REFUSAL_MESSAGE)
   })
 
   it('hostname que resolve para IP privado (127.0.0.1) é recusado sem chamar fetch', async () => {
@@ -128,7 +128,30 @@ describe('POST /api/ai/custom-tools/[id]/test — portão SSRF', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1) // só o primeiro salto — o segundo nunca aconteceu
     expect(json.status).toBe('failed')
-    expect(json.detail.error).toContain('não pode ser usado como fonte')
+    expect(json.detail.error).toBe(GENERIC_REFUSAL_MESSAGE)
+  })
+
+  it('a mensagem de recusa é a MESMA pra "não resolve" e pra "resolve pra rede interna" — não é oráculo de DNS interno', async () => {
+    // fix round 1 (review): as mensagens do guard distinguem "não foi
+    // possível resolver o host" de "o host resolve para uma rede interna" —
+    // um lojista autenticado testando endpoints podia usar essa diferença
+    // pra enumerar hostnames internos. O caller vê UMA mensagem só; a
+    // distinção fica só no log do servidor.
+    chainResult = { data: tool({ endpoint: 'https://interno.exemplo.com/api' }) }
+    mockLookup.mockResolvedValue([{ address: '127.0.0.1', family: 4 }])
+    const resInterno = await POST(postReq(), { params: { id: 'tool-1' } })
+    const jsonInterno = await resInterno.json()
+
+    chainResult = { data: tool({ endpoint: 'https://naoexiste.exemplo.com/api' }) }
+    mockLookup.mockReset()
+    mockLookup.mockRejectedValue(new Error('ENOTFOUND'))
+    const resNaoResolve = await POST(postReq(), { params: { id: 'tool-1' } })
+    const jsonNaoResolve = await resNaoResolve.json()
+
+    expect(jsonInterno.detail.error).toBe(GENERIC_REFUSAL_MESSAGE)
+    expect(jsonNaoResolve.detail.error).toBe(GENERIC_REFUSAL_MESSAGE)
+    expect(jsonInterno.detail.error).not.toContain('rede interna')
+    expect(jsonInterno.detail.error).not.toContain('resolver')
   })
 
   it('endpoint público de verdade continua funcionando e o corpo volta', async () => {

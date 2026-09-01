@@ -31,7 +31,13 @@
 import { lookup } from 'node:dns/promises'
 import { isIP, BlockList } from 'node:net'
 
-const BLOCKED_PREFIX = 'esse endereço não pode ser usado como fonte'
+// Exportado (fix round 1, item 19): call sites que devolvem o erro pro
+// CLIENTE (não só pro log) usam este prefixo pra colapsar qualquer recusa
+// do guard numa mensagem genérica — sem isso, as mensagens específicas
+// ("não foi possível resolver" vs "resolve para uma rede interna")
+// funcionam como oráculo de enumeração de DNS interno pra quem tem acesso
+// à rota (ex.: a rota de teste de custom tool, autenticada mas do lojista).
+export const BLOCKED_PREFIX = 'esse endereço não pode ser usado como fonte'
 
 function blocked(reason: string): Error {
   return new Error(`${BLOCKED_PREFIX}: ${reason}`)

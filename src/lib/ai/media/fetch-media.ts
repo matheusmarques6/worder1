@@ -14,7 +14,7 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { safeFetch } from '../ssrf-guard'
+import { safeFetch, BLOCKED_PREFIX } from '../ssrf-guard'
 
 export const MAX_INBOUND_MEDIA_BYTES = 10 * 1024 * 1024 // 10MB
 
@@ -64,7 +64,12 @@ export async function fetchInboundMedia(params: {
         mimeType:
           mimeType || response.headers.get('content-type') || 'application/octet-stream',
       }
-    } catch {
+    } catch (e: any) {
+      // Fix round 1 (review do item 19): sem isso, uma recusa do guard e um
+      // 404 comum eram o mesmo `null` na ops — indistinguíveis nos logs.
+      if (typeof e?.message === 'string' && e.message.startsWith(BLOCKED_PREFIX)) {
+        console.warn('[fetch-media] media_url recusada pelo portão SSRF:', e.message)
+      }
       return null
     }
   }

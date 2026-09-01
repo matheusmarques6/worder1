@@ -107,6 +107,21 @@ describe('fetchInboundMedia', () => {
       expect(fetchMock).not.toHaveBeenCalled()
     })
 
+    it('fix round 1 (review): a recusa do guard fica logada — não é indistinguível de um 404 na ops', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const fetchMock = vi.fn().mockResolvedValue(fetchResponse(new Uint8Array([1])))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const media = await fetchInboundMedia({
+        mediaUrl: 'http://169.254.169.254/latest/meta-data/',
+      })
+
+      expect(media).toBeNull()
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy.mock.calls[0].join(' ')).toContain('não pode ser usado como fonte')
+      warnSpy.mockRestore()
+    })
+
     // Redirect-por-salto NÃO tem teste dedicado aqui: fetchInboundMedia
     // reduz toda falha (não-ok, acima do cap, host recusado) ao mesmo
     // `null` — um teste que só olhasse esse retorno não discriminaria "o

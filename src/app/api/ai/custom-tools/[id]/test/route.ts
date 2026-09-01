@@ -2,10 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAuthClient } from '@/lib/api-utils'
 import { decryptSecret, isEncryptedSecret } from '@/lib/crypto/secret-box'
-import { safeFetch } from '@/lib/ai/ssrf-guard'
+import { safeFetch, BLOCKED_PREFIX } from '@/lib/ai/ssrf-guard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+// Fix round 1 (review do item 19): o guard distingue "não foi possível
+// resolver o host" de "o host resolve para uma rede interna" — útil no log,
+// mas um oráculo de DNS interno se voltar pro lojista (autenticado, mas não
+// deveria conseguir mapear hostnames internos testando endpoints). Uma
+// mensagem só pro caller; a mensagem específica do guard vai pro log.
+export const GENERIC_REFUSAL_MESSAGE =
+  'endpoint recusado: use uma URL pública e válida'
 
 // POST — o teste OBRIGATÓRIO antes de ligar (10.7): chamada real, feita do
 // servidor (o browser nunca vê o header de auth), cap de 10s. O resultado
@@ -62,7 +70,19 @@ export async function POST(
     status = response.ok ? 'ok' : 'failed'
     detail = { http_status: response.status, body: text.slice(0, 2000) }
   } catch (e: any) {
-    detail = { error: e?.message || 'falha na chamada' }
+    const message: string = e?.message || 'falha na chamada'
+    if (message.startsWith(BLOCKED_PREFIX)) {
+      // Log carrega o motivo específico (útil pra operação); o lojista só
+      // vê a mensagem genérica — ver comentário de GENERIC_REFUSAL_MESSAGE.
+      console.error('[custom-tools/test] endpoint recusado pelo portão SSRF', {
+        tool_id: params.id,
+        organization_id: auth.user.organization_id,
+        detail: message,
+      })
+      detail = { error: GENERIC_REFUSAL_MESSAGE }
+    } else {
+      detail = { error: message }
+    }
   }
 
   await supabase
