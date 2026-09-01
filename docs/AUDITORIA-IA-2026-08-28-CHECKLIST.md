@@ -543,7 +543,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   num item de paridade) pagou pela primeira vez aqui — e a segunda varredura precisa
   perguntar "quem MAIS fala pela loja?", não só "este caminho está certo?".
 
-- [ ] **31. STT e visão, ou degradação honesta** `[confirmado]`
+- [x] **31. STT e visão, ou degradação honesta** `[confirmado]` · commits
+  `4bf1c888` `b74368b1` `19986213` + `eba0ae3a` `0988c16b` `a9776d4f` + `24b54578` + `6f6a13a9`
   `src/lib/ai/media/*` (330 linhas) sem contraparte. Enquanto não portar: responder
   "ainda não consigo ouvir áudios" é melhor que responder no vazio.
 
@@ -553,6 +554,52 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   têm transcrição e visão. Para org migrada eles são ingeridos, o turno é agendado, e o runtime
   responde a uma mensagem sem texto. Não é silêncio: é resposta no vazio, que é o pior dos dois.
   O conserto mínimo enquanto o porte não vem é uma linha na condição de cancelamento.
+
+  **Entregue: a degradação honesta, não o porte.** Ruling do controlador — portar STT e visão
+  é capacidade nova com decisão de produto (custo por áudio, provedor, armazenamento), e o
+  próprio achado diz que a régua enquanto isso é responder com honestidade. O implementador
+  confirmou o tamanho do porte e concordou: segunda cascata BYO (whisper→groq, diferente da de
+  chat), porta de provedor nova (`LlmPort` não transcreve), segundo consumidor da API do
+  WhatsApp (que o contrato de import-linter proíbe fora de `channels`) e mudança no `Message`,
+  hoje `content: str`.
+
+  **A precedência decidida.** Legenda presente é fala do cliente: entra como texto e o turno
+  segue normal — o que fecha junto o achado "`caption` viaja no payload e ninguém lê", que era
+  a mesma leitura. Mídia sem legenda ganha uma linha honesta na voz da loja, **sem chamar o
+  LLM**: gerar a partir de nada é o defeito que o item existe para fechar, e o revisor provou o
+  zero-token instrumentando também o `embed` do dublê (o `assert` do implementador só cobria
+  `chat`) — sem chat, sem juiz, sem embedding, logo zero linha em `llm_calls`. E o transcrito
+  passou a dizer que houve mídia, com o tipo, em vez de linha em branco no meio da conversa.
+
+  **Um módulo puro novo** (`agent_core/media.py`) traduz os quatro dialetos que
+  `public.messages.content` guarda de verdade — texto plano, envelope Meta do backfill, o
+  `p_content` do ingest com `media_id`, e o `content` cru do espelho —, todos conferidos no
+  review contra os escritores reais. Os marcadores batem caractere a caractere com
+  `cloud-runner.ts:762-770`, e `settings.media_fallback.message`, knob sem leitor nenhum em
+  Python até aqui, vence quando configurado.
+
+  **O que o review mudou, em três rounds.** (1) O transcrito trocou mentir por omissão por
+  **mentir por afirmação**: a forma `{"image": …}` também é o que a rota de mídia grava em
+  OUTBOUND, e o backfill a copia com `author_type='human'` — a foto que a LOJA mandou saía como
+  "[Cliente enviou uma imagem]". O TS não tem o buraco porque guarda o marcador atrás de
+  `role === 'user'`; a entrega copiou as strings e deixou a guarda. (2) A dúvida sobre
+  `media_fallback.mode: 'handoff'` partia de premissa falsa: `cloud-runner.ts:657-660` manda
+  **todo** áudio ao fallback com `no_stt_provider` quando a org não tem STT, então a
+  incapacidade é estrutural dos dois lados e honrar o modo é paridade, não capacidade nova —
+  vale aqui o princípio do item 30, configuração que não faz nada é pior que ausência. Portado
+  com a régua estrita do TS, depois de confirmar nos dois lugares que o default é `ask_text`.
+  (3) O marcador da mídia da loja chegava ao modelo como mensagem `assistant` cujo conteúdo
+  inteiro é uma rubrica entre colchetes — superfície de imitação, e esta casa já pagou por esse
+  exato modo de falha em 17/08 ("entregar o JSON cru ao prompt ensinou o modelo a IMITÁ-LO").
+  Decisão: o marcador **fica** (no TS o descarte é barato porque a imagem entra inline por
+  visão; aqui o runtime nunca enxerga nada, e ele é o único vestígio de que existe uma foto),
+  mas sai do array de chat e vive só no bloco CONVERSA.
+
+  **Prova por sabotação, dos dois lados.** Cortar de menos e cortar demais falham no MESMO
+  teste; a metade `author != "contact"` da guarda ganhou asserção própria porque nada no banco
+  produz mensagem de contato começando com o marcador da loja — quem produz é o cliente
+  digitando o literal, e era ele quem perderia a fala numa refatoração. 1096 unit · 429 db ·
+  ruff · lint-imports 3/3. Nenhuma migration: o dado está no banco desde o item 06.
 
 - [ ] **32. Send-guard por tier Meta no sender Python** `[confirmado]`
   O TS tem `rate-limiter.ts` (779 l.) + `circuit-breaker.ts` (395 l.) via `checkBeforeSend`.
@@ -865,10 +912,11 @@ mais o índice HNSW, instantâneo em tabela vazia (é o item 8, commit separado)
   Achado do review de branch inteira; precisa de decisão de quem limpa (cron, migration
   ou o próprio flip).
 
-- [ ] **`caption` viaja no payload e ninguém lê.** O item 06 passou a mandar
-  `media_id`/`mime_type`/`caption`; o extrator de histórico do runtime lê
-  `content ->> 'text'`, que é nulo para mídia. `media_id` espera o item 31 por desenho,
-  mas `caption` é texto do cliente que já está lá e some do transcrito.
+- [x] **`caption` viaja no payload e ninguém lê** · `4bf1c888`. O item 06 passou a mandar
+  `media_id`/`mime_type`/`caption`; o extrator de histórico do runtime lia
+  `content ->> 'text'`, nulo para mídia. **Fechado junto com o item 31**, que é a mesma
+  leitura: a legenda é fala do cliente, entra como texto e o turno segue normal — sem
+  degradação, porque o cliente escreveu.
 
 - [ ] **Atomicidade do claim de `ai_pending` sem prova contra banco real.** Lacuna
   anterior — o worker também nunca teve esse teste — mas o raio de alcance dobrou agora
@@ -964,6 +1012,19 @@ você decidir se entram na fila.
   O guard compara o `ai_agent_id` da conversa com o agente do turno; no runtime esse agente vem de
   `load_active_version`, que não filtra por canal (ausência 3 do `FORK.md`). Org com dois agentes
   ativos torna a comparação uma coincidência. *(descoberto no re-review do item 30)*
+
+- [ ] **Resposta de botão carrega palavras do cliente e cai em `unsupported`.**
+  A classe pior não é mídia: `interactive`/`button` são a resposta que o cliente DÁ a um botão da
+  loja — texto dele, escolhido por ele — e a régua de tipos os deixa de fora, então o turno nem
+  é agendado. É a única classe em que o cliente manda algo e não recebe nada. O conserto é no
+  `src/` (régua de tipos do webhook), fora do escopo do item 31.
+  *(descoberto no review do item 31)*
+
+- [ ] **O download de mídia continua gravando storage para org migrada, e ninguém lê o resultado.**
+  O pipeline de download roda ANTES da bifurcação de rollout — confirmado no review —, então a
+  loja migrada paga bytes e storage por áudio e imagem que o runtime nunca vai abrir enquanto o
+  porte de STT/visão não vier. Custo por mensagem sem contrapartida.
+  *(descoberto no item 31)*
 
 - [ ] **`supabase/.branches/` e `supabase/.temp/` não estão no `.gitignore`.**
   Aparecem no `git status` de quem rodar o stack local — e agora todo mundo deve rodar.
