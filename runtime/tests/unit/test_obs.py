@@ -82,15 +82,36 @@ class TestTheLogAllowlist:
         assert line["organization_id"] == "org-1"
         assert "_omitted_keys" not in line
 
-    def test_a_nested_dict_does_not_smuggle_a_forbidden_field(self) -> None:
+    def test_a_dict_under_a_forbidden_key_is_dropped_whole(self) -> None:
         # "context" não está no vocabulário: o valor inteiro (com o que tiver
-        # dentro) some da linha, não só a chave de topo.
+        # dentro) some da linha, não só a chave de topo. Isto NÃO é o caso de
+        # contrabando que o brief do item 28 pediu — a chave de topo já era
+        # barrada por si só; ver test_a_forbidden_field_nested_under_an_
+        # allowed_key_is_a_known_gap logo abaixo para o caso real.
         raw = JsonFormatter().format(_record(context={"secret_token": "abc123"}))
         assert "secret_token" not in raw
         assert "abc123" not in raw
         line = json.loads(raw)
         assert "context" not in line
         assert line["_omitted_keys"] == ["context"]
+
+    def test_a_forbidden_field_nested_under_an_allowed_key_is_a_known_gap(self) -> None:
+        # O contrabando real do brief: um campo proibido não sob uma chave
+        # barrada, mas DENTRO do valor de uma chave PERMITIDA. O allowlist
+        # filtra o NOME da chave de topo de `extra`, não o conteúdo do valor
+        # — hoje isso passa direto, sem marcador de omissão.
+        #
+        # Aceito, não corrigido: sanitização recursiva teria que andar por
+        # `queues` também (obs/logging.py, _LOG_ONLY_FIELDS) — lá as chaves
+        # internas são nomes de fila DINÂMICOS, não o vocabulário fixo, então
+        # aplicar o mesmo allowlist recursivamente apagaria dado legítimo.
+        # Essa troca não foi feita (ruling do controlador no item 28: sem
+        # sanitização recursiva nesta rodada). Se este teste falhar um dia,
+        # é porque alguém fechou a lacuna — atualize-o para refletir a
+        # decisão nova, registrada em algum lugar citável.
+        line = _format(_record(organization_id={"id": "org-1", "secret_token": "abc123"}))
+        assert line["organization_id"] == {"id": "org-1", "secret_token": "abc123"}
+        assert "_omitted_keys" not in line
 
 
 class _SpanRecorder:
