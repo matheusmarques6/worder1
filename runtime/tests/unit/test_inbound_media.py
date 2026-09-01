@@ -17,6 +17,7 @@ Fonte da voz: `cloud-runner.ts:764-770` (os marcadores do histórico) e
 import pytest
 
 from agents_runtime.agent_core.media import (
+    is_store_media_line,
     media_apology,
     media_handoff,
     media_step_detail,
@@ -256,3 +257,40 @@ class TestTheModeTheMerchantConfigured:
     def test_garbage_does_not_transfer(self) -> None:
         assert media_handoff({"media_fallback": "não é objeto"}) is False
         assert media_handoff({"media_fallback": {"mode": 7}}) is False
+
+
+class TestTheRubricThatMustNotBecomeAVoice:
+    """`is_store_media_line` — a guarda que tira a rubrica do array de chat.
+
+    Ela tem DUAS metades, e as duas precisam de asserção: o prefixo E o autor.
+    Reconhecer só pelo prefixo passa despercebido no caminho feliz — nada no
+    banco de verdade produz uma mensagem de contato começando com
+    `[A loja enviou `, então uma refatoração que perdesse a metade do autor não
+    derrubaria teste nenhum. Quem produz é o cliente digitando, e é ele que
+    perderia a fala.
+    """
+
+    def test_the_store_rubric_is_cut(self) -> None:
+        assert is_store_media_line(
+            PendingMessage(author="agent", text="[A loja enviou uma imagem]")
+        )
+        assert is_store_media_line(
+            PendingMessage(author="human", text="[A loja enviou uma imagem: chegou hoje!]")
+        )
+
+    def test_the_customer_typing_the_literal_keeps_his_words(self) -> None:
+        """A metade do AUTOR, sozinha na prova. Sem ela, um cliente que escreve
+        `[A loja enviou uma imagem]` — sarcasmo, cópia, colagem — sumiria do
+        array de chat, e a loja responderia sem ter lido o que ele disse."""
+        assert not is_store_media_line(
+            PendingMessage(author="contact", text="[A loja enviou uma imagem]")
+        )
+
+    def test_what_the_store_really_said_is_never_cut(self) -> None:
+        """A metade do PREFIXO. O corte é da rubrica, não da voz da loja."""
+        assert not is_store_media_line(
+            PendingMessage(author="agent", text="Claro! Já te mando a foto.")
+        )
+        assert not is_store_media_line(
+            PendingMessage(author="contact", text="[Cliente enviou uma imagem]")
+        )

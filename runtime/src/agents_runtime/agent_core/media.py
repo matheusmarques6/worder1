@@ -143,6 +143,19 @@ def is_store_media_line(message: PendingMessage) -> bool:
     A do CLIENTE fica no array: ela chega como `user`, que é exatamente o que o
     TS faz (`cloud-runner.ts:761-771`), e o modelo não imita o que o cliente
     escreve.
+
+    **A troca que isto custa, nomeada:** a foto da loja COM legenda sai junto
+    — `[A loja enviou uma imagem: chegou hoje!]` é rubrica do começo ao fim,
+    então "chegou hoje!", que é fala de verdade da loja, sobrevive só no bloco
+    CONVERSA. É de propósito, e coerente com o motivo do corte: o que faz a
+    linha perigosa é o envelope, não o miolo, e um envelope com recheio real
+    ensina o formato igual. O bloco carrega a mesma informação sem apresentá-la
+    como fala anterior do modelo, então nada se perde do que o modelo precisa
+    saber — só do que ele poderia copiar.
+
+    Salvar a legenda exigiria desmontar o marcador e empurrar só o miolo, o que
+    é o `appendCurrentTurn` do TS de novo (e a legenda da LOJA não é o turno
+    atual de ninguém). Não vale o segundo caminho de renderização.
     """
     return message.author != "contact" and message.text.startswith(STORE_MARK)
 
