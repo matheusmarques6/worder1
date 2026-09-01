@@ -601,9 +601,31 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   digitando o literal, e era ele quem perderia a fala numa refatoração. 1096 unit · 429 db ·
   ruff · lint-imports 3/3. Nenhuma migration: o dado está no banco desde o item 06.
 
-- [ ] **32. Send-guard por tier Meta no sender Python** `[confirmado]`
+- [x] **32. Send-guard por tier Meta no sender Python** `[confirmado]` · commits
+  `ee69f682` `2c14d6d8` `cb1624d0` `ea3bc6da` + `d5d99033` `128a4069` `eb235cae` `20aa8a50`
+  `4d049256` `993a4f4f` + `d30c8322` `383fc30f`
   O TS tem `rate-limiter.ts` (779 l.) + `circuit-breaker.ts` (395 l.) via `checkBeforeSend`.
   O caminho novo tem mais risco de bloqueio da conta que o antigo.
+
+  **Entregue: breaker e cooldown de throttle por `phone_number_id`, com a régua em SQL.**
+  `internal.whatsapp_send_guard` mais `send_guard_check` / `send_guard_report`
+  (migrations `20260901000004`..`20260901000008`), no molde do `sender_preflight`: a função
+  decide, o sender executa o veredito. Números do TS onde os dois existem — 5 falhas seguidas
+  → 30 s, 3 sucessos para fechar o half-open, escada de 10/20/50 sinais de excesso no dia UTC
+  → 1/5/10 min. Chamado uma vez por chamada ao Graph, não por linha de outbox, e o envio
+  segurado aparece no painel em vez de sumir.
+
+  **Fora por ruling M, e não por falta de tempo:** pair-rate, throughput e cota diária. O
+  estado é rachado por desenho — o TS conta em Upstash Redis, este conta em Postgres, e cinco
+  caminhos TS enviam pelo MESMO número de uma org migrada sem que o rollout desligue nenhum
+  deles. Falhas seguidas e sinais de excesso partidos degradam o TEMPO DE REAÇÃO; teto partido
+  seria contador que mente, e contador que mente é pior que contador nenhum.
+
+  **Registrados, não implementados:** a re-armagem do throttle por qualquer falha (esquisitice
+  do TS replicada por ruling T — mudá-la é nos dois motores ao mesmo tempo), o
+  `consecutive_failures` que cresce em OPEN aqui e fica congelado no TS, a ausência de teto de
+  retentativa para transitórios em `20260812000004:393-403`, o `attempt_count` inflado pelos
+  holds, e as campanhas do TS que não checam o rollout.
 
 - [ ] **33. Retry e rate limit no conector Shopify** `[relatado]`
   `runtime/src/agents_runtime/connectors/shopify.py:100-115` — 429 no meio do `create_coupon` deixa a
