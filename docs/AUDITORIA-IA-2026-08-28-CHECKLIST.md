@@ -434,7 +434,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `src/app/api/integrations/shopify/webhook/route.ts:21`. As chamadoras fecham em produção, mas a função
   é um pé de cabra esperando um segundo chamador que esqueça o guarda.
 
-- [ ] **27. Chave do Gemini na query string** `[relatado]`
+- [x] **27. Chave do Gemini na query string** `[relatado]` · commit `1d23c5ce`
   `src/lib/whatsapp/ai-providers.ts:245,654`. É o contrato do Google, mas a chave do lojista fica em URL
   e vaza em qualquer log de fetch, proxy ou stack trace.
 
