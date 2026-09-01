@@ -730,6 +730,31 @@ mais o índice HNSW, instantâneo em tabela vazia (é o item 8, commit separado)
 
 ## Descobertos durante a execução (não renumerados — a fila de 63 é estável)
 
+- [x] **Um SEGUNDO `safeFetch`, com a defesa que o Node nunca chamava** ·
+  `cdeba429` + `2577c209`. Achado pelo review da fase 3 inteira, fora dos itens
+  numerados e **vivo em produção**: `src/lib/webhooks/safe-fetch.ts` guardava a rede
+  interna com um `lookup` customizado do undici — e o Node **não chama** `options.lookup`
+  quando o host é um IP literal (o revisor provou rodando). O lojista cadastrava um
+  webhook para `https://10.0.0.5:8443/x`, a entrega acontecia, e o worker gravava 2 KB
+  da resposta interna em `webhook_deliveries.response_body`, que o lojista lê na
+  interface. A mesma primitiva de leitura interna que o item 19 tirou da rota de teste
+  das custom tools, viva em outro arquivo.
+  **Corrigido** usando o portão já vetado por dois rounds de review, em vez de remendar
+  a segunda cópia. Descoberta de passagem: o código antigo **nunca seguia redirect**, e
+  um 3xx virava falha permanente — receptores que respondem 3xx passam a ser entregues.
+  E a correção criou uma regressão que o re-review pegou: seguir redirect abriu a porta
+  para `302 → http://`, mandando payload e assinatura em claro. Fechado com política
+  por chamador (`blockHttpsDowngrade`), com teste que fixa que o crawler continua
+  podendo buscar `http://`.
+
+- [ ] **`safeFetch`/`createSafeAgent` órfãos em `src/lib/webhooks/safe-fetch.ts`.**
+  Sem chamador depois da correção acima. `validateUrl` e `isPrivateIP` do mesmo arquivo
+  seguem em uso no cadastro de assinatura. Apagar é o item 61 — mas é função morta e
+  perigosa esperando alguém importar pelo nome.
+
+- [ ] **`ssrf-guard.ts:183` re-envia método e corpo no 303.** A especificação do fetch
+  converte para GET. Inofensivo para os receptores de hoje, surpreendente depois.
+
 - [ ] **O fail-open por `NODE_ENV` está espalhado por ~40 rotas de cron e workers.**
   O item 25 fechou as duas cópias que o achado nomeava. O review foi olhar em volta:
   `src/lib/cron-auth.ts:25` tem a mesma linha (`nodeEnv !== 'production'` quando falta
