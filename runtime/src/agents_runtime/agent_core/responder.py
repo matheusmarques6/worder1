@@ -403,32 +403,19 @@ def build_responder(
             # (cloud-runner.ts:571-577 diz isso com todas as letras).
             handoff = resolve_handoff(version.settings, tuple(m.text for m in pending))
             if handoff is not None:
-                async with conn.transaction():
-                    await scope_to_organization(conn, job.organization_id)
-                    # Desliga a IA no espelho legado — é o freio que o webhook
-                    # já respeita para org migrada, então a transferência vale
-                    # para os turnos seguintes, não só para este.
-                    await agent_repo.mark_ai_handoff(
-                        conn,
-                        organization_id=job.organization_id,
-                        conversation_id=job.conversation_id,
-                        reason="handoff_keyword",
-                    )
-                    await alerts_repo.open_alert(
-                        conn,
-                        organization_id=job.organization_id,
-                        type=alerts_repo.HANDOFF,
-                        severity="warning",
-                        title="Cliente pediu atendimento humano — IA transferida",
-                        payload={
-                            "conversation_id": str(job.conversation_id),
-                            "keyword": handoff.keyword,
-                            "reason": "handoff_keyword",
-                        },
-                    )
+                marked = await transfer_to_human(
+                    conn,
+                    organization_id=job.organization_id,
+                    conversation_id=job.conversation_id,
+                    reason="handoff_keyword",
+                    severity="warning",
+                    title="Cliente pediu atendimento humano — IA transferida",
+                    payload={"keyword": handoff.keyword},
+                )
                 await note_step(
                     "transferred",
-                    f"Cliente pediu atendimento humano (“{handoff.keyword}”)",
+                    f"Cliente pediu atendimento humano (“{handoff.keyword}”)"
+                    + ("" if marked else UNMIRRORED_DETAIL),
                 )
                 if not handoff.confirmation:
                     return None
@@ -757,30 +744,22 @@ def build_responder(
             # conhece a lista de assuntos que ESTE lojista proibiu.
             topic = resolve_blocked_topic(version.settings, outcome.draft)
             if topic is not None:
-                async with conn.transaction():
-                    await scope_to_organization(conn, job.organization_id)
-                    await agent_repo.mark_ai_handoff(
-                        conn,
-                        organization_id=job.organization_id,
-                        conversation_id=job.conversation_id,
-                        reason="blocked_topic",
-                    )
-                    await alerts_repo.open_alert(
-                        conn,
-                        organization_id=job.organization_id,
-                        type=alerts_repo.HANDOFF,
-                        severity="critical",
-                        title="Resposta tocou num assunto proibido — nada foi enviado",
-                        payload={
-                            "conversation_id": str(job.conversation_id),
-                            "topic": topic,
-                            "reason": "blocked_topic",
-                            # Mesma regra do veto do Judge 1: o bloqueio segura
-                            # o envio, não a evidência.
-                            "draft": outcome.draft,
-                        },
-                    )
-                await note_step("transferred", f"Assunto proibido na resposta (“{topic}”)")
+                marked = await transfer_to_human(
+                    conn,
+                    organization_id=job.organization_id,
+                    conversation_id=job.conversation_id,
+                    reason="blocked_topic",
+                    severity="critical",
+                    title="Resposta tocou num assunto proibido — nada foi enviado",
+                    # Mesma regra do veto do Judge 1: o bloqueio segura o
+                    # envio, não a evidência.
+                    payload={"topic": topic, "draft": outcome.draft},
+                )
+                await note_step(
+                    "transferred",
+                    f"Assunto proibido na resposta (“{topic}”)"
+                    + ("" if marked else UNMIRRORED_DETAIL),
+                )
                 return None
 
             # As flags de entrega viajam COM o envio (payload da outbox): o
@@ -789,6 +768,65 @@ def build_responder(
             return {"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}}
 
     return respond
+
+
+#: O que o passo e o título dizem quando a marca NÃO pegou. A transferência
+#: mora no espelho legado, a dois saltos sem FK da canônica: conversa sem
+#: identidade WhatsApp, ou sem linha no espelho, não pega a marca.
+UNMIRRORED_DETAIL = " — a IA não foi desligada (conversa sem espelho no inbox)"
+
+
+async def transfer_to_human(
+    conn: psycopg.AsyncConnection,
+    *,
+    organization_id: UUID,
+    conversation_id: UUID,
+    reason: str,
+    severity: str,
+    title: str,
+    payload: dict,
+) -> bool:
+    """Tira a IA de cena e registra — devolvendo se a marca PEGOU.
+
+    Um lugar só para os dois (três, com o toque) call sites, porque o defeito
+    era justamente ninguém ler o booleano: `mark_ai_handoff` devolve false
+    quando não há espelho onde escrever, e nesse caso `ai_enabled` continua
+    true, o webhook não cancela nada, e a transferência não vale para os
+    turnos seguintes. O alerta que dissesse "IA transferida" assim mesmo faria
+    a operação acreditar numa transferência que não aconteceu.
+
+    O alerta é deduplicado por conversa e motivo: sem transferência efetiva o
+    mesmo assunto pode reincidir a cada turno, e um `critical` novo por
+    mensagem seria um alarme que ninguém consegue ler.
+    """
+    async with conn.transaction():
+        await scope_to_organization(conn, organization_id)
+        # Desliga a IA no espelho legado — é o freio que o webhook já respeita
+        # para org migrada, então a transferência vale para os turnos
+        # seguintes, não só para este.
+        marked = await agent_repo.mark_ai_handoff(
+            conn,
+            organization_id=organization_id,
+            conversation_id=conversation_id,
+            reason=reason,
+        )
+        await alerts_repo.open_alert(
+            conn,
+            organization_id=organization_id,
+            type=alerts_repo.HANDOFF,
+            # Marca que não pegou é sempre grave: alguém precisa desligar a IA
+            # na mão, e ninguém vai saber disso por outro caminho.
+            severity=severity if marked else "critical",
+            title=title if marked else title + UNMIRRORED_DETAIL,
+            payload={
+                **payload,
+                "conversation_id": str(conversation_id),
+                "reason": reason,
+                "mirrored": marked,
+            },
+            dedup_key=f"handoff:{reason}:{conversation_id}",
+        )
+    return marked
 
 
 def agent_responder(dsn: str):

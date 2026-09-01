@@ -33,13 +33,34 @@ async def open_alert(
     severity: str,
     title: str,
     payload: dict | None = None,
-) -> UUID:
+    dedup_key: str | None = None,
+) -> UUID | None:
+    """Abre um alerta; com `dedup_key`, o MESMO problema aberto não duplica.
+
+    O `dedup_key` e o índice parcial que o faz valer já existiam na tabela
+    (`alerts_dedup_uniq`, sobre `status = 'open'`) e não tinham escritor. Quem
+    precisa dele é o alerta que um turno pode reabrir a cada mensagem — um
+    tópico proibido que reincide numa conversa onde a transferência não pegou
+    abriria um `critical` novo para sempre. None de volta = já havia um aberto.
+    """
     cursor = await conn.execute(
         """
-        insert into public.alerts (organization_id, type, severity, title, metadata)
-        values (%s, %s, %s, %s, %s)
+        insert into public.alerts
+            (organization_id, type, severity, title, metadata, dedup_key)
+        values (%s, %s, %s, %s, %s, %s)
+        on conflict (organization_id, dedup_key)
+            where dedup_key is not null and status = 'open'
+            do nothing
         returning id
         """,
-        (organization_id, type, severity, title, Jsonb(payload if payload is not None else {})),
+        (
+            organization_id,
+            type,
+            severity,
+            title,
+            Jsonb(payload if payload is not None else {}),
+            dedup_key,
+        ),
     )
-    return (await cursor.fetchone())[0]
+    row = await cursor.fetchone()
+    return row[0] if row is not None else None

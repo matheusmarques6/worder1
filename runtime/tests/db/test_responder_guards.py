@@ -246,6 +246,12 @@ class TestTheBehaviorGuardsAreWired:
             (mirror.conversation_id,),
         ).fetchone()
         assert enabled is False
+        (alert,) = admin.execute(
+            "select metadata from public.alerts"
+            " where organization_id = %s and type = 'handoff'",
+            (tenant,),
+        ).fetchone()
+        assert alert["mirrored"] is True
 
     async def test_with_every_guard_configured_and_none_tripped_the_turn_goes_on(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
@@ -275,3 +281,74 @@ class TestTheBehaviorGuardsAreWired:
         draft = await responder(dsn)(a_job(tenant, thread.conversation_id))
 
         assert draft is not None and draft.get("text")
+
+
+class TestATransferThatDoesNotStick:
+    """`mark_ai_handoff` devolve false — e o registro não pode mentir sobre isso.
+
+    A marca é escrita no espelho legado, a dois saltos sem FK da canônica
+    (`conversations` -> `channel_identities` -> `whatsapp_cloud_conversations`).
+    Conversa sem identidade WhatsApp, ou sem linha no espelho, não pega a
+    marca: `ai_enabled` continua true, o webhook não cancela nada, e a
+    transferência não vale para os turnos seguintes. Um alerta dizendo "IA
+    transferida" nesse caso é pior que nenhum alerta.
+    """
+
+    async def test_the_alert_says_the_transfer_did_not_reach_the_mirror(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type="whatsapp.received", status="active")
+        configure(
+            admin,
+            tenant,
+            {
+                "safety": {
+                    "handoff_keywords": ["atendente"],
+                    "handoff_confirmation_message": "Já vou chamar alguém do time!",
+                }
+            },
+        )
+        # Sem identidade WhatsApp e sem espelho: a marca não tem onde pegar.
+        thread = create_thread(admin, tenant)
+        create_message(
+            admin, tenant, thread, direction="inbound", seq=1, text="quero um atendente"
+        )
+
+        draft = await responder(dsn)(a_job(tenant, thread.conversation_id))
+
+        # A confirmação continua saindo: o cliente pediu um humano e merece
+        # ouvir que foi ouvido. O que não pode é o registro mentir.
+        assert draft is not None
+        assert draft["text"] == "Já vou chamar alguém do time!"
+        (severity, title, metadata) = admin.execute(
+            "select severity, title, metadata from public.alerts"
+            " where organization_id = %s and type = 'handoff'",
+            (tenant,),
+        ).fetchone()
+        assert metadata["mirrored"] is False
+        assert "não foi desligada" in title
+        assert severity == "critical"
+
+    async def test_a_recurring_blocked_topic_does_not_open_a_new_alert_every_turn(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """Sem transferência efetiva, cada turno regenera o mesmo assunto — e
+        abriria um alerta `critical` novo, para sempre. O `dedup_key` que a
+        tabela já tem existe exatamente para isso."""
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type="whatsapp.received", status="active")
+        configure(admin, tenant, {"safety": {"blocked_topics": ["processo judicial"]}})
+        thread = create_thread(admin, tenant)
+        create_message(admin, tenant, thread, direction="inbound", seq=1, text="e aí")
+        llm = ScriptedLlm(reply="Sobre o seu Processo Judicial, melhor conversarmos.")
+
+        assert await responder(dsn, llm)(a_job(tenant, thread.conversation_id)) is None
+        assert await responder(dsn, llm)(a_job(tenant, thread.conversation_id)) is None
+
+        (alerts,) = admin.execute(
+            "select count(*) from public.alerts"
+            " where organization_id = %s and type = 'handoff'",
+            (tenant,),
+        ).fetchone()
+        assert alerts == 1
