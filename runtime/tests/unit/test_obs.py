@@ -34,17 +34,18 @@ class TestJsonLines:
         assert line["ts"].endswith("+00:00")
 
     def test_extra_fields_pass_through(self) -> None:
-        line = _format(_record(queue="q_inbound", depth=7))
+        # Chaves do vocabulário permitido (item 28) — não são valores livres.
+        line = _format(_record(queue="q_inbound", provider="openai"))
         assert line["queue"] == "q_inbound"
-        assert line["depth"] == 7
+        assert line["provider"] == "openai"
 
     def test_a_value_json_cannot_carry_becomes_repr(self) -> None:
         class Opaque:
             def __repr__(self) -> str:
                 return "<opaque>"
 
-        line = _format(_record(thing=Opaque()))
-        assert line["thing"] == "<opaque>"
+        line = _format(_record(provider=Opaque()))
+        assert line["provider"] == "<opaque>"
 
     def test_an_exception_carries_error_and_stack(self) -> None:
         try:
@@ -62,6 +63,34 @@ class TestJsonLines:
         configure_logging("INFO")
         configure_logging("INFO")
         assert len(logging.getLogger().handlers) == 1
+
+
+class TestTheLogAllowlist:
+    """Item 28: o log de stdout ganha o mesmo cinto do span (SAFE_ATTRIBUTES),
+    somado aos campos operacionais que só o log carrega."""
+
+    def test_a_forbidden_key_does_not_appear_in_the_log_line(self) -> None:
+        line = _format(_record(secret_token="abc123"))
+        assert "secret_token" not in line
+
+    def test_the_omission_leaves_a_trace_not_silence(self) -> None:
+        line = _format(_record(secret_token="abc123"))
+        assert line["_omitted_keys"] == ["secret_token"]
+
+    def test_a_legitimate_key_keeps_passing(self) -> None:
+        line = _format(_record(organization_id="org-1"))
+        assert line["organization_id"] == "org-1"
+        assert "_omitted_keys" not in line
+
+    def test_a_nested_dict_does_not_smuggle_a_forbidden_field(self) -> None:
+        # "context" não está no vocabulário: o valor inteiro (com o que tiver
+        # dentro) some da linha, não só a chave de topo.
+        raw = JsonFormatter().format(_record(context={"secret_token": "abc123"}))
+        assert "secret_token" not in raw
+        assert "abc123" not in raw
+        line = json.loads(raw)
+        assert "context" not in line
+        assert line["_omitted_keys"] == ["context"]
 
 
 class _SpanRecorder:
