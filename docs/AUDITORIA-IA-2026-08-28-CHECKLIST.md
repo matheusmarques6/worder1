@@ -402,7 +402,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 - [x] **22. Ordem do delete em `/api/ai/knowledge`** `[relatado]` · commit `4f0110c1`
   `:147-156` apaga chunks e documentos por `knowledge_base_id` sem filtro de org; só `:159-163` escopa.
 
-- [ ] **23. Fallback sem escopo em `/api/ai/respond`** `[relatado]`
+- [x] **23. Fallback sem escopo em `/api/ai/respond`** `[relatado]` · commit `5c7a6774`
   `:293-297` lê `ai_agent_configs` só por `agent_id`. Rota órfã — resolver junto com o item 55.
 
 - [ ] **24. Filtro de org nas views de atividade** `[confirmado]`
