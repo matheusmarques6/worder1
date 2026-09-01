@@ -484,7 +484,9 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   independentes desde o início. Uma pessoa só, por mais cuidadosa que seja com o que escreveu,
   não enxerga o que não procurou.
 
-- [ ] **30. Guards de comportamento: portar ou remover da UI** `[confirmado]`
+- [x] **30. Guards de comportamento: portar ou remover da UI** `[confirmado]` · commits
+  `f2979270` `c52373fa` `15f71f60` `8179fba7` `183b5c4f` `281f249a` `d8bb4ce4` `2f391fc1`
+  `2c86b9ea` + `f4a64f29` `a4b6b10f` `78808a6e` `7bac1df5` + `753db228` `894716b1`
   Handoff por keyword, `blocked_topics`, `max_messages_per_conversation`, `activate_on: manual`,
   cooldown pós-transferência, horário de atendimento. Todos configuráveis na mesma linha de `ai_agents`
   que o runtime lê, todos ignorados por ele. Configuração que não faz nada é pior que ausência.
@@ -494,6 +496,52 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (`:515-535`). São oito, não seis. `repository/agent.py:118` carrega o `settings` inteiro e usa
   exatamente uma chave dele (`tools.enabled`); grep por `behavior`, `blocked_topics`, `handoff`,
   `activate_on` e `business_hours` em `runtime/src/` dá zero.
+
+  **Entregue — e os oito são de fato oito.** Um módulo puro novo
+  (`runtime/src/agents_runtime/agent_core/guards.py`, espelho de `src/lib/ai/guards.ts`:
+  zero I/O, relógio recebido), fiado no `responder.py` na ORDEM do TS, com o silêncio
+  sempre explicável — cada guard que cala emite o passo `skipped` com o motivo em pt-BR,
+  no mesmo canal que o inbox já lê. Os dois que TRANSFEREM (handoff por keyword e
+  `blocked_topics`) desligam a IA no espelho legado, que é o freio que o webhook já
+  respeita para org migrada — a transferência vale para os turnos seguintes, não só para
+  este — e abrem `public.alerts` com `type = 'handoff'`, tipo que existia no CHECK desde
+  agosto e não tinha escritor nenhum.
+
+  **A questão de tabela, decidida com prova.** O estado que estes guards leem não existe
+  na canônica: `public.conversations` não tem `ai_transferred_at`, `ai_agent_id` nem
+  `ai_enabled`, e `public.messages` não tem escritor de outbound humano (a ausência 29 do
+  `FORK.md`). Ler `stop_on_human_reply` de lá produziria um guard que NUNCA dispara — pior
+  que não ter o guard, porque parece entregue. Então lê do espelho legado do inbox, por
+  duas funções `SECURITY DEFINER` em `internal` escopadas por org
+  (`legacy_conversation_guard_state`, `mark_ai_handoff`), no mesmo desenho de
+  `internal.emit_ai_run_step`. As legadas estão com RLS DESLIGADA: um `grant select` daria
+  ao worker o inbox de TODA org.
+
+  **O que os reviews mudaram.** As afirmações da entrega resistiram inteiras — 8 de 8
+  guards conferidos abrindo os dois lados, nenhuma falsa, SQL escopada e correta. O defeito
+  estava, de novo, no que a varredura não achou: **o runtime tem DOIS produtores de fala e
+  a entrega cobriu um**. O toque proativo de missão não consultava guard nenhum — conversa
+  transferida, em takeover humano, no teto ou fora do horário continuava recebendo toque, e
+  o rascunho do toque não passava pela lista de tópicos proibidos, que é textualmente o
+  efeito que o item existe para eliminar. As duas varreduras independentes acharam este
+  mesmo achado, o que fecha a dúvida sobre ele. Mais dois obrigatórios: `mark_ai_handoff`
+  devolvia `false` e ninguém lia (transferência virava no-op enquanto o passo e o alerta
+  afirmavam que pegou), e **a fiação não tinha um único teste** — apagar os quatro blocos
+  do `responder.py` deixava as duas suítes verdes.
+
+  Fechados em dois rounds: o toque passa pelos mesmos guards (todos menos o handoff por
+  keyword, que não se aplica sem inbound) e deixa o mesmo chip; `ai_enabled` entrou no
+  estado lido e vale nos dois produtores — é o guard básico de `cloud-runner.ts:390-392`,
+  que o webhook freava só no ingest; a transferência lê o booleano e escala para `critical`
+  quando a marca não pega, com dedup por `alerts.dedup_key` (coluna que a tabela já tinha e
+  ninguém escrevia) que distingue espelhado de não-espelhado, para a escalação não morrer
+  atrás de um `warning` aberto. E a fiação ganhou teste de banco por classe de desfecho —
+  cala, transfere, passa —, todos provados por sabotagem, pelo implementador e de novo
+  pelo revisor.
+
+  **Lição de método, confirmada:** o aprendizado do item 29 (duas varreduras independentes
+  num item de paridade) pagou pela primeira vez aqui — e a segunda varredura precisa
+  perguntar "quem MAIS fala pela loja?", não só "este caminho está certo?".
 
 - [ ] **31. STT e visão, ou degradação honesta** `[confirmado]`
   `src/lib/ai/media/*` (330 linhas) sem contraparte. Enquanto não portar: responder
@@ -531,6 +579,15 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 - [ ] **37. Trilha e relatórios para org migrada** `[confirmado]`
   Relatórios, propostas, kappa, painel de custo, analytics e `update_agent_stats` leem `agent_traces` /
   `ai_usage_logs`, que o runtime não escreve. Para org migrada tudo vira zero permanente.
+
+  **Mais um, vindo do item 30:** `conversation-ai-status.ts:166-168` desliga o badge
+  explicativo para org em modo `runtime` com o argumento de que "o runtime Python nunca lê
+  essa coluna". Agora lê, e os guards decidem — então o badge pode dizer "Bot ativo" numa
+  conversa em que o agente está calado por `stop_on_human_reply`, teto, horário, cooldown
+  ou ativação manual. Nas duas TRANSFERÊNCIAS o badge fica honesto (a checagem de
+  `ai_enabled` roda antes do early-return de `runtime`); a mentira sobra nos outros cinco.
+  O conserto reusa a ponte SQL que o item 30 construiu, e o passo `skipped` já leva o motivo
+  ao inbox. Decisão de UI: fica aqui, não vira item novo.
 
 - [ ] **38. Typing indicator** `[relatado]`
   Divergência já declarada. Depende do outbox carregar o wamid do último inbound.
@@ -866,6 +923,47 @@ você decidir se entram na fila.
   `prompt-builder.ts:235` o usa. O runtime não tem contraparte. Não é o item 39 (aquele é sobre o
   transcript ir duas vezes; este é sobre o que o transcript pode conter).
   *(descoberto no item 29)*
+
+- [ ] **A leitura do estado dos guards paga duas varreduras do espelho em TODO turno.**
+  `internal.legacy_conversation_guard_state` roda as duas laterais (contagem de outbound do bot
+  e existência de resposta humana) sempre, enquanto o TS só conta mensagens quando o knob está
+  ligado — e não há índice por `conversation_id` em `whatsapp_cloud_messages` no shape do repo.
+  Agora o toque paga a mesma leitura. O índice é do item 50; o "só pague o que o knob pede" é
+  desta linha. *(descoberto no review do item 30)*
+
+- [ ] **`settings.schedule.hours` presente e incompleto diverge entre os motores.**
+  Com o bloco `hours` gravado sem uma das pontas, o TS cala 24×7 e o Python responde. Idem hora
+  sem zero à esquerda e `days` com maiúscula. O teste do item 30 usa justamente o formato em que
+  os dois concordam — nenhum é forma que a UI de hoje produza, mas jsonb editado à mão produz.
+  *(descoberto no review do item 30)*
+
+- [ ] **O fail-open do fuso engole também tzdb ausente, e `tzdata` não é dependência declarada.**
+  Fuso que o `zoneinfo` não conhece faz o guard de horário abrir mão e deixar responder — decisão
+  deliberada para não calar a loja por um typo na tela. Mas a mesma porta cobre "a imagem não tem
+  banco de fusos": uma troca de base desligaria o horário de TODAS as lojas em silêncio. A imagem
+  viva tem tzdb (verificado); a garantia é que não está escrita. *(descoberto no review do item 30)*
+
+- [ ] **Três divergências degeneradas de matching entre os guards TS e Python.**
+  Confirmação de handoff que não passa por `blocked_topics`, item não-string dentro da lista de
+  keywords, e `cooldown_after_transfer: true`. Nenhuma é forma que a UI produza; todas são jsonb
+  editado à mão. *(descoberto no review do item 30)*
+
+- [ ] **Guard que cala apaga o alerta de fluxo quebrado que viria depois.**
+  Os guards de comportamento rodam ANTES da arbitragem de missão — que é a ordem do TS e o certo
+  para não pagar trabalho caro. Efeito colateral: conversa em que um guard cala nunca abre o
+  `no_active_mission`, então uma órbita quebrada fica invisível enquanto o guard estiver valendo.
+  *(descoberto no re-review do item 30)*
+
+- [ ] **Estado de guard não encontrado é fail-open, e o toque frio é o caminho mais exposto.**
+  Conversa sem linha no espelho legado devolve estado zerado — "ninguém transferiu, o bot não
+  respondeu, nenhum humano falou" —, que é a verdade para conversa nova e é otimismo para conversa
+  cuja ponte canônica → espelho não resolveu. Quando a ponte não resolve, o passo `skipped` também
+  não espelha: no toque, o único registro que sobrevive é o alerta. *(descoberto no re-review do item 30)*
+
+- [ ] **`activate_on: manual` no toque só funciona porque o runtime tem um agente por org.**
+  O guard compara o `ai_agent_id` da conversa com o agente do turno; no runtime esse agente vem de
+  `load_active_version`, que não filtra por canal (ausência 3 do `FORK.md`). Org com dois agentes
+  ativos torna a comparação uma coincidência. *(descoberto no re-review do item 30)*
 
 - [ ] **`supabase/.branches/` e `supabase/.temp/` não estão no `.gitignore`.**
   Aparecem no `git status` de quem rodar o stack local — e agora todo mundo deve rodar.
