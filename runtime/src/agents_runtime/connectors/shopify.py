@@ -26,16 +26,31 @@ from agents_runtime.clock import Clock, SystemClock
 API_VERSION = "2024-01"
 _TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 
-# 429: paridade com o `fetchWithRateLimit` do lado TS
-# (`src/lib/services/shopify/api-client.ts:109-142`) — 3 tentativas honrando
-# `Retry-After`, com 2s de default quando o header não vem ou vem ilegível.
+# 429: inspirado no `fetchWithRateLimit` do lado TS
+# (`src/lib/services/shopify/api-client.ts:109-142`), com DUAS divergências
+# numéricas deliberadas — o comportamento aqui não é o de lá:
+#
+#   * contagem: `api-client.ts:112,130` faz `maxRetries = 3` com
+#     `retryCount >= maxRetries` a partir de 0, ou seja 3 RE-tentativas =
+#     4 requisições. Aqui são 3 REQUISIÇÕES no total (2 re-tentativas),
+#     porque o teto de espera abaixo é mais apertado que o de lá;
+#   * throttle proativo: `api-client.ts:148+` desacelera sozinho quando o
+#     header `X-Shopify-Shop-Api-Call-Limit` mostra `remaining <= 5`. NÃO
+#     replicamos: lá o cliente serve sync/leitura em lote, onde vale gastar
+#     latência para não bater no limite; aqui é uma chamada única dentro do
+#     turno do agente, e desacelerar de propósito só encurta o turno.
+#
+# O que veio de lá sem mudança: honrar `Retry-After`, com 2s de default
+# quando o header não vem ou vem ilegível.
 _MAX_ATTEMPTS = 3
 _DEFAULT_RETRY_AFTER_SECONDS = 2.0
-# O teto é NOSSO, não de lá: esta chamada roda DENTRO do turno do agente (60s
-# de timeout de geração, lease de 60s no envio), então um `Retry-After: 120`
-# da Shopify não pode segurar o turno inteiro. Estourou o teto, o 429 sobe e o
-# backoff longo fica com a fila (`queueing/backoff.py:15-35`), que é por
-# MENSAGEM — os dois convivem, não se substituem.
+# O teto é NOSSO, não de lá, e é do CONECTOR INTEIRO — não de cada request.
+# `create_discount` faz até três chamadas HTTP; um teto por chamada deixaria
+# a tool dormir 3x6s dentro de um turno de 60s (timeout de geração) com lease
+# de 60s no envio. Por isso o orçamento nasce em `create_discount` e é
+# compartilhado pelas três. Estourou, o 429 sobe e o backoff longo fica com a
+# fila (`queueing/backoff.py:15-35`), que é por MENSAGEM — os dois convivem,
+# não se substituem.
 _RETRY_BUDGET_SECONDS = 6.0
 
 # `GET /price_rules.json` (2024-01) não filtra por título — os únicos filtros
@@ -44,6 +59,12 @@ _RETRY_BUDGET_SECONDS = 6.0
 # de rules em vez da loja inteira; quem garante que é A rule certa é o título,
 # comparado exato depois. A margem cobre o truncamento de subsegundo do lado
 # da Shopify.
+#
+# Uma página só: se a rule não estiver nos 250 primeiros resultados da janela,
+# a busca devolve None e vira ShopifyError. Falha FECHADA de propósito — nunca
+# um cupom prometido sem existir — e paginar dentro do turno do agente custaria
+# mais que o retry da fila. Só vira problema numa loja com >250 price rules
+# terminando dentro da mesma janela de 2 minutos.
 _ENDS_AT_MARGIN = timedelta(seconds=60)
 _PAGE_LIMIT = 250
 
@@ -103,7 +124,12 @@ def _retry_after_seconds(raw: str | None) -> float:
 
 
 async def _send(
-    client: httpx.AsyncClient, clock: Clock, method: str, url: str, **kwargs
+    client: httpx.AsyncClient,
+    clock: Clock,
+    budget: list[float],
+    method: str,
+    url: str,
+    **kwargs,
 ) -> httpx.Response:
     """Uma chamada à Shopify, re-tentando só 429 e só dentro do teto.
 
@@ -111,23 +137,27 @@ async def _send(
     deixava a price rule órfã e o cliente com um código inexistente. A espera
     sai do `Clock` injetado, não de `asyncio.sleep` — a fitness function
     `tests/unit/test_no_direct_clock.py` é quem manda aqui.
+
+    `budget` é uma caixa de um elemento porque o teto é do CONECTOR, não desta
+    chamada: as três compartilham o mesmo saldo, senão uma rajada de throttle
+    somaria 3x`_RETRY_BUDGET_SECONDS` dentro de um turno só.
     """
-    budget = _RETRY_BUDGET_SECONDS
     for attempt in range(_MAX_ATTEMPTS):
         response = await client.request(method, url, **kwargs)
         if response.status_code != 429 or attempt == _MAX_ATTEMPTS - 1:
             return response
         delay = _retry_after_seconds(response.headers.get("Retry-After"))
-        if delay > budget:
+        if delay > budget[0]:
             return response  # esperar mais que o teto é pior que devolver o 429
         await clock.sleep(delay)
-        budget -= delay
+        budget[0] -= delay
     return response
 
 
 async def _find_price_rule_id(
     client: httpx.AsyncClient,
     clock: Clock,
+    budget: list[float],
     base: str,
     *,
     code: str,
@@ -137,6 +167,7 @@ async def _find_price_rule_id(
     found = await _send(
         client,
         clock,
+        budget,
         "GET",
         f"{base}/price_rules.json",
         params={
@@ -170,6 +201,8 @@ async def create_discount(
 ) -> str:
     """Cria (ou encontra) o cupom `code` na loja. Devolve o código."""
     clock = clock or SystemClock()
+    # Saldo de espera das TRÊS chamadas juntas — ver `_RETRY_BUDGET_SECONDS`.
+    budget = [_RETRY_BUDGET_SECONDS]
     base = f"https://{store.shop_domain}/admin/api/{API_VERSION}"
     headers = {
         "X-Shopify-Access-Token": store.access_token,
@@ -181,6 +214,7 @@ async def create_discount(
         created = await _send(
             client,
             clock,
+            budget,
             "POST",
             f"{base}/price_rules.json",
             json=_price_rule_payload(
@@ -194,7 +228,7 @@ async def create_discount(
             # órfã. Sair com `code` aqui mandava ao cliente um cupom que não
             # existe. Reencontra a rule e segue para o passo que confirma.
             rule_id = await _find_price_rule_id(
-                client, clock, base, code=code, validity_until=validity_until
+                client, clock, budget, base, code=code, validity_until=validity_until
             )
             if rule_id is None:
                 raise ShopifyError(
@@ -211,6 +245,7 @@ async def create_discount(
         coded = await _send(
             client,
             clock,
+            budget,
             "POST",
             f"{base}/price_rules/{rule_id}/discount_codes.json",
             json={"discount_code": {"code": code}},

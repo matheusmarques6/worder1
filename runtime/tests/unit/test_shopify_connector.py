@@ -136,12 +136,18 @@ class TestIdempotentRetry:
                 return httpx.Response(201, json={"price_rule": {"id": 42}})
             return httpx.Response(429, headers={"Retry-After": "60"}, text="throttled")
 
-        transport, _ = _transport(first)  # 60s > teto: sobe sem segurar o turno
+        # 60s > teto de 6s: sobe sem segurar o turno. O FakeClock é o que
+        # garante que este teste nunca dorme de verdade nem quando o teto
+        # quebra — teste que só é rápido porque o código está certo esconde a
+        # falha em vez de mostrá-la.
+        clock = FakeClock()
+        transport, _ = _transport(first)
         with pytest.raises(shopify.ShopifyError, match="HTTP 429"):
             await shopify.create_discount(
                 STORE, code="WD-ORFA", kind="percent", value=Decimal("10"),
-                validity_until=UNTIL, transport=transport,
+                validity_until=UNTIL, transport=transport, clock=clock,
             )
+        assert clock.slept == []
 
         def second(request: httpx.Request) -> httpx.Response:
             if request.method == "POST" and request.url.path.endswith("/price_rules.json"):
@@ -247,16 +253,31 @@ class TestRateLimit:
         assert clock.slept == []  # nem dormiu: 120s > teto de 6s
 
     async def test_the_total_wait_never_passes_the_cap(self) -> None:
-        def throttled(request: httpx.Request) -> httpx.Response:
-            # sem Retry-After: cai no default de 2s do api-client.ts
+        """O teto é do CONECTOR, não de cada request.
+
+        `create_discount` faz até três chamadas HTTP; um teto por chamada
+        deixaria a tool dormir 3x6s dentro de um turno de 60s. O throttle real
+        chega em rajada, então o cenário é este: a price rule custa duas
+        esperas e o discount code tenta gastar mais duas — a segunda tem de
+        ser negada porque o orçamento do conector já acabou.
+        """
+        calls = {"price_rules": 0}
+
+        def burst(request: httpx.Request) -> httpx.Response:
+            # sem Retry-After em lugar nenhum: cai no default de 2s
+            if request.url.path.endswith("/price_rules.json"):
+                calls["price_rules"] += 1
+                if calls["price_rules"] <= 2:
+                    return httpx.Response(429, text="throttled")
+                return httpx.Response(201, json={"price_rule": {"id": 42}})
             return httpx.Response(429, text="throttled")
 
         clock = FakeClock()
-        transport, _ = _transport(throttled)
+        transport, _ = _transport(burst)
         with pytest.raises(shopify.ShopifyError, match="HTTP 429"):
             await shopify.create_discount(
                 STORE, code="WD-TETO", kind="percent", value=Decimal("10"),
                 validity_until=UNTIL, transport=transport, clock=clock,
             )
-        assert clock.slept == [2.0, 2.0]
+        assert clock.slept == [2.0, 2.0, 2.0]  # 2 na price rule, só 1 no código
         assert sum(clock.slept) <= shopify._RETRY_BUDGET_SECONDS == 6.0
