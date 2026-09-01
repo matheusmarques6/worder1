@@ -17,11 +17,12 @@ As diferenças que importam:
     no meio da geração mata o rascunho e o turno de RESPOSTA assume.
 """
 
+import logging
 import os
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 import psycopg
@@ -65,6 +66,7 @@ from agents_runtime.obs.telemetry import annotate
 from agents_runtime.queueing.jobs import MissionTouchJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
+from agents_runtime.repository import engine as engine_repo
 from agents_runtime.repository import judge_scores as scores_repo
 from agents_runtime.repository import missions as missions_repo
 from agents_runtime.repository import moments as moments_repo
@@ -73,6 +75,8 @@ from agents_runtime.repository import provider_keys as keys_repo
 from agents_runtime.repository.scope import scope_to_organization
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.coupon import CreateCoupon
+
+logger = logging.getLogger(__name__)
 
 #: O texto do toucher de andaime (paridade com fixed_responder): a suíte
 #: pipeline dirige o processo real sem LLM nenhum.
@@ -186,6 +190,28 @@ def build_toucher(
                 )
                 return TouchDraft(None, (), None)
 
+            # --- chip de progresso no chat, o mesmo canal do responder. Sem
+            # ele o toque calado por guard sumia: o nó pedia, recebia `queued`,
+            # e nada acontecia — nem alerta (guard não é anomalia, e não deve
+            # abrir um) nem motivo legível. Best-effort por contrato: sem
+            # conversa no espelho o passo some num `false` silencioso, e um
+            # chip perdido jamais custa um turno.
+            run_id = uuid4()
+
+            async def note_step(step_name: str, step_detail: str | None = None) -> None:
+                try:
+                    await engine_repo.emit_ai_run_step(
+                        conn,
+                        organization_id=job.organization_id,
+                        run_id=run_id,
+                        step=step_name,
+                        detail=step_detail,
+                        agent_id=version.agent_id,
+                        conversation_id=job.conversation_id,
+                    )
+                except Exception:  # adereço nunca vira causa de morte do turno
+                    logger.debug("run-step emit failed", exc_info=True)
+
             # --- guards de comportamento (item 30): o MESMO módulo puro do
             # turno de resposta. O toque nasce de `emit_ai_mission_job`, fora
             # do ingest, então nada do que o webhook freia vale para ele — sem
@@ -198,15 +224,16 @@ def build_toucher(
             #
             # Silêncio de guard não abre alerta: é comportamento que a loja
             # configurou, não anomalia — ao contrário de "sem missão ativa".
-            if (
-                evaluate_inbound_guards(
-                    version.settings,
-                    guard_state,
-                    agent_id=version.agent_id,
-                    now=clock.now(),
-                )
-                or schedule_silence(version.settings, now=clock.now())
-            ) is not None:
+            # Mas deixa passo: mudo sem motivo legível é o defeito (requisito 3
+            # do brief), e vale para os dois produtores de fala.
+            silence = evaluate_inbound_guards(
+                version.settings,
+                guard_state,
+                agent_id=version.agent_id,
+                now=clock.now(),
+            ) or schedule_silence(version.settings, now=clock.now())
+            if silence is not None:
+                await note_step("skipped", silence.detail)
                 return TouchDraft(None, (), None)
 
             if mission is None:
@@ -421,6 +448,7 @@ def build_toucher(
                         "draft": outcome.draft,
                     },
                 )
+                await note_step("transferred", f"Assunto proibido no toque (“{topic}”)")
                 return TouchDraft(None, (), mission_version_id)
 
             return TouchDraft(

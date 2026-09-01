@@ -486,3 +486,45 @@ class TestTheTouchConsultsTheSameGuards:
         draft = await toucher(dsn, ScriptedLlm())(a_touch(tenant, thread))
 
         assert draft.content is not None and draft.content.get("text")
+
+
+class TestASilentTouchStillLeavesATrace:
+    """Defeito novo do round 1: o toque calado por guard sumia sem registro.
+
+    O toucher nunca teve run steps — o único canal dele era `alerts`, e guard
+    não é anomalia, então não abre alerta. Resultado: o nó de fluxo pedia o
+    toque, recebia `queued`, e nada acontecia, sem chip e sem motivo. O
+    requisito 3 do brief vale para os dois produtores: um agente que fica mudo
+    sem motivo legível é o defeito. O canal é o mesmo do responder.
+    """
+
+    async def test_the_guard_that_silences_a_touch_says_why_in_a_step(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type=FAMILY, status="active")
+        thread = create_thread(admin, tenant)
+        mirror = mirrored(admin, tenant, thread)
+        admin.execute(
+            "update public.whatsapp_cloud_conversations set ai_enabled = false where id = %s",
+            (mirror.conversation_id,),
+        )
+
+        draft = await toucher(dsn, ScriptedLlm())(a_touch(tenant, thread))
+
+        assert draft.content is None
+        assert ("skipped", "IA desligada nesta conversa") in steps(admin, mirror)
+
+    async def test_a_blocked_topic_in_the_touch_leaves_the_transferred_step(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type=FAMILY, status="active")
+        configure(admin, tenant, {"safety": {"blocked_topics": ["processo judicial"]}})
+        thread = create_thread(admin, tenant)
+        mirror = mirrored(admin, tenant, thread)
+        llm = ScriptedLlm(reply="Sobre o seu Processo Judicial, melhor conversarmos.")
+
+        await toucher(dsn, llm)(a_touch(tenant, thread))
+
+        assert any(step == "transferred" for step, _ in steps(admin, mirror))
