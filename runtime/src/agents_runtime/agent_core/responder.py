@@ -43,6 +43,7 @@ from agents_runtime.agent_core.guards import (
     evaluate_inbound_guards,
     resolve_blocked_topic,
     resolve_handoff,
+    schedule_silence,
 )
 from agents_runtime.agent_core.llm import (
     ChatRequest,
@@ -439,6 +440,15 @@ def build_responder(
                     "text": handoff.confirmation,
                     "humanize": {"split": split, "rhythm": rhythm},
                 }
+
+            # --- horário de atendimento (item 30). DEPOIS do handoff, como
+            # no TS: lá o horário é checado dentro do engine (engine.ts:85-88),
+            # que só roda depois do handoff por keyword — um pedido de
+            # atendente fora do horário transfere, não vira silêncio.
+            outside = schedule_silence(version.settings, now=clock.now())
+            if outside is not None:
+                await note_step("skipped", outside.detail)
+                return None
 
             # --- arbitragem: uma missão vence o turno; sem nenhuma, alerta e
             # silêncio deliberado (a conversa avança; §3.4 inv. 8).

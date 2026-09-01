@@ -18,8 +18,10 @@ import pytest
 from agents_runtime.agent_core.guards import (
     GuardState,
     evaluate_inbound_guards,
+    is_within_schedule,
     resolve_blocked_topic,
     resolve_handoff,
+    schedule_silence,
 )
 
 pytestmark = pytest.mark.unit
@@ -474,6 +476,120 @@ class TestBlockedTopics:
         """O guard de saída não olha o que o cliente escreveu: o cliente pode
         falar de qualquer assunto — quem não pode é a voz da loja."""
         assert resolve_blocked_topic(BLOCKED_SETTINGS, "") is None
+
+
+SCHEDULE = {
+    "schedule": {
+        "always_active": False,
+        "timezone": "America/Sao_Paulo",
+        "hours": {"start": "08:00", "end": "18:00"},
+        "days": ["mon", "tue", "wed", "thu", "fri"],
+    }
+}
+
+
+def sao_paulo(day: int, hour: int, minute: int = 0) -> datetime:
+    """UTC-3 sem horário de verão desde 2019: a hora local é a UTC menos 3.
+
+    2026-08-31 é uma segunda-feira, então `day` anda pela semana a partir dela.
+    """
+    monday = datetime(2026, 8, 31, hour, minute, tzinfo=UTC)
+    return monday + timedelta(days=day - 1, hours=3)
+
+
+class TestBusinessHours:
+    """`settings.schedule` — engine.ts:86-88 e :308-350.
+
+    O achado citava `engine.ts` como caminho LEGADO, mas o caminho Cloud aplica
+    o horário de verdade: `cloud-runner.ts:805` chama `createAgentEngine`, e
+    `processMessage` lança "Fora do horário de atendimento" logo na entrada
+    (`engine.ts:86`), que `failure-classifier.ts:15-18` classifica como `skip`.
+    Há paridade a quebrar, então há trabalho a fazer.
+    """
+
+    def test_inside_the_window_answers(self) -> None:
+        assert is_within_schedule(SCHEDULE, now=sao_paulo(1, 10)) is True
+
+    def test_before_opening_is_silent(self) -> None:
+        assert is_within_schedule(SCHEDULE, now=sao_paulo(1, 7, 59)) is False
+
+    def test_after_closing_is_silent(self) -> None:
+        assert is_within_schedule(SCHEDULE, now=sao_paulo(1, 18, 1)) is False
+
+    def test_the_boundaries_are_inclusive(self) -> None:
+        """`currentTime >= start && currentTime <= end` no TS: as pontas contam."""
+        assert is_within_schedule(SCHEDULE, now=sao_paulo(1, 8)) is True
+        assert is_within_schedule(SCHEDULE, now=sao_paulo(1, 18)) is True
+
+    def test_a_day_outside_the_configured_week_is_silent(self) -> None:
+        assert is_within_schedule(SCHEDULE, now=sao_paulo(6, 10)) is False  # sábado
+
+    def test_the_timezone_is_the_configured_one_not_utc(self) -> None:
+        """13:00 UTC é 10:00 em São Paulo (dentro) e 22:00 em Tóquio (fora).
+        Sem o fuso configurado o guard cala a loja errada."""
+        thirteen_utc = datetime(2026, 8, 31, 13, 0, tzinfo=UTC)
+
+        assert is_within_schedule(SCHEDULE, now=thirteen_utc) is True
+        assert (
+            is_within_schedule(
+                {"schedule": {**SCHEDULE["schedule"], "timezone": "Asia/Tokyo"}},
+                now=thirteen_utc,
+            )
+            is False
+        )
+
+    def test_always_active_ignores_hours_and_days(self) -> None:
+        assert (
+            is_within_schedule(
+                {"schedule": {**SCHEDULE["schedule"], "always_active": True}},
+                now=sao_paulo(6, 3),
+            )
+            is True
+        )
+
+    def test_no_schedule_block_answers_around_the_clock(self) -> None:
+        for settings in (None, {}, {"schedule": {}}):
+            assert is_within_schedule(settings, now=sao_paulo(6, 3)) is True
+
+    def test_the_defaults_are_the_ones_the_ts_hardcodes(self) -> None:
+        """Bloco presente sem `hours`/`days`: 08:00-18:00, seg-sex."""
+        only_tz = {"schedule": {"timezone": "America/Sao_Paulo"}}
+
+        assert is_within_schedule(only_tz, now=sao_paulo(1, 12)) is True
+        assert is_within_schedule(only_tz, now=sao_paulo(1, 20)) is False
+        assert is_within_schedule(only_tz, now=sao_paulo(6, 12)) is False
+
+    def test_an_unknown_timezone_never_silences_the_store(self) -> None:
+        """Um typo no fuso não pode calar a loja inteira: aqui o guard abre
+        mão, e o caminho TS morre no Intl e vira retry. Nenhum dos dois
+        silencia sem motivo — é a divergência que sobra, e é a menos ruim."""
+        assert (
+            is_within_schedule(
+                {"schedule": {**SCHEDULE["schedule"], "timezone": "Marte/Olympus"}},
+                now=sao_paulo(6, 3),
+            )
+            is True
+        )
+
+    def test_the_guard_is_a_silence_with_a_reason(self) -> None:
+        silence = schedule_silence(SCHEDULE, now=sao_paulo(6, 3))
+
+        assert silence is not None
+        assert silence.reason == "outside_business_hours"
+        assert silence.detail.strip()
+
+    def test_inside_the_window_there_is_no_silence(self) -> None:
+        assert schedule_silence(SCHEDULE, now=sao_paulo(1, 10)) is None
+
+    def test_it_is_separate_from_the_inbound_guards_on_purpose(self) -> None:
+        """No TS o horário é checado DENTRO do engine (engine.ts:85-88), depois
+        do handoff por keyword (cloud-runner.ts:578-585). Fundir os dois faria
+        um pedido de atendente fora do horário virar silêncio em vez de
+        transferência — divergência que o item 30 existe para não criar."""
+        assert (
+            evaluate_inbound_guards(SCHEDULE, state(), agent_id=AGENT, now=sao_paulo(6, 3))
+            is None
+        )
 
 
 class TestSettingsGarbageNeverSilences:

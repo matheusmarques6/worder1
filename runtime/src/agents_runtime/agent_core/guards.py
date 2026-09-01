@@ -275,6 +275,19 @@ def resolve_handoff(settings: Any, texts: Sequence[str]) -> Handoff | None:
     return None
 
 
+def schedule_silence(settings: Any, *, now: datetime) -> Silence | None:
+    """O horário de atendimento como silêncio explicável, ou None.
+
+    Separado de `evaluate_inbound_guards` de propósito: no TS o horário é
+    checado DENTRO do engine (`engine.ts:85-88`), depois do handoff por
+    keyword (`cloud-runner.ts:578-585`). Fundir os dois faria um pedido de
+    atendente fora do horário virar silêncio em vez de transferência.
+    """
+    if is_within_schedule(settings, now=now):
+        return None
+    return Silence("outside_business_hours", "Fora do horário de atendimento configurado")
+
+
 def resolve_blocked_topic(settings: Any, draft: str | None) -> str | None:
     """O tópico proibido que o modelo deixou escapar no rascunho, ou None.
 
