@@ -8,7 +8,8 @@
  * configurado, a resposta é sempre "inválido", sem exceção de NODE_ENV.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import crypto from 'crypto'
 import { verifyShopifyWebhook } from './verify'
 
 const SECRET = 'shhh-shopify-secret'
@@ -39,5 +40,18 @@ describe('verifyShopifyWebhook (integrations/shopify/webhook)', () => {
   it('não lança com header malformado (tamanho diferente do hash)', () => {
     expect(() => verifyShopifyWebhook('{"id":1}', 'curto', SECRET)).not.toThrow()
     expect(verifyShopifyWebhook('{"id":1}', 'curto', SECRET)).toBe(false)
+  })
+
+  it('achado 5: uma falha inesperada na verificação é logada, não engolida calada', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const hmacSpy = vi.spyOn(crypto, 'createHmac').mockImplementation(() => {
+      throw new Error('boom')
+    })
+
+    expect(verifyShopifyWebhook('{"id":1}', 'qualquer-coisa==', SECRET)).toBe(false)
+    expect(errorSpy).toHaveBeenCalled()
+
+    hmacSpy.mockRestore()
+    errorSpy.mockRestore()
   })
 })

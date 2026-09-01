@@ -11,7 +11,8 @@
  * inválida — sem exceção de ambiente (mesma decisão do item 25).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import crypto from 'crypto'
 import { verifyShopifyWebhook } from './verify'
 
 const SECRET = 'shhh-shopify-secret'
@@ -52,5 +53,19 @@ describe('verifyShopifyWebhook (api/shopify)', () => {
     process.env.SHOPIFY_WEBHOOK_SECRET = SECRET
     expect(() => verifyShopifyWebhook('{"id":1}', 'curto')).not.toThrow()
     expect(verifyShopifyWebhook('{"id":1}', 'curto')).toBe(false)
+  })
+
+  it('achado 5: uma falha inesperada na verificação é logada, não engolida calada', () => {
+    process.env.SHOPIFY_WEBHOOK_SECRET = SECRET
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const hmacSpy = vi.spyOn(crypto, 'createHmac').mockImplementation(() => {
+      throw new Error('boom')
+    })
+
+    expect(verifyShopifyWebhook('{"id":1}', 'qualquer-coisa==')).toBe(false)
+    expect(errorSpy).toHaveBeenCalled()
+
+    hmacSpy.mockRestore()
+    errorSpy.mockRestore()
   })
 })

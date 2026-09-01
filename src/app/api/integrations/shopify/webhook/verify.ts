@@ -32,7 +32,13 @@ export function verifyShopifyWebhook(rawBody: string, hmacHeader: string, secret
       Buffer.from(hash),
       Buffer.from(hmacHeader)
     );
-  } catch {
+  } catch (error) {
+    // Achado 5 (follow-up fase 3): das quatro implementações do item 26,
+    // duas logavam a falha de verificação (webhooks/shopify/verify.ts,
+    // lib/integrations/shopify.ts) e duas engoliam calada — mesma decisão
+    // de segurança, comportamento observável diferente. Loga, não muda o
+    // retorno: continua `false`.
+    console.error('[integrations/shopify/webhook] HMAC verification error:', error);
     return false;
   }
 }
