@@ -127,6 +127,16 @@ def speechless_media(pending: Sequence[PendingMessage]) -> str | None:
     seguido de "viu?" é uma pergunta que o modelo responde, e degradar aí seria
     ignorar o cliente. Só o que o CONTATO mandou conta — a mesma régua do
     think-gate, pelo mesmo motivo.
+
+    **A desculpa nomeia a PRIMEIRA mídia da rajada, não a última nem a que
+    agendou o turno** — imagem seguida de áudio pede desculpa pela imagem. É
+    escolha, e diverge do TS por construção: lá cada mensagem é um turno e ganha
+    o seu próprio fallback; aqui o debounce coalesce a rajada inteira em UMA
+    resposta, então é preciso escolher um tipo. A primeira ganha porque é a que
+    abriu o assunto, e responder pela última faria a loja ignorar aquilo com que
+    o cliente começou. Uma frase citando os dois tipos foi descartada: a
+    combinação não é rara o bastante para pagar a redação, e a linha honesta
+    vale para as duas mídias de qualquer jeito.
     """
     from_contact = [message for message in pending if message.author == "contact"]
     if not from_contact or any(message.media_kind is None for message in from_contact):
