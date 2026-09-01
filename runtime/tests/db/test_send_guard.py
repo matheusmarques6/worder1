@@ -76,6 +76,15 @@ def expire_window(conn: psycopg.Connection, phone_number_id: str, column: str) -
     )
 
 
+def streak(conn: psycopg.Connection, phone_number_id: str) -> int:
+    """A série de sucessos crua — a única coluna que nenhum veredito expõe."""
+    return conn.execute(
+        "select half_open_successes from internal.whatsapp_send_guard"
+        " where phone_number_id = %s",
+        (phone_number_id,),
+    ).fetchone()[0]
+
+
 def close_breaker(conn: psycopg.Connection, phone_number_id: str) -> None:
     """Devolve o número ao estado fechado do jeito que o TS exige: vencida a
     janela, TRÊS sucessos. Existe como helper porque os testes de throttle
@@ -222,6 +231,33 @@ class TestTheBreaker:
 
         report(admin, pnid, success=False)
         assert check(admin, pnid)[0] == "circuit_open"
+
+    def test_a_failure_in_closed_leaves_the_success_streak_where_it_is(
+        self, admin: psycopg.Connection
+    ) -> None:
+        """Paridade de FORMA com o `LUA_RECORD_FAILURE` (ruling X): o ramo
+        CLOSED de lá faz `INCR failures` e nada mais — quem zera `successes` é
+        o ramo HALF_OPEN (`circuit-breaker.ts:112-115`). A SQL zerava a série em
+        TODA falha e o comentário da migration chamava isso de paridade.
+
+        O estado deste teste é montado à mão porque nenhum caminho da função
+        chega nele: `half_open_successes` só cresce em HALF_OPEN, a falha que
+        reabre zera, e o 3º sucesso zera ao fechar — em CLOSED a série já é 0
+        por construção. É por isso que a troca não muda comportamento nenhum, e
+        é por isso mesmo que ela precisa de teste: o que não é observável volta
+        a divergir na próxima edição sem ninguém ver.
+        """
+        pnid = a_number()
+        report(admin, pnid, success=False)
+        admin.execute(
+            "update internal.whatsapp_send_guard"
+            "   set consecutive_failures = 1, half_open_successes = 2"
+            " where phone_number_id = %s",
+            (pnid,),
+        )
+
+        report(admin, pnid, success=False)  # CLOSED: 2 falhas, longe do limiar
+        assert streak(admin, pnid) == 2
 
     def test_a_success_while_the_window_is_still_open_changes_nothing(
         self, admin: psycopg.Connection
