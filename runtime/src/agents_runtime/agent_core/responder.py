@@ -39,7 +39,7 @@ import psycopg
 
 import agents_runtime
 from agents_runtime.agent_core import openrouter
-from agents_runtime.agent_core.guards import evaluate_inbound_guards
+from agents_runtime.agent_core.guards import evaluate_inbound_guards, resolve_handoff
 from agents_runtime.agent_core.llm import (
     ChatRequest,
     LlmPort,
@@ -391,6 +391,50 @@ def build_responder(
             if silence is not None:
                 await note_step("skipped", silence.detail)
                 return None
+
+            # --- handoff por keyword (item 30): o cliente pediu um humano.
+            # Depois dos guards e ANTES da cascata de chave BYO — um pedido de
+            # atendente não pode depender de a loja ter chave de LLM válida
+            # (cloud-runner.ts:571-577 diz isso com todas as letras).
+            handoff = resolve_handoff(version.settings, tuple(m.text for m in pending))
+            if handoff is not None:
+                async with conn.transaction():
+                    await scope_to_organization(conn, job.organization_id)
+                    # Desliga a IA no espelho legado — é o freio que o webhook
+                    # já respeita para org migrada, então a transferência vale
+                    # para os turnos seguintes, não só para este.
+                    await agent_repo.mark_ai_handoff(
+                        conn,
+                        organization_id=job.organization_id,
+                        conversation_id=job.conversation_id,
+                        reason="handoff_keyword",
+                    )
+                    await alerts_repo.open_alert(
+                        conn,
+                        organization_id=job.organization_id,
+                        type=alerts_repo.HANDOFF,
+                        severity="warning",
+                        title="Cliente pediu atendimento humano — IA transferida",
+                        payload={
+                            "conversation_id": str(job.conversation_id),
+                            "keyword": handoff.keyword,
+                            "reason": "handoff_keyword",
+                        },
+                    )
+                await note_step(
+                    "transferred",
+                    f"Cliente pediu atendimento humano (“{handoff.keyword}”)",
+                )
+                if not handoff.confirmation:
+                    return None
+                # A confirmação sai pelo caminho normal de envio. Falha na
+                # entrega não desfaz a transferência: quem já foi passado para
+                # um humano continua passado.
+                split, rhythm = delivery_flags(version.settings)
+                return {
+                    "text": handoff.confirmation,
+                    "humanize": {"split": split, "rhythm": rhythm},
+                }
 
             # --- arbitragem: uma missão vence o turno; sem nenhuma, alerta e
             # silêncio deliberado (a conversa avança; §3.4 inv. 8).

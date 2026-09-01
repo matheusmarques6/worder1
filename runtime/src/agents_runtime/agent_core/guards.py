@@ -123,6 +123,19 @@ def find_blocked_topic(
     return match_handoff_keyword(response, blocked_topics)
 
 
+@dataclass(frozen=True, slots=True)
+class Handoff:
+    """O cliente pediu um humano, com todas as palavras.
+
+    `keyword` volta na forma ORIGINAL configurada (é o que o lojista reconhece
+    no alerta); `confirmation` é a mensagem opcional que o agente manda antes
+    de sair de cena — vazia quer dizer "transfere calado".
+    """
+
+    keyword: str
+    confirmation: str
+
+
 def _block(settings: Any, name: str) -> Mapping[str, Any]:
     """Um sub-bloco de `ai_agents.settings`; lixo em jsonb vira bloco vazio."""
     if not isinstance(settings, Mapping):
@@ -240,6 +253,26 @@ def is_within_schedule(settings: Any, *, now: datetime) -> bool:
         else DEFAULT_SCHEDULE_DAYS
     )
     return _WEEKDAY_NAMES[local.weekday()] in days
+
+
+def resolve_handoff(settings: Any, texts: Sequence[str]) -> Handoff | None:
+    """O pedido de humano nesta rajada, ou None — cloud-runner.ts:98-167.
+
+    A janela do debounce entrega a rajada inteira e o pedido pode estar em
+    qualquer uma das mensagens; o TS checa a mensagem do turno, que é a mesma
+    coisa com uma mensagem só.
+
+    Roda ANTES da cascata de chave BYO, de propósito: um cliente pedindo um
+    atendente não pode depender de a loja ter uma chave de LLM válida.
+    """
+    keywords = handoff_keywords(settings)
+    if not keywords:
+        return None
+    for text in texts:
+        matched = match_handoff_keyword(text, keywords)
+        if matched is not None:
+            return Handoff(matched, handoff_confirmation_message(settings))
+    return None
 
 
 def evaluate_inbound_guards(

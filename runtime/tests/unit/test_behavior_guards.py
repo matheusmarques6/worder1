@@ -18,6 +18,7 @@ import pytest
 from agents_runtime.agent_core.guards import (
     GuardState,
     evaluate_inbound_guards,
+    resolve_handoff,
 )
 
 pytestmark = pytest.mark.unit
@@ -368,6 +369,71 @@ class TestStopOnHumanReply:
 
         assert silence is not None
         assert silence.reason == "max_messages"
+
+
+HANDOFF_SETTINGS = {
+    "safety": {
+        "handoff_keywords": ["atendente", "falar com humano"],
+        "handoff_confirmation_message": "  Já estou te passando para alguém.  ",
+    }
+}
+
+
+class TestHandoffKeywords:
+    """`safety.handoff_keywords` — cloud-runner.ts:98-167 + guards.ts:25-37."""
+
+    def test_the_keyword_transfers(self) -> None:
+        handoff = resolve_handoff(HANDOFF_SETTINGS, ("quero um atendente agora",))
+
+        assert handoff is not None
+        assert handoff.keyword == "atendente"
+
+    def test_a_conversation_without_the_keyword_does_not_transfer(self) -> None:
+        assert resolve_handoff(HANDOFF_SETTINGS, ("quanto custa o frete?",)) is None
+
+    def test_matching_ignores_case_and_accents(self) -> None:
+        """pt-BR no celular: "ATENDENTE", "atêndente" e "atendente" são a
+        mesma palavra. guards.ts:normalizeForMatch usa NFD por isso."""
+        for text in ("ATENDENTE", "atêndente", "Atendente,"):
+            assert resolve_handoff(HANDOFF_SETTINGS, (text,)) is not None
+
+    def test_matching_is_by_substring(self) -> None:
+        """Substring, não palavra inteira — é o que o TS faz, e mudar isso
+        faria a mesma frase transferir num motor e não no outro."""
+        assert resolve_handoff(HANDOFF_SETTINGS, ("atendenteeee",)) is not None
+
+    def test_the_keyword_comes_back_in_the_configured_form(self) -> None:
+        handoff = resolve_handoff(
+            {"safety": {"handoff_keywords": ["Atendênte"]}}, ("quero atendente",)
+        )
+
+        assert handoff is not None
+        assert handoff.keyword == "Atendênte"
+
+    def test_the_confirmation_message_is_trimmed(self) -> None:
+        handoff = resolve_handoff(HANDOFF_SETTINGS, ("atendente",))
+
+        assert handoff is not None
+        assert handoff.confirmation == "Já estou te passando para alguém."
+
+    def test_without_a_confirmation_message_it_still_transfers(self) -> None:
+        handoff = resolve_handoff(
+            {"safety": {"handoff_keywords": ["atendente"]}}, ("atendente",)
+        )
+
+        assert handoff is not None
+        assert handoff.confirmation == ""
+
+    def test_no_keywords_configured_never_transfers(self) -> None:
+        for settings in (None, {}, {"safety": {}}, {"safety": {"handoff_keywords": []}}):
+            assert resolve_handoff(settings, ("quero um atendente",)) is None
+
+    def test_any_message_of_the_burst_can_ask_for_a_human(self) -> None:
+        """A janela do debounce entrega a rajada inteira; o pedido pode estar em
+        qualquer uma delas."""
+        handoff = resolve_handoff(HANDOFF_SETTINGS, ("oi", "tudo bem?", "quero atendente"))
+
+        assert handoff is not None
 
 
 class TestSettingsGarbageNeverSilences:

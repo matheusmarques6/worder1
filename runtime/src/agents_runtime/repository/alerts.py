@@ -20,6 +20,10 @@ CRITICAL_VIOLATION = "critical_violation"
 #: Inbound (ou toque) sem missão ativa para assumir o turno (§3.4 inv. 8).
 NO_ACTIVE_MISSION = "no_active_mission"
 
+#: O cliente pediu um humano (handoff por keyword) ou o modelo tocou num
+#: tópico proibido — a IA saiu de cena e alguém precisa entrar (item 30).
+HANDOFF = "handoff"
+
 
 async def open_alert(
     conn: psycopg.AsyncConnection,
