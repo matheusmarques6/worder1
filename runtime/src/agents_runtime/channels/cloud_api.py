@@ -31,7 +31,7 @@ from uuid import UUID
 import httpx
 import psycopg
 
-from agents_runtime.channels.port import ChannelPort
+from agents_runtime.channels.port import ChannelPort, mark_before_the_provider
 from agents_runtime.crypto.secret_box import base_secret_from_env
 from agents_runtime.queueing.failures import meta_error_code
 from agents_runtime.repository.outbox import ClaimedSend
@@ -67,10 +67,19 @@ class CloudApiChannel:
         self._load_token = load_token
 
     async def send(self, conn: psycopg.AsyncConnection, send: ClaimedSend) -> str:
-        token = await self._load_token(conn, send.organization_id)
+        try:
+            token = await self._load_token(conn, send.organization_id)
+            payload = self._payload_for(send)
+        except BaseException as error:
+            # Item 32, ruling U(a): nada disto tocou a Meta. Token que não abre
+            # e payload malformado são bugs nossos, e contá-los no breaker
+            # abriria o circuito de uma conta perfeitamente saudável.
+            mark_before_the_provider(error)
+            raise
+
         response = await self._client.post(
             f"/{send.channel_external_id}/messages",
-            json=self._payload_for(send),
+            json=payload,
             # Por-request, nunca por-client: cada conta da fila pode ter um
             # token diferente, e o client é compartilhado entre organizações.
             headers={"Authorization": f"Bearer {token}"},

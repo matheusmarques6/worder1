@@ -33,7 +33,7 @@ from datetime import timedelta
 import psycopg
 
 from agents_runtime.channels.humanize import compute_pacing, split_into_bubbles
-from agents_runtime.channels.port import ChannelPort
+from agents_runtime.channels.port import ChannelPort, before_the_provider
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
 from agents_runtime.obs.telemetry import annotate, span
@@ -55,6 +55,13 @@ async def _report_to_guard(
     reação mais lenta; uma exceção aqui custaria o envio que já saiu.
     """
     if send.channel_type != "whatsapp" or not send.channel_external_id:
+        return
+    if error is not None and before_the_provider(error):
+        # Ruling U(a): a falha morreu antes de qualquer contato com a Meta —
+        # credencial que não abre, payload malformado. É bug nosso, e contá-lo
+        # aqui abriria o circuito de uma conta perfeitamente saudável: cinco
+        # payloads ruins e a loja fica 30 s muda por nossa causa. A escada de
+        # retentativa continua tratando a mensagem; só o NÚMERO fica de fora.
         return
     try:
         await engine.send_guard_report(

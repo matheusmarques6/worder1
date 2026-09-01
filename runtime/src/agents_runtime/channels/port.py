@@ -31,6 +31,30 @@ import psycopg
 
 from agents_runtime.repository.outbox import ClaimedSend
 
+#: Item 32, ruling U(a). Um canal faz trabalho local antes de falar com o
+#: provedor — resolver credencial, montar payload — e esse trabalho pode falhar
+#: por bug NOSSO. Quem julga a saúde da CONTA (o send-guard) precisa distinguir
+#: as duas coisas: cinco payloads malformados do mesmo número abririam o
+#: circuito de uma conta perfeitamente saudável, e a loja ficaria muda por
+#: nossa causa.
+#:
+#: A marca é um atributo na própria exceção, e não um tipo novo, de propósito:
+#: o classificador de falhas decide pelo TIPO (um `ValueError` de payload é
+#: permanente), e embrulhar mudaria essa decisão junto. A exceção sobe
+#: exatamente como era; só ganha um bit.
+_BEFORE_THE_PROVIDER = "agents_runtime_before_the_provider"
+
+
+def mark_before_the_provider(error: BaseException) -> None:
+    """O canal declara: isto morreu antes de qualquer contato com o provedor."""
+    setattr(error, _BEFORE_THE_PROVIDER, True)
+
+
+def before_the_provider(error: BaseException) -> bool:
+    """Sem marca, assume-se que chegou — a falha de rede, que é o que o breaker
+    mais precisa contar, não tem como se anunciar."""
+    return getattr(error, _BEFORE_THE_PROVIDER, False)
+
 
 class ChannelPort(Protocol):
     """Deliver one message; return the provider's id for it.

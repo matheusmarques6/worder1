@@ -12,7 +12,7 @@ the real provider does uninvited.
 
 import psycopg
 
-from agents_runtime.channels.port import ChannelPort
+from agents_runtime.channels.port import ChannelPort, mark_before_the_provider
 from agents_runtime.repository.outbox import ClaimedSend
 
 SCHEMA_SQL = """
@@ -59,6 +59,13 @@ class FakeChannel:
             raise ConnectionError("HTTP 503 fake channel told to fail")
         if behavior == "fail_permanent":
             raise ValueError("HTTP 400 fake channel told to reject")
+        if behavior == "fail_before_the_provider":
+            # O que o canal real faz quando o token não abre ou o payload está
+            # malformado: levanta ANTES da rede e marca a exceção, para o
+            # breaker não contar contra uma conta que nunca foi consultada.
+            error = ValueError("payload inválido: sem 'text' — chaves ['imagem']")
+            mark_before_the_provider(error)
+            raise error
         if behavior == "fail_rate_limited":
             # O corpo que a Meta devolve num excesso, com o `code` que o
             # `is_rate_limited` lê (item 32). Um 503 NÃO serve aqui: ele é

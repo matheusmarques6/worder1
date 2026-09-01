@@ -22,6 +22,7 @@ import httpx
 import pytest
 
 from agents_runtime.channels.cloud_api import CloudApiChannel, from_env
+from agents_runtime.channels.port import before_the_provider
 from agents_runtime.queueing.failures import Failure, classify, is_rate_limited
 from agents_runtime.repository.outbox import ClaimedSend
 
@@ -294,3 +295,54 @@ async def test_a_short_body_still_works_the_old_way() -> None:
         await channel_answering(handler).send(None, a_send())
 
     assert is_rate_limited(failure.value) is True
+
+
+# --- item 32, ruling U(a): o que nunca saiu de casa não conta contra a conta ---
+#
+# `send` faz duas coisas ANTES da rede — resolver o token e montar o payload —
+# e as duas podem falhar por bug nosso. O breaker existe para reagir ao que a
+# Meta faz; cinco payloads malformados do mesmo número abririam o circuito de
+# uma conta perfeitamente saudável, e a loja ficaria 30 s muda por nossa causa.
+
+
+async def test_a_malformed_payload_never_reached_the_provider() -> None:
+    reached = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal reached
+        reached = True
+        return httpx.Response(200, json={"messages": [{"id": "wamid.X"}]})
+
+    with pytest.raises(ValueError) as failure:
+        await channel_answering(handler).send(None, a_send(payload={"imagem": "x"}))
+
+    assert reached is False
+    assert before_the_provider(failure.value) is True
+    # E a classificação não muda: payload inválido segue permanente.
+    assert classify(failure.value) is Failure.PERMANENT
+
+
+async def test_a_token_that_does_not_open_never_reached_the_provider() -> None:
+    async def load_token(conn, organization_id) -> str:
+        raise RuntimeError("conta whatsapp sem token (nem cifrado, nem legado)")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("não deveria ter chegado à rede")
+
+    channel = CloudApiChannel(load_token=load_token, transport=httpx.MockTransport(handler))
+    with pytest.raises(RuntimeError) as failure:
+        await channel.send(None, a_send())
+
+    assert before_the_provider(failure.value) is True
+
+
+async def test_a_provider_refusal_did_reach_it() -> None:
+    """O controle que impede a marca de virar "nunca conte nada": o 400 da Meta
+    é resposta dela, e tem de contar contra a conta."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"message": "nope", "code": 131047}})
+
+    with pytest.raises(RuntimeError) as failure:
+        await channel_answering(handler).send(None, a_send())
+
+    assert before_the_provider(failure.value) is False

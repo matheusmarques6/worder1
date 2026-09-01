@@ -269,6 +269,28 @@ class TestTheResultFeedsTheBreaker:
         assert outbox_row(admin, outbox_id)[0] == "sent"
         assert guard_row(admin, pnid) == (0, 0, False)
 
+    async def test_a_failure_that_never_left_the_house_does_not_count(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants, fake_channel
+    ) -> None:
+        """Ruling U(a): o canal faz trabalho local antes da rede — resolver a
+        credencial, montar o payload — e os dois falham por bug NOSSO.
+
+        Cinco payloads malformados do mesmo número abririam o circuito de uma
+        conta perfeitamente saudável, e a loja ficaria 30 s muda por nossa
+        causa. Aqui são cinco, o limiar exato, e o breaker não pode se mexer.
+        """
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        open_window(admin, thread.conversation_id)
+        lines = [create_outbox_item(admin, org, thread) for _ in range(FAILURE_THRESHOLD)]
+        for outbox_id in lines:
+            direct(admin, outbox_id, "fail_before_the_provider")
+
+        async with as_sender(dsn) as conn:
+            await sender_pass(conn, fake_channel, config=NO_DELAYS, randomness=SystemRandomness())
+
+        assert guard_row(admin, account_number(admin, thread)) is None
+
     async def test_a_failed_send_counts_against_the_number(
         self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants, fake_channel
     ) -> None:
