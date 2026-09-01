@@ -96,6 +96,14 @@ describe('runtimeConversationDetail', () => {
     expect(seen.ai_runtime_activity_tools).toContainEqual([
       'eq', ['conversation_id', CONV],
     ]);
+    // A view não avalia RLS (sem security_invoker) — o filtro de org na query
+    // é a fronteira, mesmo já existindo o guard da conversa acima.
+    expect(seen.ai_runtime_activity_calls).toContainEqual([
+      'eq', ['organization_id', ORG],
+    ]);
+    expect(seen.ai_runtime_activity_tools).toContainEqual([
+      'eq', ['organization_id', ORG],
+    ]);
   });
 
   it('conversa de outra org é null — nunca vaza pelo id', async () => {

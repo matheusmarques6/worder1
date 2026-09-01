@@ -63,15 +63,25 @@ export async function runtimeConversationDetail(
   const conversation = (rows ?? [])[0] as RuntimeActivityRow | undefined;
   if (!conversation) return null;
 
+  // As views ai_runtime_activity_calls/_tools não têm security_invoker (nenhuma
+  // view desta trilha tem), então a RLS das tabelas internal.* não é avaliada
+  // aqui — o .eq('organization_id', ...) abaixo É a fronteira de tenancy, não
+  // um reforço da RLS. Hoje o guard `if (!conversation) return null` acima já
+  // barra o vazamento, mas essa proteção é por ordem de execução: some se
+  // alguém reordenar o fluxo ou extrair este trecho. Por isso o filtro vai
+  // explícito aqui também, mesmo parecendo redundante. Não remova achando que
+  // "já está protegido" — releia este comentário antes de simplificar.
   const [calls, tools] = await Promise.all([
     supabase
       .from('ai_runtime_activity_calls')
       .select('*')
+      .eq('organization_id', organizationId)
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true }),
     supabase
       .from('ai_runtime_activity_tools')
       .select('*')
+      .eq('organization_id', organizationId)
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true }),
   ]);
