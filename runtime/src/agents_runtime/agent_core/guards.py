@@ -55,8 +55,13 @@ class GuardState:
     existe no espelho chega com tudo zerado/None — o que é a verdade, não um
     default otimista: ninguém transferiu, o bot não respondeu, nenhum humano
     falou.
+
+    `ai_enabled` é o único campo cujo "nada aconteceu" é True: ninguém desligar
+    o bot significa bot ligado (a coluna legada é `not null default true`, e o
+    TS testa `=== false`). Inverter isso calaria toda conversa sem espelho.
     """
 
+    ai_enabled: bool = True
     ai_agent_id: UUID | None = None
     ai_transferred_at: datetime | None = None
     bot_message_count: int = 0
@@ -313,6 +318,15 @@ def evaluate_inbound_guards(
     respostas é explicada pela transferência, nos dois motores.
     """
     behavior = behavior_of(settings)
+
+    # ai_enabled = false — cloud-runner.ts:388-390 (`skipped: 'ai_disabled'`).
+    # PRIMEIRO, como no TS: é o freio da própria transferência (e do botão do
+    # inbox), e o motivo que explica o silêncio antes de qualquer knob. O
+    # webhook já freia no ingest, mas o runtime tem DOIS produtores de fala —
+    # com um deles saindo por fora do ingest, o freio precisa morar onde a
+    # decisão mora.
+    if state.ai_enabled is False:
+        return Silence("ai_disabled", "IA desligada nesta conversa")
 
     # activate_on: 'manual' — cloud-runner.ts:486-496. O mecanismo de atribuição
     # é o botão do inbox, que grava `ai_agent_id` na conversa; um agente manual

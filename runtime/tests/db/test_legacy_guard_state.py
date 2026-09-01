@@ -116,6 +116,24 @@ class TestTheBridgeToTheMirror:
         assert state.ai_agent_id == agent_id
         assert state.ai_transferred_at is not None
 
+    async def test_the_bot_turned_off_travels_to_the_guards(
+        self, dsn: str, admin: psycopg.Connection, wired
+    ) -> None:
+        """`ai_enabled = false` é o freio da transferência e do botão do inbox;
+        se ele não chegar até aqui, o toque de missão desfaz a transferência."""
+        organization_id, thread, mirror = wired
+        with admin.cursor() as cur:
+            cur.execute(
+                "update public.whatsapp_cloud_conversations set ai_enabled = false"
+                " where id = %s",
+                (mirror.conversation_id,),
+            )
+        admin.commit()
+
+        state = await read(dsn, organization_id, thread.conversation_id)
+
+        assert state.ai_enabled is False
+
     async def test_it_counts_only_the_bot_messages_of_this_conversation(
         self, dsn: str, admin: psycopg.Connection, wired
     ) -> None:
@@ -153,6 +171,7 @@ class TestTheBridgeToTheMirror:
 
         state = await read(dsn, organization_id, thread.conversation_id)
 
+        assert state.ai_enabled is True
         assert state.ai_agent_id is None
         assert state.ai_transferred_at is None
         assert state.bot_message_count == 0

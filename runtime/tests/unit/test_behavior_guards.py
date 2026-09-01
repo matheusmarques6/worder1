@@ -33,6 +33,7 @@ NOW = datetime(2026, 8, 31, 15, 0, tzinfo=UTC)
 
 def state(**overrides) -> GuardState:
     base = {
+        "ai_enabled": True,
         "ai_agent_id": AGENT,
         "ai_transferred_at": None,
         "bot_message_count": 0,
@@ -40,6 +41,40 @@ def state(**overrides) -> GuardState:
         "has_human_reply": False,
     }
     return GuardState(**{**base, **overrides})
+
+
+class TestTheBotIsTurnedOff:
+    """`ai_enabled = false` — cloud-runner.ts:388-390 (`skipped: 'ai_disabled'`).
+
+    O freio da própria transferência: quem foi passado para um humano, ou teve
+    o bot desligado no botão do inbox, não volta a ouvir a IA no turno seguinte.
+    """
+
+    def test_a_conversation_with_the_bot_turned_off_is_silent(self) -> None:
+        silence = evaluate_inbound_guards(
+            {}, state(ai_enabled=False), agent_id=AGENT, now=NOW
+        )
+
+        assert silence is not None
+        assert silence.reason == "ai_disabled"
+
+    def test_it_comes_before_every_other_guard(self) -> None:
+        """Ordem do TS: o bot desligado explica o silêncio antes de qualquer
+        knob de comportamento — é o motivo que o lojista precisa ler."""
+        silence = evaluate_inbound_guards(
+            {"behavior": {"activate_on": "manual"}},
+            state(ai_enabled=False, ai_agent_id=uuid4(), has_human_reply=True),
+            agent_id=AGENT,
+            now=NOW,
+        )
+
+        assert silence is not None
+        assert silence.reason == "ai_disabled"
+
+    def test_a_conversation_without_a_mirror_row_is_not_turned_off(self) -> None:
+        """Sem linha no espelho ninguém desligou nada: o default é responder.
+        Pessimismo inventado aqui calaria toda org que ainda não migrou."""
+        assert evaluate_inbound_guards({}, GuardState(), agent_id=None, now=NOW) is None
 
 
 class TestActivateOnManual:

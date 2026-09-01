@@ -303,7 +303,7 @@ async def load_legacy_guard_state(
     um grant de tabela ao worker_role abriria o inbox de toda org.
 
     Conversa ausente do espelho devolve o estado zerado — ninguém transferiu,
-    o bot não respondeu, nenhum humano falou.
+    o bot não respondeu, nenhum humano falou, e o bot segue ligado.
     """
     cursor = await conn.execute(
         "select * from internal.legacy_conversation_guard_state(%s, %s)",
@@ -313,11 +313,12 @@ async def load_legacy_guard_state(
     if row is None:
         return GuardState()
     return GuardState(
-        ai_agent_id=row[0],
-        ai_transferred_at=row[1],
-        bot_message_count=row[2] or 0,
-        last_bot_message_at=row[3],
-        has_human_reply=bool(row[4]),
+        ai_enabled=bool(row[0]),
+        ai_agent_id=row[1],
+        ai_transferred_at=row[2],
+        bot_message_count=row[3] or 0,
+        last_bot_message_at=row[4],
+        has_human_reply=bool(row[5]),
     )
 
 
