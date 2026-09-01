@@ -39,6 +39,7 @@ import psycopg
 
 import agents_runtime
 from agents_runtime.agent_core import openrouter
+from agents_runtime.agent_core.guards import evaluate_inbound_guards
 from agents_runtime.agent_core.llm import (
     ChatRequest,
     LlmPort,
@@ -330,6 +331,14 @@ def build_responder(
                     organization_id=job.organization_id,
                     contact_id=state.contact_id,
                 )
+                # Item 30: o estado que os guards de comportamento leem. Vem do
+                # espelho legado do inbox porque a canônica não tem o dado —
+                # ver `load_legacy_guard_state`.
+                guard_state = await agent_repo.load_legacy_guard_state(
+                    conn,
+                    organization_id=job.organization_id,
+                    conversation_id=job.conversation_id,
+                )
                 custom_rows = await custom_tools_repo.load_enabled_custom_tools(conn)
                 key_rows = (
                     await keys_repo.load_org_provider_keys(
@@ -367,6 +376,21 @@ def build_responder(
                     )
                 except Exception:  # adereço nunca vira causa de morte do turno
                     logger.debug("run-step emit failed", exc_info=True)
+
+            # --- guards de comportamento do lojista (item 30). Rodam ANTES de
+            # qualquer trabalho caro — antes da cascata de chave BYO, antes do
+            # LLM — porque calar cedo não custa nada, e é a ordem do TS.
+            # O silêncio é sempre explicável: o motivo vai para o passo
+            # `skipped`, o mesmo chip que o inbox já lê.
+            silence = evaluate_inbound_guards(
+                version.settings,
+                guard_state,
+                agent_id=version.agent_id,
+                now=clock.now(),
+            )
+            if silence is not None:
+                await note_step("skipped", silence.detail)
+                return None
 
             # --- arbitragem: uma missão vence o turno; sem nenhuma, alerta e
             # silêncio deliberado (a conversa avança; §3.4 inv. 8).

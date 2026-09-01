@@ -20,6 +20,7 @@ from uuid import UUID
 
 import psycopg
 
+from agents_runtime.agent_core.guards import GuardState
 from agents_runtime.agent_core.prompt import AgentConfig, TenantPolicy
 from agents_runtime.agent_core.think_gate import PendingMessage
 
@@ -286,3 +287,55 @@ async def load_recent_transcript(
     return tuple(
         PendingMessage(author=row[0], text=row[1] or "") for row in await cursor.fetchall()
     )
+
+
+async def load_legacy_guard_state(
+    conn: psycopg.AsyncConnection, *, organization_id: UUID, conversation_id: UUID
+) -> GuardState:
+    """O estado que os guards de comportamento leem (auditoria item 30).
+
+    FORK: vem do espelho legado do inbox, não da canônica, porque a canônica
+    não tem o dado. `public.conversations` não tem `ai_agent_id` nem
+    `ai_transferred_at`, e `public.messages` nunca recebe outbound humano
+    (ausência 29 do FORK.md) — ler de lá faria `stop_on_human_reply` nunca
+    disparar, que é pior que não ter o guard. A função é SECURITY DEFINER e
+    filtra por `organization_id`: as tabelas legadas têm RLS desligada, então
+    um grant de tabela ao worker_role abriria o inbox de toda org.
+
+    Conversa ausente do espelho devolve o estado zerado — ninguém transferiu,
+    o bot não respondeu, nenhum humano falou.
+    """
+    cursor = await conn.execute(
+        "select * from internal.legacy_conversation_guard_state(%s, %s)",
+        (organization_id, conversation_id),
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        return GuardState()
+    return GuardState(
+        ai_agent_id=row[0],
+        ai_transferred_at=row[1],
+        bot_message_count=row[2] or 0,
+        last_bot_message_at=row[3],
+        has_human_reply=bool(row[4]),
+    )
+
+
+async def mark_ai_handoff(
+    conn: psycopg.AsyncConnection,
+    *,
+    organization_id: UUID,
+    conversation_id: UUID,
+    reason: str,
+) -> bool:
+    """Transfere a conversa para humano no espelho legado (item 30).
+
+    É o mesmo freio que o webhook já respeita para org migrada: com
+    `ai_enabled = false` o ingest chama `cancel_pending_ai_response`, então a
+    transferência vale para os turnos SEGUINTES e não só para este.
+    """
+    cursor = await conn.execute(
+        "select internal.mark_ai_handoff(%s, %s, %s)",
+        (organization_id, conversation_id, reason),
+    )
+    return bool((await cursor.fetchone())[0])
