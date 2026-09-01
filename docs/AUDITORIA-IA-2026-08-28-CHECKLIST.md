@@ -410,9 +410,25 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   não é avaliada e o `.eq()` na rota **é** a fronteira. `src/lib/ai/activity.ts:68-71` e `:73-76` filtram
   só por `conversation_id`. Hoje protegido por um guard anterior; o filtro é de graça.
 
-- [ ] **25. `isInternalAuthorized` fail-open** `[relatado]`
+- [x] **25. `isInternalAuthorized` fail-open** `[relatado]` · commit `704ec32e`
   `src/app/api/ai/process/document/route.ts:21-25` devolve `NODE_ENV !== 'production'` quando nem
   `INTERNAL_API_SECRET` nem `CRON_SECRET` estão setados. Rota service_role que confia no body.
+
+  **Entregue.** Sem segredo configurado, nega — em qualquer ambiente, inclusive com
+  `NODE_ENV` indefinido ou `test`. `NODE_ENV` não é credencial. A função virou UMA
+  implementação em `src/lib/internal-auth.ts`, consumida pelas duas rotas que tinham
+  cópias idênticas (`ai/process/document` e `whatsapp/back-in-stock`, três call sites);
+  duas cópias de uma decisão de segurança divergem no primeiro conserto que só uma
+  recebe. Comparação por `verifyBearerToken`, que checa comprimento antes do
+  `timingSafeEqual` e não lança — 401 continua sendo 401, não 500.
+
+  **Decisão registrada:** o motivo da recusa fica no log do servidor, não na resposta.
+  Explicar ao chamador não autenticado que "o segredo não está configurado" ajuda quem
+  está sondando. Custo: quem roda `next dev` sem a env vê 401 e precisa olhar o
+  terminal — a mensagem lá nomeia as duas variáveis e aponta o `.env.example`.
+
+  **Achado maior que o item, registrado abaixo:** o mesmo fail-open está espalhado por
+  ~40 rotas de cron e workers, cada uma com sua cópia inline.
 
 - [ ] **26. `verifyShopifyWebhook` retorna `true` sem secret** `[relatado]`
   `src/app/api/integrations/shopify/webhook/route.ts:21`. As chamadoras fecham em produção, mas a função
@@ -699,6 +715,19 @@ mais o índice HNSW, instantâneo em tabela vazia (é o item 8, commit separado)
 ---
 
 ## Descobertos durante a execução (não renumerados — a fila de 63 é estável)
+
+- [ ] **O fail-open por `NODE_ENV` está espalhado por ~40 rotas de cron e workers.**
+  O item 25 fechou as duas cópias que o achado nomeava. O review foi olhar em volta:
+  `src/lib/cron-auth.ts:25` tem a mesma linha (`nodeEnv !== 'production'` quando falta
+  `CRON_SECRET`), mas só 1 arquivo o importa de fato; os outros ~44 arquivos em
+  `src/app/api/cron` e `/workers` **reimplementam a checagem inline**, vários com o
+  mesmo fail-open (`cron/auto-process/route.ts:32`,
+  `cron/check-back-in-stock/route.ts:21`), outros com variantes
+  (`NODE_ENV === 'development'`). O `x-vercel-cron` cobre o caminho legítimo em
+  produção, então a janela é a mesma do item 25 — ambiente mal configurado —, mas a
+  superfície é vinte vezes maior. É a versão grande do defeito do item 13: a mesma
+  decisão de segurança copiada até divergir. Precisa de item próprio: primeiro
+  inventariar as variantes, depois uma implementação só.
 
 - [ ] **Nada limpa o `ai_pending` no flip para runtime.** O item 09 limpa
   `pending_response_at` quando a org volta para legacy; o caminho espelho não tem dono.
