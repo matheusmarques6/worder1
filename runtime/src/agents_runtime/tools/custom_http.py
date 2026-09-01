@@ -10,6 +10,15 @@ ler. O endpoint vem da linha do banco, então nenhum host existe aqui dentro
 Validação ANTES da rede: argumento desconhecido, obrigatório ausente ou tipo
 errado viram `success=False` legível — o modelo precisa do erro para dizer
 "não consegui consultar", e um provedor caído jamais vira exceção no turno.
+
+SSRF (item 19 do audit): o CHECK do schema (`endpoint like 'https://%'`) pega
+o erro de digitação no cadastro, mas não impede o endpoint de apontar pra
+rede interna em runtime. `__call__` valida o endpoint via
+`ssrf_guard.assert_safe_url` — que resolve o host e confere o(s) IP(s) —
+ANTES de abrir o `httpx.AsyncClient`. `follow_redirects=False` fica explícito
+no client (era o padrão do httpx, mas explícito documenta a intenção): sem
+isso, um 3xx do endpoint seria perseguido automaticamente sem revalidar o
+destino, reabrindo o mesmo buraco que o guard fecha.
 """
 
 import json
@@ -22,6 +31,7 @@ import httpx
 from agents_runtime.agent_core.llm import ToolSpec
 from agents_runtime.agent_core.providers import decode_stored_key
 from agents_runtime.tools.base import ToolResult
+from agents_runtime.tools.ssrf_guard import Resolver, SsrfBlocked, assert_safe_url
 
 #: O corpo devolvido ao modelo é truncado aqui: resposta gigante vira custo
 #: de prompt e não vira informação.
@@ -86,11 +96,13 @@ class CustomHttpTool:
         *,
         base_secret: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        resolver: Resolver | None = None,
     ) -> None:
         self.name = row.name
         self._row = row
         self._base_secret = base_secret
         self._transport = transport
+        self._resolver = resolver
 
     def _validate(self, arguments: Mapping[str, Any]) -> str | None:
         known = {str(p["name"]) for p in self._row.params}
@@ -120,6 +132,11 @@ class CustomHttpTool:
         if problem is not None:
             return ToolResult(tool=self.name, success=False, error=problem)
 
+        try:
+            safe_url = await assert_safe_url(self._row.endpoint, resolver=self._resolver)
+        except SsrfBlocked as blocked:
+            return ToolResult(tool=self.name, success=False, error=str(blocked))
+
         headers: dict[str, str] = {}
         if self._row.auth_header_value:
             headers[self._row.auth_header_name] = decode_stored_key(
@@ -129,15 +146,15 @@ class CustomHttpTool:
         timeout = httpx.Timeout(self._row.timeout_ms / 1000)
         try:
             async with httpx.AsyncClient(
-                timeout=timeout, transport=self._transport
+                timeout=timeout, transport=self._transport, follow_redirects=False
             ) as client:
                 if self._row.method == "GET":
                     response = await client.get(
-                        self._row.endpoint, params=dict(arguments), headers=headers
+                        str(safe_url), params=dict(arguments), headers=headers
                     )
                 else:
                     response = await client.post(
-                        self._row.endpoint, json=dict(arguments), headers=headers
+                        str(safe_url), json=dict(arguments), headers=headers
                     )
         except httpx.HTTPError as error:
             return ToolResult(
