@@ -3,7 +3,7 @@ import { Receiver } from '@upstash/qstash';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { decryptSecret } from '@/lib/webhooks/secret-store';
 import { buildSignatureHeader } from '@/lib/webhooks/signature';
-import { safeFetch } from '@/lib/webhooks/safe-fetch';
+import { safeFetch } from '@/lib/ai/ssrf-guard';
 import { classifyResponse } from '@/lib/webhooks/response-classifier';
 import { byteaToBuffer } from '@/lib/webhooks/bytea';
 
@@ -123,13 +123,25 @@ export async function POST(req: NextRequest) {
     'User-Agent': 'Worder-Webhooks/1.0',
   };
 
+  // O guard aqui é o mesmo dos itens 18/19 do audit (ssrf-guard.ts): valida
+  // esquema e IP/DNS do host, e revalida a cada salto de redirect — a URL do
+  // hook é digitada pelo lojista, então tem a mesma classe de risco de SSRF
+  // que fonte de conhecimento/mídia de WhatsApp. O safeFetch específico de
+  // webhooks (safe-fetch.ts) tinha essa checagem só no `lookup` custom do
+  // undici, que o Node nunca chama pra um IP literal — um lojista registrando
+  // `https://10.0.0.5/x` batia direto na rede interna e a resposta virava
+  // leitura exposta em webhook_deliveries.response_body.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
-    const result = await safeFetch(claimed.url, {
+    const res = await safeFetch(claimed.url, {
       method: 'POST',
       headers,
       body: outboundBody,
-      timeoutMs: 10_000,
+      signal: controller.signal,
     });
+    const text = await res.text();
+    const result = { status: res.status, body: text.slice(0, 2048) };
 
     const outcome = classifyResponse(result.status, claimed.attempt_count, claimed.max_attempts);
     await updateAfterAttempt(deliveryId, {
@@ -149,5 +161,7 @@ export async function POST(req: NextRequest) {
       next_retry_at: outcome === 'retrying' ? nextRetryDate(claimed.attempt_count) : null,
     });
     return NextResponse.json({ ok: false, error: err?.message }, { status: 200 });
+  } finally {
+    clearTimeout(timeout);
   }
 }
