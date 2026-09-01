@@ -399,7 +399,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   e foram junto. O estado de falha virou função pura testada — antes era verificado
   à mão, agora o build quebra se alguém inverter.
 
-- [ ] **22. Ordem do delete em `/api/ai/knowledge`** `[relatado]`
+- [x] **22. Ordem do delete em `/api/ai/knowledge`** `[relatado]` · commit `4f0110c1`
   `:147-156` apaga chunks e documentos por `knowledge_base_id` sem filtro de org; só `:159-163` escopa.
 
 - [ ] **23. Fallback sem escopo em `/api/ai/respond`** `[relatado]`
