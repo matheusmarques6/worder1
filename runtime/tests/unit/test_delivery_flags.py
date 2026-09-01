@@ -13,6 +13,7 @@ from agents_runtime.agent_core.responder import delivery_flags
 from agents_runtime.clock import SystemClock
 from agents_runtime.queueing.sender import send_humanized
 from agents_runtime.repository.outbox import ClaimedSend
+from tests.support.fake_conn import RecordingConnection
 
 
 class FakeChannel:
@@ -60,7 +61,7 @@ class TestSendHonorsTheSplitFlag:
 
         delivered = await send_humanized(
             channel,
-            None,
+            RecordingConnection(),
             a_send({"text": TWO_PARAGRAPHS}),
             humanize_delays=False,
             clock=SystemClock(),
@@ -76,7 +77,7 @@ class TestSendHonorsTheSplitFlag:
 
         delivered = await send_humanized(
             channel,
-            None,
+            RecordingConnection(),
             a_send({"text": TWO_PARAGRAPHS}),
             humanize_delays=False,
             clock=SystemClock(),

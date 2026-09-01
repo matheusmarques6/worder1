@@ -356,6 +356,41 @@ async def mark_outbox_failed(
     return bool((await cursor.fetchone())[0])
 
 
+@dataclass(frozen=True, slots=True)
+class SendGuardHold:
+    """O número está segurado, e por quanto tempo (item 32)."""
+
+    reason: str
+    retry_after: timedelta
+
+
+async def send_guard_check(
+    conn: psycopg.AsyncConnection, phone_number_id: str
+) -> SendGuardHold | None:
+    """`None` = pode enviar. Zero linhas cobre os dois casos em que pode:
+    número que nunca falhou e janela já vencida."""
+    cursor = await conn.execute(
+        "select reason, retry_after from internal.send_guard_check(%s)",
+        (phone_number_id,),
+    )
+    row = await cursor.fetchone()
+    return None if row is None else SendGuardHold(reason=row[0], retry_after=row[1])
+
+
+async def send_guard_report(
+    conn: psycopg.AsyncConnection,
+    phone_number_id: str,
+    *,
+    success: bool,
+    rate_limited: bool,
+) -> None:
+    """Uma chamada por chamada ao Graph, nunca por linha de outbox (ruling N)."""
+    await conn.execute(
+        "select internal.send_guard_report(%s, %s, %s)",
+        (phone_number_id, success, rate_limited),
+    )
+
+
 async def sweep_outbox_unknown(conn: psycopg.AsyncConnection) -> int:
     cursor = await conn.execute("select internal.sweep_outbox_unknown()")
     return int((await cursor.fetchone())[0])

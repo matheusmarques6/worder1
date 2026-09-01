@@ -38,12 +38,52 @@ from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
 from agents_runtime.obs.telemetry import annotate, span
 from agents_runtime.queueing.backoff import delay_for
-from agents_runtime.queueing.failures import Failure, classify
+from agents_runtime.queueing.failures import Failure, classify, is_rate_limited
 from agents_runtime.randomness import Randomness
 from agents_runtime.repository import engine
 from agents_runtime.repository.outbox import ClaimedSend
 
 logger = logging.getLogger(__name__)
+
+
+async def _report_to_guard(
+    conn: psycopg.AsyncConnection, send: ClaimedSend, error: BaseException | None
+) -> None:
+    """O desfecho de UMA chamada ao Graph volta para o breaker do número.
+
+    Fail-open como o resto do guard (ruling D): um relato que não grava custa
+    reação mais lenta; uma exceção aqui custaria o envio que já saiu.
+    """
+    if send.channel_type != "whatsapp" or not send.channel_external_id:
+        return
+    try:
+        await engine.send_guard_report(
+            conn,
+            send.channel_external_id,
+            success=error is None,
+            rate_limited=error is not None and is_rate_limited(error),
+        )
+    except psycopg.Error:
+        logger.warning("send-guard: desfecho não registrado", exc_info=True)
+
+
+async def _send_reporting(
+    channel: ChannelPort, conn: psycopg.AsyncConnection, send: ClaimedSend
+) -> str:
+    """Uma chamada ao Graph, um relato (ruling N).
+
+    Por CHAMADA e não por linha porque é a chamada que a Meta conta e é ela que
+    falha: com três bolhas, a 2ª recusada deixa a linha `sent` — o que saiu
+    vale — e ainda assim a conta acabou de recusar, coisa que um relato por
+    linha não veria.
+    """
+    try:
+        wamid = await channel.send(conn, send)
+    except BaseException as error:
+        await _report_to_guard(conn, send, error)
+        raise
+    await _report_to_guard(conn, send, None)
+    return wamid
 
 
 async def send_humanized(
@@ -72,7 +112,7 @@ async def send_humanized(
         bubbles = split_into_bubbles(text) if isinstance(text, str) else []
     if len(bubbles) <= 1:
         # Template, payload não-texto ou bolha única: um envio, como sempre.
-        wamid = await channel.send(conn, send)
+        wamid = await _send_reporting(channel, conn, send)
         body = bubbles[0] if bubbles else None
         return [(wamid, body)] if body is not None else [(wamid, "")]
 
@@ -83,7 +123,7 @@ async def send_humanized(
         if delay_ms:
             await clock.sleep(delay_ms / 1000)
         try:
-            wamid = await channel.send(conn, replace(send, payload={"text": bubble}))
+            wamid = await _send_reporting(channel, conn, replace(send, payload={"text": bubble}))
         except Exception:
             if index == 0:
                 raise
@@ -168,6 +208,47 @@ async def sender_pass(
                         }
                     },
                 )
+
+        # Send-guard (item 32), DEPOIS do preflight e ANTES de qualquer envio.
+        # Depois porque as supressões do preflight são terminais e devem morrer
+        # em vez de voltar para a fila; e porque o rebaixamento para template já
+        # aconteceu — um template é um envio como outro qualquer, e segurá-lo
+        # também é o ponto.
+        #
+        # UMA checagem por LINHA (ruling N), não por bolha: checar entre bolhas
+        # abriria o caso de bloquear no meio de uma mensagem já parcialmente
+        # entregue, e aí ou repetimos bolha ou engolimos o resto. Parar na
+        # fronteira da linha para a tempestade do mesmo jeito.
+        if send.channel_type == "whatsapp" and send.channel_external_id:
+            hold = None
+            try:
+                hold = await engine.send_guard_check(conn, send.channel_external_id)
+            except psycopg.Error:
+                # Fail-open (ruling D, `send-guard.ts:21`): indisponibilidade da
+                # infra do guard PERMITE o envio e loga. O breaker aberto é
+                # decisão tomada; isto aqui é ausência de resposta, e ausência
+                # nunca pode calar a loja.
+                logger.warning("send-guard indisponível; envio liberado", exc_info=True)
+            if hold is not None:
+                held_for = round(hold.retry_after.total_seconds())
+                await engine.mark_outbox_failed(
+                    conn,
+                    send.outbox_id,
+                    token,
+                    # Transitório: a linha VOLTA para a fila, e volta quando o
+                    # número voltar — o atraso é o da janela do guard, não o da
+                    # escada de backoff, que é sobre outra coisa.
+                    transient=True,
+                    # Requisito 2: quem opera precisa distinguir "a Meta
+                    # recusou" de "nós seguramos".
+                    error=(
+                        f"send-guard: {hold.reason} — nós seguramos o envio por"
+                        f" {held_for}s (não foi recusa da Meta)"
+                    ),
+                    retry_in=hold.retry_after,
+                )
+                annotate(outcome=f"held:{hold.reason}")
+                return
 
         # Chip de progresso no chat (pedido 17/08) — adereço de UI, nunca
         # motivo de falha do envio.

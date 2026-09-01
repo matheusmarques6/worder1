@@ -59,6 +59,23 @@ class FakeChannel:
             raise ConnectionError("HTTP 503 fake channel told to fail")
         if behavior == "fail_permanent":
             raise ValueError("HTTP 400 fake channel told to reject")
+        if behavior == "fail_rate_limited":
+            # O corpo que a Meta devolve num excesso, com o `code` que o
+            # `is_rate_limited` lê (item 32). Um 503 NÃO serve aqui: ele é
+            # falha e não é excesso, e a diferença é o que decide se o número
+            # entra em cooldown.
+            raise RuntimeError('HTTP 400 {"error":{"message":"limite","code":131048}}')
+        if behavior == "fail_after_first":
+            # Uma bolha entregue e a seguinte falhando — o caso que separa
+            # "relato por CHAMADA ao Graph" de "relato por linha da outbox"
+            # (ruling N). A linha ainda conta como enviada (o que saiu vale),
+            # mas o Graph recusou uma chamada e o breaker precisa saber.
+            cursor = await conn.execute(
+                "select count(*) from testing.fake_channel_sends where idempotency_key = %s",
+                (send.idempotency_key,),
+            )
+            if (await cursor.fetchone())[0] >= 1:
+                raise ConnectionError("HTTP 503 fake channel told to fail after the first")
 
         # The recording happens BEFORE the return, mirroring the real world:
         # the provider has the message the moment the API accepts it, whatever

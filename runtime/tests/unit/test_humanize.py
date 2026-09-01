@@ -26,6 +26,7 @@ from agents_runtime.channels.humanize import (
 from agents_runtime.clock import SystemClock
 from agents_runtime.queueing.sender import send_humanized
 from agents_runtime.repository.outbox import ClaimedSend
+from tests.support.fake_conn import RecordingConnection
 
 VECTORS = json.loads(
     (Path(__file__).parent / "fixtures" / "bubble_vectors.json").read_text()
@@ -96,7 +97,11 @@ class TestSendHumanized:
     async def test_each_bubble_goes_out_in_order_with_the_same_key(self) -> None:
         channel = _StubChannel()
         delivered = await send_humanized(
-            channel, None, _send(THREE_PARAGRAPHS), humanize_delays=False, clock=SystemClock()
+            channel,
+            RecordingConnection(),
+            _send(THREE_PARAGRAPHS),
+            humanize_delays=False,
+            clock=SystemClock(),
         )
 
         assert [p["text"] for p in channel.sent] == [
@@ -111,7 +116,7 @@ class TestSendHumanized:
         send = dc_replace(_send("x"), payload={"template": {"name": "t", "language": "pt_BR"}})
 
         delivered = await send_humanized(
-            channel, None, send, humanize_delays=False, clock=SystemClock()
+            channel, RecordingConnection(), send, humanize_delays=False, clock=SystemClock()
         )
         assert len(channel.sent) == 1
         assert channel.sent[0] == {"template": {"name": "t", "language": "pt_BR"}}
@@ -121,14 +126,55 @@ class TestSendHumanized:
         channel = _StubChannel(fail_at=0)
         with pytest.raises(ConnectionError):
             await send_humanized(
-                channel, None, _send(THREE_PARAGRAPHS), humanize_delays=False, clock=SystemClock()
+                channel,
+                RecordingConnection(),
+                _send(THREE_PARAGRAPHS),
+                humanize_delays=False,
+                clock=SystemClock(),
             )
         assert channel.sent == []
+
+    async def test_every_call_to_the_graph_is_reported_to_the_guard(self) -> None:
+        """Ruling N do item 32: o alimento do breaker é por CHAMADA.
+
+        Três bolhas são três chamadas ao Graph, e a Meta conta três — não uma
+        linha de outbox. Sem isto o breaker enxergaria um terço do que a conta
+        realmente fez.
+        """
+        conn = RecordingConnection()
+        await send_humanized(
+            _StubChannel(),
+            conn,
+            _send(THREE_PARAGRAPHS),
+            humanize_delays=False,
+            clock=SystemClock(),
+        )
+
+        assert conn.guard_reports() == [("wa-1", True, False)] * 3
+
+    async def test_a_middle_failure_reports_the_refusal_too(self) -> None:
+        """A metade que separa "por chamada" de "por linha": a 1ª bolha saiu e
+        a 2ª foi recusada. A LINHA vale como enviada, mas a conta acabou de
+        recusar — e é isso que o breaker precisa saber."""
+        conn = RecordingConnection()
+        await send_humanized(
+            _StubChannel(fail_at=1),
+            conn,
+            _send(THREE_PARAGRAPHS),
+            humanize_delays=False,
+            clock=SystemClock(),
+        )
+
+        assert conn.guard_reports() == [("wa-1", True, False), ("wa-1", False, False)]
 
     async def test_a_middle_failure_keeps_what_left_and_never_retries(self) -> None:
         channel = _StubChannel(fail_at=1)
         delivered = await send_humanized(
-            channel, None, _send(THREE_PARAGRAPHS), humanize_delays=False, clock=SystemClock()
+            channel,
+            RecordingConnection(),
+            _send(THREE_PARAGRAPHS),
+            humanize_delays=False,
+            clock=SystemClock(),
         )
 
         assert [p["text"] for p in channel.sent] == ["Oi Joana!"]
