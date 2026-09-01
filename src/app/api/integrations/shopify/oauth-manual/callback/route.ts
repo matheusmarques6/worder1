@@ -37,6 +37,22 @@ function redirectTo(appUrl: string, path: string) {
   return NextResponse.redirect(`${appUrl}${path}`);
 }
 
+// Redirect de conflito enriquecido: além do código, leva id/nome/domínio
+// da loja ativa bloqueadora e (se houver) a linha que se tentava
+// reativar, pra UI mostrar QUEM bloqueia e oferecer mesclar/desativar
+// sem outro fetch. Params ausentes → a UI cai no texto genérico antigo.
+function conflictRedirect(
+  appUrl: string,
+  blocker: { id: string; shop_name?: string | null; shop_domain?: string | null },
+  targetStoreId: string | null
+) {
+  const qs = new URLSearchParams({ error: 'domain_conflict', conflict_store_id: blocker.id });
+  if (blocker.shop_name) qs.set('conflict_store_name', blocker.shop_name);
+  if (blocker.shop_domain) qs.set('conflict_store_domain', blocker.shop_domain);
+  if (targetStoreId) qs.set('target_store_id', targetStoreId);
+  return redirectTo(appUrl, `/integrations/shopify?${qs.toString()}`);
+}
+
 export async function GET(request: NextRequest) {
   const { getAppBaseUrl } = await import('@/lib/app-url');
   const APP_URL = getAppBaseUrl();
@@ -240,13 +256,13 @@ export async function GET(request: NextRequest) {
     if (shopifyShopId) {
       const { data: shopIdRows } = await supabase
         .from('shopify_stores')
-        .select('id, is_active')
+        .select('id, is_active, shop_name, shop_domain')
         .eq('organization_id', organizationId)
         .eq('shopify_shop_id', shopifyShopId)
         .neq('id', existingStore?.id || '00000000-0000-0000-0000-000000000000');
       for (const r of (shopIdRows || []) as any[]) {
         if (r.is_active) {
-          return redirectTo(APP_URL, '/integrations/shopify?error=domain_conflict');
+          return conflictRedirect(APP_URL, r, existingStore?.id ?? null);
         }
         await supabase.from('shopify_stores').update({ shopify_shop_id: null }).eq('id', r.id);
       }
@@ -257,13 +273,13 @@ export async function GET(request: NextRequest) {
     {
       const { data: blockers } = await supabase
         .from('shopify_stores')
-        .select('id, is_active')
+        .select('id, is_active, shop_name, shop_domain')
         .eq('organization_id', organizationId)
         .eq('shop_domain', canonicalDomain)
         .neq('id', existingStore?.id || '00000000-0000-0000-0000-000000000000');
       for (const b of (blockers || []) as any[]) {
         if (b.is_active) {
-          return redirectTo(APP_URL, '/integrations/shopify?error=domain_conflict');
+          return conflictRedirect(APP_URL, b, existingStore?.id ?? null);
         }
         await supabase
           .from('shopify_stores')
@@ -322,6 +338,18 @@ export async function GET(request: NextRequest) {
       }
       storeId = existingStore.id;
     } else {
+      // Alterar integração NUNCA cria loja nova. Sem linha alvo (nem
+      // storeId nem dedup), o INSERT só é permitido no fluxo explícito
+      // "Adicionar loja" (allow_create no state) ou em org sem lojas.
+      if (pending.allow_create !== true) {
+        const { count } = await supabase
+          .from('shopify_stores')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', organizationId);
+        if ((count || 0) > 0) {
+          return redirectTo(APP_URL, '/integrations/shopify?error=no_target_store');
+        }
+      }
       const { data, error } = await supabase.from('shopify_stores').insert(storeRecord).select('id').single();
       if (error || !data) {
         console.error('[ShopifyOAuthManual] store insert failed:', error);

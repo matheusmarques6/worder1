@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { domain, clientId, clientSecret, storeId: targetStoreId } = body || {};
+    const { domain, clientId, clientSecret, storeId: targetStoreId, allowCreate } = body || {};
 
     if (!domain || !clientId || !clientSecret) {
       return NextResponse.json(
@@ -342,7 +342,7 @@ export async function POST(request: NextRequest) {
     if (shopifyShopId) {
       const { data: shopIdRows } = await supabase
         .from('shopify_stores')
-        .select('id, is_active')
+        .select('id, is_active, shop_name, shop_domain')
         .eq('organization_id', organizationId)
         .eq('shopify_shop_id', shopifyShopId)
         .neq('id', existingStore?.id || '00000000-0000-0000-0000-000000000000');
@@ -352,6 +352,8 @@ export async function POST(request: NextRequest) {
             {
               error: 'Esta Shopify já está conectada em outra loja ativa desta organização. Desative ou troque a integração daquela loja antes.',
               collidingStoreId: r.id,
+              collidingStoreName: r.shop_name ?? null,
+              collidingStoreDomain: r.shop_domain ?? null,
             },
             { status: 409 }
           );
@@ -367,7 +369,7 @@ export async function POST(request: NextRequest) {
     {
       const { data: blockers } = await supabase
         .from('shopify_stores')
-        .select('id, shop_domain, is_active')
+        .select('id, shop_domain, shop_name, is_active')
         .eq('organization_id', organizationId)
         .eq('shop_domain', primaryDomain)
         .neq('id', existingStore?.id || '00000000-0000-0000-0000-000000000000');
@@ -376,6 +378,8 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({
             error: `Outra loja ATIVA já usa ${primaryDomain}. Mescle ou exclua antes de prosseguir.`,
             collidingStoreId: b.id,
+            collidingStoreName: b.shop_name ?? null,
+            collidingStoreDomain: b.shop_domain ?? null,
           }, { status: 409 });
         }
         // Inactive — free the domain by renaming to a placeholder so
@@ -385,6 +389,23 @@ export async function POST(request: NextRequest) {
           .from('shopify_stores')
           .update({ shop_domain: placeholder, updated_at: new Date().toISOString() })
           .eq('id', b.id);
+      }
+    }
+
+    // Alterar integração NUNCA cria loja nova. Sem linha alvo (nem
+    // storeId nem dedup), o INSERT só é permitido no fluxo explícito
+    // "Adicionar loja" (allowCreate) ou quando a org ainda não tem
+    // nenhuma loja (primeiro connect).
+    if (!existingStore && allowCreate !== true) {
+      const { count } = await supabase
+        .from('shopify_stores')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId);
+      if ((count || 0) > 0) {
+        return NextResponse.json({
+          error: 'Nenhuma loja alvo para esta integração. Selecione a loja cuja integração quer alterar, reative uma loja desativada, ou use "Adicionar loja" para criar uma nova.',
+          code: 'no_target_store',
+        }, { status: 409 });
       }
     }
 

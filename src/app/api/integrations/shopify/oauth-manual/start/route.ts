@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { domain, clientId, clientSecret, storeId } = body || {};
+    const { domain, clientId, clientSecret, storeId, allowCreate } = body || {};
 
     if (!domain || !clientId || !clientSecret) {
       return NextResponse.json(
@@ -81,6 +81,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Fail-fast: se outra loja ATIVA da org já usa esse domínio (primário
+    // ou alias), o OAuth terminaria em domain_conflict só no callback —
+    // melhor recusar aqui, antes de mandar o merchant autorizar na
+    // Shopify. O check por shopify_shop_id do callback continua como
+    // backstop (cobre domínio digitado ≠ canônico). Em schema antigo sem
+    // shop_domain_aliases o .or retorna erro → data null → no-op.
+    {
+      const { data: colliding } = await supabase
+        .from('shopify_stores')
+        .select('id, shop_name, shop_domain')
+        .eq('organization_id', organizationId)
+        .eq('is_active', true)
+        .or(`shop_domain.eq.${shopDomain},shop_domain_aliases.cs.{${shopDomain}}`)
+        .neq('id', storeId || '00000000-0000-0000-0000-000000000000')
+        .limit(1)
+        .maybeSingle();
+      if (colliding) {
+        return NextResponse.json({
+          error: `Outra loja ativa (${colliding.shop_name || colliding.shop_domain}) já usa ${shopDomain}. Mescle ou desative-a antes de conectar.`,
+          collidingStoreId: colliding.id,
+          collidingStoreName: colliding.shop_name ?? null,
+          collidingStoreDomain: colliding.shop_domain ?? null,
+        }, { status: 409 });
+      }
+    }
+
     // State de uso único. O callback é público (o clique final pode vir
     // do navegador do DONO da loja, sem sessão Worder) — todo o contexto
     // viaja por aqui, nunca pela sessão.
@@ -98,6 +124,9 @@ export async function POST(request: NextRequest) {
       client_id: String(clientId).trim(),
       client_secret: String(clientSecret).trim(),
       store_id: storeId || null,
+      // Alterar integração nunca cria loja: o callback só insere linha
+      // nova com esta flag (fluxo "Adicionar loja") ou em org sem lojas.
+      allow_create: allowCreate === true,
     };
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 

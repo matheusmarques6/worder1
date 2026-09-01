@@ -44,6 +44,27 @@ export default function ShopifyConnect() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
+  // Conflito de domínio/shop_id com loja ATIVA da org. Alimentado pela
+  // URL (?error=domain_conflict&conflict_store_id=...) e pelos 409 dos
+  // endpoints manual / swap-backend / oauth-manual/start. Um único shape
+  // pros 4 fluxos — o banner rico é o mesmo. targetStoreId = a linha que
+  // se tentava (re)ativar; sem ele a ação de merge não é oferecida.
+  const [conflict, setConflict] = useState<{
+    storeId: string
+    name: string | null
+    domain: string | null
+    targetStoreId: string | null
+  } | null>(null);
+  const [conflictAction, setConflictAction] = useState<'merge' | 'disconnect' | null>(null);
+
+  // Lojas ATIVAS da org — só visibilidade: o erro de conflito fala de
+  // uma "loja ativa" que a lista de desativadas nunca mostra.
+  const [activeStores, setActiveStores] = useState<Array<{
+    id: string
+    shop_name: string | null
+    shop_domain: string
+  }>>([]);
+
   const [mode, setMode] = useState<'official' | 'manual'>('manual');
   const [manualDomain, setManualDomain] = useState('');
   const [manualClientId, setManualClientId] = useState('');
@@ -118,7 +139,19 @@ export default function ShopifyConnect() {
       setSuccessMessage(`Loja conectada! ${webhooks ? `${webhooks} webhooks registrados.` : ''}`);
     }
     if (urlError) {
-      setError(getErrorMessage(urlError));
+      const conflictStoreId = searchParams.get('conflict_store_id');
+      if (urlError === 'domain_conflict' && conflictStoreId) {
+        // Callback identificou a bloqueadora — banner rico com ações.
+        setConflict({
+          storeId: conflictStoreId,
+          name: searchParams.get('conflict_store_name'),
+          domain: searchParams.get('conflict_store_domain'),
+          targetStoreId: searchParams.get('target_store_id'),
+        });
+      } else {
+        // Redirect antigo/sem params extras — texto genérico de sempre.
+        setError(getErrorMessage(urlError));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -155,6 +188,80 @@ export default function ShopifyConnect() {
     }
   }
 
+  // 409 de conflito (traz collidingStoreId) → banner rico com ações;
+  // qualquer outro erro → texto puro como antes.
+  function applyApiError(status: number, data: any, targetStoreId: string | null, fallback: string) {
+    if (status === 409 && data?.collidingStoreId) {
+      setConflict({
+        storeId: data.collidingStoreId,
+        name: data.collidingStoreName ?? null,
+        domain: data.collidingStoreDomain ?? null,
+        targetStoreId,
+      });
+      return;
+    }
+    setError(data?.error || fallback);
+  }
+
+  // Ação (a) do banner: trazer os dados da bloqueadora pra loja que se
+  // tentava (re)ativar e ARQUIVAR a bloqueadora. Direção fixa: a ficha
+  // com os fluxos/histórico sobrevive; a duplicada acidental some.
+  async function handleConflictMerge() {
+    if (!conflict?.targetStoreId || conflict.targetStoreId === conflict.storeId) return;
+    const blockerLabel = conflict.name || conflict.domain || 'a loja ativa';
+    if (!confirm(`Trazer os dados de "${blockerLabel}" para esta loja e arquivá-la?\n\nPedidos, clientes, eventos e automações da duplicada passam para a loja que você está reativando. A duplicada é arquivada (dados preservados no histórico). Depois, repita a reativação — o bloqueio some.`)) return;
+    setConflictAction('merge');
+    setError('');
+    try {
+      const res = await fetch('/api/integrations/shopify/merge-stores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceStoreId: conflict.storeId, targetStoreId: conflict.targetStoreId }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || 'Falha ao mesclar as lojas.');
+        return;
+      }
+      setConflict(null);
+      setSuccessMessage(`Dados de "${blockerLabel}" mesclados. Agora repita a conexão/reativação — o conflito foi resolvido.`);
+      fetchOrgStores();
+    } catch {
+      setError('Erro ao mesclar. Tente novamente.');
+    } finally {
+      setConflictAction(null);
+    }
+  }
+
+  // Ação (b) do banner: desativar a bloqueadora (dados preservados) pra
+  // liberar o domínio e repetir a ação original.
+  async function handleConflictDisconnect() {
+    if (!conflict) return;
+    const blockerLabel = conflict.name || conflict.domain || 'a loja ativa';
+    if (!confirm(`Desativar "${blockerLabel}"?\n\nEla para de sincronizar pedidos, webhooks e pixel imediatamente. Os dados dela ficam preservados (dá pra reativar depois). Em seguida, repita a conexão/reativação.`)) return;
+    setConflictAction('disconnect');
+    setError('');
+    try {
+      const res = await fetch('/api/integrations/shopify/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: conflict.storeId }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || 'Falha ao desativar a loja.');
+        return;
+      }
+      setConflict(null);
+      setSuccessMessage(`"${blockerLabel}" desativada. Agora repita a conexão/reativação — o conflito foi resolvido.`);
+      fetchOrgStores();
+    } catch {
+      setError('Erro ao desativar. Tente novamente.');
+    } finally {
+      setConflictAction(null);
+    }
+  }
+
   async function handleConnect() {
     const domain = shopDomain.trim();
     if (!domain) { setError('Digite o domínio da sua loja'); return; }
@@ -184,10 +291,12 @@ export default function ShopifyConnect() {
     }
     setManualConnecting(true);
     setError('');
+    setConflict(null);
     setManualResult(null);
     setPixelCode(null);
 
     try {
+      const targetStoreId = !forceAdd && currentStore?.id ? currentStore.id : undefined;
       const res = await fetch('/api/integrations/shopify/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -196,18 +305,19 @@ export default function ShopifyConnect() {
           clientId: manualClientId.trim(),
           clientSecret: manualClientSecret.trim(),
           // A integração pertence à LOJA selecionada: conectar aqui troca
-          // a Shopify desta loja, nunca cria uma loja nova. Só sem loja
-          // no contexto (?add=1) o backend cria/dedupa.
-          storeId: !forceAdd && currentStore?.id ? currentStore.id : undefined,
+          // a Shopify desta loja, nunca cria uma loja nova. Criar linha
+          // nova só no fluxo explícito "Adicionar loja" (?add=1).
+          storeId: targetStoreId,
+          allowCreate: forceAdd,
         }),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
-        let errorMsg = data.error || 'Erro ao conectar loja.';
         if (data.missingScopes && Array.isArray(data.missingScopes) && data.missingScopes.length > 0) {
-          errorMsg = `Permissões obrigatórias ausentes: ${data.missingScopes.join(', ')}. Configure os escopos no Shopify Dev Dashboard e reinstale o app.`;
+          setError(`Permissões obrigatórias ausentes: ${data.missingScopes.join(', ')}. Configure os escopos no Shopify Dev Dashboard e reinstale o app.`);
+          return;
         }
-        setError(errorMsg);
+        applyApiError(res.status, data, targetStoreId ?? null, 'Erro ao conectar loja.');
         return;
       }
       setManualResult(data);
@@ -265,6 +375,7 @@ export default function ShopifyConnect() {
     }
     setOauthConnecting(true);
     setError('');
+    setConflict(null);
     try {
       const res = await fetch('/api/integrations/shopify/oauth-manual/start', {
         method: 'POST',
@@ -274,11 +385,12 @@ export default function ShopifyConnect() {
           clientId: opts.clientId.trim(),
           clientSecret: opts.clientSecret.trim(),
           storeId: opts.storeId,
+          allowCreate: forceAdd,
         }),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
-        setError(data.error || 'Erro ao iniciar a autorização OAuth.');
+        applyApiError(res.status, data, opts.storeId ?? null, 'Erro ao iniciar a autorização OAuth.');
         setOauthConnecting(false);
         return;
       }
@@ -342,20 +454,41 @@ export default function ShopifyConnect() {
     }
   }
 
-  // Fetch disconnected stores so we can offer reactivation paths.
+  // Fetch das lojas da org pro formulário: as DESATIVADAS (caminho de
+  // reativação) e as ATIVAS (visibilidade — é sempre uma ativa que causa
+  // o conflito de domínio, e ela não aparece em nenhuma outra lista
+  // desta tela). Reusada pelos handlers do banner de conflito.
+  async function fetchOrgStores() {
+    const [disconnected, active] = await Promise.allSettled([
+      (async () => {
+        const res = await fetch('/api/integrations/shopify/disconnected-stores')
+        if (!res.ok) return null
+        const j = await res.json()
+        return j.stores || []
+      })(),
+      (async () => {
+        const res = await fetch('/api/shopify/connect')
+        if (!res.ok) return null
+        const j = await res.json()
+        const list = j.stores || []
+        return list
+          .filter((s: any) => s.isActive === true || s.is_active === true)
+          .map((s: any) => ({
+            id: s.id,
+            shop_name: s.shop_name ?? s.shopName ?? null,
+            shop_domain: s.shop_domain ?? s.shopDomain ?? '',
+          }))
+      })(),
+    ])
+    if (disconnected.status === 'fulfilled' && disconnected.value) setDisconnectedStores(disconnected.value)
+    if (active.status === 'fulfilled' && active.value) setActiveStores(active.value)
+  }
+
   // Runs whenever the form is shown (i.e. not connected).
   useEffect(() => {
     if (loading || (connected && store)) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch('/api/integrations/shopify/disconnected-stores')
-        if (!res.ok) return
-        const j = await res.json()
-        if (!cancelled) setDisconnectedStores(j.stores || [])
-      } catch { /* silent */ }
-    })()
-    return () => { cancelled = true }
+    fetchOrgStores()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, connected, store])
 
   // Kick off the post-connect cascade in the BACKGROUND:
@@ -398,6 +531,7 @@ export default function ShopifyConnect() {
     const fullDomain = domain.endsWith('.myshopify.com') ? domain : `${domain}.myshopify.com`
     setReactivating(true)
     setError('')
+    setConflict(null)
     setSuccessMessage('')
     try {
       const res = await fetch('/api/integrations/shopify/swap-backend', {
@@ -412,7 +546,7 @@ export default function ShopifyConnect() {
       })
       const data = await res.json()
       if (!res.ok || data.error) {
-        setError(data.error || 'Falha ao reativar loja.')
+        applyApiError(res.status, data, storeId, 'Falha ao reativar loja.')
         return
       }
       const finalDomain = data.store?.shop_domain || fullDomain
@@ -452,6 +586,7 @@ export default function ShopifyConnect() {
     if (!confirm(`Trocar backend pra "${fullDomain}"?\n\nTodos os dados da Worder (contatos, eventos, automações, fluxos, emails, financeiro) ficam preservados. Apenas a Shopify de origem muda.\n\nWebhooks, pixel, loader e tracker são registrados automaticamente. A importação inicial de produtos/pedidos/clientes inicia em segundo plano.`)) return;
     setSwapping(true);
     setError('');
+    setConflict(null);
     setSuccessMessage('');
     try {
       const res = await fetch('/api/integrations/shopify/swap-backend', {
@@ -466,7 +601,7 @@ export default function ShopifyConnect() {
       });
       const data = await res.json();
       if (!res.ok || data.error) {
-        setError(data.error || 'Falha ao trocar Shopify.');
+        applyApiError(res.status, data, store?.id ?? null, 'Falha ao trocar Shopify.');
         return;
       }
       const finalDomain = data.store?.shop_domain || fullDomain;
@@ -526,6 +661,7 @@ export default function ShopifyConnect() {
       hmac_invalid: 'Validação de segurança falhou.',
       no_organization: 'Organização não encontrada. Faça login novamente.',
       domain_conflict: 'Outra loja ATIVA desta organização já usa esse domínio Shopify. Mescle ou desative a duplicada antes de conectar.',
+      no_target_store: 'Nenhuma loja alvo para esta integração. Selecione a loja cuja integração quer alterar, reative uma loja desativada, ou use "Adicionar loja" para criar uma nova.',
     };
     return m[code] || `Erro: ${code}`;
   }
@@ -555,6 +691,14 @@ export default function ShopifyConnect() {
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             {error}
           </div>
+        )}
+        {conflict && (
+          <ConflictBanner
+            conflict={conflict}
+            busy={conflictAction}
+            onMerge={handleConflictMerge}
+            onDisconnect={handleConflictDisconnect}
+          />
         )}
 
         <div className="flex items-center justify-between">
@@ -927,6 +1071,14 @@ export default function ShopifyConnect() {
           {error}
         </div>
       )}
+      {conflict && (
+        <ConflictBanner
+          conflict={conflict}
+          busy={conflictAction}
+          onMerge={handleConflictMerge}
+          onDisconnect={handleConflictDisconnect}
+        />
+      )}
       {successMessage && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg flex items-center gap-2 text-sm">
           <CheckCircle className="w-4 h-4 flex-shrink-0" />
@@ -941,6 +1093,29 @@ export default function ShopifyConnect() {
         <h3 className="text-lg font-semibold text-gray-900">Conecte sua loja Shopify</h3>
         <p className="text-sm text-gray-500">Sincronize pedidos, clientes e ative tracking completo</p>
       </div>
+
+      {/* Lojas ATIVAS da organização — só visibilidade. O conflito de
+          domínio é sempre com uma dessas, e nenhuma outra lista desta
+          tela as mostra: sem isto o erro fala de uma "loja ativa" que o
+          usuário não consegue ver em lugar nenhum. */}
+      {activeStores.length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+          <p className="text-[12px] font-semibold text-gray-700 mb-2">
+            {activeStores.length === 1 ? 'Loja ativa nesta organização' : `${activeStores.length} lojas ativas nesta organização`}
+          </p>
+          <div className="space-y-1.5">
+            {activeStores.map((s) => (
+              <div key={s.id} className="flex items-center gap-2 text-[12px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                <span className="font-medium text-gray-800">{s.shop_name || 'Loja sem nome'}</span>
+                {s.shop_domain && !s.shop_domain.endsWith('.worder.local') && (
+                  <code className="font-mono text-[11px] text-gray-500 truncate">{s.shop_domain}</code>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Disconnected stores — offer reactivation INTO the existing row.
           Surfaces only when there's data worth preserving (contacts/events/
@@ -1423,6 +1598,59 @@ export default function ShopifyConnect() {
         <p>&#10003; Tracking comportamental</p>
         <p>&#10003; Código de rastreio e entregas</p>
       </div>
+    </div>
+  );
+}
+
+// Banner de conflito com loja ATIVA. Nome/domínio vêm do banco e entram
+// só como text nodes (React escapa) — nunca em HTML/href. Domínio
+// placeholder interno (.worder.local) é escondido: não ajuda o usuário.
+function ConflictBanner({ conflict, busy, onMerge, onDisconnect }: {
+  conflict: { storeId: string; name: string | null; domain: string | null; targetStoreId: string | null }
+  busy: 'merge' | 'disconnect' | null
+  onMerge: () => void
+  onDisconnect: () => void
+}) {
+  const showDomain = conflict.domain && !conflict.domain.endsWith('.worder.local');
+  const label = conflict.name || (showDomain ? conflict.domain : null) || 'outra loja ativa';
+  const canMerge = !!conflict.targetStoreId && conflict.targetStoreId !== conflict.storeId;
+  return (
+    <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+      <div className="flex items-start gap-2">
+        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-600" />
+        <div className="text-sm text-red-700">
+          <p className="font-semibold">Esta Shopify já está conectada em outra loja ativa</p>
+          <p className="mt-0.5">
+            A loja ativa <strong>{label}</strong>
+            {showDomain && conflict.name ? <> (<code className="font-mono text-[12px]">{conflict.domain}</code>)</> : null}
+            {' '}está usando esse domínio Shopify. Resolva com uma das ações abaixo e repita a conexão.
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        {canMerge && (
+          <button
+            onClick={onMerge}
+            disabled={busy !== null}
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-[13px] font-medium transition-colors"
+          >
+            {busy === 'merge' ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Trazer dados de {label} pra esta loja e arquivá-la
+          </button>
+        )}
+        <button
+          onClick={onDisconnect}
+          disabled={busy !== null}
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-red-300 text-red-700 bg-white rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed text-[13px] font-medium transition-colors"
+        >
+          {busy === 'disconnect' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          Desativar {label}
+        </button>
+      </div>
+      <p className="text-[11px] text-red-600/80">
+        Os dados da loja nunca são apagados em nenhuma das ações. Ou gerencie manualmente no{' '}
+        <a href="/integrations/shopify/tracking-debug" className="underline hover:text-red-800">diagnóstico</a>.
+      </p>
     </div>
   );
 }
