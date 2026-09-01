@@ -343,10 +343,31 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
 ## Fase 3 — Segurança restante
 
-- [ ] **18. SSRF no crawler da base de conhecimento** `[relatado]`
+- [x] **18. SSRF no crawler da base de conhecimento** `[relatado]` · commits `84daa998` + `9cc62ece`
   `src/app/api/ai/agents/[id]/sources/route.ts:137` grava a URL crua; `src/lib/ai/crawler.ts:128` faz
   `new URL()` e busca com `redirect: 'follow'`, sem checar esquema, host, IP privado ou link-local.
   O conteúdo vira chunk persistido e legível pelo agente.
+
+  **Entregue.** Portão próprio (`src/lib/ai/ssrf-guard.ts`) aplicado no ponto em que a
+  rede é tocada — raiz, `sitemap.xml`, sitemap filho e link interno passam pelo mesmo
+  `assertSafeUrl`. Recusa esquema fora de http(s), credencial embutida na URL e
+  destino que RESOLVE para endereço não roteável. Redirect deixou de ser `follow`:
+  cada salto é revalidado antes de ser seguido, com teto de 5 e o corpo do 3xx
+  cancelado. Sem allowlist de domínio — o produto é "o lojista aponta para o site
+  dele"; a defesa é sobre para onde o nome resolve.
+
+  O review (lido como atacante) achou o que faltava: NAT64 `64:ff9b::/96`, 6to4
+  `2002::/16` e a forma IPv4-compatible (`::127.0.0.1`, que a URL normaliza para
+  `::7f00:1` e o `BlockList` não pega) atravessavam. Fechados, mais CGNAT
+  `100.64/10`, `0.0.0.0/8`, `240/4` e companhia. 43 testes no guard, cada buraco
+  provado em vermelho antes.
+
+  **Aberto e declarado:** DNS rebinding. O guard resolve o nome e o `fetch` resolve de
+  novo — quem controla um domínio com TTL 0 alterna as respostas. NÃO é corrida de
+  milissegundos: é determinístico e barato. Fechar exige fixar o IP validado no
+  connect, o que pede dependência nova (`undici` não é módulo `node:`). O portão
+  fecha literal de IP, esquema, credencial, redirect e DNS honesto — sobe a barra de
+  "qualquer um digita uma URL" para "atacante com domínio próprio".
 
 - [ ] **19. SSRF nas custom tools** `[relatado]`
   Único filtro é o CHECK `endpoint like 'https://%'` (`20260814000003:25`). A rota
