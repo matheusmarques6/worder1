@@ -438,9 +438,23 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `src/lib/whatsapp/ai-providers.ts:245,654`. É o contrato do Google, mas a chave do lojista fica em URL
   e vaza em qualquer log de fetch, proxy ou stack trace.
 
-- [ ] **28. Allowlist no log JSON do runtime** `[relatado]`
+- [x] **28. Allowlist no log JSON do runtime** `[relatado]` · commits `04de8d90` + `6e708d4c`
   `runtime/src/agents_runtime/obs/logging.py:30-32` copia todo o `extra` do LogRecord sem allowlist.
   As 3 camadas de defesa do Logfire são reais e verificadas; o log de stdout é convenção, não código.
+
+  **Entregue.** O log JSON passa a filtrar `extra` por `ALLOWED_EXTRA_KEYS`, que é
+  `SAFE_ATTRIBUTES` **importado** da telemetria mais 8 campos de saúde de processo que
+  o vocabulário de span nunca carregou. Uma fonte de verdade, não uma segunda lista —
+  esta auditoria já consertou esse padrão quatro vezes. Chave barrada deixa rastro em
+  `_omitted_keys`, com nome e nunca valor: log que apaga calado esconde tanto quanto
+  log que vaza. Todos os 8 call sites reais de `extra=` continuam passando.
+
+  **Buraco declarado e agora fixado por teste:** campo proibido aninhado sob uma chave
+  PERMITIDA passa sem filtro (o formatter não desce no valor). Não foi consertado —
+  sanitização recursiva teria de andar também pelo `queues`, e essa troca não foi
+  feita. O review pegou que o teste que dizia cobrir isso testava o caso fácil; agora
+  há um teste com o nome honesto que afirma o comportamento atual e **quebra** no dia
+  em que alguém implementar a recursão.
 
 ---
 
