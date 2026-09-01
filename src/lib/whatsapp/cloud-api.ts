@@ -10,6 +10,7 @@ export { META_API_VERSION, META_BASE_URL } from './api-version';
 import { META_BASE_URL } from './api-version';
 import { withRetry } from './backoff';
 import { wlog } from '@/lib/observability/whatsapp-logger';
+import { safeFetch } from '@/lib/ai/ssrf-guard';
 
 // =============================================
 // TIPOS
@@ -565,8 +566,14 @@ export class WhatsAppCloudAPI {
 
   async downloadMedia(mediaId: string): Promise<{ data: Uint8Array; mimeType: string }> {
     const mediaInfo = await this.getMediaUrl(mediaId);
-    
-    const response = await fetch(mediaInfo.url, {
+
+    // Fix round 1 (review do item 19 do audit): mediaInfo.url vem do CORPO
+    // da resposta da Graph API, não de uma config fixa — a mesma classe de
+    // SSRF de fetch-media.ts, só que aqui a chamada carrega o Bearer token
+    // da conta. Um provedor comprometido/resposta forjada não seria só
+    // leitura interna: seria exfiltração do token pro host que a resposta
+    // escolher. safeFetch valida pra onde o host resolve antes de buscar.
+    const response = await safeFetch(mediaInfo.url, {
       headers: {
         'Authorization': `Bearer ${this.config.accessToken}`,
       },

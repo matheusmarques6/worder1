@@ -4,6 +4,7 @@
 
 // API Version centralizada (F.1 Onda 4).
 import { META_BASE_URL } from './api-version';
+import { safeFetch } from '@/lib/ai/ssrf-guard';
 
 interface SendMessageParams {
   phoneNumberId: string;
@@ -243,8 +244,11 @@ export async function downloadMedia(params: { mediaId: string; accessToken: stri
     throw new Error('Media URL not found');
   }
 
-  // Baixar o arquivo
-  const mediaResponse = await fetch(urlData.url, {
+  // Fix round 1 (review do item 19 do audit): urlData.url vem do CORPO da
+  // resposta da Graph API — mesma classe de SSRF de fetch-media.ts, mas
+  // aqui a chamada carrega o Bearer token da conta (exfiltração, não só
+  // leitura interna, se a resposta for forjada/comprometida).
+  const mediaResponse = await safeFetch(urlData.url, {
     headers: {
       'Authorization': `Bearer ${params.accessToken}`,
     },
