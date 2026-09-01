@@ -276,4 +276,12 @@ def evaluate_inbound_guards(
             "Em cooldown depois de uma transferência para humano",
         )
 
+    # cooldown curto — cloud-runner.ts:515-535. Constante, não knob de loja: é
+    # o anti-loop de quem responderia duas vezes à mesma rajada.
+    if (
+        state.last_bot_message_at is not None
+        and (now - state.last_bot_message_at).total_seconds() < RECENT_REPLY_COOLDOWN_SECONDS
+    ):
+        return Silence("cooldown", "Cooldown: o agente acabou de responder")
+
     return None

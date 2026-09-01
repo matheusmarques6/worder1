@@ -206,6 +206,59 @@ class TestTransferCooldown:
         assert silence.reason == "manual_activation_required"
 
 
+class TestRecentReplyCooldown:
+    """O cooldown curto de cloud-runner.ts:515-535 (constante COOLDOWN_MS = 5000).
+
+    Não é knob de loja: é o anti-loop de quem responde duas vezes à mesma
+    rajada. Por ser transiente e sumir sozinho, o badge do inbox o ignora de
+    propósito (conversation-ai-status.ts:110-113) — mas o turno, não.
+    """
+
+    def test_the_agent_that_just_answered_is_silent(self) -> None:
+        silence = evaluate_inbound_guards(
+            {},
+            state(last_bot_message_at=NOW - timedelta(seconds=4)),
+            agent_id=AGENT,
+            now=NOW,
+        )
+
+        assert silence is not None
+        assert silence.reason == "cooldown"
+
+    def test_five_seconds_later_answers(self) -> None:
+        assert (
+            evaluate_inbound_guards(
+                {},
+                state(last_bot_message_at=NOW - timedelta(seconds=6)),
+                agent_id=AGENT,
+                now=NOW,
+            )
+            is None
+        )
+
+    def test_an_agent_that_never_answered_here_is_not_in_cooldown(self) -> None:
+        assert (
+            evaluate_inbound_guards(
+                {}, state(last_bot_message_at=None), agent_id=AGENT, now=NOW
+            )
+            is None
+        )
+
+    def test_the_transfer_cooldown_wins(self) -> None:
+        silence = evaluate_inbound_guards(
+            {},
+            state(
+                ai_transferred_at=NOW - timedelta(seconds=10),
+                last_bot_message_at=NOW - timedelta(seconds=1),
+            ),
+            agent_id=AGENT,
+            now=NOW,
+        )
+
+        assert silence is not None
+        assert silence.reason == "transfer_cooldown"
+
+
 class TestSettingsGarbageNeverSilences:
     """jsonb malformado degrada para "responde" — nunca para um mudo sem motivo."""
 
