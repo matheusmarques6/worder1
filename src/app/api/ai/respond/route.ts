@@ -46,6 +46,8 @@ export async function POST(request: NextRequest) {
     let aiConfig: any = null
 
     // Se tem agent_id, buscar config do agente
+    // Rota órfã (zero chamadores em src/ — remoção é escopo do item 61 da
+    // auditoria de 2026-08-28); enquanto ela existir, tem que ficar segura.
     if (agent_id) {
       const { data: agent } = await supabase
         .from('agents')
@@ -54,18 +56,25 @@ export async function POST(request: NextRequest) {
         .eq('organization_id', orgId)
         .single()
 
-      if (agent?.ai_config) {
-        aiConfig = agent.ai_config
-      } else {
-        // Tentar tabela de config separada
-        const { data: config } = await supabase
-          .from('ai_agent_configs')
-          .select('*')
-          .eq('agent_id', agent_id)
-          .single()
+      // `agent` só vem preenchido se o agent_id for da própria org — é essa
+      // busca escopada, e não o agent_id cru, que estabelece posse. Sem ela,
+      // não dá pra consultar `ai_agent_configs`: a tabela não tem
+      // `organization_id` (mesma lacuna do item 04), a posse mora só no pai.
+      if (agent) {
+        if (agent.ai_config) {
+          aiConfig = agent.ai_config
+        } else {
+          // Tentar tabela de config separada — seguro aqui porque a posse do
+          // agent_id já foi confirmada acima.
+          const { data: config } = await supabase
+            .from('ai_agent_configs')
+            .select('*')
+            .eq('agent_id', agent_id)
+            .single()
 
-        if (config) {
-          aiConfig = config
+          if (config) {
+            aiConfig = config
+          }
         }
       }
     }
