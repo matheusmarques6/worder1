@@ -266,4 +266,14 @@ def evaluate_inbound_guards(
             "Agente é de ativação manual e não está atribuído a esta conversa",
         )
 
+    # cooldown pós-transferência — cloud-runner.ts:500-513. Roda ANTES de
+    # qualquer trabalho caro: silencia cedo, sem custo.
+    if is_transfer_cooldown_active(
+        state.ai_transferred_at, behavior.get("cooldown_after_transfer"), now=now
+    ):
+        return Silence(
+            "transfer_cooldown",
+            "Em cooldown depois de uma transferência para humano",
+        )
+
     return None

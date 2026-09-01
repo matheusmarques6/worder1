@@ -10,7 +10,7 @@ Fonte da verdade: `src/lib/ai/guards.ts` e o bloco de `src/lib/ai/cloud-runner.t
 a partir de `:462`.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -98,6 +98,112 @@ class TestActivateOnManual:
 
         assert silence is not None
         assert silence.detail.strip()
+
+
+class TestTransferCooldown:
+    """`behavior.cooldown_after_transfer` — cloud-runner.ts:500-513 + guards.ts:61-69."""
+
+    def test_inside_the_cooldown_is_silent(self) -> None:
+        silence = evaluate_inbound_guards(
+            {"behavior": {"cooldown_after_transfer": 300}},
+            state(ai_transferred_at=NOW - timedelta(seconds=299)),
+            agent_id=AGENT,
+            now=NOW,
+        )
+
+        assert silence is not None
+        assert silence.reason == "transfer_cooldown"
+
+    def test_after_the_cooldown_answers(self) -> None:
+        assert (
+            evaluate_inbound_guards(
+                {"behavior": {"cooldown_after_transfer": 300}},
+                state(ai_transferred_at=NOW - timedelta(seconds=301)),
+                agent_id=AGENT,
+                now=NOW,
+            )
+            is None
+        )
+
+    def test_default_is_three_hundred_seconds(self) -> None:
+        """Sem a chave configurada o TS usa 300s (guards.ts:63)."""
+        assert (
+            evaluate_inbound_guards(
+                {}, state(ai_transferred_at=NOW - timedelta(seconds=299)),
+                agent_id=AGENT, now=NOW,
+            )
+            is not None
+        )
+        assert (
+            evaluate_inbound_guards(
+                {}, state(ai_transferred_at=NOW - timedelta(seconds=301)),
+                agent_id=AGENT, now=NOW,
+            )
+            is None
+        )
+
+    def test_zero_or_negative_turns_the_cooldown_off(self) -> None:
+        for value in (0, -1):
+            assert (
+                evaluate_inbound_guards(
+                    {"behavior": {"cooldown_after_transfer": value}},
+                    state(ai_transferred_at=NOW),
+                    agent_id=AGENT,
+                    now=NOW,
+                )
+                is None
+            )
+
+    def test_garbage_turns_the_cooldown_off(self) -> None:
+        """`Number('abc')` é NaN, e o TS trata NaN como desligado."""
+        assert (
+            evaluate_inbound_guards(
+                {"behavior": {"cooldown_after_transfer": "abc"}},
+                state(ai_transferred_at=NOW),
+                agent_id=AGENT,
+                now=NOW,
+            )
+            is None
+        )
+
+    def test_never_transferred_answers(self) -> None:
+        assert (
+            evaluate_inbound_guards(
+                {"behavior": {"cooldown_after_transfer": 300}},
+                state(ai_transferred_at=None),
+                agent_id=AGENT,
+                now=NOW,
+            )
+            is None
+        )
+
+    def test_the_cooldown_survives_a_human_turning_the_ai_back_on(self) -> None:
+        """Contrato documentado no TS (cloud-runner.ts:502-504): ai_transferred_at
+        NÃO é limpo na reativação manual, então o cooldown vale mesmo depois de
+        um humano religar a IA. Religar não é pedir para falar por cima."""
+        silence = evaluate_inbound_guards(
+            {"behavior": {"cooldown_after_transfer": 300}},
+            # ai_enabled voltou a true (não é lido aqui); a marca da
+            # transferência continua onde estava.
+            state(ai_transferred_at=NOW - timedelta(seconds=10)),
+            agent_id=AGENT,
+            now=NOW,
+        )
+
+        assert silence is not None
+        assert silence.reason == "transfer_cooldown"
+
+    def test_manual_activation_wins_over_the_cooldown(self) -> None:
+        """A ordem do TS decide o motivo que o lojista lê."""
+        silence = evaluate_inbound_guards(
+            {"behavior": {"activate_on": "manual", "cooldown_after_transfer": 300}},
+            state(ai_agent_id=None, ai_transferred_at=NOW),
+            agent_id=AGENT,
+            now=NOW,
+        )
+
+        assert silence is not None
+        assert silence.reason == "manual_activation_required"
 
 
 class TestSettingsGarbageNeverSilences:
