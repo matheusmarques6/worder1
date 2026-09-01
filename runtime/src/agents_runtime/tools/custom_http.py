@@ -22,6 +22,7 @@ destino, reabrindo o mesmo buraco que o guard fecha.
 """
 
 import json
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -33,9 +34,22 @@ from agents_runtime.agent_core.providers import decode_stored_key
 from agents_runtime.tools.base import ToolResult
 from agents_runtime.tools.ssrf_guard import Resolver, SsrfBlocked, assert_safe_url
 
+logger = logging.getLogger(__name__)
+
 #: O corpo devolvido ao modelo é truncado aqui: resposta gigante vira custo
 #: de prompt e não vira informação.
 MAX_BODY_CHARS = 3000
+
+# Achado 1 do follow-up de segurança (fase 3): o guard distingue "não foi
+# possível resolver o host" de "o host resolve para uma rede interna" — útil
+# pra operação, mas devolvido cru ao modelo é um oráculo de DNS interno de um
+# bit (mesmo raciocínio do item 19 do lado TS, `custom-tools/[id]/test/route.ts`,
+# e do item 25 pra falha de auth: o motivo vai pro log, nunca pro chamador).
+# A mensagem específica de `blocked` vai só pro logger — na MSG, não em
+# `extra=`, porque `extra` passa pelo cinto do item 28
+# (`obs/logging.py:ALLOWED_EXTRA_KEYS`) e uma chave fora do vocabulário some
+# sem rastro nenhum além de `_omitted_keys`.
+GENERIC_REFUSAL_MESSAGE = "endpoint recusado: use uma URL pública e válida"
 
 _ALLOWED_METHODS = ("GET", "POST")
 _PARAM_TYPES = {"string": str, "number": (int, float), "boolean": bool}
@@ -135,7 +149,10 @@ class CustomHttpTool:
         try:
             safe_url = await assert_safe_url(self._row.endpoint, resolver=self._resolver)
         except SsrfBlocked as blocked:
-            return ToolResult(tool=self.name, success=False, error=str(blocked))
+            logger.warning(
+                "tool custom %s: endpoint recusado pelo portão SSRF — %s", self.name, blocked
+            )
+            return ToolResult(tool=self.name, success=False, error=GENERIC_REFUSAL_MESSAGE)
 
         headers: dict[str, str] = {}
         if self._row.auth_header_value:

@@ -25,7 +25,12 @@ from dataclasses import replace
 import httpx
 import pytest
 
-from agents_runtime.tools.custom_http import CustomHttpTool, CustomToolRow, tool_spec_for
+from agents_runtime.tools.custom_http import (
+    GENERIC_REFUSAL_MESSAGE,
+    CustomHttpTool,
+    CustomToolRow,
+    tool_spec_for,
+)
 
 ROW = CustomToolRow(
     name="frete_kangu",
@@ -159,7 +164,7 @@ class TestTheSsrfGate:
     o destino é recusado.
     """
 
-    async def test_ip_literal_privado_e_recusado_sem_tocar_a_rede(self) -> None:
+    async def test_ip_literal_privado_e_recusado_sem_tocar_a_rede(self, caplog) -> None:
         def exploding(_request: httpx.Request) -> httpx.Response:
             raise AssertionError("a rede não deveria ser tocada")
 
@@ -168,12 +173,18 @@ class TestTheSsrfGate:
             row, transport=httpx.MockTransport(exploding), resolver=_resolve_public
         )
 
-        result = await tool(None, None, {"cep": "01310-100"})
+        with caplog.at_level("WARNING"):
+            result = await tool(None, None, {"cep": "01310-100"})
 
+        # Achado 1 (follow-up fase 3): o modelo recebe a recusa genérica —
+        # "rede interna" é o motivo específico, e esse é um oráculo de DNS
+        # interno se voltar pro chamador (mesma lógica do item 19/25).
         assert result.success is False
-        assert "rede interna" in (result.error or "")
+        assert result.error == GENERIC_REFUSAL_MESSAGE
+        assert "rede interna" not in (result.error or "")
+        assert "rede interna" in caplog.text
 
-    async def test_hostname_que_resolve_para_ip_privado_e_recusado(self) -> None:
+    async def test_hostname_que_resolve_para_ip_privado_e_recusado(self, caplog) -> None:
         def exploding(_request: httpx.Request) -> httpx.Response:
             raise AssertionError("a rede não deveria ser tocada")
 
@@ -184,12 +195,15 @@ class TestTheSsrfGate:
             ROW, transport=httpx.MockTransport(exploding), resolver=resolver_malicioso
         )
 
-        result = await tool(None, None, {"cep": "01310-100"})
+        with caplog.at_level("WARNING"):
+            result = await tool(None, None, {"cep": "01310-100"})
 
         assert result.success is False
-        assert "rede interna" in (result.error or "")
+        assert result.error == GENERIC_REFUSAL_MESSAGE
+        assert "rede interna" not in (result.error or "")
+        assert "rede interna" in caplog.text
 
-    async def test_esquema_diferente_de_http_https_e_recusado(self) -> None:
+    async def test_esquema_diferente_de_http_https_e_recusado(self, caplog) -> None:
         def exploding(_request: httpx.Request) -> httpx.Response:
             raise AssertionError("a rede não deveria ser tocada")
 
@@ -198,10 +212,13 @@ class TestTheSsrfGate:
             row, transport=httpx.MockTransport(exploding), resolver=_resolve_public
         )
 
-        result = await tool(None, None, {"cep": "01310-100"})
+        with caplog.at_level("WARNING"):
+            result = await tool(None, None, {"cep": "01310-100"})
 
         assert result.success is False
-        assert "esquema" in (result.error or "")
+        assert result.error == GENERIC_REFUSAL_MESSAGE
+        assert "esquema" not in (result.error or "")
+        assert "esquema" in caplog.text
 
     async def test_redirect_3xx_nunca_e_seguido_automaticamente(self) -> None:
         # `follow_redirects=False` é explícito no client (custom_http.py):
