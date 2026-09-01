@@ -430,7 +430,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Achado maior que o item, registrado abaixo:** o mesmo fail-open está espalhado por
   ~40 rotas de cron e workers, cada uma com sua cópia inline.
 
-- [ ] **26. `verifyShopifyWebhook` retorna `true` sem secret** `[relatado]`
+- [x] **26. `verifyShopifyWebhook` retorna `true` sem secret** `[relatado]` · commits `834d43d2` `edaebe0e` `db44a40b` `1074c998`
   `src/app/api/integrations/shopify/webhook/route.ts:21`. As chamadoras fecham em produção, mas a função
   é um pé de cabra esperando um segundo chamador que esqueça o guarda.
 
