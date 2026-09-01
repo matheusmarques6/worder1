@@ -374,7 +374,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `src/app/api/ai/custom-tools/[id]/test/route.ts:42-57` devolve o corpo na resposta;
   `runtime/src/agents_runtime/tools/custom_http.py:135-141` chama em produção sem allowlist.
 
-- [ ] **20. Token Meta por conta no runtime** `[confirmado]`
+- [x] **20. Token Meta por conta no runtime** `[confirmado]` · commits `4710326c` + `2df1d71e`
   `runtime/src/agents_runtime/channels/cloud_api.py:110-126` usa um `AGENTS_META_ACCESS_TOKEN` global.
   O TS carrega por conta, cifrado (`src/lib/whatsapp/account-loader.ts:25-33`).
   Ação: função SECURITY DEFINER análoga a `internal.active_shopify_store`.
