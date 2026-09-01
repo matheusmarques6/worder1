@@ -325,15 +325,22 @@ class TestTheThrottle:
         assert reason == "throttled"
         assert 55 <= retry_after.total_seconds() <= 60
 
-    def test_a_plain_failure_does_not_renew_an_expired_throttle(
+    def test_a_plain_failure_renews_an_expired_throttle(
         self, admin: psycopg.Connection
     ) -> None:
-        """A terceira metade: passada a janela, um 503 não pode recarregá-la.
+        """A segunda esquisitice da mesma função do TS, replicada por ruling T.
 
-        O contador do dia continua acima do degrau — é assim que o TS funciona,
-        a contagem é diária. Se a escada fosse consultada em toda falha em vez
-        de só nas de excesso, qualquer erro comum devolveria o número ao
-        silêncio pela janela inteira, para sempre, até a virada do dia.
+        `recordError` (`rate-limiter.ts:594-624`) roda em TODA falha, e a
+        escada no fim dela roda **incondicionalmente**, seja qual for o código.
+        Consequência lá: 10 excessos às 10:00 armam 60 s; às 10:05 um 503
+        qualquer chama `recordError`, o total do dia continua 10, e o `setex`
+        re-arma a janela inteira.
+
+        A primeira entrega deste item tinha CORRIGIDO isso sem declarar, e o
+        ruling O mandou replicar as esquisitices, não escolher entre elas — com
+        o argumento extra de que aqui a re-armagem é o lado conservador: segura
+        mais tempo, envia menos. Que ela seja discutível é achado registrado,
+        e o lugar de mudá-la é nos DOIS motores ao mesmo tempo.
         """
         pnid = a_number()
         for _ in range(10):
@@ -341,6 +348,25 @@ class TestTheThrottle:
         expire_window(admin, pnid, "throttled_until")
         close_breaker(admin, pnid)
         assert check(admin, pnid) is None
+
+        # Um 503, que não é excesso e não soma ao contador do dia — mas o
+        # contador do dia continua em 10, e a escada o relê.
+        report(admin, pnid, success=False, rate_limited=False)
+        reason, retry_after = check(admin, pnid)
+        assert reason == "throttled"
+        assert 55 <= retry_after.total_seconds() <= 60
+
+    def test_a_plain_failure_below_the_step_still_throttles_nothing(
+        self, admin: psycopg.Connection
+    ) -> None:
+        """O contrapeso do teste acima, para "re-arma" não virar "arma": a
+        escada relê o contador, e um contador abaixo do 1º degrau não segura
+        ninguém. Sem isto, um 503 num número que nunca levou excesso poderia
+        calar a loja."""
+        pnid = a_number()
+        for _ in range(9):
+            report(admin, pnid, success=False, rate_limited=True)
+        close_breaker(admin, pnid)
 
         report(admin, pnid, success=False, rate_limited=False)
         close_breaker(admin, pnid)
