@@ -59,6 +59,26 @@ class TestJsonLines:
         assert "a causa" in line["error"]
         assert "RuntimeError" in line["stack"]
 
+    def test_exception_error_and_stack_are_bounded(self) -> None:
+        # Achado 4 (follow-up fase 3): `error`/`stack` vêm de `exc_info`, fora
+        # do allowlist de `extra=` — o cinto possível aqui é por tamanho, não
+        # por vocabulário (uma exceção não tem chaves pra checar). Prova que
+        # uma mensagem de exceção gigante (ex.: corpo de provedor sem o
+        # truncamento de `cloud_api.py:82`) não vira uma linha de log sem fim.
+        from agents_runtime.obs.logging import MAX_ERROR_CHARS, MAX_STACK_CHARS
+
+        try:
+            raise RuntimeError("x" * 5000)
+        except RuntimeError:
+            import sys
+
+            record = _record()
+            record.exc_info = sys.exc_info()
+        line = _format(record)
+        assert len(line["error"]) <= MAX_ERROR_CHARS + len("…(truncado)")
+        assert line["error"].endswith("…(truncado)")
+        assert len(line["stack"]) <= MAX_STACK_CHARS + len("…(truncado)")
+
     def test_configure_twice_keeps_one_handler(self) -> None:
         configure_logging("INFO")
         configure_logging("INFO")

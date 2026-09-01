@@ -47,6 +47,23 @@ _LOG_ONLY_FIELDS = frozenset(
 )
 ALLOWED_EXTRA_KEYS = SAFE_ATTRIBUTES | _LOG_ONLY_FIELDS
 
+# Achado 4 do follow-up (fase 3): o allowlist acima só cobre `extra=` —
+# `error`/`stack`, abaixo, vêm de `record.exc_info` direto pra linha, sem
+# passar por ALLOWED_EXTRA_KEYS nenhum. Não dá pra filtrar por VOCABULÁRIO
+# aqui (uma exceção qualquer não tem chaves pra checar contra a lista, só uma
+# mensagem livre — que pode carregar corpo de provedor, ex.:
+# `channels/cloud_api.py:82`, até 300 bytes do corpo que a Meta devolveu).
+# O cinto possível é por TAMANHO, não por conteúdo — mesmo raciocínio do
+# truncamento de corpo em `tools/custom_http.py` (MAX_BODY_CHARS). Diferente
+# do gap de dict aninhado (aceito e só documentado, ver test_obs.py): este
+# aqui é fechado em código, não só declarado.
+MAX_ERROR_CHARS = 500
+MAX_STACK_CHARS = 2000
+
+
+def _truncate(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[:limit] + "…(truncado)"
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -70,8 +87,8 @@ class JsonFormatter(logging.Formatter):
         if omitted:
             line["_omitted_keys"] = sorted(omitted)
         if record.exc_info and record.exc_info[1] is not None:
-            line["error"] = repr(record.exc_info[1])
-            line["stack"] = self.formatException(record.exc_info)
+            line["error"] = _truncate(repr(record.exc_info[1]), MAX_ERROR_CHARS)
+            line["stack"] = _truncate(self.formatException(record.exc_info), MAX_STACK_CHARS)
         return json.dumps(line, ensure_ascii=False, default=repr)
 
 
