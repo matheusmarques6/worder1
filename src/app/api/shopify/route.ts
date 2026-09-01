@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
+import { verifyShopifyWebhook } from './verify';
 export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
@@ -20,15 +20,6 @@ const supabase = new Proxy({} as SupabaseClient, {
     return (getDb() as any)[prop];
   }
 });
-
-// Verify Shopify webhook signature
-function verifyShopifyWebhook(body: string, signature: string): boolean {
-  const secret = process.env.SHOPIFY_WEBHOOK_SECRET || '';
-  const hmac = crypto.createHmac('sha256', secret);
-  hmac.update(body, 'utf8');
-  const digest = hmac.digest('base64');
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
-}
 
 // Handle Shopify OAuth callback
 export async function GET(request: NextRequest) {
