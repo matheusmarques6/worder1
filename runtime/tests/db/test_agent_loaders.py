@@ -376,3 +376,30 @@ class TestMediaInTheHistory:
             )
 
         assert [m.text for m in transcript] == ["[Cliente enviou uma imagem: chegou assim]"]
+
+    async def test_the_photo_the_store_sent_stays_the_store_speaking(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """`load_recent_transcript` traz as DUAS direções, e a foto que o
+        lojista manda pelo inbox chega em `public.messages` na mesma forma
+        `{"image": {...}}` do backfill de mídia inbound
+        (`inbox/conversations/[id]/media/route.ts:220-225` +
+        `20260817000004:127-135`). Rotular pela chave sem olhar o autor punha
+        a foto da LOJA na boca do cliente — trocar a linha muda por uma
+        afirmação falsa sobre quem disse o quê."""
+        thread = create_thread(admin, tenant)
+        create_message(admin, tenant, thread, direction="inbound", seq=1, text="tem foto?")
+        create_message(
+            admin, tenant, thread, direction="outbound", seq=1,
+            content={"image": {"id": "wamid.out", "caption": None}},
+        )
+
+        async with as_worker(dsn, tenant) as conn:
+            transcript = await agent_repo.load_recent_transcript(
+                conn, conversation_id=thread.conversation_id, limit=10
+            )
+
+        assert [(m.author, m.text, m.media_kind) for m in transcript] == [
+            ("contact", "tem foto?", None),
+            ("agent", "[A loja enviou uma imagem]", None),
+        ]

@@ -11,7 +11,7 @@ fazer, e são estas que este módulo decide:
     conversa, e o modelo lê uma conversa em que o cliente ficou mudo.
 
 Fonte da voz: `cloud-runner.ts:764-770` (os marcadores do histórico) e
-`media/router.ts:23-24` (a frase do fallback).
+`media/router.ts:22-23` (a frase do fallback).
 """
 
 import pytest
@@ -31,24 +31,24 @@ class TestReadingTheStoredMessage:
     """Os quatro dialetos que `public.messages.content` guarda de verdade."""
 
     def test_plain_text_is_itself_and_carries_no_media(self) -> None:
-        assert read_message({"text": "qual o frete?"}) == ("qual o frete?", None)
+        assert read_message({"text": "qual o frete?"}, "contact") == ("qual o frete?", None)
 
     def test_the_meta_envelope_from_the_backfill_is_flattened(self) -> None:
         """`{"text": {"body": …}}` — o formato que o backfill copiou do inbox
         legado e que já ensinou o modelo a IMITAR o JSON (17/08)."""
-        assert read_message({"text": {"body": "boa tarde"}}) == ("boa tarde", None)
+        assert read_message({"text": {"body": "boa tarde"}}, "contact") == ("boa tarde", None)
 
     def test_an_audio_says_it_was_an_audio_and_names_the_kind(self) -> None:
         """A forma que o ingest do runtime grava (`webhook-processor.ts:489-494`):
         `text` nulo, `media_id` presente. Sem esta linha o transcrito mostra um
         turno em branco e o turno responde sobre nada."""
         assert read_message(
-            {"type": "audio", "text": None, "media_id": "wamid.1", "caption": None}
+            {"type": "audio", "text": None, "media_id": "wamid.1", "caption": None}, "contact"
         ) == ("[Cliente enviou um áudio sem transcrição]", "audio")
 
     def test_an_image_without_a_caption_says_so(self) -> None:
         assert read_message(
-            {"type": "image", "text": None, "media_id": "wamid.2", "caption": None}
+            {"type": "image", "text": None, "media_id": "wamid.2", "caption": None}, "contact"
         ) == ("[Cliente enviou uma imagem]", "image")
 
     def test_a_caption_is_the_customer_speaking_so_there_is_no_media_kind(self) -> None:
@@ -60,23 +60,25 @@ class TestReadingTheStoredMessage:
         `extractWebhookMessageText` já põe a legenda em `text` (`cloud-api.ts:743-746`),
         então é de lá que ela costuma vir."""
         assert read_message(
-            {"type": "image", "text": "olha isso", "media_id": "wamid.3", "caption": "olha isso"}
+            {"type": "image", "text": "olha isso", "media_id": "wamid.3", "caption": "olha isso"},
+            "contact",
         ) == ("[Cliente enviou uma imagem: olha isso]", None)
 
     def test_the_caption_key_alone_also_counts_as_speech(self) -> None:
         assert read_message(
-            {"type": "image", "text": None, "media_id": "wamid.4", "caption": "esse aqui"}
+            {"type": "image", "text": None, "media_id": "wamid.4", "caption": "esse aqui"},
+            "contact",
         ) == ("[Cliente enviou uma imagem: esse aqui]", None)
 
     def test_the_legacy_backfill_shape_names_the_kind_by_its_key(self) -> None:
         """O backfill de criação copia `whatsapp_cloud_messages.content` cru
         quando não há `text_body` (`20260817000004:131-135`), e lá a forma é
         `{"image": {...}}` — sem chave `type` nenhuma."""
-        assert read_message({"audio": {"id": "wamid.5", "mime_type": "audio/ogg"}}) == (
+        assert read_message({"audio": {"id": "wamid.5", "mime_type": "audio/ogg"}}, "contact") == (
             "[Cliente enviou um áudio sem transcrição]",
             "audio",
         )
-        assert read_message({"image": {"id": "wamid.6", "caption": "esse"}}) == (
+        assert read_message({"image": {"id": "wamid.6", "caption": "esse"}}, "contact") == (
             "[Cliente enviou uma imagem: esse]",
             None,
         )
@@ -91,18 +93,46 @@ class TestReadingTheStoredMessage:
             ("sticker", "[Cliente enviou uma figurinha]"),
             ("location", "[Cliente enviou uma localização]"),
         ):
-            assert read_message({"type": kind, "text": None, "media_id": "x"}) == (line, kind)
+            row = {"type": kind, "text": None, "media_id": "x"}
+            assert read_message(row, "contact") == (line, kind)
 
     def test_an_unknown_type_without_words_stays_as_it_is_today(self) -> None:
         """Não inventar rótulo para o que não se conhece: o que não está no mapa
         volta vazio, exatamente como antes deste item."""
-        assert read_message({"type": "reaction", "text": None}) == ("", None)
-        assert read_message({"type": "text", "text": None}) == ("", None)
+        assert read_message({"type": "reaction", "text": None}, "contact") == ("", None)
+        assert read_message({"type": "text", "text": None}, "contact") == ("", None)
+
+    def test_the_media_the_STORE_sent_is_never_put_in_the_customer_mouth(self) -> None:
+        """A mesma forma `{"image": {...}}` é o que a rota de mídia do inbox
+        grava em OUTBOUND quando o lojista manda uma foto
+        (`inbox/conversations/[id]/media/route.ts:220-225`), e sem legenda o
+        `text_body` fica vazio, então o backfill copia esse `content` cru com
+        `author_type` 'human' ou 'agent' (`20260817000004:127-135`).
+
+        Rotular pela chave sem olhar o autor punha a foto da LOJA na boca do
+        cliente: onde antes havia linha muda passaria a haver uma afirmação
+        falsa sobre quem disse o quê — a mesma doença que este item trata, na
+        outra direção. O TS guarda contra isso com `role === 'user'`
+        (`cloud-runner.ts:761,769`); aqui a guarda é o autor, e é explícita
+        porque as duas direções saem do MESMO loader.
+
+        E o tipo volta `None`: mídia da loja não é rajada muda do cliente, e
+        nada nela pode degradar um turno."""
+        store_photo = {"image": {"id": "wamid.out", "caption": None}}
+        assert read_message(store_photo, "human") == ("[A loja enviou uma imagem]", None)
+        assert read_message(store_photo, "agent") == ("[A loja enviou uma imagem]", None)
+        assert read_message(store_photo, "contact") == ("[Cliente enviou uma imagem]", "image")
+
+    def test_what_the_store_wrote_with_the_photo_is_the_store_speaking(self) -> None:
+        assert read_message({"image": {"id": "w", "caption": "chegou hoje!"}}, "agent") == (
+            "[A loja enviou uma imagem: chegou hoje!]",
+            None,
+        )
 
     def test_nothing_at_all_is_not_a_crash(self) -> None:
-        assert read_message(None) == ("", None)
-        assert read_message("não é objeto") == ("", None)
-        assert read_message({}) == ("", None)
+        assert read_message(None, "contact") == ("", None)
+        assert read_message("não é objeto", "contact") == ("", None)
+        assert read_message({}, "contact") == ("", None)
 
 
 def pending(*messages: tuple[str, str, str | None]) -> tuple[PendingMessage, ...]:

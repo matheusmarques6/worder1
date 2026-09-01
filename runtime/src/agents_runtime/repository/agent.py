@@ -221,7 +221,7 @@ def _message(row: tuple) -> PendingMessage:
     conversa. Um `case` de SQL cobrindo os quatro seria ilegível e não teria
     teste unitário; `agent_core.media` tem os dois.
     """
-    text, media_kind = read_message(row[1])
+    text, media_kind = read_message(row[1], row[0])
     return PendingMessage(author=row[0], text=text, media_kind=media_kind)
 
 

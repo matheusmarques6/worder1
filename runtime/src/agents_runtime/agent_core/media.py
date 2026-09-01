@@ -69,16 +69,28 @@ def _words(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def read_message(content: object) -> tuple[str, str | None]:
+def read_message(content: object, author: str) -> tuple[str, str | None]:
     """`public.messages.content` → (a linha do histórico, o tipo sem palavra).
 
-    O segundo elemento só vem preenchido quando o cliente mandou mídia e **não**
+    O segundo elemento só vem preenchido quando o CLIENTE mandou mídia e **não**
     escreveu nada — é o único caso que degrada. Com legenda ele volta `None`:
     o cliente escreveu, o turno é normal, e o marcador continua na linha só para
     o modelo saber que existe algo que ele não viu.
+
+    **O autor decide de quem é a mídia, e não é detalhe.** A forma
+    `{"image": {...}}` que este módulo rotula pela chave é também o que a rota
+    de mídia do inbox grava em OUTBOUND quando o lojista manda uma foto
+    (`inbox/conversations/[id]/media/route.ts:220-225`); sem legenda o
+    `text_body` fica vazio e o backfill copia esse `content` cru com
+    `author_type` 'human'/'agent' (`20260817000004:127-135`). Rotular sem olhar
+    o autor punha a foto da LOJA na boca do cliente — trocar mentira por omissão
+    por mentira por afirmação, que é pior. O TS guarda o marcador atrás de
+    `role === 'user'` (`cloud-runner.ts:761,769`); aqui a guarda é o autor, e
+    precisa ser explícita porque as duas direções saem do MESMO loader.
     """
     if not isinstance(content, Mapping):
         return "", None
+    from_contact = author == "contact"
 
     words = _words(content.get("text")) or _words(content.get("caption"))
     kind = content.get("type")
@@ -97,9 +109,15 @@ def read_message(content: object) -> tuple[str, str | None]:
         # ou nada. Inventar rótulo para o que não se conhece seria pôr palavra
         # na boca do cliente.
         return words, None
+    # Ao contrário do TS, que simplesmente DESCARTA a linha de mídia outbound
+    # do histórico (`cloud-runner.ts:761-771` só empurra para `role === 'user'`),
+    # a loja também ganha o seu marcador: a omissão é o defeito que este item
+    # existe para fechar, e ela vale nas duas direções — o modelo precisa saber
+    # que a loja já mandou uma foto antes de oferecer mandar outra.
+    who = "Cliente" if from_contact else "A loja"
     if words:
-        return f"[Cliente enviou {label}: {words}]", None
-    return f"[Cliente enviou {label}]", kind
+        return f"[{who} enviou {label}: {words}]", None
+    return f"[{who} enviou {label}]", kind if from_contact else None
 
 
 def speechless_media(pending: Sequence[PendingMessage]) -> str | None:
