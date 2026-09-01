@@ -44,7 +44,7 @@ def state(**overrides) -> GuardState:
 
 
 class TestTheBotIsTurnedOff:
-    """`ai_enabled = false` — cloud-runner.ts:388-390 (`skipped: 'ai_disabled'`).
+    """`ai_enabled = false` — cloud-runner.ts:390-392 (`skipped: 'ai_disabled'`).
 
     O freio da própria transferência: quem foi passado para um humano, ou teve
     o bot desligado no botão do inbox, não volta a ouvir a IA no turno seguinte.

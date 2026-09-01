@@ -32,7 +32,11 @@ from datetime import UTC, datetime
 import psycopg
 import pytest
 
-from agents_runtime.agent_core.responder import NoActiveVersion, build_responder
+from agents_runtime.agent_core.responder import (
+    NoActiveVersion,
+    build_responder,
+    transfer_to_human,
+)
 from agents_runtime.agent_core.toucher import build_toucher
 from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from tests.db.factories import (
@@ -528,3 +532,57 @@ class TestASilentTouchStillLeavesATrace:
         await toucher(dsn, llm)(a_touch(tenant, thread))
 
         assert any(step == "transferred" for step, _ in steps(admin, mirror))
+
+
+class TestTheDedupKeyDoesNotSwallowTheEscalation:
+    """`dedup_key` sem `mirrored` suprimia justamente o alerta grave.
+
+    Alcançável no vivo: a transferência pega uma vez (alerta `warning` aberto),
+    um humano religa o bot pelo botão do inbox sem resolver o alerta (são duas
+    telas), e depois a ponte para de resolver — telefone editado, linha do
+    espelho rotacionada, a assimetria do `+`. A partir daí toda transferência
+    falha em silêncio, com o `critical` "a IA não foi desligada" engolido por
+    um `warning` menos grave que ficou aberto. E é o único registro que
+    sobrevive nesse caso: o passo `transferred` também não espelha.
+    """
+
+    async def test_the_unmirrored_critical_passes_an_open_warning(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        thread = create_thread(admin, tenant)
+        mirror = mirrored(admin, tenant, thread)
+
+        async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+            await conn.execute("set role worker_role")
+            first = await transfer_to_human(
+                conn,
+                organization_id=tenant,
+                conversation_id=thread.conversation_id,
+                reason="handoff_keyword",
+                severity="warning",
+                title="Cliente pediu atendimento humano",
+                payload={},
+            )
+            # A ponte para de resolver: mesma conversa, mesmo motivo, mas a
+            # marca não tem mais onde pegar.
+            admin.execute(
+                "delete from public.whatsapp_cloud_conversations where id = %s",
+                (mirror.conversation_id,),
+            )
+            second = await transfer_to_human(
+                conn,
+                organization_id=tenant,
+                conversation_id=thread.conversation_id,
+                reason="handoff_keyword",
+                severity="warning",
+                title="Cliente pediu atendimento humano",
+                payload={},
+            )
+
+        assert (first, second) == (True, False)
+        rows = admin.execute(
+            "select severity, metadata -> 'mirrored' from public.alerts"
+            " where organization_id = %s and type = 'handoff' order by severity",
+            (tenant,),
+        ).fetchall()
+        assert rows == [("critical", False), ("warning", True)]

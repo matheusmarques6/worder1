@@ -3,7 +3,7 @@
 -- dos guards.
 --
 -- A entrega anterior portou os oito knobs de `settings` e deixou de fora o
--- guard mais básico do TS: `cloud-runner.ts:388-390` cala o turno com
+-- guard mais básico do TS: `cloud-runner.ts:390-392` cala o turno com
 -- `skipped: 'ai_disabled'` quando `conversation.ai_enabled === false`. O
 -- argumento era que o webhook já freia no ingest
 -- (`webhook-processor.ts:513-520` chama `cancel_pending_ai_response`).

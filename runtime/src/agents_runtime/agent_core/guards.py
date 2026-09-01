@@ -319,7 +319,7 @@ def evaluate_inbound_guards(
     """
     behavior = behavior_of(settings)
 
-    # ai_enabled = false — cloud-runner.ts:388-390 (`skipped: 'ai_disabled'`).
+    # ai_enabled = false — cloud-runner.ts:390-392 (`skipped: 'ai_disabled'`).
     # PRIMEIRO, como no TS: é o freio da própria transferência (e do botão do
     # inbox), e o motivo que explica o silêncio antes de qualquer knob. O
     # webhook já freia no ingest, mas o runtime tem DOIS produtores de fala —

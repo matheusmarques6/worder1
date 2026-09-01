@@ -795,9 +795,14 @@ async def transfer_to_human(
     turnos seguintes. O alerta que dissesse "IA transferida" assim mesmo faria
     a operação acreditar numa transferência que não aconteceu.
 
-    O alerta é deduplicado por conversa e motivo: sem transferência efetiva o
-    mesmo assunto pode reincidir a cada turno, e um `critical` novo por
-    mensagem seria um alarme que ninguém consegue ler.
+    O alerta é deduplicado por conversa, motivo e SE A MARCA PEGOU: sem
+    transferência efetiva o mesmo assunto pode reincidir a cada turno, e um
+    `critical` novo por mensagem seria um alarme que ninguém consegue ler —
+    mas deixar `mirrored` fora da chave fazia um `warning` ainda aberto engolir
+    o `critical` "a IA não foi desligada". Dedup que suprime na direção da
+    escalação está invertido, e nesse caso o alerta é o ÚNICO registro que
+    sobra: o passo `transferred` não espelha pelo mesmo motivo que a marca não
+    pegou.
     """
     async with conn.transaction():
         await scope_to_organization(conn, organization_id)
@@ -824,7 +829,9 @@ async def transfer_to_human(
                 "reason": reason,
                 "mirrored": marked,
             },
-            dedup_key=f"handoff:{reason}:{conversation_id}",
+            dedup_key=(
+                f"handoff:{reason}:{'mirrored' if marked else 'unmirrored'}:{conversation_id}"
+            ),
         )
     return marked
 
