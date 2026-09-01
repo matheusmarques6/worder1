@@ -53,7 +53,8 @@ vi.mock('node:dns/promises', () => ({ lookup: vi.fn() }))
 import { lookup } from 'node:dns/promises'
 const mockLookup = lookup as unknown as ReturnType<typeof vi.fn>
 
-import { POST, GENERIC_REFUSAL_MESSAGE } from './route'
+import { POST } from './route'
+import { GENERIC_REFUSAL_MESSAGE } from './refusal-message'
 
 const AUTH = { user: { id: 'u1', email: 'a@b.com', organization_id: 'org-1' } }
 

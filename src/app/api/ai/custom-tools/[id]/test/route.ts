@@ -3,17 +3,10 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAuthClient } from '@/lib/api-utils'
 import { decryptSecret, isEncryptedSecret } from '@/lib/crypto/secret-box'
 import { safeFetch, BLOCKED_PREFIX } from '@/lib/ai/ssrf-guard'
+import { GENERIC_REFUSAL_MESSAGE } from './refusal-message'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-// Fix round 1 (review do item 19): o guard distingue "não foi possível
-// resolver o host" de "o host resolve para uma rede interna" — útil no log,
-// mas um oráculo de DNS interno se voltar pro lojista (autenticado, mas não
-// deveria conseguir mapear hostnames internos testando endpoints). Uma
-// mensagem só pro caller; a mensagem específica do guard vai pro log.
-export const GENERIC_REFUSAL_MESSAGE =
-  'endpoint recusado: use uma URL pública e válida'
 
 // POST — o teste OBRIGATÓRIO antes de ligar (10.7): chamada real, feita do
 // servidor (o browser nunca vê o header de auth), cap de 10s. O resultado
