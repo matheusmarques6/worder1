@@ -270,7 +270,7 @@ class TestTheThrottle:
         self, admin: psycopg.Connection
     ) -> None:
         """O contador do TS é por DIA CORRIDO (chave `wa:errors:{id}:{dia}`,
-        `rate-limiter.ts:595`), com o dia em UTC. Replicado, não corrigido: uma
+        `rate-limiter.ts:596`), com o dia em UTC. Replicado, não corrigido: uma
         janela deslizante seria melhor NOS DOIS, e divergir de um lado só cria
         divergência nova."""
         pnid = a_number()

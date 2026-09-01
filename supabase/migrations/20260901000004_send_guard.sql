@@ -126,7 +126,7 @@ begin
     on conflict (phone_number_id) do nothing;
 
     if p_success then
-        -- Paridade com `reportSendResult` (send-guard.ts:171-175): o sucesso
+        -- Paridade com `reportSendResult` (send-guard.ts:162-165): o sucesso
         -- fecha o BREAKER e não toca no throttle. O `recordSuccess` do limiter
         -- é no-op declarado no TS (rate-limiter.ts:629-631) — a janela de
         -- throttle expira sozinha, e é assim que ela deve expirar: o sinal de
@@ -140,7 +140,7 @@ begin
     end if;
 
     -- 5 falhas seguidas → 30 s (send-guard.ts:64-65, os mesmos números que
-    -- campaign-processor.ts:649-652 já usa no mesmo número).
+    -- campaign-processor.ts:650-651 já usa no mesmo número).
     --
     -- O contador NÃO volta a zero quando a janela vence: ele fica no limiar, e
     -- a próxima falha o cruza na hora. É o essencial do HALF_OPEN do TS
