@@ -308,6 +308,68 @@ class TestMaxMessagesPerConversation:
         assert "3" in silence.detail
 
 
+class TestStopOnHumanReply:
+    """`behavior.stop_on_human_reply` — cloud-runner.ts:550-560."""
+
+    def test_default_is_on(self) -> None:
+        """Sem a chave, o guard VALE (`!== false` no TS). Um default invertido
+        aqui devolveria em silêncio o takeover que dura uma mensagem."""
+        silence = evaluate_inbound_guards(
+            {}, state(has_human_reply=True), agent_id=AGENT, now=NOW
+        )
+
+        assert silence is not None
+        assert silence.reason == "stop_on_human"
+
+    def test_explicit_false_turns_it_off(self) -> None:
+        assert (
+            evaluate_inbound_guards(
+                {"behavior": {"stop_on_human_reply": False}},
+                state(has_human_reply=True),
+                agent_id=AGENT,
+                now=NOW,
+            )
+            is None
+        )
+
+    def test_without_a_human_reply_the_agent_answers(self) -> None:
+        assert (
+            evaluate_inbound_guards(
+                {"behavior": {"stop_on_human_reply": True}},
+                state(has_human_reply=False),
+                agent_id=AGENT,
+                now=NOW,
+            )
+            is None
+        )
+
+    def test_the_guard_is_permanent_for_the_conversation(self) -> None:
+        """Uma única resposta manual no passado silencia o agente para sempre
+        NESTA conversa — não há janela que a expire, e não é o ai_enabled que
+        barra (a flag pode estar true; quem barra é este guard)."""
+        long_ago = NOW - timedelta(days=90)
+        silence = evaluate_inbound_guards(
+            {},
+            state(has_human_reply=True, last_bot_message_at=long_ago),
+            agent_id=AGENT,
+            now=NOW,
+        )
+
+        assert silence is not None
+        assert silence.reason == "stop_on_human"
+
+    def test_the_ceiling_is_checked_before_the_human_reply(self) -> None:
+        silence = evaluate_inbound_guards(
+            {"behavior": {"max_messages_per_conversation": 1}},
+            state(bot_message_count=1, has_human_reply=True),
+            agent_id=AGENT,
+            now=NOW,
+        )
+
+        assert silence is not None
+        assert silence.reason == "max_messages"
+
+
 class TestSettingsGarbageNeverSilences:
     """jsonb malformado degrada para "responde" — nunca para um mudo sem motivo."""
 

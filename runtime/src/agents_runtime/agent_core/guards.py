@@ -293,4 +293,15 @@ def evaluate_inbound_guards(
             f"Limite de {int(ceiling)} resposta(s) por conversa atingido",
         )
 
+    # stop_on_human_reply — cloud-runner.ts:550-560. Default LIGADO (`!== false`)
+    # e PERMANENTE por conversa: uma única resposta manual no passado cala o
+    # agente nela para sempre. Sem este guard o takeover durava uma mensagem —
+    # o atendente respondia e o bot voltava a falar no inbound seguinte, sem
+    # saber o que foi dito (ausência 29 do FORK.md, que anda junto desta).
+    if behavior.get("stop_on_human_reply") is not False and state.has_human_reply:
+        return Silence(
+            "stop_on_human",
+            "Um humano já respondeu nesta conversa (stop_on_human_reply)",
+        )
+
     return None
