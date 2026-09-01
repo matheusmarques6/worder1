@@ -54,6 +54,7 @@ from agents_runtime.agent_core.llm import (
     strip_code_fence,
 )
 from agents_runtime.agent_core.media import (
+    is_store_media_line,
     media_apology,
     media_handoff,
     media_step_detail,
@@ -253,13 +254,20 @@ def default_rubrics_directory() -> Path:
 def _as_chat(messages: Sequence[PendingMessage]) -> list[Message]:
     """A conversa na gramática do provedor: o contato é `user`, o agente é
     `assistant`. Um humano em takeover também fala como o agente — para o
-    modelo, é a mesma voz da loja."""
+    modelo, é a mesma voz da loja.
+
+    A rubrica da mídia da loja fica de fora (item 31): aqui ela seria uma
+    mensagem `assistant` inteiramente entre colchetes, isto é, uma instrução
+    de palco servida como fala anterior do próprio modelo — a superfície de
+    imitação que custou a esta casa a resposta crua de 17/08. Ela continua no
+    bloco CONVERSA, onde é narração e não convite."""
     return [
         Message(
             role="user" if message.author == "contact" else "assistant",
             content=message.text,
         )
         for message in messages
+        if not is_store_media_line(message)
     ]
 
 

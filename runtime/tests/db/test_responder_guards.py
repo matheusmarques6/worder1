@@ -802,3 +802,37 @@ class TestMediaWithoutAWordDegradesHonestly:
             (mirror.conversation_id,),
         ).fetchone()
         assert enabled is not False
+
+    async def test_the_store_media_line_reaches_the_block_but_never_the_chat_array(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """O marcador da loja é uma RUBRICA, não uma fala.
+
+        No array de chat ele viraria uma mensagem `assistant` cujo conteúdo
+        inteiro é `[A loja enviou uma imagem]` — uma rubrica entre colchetes
+        apresentada ao modelo como fala anterior dele mesmo, que é a superfície
+        de imitação mais forte que existe. Este repositório já pagou por esse
+        modo de falha exato em 17/08: entregar o JSON cru ao prompt ensinou o
+        modelo a IMITÁ-LO, e a resposta saiu crua no WhatsApp.
+
+        O ganho fica inteiro no bloco CONVERSA, que é narração em terceira
+        pessoa (`agent: [A loja enviou uma imagem]`) e não convida a imitar.
+        """
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type="whatsapp.received", status="active")
+        thread = create_thread(admin, tenant)
+        create_message(
+            admin, tenant, thread, direction="outbound", seq=1,
+            content={"image": {"id": "wamid.out", "caption": None}},
+        )
+        create_message(admin, tenant, thread, direction="inbound", seq=1, text="é esse mesmo?")
+        llm = ScriptedLlm(reply="É esse sim!")
+
+        await responder(dsn, llm)(a_job(tenant, thread.conversation_id))
+
+        system, *chat = llm.asked[0].messages
+        assert "[A loja enviou uma imagem]" in system.content
+        assert not any("[A loja enviou" in message.content for message in chat)
+        # E o que o CLIENTE disse continua no array: o corte é da rubrica, não
+        # do histórico.
+        assert any(message.content == "é esse mesmo?" for message in chat)

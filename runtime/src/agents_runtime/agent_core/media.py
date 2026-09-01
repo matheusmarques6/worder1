@@ -27,6 +27,12 @@ from collections.abc import Mapping, Sequence
 
 from agents_runtime.agent_core.think_gate import PendingMessage
 
+#: Quem mandou, na abertura do marcador. Constantes porque a linha é montada
+#: aqui e reconhecida em `is_store_media_line` — duas cópias da mesma string
+#: divergiriam no dia em que alguém mexesse na redação.
+CONTACT_MARK = "[Cliente enviou "
+STORE_MARK = "[A loja enviou "
+
 #: Como cada tipo aparece no histórico. Os dois primeiros são a redação do
 #: caminho legado, palavra por palavra (`cloud-runner.ts:766-770`) — divergir
 #: no marcador faria as duas engines contarem histórias diferentes da mesma
@@ -114,10 +120,31 @@ def read_message(content: object, author: str) -> tuple[str, str | None]:
     # a loja também ganha o seu marcador: a omissão é o defeito que este item
     # existe para fechar, e ela vale nas duas direções — o modelo precisa saber
     # que a loja já mandou uma foto antes de oferecer mandar outra.
-    who = "Cliente" if from_contact else "A loja"
+    who = CONTACT_MARK if from_contact else STORE_MARK
     if words:
-        return f"[{who} enviou {label}: {words}]", None
-    return f"[{who} enviou {label}]", kind if from_contact else None
+        return f"{who}{label}: {words}]", None
+    return f"{who}{label}]", kind if from_contact else None
+
+
+def is_store_media_line(message: PendingMessage) -> bool:
+    """Esta linha é a RUBRICA da mídia da loja, e não uma fala dela?
+
+    Existe para tirá-la do array de chat. Lá ela viraria uma mensagem
+    `assistant` cujo conteúdo inteiro é `[A loja enviou uma imagem]` — uma
+    rubrica entre colchetes apresentada ao modelo como fala anterior dele
+    mesmo, que é a superfície de imitação mais forte que existe. Esta casa já
+    pagou por esse modo de falha exato em 17/08, quando o JSON cru no histórico
+    ensinou o modelo a imitá-lo e a resposta saiu crua no WhatsApp.
+
+    No bloco CONVERSA a mesma linha é inofensiva: lá é narração em terceira
+    pessoa, com o autor por fora (`agent: [A loja enviou uma imagem]`), e o
+    ganho — o modelo saber que a loja já mandou uma foto — fica inteiro.
+
+    A do CLIENTE fica no array: ela chega como `user`, que é exatamente o que o
+    TS faz (`cloud-runner.ts:761-771`), e o modelo não imita o que o cliente
+    escreve.
+    """
+    return message.author != "contact" and message.text.startswith(STORE_MARK)
 
 
 def speechless_media(pending: Sequence[PendingMessage]) -> str | None:
@@ -149,7 +176,7 @@ def media_handoff(settings: Mapping | None) -> bool:
 
     A outra metade do knob (`media_fallback.mode`), e a régua é a do TS,
     estrita: `raw?.mode === 'handoff' ? 'handoff' : 'ask_text'`
-    (`media/router.ts:83`). Só a palavra exata transfere — qualquer outra
+    (`media/router.ts:84`). Só a palavra exata transfere — qualquer outra
     coisa, lixo e ausência inclusive, pede o texto. O default de settings crava
     `ask_text` (`types.ts:437`), então loja que nunca configurou nada nunca
     transfere por causa de um áudio.
