@@ -138,22 +138,45 @@ export async function DELETE(request: NextRequest) {
     }
 
     const id = request.nextUrl.searchParams.get('id')
-    
+
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
+    // Posse verificada com LEITURA escopada antes de qualquer delete — não confiamos
+    // em RLS aqui porque as tabelas de conhecimento são legadas e a auditoria já
+    // registrou (item 24) que essa família não avalia policy como se espera. Base
+    // inexistente e base de outra org voltam da mesma consulta sem linha e recebem a
+    // MESMA resposta (404): um status diferente por caso seria oráculo de existência
+    // (precedente dos itens 03 e 04 desta auditoria). Sem essa checagem antes, o
+    // delete de chunks/documentos abaixo rodava sem filtro de org e apagava conteúdo
+    // de outra loja mesmo quando o delete final na própria base não afetava nada.
+    const { data: owned } = await supabase
+      .from('knowledge_bases')
+      .select('id')
+      .eq('id', id)
+      .eq('organization_id', orgId)
+      .single()
+
+    if (!owned) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+
     // Deletar chunks primeiro
-    await supabase
+    const { error: chunksError } = await supabase
       .from('knowledge_chunks')
       .delete()
       .eq('knowledge_base_id', id)
 
+    if (chunksError) throw chunksError
+
     // Deletar documentos
-    await supabase
+    const { error: documentsError } = await supabase
       .from('knowledge_documents')
       .delete()
       .eq('knowledge_base_id', id)
+
+    if (documentsError) throw documentsError
 
     // Deletar base
     const { error } = await supabase
