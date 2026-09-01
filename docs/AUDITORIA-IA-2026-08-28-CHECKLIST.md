@@ -369,7 +369,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   fecha literal de IP, esquema, credencial, redirect e DNS honesto — sobe a barra de
   "qualquer um digita uma URL" para "atacante com domínio próprio".
 
-- [ ] **19. SSRF nas custom tools** `[relatado]`
+- [x] **19. SSRF nas custom tools** `[relatado]` · commits `db3524b1` `b3281db3` `3b180d65` + `a5ab7738` `be4a90fc` `f5863136` `e72ca07e`
   Único filtro é o CHECK `endpoint like 'https://%'` (`20260814000003:25`). A rota
   `src/app/api/ai/custom-tools/[id]/test/route.ts:42-57` devolve o corpo na resposta;
   `runtime/src/agents_runtime/tools/custom_http.py:135-141` chama em produção sem allowlist.
