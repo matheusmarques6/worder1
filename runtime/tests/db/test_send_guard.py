@@ -372,24 +372,43 @@ class TestTheThrottle:
         close_breaker(admin, pnid)
         assert check(admin, pnid) is None
 
+    @pytest.mark.parametrize("rate_limited", [True, False], ids=["excesso", "falha comum"])
     def test_yesterdays_errors_do_not_count_for_todays_step(
-        self, admin: psycopg.Connection
+        self, admin: psycopg.Connection, rate_limited: bool
     ) -> None:
         """O contador do TS é por DIA CORRIDO (chave `wa:errors:{id}:{dia}`,
         `rate-limiter.ts:596`), com o dia em UTC. Replicado, não corrigido: uma
         janela deslizante seria melhor NOS DOIS, e divergir de um lado só cria
-        divergência nova."""
+        divergência nova.
+
+        **Parametrizado pelo TIPO da 1ª falha de hoje, e é aí que estava o
+        buraco.** A versão anterior deste teste só exercitava o caminho de
+        excesso, que sempre esteve certo. Quando o ruling T tirou o `return` que
+        ficava antes da escada, a falha comum passou a CHEGAR nela — e lia um
+        contador parado no dia anterior. Uma única falha comum hoje segurava a
+        loja com o que aconteceu ontem.
+
+        No TS isso é impossível: a chave carrega o dia, então qualquer erro que
+        chegue num dia novo soma sobre um hash vazio. O que rola o dia lá é o
+        `hincrby`, que roda em TODA falha — não só nas de excesso.
+        """
         pnid = a_number()
-        for _ in range(9):
+        # Dez, e não nove: com nove a escada não segura nem lendo o contador
+        # velho, e o teste passaria com o defeito de pé.
+        for _ in range(10):
             report(admin, pnid, success=False, rate_limited=True)
         admin.execute(
             "update internal.whatsapp_send_guard"
-            " set error_day = error_day - 1 where phone_number_id = %s",
+            "   set error_day = error_day - 1,"
+            # A janela que os dez armaram ontem já venceu — senão o que este
+            # teste veria seria ela, e não o contador.
+            "       throttled_until = now() - interval '1 second'"
+            " where phone_number_id = %s",
             (pnid,),
         )
-
-        report(admin, pnid, success=False, rate_limited=True)  # o 1º de hoje
         close_breaker(admin, pnid)
+
+        report(admin, pnid, success=False, rate_limited=rate_limited)
         assert check(admin, pnid) is None
 
     def test_the_day_is_utc_whatever_the_session_timezone_says(
