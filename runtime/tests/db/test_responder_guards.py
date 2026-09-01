@@ -586,3 +586,155 @@ class TestTheDedupKeyDoesNotSwallowTheEscalation:
             (tenant,),
         ).fetchall()
         assert rows == [("critical", False), ("warning", True)]
+
+
+class TestMediaWithoutAWordDegradesHonestly:
+    """Item 31: o turno de áudio/imagem parou de responder no vazio.
+
+    Áudio e imagem NÃO são `unsupported` para o webhook — a régua de
+    `media/router.ts:38-50` os inclui de propósito, porque no caminho legado
+    eles têm transcrição e visão. Para org migrada o turno era agendado do
+    mesmo jeito e o modelo escrevia sobre uma rajada sem texto: não é silêncio,
+    é resposta no vazio, que é o pior dos dois.
+
+    Três classes de desfecho, uma por teste — e cada uma morde um pedaço
+    diferente da fiação.
+    """
+
+    async def test_an_audio_alone_answers_honestly_and_spends_no_token(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """A prova de que nenhum token é gasto está em `llm.asked`: gerar
+        resposta a partir de nada é o defeito que este item fecha, então a
+        chamada seria desperdício além de mentira."""
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type="whatsapp.received", status="active")
+        thread = create_thread(admin, tenant)
+        mirror = mirrored(admin, tenant, thread)
+        create_message(
+            admin, tenant, thread, direction="inbound", seq=1,
+            content={"type": "audio", "text": None, "media_id": "wamid.a"},
+        )
+        llm = ScriptedLlm()
+
+        draft = await responder(dsn, llm)(a_job(tenant, thread.conversation_id))
+
+        assert draft is not None
+        assert draft["text"] == (
+            "Desculpe, ainda não consigo ouvir áudios por aqui. "
+            "Pode me escrever em texto, por favor?"
+        )
+        assert llm.asked == []
+        assert (
+            "started",
+            "Cliente enviou um áudio sem transcrição — o agente ainda não lê"
+            " esse tipo e pediu o texto",
+        ) in steps(admin, mirror)
+
+    async def test_an_image_alone_has_its_own_wording(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """"Não consigo ouvir" para uma imagem seria uma segunda mentira."""
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type="whatsapp.received", status="active")
+        thread = create_thread(admin, tenant)
+        create_message(
+            admin, tenant, thread, direction="inbound", seq=1,
+            content={"type": "image", "text": None, "media_id": "wamid.i", "caption": None},
+        )
+        llm = ScriptedLlm()
+
+        draft = await responder(dsn, llm)(a_job(tenant, thread.conversation_id))
+
+        assert draft is not None
+        assert draft["text"] == (
+            "Desculpe, ainda não consigo ver imagens por aqui. "
+            "Pode me escrever em texto, por favor?"
+        )
+        assert llm.asked == []
+
+    async def test_the_store_message_wins_when_the_merchant_wrote_one(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """`settings.media_fallback.message` é o knob que o TS já lê
+        (`media/router.ts:78-85`) e que não tinha leitor nenhum em Python."""
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type="whatsapp.received", status="active")
+        configure(admin, tenant, {"media_fallback": {"message": "Me manda por escrito? 🧡"}})
+        thread = create_thread(admin, tenant)
+        create_message(
+            admin, tenant, thread, direction="inbound", seq=1,
+            content={"type": "audio", "text": None, "media_id": "wamid.a"},
+        )
+
+        draft = await responder(dsn)(a_job(tenant, thread.conversation_id))
+
+        assert draft is not None and draft["text"] == "Me manda por escrito? 🧡"
+
+    async def test_a_caption_is_the_customer_speaking_and_the_turn_is_normal(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """O outro lado da prova. Degradar com legenda seria ignorar um cliente
+        que escreveu — e o prompt precisa carregar as duas coisas: o que ele
+        escreveu E que existe uma imagem que o modelo não viu."""
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type="whatsapp.received", status="active")
+        thread = create_thread(admin, tenant)
+        create_message(
+            admin, tenant, thread, direction="inbound", seq=1,
+            content={
+                "type": "image",
+                "text": "esse ainda tem?",
+                "media_id": "wamid.i",
+                "caption": "esse ainda tem?",
+            },
+        )
+        llm = ScriptedLlm(reply="Tem sim! Me diz qual é que eu confiro o estoque.")
+
+        draft = await responder(dsn, llm)(a_job(tenant, thread.conversation_id))
+
+        assert draft is not None
+        assert draft["text"] == "Tem sim! Me diz qual é que eu confiro o estoque."
+        prompts = [message.content for request in llm.asked for message in request.messages]
+        assert any("[Cliente enviou uma imagem: esse ainda tem?]" in text for text in prompts)
+
+    async def test_one_written_message_in_the_burst_keeps_the_turn_normal(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """A rajada do debounce traz várias mensagens: áudio seguido de "viu?"
+        é uma pergunta que o modelo responde."""
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type="whatsapp.received", status="active")
+        thread = create_thread(admin, tenant)
+        create_message(
+            admin, tenant, thread, direction="inbound", seq=1,
+            content={"type": "audio", "text": None, "media_id": "wamid.a"},
+        )
+        create_message(admin, tenant, thread, direction="inbound", seq=2, text="viu?")
+        llm = ScriptedLlm(reply="Vi sim!")
+
+        draft = await responder(dsn, llm)(a_job(tenant, thread.conversation_id, target_seq=2))
+
+        assert draft is not None and draft["text"] == "Vi sim!"
+
+    async def test_a_guard_that_silences_still_wins_over_the_honest_line(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """Ordem: os guards decidem SE a loja fala; a mídia decide o que ela
+        diz. Uma conversa transferida há pouco não volta a falar por causa de
+        um áudio."""
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type="whatsapp.received", status="active")
+        thread = create_thread(admin, tenant)
+        mirror = mirrored(admin, tenant, thread)
+        create_message(
+            admin, tenant, thread, direction="inbound", seq=1,
+            content={"type": "audio", "text": None, "media_id": "wamid.a"},
+        )
+        admin.execute(
+            "update public.whatsapp_cloud_conversations set ai_transferred_at = now()"
+            " where id = %s",
+            (mirror.conversation_id,),
+        )
+
+        assert await responder(dsn)(a_job(tenant, thread.conversation_id)) is None

@@ -18,6 +18,7 @@ import pytest
 
 from agents_runtime.agent_core.media import (
     media_apology,
+    media_step_detail,
     read_message,
     speechless_media,
 )
@@ -182,6 +183,14 @@ class TestTheHonestLine:
         loja, cai no default. Mesma regra."""
         settings = {"media_fallback": {"message": "   "}}
         assert media_apology("audio", settings).startswith("Desculpe, ainda não consigo ouvir")
+
+    def test_the_chip_says_what_happened(self) -> None:
+        """Degradação sem registro é a mesma doença do silêncio sem registro."""
+        assert media_step_detail("audio") == (
+            "Cliente enviou um áudio sem transcrição — "
+            "o agente ainda não lê esse tipo e pediu o texto"
+        )
+        assert media_step_detail("carrier-pigeon").startswith("Cliente enviou uma mídia —")
 
     def test_garbage_in_settings_is_not_a_crash(self) -> None:
         assert media_apology("audio", {"media_fallback": "não é objeto"}).startswith("Desculpe,")

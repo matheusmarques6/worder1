@@ -116,6 +116,19 @@ def speechless_media(pending: Sequence[PendingMessage]) -> str | None:
     return from_contact[0].media_kind
 
 
+def media_step_detail(kind: str) -> str:
+    """O chip do inbox para o turno degradado.
+
+    Degradação sem registro é a mesma doença do silêncio sem registro: quem
+    olha o inbox precisa ver por que a loja respondeu isso, e não a resposta
+    de sempre.
+    """
+    return (
+        f"Cliente enviou {LABELS.get(kind, 'uma mídia')} — "
+        "o agente ainda não lê esse tipo e pediu o texto"
+    )
+
+
 def media_apology(kind: str, settings: Mapping | None) -> str:
     """A linha honesta, na voz da loja.
 

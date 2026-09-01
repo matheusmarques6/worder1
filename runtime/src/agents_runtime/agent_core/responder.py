@@ -53,6 +53,11 @@ from agents_runtime.agent_core.llm import (
     ToolSpec,
     strip_code_fence,
 )
+from agents_runtime.agent_core.media import (
+    media_apology,
+    media_step_detail,
+    speechless_media,
+)
 from agents_runtime.agent_core.metering import CallRecord, MeteredLlm
 from agents_runtime.agent_core.mission_resolver import (
     DISCOVERY_EVENT,
@@ -436,6 +441,25 @@ def build_responder(
             if outside is not None:
                 await note_step("skipped", outside.detail)
                 return None
+
+            # --- mídia sem uma palavra (item 31). O runtime não transcreve
+            # áudio nem enxerga imagem, e os dois NÃO são `unsupported` para o
+            # webhook: o turno é agendado igual. Sem esta saída, a rajada vazia
+            # ia para o modelo e ele escrevia sobre nada — resposta no vazio, o
+            # pior dos dois desfechos.
+            #
+            # Depois dos guards, de propósito: eles decidem SE a loja fala;
+            # isto decide o QUE ela diz. E antes da arbitragem e da cascata de
+            # chave BYO, porque nada aqui precisa de missão nem de LLM — a
+            # chamada seria token queimado para gerar a partir de nada.
+            speechless = speechless_media(pending)
+            if speechless is not None:
+                await note_step("started", media_step_detail(speechless))
+                split, rhythm = delivery_flags(version.settings)
+                return {
+                    "text": media_apology(speechless, version.settings),
+                    "humanize": {"split": split, "rhythm": rhythm},
+                }
 
             # --- arbitragem: uma missão vence o turno; sem nenhuma, alerta e
             # silêncio deliberado (a conversa avança; §3.4 inv. 8).
