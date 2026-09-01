@@ -627,10 +627,35 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   retentativa para transitórios em `20260812000004:393-403`, o `attempt_count` inflado pelos
   holds, e as campanhas do TS que não checam o rollout.
 
-- [ ] **33. Retry e rate limit no conector Shopify** `[relatado]`
+- [x] **33. Retry e rate limit no conector Shopify** `[relatado]` · commits `1744994b` + `c7a790a0`
   `runtime/src/agents_runtime/connectors/shopify.py:100-115` — 429 no meio do `create_coupon` deixa a
   price rule criada e o discount code não; no retry a price rule volta `422 taken` e a função retorna o
   código **sem nunca criar o cupom**. Cliente recebe código inexistente.
+
+  **A função é `create_discount`, e a linha decisiva não era a citada.** O `return code` do 422
+  "taken" na PRICE RULE saía sem nunca tocar `discount_codes.json`. Agora o 422 taken deixa de ser
+  sucesso por fé: a rule existente é reencontrada e o discount code é confirmado nesta chamada — e
+  se a rule não for reencontrada, isso é erro, não sucesso. O 422 taken do discount code continua
+  sendo sucesso legítimo, porque ali a rule foi confirmada no mesmo caminho.
+
+  **A busca falha FECHADA em todo ramo.** O REST `2024-01` não filtra price rule por título, então a
+  busca é janela de ±60 s em `ends_at` (o `validity_until` do grant, estável entre tentativas) mais
+  igualdade exata de título — e GET não-200, rule ausente ou página truncada levantam `ShopifyError`.
+  Em nenhum ramo devolve o código sem o cupom existir. Teto de 250 por página declarado no código.
+
+  **Retry de 429 com teto de 6 s POR INVOCAÇÃO**, três requisições, honrando `Retry-After` com
+  default de 2 s. O `asyncio.sleep` que o despacho tinha liberado é proibido pela fitness AST
+  `test_no_direct_clock.py`: o retry usa o `Clock` injetado, e por isso os testes MEDEM a espera em
+  vez de esperá-la. Divergências declaradas no código: o TS faz 4 requisições
+  (`api-client.ts:112,130`) e não replicamos o throttle proativo do `X-Shopify-Shop-Api-Call-Limit`.
+
+  **Dois testes que passavam pelo motivo errado, achados pelo review e pelo próprio implementador:**
+  o do teto nunca cruzava a fronteira entre chamadas (era ali que o orçamento vazava, 18 s onde a
+  régua manda 6), e o do `Retry-After` acima do teto passava por acidente contra um corpo sem retry
+  nenhum — "desistir imediatamente" é o que um corpo sem retry faz. Registrados e não implementados:
+  corpo malformado no GET escapa como `JSONDecodeError`, `Retry-After` em HTTP-date cai no default,
+  price rules órfãs nunca são limpas, e o recurso `PriceRule`/`DiscountCode` do REST está deprecado
+  na Shopify — migrar para GraphQL é maior que o item 35 e devia virar fila.
 
 - [ ] **34. Templates com componentes e variáveis** `[relatado]`
   `runtime/src/agents_runtime/channels/cloud_api.py:88-94` monta só `{name, language}`.
