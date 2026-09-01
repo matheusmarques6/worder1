@@ -379,9 +379,25 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   O TS carrega por conta, cifrado (`src/lib/whatsapp/account-loader.ts:25-33`).
   Ação: função SECURITY DEFINER análoga a `internal.active_shopify_store`.
 
-- [ ] **21. Fail-open em `/api/whatsapp/agents/me`** `[relatado]`
+- [x] **21. Fail-open em `/api/whatsapp/agents/me`** `[relatado]` · commits `e36ecd06` + `6f6387a5`
   `:17-26` devolve `isAdmin:true, permissions:null` quando a auth falha, em vez de 401.
   Todo o gating de permissão do inbox se apoia nisso.
+
+  **Entregue.** Sem sessão, 401 — e o comentário que justificava o fail-open ("assumir
+  que é admin para não bloquear a interface") saiu junto. O e-mail do usuário saiu dos
+  logs. O implementador achou o MESMO fail-open no único consumidor, o hook
+  `useAgentPermissions`, que reabria acesso total em qualquer 401: consertar só a rota
+  teria devolvido o buraco pela porta do lado.
+
+  **O review achou a sobra que importa:** o defeito sobrevivia na janela de
+  carregamento. O hook começava com `isAgent: false` e todo helper faz
+  `if (!isAgent) return true` — agente real com acesso total até o fetch resolver.
+  Não era explorável só porque o consumidor mostra spinner e segura o fetch, ou seja,
+  a segurança morava no CHAMADOR. Agora o hook nega sozinho enquanto a identidade é
+  desconhecida, sem trocar o spinner por tela de permissão negada, e o caminho do
+  admin segue idêntico. Os quatro booleanos de conveniência tinham o mesmo `?? true`
+  e foram junto. O estado de falha virou função pura testada — antes era verificado
+  à mão, agora o build quebra se alguém inverter.
 
 - [ ] **22. Ordem do delete em `/api/ai/knowledge`** `[relatado]`
   `:147-156` apaga chunks e documentos por `knowledge_base_id` sem filtro de org; só `:159-163` escopa.
