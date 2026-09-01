@@ -165,13 +165,27 @@ async function processFileAsync(
 ) {
   const supabase = getSupabaseAdmin()
   try {
+    // Achado 6 (follow-up fase 3): item 25 fechou /api/ai/process/document
+    // pra negar sempre sem segredo configurado (ambiente não é credencial).
+    // Mandar `Bearer ` vazio some direto num 401 genérico, indistinguível de
+    // URL errada — em qualquer ambiente sem a env (CI, preview, `next dev`
+    // novo), todo upload morre calado. Falha ANTES do fetch, com uma
+    // mensagem que nomeia a env que falta (mesmo tratamento de
+    // sources/route.ts).
+    const internalSecret = process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET
+    if (!internalSecret) {
+      throw new Error(
+        'INTERNAL_API_SECRET (ou CRON_SECRET) não configurado neste ambiente — configure um dos dois (veja .env.example) para processar fontes de URL/texto.'
+      )
+    }
+
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
     const res = await fetch(`${baseUrl}/api/ai/process/document`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
+        authorization: `Bearer ${internalSecret}`,
       },
       body: JSON.stringify({
         source_id: sourceId,

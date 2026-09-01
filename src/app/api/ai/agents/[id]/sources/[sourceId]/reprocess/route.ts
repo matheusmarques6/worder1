@@ -66,19 +66,7 @@ export async function POST(
     }
 
     // Disparar reprocessamento em background
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-
-    fetch(`${baseUrl}/api/ai/process/document`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
-      },
-      body: JSON.stringify({
-        source_id: sourceId,
-        organization_id: organizationId,
-      }),
-    }).catch(err => {
+    triggerReprocess(sourceId, organizationId).catch(err => {
       console.error('Error triggering reprocess:', err)
     })
 
@@ -91,5 +79,58 @@ export async function POST(
   } catch (error: any) {
     console.error('Error in POST /api/ai/agents/[id]/sources/[sourceId]/reprocess:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+// =====================================================
+// REPROCESSAMENTO EM BACKGROUND
+// =====================================================
+
+async function triggerReprocess(sourceId: string, organizationId: string) {
+  const supabase = getSupabaseAdmin()
+  try {
+    // Achado 6 (follow-up fase 3): mesmo tratamento de sources/route.ts e
+    // sources/upload/route.ts — item 25 fechou /api/ai/process/document pra
+    // negar sempre sem segredo configurado (ambiente não é credencial).
+    // Nunca manda a credencial vazia; falha ANTES do fetch, com uma
+    // mensagem que nomeia a env que falta.
+    const internalSecret = process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET
+    if (!internalSecret) {
+      throw new Error(
+        'INTERNAL_API_SECRET (ou CRON_SECRET) não configurado neste ambiente — configure um dos dois (veja .env.example) para processar fontes de URL/texto.'
+      )
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
+    const res = await fetch(`${baseUrl}/api/ai/process/document`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        authorization: `Bearer ${internalSecret}`,
+      },
+      body: JSON.stringify({
+        source_id: sourceId,
+        organization_id: organizationId,
+      }),
+    })
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body?.error || `process/document respondeu ${res.status}`)
+    }
+  } catch (error: any) {
+    console.error('Error triggering reprocess:', error)
+    // Sem isso a fonte ficaria presa em 'pending' para sempre, sem nenhum
+    // sinal pro lojista de que o reprocessamento não engatou.
+    await supabase
+      .from('ai_agent_sources')
+      .update({
+        status: 'error',
+        error_message: `Falha ao iniciar processamento: ${error?.message || 'erro desconhecido'}. Clique em Reprocessar.`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', sourceId)
+      .then(undefined, () => {})
   }
 }
