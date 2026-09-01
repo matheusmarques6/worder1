@@ -33,6 +33,8 @@ import pytest
 from tests.db.conftest import TwoTenants, as_app_role
 
 FAILURE_THRESHOLD = 5
+#: Sucessos em HALF_OPEN para fechar (`circuit-breaker.ts:53`, `successThreshold ?? 3`).
+SUCCESS_THRESHOLD = 3
 THROTTLE_STEPS = ((10, 60), (20, 300), (50, 600))
 
 
@@ -72,6 +74,15 @@ def expire_window(conn: psycopg.Connection, phone_number_id: str, column: str) -
         " where phone_number_id = %s",
         (phone_number_id,),
     )
+
+
+def close_breaker(conn: psycopg.Connection, phone_number_id: str) -> None:
+    """Devolve o número ao estado fechado do jeito que o TS exige: vencida a
+    janela, TRÊS sucessos. Existe como helper porque os testes de throttle
+    precisam tirar o breaker da frente para enxergar só o throttle."""
+    expire_window(conn, phone_number_id, "open_until")
+    for _ in range(SUCCESS_THRESHOLD):
+        report(conn, phone_number_id, success=True)
 
 
 @pytest.fixture(autouse=True)
@@ -149,19 +160,89 @@ class TestTheBreaker:
         report(admin, pnid, success=False)
         assert check(admin, pnid)[0] == "circuit_open"
 
-    def test_one_success_after_the_window_closes_it_for_good(
+    def test_one_success_after_the_window_does_not_close_it(
         self, admin: psycopg.Connection
     ) -> None:
-        """A outra metade da mesma regra — sem ela o número ficaria a uma falha
-        de reabrir para sempre, e a recuperação nunca aconteceria."""
+        """O TS exige TRÊS sucessos para sair do HALF_OPEN
+        (`successThreshold ?? 3`, `circuit-breaker.ts:53`, implementado no
+        `LUA_RECORD_SUCCESS`). Com um só, uma conta intermitente levaria mais
+        cinco mensagens por ciclo aqui onde o TS leva uma — o motor novo seria
+        o MENOS conservador dos dois, o oposto do que este item existe para
+        fazer."""
         pnid = a_number()
         for _ in range(FAILURE_THRESHOLD):
             report(admin, pnid, success=False)
         expire_window(admin, pnid, "open_until")
 
         report(admin, pnid, success=True)
+        # Ainda em recuperação: a próxima falha reabre NA HORA, sem precisar de
+        # mais quatro.
+        report(admin, pnid, success=False)
+        assert check(admin, pnid)[0] == "circuit_open"
+
+    def test_two_successes_are_still_not_enough(self, admin: psycopg.Connection) -> None:
+        pnid = a_number()
+        for _ in range(FAILURE_THRESHOLD):
+            report(admin, pnid, success=False)
+        expire_window(admin, pnid, "open_until")
+
+        for _ in range(SUCCESS_THRESHOLD - 1):
+            report(admin, pnid, success=True)
+        report(admin, pnid, success=False)
+        assert check(admin, pnid)[0] == "circuit_open"
+
+    def test_three_successes_close_it_for_good(self, admin: psycopg.Connection) -> None:
+        """A outra metade da mesma regra — sem ela o número ficaria a uma falha
+        de reabrir para sempre, e a recuperação nunca aconteceria."""
+        pnid = a_number()
+        for _ in range(FAILURE_THRESHOLD):
+            report(admin, pnid, success=False)
+        close_breaker(admin, pnid)
+
         report(admin, pnid, success=False)
         assert check(admin, pnid) is None
+
+    def test_a_failure_during_recovery_restarts_the_success_streak(
+        self, admin: psycopg.Connection
+    ) -> None:
+        """`LUA_RECORD_FAILURE` zera os sucessos ao reabrir
+        (`circuit-breaker.ts:112-115`). Sem isso, dois sucessos de um ciclo
+        somados a um do ciclo seguinte fechariam um número que nunca teve três
+        seguidos."""
+        pnid = a_number()
+        for _ in range(FAILURE_THRESHOLD):
+            report(admin, pnid, success=False)
+        expire_window(admin, pnid, "open_until")
+        for _ in range(SUCCESS_THRESHOLD - 1):
+            report(admin, pnid, success=True)
+
+        report(admin, pnid, success=False)  # reabre e zera a série
+        expire_window(admin, pnid, "open_until")
+        report(admin, pnid, success=True)  # 1 de 3, não 3 de 3
+
+        report(admin, pnid, success=False)
+        assert check(admin, pnid)[0] == "circuit_open"
+
+    def test_a_success_while_the_window_is_still_open_changes_nothing(
+        self, admin: psycopg.Connection
+    ) -> None:
+        """Paridade com o `LUA_RECORD_SUCCESS`, que só trata HALF_OPEN e
+        CLOSED: em OPEN o sucesso passa sem mexer em nada. Na prática o gate
+        impede esse envio — mas se o fail-open deixar passar uma rajada durante
+        um outage do guard, ela não pode dar alta a um número ainda de castigo.
+
+        São TRÊS sucessos de propósito, e não um: com um só, o número de
+        sucessos nunca chega ao limiar e o teste passaria mesmo sem a guarda de
+        OPEN — foi a sabotagem que mostrou isso. É no terceiro que a guarda
+        deixa de ser decoração.
+        """
+        pnid = a_number()
+        for _ in range(FAILURE_THRESHOLD):
+            report(admin, pnid, success=False)
+
+        for _ in range(SUCCESS_THRESHOLD):
+            report(admin, pnid, success=True)
+        assert check(admin, pnid)[0] == "circuit_open"
 
     def test_two_numbers_do_not_contaminate_each_other(self, admin: psycopg.Connection) -> None:
         """A chave é o número, e o número é físico: o vizinho não paga."""
@@ -183,11 +264,11 @@ class TestTheThrottle:
         pnid = a_number()
         for _ in range(9):
             report(admin, pnid, success=False, rate_limited=True)
-        report(admin, pnid, success=True)  # fecha o breaker, não o throttle
+        close_breaker(admin, pnid)  # fecha o breaker, não o throttle
         assert check(admin, pnid) is None
 
         report(admin, pnid, success=False, rate_limited=True)
-        report(admin, pnid, success=True)
+        close_breaker(admin, pnid)
         held = check(admin, pnid)
 
         assert held is not None
@@ -202,7 +283,7 @@ class TestTheThrottle:
             while seen < threshold:
                 report(admin, pnid, success=False, rate_limited=True)
                 seen += 1
-            report(admin, pnid, success=True)  # o breaker sai da frente
+            close_breaker(admin, pnid)  # o breaker sai da frente
             reason, retry_after = check(admin, pnid)
             assert reason == "throttled"
             assert window - 5 <= retry_after.total_seconds() <= window
@@ -217,8 +298,7 @@ class TestTheThrottle:
             report(admin, pnid, success=False, rate_limited=False)
         assert check(admin, pnid)[0] == "circuit_open"
 
-        expire_window(admin, pnid, "open_until")
-        report(admin, pnid, success=True)
+        close_breaker(admin, pnid)
         assert check(admin, pnid) is None
 
     def test_plain_failures_do_not_inflate_the_excess_counter(
@@ -239,7 +319,7 @@ class TestTheThrottle:
         for _ in range(45):
             report(admin, pnid, success=False, rate_limited=False)
         report(admin, pnid, success=False, rate_limited=True)
-        report(admin, pnid, success=True)  # o breaker sai da frente
+        close_breaker(admin, pnid)  # o breaker sai da frente
 
         reason, retry_after = check(admin, pnid)
         assert reason == "throttled"
@@ -259,11 +339,11 @@ class TestTheThrottle:
         for _ in range(10):
             report(admin, pnid, success=False, rate_limited=True)
         expire_window(admin, pnid, "throttled_until")
-        report(admin, pnid, success=True)  # fecha o breaker
+        close_breaker(admin, pnid)
         assert check(admin, pnid) is None
 
         report(admin, pnid, success=False, rate_limited=False)
-        report(admin, pnid, success=True)
+        close_breaker(admin, pnid)
         assert check(admin, pnid) is None
 
     def test_yesterdays_errors_do_not_count_for_todays_step(
@@ -283,7 +363,7 @@ class TestTheThrottle:
         )
 
         report(admin, pnid, success=False, rate_limited=True)  # o 1º de hoje
-        report(admin, pnid, success=True)
+        close_breaker(admin, pnid)
         assert check(admin, pnid) is None
 
     def test_the_day_is_utc_whatever_the_session_timezone_says(

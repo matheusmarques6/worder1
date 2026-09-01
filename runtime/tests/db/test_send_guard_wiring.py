@@ -30,7 +30,7 @@ from tests.db.factories import (
     create_thread,
     open_window,
 )
-from tests.db.test_send_guard import FAILURE_THRESHOLD, report
+from tests.db.test_send_guard import FAILURE_THRESHOLD, close_breaker, report
 from tests.support.fake_channel import SCHEMA_SQL, FakeChannel
 
 NO_DELAYS = QueueingConfig(humanize_delays=False)
@@ -143,7 +143,7 @@ class TestTheVerdictIsExecuted:
         pnid = account_number(admin, thread)
         for _ in range(10):
             report(admin, pnid, success=False, rate_limited=True)
-        report(admin, pnid, success=True)  # fecha o breaker; o throttle fica
+        close_breaker(admin, pnid)  # fecha o breaker; o throttle fica
         outbox_id = create_outbox_item(admin, org, thread)
 
         async with as_sender(dsn) as conn:
