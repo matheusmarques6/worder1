@@ -39,7 +39,11 @@ import psycopg
 
 import agents_runtime
 from agents_runtime.agent_core import openrouter
-from agents_runtime.agent_core.guards import evaluate_inbound_guards, resolve_handoff
+from agents_runtime.agent_core.guards import (
+    evaluate_inbound_guards,
+    resolve_blocked_topic,
+    resolve_handoff,
+)
 from agents_runtime.agent_core.llm import (
     ChatRequest,
     LlmPort,
@@ -734,6 +738,39 @@ def build_responder(
                 await note_step(
                     "skipped", "Resposta retida pela verificação de qualidade" + preview
                 )
+                return None
+
+            # --- blocked_topics (item 30): a última coisa antes do envio.
+            # Os outros guards decidem sobre o que CHEGOU; este decide sobre o
+            # que o modelo PRODUZIU, e por isso mora aqui e não lá em cima.
+            # Não substitui o Judge 1: o juiz tem rubricas próprias e não
+            # conhece a lista de assuntos que ESTE lojista proibiu.
+            topic = resolve_blocked_topic(version.settings, outcome.draft)
+            if topic is not None:
+                async with conn.transaction():
+                    await scope_to_organization(conn, job.organization_id)
+                    await agent_repo.mark_ai_handoff(
+                        conn,
+                        organization_id=job.organization_id,
+                        conversation_id=job.conversation_id,
+                        reason="blocked_topic",
+                    )
+                    await alerts_repo.open_alert(
+                        conn,
+                        organization_id=job.organization_id,
+                        type=alerts_repo.HANDOFF,
+                        severity="critical",
+                        title="Resposta tocou num assunto proibido — nada foi enviado",
+                        payload={
+                            "conversation_id": str(job.conversation_id),
+                            "topic": topic,
+                            "reason": "blocked_topic",
+                            # Mesma regra do veto do Judge 1: o bloqueio segura
+                            # o envio, não a evidência.
+                            "draft": outcome.draft,
+                        },
+                    )
+                await note_step("transferred", f"Assunto proibido na resposta (“{topic}”)")
                 return None
 
             # As flags de entrega viajam COM o envio (payload da outbox): o

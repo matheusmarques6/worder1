@@ -18,6 +18,7 @@ import pytest
 from agents_runtime.agent_core.guards import (
     GuardState,
     evaluate_inbound_guards,
+    resolve_blocked_topic,
     resolve_handoff,
 )
 
@@ -434,6 +435,45 @@ class TestHandoffKeywords:
         handoff = resolve_handoff(HANDOFF_SETTINGS, ("oi", "tudo bem?", "quero atendente"))
 
         assert handoff is not None
+
+
+BLOCKED_SETTINGS = {"safety": {"blocked_topics": ["processo judicial", "concorrente"]}}
+
+
+class TestBlockedTopics:
+    """`safety.blocked_topics` — cloud-sender.ts:129-163 + guards.ts:44-49.
+
+    A exceção do item 30: é sobre o que o MODELO produziu, não sobre o que
+    chegou, então fica do lado da saída, antes do envio — como no TS.
+    """
+
+    def test_a_forbidden_topic_in_the_draft_is_caught(self) -> None:
+        assert (
+            resolve_blocked_topic(
+                BLOCKED_SETTINGS, "Nesse caso abra um processo judicial contra a loja."
+            )
+            == "processo judicial"
+        )
+
+    def test_a_clean_draft_passes(self) -> None:
+        assert resolve_blocked_topic(BLOCKED_SETTINGS, "O frete sai em dois dias.") is None
+
+    def test_matching_ignores_case_and_accents(self) -> None:
+        assert (
+            resolve_blocked_topic(
+                {"safety": {"blocked_topics": ["jurídico"]}}, "Falo com o JURIDICO."
+            )
+            == "jurídico"
+        )
+
+    def test_nothing_configured_blocks_nothing(self) -> None:
+        for settings in (None, {}, {"safety": {"blocked_topics": []}}):
+            assert resolve_blocked_topic(settings, "qualquer coisa") is None
+
+    def test_it_reads_the_response_not_the_inbound(self) -> None:
+        """O guard de saída não olha o que o cliente escreveu: o cliente pode
+        falar de qualquer assunto — quem não pode é a voz da loja."""
+        assert resolve_blocked_topic(BLOCKED_SETTINGS, "") is None
 
 
 class TestSettingsGarbageNeverSilences:

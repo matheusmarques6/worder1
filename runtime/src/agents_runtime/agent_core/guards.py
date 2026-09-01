@@ -275,6 +275,17 @@ def resolve_handoff(settings: Any, texts: Sequence[str]) -> Handoff | None:
     return None
 
 
+def resolve_blocked_topic(settings: Any, draft: str | None) -> str | None:
+    """O tópico proibido que o modelo deixou escapar no rascunho, ou None.
+
+    A exceção do item 30: os outros guards decidem sobre o que CHEGOU, este
+    decide sobre o que o modelo PRODUZIU — então mora do lado da saída, antes
+    do envio, como `cloud-sender.ts:129-163`. Não substitui o Judge 1: o juiz
+    tem rubricas próprias e não conhece a lista do lojista.
+    """
+    return find_blocked_topic(draft, blocked_topics(settings))
+
+
 def evaluate_inbound_guards(
     settings: Any,
     state: GuardState,
