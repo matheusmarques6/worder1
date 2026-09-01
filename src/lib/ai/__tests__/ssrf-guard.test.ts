@@ -224,6 +224,18 @@ describe('safeFetch', () => {
       expect(headers.get('authorization')).toBe('Bearer segredo-da-loja')
     })
 
+    it('sem blockHttpsDowngrade (default, comportamento dos outros chamadores): segue salto https → http normalmente', async () => {
+      mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+      fetchMock
+        .mockResolvedValueOnce(
+          new Response(null, { status: 302, headers: { location: 'http://outracdn.com/x' } }),
+        )
+        .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+      const res = await safeFetch('https://cdn.loja.com/x')
+      expect(res.status).toBe(200)
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
     it('cadeia de dois saltos: mantém na origem igual, derruba na diferente', async () => {
       mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
       fetchMock
@@ -243,6 +255,37 @@ describe('safeFetch', () => {
         'Bearer segredo-da-loja'
       )
       expect(new Headers(fetchMock.mock.calls[2][1].headers).get('authorization')).toBeNull()
+    })
+  })
+
+  // Re-review de cdeba429: seguir redirect (fix round 2 do item 19, reusado
+  // pela entrega de webhook) abre um jeito de um destino https responder 302
+  // pra um http:// arbitrário — o request do segundo salto (corpo + headers,
+  // incluindo qualquer segredo neles) vai em texto claro. Opt-in por
+  // chamador: o crawler busca http:// de propósito, então o default
+  // (blockHttpsDowngrade=false, suíte acima) não pode mudar pra ele.
+  describe('blockHttpsDowngrade (opt-in, fix da re-review de cdeba429)', () => {
+    it('recusa salto https → http, nunca busca o destino em texto claro', async () => {
+      mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+      fetchMock.mockResolvedValueOnce(
+        new Response(null, { status: 302, headers: { location: 'http://outracdn.com/x' } }),
+      )
+      await expect(safeFetch('https://cdn.loja.com/x', {}, 5, true)).rejects.toThrow(
+        /não pode ser usado como fonte|não é permitido/,
+      )
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('permite salto https → https normalmente', async () => {
+      mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+      fetchMock
+        .mockResolvedValueOnce(
+          new Response(null, { status: 302, headers: { location: 'https://outracdn.com/x' } }),
+        )
+        .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+      const res = await safeFetch('https://cdn.loja.com/x', {}, 5, true)
+      expect(res.status).toBe(200)
+      expect(fetchMock).toHaveBeenCalledTimes(2)
     })
   })
 })

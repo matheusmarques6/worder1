@@ -166,17 +166,30 @@ function stripCredentialHeaders(init: RequestInit): RequestInit {
  * anterior, derruba as headers de credencial antes de seguir — mesmo
  * comportamento do fetch nativo, só que feito à mão porque o loop também é
  * à mão.
+ *
+ * `blockHttpsDowngrade` (default false — não muda o crawler nem os outros
+ * chamadores): recusa um salto que caia de https pra http. Sem isso, um
+ * destino https que responde 302 pra um http:// arbitrário faz o corpo E os
+ * headers do request seguirem em texto claro nesse salto — pra um chamador
+ * que carrega segredo no header (ex.: a assinatura HMAC do webhook), isso é
+ * o segredo em texto claro na rede, não só perda de confidencialidade do
+ * corpo. Opt-in por chamador porque o crawler busca http:// legitimamente.
  */
 export async function safeFetch(
   rawUrl: string,
   init: RequestInit = {},
-  maxRedirects = 5
+  maxRedirects = 5,
+  blockHttpsDowngrade = false
 ): Promise<Response> {
   let currentUrl = rawUrl
   let currentInit = init
   let previousOrigin: string | null = null
+  let previousProtocol: string | null = null
   for (let hop = 0; ; hop++) {
     const url = await assertSafeUrl(currentUrl)
+    if (blockHttpsDowngrade && previousProtocol === 'https:' && url.protocol === 'http:') {
+      throw blocked('redirect de https para http não é permitido')
+    }
     if (previousOrigin !== null && url.origin !== previousOrigin) {
       currentInit = stripCredentialHeaders(currentInit)
     }
@@ -196,6 +209,7 @@ export async function safeFetch(
       throw blocked('excesso de redirecionamentos ao seguir a URL')
     }
     previousOrigin = url.origin
+    previousProtocol = url.protocol
     currentUrl = new URL(location, url).toString()
   }
 }

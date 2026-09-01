@@ -180,4 +180,19 @@ describe('crawlSite', () => {
   it('URL malformada → mensagem clara, não TypeError cru', async () => {
     await expect(crawlSite('não é uma url')).rejects.toThrow(/não pode ser usado como fonte/)
   })
+
+  // Re-review de cdeba429 (item de webhook): a entrega de webhook passou a
+  // recusar salto https → http (blockHttpsDowngrade). O crawler NÃO chama
+  // safeFetch com essa opção — ele busca http:// de propósito (fonte de
+  // conhecimento pode ser um site legado sem TLS) — então isso não pode
+  // mudar. `crawlSite` com URL inicial http:// (não é downgrade nenhum,
+  // nunca houve salto https antes) continua funcionando.
+  it('URL inicial http:// (sem TLS) continua sendo buscada normalmente — crawler não pede blockHttpsDowngrade', async () => {
+    respond({
+      'http://legado.com/': { body: htmlPage(LONG) },
+      'http://legado.com/sitemap.xml': { status: 404, body: '' },
+    })
+    const text = await crawlSite('http://legado.com/')
+    expect(text).toContain('Produto excelente')
+  })
 })

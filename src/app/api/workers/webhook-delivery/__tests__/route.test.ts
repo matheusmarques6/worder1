@@ -174,6 +174,36 @@ describe('POST /api/workers/webhook-delivery', () => {
       expect(sentHeaders.get('X-Worder-Signature')).toBe('sha256=deadbeef')
     })
 
+    // Re-review de cdeba429 (Minor, tratado como regressão): antes deste
+    // commit, um 3xx era gravado como delivery falha e nada era reentregue —
+    // seguir redirect nunca acontecia. Fazer a entrega seguir redirect
+    // (correto: recebedores que respondem 3xx deixam de ficar permanentemente
+    // "failed") abriu um jeito de um destino https responder 302 pra um
+    // http:// arbitrário — o segundo salto levaria o corpo assinado E o
+    // header X-Worder-Signature em texto claro. O guard segue seguindo
+    // redirect (não voltamos a marcar 3xx como falha); só não pode pisar em
+    // http no meio do caminho.
+    it('recusa quando o primeiro salto responde 302 para http:// — não entrega, HMAC não vaza em texto claro', async () => {
+      mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+      fetchMock.mockResolvedValueOnce(
+        new Response(null, { status: 302, headers: { location: 'http://outra-cdn.com/hook' } }),
+      )
+      rpcResult = { data: [claimedRow('https://loja-cliente.com/webhooks/worder')], error: null }
+      chainResult = { data: subRow, error: null }
+
+      const res = await POST(req({ deliveryId: 'deliv-1' }))
+      const body = await res.json()
+      expect(body.ok).toBe(false)
+      expect(body.error).toMatch(/não pode ser usado como fonte|não é permitido/)
+
+      // só o primeiro salto (https) foi buscado — o destino http:// nunca
+      // recebeu o payload nem a assinatura
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const updatePatch = calls['update']?.[0]?.[0]
+      expect(updatePatch.response_body).toBeUndefined()
+      expect(updatePatch.response_code).toBeUndefined()
+    })
+
     it('segue redirect para outro host público e captura o response final, mantendo a assinatura HMAC', async () => {
       mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
       fetchMock

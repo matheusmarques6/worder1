@@ -134,12 +134,16 @@ export async function POST(req: NextRequest) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
+    // blockHttpsDowngrade=true (fix da re-review em cdeba429): sem isso, um
+    // receptor https que responde 302 pra um http:// entrega a assinatura
+    // HMAC (X-Worder-Signature) em texto claro nesse salto. Seguir redirect
+    // continua correto — só não pode pisar em http no meio do caminho.
     const res = await safeFetch(claimed.url, {
       method: 'POST',
       headers,
       body: outboundBody,
       signal: controller.signal,
-    });
+    }, 5, true);
     const text = await res.text();
     const result = { status: res.status, body: text.slice(0, 2048) };
 
