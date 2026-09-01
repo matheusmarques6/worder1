@@ -102,7 +102,7 @@ export interface UseAgentPermissionsReturn {
 // acima: mesmo com a rota corrigida, esse catch continuava devolvendo
 // acesso total pra quem não autenticou. Fail-closed aqui é isAgent: true
 // com estes defaults, não um modo de degradação novo.
-const RESTRICTIVE_AGENT_DEFAULTS: AgentPermissions = {
+export const RESTRICTIVE_AGENT_DEFAULTS: AgentPermissions = {
   agentId: null,
   accessLevel: 'agent',
   canViewAllConversations: false,
@@ -128,6 +128,32 @@ const RESTRICTIVE_AGENT_DEFAULTS: AgentPermissions = {
   allowedHoursStart: null,
   allowedHoursEnd: null,
   allowedDays: null,
+}
+
+// Estado a assumir quando a rota de identidade falha (401 ou erro de
+// rede/parse) — puro e testável sem precisar renderizar o hook, pra não
+// depender só de leitura de código pra provar que o fail-open não volta.
+export function permissionsStateOnFailure(): {
+  isAgent: boolean
+  isAdmin: boolean
+  permissions: AgentPermissions
+} {
+  return { isAgent: true, isAdmin: false, permissions: RESTRICTIVE_AGENT_DEFAULTS }
+}
+
+// Decide o que os helpers de acesso respondem ANTES de saber quem é o
+// usuário. Enquanto `isLoading`, identidade é desconhecida — a resposta
+// certa é 'deny', a mesma lógica de "não sei quem é, então nego" que a
+// rota usa pra devolver 401 em vez de chutar admin. Sem isso, todo helper
+// que checa `!isAgent` tratava o estado inicial (isAgent: false) como
+// acesso total até o fetch resolver.
+export type AccessGate = 'allow' | 'deny' | 'check-permissions'
+
+export function accessGate(isLoading: boolean, isAdmin: boolean, isAgent: boolean): AccessGate {
+  if (isLoading) return 'deny'
+  if (isAdmin) return 'allow'
+  if (!isAgent) return 'allow'
+  return 'check-permissions'
 }
 
 // =====================================================
@@ -185,12 +211,12 @@ export function useAgentPermissions(): UseAgentPermissionsReturn {
       if (!res.ok) {
         // 401 (sem sessão) ou qualquer outro erro da rota de identidade:
         // não sabemos quem é o usuário, então nada de acesso total.
-        // Mesmo estado restritivo do agente sem permissões conhecidas.
+        const fallback = permissionsStateOnFailure()
         setError('Falha ao buscar permissões')
-        setIsAgent(true)
-        setIsAdmin(false)
+        setIsAgent(fallback.isAgent)
+        setIsAdmin(fallback.isAdmin)
         setAgent(null)
-        setPermissions(RESTRICTIVE_AGENT_DEFAULTS)
+        setPermissions(fallback.permissions)
         return
       }
 
@@ -213,11 +239,12 @@ export function useAgentPermissions(): UseAgentPermissionsReturn {
       console.error('[useAgentPermissions] Erro:', err)
       setError(err.message)
       // Falha de rede/parse: mesmo tratamento fail-closed do `!res.ok`
-      // acima. Não vira admin — vira agente com defaults restritivos.
-      setIsAgent(true)
-      setIsAdmin(false)
+      // acima — mesma função, pra não voltar a divergir.
+      const fallback = permissionsStateOnFailure()
+      setIsAgent(fallback.isAgent)
+      setIsAdmin(fallback.isAdmin)
       setAgent(null)
-      setPermissions(RESTRICTIVE_AGENT_DEFAULTS)
+      setPermissions(fallback.permissions)
     } finally {
       setIsLoading(false)
     }
@@ -237,11 +264,11 @@ export function useAgentPermissions(): UseAgentPermissionsReturn {
   
   // Helper: verificar acesso a número WhatsApp
   const canAccessNumber = useCallback((numberId: string): boolean => {
-    if (isAdmin) return true
-    if (!isAgent) return true
+    const gate = accessGate(isLoading, isAdmin, isAgent)
+    if (gate !== 'check-permissions') return gate === 'allow'
     if (permissions?.whatsappAccessAll) return true
     return permissions?.whatsappNumberIds?.includes(numberId) ?? false
-  }, [isAdmin, isAgent, permissions])
+  }, [isLoading, isAdmin, isAgent, permissions])
   
   // Helper: verificar acesso a conversa
   const canAccessConversation = useCallback((conversation: { whatsapp_number_id?: string }): boolean => {
@@ -251,30 +278,30 @@ export function useAgentPermissions(): UseAgentPermissionsReturn {
   
   // Helper: verificar acesso a pipeline
   const canAccessPipeline = useCallback((pipelineId: string): boolean => {
-    if (isAdmin) return true
-    if (!isAgent) return true
+    const gate = accessGate(isLoading, isAdmin, isAgent)
+    if (gate !== 'check-permissions') return gate === 'allow'
     if (!permissions?.canAccessPipelines) return false
     if (permissions?.pipelineAccessAll) return true
     return permissions?.pipelineIds?.includes(pipelineId) ?? false
-  }, [isAdmin, isAgent, permissions])
-  
+  }, [isLoading, isAdmin, isAgent, permissions])
+
   // Helper: verificar qualquer permissão
   const canAccess = useCallback((permission: keyof AgentPermissions): boolean => {
-    if (isAdmin) return true
-    if (!isAgent) return true
+    const gate = accessGate(isLoading, isAdmin, isAgent)
+    if (gate !== 'check-permissions') return gate === 'allow'
     if (!permissions) return false
-    
+
     const value = permissions[permission]
     if (typeof value === 'boolean') return value
     if (Array.isArray(value)) return value.length > 0
     return !!value
-  }, [isAdmin, isAgent, permissions])
-  
+  }, [isLoading, isAdmin, isAgent, permissions])
+
   // Helper: verificar acesso a rota
   const canAccessRoute = useCallback((route: string): boolean => {
-    if (isAdmin) return true
-    if (!isAgent) return true
-    
+    const gate = accessGate(isLoading, isAdmin, isAgent)
+    if (gate !== 'check-permissions') return gate === 'allow'
+
     // Encontrar a permissão necessária para a rota
     let requiredPermission: keyof AgentPermissions | 'admin' | 'always' | null = null
     
@@ -302,8 +329,8 @@ export function useAgentPermissions(): UseAgentPermissionsReturn {
     
     // Verificar a permissão
     return canAccess(requiredPermission)
-  }, [isAdmin, isAgent, canAccess])
-  
+  }, [isLoading, isAdmin, isAgent, canAccess])
+
   return {
     isAgent,
     isAdmin,
@@ -314,10 +341,14 @@ export function useAgentPermissions(): UseAgentPermissionsReturn {
     canAccessNumber,
     canAccessConversation,
     canAccessPipeline,
-    canSendMessages: isAdmin || (permissions?.canSendMedia ?? true),
-    canTransferChats: isAdmin || (permissions?.canTransferConversations ?? true),
-    canEditPipeline: isAdmin || (permissions?.canAccessPipelines ?? false),
-    canViewReports: isAdmin || (permissions?.canViewReports ?? false),
+    // !isLoading primeiro: mesma regra de "não sei quem é, nego" dos
+    // helpers acima — sem ela, o estado inicial (isAdmin: false,
+    // permissions: null) resolvia canSendMedia/canViewReports pelo
+    // fallback otimista do `??` antes do fetch responder.
+    canSendMessages: !isLoading && (isAdmin || (permissions?.canSendMedia ?? true)),
+    canTransferChats: !isLoading && (isAdmin || (permissions?.canTransferConversations ?? true)),
+    canEditPipeline: !isLoading && (isAdmin || (permissions?.canAccessPipelines ?? false)),
+    canViewReports: !isLoading && (isAdmin || (permissions?.canViewReports ?? false)),
     canAccess,
     canAccessRoute,
     refreshPermissions: fetchPermissions,
