@@ -405,7 +405,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 - [x] **23. Fallback sem escopo em `/api/ai/respond`** `[relatado]` · commit `5c7a6774`
   `:293-297` lê `ai_agent_configs` só por `agent_id`. Rota órfã — resolver junto com o item 55.
 
-- [ ] **24. Filtro de org nas views de atividade** `[confirmado]`
+- [x] **24. Filtro de org nas views de atividade** `[confirmado]` · commit `84fc4c62`
   Nenhuma view tem `security_invoker` (`grep` em todas as migrations: zero), então a RLS das tabelas-base
   não é avaliada e o `.eq()` na rota **é** a fronteira. `src/lib/ai/activity.ts:68-71` e `:73-76` filtram
   só por `conversation_id`. Hoje protegido por um guard anterior; o filtro é de graça.
