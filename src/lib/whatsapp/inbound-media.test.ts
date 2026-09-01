@@ -16,6 +16,10 @@ const rows: { message: any; account: any } = { message: null, account: null }
 const mockUpdate = vi.fn()
 const mockUpload = vi.fn()
 const mockCreateSignedUrl = vi.fn()
+// Achado 2 (follow-up fase 3): registra TODOS os .eq(...) encadeados na leitura
+// de whatsapp_business_accounts, para provar que a query é escopada por
+// organization_id — não só por id (item 20 aplicado ao gêmeo TS).
+const mockAccountEq: Array<[string, any]> = []
 
 // Controla o resultado do .update(...).eq(...) do mock do Supabase, para
 // exercitar os caminhos onde a própria persistência falha (ver testes de
@@ -31,14 +35,19 @@ const selectErrorBehavior: { message: any; account: any } = { message: null, acc
 vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
     from: (table: string) => ({
-      select: () => ({
-        eq: () => ({
+      select: () => {
+        const chain: any = {
+          eq: (col: string, val: any) => {
+            if (table === 'whatsapp_business_accounts') mockAccountEq.push([col, val])
+            return chain
+          },
           maybeSingle: async () => ({
             data: table === 'whatsapp_cloud_messages' ? rows.message : rows.account,
             error: table === 'whatsapp_cloud_messages' ? selectErrorBehavior.message : selectErrorBehavior.account,
           }),
-        }),
-      }),
+        }
+        return chain
+      },
       update: (values: any) => {
         mockUpdate(table, values)
         return {
@@ -91,6 +100,7 @@ describe('processInboundMedia', () => {
     mockUpdate.mockReset()
     mockUpload.mockReset()
     mockCreateSignedUrl.mockReset()
+    mockAccountEq.length = 0
     rows.message = {
       id: 'msg-1',
       media_id: 'meta-media-9',
@@ -183,6 +193,15 @@ describe('processInboundMedia', () => {
 
     expect(result.ok).toBe(false)
     expect(result.reason).toBe('meta 401')
+  })
+
+  it('lê whatsapp_business_accounts escopado por organization_id, não só por id (item 20 aplicado ao gêmeo TS)', async () => {
+    mockDownloadMedia.mockResolvedValue({ data: new Uint8Array([1, 2, 3]), mimeType: 'image/jpeg' })
+
+    await processInboundMedia(JOB)
+
+    expect(mockAccountEq).toContainEqual(['id', JOB.accountId])
+    expect(mockAccountEq).toContainEqual(['organization_id', JOB.organizationId])
   })
 
   it('erro transitório ao ler a mensagem NÃO lança e retorna db_read_failed (retryável, diferente de message_not_found)', async () => {

@@ -81,10 +81,15 @@ export async function processInboundMedia(job: InboundMediaJob): Promise<Inbound
   // Idempotência: retry do QStash (ou corrida enqueue+inline) vira no-op.
   if (row.media_download_status === 'done') return { ok: true, reason: 'already_done' };
 
+  // Achado 2 (follow-up fase 3, item 20 aplicado ao gêmeo TS): job.accountId
+  // sozinho não prova a org — a linha lida aqui é a mesma cujo token sai numa
+  // chamada de rede logo abaixo. O job já carrega organizationId
+  // (route.ts valida como obrigatório); a query escopa por ele também.
   const { data: account, error: accountError } = await supabase
     .from('whatsapp_business_accounts')
     .select('*')
     .eq('id', job.accountId)
+    .eq('organization_id', job.organizationId)
     .maybeSingle();
 
   if (accountError) {
