@@ -55,6 +55,7 @@ from agents_runtime.agent_core.llm import (
 )
 from agents_runtime.agent_core.media import (
     media_apology,
+    media_handoff,
     media_step_detail,
     speechless_media,
 )
@@ -454,6 +455,29 @@ def build_responder(
             # chamada seria token queimado para gerar a partir de nada.
             speechless = speechless_media(pending)
             if speechless is not None:
+                # A loja pode ter configurado que mídia vai para humano em vez
+                # de virar pedido de texto. É o mesmo knob do TS, e lá ele
+                # também dispara por incapacidade ESTRUTURAL, não por falha:
+                # `cloud-runner.ts:657-660` manda todo áudio ao fallback com
+                # `no_stt_provider` quando a org não tem STT. Quem responde
+                # nesse modo é o humano — o cliente não recebe nada da IA,
+                # como no legado (`:210-241`).
+                if media_handoff(version.settings):
+                    marked = await transfer_to_human(
+                        conn,
+                        organization_id=job.organization_id,
+                        conversation_id=job.conversation_id,
+                        reason="media_handoff",
+                        severity="warning",
+                        title="Cliente enviou mídia que a IA não interpreta — IA transferida",
+                        payload={"media_kind": speechless},
+                    )
+                    await note_step(
+                        "transferred",
+                        media_step_detail(speechless, handoff=True)
+                        + ("" if marked else UNMIRRORED_DETAIL),
+                    )
+                    return None
                 await note_step("started", media_step_detail(speechless))
                 split, rhythm = delivery_flags(version.settings)
                 return {

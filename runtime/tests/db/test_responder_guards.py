@@ -738,3 +738,67 @@ class TestMediaWithoutAWordDegradesHonestly:
         )
 
         assert await responder(dsn)(a_job(tenant, thread.conversation_id)) is None
+
+    async def test_the_handoff_mode_transfers_instead_of_asking_for_text(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """`media_fallback.mode: 'handoff'` — a outra metade do knob.
+
+        No TS o modo desliga a IA, notifica a equipe e NÃO responde nada ao
+        cliente (`cloud-runner.ts:210-241`): quem responde é o humano. E não é
+        caminho excepcional de lá — `:657-660` manda todo áudio ao fallback
+        com `no_stt_provider` quando a org não tem STT, antes de tentar. Quem
+        configurou isto já vive assim no motor legado.
+        """
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type="whatsapp.received", status="active")
+        configure(admin, tenant, {"media_fallback": {"mode": "handoff"}})
+        thread = create_thread(admin, tenant)
+        mirror = mirrored(admin, tenant, thread)
+        create_message(
+            admin, tenant, thread, direction="inbound", seq=1,
+            content={"type": "audio", "text": None, "media_id": "wamid.a"},
+        )
+        llm = ScriptedLlm()
+
+        draft = await responder(dsn, llm)(a_job(tenant, thread.conversation_id))
+
+        assert draft is None
+        assert llm.asked == []
+        (enabled,) = admin.execute(
+            "select ai_enabled from public.whatsapp_cloud_conversations where id = %s",
+            (mirror.conversation_id,),
+        ).fetchone()
+        assert enabled is False
+        (reason, metadata) = admin.execute(
+            "select metadata ->> 'reason', metadata from public.alerts"
+            " where organization_id = %s and type = 'handoff'",
+            (tenant,),
+        ).fetchone()
+        assert (reason, metadata["mirrored"]) == ("media_handoff", True)
+        assert any(step == "transferred" for step, _ in steps(admin, mirror))
+
+    async def test_without_the_mode_the_store_keeps_answering(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """O controle negativo do knob: `mode` ausente é `ask_text`
+        (`media/router.ts:83`, `types.ts:437`), e a loja que nunca configurou
+        nada não pode perder a conversa para um humano por causa de um áudio."""
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type="whatsapp.received", status="active")
+        configure(admin, tenant, {"media_fallback": {"message": "me escreve, por favor"}})
+        thread = create_thread(admin, tenant)
+        mirror = mirrored(admin, tenant, thread)
+        create_message(
+            admin, tenant, thread, direction="inbound", seq=1,
+            content={"type": "audio", "text": None, "media_id": "wamid.a"},
+        )
+
+        draft = await responder(dsn)(a_job(tenant, thread.conversation_id))
+
+        assert draft is not None and draft["text"] == "me escreve, por favor"
+        (enabled,) = admin.execute(
+            "select ai_enabled from public.whatsapp_cloud_conversations where id = %s",
+            (mirror.conversation_id,),
+        ).fetchone()
+        assert enabled is not False

@@ -18,6 +18,7 @@ import pytest
 
 from agents_runtime.agent_core.media import (
     media_apology,
+    media_handoff,
     media_step_detail,
     read_message,
     speechless_media,
@@ -225,3 +226,33 @@ class TestTheHonestLine:
     def test_garbage_in_settings_is_not_a_crash(self) -> None:
         assert media_apology("audio", {"media_fallback": "não é objeto"}).startswith("Desculpe,")
         assert media_apology("audio", {"media_fallback": {"message": 7}}).startswith("Desculpe,")
+
+
+class TestTheModeTheMerchantConfigured:
+    """`media_fallback.mode` — o outro metade do knob, que não tinha leitor.
+
+    No TS o modo `handoff` desliga a IA e chama a equipe, e ele NÃO é um
+    caminho excepcional de lá: `cloud-runner.ts:657-660` manda todo áudio para
+    o fallback com `no_stt_provider` quando a org não tem STT, antes de
+    qualquer tentativa. Uma loja que configurou `handoff` e nunca configurou
+    STT já tem, hoje, a IA desligada no primeiro áudio de cada conversa.
+    Honrar o modo aqui é paridade, não capacidade nova.
+    """
+
+    def test_the_default_is_asking_for_text_not_transferring(self) -> None:
+        """`raw?.mode === 'handoff' ? 'handoff' : 'ask_text'`
+        (`media/router.ts:83`), e o default de settings crava `ask_text`
+        (`types.ts:437`). Loja que nunca configurou nada não transfere."""
+        assert media_handoff(None) is False
+        assert media_handoff({}) is False
+        assert media_handoff({"media_fallback": {}}) is False
+        assert media_handoff({"media_fallback": {"message": "me escreve"}}) is False
+
+    def test_only_the_exact_word_transfers(self) -> None:
+        assert media_handoff({"media_fallback": {"mode": "handoff"}}) is True
+        assert media_handoff({"media_fallback": {"mode": "ask_text"}}) is False
+        assert media_handoff({"media_fallback": {"mode": "HANDOFF"}}) is False
+
+    def test_garbage_does_not_transfer(self) -> None:
+        assert media_handoff({"media_fallback": "não é objeto"}) is False
+        assert media_handoff({"media_fallback": {"mode": 7}}) is False

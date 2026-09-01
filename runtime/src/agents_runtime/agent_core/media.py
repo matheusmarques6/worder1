@@ -134,17 +134,41 @@ def speechless_media(pending: Sequence[PendingMessage]) -> str | None:
     return from_contact[0].media_kind
 
 
-def media_step_detail(kind: str) -> str:
+def media_handoff(settings: Mapping | None) -> bool:
+    """A loja configurou `handoff` para mídia que a IA não interpreta?
+
+    A outra metade do knob (`media_fallback.mode`), e a régua é a do TS,
+    estrita: `raw?.mode === 'handoff' ? 'handoff' : 'ask_text'`
+    (`media/router.ts:83`). Só a palavra exata transfere — qualquer outra
+    coisa, lixo e ausência inclusive, pede o texto. O default de settings crava
+    `ask_text` (`types.ts:437`), então loja que nunca configurou nada nunca
+    transfere por causa de um áudio.
+
+    Não é caminho excepcional do lado de lá: `cloud-runner.ts:657-660` manda
+    TODO áudio ao fallback com `no_stt_provider` quando a org não tem STT,
+    antes de qualquer tentativa, e `:718-723` faz o mesmo para imagem sem
+    visão. Quem configurou `handoff` sem STT já vive isto no motor legado —
+    honrar aqui é paridade, e configuração que não faz nada é pior que
+    ausência (item 30).
+    """
+    raw = (settings or {}).get("media_fallback")
+    return isinstance(raw, Mapping) and raw.get("mode") == "handoff"
+
+
+def media_step_detail(kind: str, *, handoff: bool = False) -> str:
     """O chip do inbox para o turno degradado.
 
     Degradação sem registro é a mesma doença do silêncio sem registro: quem
     olha o inbox precisa ver por que a loja respondeu isso, e não a resposta
-    de sempre.
+    de sempre. No modo `handoff` o chip é ainda mais necessário: ali o cliente
+    não recebe NADA da IA, e sem o registro o turno some.
     """
-    return (
-        f"Cliente enviou {LABELS.get(kind, 'uma mídia')} — "
-        "o agente ainda não lê esse tipo e pediu o texto"
+    desfecho = (
+        "a conversa foi para um humano"
+        if handoff
+        else "o agente ainda não lê esse tipo e pediu o texto"
     )
+    return f"Cliente enviou {LABELS.get(kind, 'uma mídia')} — {desfecho}"
 
 
 def media_apology(kind: str, settings: Mapping | None) -> str:
