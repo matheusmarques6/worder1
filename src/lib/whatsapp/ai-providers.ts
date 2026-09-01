@@ -242,11 +242,13 @@ async function callGemini(config: AIConfig, messages: AIMessage[]): Promise<AIRe
   }));
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${config.model || 'gemini-1.5-flash'}:generateContent?key=${config.apiKey}`,
+    // item 27 do audit: chave e do lojista, nao anda em URL (loga em qualquer lugar) — vai no header.
+    `https://generativelanguage.googleapis.com/v1beta/models/${config.model || 'gemini-1.5-flash'}:generateContent`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-goog-api-key': config.apiKey,
       },
       body: JSON.stringify({
         contents,
@@ -651,10 +653,11 @@ async function callGeminiWithTools(
   }
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${config.model || 'gemini-1.5-flash'}:generateContent?key=${config.apiKey}`,
+    // item 27 do audit: chave e do lojista, nao anda em URL (loga em qualquer lugar) — vai no header.
+    `https://generativelanguage.googleapis.com/v1beta/models/${config.model || 'gemini-1.5-flash'}:generateContent`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.apiKey },
       body: JSON.stringify({
         contents,
         systemInstruction: systemMessage
