@@ -21,6 +21,7 @@ from agents_runtime.queueing.jobs import MissionTouchJob
 from agents_runtime.queueing.worker import TurnResult, run_touch
 from tests.db.factories import (
     create_agent_version,
+    create_message,
     create_mission,
     create_moment,
     create_store,
@@ -77,6 +78,31 @@ class TestTheDraft:
         system = llm.asked[0].messages[0].content
         assert "lembrar do frete grátis de hoje" in system  # o delta venceu
         assert "# MISSÃO" in system  # o bloco existe, não-fantasma
+
+    async def test_the_media_in_the_history_reaches_the_touch_prompt(
+        self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
+    ) -> None:
+        """Item 31, no SEGUNDO produtor de fala. O toucher lê o mesmo
+        `load_recent_transcript` do turno de resposta, então a mídia que virava
+        linha em branco virava linha em branco aqui também — e aqui é pior:
+        ninguém escreveu nada, então o histórico é TODO o contexto que o
+        modelo tem para decidir o tom do toque.
+
+        O toque não degrada (não há rajada de inbound para degradar); o que ele
+        precisa é não ler um turno em branco no meio da conversa."""
+        thread = create_thread(admin, org)
+        create_mission(admin, org, event_type=FAMILY, status="active")
+        create_message(admin, org, thread, direction="inbound", seq=1, text="esse aqui serve?")
+        create_message(
+            admin, org, thread, direction="inbound", seq=2,
+            content={"type": "image", "text": None, "media_id": "wamid.i", "caption": None},
+        )
+        llm = ScriptedLlm(reply="Oi! Ficou alguma dúvida sobre a foto que você mandou?")
+
+        await _toucher(dsn, llm)(_job(org, thread))
+
+        system = llm.asked[0].messages[0].content
+        assert "[Cliente enviou uma imagem]" in system
 
     async def test_a_family_off_the_air_alerts_and_stays_silent(
         self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
