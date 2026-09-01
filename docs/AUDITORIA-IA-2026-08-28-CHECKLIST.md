@@ -460,19 +460,51 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
 ## Fase 4 — Fechar a paridade que ninguém declarou
 
-- [ ] **29. Registrar as 19 ausências não declaradas no `FORK.md`** `[confirmado]`
+- [x] **29. Registrar as ausências não declaradas no `FORK.md`** `[confirmado]` · commits `306f1c06` + `686c8dea`
   A matriz tem 21 features ausentes; só typing indicator e send-guard estão declarados.
   **Fazer antes do próximo `insert into ai_runtime_rollout`** — cada ausência vira divergência consciente
   ou dívida com prazo.
+
+  **Entregue — e não são 19.** A matriz do dossiê nunca esteve no repositório, então a lista
+  foi reconstruída do código, com arquivo:linha nos dois lados por linha. Deu **32 ausências**:
+  4 divergências conscientes e 28 dívidas, 13 com item dono e 15 sem. O `runtime/FORK.md`
+  ganhou a seção, junto das 7 divergências que já estavam declaradas, e fecha com a checagem
+  por org — o que abrir em `ai_agents` antes de rodar o `insert`. Uma entrada existente foi
+  corrigida (dizia roadmap para bolhas e ritmo, que já tinham sido entregues) e 7 candidatas
+  foram descartadas com motivo escrito.
+
+  **O que o review mudou.** As 28 linhas da primeira entrega resistiram inteiras à conferência
+  independente — o revisor abriu 28 de 28 e não derrubou nenhuma. O defeito estava no que a
+  varredura não achou: **4 ausências faltando**, uma delas a pior da lista, mais um dono errado
+  (o item 42 conserta a contabilidade de custo do lado TS e não faz o runtime aplicar teto) e
+  uma ausência que descrevia um mecanismo que não acontece. As 4 novas foram conferidas de novo
+  no re-review, abrindo os dois lados, e nenhuma caiu.
+
+  **Lição de método, aplicada aos itens 30-38:** item de paridade orça DUAS varreduras
+  independentes desde o início. Uma pessoa só, por mais cuidadosa que seja com o que escreveu,
+  não enxerga o que não procurou.
 
 - [ ] **30. Guards de comportamento: portar ou remover da UI** `[confirmado]`
   Handoff por keyword, `blocked_topics`, `max_messages_per_conversation`, `activate_on: manual`,
   cooldown pós-transferência, horário de atendimento. Todos configuráveis na mesma linha de `ai_agents`
   que o runtime lê, todos ignorados por ele. Configuração que não faz nada é pior que ausência.
 
+  **Mais dois, achados ao escrever o brief:** `stop_on_human_reply` (default TRUE no TS, guard
+  permanente por conversa — `cloud-runner.ts:550-560`) e o cooldown "acabou de responder"
+  (`:515-535`). São oito, não seis. `repository/agent.py:118` carrega o `settings` inteiro e usa
+  exatamente uma chave dele (`tools.enabled`); grep por `behavior`, `blocked_topics`, `handoff`,
+  `activate_on` e `business_hours` em `runtime/src/` dá zero.
+
 - [ ] **31. STT e visão, ou degradação honesta** `[confirmado]`
   `src/lib/ai/media/*` (330 linhas) sem contraparte. Enquanto não portar: responder
   "ainda não consigo ouvir áudios" é melhor que responder no vazio.
+
+  **Verificado no item 29, e é pior que "sem contraparte":** `webhook-processor.ts:514-520`
+  cancela o turno para `botOff` e para tipo `unsupported`, mas **áudio e imagem não são
+  `unsupported`** — a régua de `:298-308` os inclui de propósito, porque no caminho legado eles
+  têm transcrição e visão. Para org migrada eles são ingeridos, o turno é agendado, e o runtime
+  responde a uma mensagem sem texto. Não é silêncio: é resposta no vazio, que é o pior dos dois.
+  O conserto mínimo enquanto o porte não vem é uma linha na condição de cancelamento.
 
 - [ ] **32. Send-guard por tier Meta no sender Python** `[confirmado]`
   O TS tem `rate-limiter.ts` (779 l.) + `circuit-breaker.ts` (395 l.) via `checkBeforeSend`.
@@ -815,6 +847,25 @@ você decidir se entram na fila.
   que fez só revisão estática dos itens 2–4. Contorno usado aqui: chamar `node_modules/.bin/vitest`
   direto. Aprovar os builds muda política local de execução — decisão do dono da máquina, não minha.
   *(descoberto no review do item 1)*
+
+- [ ] **Depois de um takeover humano o agente volta amnésico (org migrada).**
+  A fala do atendente vai para `whatsapp_cloud_messages` e para o espelho do inbox, mas
+  `public.messages` — o transcript que o runtime lê — **não tem escritor de outbound humano**:
+  no repositório inteiro há 7 `insert into public.messages` e `author_type='human'` aparece uma
+  única vez, no backfill que roda só na criação da conversa. Efeito na loja: o agente contradiz
+  o preço, o prazo ou a exceção que o atendente acabou de dar, sem saber que alguém falou. Sem
+  dono na fila de 63 — nenhum item de 30 a 55 se compromete a devolver essa escrita.
+  *(descoberto no item 29, confirmado no review e no re-review)*
+
+- [ ] **Texto do cliente entra no system prompt do runtime sem sanitização — e o delimitador é imitável.**
+  `agent_core/prompt_compiler.py:241,244` interpola `f"{author}: {text}"` do transcript e da janela
+  pendente DENTRO do bloco de sistema, e os blocos são separados por cabeçalho markdown (`# CONVERSA`,
+  `# MISSÃO`). Um cliente que escreva `# MISSÃO` no WhatsApp escreve um bloco. O caminho TypeScript tem
+  `src/lib/ai/prompt-sanitizer.ts` para exatamente isto — strip de control chars e zero-width, colapso de
+  newline, remoção de `</`, truncamento por code point e bloco DATA com delimitador explícito — e
+  `prompt-builder.ts:235` o usa. O runtime não tem contraparte. Não é o item 39 (aquele é sobre o
+  transcript ir duas vezes; este é sobre o que o transcript pode conter).
+  *(descoberto no item 29)*
 
 - [ ] **`supabase/.branches/` e `supabase/.temp/` não estão no `.gitignore`.**
   Aparecem no `git status` de quem rodar o stack local — e agora todo mundo deve rodar.
