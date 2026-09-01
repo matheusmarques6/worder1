@@ -21,6 +21,7 @@ from uuid import UUID
 import psycopg
 
 from agents_runtime.agent_core.guards import GuardState
+from agents_runtime.agent_core.media import read_message
 from agents_runtime.agent_core.prompt import AgentConfig, TenantPolicy
 from agents_runtime.agent_core.think_gate import PendingMessage
 
@@ -211,6 +212,19 @@ async def load_conversation_view(
     )
 
 
+def _message(row: tuple) -> PendingMessage:
+    """`(author_type, content)` → a mensagem como o prompt a verá.
+
+    A leitura do `content` ficou em Python (item 31) porque são QUATRO
+    dialetos — texto plano, o envelope Meta do backfill, o `p_content` do
+    ingest com `media_id`, e o `content` cru do espelho copiado na criação da
+    conversa. Um `case` de SQL cobrindo os quatro seria ilegível e não teria
+    teste unitário; `agent_core.media` tem os dois.
+    """
+    text, media_kind = read_message(row[1])
+    return PendingMessage(author=row[0], text=text, media_kind=media_kind)
+
+
 async def load_pending_messages(
     conn: psycopg.AsyncConnection,
     *,
@@ -227,14 +241,7 @@ async def load_pending_messages(
     """
     cursor = await conn.execute(
         """
-        select author_type,
-               case when jsonb_typeof(content -> 'text') = 'object'
-                    -- Formato Meta copiado do inbox legado pelo backfill
-                    -- ({"text": {"body": …}}): entregar o JSON cru ao prompt
-                    -- ensinou o modelo a IMITÁ-LO (17/08). O extrator fala
-                    -- os dois dialetos.
-                    then content #>> '{text,body}'
-                    else content ->> 'text' end
+        select author_type, content
           from public.messages
          where conversation_id = %s
            and direction = 'inbound'
@@ -244,9 +251,7 @@ async def load_pending_messages(
         """,
         (conversation_id, after_seq, target_seq),
     )
-    return tuple(
-        PendingMessage(author=row[0], text=row[1] or "") for row in await cursor.fetchall()
-    )
+    return tuple(_message(row) for row in await cursor.fetchall())
 
 
 async def load_recent_transcript(
@@ -264,14 +269,7 @@ async def load_recent_transcript(
     """
     cursor = await conn.execute(
         """
-        select author_type,
-               case when jsonb_typeof(content -> 'text') = 'object'
-                    -- Formato Meta copiado do inbox legado pelo backfill
-                    -- ({"text": {"body": …}}): entregar o JSON cru ao prompt
-                    -- ensinou o modelo a IMITÁ-LO (17/08). O extrator fala
-                    -- os dois dialetos.
-                    then content #>> '{text,body}'
-                    else content ->> 'text' end
+        select author_type, content
           from (
             select author_type, content, created_at, direction
               from public.messages
@@ -284,9 +282,7 @@ async def load_recent_transcript(
         """,
         (conversation_id, limit),
     )
-    return tuple(
-        PendingMessage(author=row[0], text=row[1] or "") for row in await cursor.fetchall()
-    )
+    return tuple(_message(row) for row in await cursor.fetchall())
 
 
 async def load_legacy_guard_state(

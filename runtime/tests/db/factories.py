@@ -140,7 +140,10 @@ def create_message(
     direction: str = "inbound",
     seq: int = 1,
     text: str = "oi",
+    content: dict | None = None,
 ) -> uuid.UUID:
+    """`content` cru quando a mensagem não é texto puro — mídia, sobretudo
+    (item 31). Sem ele só dá para montar a conversa que o motor já lia."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -155,7 +158,7 @@ def create_message(
                 direction,
                 seq,
                 "contact" if direction == "inbound" else "agent",
-                psycopg.types.json.Jsonb({"text": text}),
+                psycopg.types.json.Jsonb(content if content is not None else {"text": text}),
             ),
         )
         (message_id,) = cur.fetchone()

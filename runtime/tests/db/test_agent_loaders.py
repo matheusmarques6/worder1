@@ -271,3 +271,108 @@ class TestLegacyShapedHistory:
             )
 
         assert [message.text for message in pending] == ["qual o horário?"]
+
+
+#: O que o ingest grava para um áudio e para uma imagem com legenda
+#: (`webhook-processor.ts:489-494`).
+AUDIO = {"type": "audio", "text": None, "media_id": "wamid.a", "mime_type": "audio/ogg"}
+IMAGE_WITH_CAPTION = {
+    "type": "image",
+    "text": "esse produto ainda tem?",
+    "media_id": "wamid.i",
+    "mime_type": "image/jpeg",
+    "caption": "esse produto ainda tem?",
+}
+
+
+class TestMediaInTheHistory:
+    """Item 31: mídia parava de existir entre o banco e o prompt.
+
+    O ingest carrega a referência desde o item 06 (`p_content` leva `media_id`,
+    `mime_type` e `caption`), mas os dois loaders liam só `content ->> 'text'`
+    — nulo para áudio e imagem. O efeito era duplo: o transcrito mostrava uma
+    linha em branco no meio da conversa, e a janela pendente chegava vazia ao
+    modelo, que respondia sobre nada.
+
+    As duas leituras são as mesmas dos DOIS produtores de fala do runtime: o
+    responder lê as duas, o toucher lê o transcrito.
+    """
+
+    async def test_the_pending_window_says_it_was_an_audio(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        thread = create_thread(admin, tenant)
+        create_message(admin, tenant, thread, direction="inbound", seq=1, content=AUDIO)
+
+        async with as_worker(dsn, tenant) as conn:
+            pending = await agent_repo.load_pending_messages(
+                conn, conversation_id=thread.conversation_id, after_seq=0, target_seq=1
+            )
+
+        assert [(m.text, m.media_kind) for m in pending] == [
+            ("[Cliente enviou um áudio sem transcrição]", "audio")
+        ]
+
+    async def test_a_caption_is_the_customer_speaking(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """Legenda é texto que o cliente escreveu e que estava no banco desde
+        sempre — nada degrada (`media_kind` volta None) e o turno é normal."""
+        thread = create_thread(admin, tenant)
+        create_message(
+            admin, tenant, thread, direction="inbound", seq=1, content=IMAGE_WITH_CAPTION
+        )
+
+        async with as_worker(dsn, tenant) as conn:
+            pending = await agent_repo.load_pending_messages(
+                conn, conversation_id=thread.conversation_id, after_seq=0, target_seq=1
+            )
+
+        assert [(m.text, m.media_kind) for m in pending] == [
+            ("[Cliente enviou uma imagem: esse produto ainda tem?]", None)
+        ]
+
+    async def test_the_transcript_stops_showing_a_blank_turn(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """A linha em branco é pior que a ausência: o modelo lê uma conversa em
+        que o cliente ficou mudo no meio e responde como se nada tivesse
+        acontecido."""
+        thread = create_thread(admin, tenant)
+        create_message(admin, tenant, thread, direction="inbound", seq=1, text="oi")
+        create_message(admin, tenant, thread, direction="inbound", seq=2, content=AUDIO)
+        create_message(admin, tenant, thread, direction="outbound", seq=1, text="opa!")
+
+        async with as_worker(dsn, tenant) as conn:
+            transcript = await agent_repo.load_recent_transcript(
+                conn, conversation_id=thread.conversation_id, limit=10
+            )
+
+        assert [m.text for m in transcript] == [
+            "oi",
+            "[Cliente enviou um áudio sem transcrição]",
+            "opa!",
+        ]
+
+    async def test_the_legacy_backfill_shape_is_read_too(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """As linhas copiadas na criação da conversa vêm no formato cru do
+        espelho (`{"image": {...}}`, sem chave `type`) — mesma mídia, outro
+        dialeto (`20260817000004:131-135`)."""
+        thread = create_thread(admin, tenant)
+        create_message(
+            admin,
+            tenant,
+            thread,
+            direction="inbound",
+            seq=1,
+            content={"image": {"id": "wamid.z", "caption": "chegou assim"}},
+        )
+
+        async with as_worker(dsn, tenant) as conn:
+            transcript = await agent_repo.load_recent_transcript(
+                conn, conversation_id=thread.conversation_id, limit=10
+            )
+
+        assert [m.text for m in transcript] == ["[Cliente enviou uma imagem: chegou assim]"]

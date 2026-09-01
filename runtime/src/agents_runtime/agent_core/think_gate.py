@@ -57,6 +57,10 @@ MULTIPLE_QUESTIONS = 2
 class PendingMessage:
     author: str
     text: str
+    media_kind: str | None = None
+    """O tipo da mídia quando a mensagem não trouxe palavra nenhuma do cliente
+    — áudio, imagem sem legenda (item 31). `None` sempre que houve texto,
+    legenda inclusive: com legenda o cliente escreveu, e o turno é normal."""
 
 
 @dataclass(frozen=True, slots=True)
