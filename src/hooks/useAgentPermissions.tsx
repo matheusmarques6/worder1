@@ -94,6 +94,43 @@ export interface UseAgentPermissionsReturn {
 }
 
 // =====================================================
+// DEFAULTS RESTRITIVOS (agente sem permissões conhecidas)
+// =====================================================
+// Usado tanto quando o agente existe mas não tem linha de permissões
+// quanto quando a rota de identidade falha (401/erro de rede). Antes, a
+// falha aqui virava `isAdmin: true` — o mesmo fail-open da rota, um andar
+// acima: mesmo com a rota corrigida, esse catch continuava devolvendo
+// acesso total pra quem não autenticou. Fail-closed aqui é isAgent: true
+// com estes defaults, não um modo de degradação novo.
+const RESTRICTIVE_AGENT_DEFAULTS: AgentPermissions = {
+  agentId: null,
+  accessLevel: 'agent',
+  canViewAllConversations: false,
+  canTransferConversations: true,
+  canUseAiSuggestions: true,
+  canSendMedia: true,
+  canUseQuickReplies: true,
+  whatsappAccessAll: false,
+  whatsappNumberIds: [],
+  canViewContactInfo: true,
+  canEditContactInfo: false,
+  canAddNotes: true,
+  canViewOrderHistory: true,
+  canAccessCrm: false,
+  canAccessPipelines: false,
+  canCreateDeals: false,
+  canManageTags: false,
+  pipelineAccessAll: false,
+  pipelineIds: [],
+  canViewAnalytics: false,
+  canViewReports: false,
+  maxConcurrentChats: 10,
+  allowedHoursStart: null,
+  allowedHoursEnd: null,
+  allowedDays: null,
+}
+
+// =====================================================
 // MAPEAMENTO DE ROTAS PARA PERMISSÕES
 // =====================================================
 
@@ -144,20 +181,21 @@ export function useAgentPermissions(): UseAgentPermissionsReturn {
     
     try {
       const res = await fetch('/api/whatsapp/agents/me')
-      
+
       if (!res.ok) {
-        throw new Error('Falha ao buscar permissões')
+        // 401 (sem sessão) ou qualquer outro erro da rota de identidade:
+        // não sabemos quem é o usuário, então nada de acesso total.
+        // Mesmo estado restritivo do agente sem permissões conhecidas.
+        setError('Falha ao buscar permissões')
+        setIsAgent(true)
+        setIsAdmin(false)
+        setAgent(null)
+        setPermissions(RESTRICTIVE_AGENT_DEFAULTS)
+        return
       }
-      
+
       const data = await res.json()
-      
-      console.log('[useAgentPermissions] Dados recebidos:', {
-        isAgent: data.isAgent,
-        isAdmin: data.isAdmin,
-        hasPermissions: !!data.permissions,
-        permissions: data.permissions
-      })
-      
+
       setIsAgent(data.isAgent || false)
       setIsAdmin(data.isAdmin || false)
       setAgent(data.agent || null)
@@ -169,40 +207,17 @@ export function useAgentPermissions(): UseAgentPermissionsReturn {
         setPermissions(null)
       } else {
         // Agente sem permissões - usar defaults restritivos
-        setPermissions({
-          agentId: null,
-          accessLevel: 'agent',
-          canViewAllConversations: false,
-          canTransferConversations: true,
-          canUseAiSuggestions: true,
-          canSendMedia: true,
-          canUseQuickReplies: true,
-          whatsappAccessAll: false,
-          whatsappNumberIds: [],
-          canViewContactInfo: true,
-          canEditContactInfo: false,
-          canAddNotes: true,
-          canViewOrderHistory: true,
-          canAccessCrm: false,
-          canAccessPipelines: false,
-          canCreateDeals: false,
-          canManageTags: false,
-          pipelineAccessAll: false,
-          pipelineIds: [],
-          canViewAnalytics: false,
-          canViewReports: false,
-          maxConcurrentChats: 10,
-          allowedHoursStart: null,
-          allowedHoursEnd: null,
-          allowedDays: null,
-        })
+        setPermissions(RESTRICTIVE_AGENT_DEFAULTS)
       }
     } catch (err: any) {
       console.error('[useAgentPermissions] Erro:', err)
       setError(err.message)
-      // Em caso de erro, assumir que é admin para não bloquear
-      setIsAdmin(true)
-      setIsAgent(false)
+      // Falha de rede/parse: mesmo tratamento fail-closed do `!res.ok`
+      // acima. Não vira admin — vira agente com defaults restritivos.
+      setIsAgent(true)
+      setIsAdmin(false)
+      setAgent(null)
+      setPermissions(RESTRICTIVE_AGENT_DEFAULTS)
     } finally {
       setIsLoading(false)
     }

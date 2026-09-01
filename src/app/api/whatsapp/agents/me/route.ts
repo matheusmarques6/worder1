@@ -11,21 +11,14 @@ export async function GET(request: NextRequest) {
     
     // 1. Buscar usuário autenticado
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    // Se não conseguir autenticar, assumir que é admin (owner da conta)
-    // Isso evita bloquear a interface quando há problemas de sessão
-    if (authError || !user) {
-      console.log('[/api/whatsapp/agents/me] Sem sessão, retornando como admin');
-      return NextResponse.json({ 
-        isAgent: false,
-        isAdmin: true,
-        user: null,
-        agent: null,
-        permissions: null // Admin tem acesso total
-      });
-    }
 
-    console.log('[/api/whatsapp/agents/me] User:', user.email, 'is_agent:', user.user_metadata?.is_agent);
+    // Sem sessão (ou erro do provedor de auth) é a mesma coisa pra quem
+    // chama: não sabemos quem é, então 401. "Assumir admin" aqui já foi
+    // fail-open puro — todo o gating de permissão do inbox se apoiava
+    // nisso, e um problema de sessão virava acesso total.
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     
     // 2. Se não é agente, é admin - tem acesso total
     if (!user.user_metadata?.is_agent) {
