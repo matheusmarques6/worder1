@@ -270,11 +270,17 @@ async function callGoogle(apiKey: string, model: string, messages: any[], temper
       parts: [{ text: m.content }],
     }))
 
+  // Achado 3 (follow-up fase 3): `?key=` na URL vaza a chave do lojista em
+  // log de proxy/access log (item 27 já corrigiu as duas chamadas de
+  // ai-providers.ts pelo mesmo motivo — esta ficou de fora por não estar
+  // nomeada no achado original). `x-goog-api-key` é a forma verificada: a
+  // Google lê o header (chave inválida por header devolve 400
+  // API_KEY_INVALID; nenhuma chave devolve 403).
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemInstruction }] },
         contents,

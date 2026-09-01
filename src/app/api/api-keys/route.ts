@@ -188,7 +188,13 @@ async function validateApiKey(provider: string, apiKey: string, baseUrl?: string
       }
 
       case 'google': {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`)
+        // Achado 3 (follow-up fase 3): `?key=` na URL vaza a chave que o
+        // lojista acabou de colar em log de proxy/access log — mesmo
+        // raciocínio do item 27 (ai-providers.ts). `x-goog-api-key` é a
+        // forma verificada contra a API real.
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
+          headers: { 'x-goog-api-key': apiKey },
+        })
         if (!res.ok) {
           return { valid: false, error: 'Invalid API key' }
         }

@@ -167,3 +167,26 @@ describe('POST /api/ai/respond — fallback de config não vaza outra loja', () 
     expect(body.provider).toBe('openai')
   })
 })
+
+// Achado 3 (follow-up fase 3): item 27 já moveu duas chamadas Gemini de
+// `?key=` na URL pra `x-goog-api-key` (ai-providers.ts) — a auditoria só
+// nomeou aquelas duas linhas, então esta (callGoogle, provider direto sem
+// agent_id) ficou de fora. `?key=` na query string vaza a chave do lojista
+// em log de proxy/access log; o header não.
+describe('POST /api/ai/respond — a chave do Google não vai na URL (achado 3)', () => {
+  it('chama a Gemini com x-goog-api-key, nunca com ?key= na query string', async () => {
+    ;(global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: 'resposta-google' }] } }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+      }),
+    })
+
+    await POST(req({ provider: 'google', model: 'gemini-1.5-flash', message: 'oi' }))
+
+    const [url, init] = (global.fetch as any).mock.calls[0]
+    expect(url).not.toMatch(/[?&]key=/)
+    expect(init.headers['x-goog-api-key']).toBe('chave-de-teste')
+  })
+})
