@@ -49,19 +49,37 @@ class Thread:
 def create_channel_account(
     conn: psycopg.Connection,
     organization_id: uuid.UUID,
+    *,
+    access_token: str | None = None,
+    access_token_encrypted: str | None = None,
+    status: str = "active",
 ) -> ChannelAccount:
-    """A WhatsApp Cloud account (Worder: whatsapp_business_accounts)."""
+    """A WhatsApp Cloud account (Worder: whatsapp_business_accounts).
+
+    Sem token por padrão — quem precisa da credencial (item 20 da auditoria)
+    passa `access_token` (legado, em claro) ou `access_token_encrypted` (v2
+    secret-box), nunca os dois de propósito ao mesmo tempo num teste que
+    prova qual coluna vence.
+    """
     phone = unique_phone()
     external_account_id = unique_id("wa")
     with conn.cursor() as cur:
         cur.execute(
             """
             insert into public.whatsapp_business_accounts
-                (organization_id, phone_number_id, phone_number, status)
-            values (%s, %s, %s, 'active')
+                (organization_id, phone_number_id, phone_number, status,
+                 access_token, access_token_encrypted)
+            values (%s, %s, %s, %s, %s, %s)
             returning id
             """,
-            (organization_id, external_account_id, phone),
+            (
+                organization_id,
+                external_account_id,
+                phone,
+                status,
+                access_token,
+                access_token_encrypted,
+            ),
         )
         (account_id,) = cur.fetchone()
 

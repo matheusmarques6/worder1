@@ -11,13 +11,13 @@ o `docker-compose.yml` é o espelho local dela.
    `render.yaml`).
 2. O Render lê o blueprint: web service Docker de `runtime/`, health check em
    `/healthz`, envs não-secretas já preenchidas.
-3. Preencher os 5 segredos no Apply:
+3. Preencher os 4 segredos no Apply:
    - `SUPABASE_DB_URL` — **session pooler** (IPv4; a direta é IPv6):
      `postgresql://postgres.rqpmoavktzvxfcfsdkcc:[SENHA]@aws-0-sa-east-1.pooler.supabase.com:5432/postgres`
      (transaction pooler 6543 NÃO serve — `set role` e leases são por sessão)
    - `AGENTS_OPENROUTER_API_KEY` — chave da plataforma (Judge 1 + embeddings)
-   - `ENCRYPTION_KEY` — o MESMO do app Next.js (senão as chaves BYO não abrem)
-   - `AGENTS_META_ACCESS_TOKEN` — token de sistema Meta
+   - `ENCRYPTION_KEY` — o MESMO do app Next.js (senão as chaves BYO nem a
+     credencial Meta por conta abrem — item 20 da auditoria)
    - `AGENTS_PREVIEW_TOKEN` — um segredo novo; o MESMO vai na Vercel
 4. Apply. Quando o serviço estiver live: na **Vercel**, setar
    `AGENTS_RUNTIME_URL=https://<serviço>.onrender.com` e o mesmo
@@ -53,8 +53,8 @@ no banco LOCAL (`docker compose exec db psql -U postgres`) mostrando
 
 O espelho contém dados reais de clientes: o volume `db_data` é dado sensível.
 Destruir: `docker compose --profile bancada down -v`. A bancada é MUDA por
-contrato — nunca adicionar `AGENTS_CHANNEL`/`AGENTS_META_ACCESS_TOKEN` ao
-`.env.bancada`; para envio real existe o piloto.
+contrato — nunca adicionar `AGENTS_CHANNEL` ao `.env.bancada`; para envio real
+existe o piloto.
 
 **Piloto** (envio REAL — runtime de produção rodando no PC):
 
@@ -87,15 +87,21 @@ interruptor — subir o piloto não liga org nenhuma.
 | `AGENTS_WORKER_SET_ROLE` | `worker_role`. **O processo recusa subir sem ela** (28/08). Sem `SET ROLE` ele fica sendo o dono do DSN — que no Supabase tem BYPASSRLS mesmo sem ser superuser — e a camada de repositório, escrita sem `where organization_id` porque a RLS escopa, passaria a ler cross-org em silêncio. `worker_role` é NOLOGIN de propósito: `SET ROLE` é o único caminho, não existe "logar COMO o role" |
 | `AGENTS_SENDER_SET_ROLE` | `sender_role` — mesma regra, mesma recusa na partida. As duas NÃO são intercambiáveis: cada pool cobra o seu role por constante do código, então trocá-las de lugar também mata a partida. Com `AGENTS_HTTP_PORT` definida a checagem acontece ANTES de o listener abrir a porta |
 | `AGENTS_OPENROUTER_API_KEY` | Chave da PLATAFORMA (Judge 1 + embeddings — D4). A resposta do agente usa as chaves BYO da org (`organization_api_keys`) |
-| `ENCRYPTION_KEY` | O mesmo secret do app Next.js — o secret_box (scrypt+AES-GCM) descriptografa as chaves BYO com ele |
+| `ENCRYPTION_KEY` | O mesmo secret do app Next.js — o secret_box (scrypt+AES-GCM) descriptografa as chaves BYO E, desde o item 20 da auditoria, a credencial Meta por conta (`whatsapp_business_accounts.access_token_encrypted`) |
 
 ### Canal (sem ela: worker roda, nada é enviado)
 
 | Variável | O que é |
 |---|---|
 | `AGENTS_CHANNEL` | `agents_runtime.channels.cloud_api:from_env` |
-| `AGENTS_META_ACCESS_TOKEN` | Token de sistema Meta (fallback quando a conta Cloud da org não tem token próprio) |
 | `AGENTS_META_API_VERSION` | `v19.0` (default) |
+
+Item 20 da auditoria: não existe mais um `AGENTS_META_ACCESS_TOKEN` global —
+cada envio lê a credencial da conta Cloud ATIVA da própria org
+(`internal.active_whatsapp_business_account`, SECURITY DEFINER que recusa
+qualquer org que não seja a da sessão), a mesma que o app Next.js já grava em
+`whatsapp_business_accounts`. Uma org sem conta ativa faz o envio falhar
+(permanente) — não há fallback para uma credencial de sistema.
 
 ### Observabilidade e API interna (opt-in)
 

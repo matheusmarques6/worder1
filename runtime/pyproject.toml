@@ -172,4 +172,10 @@ ignore_imports = [
     "agents_runtime.tools.coupon -> psycopg",
     "agents_runtime.tools.customer -> psycopg",
     "agents_runtime.tools.knowledge -> psycopg",
+    # Auditoria 2026-08-28 item 20: `ChannelPort.send` passa a receber a
+    # conexão do sender (a credencial agora é por conta, lida do banco) em vez
+    # de o canal abrir a sua própria — o MESMO motivo dos 10 acima, um novo
+    # nome na lista.
+    "agents_runtime.channels.port -> psycopg",
+    "agents_runtime.channels.cloud_api -> psycopg",
 ]

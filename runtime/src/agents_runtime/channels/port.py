@@ -12,9 +12,19 @@ contract, and this protocol is why nobody needs to.
 canal apenas a consome. O import aponta para lá, nunca o contrário — ver a
 docstring de `repository/outbox.py` para as duas vezes que a seta invertida
 reprovou no CI.
+
+`conn` (auditoria 2026-08-28, item 20): a credencial por conta mora no banco
+agora, então `send` recebe a MESMA conexão scoped/role'd que `sender_pass` já
+abre (`agents_runtime.app._connect`), em vez de o canal abrir a sua própria —
+"só o repository fala com psycopg" (pyproject `[tool.importlinter]`) proíbe um
+canal de conectar por conta própria, e reabrir uma conexão por envio seria uma
+segunda cópia da checagem de RLS que `assert_rls_enforced` já faz uma vez, no
+único lugar onde o processo nasce.
 """
 
 from typing import Protocol
+
+import psycopg
 
 from agents_runtime.repository.outbox import ClaimedSend
 
@@ -28,4 +38,4 @@ class ChannelPort(Protocol):
     sender's backoff and multiply attempts invisibly.
     """
 
-    async def send(self, send: ClaimedSend) -> str: ...
+    async def send(self, conn: psycopg.AsyncConnection, send: ClaimedSend) -> str: ...

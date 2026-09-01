@@ -42,7 +42,10 @@ class FakeChannel:
             self._conn = await psycopg.AsyncConnection.connect(self._dsn, autocommit=True)
         return self._conn
 
-    async def send(self, send: ClaimedSend) -> str:
+    async def send(self, _conn: psycopg.AsyncConnection, send: ClaimedSend) -> str:
+        # `_conn` (item 20) é a do sender de verdade, ignorada aqui: este fake
+        # segue com a sua própria, aberta sob demanda — o directives/sends dele
+        # vivem no schema `testing`, fora do que o sender real enxerga.
         conn = await self._connection()
 
         cursor = await conn.execute(

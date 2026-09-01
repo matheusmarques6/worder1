@@ -1,6 +1,6 @@
 # Render Blueprint — o runtime de agentes IA (runtime/) como web service.
 #
-# Deploy: Render Dashboard → New → Blueprint → este repo → preencher os 5
+# Deploy: Render Dashboard → New → Blueprint → este repo → preencher os 4
 # segredos (sync: false) → Apply. O serviço builda de runtime/Dockerfile,
 # expõe /healthz (o Render usa como health check) e o processo único asyncio
 # (coalescer + workers + sender + heartbeat + listener) sobe dormante: filas
@@ -50,9 +50,10 @@ services:
         sync: false
       - key: AGENTS_OPENROUTER_API_KEY # chave da PLATAFORMA (Judge 1 + embeddings)
         sync: false
+      # Item 20 da auditoria: também abre a credencial Meta por conta agora
+      # (whatsapp_business_accounts.access_token_encrypted) — não existe mais
+      # um AGENTS_META_ACCESS_TOKEN global.
       - key: ENCRYPTION_KEY # o MESMO secret do app Next.js (secret_box)
-        sync: false
-      - key: AGENTS_META_ACCESS_TOKEN # token de sistema Meta (fallback por conta)
         sync: false
       - key: AGENTS_PREVIEW_TOKEN # o mesmo valor vai na Vercel p/ o preview
         sync: false

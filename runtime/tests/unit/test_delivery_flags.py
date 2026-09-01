@@ -19,7 +19,7 @@ class FakeChannel:
     def __init__(self) -> None:
         self.sent: list[dict] = []
 
-    async def send(self, send: ClaimedSend) -> str:
+    async def send(self, conn, send: ClaimedSend) -> str:
         self.sent.append(send.payload)
         return f"wamid-{len(self.sent)}"
 
@@ -60,6 +60,7 @@ class TestSendHonorsTheSplitFlag:
 
         delivered = await send_humanized(
             channel,
+            None,
             a_send({"text": TWO_PARAGRAPHS}),
             humanize_delays=False,
             clock=SystemClock(),
@@ -75,6 +76,7 @@ class TestSendHonorsTheSplitFlag:
 
         delivered = await send_humanized(
             channel,
+            None,
             a_send({"text": TWO_PARAGRAPHS}),
             humanize_delays=False,
             clock=SystemClock(),

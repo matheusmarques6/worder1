@@ -69,7 +69,7 @@ class _StubChannel:
         self.sent: list[dict] = []
         self._fail_at = fail_at
 
-    async def send(self, send: ClaimedSend) -> str:
+    async def send(self, conn, send: ClaimedSend) -> str:
         if self._fail_at is not None and len(self.sent) == self._fail_at:
             raise ConnectionError("provedor caiu nesta bolha")
         self.sent.append(dict(send.payload))
@@ -96,7 +96,7 @@ class TestSendHumanized:
     async def test_each_bubble_goes_out_in_order_with_the_same_key(self) -> None:
         channel = _StubChannel()
         delivered = await send_humanized(
-            channel, _send(THREE_PARAGRAPHS), humanize_delays=False, clock=SystemClock()
+            channel, None, _send(THREE_PARAGRAPHS), humanize_delays=False, clock=SystemClock()
         )
 
         assert [p["text"] for p in channel.sent] == [
@@ -111,7 +111,7 @@ class TestSendHumanized:
         send = dc_replace(_send("x"), payload={"template": {"name": "t", "language": "pt_BR"}})
 
         delivered = await send_humanized(
-            channel, send, humanize_delays=False, clock=SystemClock()
+            channel, None, send, humanize_delays=False, clock=SystemClock()
         )
         assert len(channel.sent) == 1
         assert channel.sent[0] == {"template": {"name": "t", "language": "pt_BR"}}
@@ -121,14 +121,14 @@ class TestSendHumanized:
         channel = _StubChannel(fail_at=0)
         with pytest.raises(ConnectionError):
             await send_humanized(
-                channel, _send(THREE_PARAGRAPHS), humanize_delays=False, clock=SystemClock()
+                channel, None, _send(THREE_PARAGRAPHS), humanize_delays=False, clock=SystemClock()
             )
         assert channel.sent == []
 
     async def test_a_middle_failure_keeps_what_left_and_never_retries(self) -> None:
         channel = _StubChannel(fail_at=1)
         delivered = await send_humanized(
-            channel, _send(THREE_PARAGRAPHS), humanize_delays=False, clock=SystemClock()
+            channel, None, _send(THREE_PARAGRAPHS), humanize_delays=False, clock=SystemClock()
         )
 
         assert [p["text"] for p in channel.sent] == ["Oi Joana!"]

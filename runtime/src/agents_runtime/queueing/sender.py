@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 
 async def send_humanized(
     channel: ChannelPort,
+    conn: psycopg.AsyncConnection,
     send: ClaimedSend,
     *,
     humanize_delays: bool,
@@ -71,7 +72,7 @@ async def send_humanized(
         bubbles = split_into_bubbles(text) if isinstance(text, str) else []
     if len(bubbles) <= 1:
         # Template, payload não-texto ou bolha única: um envio, como sempre.
-        wamid = await channel.send(send)
+        wamid = await channel.send(conn, send)
         body = bubbles[0] if bubbles else None
         return [(wamid, body)] if body is not None else [(wamid, "")]
 
@@ -82,7 +83,7 @@ async def send_humanized(
         if delay_ms:
             await clock.sleep(delay_ms / 1000)
         try:
-            wamid = await channel.send(replace(send, payload={"text": bubble}))
+            wamid = await channel.send(conn, replace(send, payload={"text": bubble}))
         except Exception:
             if index == 0:
                 raise
@@ -188,6 +189,7 @@ async def sender_pass(
         try:
             delivered = await send_humanized(
                 channel,
+                conn,
                 send,
                 humanize_delays=config.humanize_delays and flags.get("rhythm") is not False,
                 clock=clock,
