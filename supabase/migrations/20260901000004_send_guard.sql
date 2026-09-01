@@ -111,7 +111,7 @@ create function internal.send_guard_report(
     set search_path = pg_catalog, internal
 as $$
 declare
-    -- UTC, como o `toISOString().split('T')[0]` do TS (rate-limiter.ts:726).
+    -- UTC, como o `toISOString().split('T')[0]` do TS (rate-limiter.ts:727).
     -- `current_date` cru cortaria o dia no fuso do servidor, e os dois motores
     -- virariam o dia em horas diferentes no MESMO número.
     v_day    date := (now() at time zone 'utc')::date;
@@ -167,7 +167,7 @@ begin
         return;
     end if;
 
-    -- A escada do TS (rate-limiter.ts:612-623). O `setex` de lá SOBRESCREVE o
+    -- A escada do TS (rate-limiter.ts:613-623). O `setex` de lá SOBRESCREVE o
     -- TTL a cada erro, então aqui a janela também é recarregada por inteiro em
     -- vez de estendida a partir do que sobrava.
     update internal.whatsapp_send_guard

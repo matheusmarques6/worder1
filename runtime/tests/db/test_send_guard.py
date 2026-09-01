@@ -11,7 +11,7 @@ motores com limiares diferentes na MESMA conta é a doença que este item trata.
 
 - breaker: 5 falhas seguidas → 30 s (`send-guard.ts:64-65`)
 - throttle: 10 / 20 / 50 erros de excesso no dia → 1 / 5 / 10 min
-  (`rate-limiter.ts:612-623`), com o dia em UTC (`:726`, `toISOString`)
+  (`rate-limiter.ts:613-623`), com o dia em UTC (`:727`, `toISOString`)
 
 O que este item NÃO conta — pair-rate, throughput e cota diária — está fora por
 ruling M, e o motivo não é falta de tempo: um número aqui seria falso enquanto o
@@ -395,7 +395,7 @@ class TestTheThrottle:
     def test_the_day_is_utc_whatever_the_session_timezone_says(
         self, admin: psycopg.Connection
     ) -> None:
-        """`toISOString()` corta em UTC (`rate-limiter.ts:726`). Um
+        """`toISOString()` corta em UTC (`rate-limiter.ts:727`). Um
         `current_date` cru cortaria no fuso da SESSÃO, e os dois motores
         virariam o dia em horas diferentes no mesmo número.
 

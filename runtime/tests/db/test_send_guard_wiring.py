@@ -25,6 +25,8 @@ from agents_runtime.randomness import SystemRandomness
 from tests.db.conftest import TwoTenants
 from tests.db.factories import (
     Thread,
+    contact_phone,
+    create_cloud_mirror,
     create_outbox_item,
     create_template_policy,
     create_thread,
@@ -222,6 +224,71 @@ class TestTheVerdictIsExecuted:
         assert len(refused) == FAILURE_THRESHOLD
         assert len(held) == 10 - FAILURE_THRESHOLD
         assert all(outbox_row(admin, outbox_id)[0] == "pending" for outbox_id in lines)
+
+    async def test_the_hold_says_so_in_the_panel(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants, fake_channel
+    ) -> None:
+        """Ruling V: um envio segurado por dez minutos de throttle não pode ser
+        invisível.
+
+        Antes deste round o hold não emitia nada — nem o `sending`, que só sai
+        depois do guard de propósito (anunciar "Enviando resposta" e então
+        segurar faria o painel mentir). Quem opera só descobria lendo o
+        `last_error` da outbox.
+
+        O passo é `started`, não um novo: `started` é NÃO-terminal, e a linha
+        VAI sair quando a janela passar — isto é atraso, não silêncio. É o
+        mesmo precedente que o item 31 abriu para a degradação de mídia, e não
+        exige vocabulário novo (o que seria `src/`, proibido aqui).
+        """
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        open_window(admin, thread.conversation_id)
+        phone = contact_phone(admin, thread.contact_id)
+        mirror = create_cloud_mirror(admin, org, thread.channel_account_id, phone)
+        for _ in range(FAILURE_THRESHOLD):
+            report(admin, account_number(admin, thread), success=False)
+        create_outbox_item(admin, org, thread)
+
+        async with as_sender(dsn) as conn:
+            await sender_pass(conn, fake_channel, config=NO_DELAYS, randomness=SystemRandomness())
+
+        steps = admin.execute(
+            "select step, detail from public.whatsapp_ai_run_steps"
+            " where conversation_id = %s order by created_at",
+            (mirror.conversation_id,),
+        ).fetchall()
+        assert len(steps) == 1
+        step, detail = steps[0]
+        assert step == "started"
+        # A voz é a do TS (`send-guard.ts:67-70`), porque é a mesma pausa vista
+        # do mesmo lado — e o prazo entra, senão o painel diz "pausado" sem
+        # dizer até quando.
+        assert "muitas falhas seguidas" in detail
+        assert "30s" in detail
+
+    async def test_a_throttle_hold_says_the_other_reason(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants, fake_channel
+    ) -> None:
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        open_window(admin, thread.conversation_id)
+        phone = contact_phone(admin, thread.contact_id)
+        mirror = create_cloud_mirror(admin, org, thread.channel_account_id, phone)
+        pnid = account_number(admin, thread)
+        for _ in range(10):
+            report(admin, pnid, success=False, rate_limited=True)
+        close_breaker(admin, pnid)
+        create_outbox_item(admin, org, thread)
+
+        async with as_sender(dsn) as conn:
+            await sender_pass(conn, fake_channel, config=NO_DELAYS, randomness=SystemRandomness())
+
+        detail = admin.execute(
+            "select detail from public.whatsapp_ai_run_steps where conversation_id = %s",
+            (mirror.conversation_id,),
+        ).fetchone()[0]
+        assert "excesso de envios" in detail
 
     async def test_the_guard_being_unavailable_lets_the_send_through(
         self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants, fake_channel

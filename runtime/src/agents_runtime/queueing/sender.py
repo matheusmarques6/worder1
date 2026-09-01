@@ -45,6 +45,15 @@ from agents_runtime.repository.outbox import ClaimedSend
 
 logger = logging.getLogger(__name__)
 
+#: A voz do `BLOCK_MESSAGES` do TS (`send-guard.ts:67-70`), porque é a mesma
+#: pausa vista do mesmo lado — o operador que lê o inbox não deveria aprender
+#: duas redações para o mesmo acontecimento. O prazo é acrescentado pelo
+#: chamador: "pausado" sem dizer até quando é metade do recado.
+_HOLD_DETAIL = {
+    "circuit_open": "Envio pausado: muitas falhas seguidas nesta conta do WhatsApp",
+    "throttled": "Envio pausado: a Meta sinalizou excesso de envios nesta conta",
+}
+
 
 async def _report_to_guard(
     conn: psycopg.AsyncConnection, send: ClaimedSend, error: BaseException | None
@@ -254,6 +263,25 @@ async def sender_pass(
                     ),
                     retry_in=hold.retry_after,
                 )
+                # Ruling V: um envio segurado por dez minutos não pode ser
+                # invisível no painel. `started` porque é NÃO-terminal e a
+                # linha VAI sair quando a janela passar — isto é atraso, não
+                # silêncio, e é o mesmo precedente que o item 31 abriu para a
+                # degradação de mídia. Adereço de UI, nunca motivo de falha.
+                try:
+                    await engine.emit_ai_run_step(
+                        conn,
+                        organization_id=send.organization_id,
+                        run_id=uuid.uuid4(),
+                        step="started",
+                        detail=(
+                            f"{_HOLD_DETAIL.get(hold.reason, 'Envio pausado')}"
+                            f" — retomando em {held_for}s"
+                        ),
+                        phone=send.to_phone_e164,
+                    )
+                except psycopg.Error:
+                    pass
                 annotate(outcome=f"held:{hold.reason}")
                 return
 
