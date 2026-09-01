@@ -299,6 +299,10 @@ class TestTheResultFeedsTheBreaker:
             await sender_pass(conn, fake_channel, config=NO_DELAYS, randomness=SystemRandomness())
 
         assert guard_row(admin, account_number(admin, thread)) == (1, 1, False)
+        # Ruling S: o excesso chega como HTTP 400, que pelo status seria
+        # permanente — e antes deste round a linha era DESCARTADA. O número
+        # ficava protegido e a mensagem morria, que é meia proteção.
+        assert outbox_row(admin, outbox_id)[0] == "pending"
 
     async def test_a_bubble_failing_after_the_first_still_counts(
         self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants, fake_channel

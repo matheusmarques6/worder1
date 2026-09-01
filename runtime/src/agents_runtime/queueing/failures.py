@@ -83,6 +83,15 @@ def is_rate_limited(error: BaseException) -> bool:
 
 
 def classify(error: BaseException) -> Failure:
+    # Item 32, ruling S: excesso é transitório, ANTES do teste de status. Os
+    # códigos de excesso da Meta chegam como HTTP 400 — que é permanente pelo
+    # status —, então sem esta linha o erro que arma o cooldown do número
+    # descartaria a própria mensagem que o causou. O número protegido e a
+    # mensagem morta é meia proteção; a mensagem só precisa esperar o número
+    # voltar, que é a definição de transitório.
+    if is_rate_limited(error):
+        return Failure.TRANSIENT
+
     status = _STATUS.search(str(error))
     if status is not None:
         code = int(status.group(1))

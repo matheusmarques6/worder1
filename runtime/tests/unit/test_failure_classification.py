@@ -129,3 +129,26 @@ class TestTheRateLimitSignal:
         # E o inverso continua valendo: o `code` de verdade ainda é lido.
         assert is_rate_limited(RuntimeError('HTTP 400 {"error":{"code":131048,'
                                             '"error_subcode":2494055}}')) is True
+
+
+class TestExcessIsTransient:
+    """Item 32, ruling S — o erro que arma o cooldown não pode matar a mensagem.
+
+    Os códigos de excesso da Meta chegam como HTTP **400** com o código no
+    corpo; é por isso que `is_rate_limited` existe, já que o status sozinho não
+    bastava. Mas `classify` decidia pelo status, e 400 é permanente: o número
+    ficava protegido e a mensagem, descartada. O requisito 2 do brief vale para
+    os dois lados da moeda — bloqueio não perde mensagem, e o erro que causa o
+    bloqueio também não pode.
+    """
+
+    def test_a_400_that_is_really_excess_is_transient(self) -> None:
+        assert classify(RuntimeError("HTTP 400 meta_code=131048 {…}")) is Failure.TRANSIENT
+        assert classify(RuntimeError('HTTP 400 {"error":{"code":80007}}')) is Failure.TRANSIENT
+
+    def test_a_400_that_is_not_excess_stays_permanent(self) -> None:
+        # O controle que impede o conserto de virar "todo 400 se repete": um
+        # payload que a Meta recusa por forma nunca vai funcionar, e repeti-lo
+        # cinco vezes é queimar tentativa e alarme por nada.
+        assert classify(RuntimeError("HTTP 400 Bad Request")) is Failure.PERMANENT
+        assert classify(RuntimeError('HTTP 400 meta_code=131047 {…}')) is Failure.PERMANENT
