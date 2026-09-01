@@ -7,6 +7,7 @@ import { checkAiBudget } from '@/lib/ai/budget';
 import { extractTextFromFile } from '@/lib/ai/processors/file-extractor'
 import { extractStoragePathFromFileUrl, AI_SOURCES_BUCKET } from '@/lib/ai/source-storage'
 import { crawlSite } from '@/lib/ai/crawler'
+import { isInternalAuthorized } from '@/lib/internal-auth'
 
 // Route Segment Config (Next.js 14 App Router)
 export const runtime = 'nodejs'
@@ -16,13 +17,9 @@ export const maxDuration = 60
 // =====================================================
 // P1: rota INTERNA (chamada por sources/upload/reprocess via fetch server-side).
 // Sem proteção, qualquer um reprocessa/envenena a base de conhecimento de
-// outra org. Mesmo padrão de auth dos crons (Bearer CRON_SECRET).
+// outra org. Mesmo padrão de auth dos crons (Bearer CRON_SECRET). Ver
+// src/lib/internal-auth.ts — item 25 da auditoria (fail-open corrigido).
 // =====================================================
-function isInternalAuthorized(request: NextRequest): boolean {
-  const secret = process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET
-  if (!secret) return process.env.NODE_ENV !== 'production'
-  return request.headers.get('authorization') === `Bearer ${secret}`
-}
 
 // =====================================================
 // POST - PROCESSAR DOCUMENTO

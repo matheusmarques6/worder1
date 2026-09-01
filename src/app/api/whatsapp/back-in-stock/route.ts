@@ -8,17 +8,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { processProductBackInStock } from '@/lib/services/whatsapp/back-in-stock-service'
+import { isInternalAuthorized } from '@/lib/internal-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-/** ✅ P1 v2: verifica Bearer secret para rotas server-to-server (admin/cron) */
-function isInternalAuthorized(request: NextRequest): boolean {
-  const secret = process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET
-  if (!secret) return false
-  const auth = request.headers.get('authorization') || ''
-  return auth === `Bearer ${secret}`
-}
+// ✅ P1 v2: verifica Bearer secret para rotas server-to-server (admin/cron).
+// Item 25 da auditoria: cópia local unificada com process/document/route.ts
+// em src/lib/internal-auth.ts, fail-closed sem exceção de ambiente.
 
 export async function POST(request: NextRequest) {
   try {
