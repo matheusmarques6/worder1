@@ -18,6 +18,19 @@ UNTIL = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
 STORE = shopify.ShopifyStore(shop_domain="loja.myshopify.com", access_token="shpat_x")
 
 
+class FakeClock:
+    """Clock injetado: o teste MEDE a espera em vez de esperar."""
+
+    def __init__(self) -> None:
+        self.slept: list[float] = []
+
+    def now(self) -> datetime:
+        return UNTIL
+
+    async def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+
+
 def _transport(handler) -> tuple[httpx.MockTransport, list[httpx.Request]]:
     seen: list[httpx.Request] = []
 
@@ -63,10 +76,33 @@ class TestHappyPath:
         assert rule["value"] == "-100.0"
 
 
+_TAKEN = {"errors": {"title": ["has already been taken"]}}
+
+
 class TestIdempotentRetry:
-    async def test_an_already_taken_title_is_success(self) -> None:
+    async def test_a_taken_title_only_succeeds_after_confirming_the_discount_code(
+        self,
+    ) -> None:
+        """422 taken na price rule NÃO prova que o cupom existe (item 33).
+
+        Devolver `code` aqui mandava ao cliente um código que podia nunca ter
+        virado discount code. O contrato agora é: reencontra a rule pelo título
+        determinístico e só sai pelo passo do discount code.
+        """
+
         def taken(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(422, json={"errors": {"title": ["has already been taken"]}})
+            if request.method == "POST" and request.url.path.endswith("/price_rules.json"):
+                return httpx.Response(422, json=_TAKEN)
+            if request.method == "GET":
+                return httpx.Response(
+                    200,
+                    json={"price_rules": [
+                        {"id": 7, "title": "OUTRO-GRANT"},
+                        {"id": 99, "title": "WD-DEJA"},
+                    ]},
+                )
+            # discount code já lá da tentativa anterior: aqui 422 taken É sucesso
+            return httpx.Response(422, json={"errors": {"code": ["has already been taken"]}})
 
         transport, seen = _transport(taken)
         code = await shopify.create_discount(
@@ -74,7 +110,68 @@ class TestIdempotentRetry:
             validity_until=UNTIL, transport=transport,
         )
         assert code == "WD-DEJA"
-        assert len(seen) == 1  # não insiste: o cupom é nosso e está lá
+        assert [r.url.path for r in seen] == [
+            "/admin/api/2024-01/price_rules.json",
+            "/admin/api/2024-01/price_rules.json",
+            "/admin/api/2024-01/price_rules/99/discount_codes.json",
+        ]
+        # a busca é escopada: janela em torno do ends_at do grant, e o título
+        # bate exato — não dá para pegar a rule de outro grant.
+        params = seen[1].url.params
+        assert "ends_at_min" in params and "ends_at_max" in params
+
+    async def test_the_429_that_orphaned_the_rule_still_ends_with_the_coupon_created(
+        self,
+    ) -> None:
+        """A sequência exata do item 33, ponta a ponta.
+
+        1ª chamada: price rule 201, discount code 429 -> ShopifyError (o grant
+        fica emitido). 2ª chamada: price rule 422 taken -> tem de terminar com
+        o discount code CRIADO, não com um código de fé.
+        """
+        created_codes: list[str] = []
+
+        def first(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/price_rules.json"):
+                return httpx.Response(201, json={"price_rule": {"id": 42}})
+            return httpx.Response(429, headers={"Retry-After": "60"}, text="throttled")
+
+        transport, _ = _transport(first)  # 60s > teto: sobe sem segurar o turno
+        with pytest.raises(shopify.ShopifyError, match="HTTP 429"):
+            await shopify.create_discount(
+                STORE, code="WD-ORFA", kind="percent", value=Decimal("10"),
+                validity_until=UNTIL, transport=transport,
+            )
+
+        def second(request: httpx.Request) -> httpx.Response:
+            if request.method == "POST" and request.url.path.endswith("/price_rules.json"):
+                return httpx.Response(422, json=_TAKEN)
+            if request.method == "GET":
+                return httpx.Response(200, json={"price_rules": [{"id": 42, "title": "WD-ORFA"}]})
+            created_codes.append(json.loads(request.content)["discount_code"]["code"])
+            return httpx.Response(201, json={"discount_code": {"code": "WD-ORFA"}})
+
+        transport, seen = _transport(second)
+        code = await shopify.create_discount(
+            STORE, code="WD-ORFA", kind="percent", value=Decimal("10"),
+            validity_until=UNTIL, transport=transport,
+        )
+        assert code == "WD-ORFA"
+        assert created_codes == ["WD-ORFA"]  # o cupom EXISTE ao fim da segunda
+        assert seen[-1].url.path == "/admin/api/2024-01/price_rules/42/discount_codes.json"
+
+    async def test_a_rule_that_cannot_be_refound_is_error_not_success(self) -> None:
+        def taken_but_absent(request: httpx.Request) -> httpx.Response:
+            if request.method == "GET":
+                return httpx.Response(200, json={"price_rules": []})
+            return httpx.Response(422, json=_TAKEN)
+
+        transport, _ = _transport(taken_but_absent)
+        with pytest.raises(shopify.ShopifyError, match="não foi reencontrada"):
+            await shopify.create_discount(
+                STORE, code="WD-SUMIU", kind="percent", value=Decimal("10"),
+                validity_until=UNTIL, transport=transport,
+            )
 
     async def test_any_other_failure_raises_for_the_retry(self) -> None:
         def broken(request: httpx.Request) -> httpx.Response:
@@ -86,3 +183,80 @@ class TestIdempotentRetry:
                 STORE, code="WD-X", kind="percent", value=Decimal("10"),
                 validity_until=UNTIL, transport=transport,
             )
+
+
+class TestRateLimit:
+    """429 é a única falha que o conector re-tenta sozinho.
+
+    Paridade com `src/lib/services/shopify/api-client.ts:109-142`
+    (`fetchWithRateLimit`): no máximo 3 tentativas honrando `Retry-After`.
+    O que é NOSSO e não de lá: o teto total de 6s, porque esta chamada roda
+    dentro do turno do agente — o backoff longo é da FILA
+    (`queueing/backoff.py:15-35`), por mensagem, não por chamada HTTP.
+    """
+
+    async def test_it_retries_a_429_up_to_three_times(self) -> None:
+        def throttled(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(429, headers={"Retry-After": "1"}, text="throttled")
+
+        clock = FakeClock()
+        transport, seen = _transport(throttled)
+        with pytest.raises(shopify.ShopifyError, match="HTTP 429"):
+            await shopify.create_discount(
+                STORE, code="WD-429", kind="percent", value=Decimal("10"),
+                validity_until=UNTIL, transport=transport, clock=clock,
+            )
+        assert len(seen) == shopify._MAX_ATTEMPTS == 3
+        assert clock.slept == [1.0, 1.0]  # dorme ENTRE tentativas, não depois da última
+
+    async def test_a_429_that_clears_goes_on_to_the_discount_code(self) -> None:
+        calls = {"n": 0}
+
+        def flaky(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/price_rules.json"):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    return httpx.Response(429, headers={"Retry-After": "3"}, text="throttled")
+                return httpx.Response(201, json={"price_rule": {"id": 42}})
+            return httpx.Response(201, json={"discount_code": {"code": "WD-OK"}})
+
+        clock = FakeClock()
+        transport, seen = _transport(flaky)
+        code = await shopify.create_discount(
+            STORE, code="WD-OK", kind="percent", value=Decimal("10"),
+            validity_until=UNTIL, transport=transport, clock=clock,
+        )
+        assert code == "WD-OK"
+        assert clock.slept == [3.0]  # honrou o Retry-After da Shopify
+        assert seen[-1].url.path == "/admin/api/2024-01/price_rules/42/discount_codes.json"
+
+    async def test_a_retry_after_beyond_the_cap_gives_up_immediately(self) -> None:
+        """`Retry-After: 120` da Shopify não pode segurar o turno inteiro."""
+
+        def slow(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(429, headers={"Retry-After": "120"}, text="throttled")
+
+        clock = FakeClock()
+        transport, seen = _transport(slow)
+        with pytest.raises(shopify.ShopifyError, match="HTTP 429"):
+            await shopify.create_discount(
+                STORE, code="WD-LENTO", kind="percent", value=Decimal("10"),
+                validity_until=UNTIL, transport=transport, clock=clock,
+            )
+        assert len(seen) == 1
+        assert clock.slept == []  # nem dormiu: 120s > teto de 6s
+
+    async def test_the_total_wait_never_passes_the_cap(self) -> None:
+        def throttled(request: httpx.Request) -> httpx.Response:
+            # sem Retry-After: cai no default de 2s do api-client.ts
+            return httpx.Response(429, text="throttled")
+
+        clock = FakeClock()
+        transport, _ = _transport(throttled)
+        with pytest.raises(shopify.ShopifyError, match="HTTP 429"):
+            await shopify.create_discount(
+                STORE, code="WD-TETO", kind="percent", value=Decimal("10"),
+                validity_until=UNTIL, transport=transport, clock=clock,
+            )
+        assert clock.slept == [2.0, 2.0]
+        assert sum(clock.slept) <= shopify._RETRY_BUDGET_SECONDS == 6.0

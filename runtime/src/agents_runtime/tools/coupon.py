@@ -185,6 +185,7 @@ class CreateCoupon:
                     validity_until=grant.validity_until,
                     max_uses=grant.max_uses,
                     transport=self._transport,
+                    clock=self._clock,
                 )
             except (shopify.ShopifyError, httpx.HTTPError) as exc:
                 return self._error(
