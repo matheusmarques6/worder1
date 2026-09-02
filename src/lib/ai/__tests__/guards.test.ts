@@ -4,6 +4,7 @@ import {
   matchHandoffKeyword,
   findBlockedTopic,
   isTransferCooldownActive,
+  isWithinSchedule,
 } from '../guards'
 
 describe('normalizeForMatch', () => {
@@ -88,5 +89,58 @@ describe('isTransferCooldownActive', () => {
 
   it('data invalida => false (fail-open, nao trava a IA por lixo no banco)', () => {
     expect(isTransferCooldownActive({ transferredAt: 'not-a-date', cooldownSeconds: 300, now })).toBe(false)
+  })
+})
+
+describe('isWithinSchedule (porte 1:1 de engine.ts:checkSchedule, item 37)', () => {
+  // Quarta-feira 10:00 America/Sao_Paulo (UTC-3) = 13:00 UTC.
+  const quartaDeManha = new Date('2026-07-29T13:00:00Z')
+
+  it('sem bloco de schedule => sempre atende', () => {
+    expect(isWithinSchedule(null, quartaDeManha)).toBe(true)
+    expect(isWithinSchedule(undefined, quartaDeManha)).toBe(true)
+  })
+
+  it('always_active ignora hours/days', () => {
+    expect(
+      isWithinSchedule({ always_active: true, days: [] }, quartaDeManha),
+    ).toBe(true)
+  })
+
+  it('dentro do horário e do dia configurados => true', () => {
+    expect(
+      isWithinSchedule(
+        { hours: { start: '08:00', end: '18:00' }, days: ['wed'] },
+        quartaDeManha,
+      ),
+    ).toBe(true)
+  })
+
+  it('fora do horário configurado => false', () => {
+    expect(
+      isWithinSchedule(
+        { hours: { start: '19:00', end: '23:00' }, days: ['wed'] },
+        quartaDeManha,
+      ),
+    ).toBe(false)
+  })
+
+  it('dia da semana fora da lista => false', () => {
+    expect(
+      isWithinSchedule(
+        { hours: { start: '00:00', end: '23:59' }, days: ['mon', 'tue'] },
+        quartaDeManha,
+      ),
+    ).toBe(false)
+  })
+
+  it('days: [] nunca bate com dia nenhum => sempre false (fora de always_active)', () => {
+    expect(
+      isWithinSchedule({ hours: { start: '00:00', end: '23:59' }, days: [] }, quartaDeManha),
+    ).toBe(false)
+  })
+
+  it('sem hours/days explícitos usa default 08:00-18:00, seg-sex', () => {
+    expect(isWithinSchedule({ timezone: 'America/Sao_Paulo' }, quartaDeManha)).toBe(true)
   })
 })

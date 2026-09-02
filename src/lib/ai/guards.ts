@@ -67,3 +67,58 @@ export function isTransferCooldownActive(params: TransferCooldownParams): boolea
   if (!Number.isFinite(transferredMs)) return false;
   return now - transferredMs < seconds * 1000;
 }
+
+/**
+ * Estamos dentro do horário de atendimento configurado
+ * (`ai_agents.settings.schedule`)?
+ *
+ * Porte 1:1 de `engine.ts:checkSchedule` — extraído para cá para ser
+ * reusado pela cadeia de guards do badge (conversation-ai-status.ts) sem
+ * duplicar a lógica (o mesmo motivo pelo qual `isTransferCooldownActive`
+ * mora aqui). `engine.ts` chama esta função com o mesmo resultado de
+ * sempre — zero mudança de comportamento no caminho live. Espelho de
+ * `runtime/src/agents_runtime/agent_core/guards.py:is_within_schedule`
+ * (auditoria item 30).
+ */
+export function isWithinSchedule(
+  schedule:
+    | { always_active?: boolean; timezone?: string; hours?: { start?: string; end?: string }; days?: string[] }
+    | null
+    | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!schedule || schedule.always_active) {
+    return true;
+  }
+
+  const tz = schedule.timezone || 'America/Sao_Paulo';
+
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  const timeString = formatter.format(now);
+  const [hours, minutes] = timeString.split(':').map(Number);
+  const currentTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+
+  const { start, end } = schedule.hours || { start: '08:00', end: '18:00' };
+  const inTimeRange = currentTime >= (start ?? '08:00') && currentTime <= (end ?? '18:00');
+
+  const dayFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    weekday: 'short',
+  });
+  const dayName = dayFormatter.format(now).toLowerCase();
+  const dayMap: Record<string, string> = {
+    sun: 'sun', mon: 'mon', tue: 'tue', wed: 'wed', thu: 'thu', fri: 'fri', sat: 'sat',
+  };
+  const today = dayMap[dayName];
+
+  const days = schedule.days || ['mon', 'tue', 'wed', 'thu', 'fri'];
+  const inDayRange = days.includes(today);
+
+  return inTimeRange && inDayRange;
+}

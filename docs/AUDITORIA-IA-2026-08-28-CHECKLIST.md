@@ -834,6 +834,23 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   pedem Postgres em Docker, indisponível nesta máquina; o teste novo do espelho
   (`tests/db/test_llm_calls_persistence.py::TestTheUsageLogsMirror`) fica sem prova executável aqui.
 
+  **Parte de UI, fechada em despacho separado** · relatório
+  `.superpowers/sdd/AUDITORIA-IA-2026-08-28-CHECKLIST/task-37-ui-report.md`.
+  `conversation-ai-status.ts:166-168` (o early-return) foi removido — org `runtime` cai na MESMA
+  cadeia de guards que a org `legacy` já usava (`activate_on: manual`, cooldown de transferência,
+  `max_messages_per_conversation`, `stop_on_human_reply`), sem RPC nova: a rota já lê
+  `whatsapp_cloud_conversations`/`whatsapp_cloud_messages` direto, os mesmos dados que
+  `internal.legacy_conversation_guard_state` expõe ao runtime Python (a ponte SQL do item 30 resolve
+  do id CANÔNICO pro espelho por telefone; esta rota já vive no espaço de id do espelho e não precisa
+  desse salto). Cobre quatro dos cinco motivos com o código que já existia. O quinto, horário, não
+  tinha guard nenhum nesta cadeia — nem para `legacy` — porque quem checa de verdade é
+  `engine.ts:checkSchedule`, chamado só dentro do envio real, nunca do badge; a lógica foi extraída
+  para `guards.ts:isWithinSchedule` (reuso, zero duplicação) e passou a entrar na cadeia SÓ para
+  `runtime` (novo motivo `outside_schedule`) — `legacy` continua exatamente como estava, provado por
+  teste (`org em legacy: horário fora da janela NÃO bloqueia o badge`). `npx vitest run`: 1282
+  passando, 4 falhas pré-existentes e alheias (`reports-utils.test.ts`, timezone; `file-extractor
+  .integration.test.ts`, fixture de PDF), nenhuma nos arquivos tocados aqui.
+
 - [ ] **38. Typing indicator** `[relatado]`
   Divergência já declarada. Depende do outbox carregar o wamid do último inbound.
 

@@ -1,19 +1,27 @@
 /**
- * O badge "vai responder?" do inbox (pacote F2 / achado L1).
+ * O badge "vai responder?" do inbox (pacote F2 / achado L1, revisto no
+ * item 37 da auditoria de 28/08).
  *
- * Este módulo decide o que o atendente lê antes de a mensagem chegar, e hoje
- * ele avalia SÓ os guards do cloud-runner (activate_on, cooldown de
- * transferência, max_messages, stop_on_human_reply) — guards que o runtime
- * Python não lê. Para uma org migrada, o badge responde pela régua errada.
+ * Este módulo decide o que o atendente lê antes de a mensagem chegar.
+ * Histórico: o L1 original fez o badge avaliar activate_on, cooldown de
+ * transferência, max_messages e stop_on_human_reply — mas com um
+ * early-return que DESLIGAVA essa cadeia inteira para org `runtime`, com o
+ * argumento de que "o runtime Python nunca lê essa coluna". O item 30
+ * portou os oito guards pro runtime Python (`guards.py`), lendo o mesmo
+ * espelho legado que esta cadeia já lia — e o early-return virou mentira:
+ * badge "Bot ativo" numa conversa calada por qualquer um desses guards.
  *
- * O que este arquivo faz AGORA: fixa o comportamento atual, guard por guard,
- * na ordem em que eles rodam. É a rede que prova que o conserto do L1 mudou
- * exatamente uma coisa — a resposta para org em `runtime` — e não mexeu no
- * caminho legado, que continua atendendo todas as outras orgs.
+ * O que este arquivo faz AGORA: fixa o comportamento ATUAL (pós item 37) —
+ * a cadeia de guards do cloud-runner roda por igual para os dois motores, e
+ * horário (`outside_schedule`) entra na cadeia só para `runtime`, porque é
+ * o único dos cinco que o legacy nunca expôs no badge (ele checa horário de
+ * verdade dentro de `engine.ts:checkSchedule`, mas isso nunca alimentou este
+ * módulo — mudar o legacy aqui seria escopo novo, não o achado do item 37).
  *
- * O contrato de DEPOIS do conserto está no fim do arquivo, no describe "L1 —
- * o badge precisa responder pela régua do caminho certo" — já são testes
- * reais, não mais `it.todo`.
+ * O describe "item 37 — o badge para de mentir em runtime" prova a inversão:
+ * cada guard que antes era ignorado em `runtime` agora bloqueia igual ao
+ * `legacy`, e o describe "org em legacy" ao lado prova que nada mudou nesse
+ * caminho — a mesma régua de sempre, guard por guard.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -215,29 +223,63 @@ describe('ordem dos guards — o caminho legado, como está hoje', () => {
 });
 
 // ---------------------------------------------------------------------------
-// O contrato DEPOIS do conserto do L1: resolveConversationAiStatus já
-// consulta getRuntimeMode; cada `it` abaixo prova uma linha do contrato.
+// O contrato DEPOIS do item 37: resolveConversationAiStatus não early-return
+// mais para `runtime` — a cadeia do cloud-runner roda igual, mais horário.
 // ---------------------------------------------------------------------------
 
-describe('L1 — o badge precisa responder pela régua do caminho certo', () => {
-  it('org em runtime: nenhum guard do cloud-runner bloqueia o badge', async () => {
+describe('item 37 — o badge para de mentir em runtime', () => {
+  it('org em runtime: activate_on=manual sem atribuição bloqueia igual ao legacy', async () => {
     db.runtimeMode = 'runtime';
-    // Cenário desenhado pra bloquear em TODOS os guards do cloud-runner ao
-    // mesmo tempo, se algum deles ainda pesasse: activate_on manual sem
-    // atribuição, cooldown de transferência correndo, max_messages estourado
-    // e humano já respondeu. Nenhum desses campos existe do lado do runtime
-    // Python — só ai_enabled e ter versão ativa (checados antes) importam lá.
-    db.agent!.settings.behavior = {
-      activate_on: 'manual',
-      cooldown_after_transfer: 300,
-      max_messages_per_conversation: 1,
-    };
-    db.botMessages = 999;
-    db.hasHumanReply = true;
-    const status = await ask({
-      ai_agent_id: null,
-      ai_transferred_at: new Date(Date.now() - 60_000).toISOString(),
+    db.agent!.settings.behavior = { activate_on: 'manual' };
+    expect(await ask({ ai_agent_id: null })).toMatchObject({
+      willRespond: false,
+      reason: 'manual_activation_required',
     });
+  });
+
+  it('org em runtime: cooldown de transferência ainda correndo bloqueia', async () => {
+    db.runtimeMode = 'runtime';
+    db.agent!.settings.behavior = { cooldown_after_transfer: 300 };
+    const agoraMenos1min = new Date(Date.now() - 60_000).toISOString();
+    expect(await ask({ ai_transferred_at: agoraMenos1min })).toMatchObject({
+      willRespond: false,
+      reason: 'transfer_cooldown',
+    });
+  });
+
+  it('org em runtime: max_messages atingido bloqueia', async () => {
+    db.runtimeMode = 'runtime';
+    db.agent!.settings.behavior = { max_messages_per_conversation: 1 };
+    db.botMessages = 5;
+    expect(await ask()).toMatchObject({ willRespond: false, reason: 'max_messages' });
+  });
+
+  it('org em runtime: humano já respondeu (stop_on_human_reply) bloqueia', async () => {
+    db.runtimeMode = 'runtime';
+    db.agent!.settings.behavior = {};
+    db.hasHumanReply = true;
+    expect(await ask()).toMatchObject({ willRespond: false, reason: 'stop_on_human' });
+  });
+
+  it('org em runtime: fora do horário configurado → outside_schedule', async () => {
+    db.runtimeMode = 'runtime';
+    // days: [] não bate com dia nenhum da semana — bloqueia sempre, sem
+    // depender de que horas são agora (o mesmo truque vale pra
+    // isWithinSchedule sozinha, testada em guards.test.ts).
+    db.agent!.settings = { behavior: {}, schedule: { days: [] } };
+    expect(await ask()).toMatchObject({ willRespond: false, reason: 'outside_schedule' });
+  });
+
+  it('org em runtime: schedule.always_active ignora o resto do bloco', async () => {
+    db.runtimeMode = 'runtime';
+    db.agent!.settings = { behavior: {}, schedule: { always_active: true, days: [] } };
+    expect(await ask()).toMatchObject({ willRespond: true, reason: null });
+  });
+
+  it('org em runtime: nada bloqueando (sem settings.schedule) → Bot ativo', async () => {
+    db.runtimeMode = 'runtime';
+    db.agent!.settings.behavior = {};
+    const status = await ask();
     expect(status).toMatchObject({
       willRespond: true,
       reason: null,
@@ -256,23 +298,7 @@ describe('L1 — o badge precisa responder pela régua do caminho certo', () => 
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('org em runtime: a resposta reflete o freio manual do inbox, não max_messages', async () => {
-    db.runtimeMode = 'runtime';
-    db.agent!.settings.behavior = { max_messages_per_conversation: 1 };
-    db.botMessages = 5; // bem acima do limite — irrelevante para o runtime
-    // Com o freio manual (ai_enabled) desligado, o motivo tem que ser
-    // ai_disabled — o freio de verdade — nunca max_messages, que o runtime
-    // não lê e portanto não pode aparecer como explicação.
-    expect(await ask({ ai_enabled: false })).toMatchObject({
-      willRespond: false,
-      reason: 'ai_disabled',
-    });
-    // Com o freio manual ligado (ai_enabled=true, o default), a contagem que
-    // estouraria o limite no legado não bloqueia nada no runtime.
-    expect(await ask({ ai_enabled: true })).toMatchObject({ willRespond: true, reason: null });
-  });
-
-  it('org em legacy: a matriz acima continua idêntica, guard por guard', async () => {
+  it('org em legacy: a matriz acima continua idêntica, guard por guard (sem regressão)', async () => {
     db.runtimeMode = 'legacy';
 
     db.agent!.settings.behavior = { activate_on: 'manual' };
@@ -295,12 +321,22 @@ describe('L1 — o badge precisa responder pela régua do caminho certo', () => 
     expect(await ask()).toMatchObject({ reason: 'stop_on_human' });
   });
 
-  it('erro ao ler ai_runtime_rollout: badge cai para a régua legacy (fail-closed)', async () => {
+  it('org em legacy: horário fora da janela NÃO bloqueia o badge (fora de escopo do item 37)', async () => {
+    db.runtimeMode = 'legacy';
+    // Mesmo schedule que bloqueia em runtime (days: []) — em legacy o badge
+    // nunca avaliou horário e continua não avaliando: comportamento intacto.
+    db.agent!.settings = { behavior: {}, schedule: { days: [] } };
+    expect(await ask()).toMatchObject({ willRespond: true, reason: null });
+  });
+
+  it('erro ao ler ai_runtime_rollout: cai pra legacy — horário não é avaliado', async () => {
     db.runtimeMode = null; // resultFor devolve error para a leitura de ai_runtime_rollout
-    db.agent!.settings.behavior = { max_messages_per_conversation: 1 };
+    db.agent!.settings = { behavior: { max_messages_per_conversation: 1 }, schedule: { days: [] } };
     db.botMessages = 5;
-    // getRuntimeMode falha aberto para 'legacy' — o guard do cloud-runner
-    // continua valendo, do jeito que valia antes desta tarefa existir.
+    // getRuntimeMode falha aberto para 'legacy': o guard de max_messages
+    // continua valendo (era assim antes desta tarefa), e horário — que só
+    // roda em runtime — não é avaliado, então não é ele quem explicaria o
+    // silêncio mesmo que fosse consultado.
     expect(await ask()).toMatchObject({ willRespond: false, reason: 'max_messages' });
   });
 });

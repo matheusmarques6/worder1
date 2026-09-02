@@ -15,17 +15,31 @@
 // lados garantiria que um dia divergissem — e um badge que mente sobre o
 // motivo e pior que um badge que so diz "ativo".
 //
-// Item 12 (28/08): os guards acima sao do cloud-runner (legacy) e o runtime
-// Python nunca os le. Para uma org em modo `runtime` (ai_runtime_rollout),
-// esses guards saem do caminho — o freio que sobra e o mesmo dos dois lados:
-// conversation.ai_enabled (a RPC cancel_pending_ai_response usa a MESMA flag
-// pra cancelar a resposta agendada). Sem isso, a loja migrada via badge verde
-// com o agente mudo, OU badge "pausado" com o agente respondendo do mesmo
-// jeito — o achado mentia nas duas direcoes.
+// Item 12 (28/08): quando isto foi escrito, os guards abaixo eram so do
+// cloud-runner (legacy) e o runtime Python nao os lia — dai o early-return
+// que existia aqui para org `runtime`.
+//
+// Item 30 (01/09) portou os oito guards para
+// `runtime/src/agents_runtime/agent_core/guards.py`, que decide com eles
+// lendo o MESMO espelho legado (`internal.legacy_conversation_guard_state`)
+// que esta cadeia le direto do `whatsapp_cloud_conversations` /
+// `whatsapp_cloud_messages`. O early-return ficou mentiroso: badge "Bot
+// ativo" numa conversa calada por stop_on_human_reply, teto, cooldown ou
+// ativacao manual (achado do item 37, parte de UI). Consertado removendo o
+// early-return — org runtime cai na MESMA cadeia que a org legacy ja usava,
+// sem duplicar logica nem chamar a RPC (a UI ja vive no espaco de ID do
+// espelho legado; a RPC existe para o runtime Python alcancar o mesmo
+// espelho a partir do id CANONICO, que esta rota nao tem).
+//
+// Horario ("outside_schedule" abaixo) e avaliado so para `runtime`: o motor
+// legacy tambem checa horario de verdade (engine.ts:checkSchedule, dentro de
+// processMessage), mas essa checagem NUNCA fez parte desta cadeia — badge
+// legacy fica mudo sobre horario hoje, e mudar isso e achado novo, fora do
+// escopo do item 37 (reportado, nao corrigido aqui).
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { isTransferCooldownActive } from './guards';
+import { isTransferCooldownActive, isWithinSchedule } from './guards';
 import { getRuntimeMode } from './runtime-rollout';
 
 export type AiBlockerReason =
@@ -35,7 +49,8 @@ export type AiBlockerReason =
   | 'manual_activation_required'
   | 'transfer_cooldown'
   | 'max_messages'
-  | 'stop_on_human';
+  | 'stop_on_human'
+  | 'outside_schedule';
 
 export interface ConversationAiStatus {
   /** false => o agente NAO vai responder ao proximo inbound. */
@@ -57,6 +72,7 @@ export const AI_BLOCKER_LABELS: Record<AiBlockerReason, string> = {
   transfer_cooldown: 'Bot em espera',
   max_messages: 'Limite atingido',
   stop_on_human: 'Bot pausado',
+  outside_schedule: 'Fora do horário',
 };
 
 const AI_BLOCKER_DETAILS: Record<AiBlockerReason, string> = {
@@ -70,6 +86,8 @@ const AI_BLOCKER_DETAILS: Record<AiBlockerReason, string> = {
   max_messages: 'O agente atingiu o limite de respostas configurado para uma conversa.',
   stop_on_human:
     'Alguém respondeu manualmente aqui, e o agente está configurado para parar quando isso acontece (stop_on_human_reply).',
+  outside_schedule:
+    'A conversa está fora do horário de atendimento configurado para este agente.',
 };
 
 /**
@@ -155,17 +173,14 @@ export async function resolveConversationAiStatus(params: {
 
   const agentMeta = { agentId, agentName: agent.name as string | undefined };
 
-  // Item 12 da auditoria: daqui pra baixo só existem guards do cloud-runner
-  // (agent.settings.behavior — activate_on, cooldown de transferência,
-  // max_messages_per_conversation, stop_on_human_reply). O runtime Python
-  // nunca lê essa coluna: `responder.py` gera e envia sem consultá-la, e o
-  // coalescer só olha `pending_response_at` + `ai_runtime_rollout` (já
-  // resolvido acima pelo ai_enabled). Numa org `runtime` esses guards não
-  // decidem nada — pesá-los no badge era o achado do L1: "bot pausado" pra
-  // sempre enquanto o agente respondia do mesmo jeito.
-  if ((await getRuntimeMode(supabaseAdmin, organizationId)) === 'runtime') {
-    return { willRespond: true, reason: null, label: 'Bot ativo', ...agentMeta };
-  }
+  // Item 30/37 da auditoria: estes guards (agent.settings.behavior —
+  // activate_on, cooldown de transferência, max_messages_per_conversation,
+  // stop_on_human_reply) decidem para os DOIS motores hoje. O cloud-runner
+  // (legacy) os aplica em TS; o runtime Python os aplica via
+  // `guards.py:evaluate_inbound_guards`, lendo o mesmo espelho legado que
+  // `countBotMessages`/`hasHumanReply` leem aqui embaixo — não há mais
+  // early-return: as duas cadeias correm por igual.
+  const runtimeMode = (await getRuntimeMode(supabaseAdmin, organizationId)) === 'runtime';
 
   const behavior = (agent.settings as any)?.behavior || {};
 
@@ -192,6 +207,16 @@ export async function resolveConversationAiStatus(params: {
     if (await hasHumanReply(organizationId, conversation.id)) {
       return blocked('stop_on_human', agentMeta);
     }
+  }
+
+  // Horário só entra na cadeia para `runtime`: é o guard que
+  // `schedule_silence` aplica de fato nesse motor (guards.py:283-293). O
+  // legacy também checa horário de verdade (engine.ts:checkSchedule, dentro
+  // de processMessage), mas essa checagem nunca fez parte deste badge —
+  // adicioná-la para legacy aqui seria mudar comportamento fora do escopo
+  // do item 37 (achado à parte, reportado e não corrigido nesta entrega).
+  if (runtimeMode && !isWithinSchedule((agent.settings as any)?.schedule)) {
+    return blocked('outside_schedule', agentMeta);
   }
 
   return { willRespond: true, reason: null, label: 'Bot ativo', ...agentMeta };

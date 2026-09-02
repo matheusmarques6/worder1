@@ -23,6 +23,7 @@ import { runToolLoop } from './tools/loop'
 import { trackAiUsage } from './cost-tracker'
 import { checkAiBudget, AiBudgetExceededError } from './budget'
 import { decodeProviderKey } from './provider-key-codec'
+import { isWithinSchedule } from './guards'
 
 // =====================================================
 // AI AGENT ENGINE CLASS
@@ -304,49 +305,14 @@ export class AIAgentEngine {
   }
 
   /**
-   * Verifica se está dentro do horário de funcionamento
+   * Verifica se está dentro do horário de funcionamento.
+   *
+   * Lógica movida para `guards.ts:isWithinSchedule` (auditoria item 37) para
+   * ser reusada pelo badge do inbox (conversation-ai-status.ts) sem
+   * duplicá-la — mesma entrada, mesma saída de sempre.
    */
   private checkSchedule(): boolean {
-    const schedule = this.agent.settings?.schedule
-    
-    if (!schedule || schedule.always_active) {
-      return true
-    }
-
-    const now = new Date()
-    const tz = schedule.timezone || 'America/Sao_Paulo'
-    
-    // Converter para timezone configurado
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    })
-    
-    const timeString = formatter.format(now)
-    const [hours, minutes] = timeString.split(':').map(Number)
-    const currentTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
-
-    // Verificar horário
-    const { start, end } = schedule.hours || { start: '08:00', end: '18:00' }
-    const inTimeRange = currentTime >= start && currentTime <= end
-
-    // Verificar dia da semana
-    const dayFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      weekday: 'short',
-    })
-    const dayName = dayFormatter.format(now).toLowerCase()
-    const dayMap: Record<string, string> = {
-      sun: 'sun', mon: 'mon', tue: 'tue', wed: 'wed', thu: 'thu', fri: 'fri', sat: 'sat',
-    }
-    const today = dayMap[dayName]
-
-    const days = schedule.days || ['mon', 'tue', 'wed', 'thu', 'fri']
-    const inDayRange = days.includes(today)
-
-    return inTimeRange && inDayRange
+    return isWithinSchedule(this.agent.settings?.schedule)
   }
 
   /**
