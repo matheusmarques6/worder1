@@ -527,6 +527,34 @@ alerta `gave_up`, com o comentário documentando o incidente que os criou; `clou
 fixo em 1024 no adapter Anthropic, que faz um modelo com reasoning estourar o teto pensando e
 devolver `""`), é caminho plausível, não teórico.
 
+**Item 39, fechado — o transcript não ia mais duas vezes por chamada de LLM.** TS:
+`prompt-builder.ts::formatMessages` é a ÚNICA passagem do histórico — o `system` nunca carrega
+texto de conversa, e tem guarda explícita contra duplicar a mensagem atual. Runtime (antes):
+`_conversation_block` (`agent_core/prompt_compiler.py`) despejava `transcript` E `pending` como
+texto dentro do bloco `# CONVERSA` do `system`, e `_as_chat(transcript)`
+(`agent_core/responder.py::build_responder.respond`) espalhava o MESMO `transcript` de novo como
+turnos de chat; como `load_recent_transcript` (`repository/agent.py`) não excluía a janela
+pendente, as mensagens do turno atual apareciam em até três lugares (duas dentro do próprio
+`system`, mais uma no array de chat) — em até 12 chamadas de geração por turno
+(`REGENERATION_LIMIT=2` em `judges/pre_send.py` × `MAX_TOOL_ROUNDS=3`+1 final em
+`agent_core/responder.py`). Resolvido na fonte, não no consumidor: `load_recent_transcript` ganhou
+o parâmetro `exclude_inbound_after_seq` (condição na query) — só `build_responder.respond` o passa
+(é o único consumidor com janela pendente; o toque, `agent_core/toucher.py`, e o preview,
+`server.py::_preview`, não filtram nada e continuam como estavam). `_conversation_block` em
+`mode="turn"` não despeja mais transcript/pending como texto — só a rubrica de mídia da loja
+sobrevive lá (item 31, exclusiva do bloco: `_as_chat` a descarta de propósito para não virar fala
+imitável). O histórico inteiro passa a viver só no array de chat
+(`_as_chat(transcript + pending)`), sem sobreposição — a query já garante que os dois conjuntos são
+disjuntos. `mode="preview"` manteve o dump completo: não fala com LLM, não duplica nada, e é a
+única forma de o lojista ver a conversa ao testar o prompt.
+*Medido* (ruling D, `task-39-report.md`): turno sintético de 20 mensagens (17 de histórico + 3
+pendentes, o caso comum descrito na recon — a conversa cabe inteira no `TRANSCRIPT_LIMIT`) foi de
+2660 para 1678 caracteres de prompt de entrada, razão **1,59× (redução de 36,9%)** — abaixo do
+"~2×" que o achado original estimava, porque o `system` também carrega AGENT/MISSÃO/ESTADO/CANAL,
+blocos que nunca duplicavam.
+*Sem prova executável aqui:* `tests/db` e `tests/pipeline` pedem Postgres em Docker, ausente nesta
+máquina — a query nova só é exercida por `tests/db/test_agent_loaders.py`, não rodado nesta tarefa.
+
 ### Regras When/Do
 
 **27. `ai_agent_actions` (o motor de ações) não existe no runtime.** TS: `engine.ts:96-134` carrega

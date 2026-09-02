@@ -941,11 +941,56 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
 ## Fase 5 — Custo e qualidade do motor
 
-- [ ] **39. Parar de mandar o transcript duas vezes** `[confirmado]`
+- [x] **39. Parar de mandar o transcript duas vezes** `[confirmado]` · commit `7ec48247` ·
+  relatório `task-39-report.md`
   `runtime/.../responder.py:437` monta `ConversationBlock` com `transcript` + `pending` no prompt de
   sistema; `:481` faz `_as_chat(transcript)` e `:543` espalha como turnos de chat. E
   `repository/agent.py:251` não exclui a janela pendente. Resultado: ~2× tokens de entrada por chamada,
   em até 12 gerações por turno — e é o padrão que induz o modelo a repetir.
+
+  **A duplicação era tripla, não dupla.** O bloco `# CONVERSA` do `system`
+  (`agent_core/prompt_compiler.py::_conversation_block`) despejava `transcript` inteiro E `pending`
+  de novo (rótulo "— responder agora a:"), e `_as_chat(transcript)`
+  (`agent_core/responder.py::build_responder.respond`) espalhava o MESMO `transcript` como turnos de
+  chat — como `repository/agent.py::load_recent_transcript` não excluía a janela pendente, o turno
+  atual aparecia em até três lugares na mesma chamada.
+
+  **Ruling C — consumidores de `load_recent_transcript`, verificados antes do código.** Dois
+  chamadores em produção: `build_responder.respond` (com janela pendente própria, único ponto onde
+  `transcript`/`pending` podiam se sobrepor) e `agent_core/toucher.py::build_toucher.touch` (sem
+  janela pendente — nunca teve a duplicação A). Filtrar na fonte não quebrou nenhum: o parâmetro
+  novo `exclude_inbound_after_seq` é opcional, `None` por padrão, e só `respond` o passa.
+
+  **O que mudou.** `load_recent_transcript` ganhou `exclude_inbound_after_seq` (condição na query,
+  não dedup em Python). `ConversationBlock` perdeu o campo `pending` (sem uso depois do corte).
+  `_conversation_block` ganhou `mode`: em `"turn"` não despeja mais o histórico como texto — só a
+  rubrica de mídia da loja sobrevive (item 31, exclusiva do bloco); em `"preview"`
+  (`server.py::_preview`, que não monta array de chat) manteve o dump completo, porque ali não há
+  nada para duplicar. `responder.py` passa a montar `_as_chat(transcript + pending)`, seguro porque
+  a query já garante os dois conjuntos disjuntos.
+
+  **Ruling D — a medida, e a correção da promessa.** Turno sintético de 20 mensagens (17 de
+  histórico + 3 pendentes, o caso comum em que a conversa cabe no `TRANSCRIPT_LIMIT`): **2660 → 1678
+  caracteres de prompt de entrada, razão 1,59× (redução de 36,9%)** — não ~2× como o achado original
+  estimava. O `system` também carrega AGENT/MISSÃO/ESTADO/CANAL, blocos que nunca duplicavam, e
+  dilui a razão; a parte que de fato duplicava (o histórico em si) chega perto de 2× isolada.
+  **Corrigindo a promessa deste item: o ganho real medido é 1,59×**, não ~2×. Continua valendo por
+  chamada, multiplicado pelas até 12 gerações por turno (ruling E, intocado).
+
+  **Teste que trava a duplicação.** `tests/unit/test_prompt_compiler_blocks.py::TestTheConversationBlockDoesNotDuplicateTheChatArray`
+  (3 casos, sem banco): texto comum do transcript não chega ao bloco em modo `"turn"`; a rubrica de
+  mídia da loja sobrevive; o modo `"preview"` continua mostrando o dump completo.
+
+  **`FORK.md` atualizado**: novo parágrafo "Item 39, fechado" na seção "Trilha, custo e
+  visibilidade".
+
+  **Sem prova executável:** `tests/db` e `tests/pipeline` pedem Postgres em Docker, ausente nesta
+  máquina — inclusive `test_agent_loaders.py` (a query nova), `test_responder_guards.py` (o teste
+  que fixa a separação narração/fala da rubrica de mídia) e `test_server.py::TestPreview` (o teste
+  que fixa o dump completo no preview). Os três continuam corretos por leitura; nenhum rodou.
+
+  **Suíte:** `tests/unit` 1187 verdes (`PYTHONUTF8=1`; 1184 da baseline + 3 testes novos).
+  `lint-imports`: 3 contratos mantidos, 0 quebrados.
 
 - [ ] **40. Fechar ou reusar os clientes httpx de LLM** `[confirmado]`
   `agent_core/providers.py:75-83` constrói o adapter por turno; os três criam `httpx.AsyncClient` no
