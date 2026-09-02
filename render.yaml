@@ -44,7 +44,7 @@ services:
       - key: DEPLOY_ENV
         value: production
       - key: AGENTS_META_API_VERSION
-        value: v19.0
+        value: v22.0
       # -- segredos (preenchidos no Apply do Blueprint; nunca no repo) --------
       - key: SUPABASE_DB_URL # session pooler, ver cabeçalho
         sync: false

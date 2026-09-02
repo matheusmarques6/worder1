@@ -94,7 +94,7 @@ interruptor — subir o piloto não liga org nenhuma.
 | Variável | O que é |
 |---|---|
 | `AGENTS_CHANNEL` | `agents_runtime.channels.cloud_api:from_env` |
-| `AGENTS_META_API_VERSION` | `v19.0` (default) |
+| `AGENTS_META_API_VERSION` | `v22.0` (default, item 35 da auditoria) |
 
 Item 20 da auditoria: não existe mais um `AGENTS_META_ACCESS_TOKEN` global —
 cada envio lê a credencial da conta Cloud ATIVA da própria org

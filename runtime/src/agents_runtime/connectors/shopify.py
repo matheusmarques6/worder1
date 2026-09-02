@@ -23,7 +23,7 @@ import httpx
 
 from agents_runtime.clock import Clock, SystemClock
 
-API_VERSION = "2024-01"
+API_VERSION = "2026-04"
 _TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 
 # 429: inspirado no `fetchWithRateLimit` do lado TS
@@ -53,11 +53,12 @@ _DEFAULT_RETRY_AFTER_SECONDS = 2.0
 # não se substituem.
 _RETRY_BUDGET_SECONDS = 6.0
 
-# `GET /price_rules.json` (2024-01) não filtra por título — os únicos filtros
-# são datas, `limit`, `since_id` e `times_used`. Como o `ends_at` da rule é o
-# `validity_until` do grant, uma janela estreita em volta dele traz um punhado
-# de rules em vez da loja inteira; quem garante que é A rule certa é o título,
-# comparado exato depois. A margem cobre o truncamento de subsegundo do lado
+# `GET /price_rules.json` (2026-04, item 35 da auditoria — checado na
+# documentação antes de subir) não filtra por título — os únicos filtros
+# continuam sendo datas, `limit`, `since_id` e `times_used`. Como o `ends_at`
+# da rule é o `validity_until` do grant, uma janela estreita em volta dele traz
+# um punhado de rules em vez da loja inteira; quem garante que é A rule certa é
+# o título, comparado exato depois. A margem cobre o truncamento de subsegundo do lado
 # da Shopify.
 #
 # Uma página só: se a rule não estiver nos 250 primeiros resultados da janela,

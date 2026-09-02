@@ -42,9 +42,15 @@ from agents_runtime.repository.whatsapp_templates import TemplateShape, load_tem
 
 logger = logging.getLogger(__name__)
 
-# v19.0 is the version worder1 ran in production — proven, not newest.
+# Item 35 da auditoria: v19.0 era a versão que o worder1 rodava em produção
+# (proven, not newest), mas o lado TS já fala v22.0 (`api-version.ts:6`) e a
+# Meta aposenta versão por cronograma — a divergência era dívida (`FORK.md`,
+# entrada 21). Documentação e changelog da Graph API (v19.0→v22.0) conferidos
+# antes de subir: nada mudou no corpo de texto, no corpo de template com
+# `components` (item 34), em `biz_opaque_callback_data` nem nos códigos de
+# erro que `queueing/failures.py` classifica.
 # Overridable per environment because Meta retires versions on a schedule.
-DEFAULT_API_VERSION = "v19.0"
+DEFAULT_API_VERSION = "v22.0"
 
 GRAPH_URL = "https://graph.facebook.com"
 

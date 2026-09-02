@@ -56,8 +56,8 @@ class TestHappyPath:
         )
         assert code == "WD-ABC12345"
         assert [r.url.path for r in seen] == [
-            "/admin/api/2024-01/price_rules.json",
-            "/admin/api/2024-01/price_rules/42/discount_codes.json",
+            "/admin/api/2026-04/price_rules.json",
+            "/admin/api/2026-04/price_rules/42/discount_codes.json",
         ]
         rule = json.loads(seen[0].content)["price_rule"]
         assert rule["value"] == "-10"
@@ -111,9 +111,9 @@ class TestIdempotentRetry:
         )
         assert code == "WD-DEJA"
         assert [r.url.path for r in seen] == [
-            "/admin/api/2024-01/price_rules.json",
-            "/admin/api/2024-01/price_rules.json",
-            "/admin/api/2024-01/price_rules/99/discount_codes.json",
+            "/admin/api/2026-04/price_rules.json",
+            "/admin/api/2026-04/price_rules.json",
+            "/admin/api/2026-04/price_rules/99/discount_codes.json",
         ]
         # a busca é escopada: janela em torno do ends_at do grant, e o título
         # bate exato — não dá para pegar a rule de outro grant.
@@ -164,7 +164,7 @@ class TestIdempotentRetry:
         )
         assert code == "WD-ORFA"
         assert created_codes == ["WD-ORFA"]  # o cupom EXISTE ao fim da segunda
-        assert seen[-1].url.path == "/admin/api/2024-01/price_rules/42/discount_codes.json"
+        assert seen[-1].url.path == "/admin/api/2026-04/price_rules/42/discount_codes.json"
 
     async def test_a_rule_that_cannot_be_refound_is_error_not_success(self) -> None:
         def taken_but_absent(request: httpx.Request) -> httpx.Response:
@@ -234,7 +234,7 @@ class TestRateLimit:
         )
         assert code == "WD-OK"
         assert clock.slept == [3.0]  # honrou o Retry-After da Shopify
-        assert seen[-1].url.path == "/admin/api/2024-01/price_rules/42/discount_codes.json"
+        assert seen[-1].url.path == "/admin/api/2026-04/price_rules/42/discount_codes.json"
 
     async def test_a_retry_after_beyond_the_cap_gives_up_immediately(self) -> None:
         """`Retry-After: 120` da Shopify não pode segurar o turno inteiro."""

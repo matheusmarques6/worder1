@@ -375,12 +375,28 @@ sai como template sem preencher `{{1}}`, ou é recusado pela Meta — o cliente 
 funil de recuperação da loja migrada morre calado. Preencher `channel_template_policies` **não**
 mitiga isto: o buraco é o payload do canal, não a política. **Dívida — item 34.**
 
-**21. Versões de API divergentes.** Meta: TS `v22.0` (`src/lib/whatsapp/api-version.ts:6`) ×
-runtime `v19.0` (`channels/cloud_api.py:41`). Shopify: TS `2026-04`
-(`src/lib/shopify/graphql-client.ts:12`) × runtime `2024-01` (`connectors/shopify.py:22`).
-*Efeito na loja:* a loja migrada fala com duas versões da Meta ao mesmo tempo (campanhas na v22, IA
-na v19) e, quando a Meta aposentar a v19, a IA para antes do resto do produto.
-**Dívida — item 35.**
+**21. Versões de API divergentes — item 35, resolvido.** Meta: TS `v22.0`
+(`src/lib/whatsapp/api-version.ts:6`) × runtime `v19.0`. Shopify: TS `2026-04`
+(`src/lib/shopify/graphql-client.ts:12`) × runtime `2024-01`.
+*O que subiu:* Meta foi para `v22.0` (`channels/cloud_api.py:53`, `render.yaml`,
+`.env.piloto.example`, `DEPLOY.md`) depois de conferir no changelog da Graph API que nada mudou
+entre v19.0 e v22.0 no corpo de texto, no corpo de template com `components` (item 34), em
+`biz_opaque_callback_data` nem nos códigos de erro que `queueing/failures.py` classifica. Shopify
+foi para `2026-04` (`connectors/shopify.py:26`) porque a documentação confirma que
+`price_rules.json` e `discount_codes.json`, embora marcados legados desde outubro/2024, ainda
+respondem nessa versão com os mesmos filtros que `_find_price_rule_id` usa
+(`ends_at_min`/`ends_at_max`/`limit`). `runtime/.env.piloto` (arquivo local de credenciais, não
+template) segue em `v19.0` até quem roda o piloto atualizar à mão.
+*O que NÃO mudou:* o cupom continua em REST, não GraphQL — a Shopify recomenda migrar
+`PriceRule`/`DiscountCode` para o Admin GraphQL (o item 33 já registrou a depreciação), mas isso é
+desenho próprio, é o caminho do dinheiro, e não é este item. Ver item novo de fila proposto no
+relatório do item 35.
+*Achado do item, registrado e não implementado:* o próprio lado TS não fala uma versão só. Além
+do `v22.0` de `api-version.ts:6` (WhatsApp), há `v19.0` fixo em `src/lib/meta-api.ts:13` (Ads),
+`src/lib/instagram/api.ts:6` e nas quatro rotas de `api/instagram` e `api/integrations/meta`, e
+`2024-01` fixo em `src/app/api/shopify/pixel/route.ts:14`. São superfícies diferentes (Marketing
+API, Instagram, pixel), então nenhuma delas é paridade do runtime — mas quem for aposentar uma
+versão da Meta precisa mexer em seis arquivos do TS, não em um.
 
 ### O provedor de LLM
 
