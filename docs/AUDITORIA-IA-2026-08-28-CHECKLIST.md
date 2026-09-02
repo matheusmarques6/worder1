@@ -1204,10 +1204,86 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   3 contratos mantidos, 0 quebrados. `tests/db`/`tests/pipeline` pedem Postgres, indisponível nesta
   máquina.
 
-- [ ] **42. Custo vindo do provedor, não de tabela hardcoded** `[confirmado]`
-  `src/lib/ai/cost-tracker.ts:61-62` devolve `0` para modelo fora do dicionário; as 15 chaves são todas
+- [x] **42. Custo vindo do provedor, não de tabela hardcoded** `[confirmado]` · relatório `task-42-report.md`
+  `src/lib/ai/cost-tracker.ts:61-62` devolvia `0` para modelo fora do dicionário; as 15 chaves eram todas
   sem namespace e a org piloto usa `google/gemini-3.5-flash`. Somado ao fail-open triplo de `budget.ts`,
-  **não existe controle de gasto**. O Python já resolveu certo em `agent_core/metering.py` — portar a decisão.
+  **não existia controle de gasto**. O Python já resolvia certo em `agent_core/metering.py` — este item
+  portou a DECISÃO (desconhecido nunca é zero), não o mecanismo (o Python não tem tabela de preço
+  nenhuma; o TS continua precisando de uma — ver o parágrafo C abaixo).
+
+  **A inversão do item, confirmada.** Ao contrário de quase todos os outros da fila, o alvo aqui é
+  `src/`, não `runtime/` — o Python já estava certo (`Usage.cost_usd: float | None`, `None` nunca vira
+  `0`). `runtime/` não mudou nesta tarefa.
+
+  **Ruling C, e a correção de impressão que o próprio item pede.** O título do item ("não de tabela
+  hardcoded") engana: a tabela **não morreu** e não devia. OpenAI e Anthropic não devolvem custo na
+  resposta da API — é por isso que o Python grava `cost_usd=None` de propósito pra esses dois
+  (`direct_providers.py`); sem tabela, não haveria NENHUM jeito de estimar o custo desses provedores.
+  O que mudou nas 15+ entradas de `PRICING` foi: (1) namespace `<provider>/<model>` batendo com o id
+  real — direto (`openai/gpt-4o-mini`, bare do lado do provider) ou já namespaced (formato OpenRouter,
+  ex. `google/gemini-flash-1.5`, que inverte a ordem do sufixo de versão — `estimateCostUsd` tenta as
+  duas grafias); (2) ausência na tabela agora significa **desconhecido**, nunca **zero**.
+  `google/gemini-3.5-flash` (o modelo do piloto) continua fora da tabela depois do conserto — não
+  existe entrada 3.5 nem no catálogo do OpenRouter — e isso é o comportamento CORRETO agora: vira
+  `null`, loga aviso, nunca `$0`.
+
+  **Ruling B, as três camadas.** (1) *Função:* `estimateCostUsd` devolve `number | null` (era sempre
+  `number`); `trackAiUsage` grava `cost_usd: null` (era `0` forçado) e loga
+  `[trackAiUsage] custo desconhecido...` (ruling D). (2) *Tipo:* `TrackAiUsageInput.costUsdOverride` e
+  o retorno de `estimateCostUsd` aceitam `null`; `BudgetCheckResult` ganhou `hasUnknownCost: boolean`
+  — `spentUsd` continua `number`, mas agora é EXPLICITAMENTE "soma do conhecido", nunca um `0`
+  inventado pra chamada sem preço. (3) *Schema* (migration
+  `supabase/migrations/20260902000003_ai_usage_logs_cost_usd_unknown.sql`, não aplicada — sem Postgres
+  nesta máquina, ver ruling G abaixo): `ai_usage_logs.cost_usd` perde o `DEFAULT 0`; a RPC
+  `ai_monthly_cost_usd` passa de `NUMERIC` solto para `TABLE(spent_usd, has_unknown_cost)` — `SUM`
+  já ignora `NULL` em SQL padrão (soma só o conhecido, honestamente), mas o valor sozinho não dizia se
+  era completo ou parcial (um mês só de chamadas desconhecidas somava igual a um mês sem nenhum gasto
+  — os dois davam `0`). `has_unknown_cost` fecha essa ambiguidade.
+
+  **Achado extra, fora da recon original — o espelho do item 37 tinha o MESMO achatamento.**
+  `internal.mirror_llm_call_to_usage_logs` (`20260902000001_ai_usage_logs_bridge.sql`, a ponte que o
+  item 37 escreveu de `internal.llm_calls` para `ai_usage_logs`) gravava `coalesce(new.cost_usd, 0)` —
+  o `None` deliberado do Python (`llm.py`, "Absent stays absent") virava `0` bem na hora de cruzar pro
+  lado TS, pro exato caminho que a org migrada usa. Corrigido na mesma migration (`CREATE OR REPLACE`,
+  não editei o arquivo original do item 37 — a migration antiga fica intacta, inclusive pro CHECK que
+  `runtime/tests/unit/test_ai_usage_logs_bridge.py` trava). Não mexi no mapa `purpose`→`feature`.
+
+  **Ruling D, visibilidade.** `trackAiUsage` loga (`console.warn`) toda vez que grava uma chamada de
+  modelo desconhecido, com `{provider, model}`. `checkAiBudget` loga quando o mês tem alguma chamada
+  assim (`hasUnknownCost`), avisando que `spentUsd` retornado é parcial. `/api/ai/usage` (o painel)
+  ganhou `totals.unknownCostCalls` e `budget.hasUnknownCost` na resposta — o silêncio que fez o defeito
+  durar até agora (a org piloto gastando de verdade, o painel mostrando `$0`) não existe mais em
+  nenhum dos três lugares onde um humano ou um log poderia ver o número.
+
+  **Ruling E, respeitado — e estendido em item novo.** O fail-open triplo de `budget.ts` (os três
+  `catch` que devolvem `allowed: true` em erro de DB) **não mudou**. Mas o próprio conserto deste item
+  abre uma pergunta prima daquela: com `hasUnknownCost` agora visível, o que `checkAiBudget` deve FAZER
+  com isso (manter best-effort / bloquear / teto separado) é a mesma classe de decisão de produto — não
+  implementado, registrado como **item 69**.
+
+  **Ruling F, o teste que quebrou — e por que quebrou mais do que um.** A recon previu que só o teste
+  "RPC retorna zero (sem histórico)" de `budget.test.ts` quebraria (assume `spentUsd` sempre `number`).
+  Na prática, a mudança de FORMATO da RPC (de `NUMERIC` solto pra `TABLE(spent_usd, has_unknown_cost)`,
+  necessária pra fechar a ambiguidade do ruling B) muda o shape que todo mock de `.rpc()` do arquivo
+  devolve — **6 dos 11 testes originais** quebraram (não só o previsto), porque todos mockavam
+  `{ data: <numero>, error: null }` e o código agora lê `data[0].spent_usd`. Ajustados via um helper
+  novo (`rpcRow(spentUsd, hasUnknownCost?)`) que monta o shape certo; nenhuma asserção de comportamento
+  mudou nesses 6 — só o mock. Um teste NOVO cobre o caso que o item existe pra resolver:
+  `hasUnknownCost: true` com `spentUsd` parcial não muda o `allowed` (ruling E — decisão de bloqueio
+  não é deste item). `cost-tracker.ts` não tinha nenhum teste antes (recon, seção 7); ganhou
+  `cost-tracker.test.ts` (8 casos, incluindo o `google/gemini-3.5-flash` do achado por nome).
+
+  **Ruling G, sem Postgres.** A migration `20260902000003_ai_usage_logs_cost_usd_unknown.sql` está
+  escrita no padrão das vizinhas (mesma postura de segurança — `service_role` só, `SECURITY DEFINER`,
+  `search_path=public` — da RPC original), mas **não foi aplicada nem exercitada contra um banco real**
+  — sem Postgres nesta máquina. Sem prova executável: o `DROP FUNCTION` + `CREATE` (troca de tipo de
+  retorno), o `bool_or(cost_usd is null)` da nova RPC, o `ALTER COLUMN ... DROP DEFAULT`, e o
+  `CREATE OR REPLACE` do trigger do item 37. Tudo revisado por leitura, nada rodado.
+
+  **Suíte:** `npx vitest run` — antes: 1299 testes, 1292 verdes, 4 falhas pré-existentes e alheias
+  (timezone em `reports-utils` ×3, fixture de PDF em `file-extractor.integration` ×1 — não mexidas).
+  Depois: 1308 testes (+9: 1 novo em `budget.test.ts`, 8 novos em `cost-tracker.test.ts`), 1301 verdes,
+  as MESMAS 4 falhas pré-existentes, nenhuma nova. `npx tsc --noEmit` limpo.
 
 - [ ] **43. Apagar o fallback de full scan do RAG** `[confirmado]`
   `src/lib/ai/rag.ts:56-73` — o `try/catch` nunca dispara porque `.rpc()` devolve `{error}` em vez de
@@ -1435,6 +1511,25 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   não cobre isto: um turno pode ficar dentro do teto de CHAMADAS e ainda assim demorar minutos numa
   única chamada lenta. Não implementado no item 41 por ruling F explícito do controlador — é achado
   vizinho, não o mesmo item.
+
+- [ ] **69. Decidir o que fazer com custo desconhecido no orçamento** `[relatado]` · *(descoberto no item 42)*
+  Depois do item 42, `checkAiBudget` (`src/lib/ai/budget.ts`) sabe distinguir "gastou $0" de "gastou
+  um valor desconhecido" (`BudgetCheckResult.hasUnknownCost`) — mas a decisão de bloqueio continua
+  igual: `allowed = spentUsd < budgetUsd`, onde `spentUsd` soma só o custo CONHECIDO do mês. Uma org
+  cujo uso é inteiramente (ou majoritariamente) de modelo fora da tabela de preços — o caso real do
+  piloto, `google/gemini-3.5-flash` — tem `spentUsd` artificialmente baixo e o orçamento pode nunca
+  fechar, mesmo com o achado do item 42 corrigido: agora o gasto desconhecido é VISÍVEL
+  (`console.warn` a cada `checkAiBudget`, `hasUnknownCost` no retorno e em `/api/ai/usage`), mas
+  continua sem CONSEQUÊNCIA no bloqueio. Escolher entre (a) manter como está — best-effort, nunca
+  bloqueia por custo que não sabe calcular, risco de gasto real sem teto para modelo sem preço
+  publicado; (b) tratar `hasUnknownCost` como equivalente a orçamento estourado (fail-closed) —
+  simples, mas pode calar o agente inteiro assim que a org usar um modelo novo, antes de qualquer
+  operador notar e cadastrar o preço; (c) um teto separado, tipo "no máximo N chamadas de custo
+  desconhecido por mês antes de bloquear" — meio-termo, mas é a política plugável que o item 42
+  evitou por YAGNI. É a mesma família de decisão do fail-open triplo de `budget.ts` (rulings E dos
+  itens 37/41/42): o que fazer quando o sistema não sabe quanto foi gasto é escolha de produto do
+  dono, não do implementador. Ponto de partida: `src/lib/ai/budget.ts::checkAiBudget`, bloco que loga
+  `hasUnknownCost` sem agir sobre ele; `task-42-report.md` tem o raciocínio completo.
 
 ---
 
