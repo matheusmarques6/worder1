@@ -31,6 +31,46 @@ OPENAI_BASE_URL = "https://api.openai.com/v1"
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 ANTHROPIC_VERSION = "2023-06-01"
 
+#: Item 36 da auditoria (ruling B): Groq e DeepSeek falam o mesmo dialeto
+#: OpenAI que `OpenAICompatibleLlm` já implementa — é o próprio TS que prova,
+#: chamando `/chat/completions` nos dois (`ai-providers.ts:284,318`). Só
+#: faltava o Python saber a URL default por nome de provider; a `base_url`
+#: gravada na linha de `organization_api_keys` continua vencendo o default
+#: (ver `client_for` em `providers.py`) — org com proxy próprio não é atropelada.
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+
+#: DIVERGÊNCIA DELIBERADA do TS (item 36 da auditoria, ruling C). O TS fala
+#: com o Gemini pelo endpoint NATIVO `:generateContent` (`ai-providers.ts:246`
+#: — corpo `contents`/`parts`, header `x-goog-api-key`, não é formato OpenAI).
+#: Aqui usamos o endpoint OpenAI-COMPATÍVEL do Google (mesmo host, path
+#: `/v1beta/openai`), verificado por POST real com chave inválida, sem gastar
+#: credencial de lojista (evidência completa em
+#: `.superpowers/sdd/AUDITORIA-IA-2026-08-28-CHECKLIST/task-36-report.md`):
+#: (1) o endpoint EXISTE — 400 `INVALID_ARGUMENT`, não 404; (2) ACEITA
+#: `Authorization: Bearer` — a mensagem muda de "Missing or invalid
+#: Authorization header." (sem header) para "Please pass a valid API key"
+#: (header presente, chave inválida); (3) ACEITA `tools` no formato OpenAI —
+#: a mesma chamada com e sem `tools` no corpo devolve o mesmo erro de chave,
+#: ou seja o corpo com `tools` não é rejeitado antes da checagem de auth.
+#: Escolhido em vez de um adapter nativo porque cabe no mesmo mapa/branch do
+#: Groq e DeepSeek, sem arquivo novo e sem mexer na trava de fitness
+#: (`test_no_provider_network.py`). Se este endpoint um dia sair do ar ou
+#: perder paridade de tools, a escolha entre adapter nativo e bloqueio na UI
+#: volta a ser decisão de produto (ruling C original).
+GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+
+#: Provider → base_url default quando a org não gravou uma própria. "google"
+#: é alias de "gemini", como no TS (`ai-providers.ts:426-427`, ruling D).
+#: Qualquer provider fora deste mapa cai no `OPENAI_BASE_URL` de
+#: `OpenAICompatibleLlm` (comportamento anterior, inalterado).
+DEFAULT_BASE_URLS: dict[str, str] = {
+    "groq": GROQ_BASE_URL,
+    "deepseek": DEEPSEEK_BASE_URL,
+    "gemini": GEMINI_OPENAI_BASE_URL,
+    "google": GEMINI_OPENAI_BASE_URL,
+}
+
 DEFAULT_TIMEOUT_SECONDS = 60.0
 
 #: O /v1/messages exige max_tokens; respostas de WhatsApp são curtas por

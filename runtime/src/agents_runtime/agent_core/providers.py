@@ -21,7 +21,11 @@ import os
 from dataclasses import dataclass
 
 from agents_runtime.agent_core import openrouter
-from agents_runtime.agent_core.direct_providers import AnthropicLlm, OpenAICompatibleLlm
+from agents_runtime.agent_core.direct_providers import (
+    DEFAULT_BASE_URLS,
+    AnthropicLlm,
+    OpenAICompatibleLlm,
+)
 from agents_runtime.agent_core.llm import LlmPort
 from agents_runtime.crypto.secret_box import decrypt_secret, is_encrypted_secret
 from agents_runtime.repository.provider_keys import ProviderKeyRow
@@ -77,9 +81,13 @@ def client_for(choice: ProviderChoice) -> LlmPort:
         return openrouter.OpenRouterLlm(choice.api_key)
     if choice.provider == ANTHROPIC:
         return AnthropicLlm(choice.api_key)
-    # openai e qualquer compatível: a base_url da linha vence o default.
+    # openai e qualquer compatível: a base_url da linha vence o default; sem
+    # ela, cai no default POR PROVIDER (item 36 — groq/deepseek/gemini/google)
+    # quando existe, senão no OPENAI_BASE_URL do próprio OpenAICompatibleLlm.
     return OpenAICompatibleLlm(
-        choice.api_key, base_url=choice.base_url, provider_label=choice.provider
+        choice.api_key,
+        base_url=choice.base_url or DEFAULT_BASE_URLS.get(choice.provider),
+        provider_label=choice.provider,
     )
 
 

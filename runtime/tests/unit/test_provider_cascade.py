@@ -7,10 +7,19 @@ flag (desligada por default). Sem chave utilizável, o agente NÃO responde —
 
 import pytest
 
-from agents_runtime.agent_core.direct_providers import AnthropicLlm, OpenAICompatibleLlm
+from agents_runtime.agent_core.direct_providers import (
+    DEEPSEEK_BASE_URL,
+    GEMINI_OPENAI_BASE_URL,
+    GROQ_BASE_URL,
+    OPENAI_BASE_URL,
+    AnthropicLlm,
+    OpenAICompatibleLlm,
+)
 from agents_runtime.agent_core.openrouter import OpenRouterLlm
 from agents_runtime.agent_core.providers import (
     NoOrgLlmKey,
+    ProviderChoice,
+    client_for,
     decode_stored_key,
     resolve_agent_llm,
     select_provider_key,
@@ -107,3 +116,51 @@ class TestResolution:
             (), agent_provider="openai", base_secret=None, platform=sentinel
         )
         assert port is sentinel
+
+
+def _base_url(port: OpenAICompatibleLlm) -> str:
+    # httpx normaliza com "/" no fim; comparamos sem ele.
+    return str(port._client.base_url).rstrip("/")
+
+
+class TestDefaultBaseUrls:
+    """Item 36 — cada provider novo prova DUAS coisas: a classe certa e a
+    URL montada certa (ruling F). Sem rede real: só inspeciona o base_url
+    configurado no client, nunca faz `.chat()`."""
+
+    def test_groq_gets_the_compatible_adapter_and_its_default_url(self) -> None:
+        port = client_for(ProviderChoice("groq", "gsk-x", None))
+        assert isinstance(port, OpenAICompatibleLlm)
+        assert _base_url(port) == GROQ_BASE_URL
+
+    def test_deepseek_gets_the_compatible_adapter_and_its_default_url(self) -> None:
+        port = client_for(ProviderChoice("deepseek", "sk-x", None))
+        assert isinstance(port, OpenAICompatibleLlm)
+        assert _base_url(port) == DEEPSEEK_BASE_URL
+
+    def test_gemini_gets_the_compatible_adapter_and_the_openai_compat_endpoint(
+        self,
+    ) -> None:
+        # ruling C: sem adapter nativo — o mesmo OpenAICompatibleLlm, contra
+        # o endpoint OpenAI-compatível do Google (verificado por POST real,
+        # ver task-36-report.md), não o `:generateContent` que o TS usa.
+        port = client_for(ProviderChoice("gemini", "AIza-x", None))
+        assert isinstance(port, OpenAICompatibleLlm)
+        assert _base_url(port) == GEMINI_OPENAI_BASE_URL
+
+    def test_google_is_an_alias_of_gemini(self) -> None:
+        # ruling D — o TS trata as duas strings no mesmo `case` (ai-providers.ts:426-427).
+        port = client_for(ProviderChoice("google", "AIza-x", None))
+        assert isinstance(port, OpenAICompatibleLlm)
+        assert _base_url(port) == GEMINI_OPENAI_BASE_URL
+
+    def test_a_stored_base_url_still_wins_over_the_provider_default(self) -> None:
+        # Org que configurou proxy próprio não é atropelada pelo default (ruling B).
+        port = client_for(ProviderChoice("groq", "gsk-x", "http://localhost:9999/v1"))
+        assert _base_url(port) == "http://localhost:9999/v1"
+
+    def test_an_unknown_provider_without_a_default_falls_back_to_openai(self) -> None:
+        # Comportamento anterior ao item 36, inalterado: provider sem entrada
+        # no mapa e sem base_url própria continua indo para a OpenAI.
+        port = client_for(ProviderChoice("mistral", "sk-x", None))
+        assert _base_url(port) == OPENAI_BASE_URL
