@@ -789,3 +789,51 @@ def create_order(
         )
         (order_id,) = cur.fetchone()
     return order_id
+
+
+def create_whatsapp_template(
+    conn: psycopg.Connection,
+    organization_id: uuid.UUID,
+    *,
+    name: str,
+    language: str = "pt_BR",
+    components: list | None = None,
+    header_type: str = "none",
+    body_text: str | None = None,
+    buttons: list | None = None,
+    status: str = "APPROVED",
+    synced_at_days_ago: int | None = None,
+) -> uuid.UUID:
+    """Um template aprovado (Worder: whatsapp_templates, tabela legada do TS).
+
+    Os DOIS formatos que a tabela aceita são parâmetros separados de propósito
+    (`src/lib/whatsapp/template-components.ts:1-9`): um teste que prove a
+    conciliação precisa poder criar a linha só com `components`, só com as
+    colunas achatadas, ou com as duas discordando.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.whatsapp_templates
+                (organization_id, name, language, category, status, components,
+                 header_type, body_text, buttons, synced_at)
+            values (%s, %s, %s, 'MARKETING', %s, %s, %s, %s, %s,
+                    case when %s::int is null then null
+                         else now() - make_interval(days => %s::int) end)
+            returning id
+            """,
+            (
+                organization_id,
+                name,
+                language,
+                status,
+                psycopg.types.json.Jsonb(components if components is not None else []),
+                header_type,
+                body_text,
+                psycopg.types.json.Jsonb(buttons if buttons is not None else []),
+                synced_at_days_ago,
+                synced_at_days_ago,
+            ),
+        )
+        (template_id,) = cur.fetchone()
+    return template_id
