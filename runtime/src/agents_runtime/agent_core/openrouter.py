@@ -113,6 +113,14 @@ class OpenRouterLlm:
 
         return response.json()
 
+    async def aclose(self) -> None:
+        # Item 40 da auditoria: um cliente novo por turno (`providers.py::client_for`),
+        # nunca reusado — quem constrói é quem tem que fechar. `respond()`/`touch()`
+        # chamam isto no `finally` do turno; sem finalizador aqui, o pool de conexões
+        # do httpcore fica retido até o GC (não determinístico em asyncio de longa
+        # duração).
+        await self._client.aclose()
+
 
 def openai_message(message: Message) -> dict:
     """Uma Message da porta no dialeto OpenAI — inclusive as duas pontas do

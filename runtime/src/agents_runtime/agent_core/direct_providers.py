@@ -135,6 +135,11 @@ class OpenAICompatibleLlm:
             tool_calls=tool_calls,
         )
 
+    async def aclose(self) -> None:
+        # Item 40 da auditoria — mesmo motivo do `OpenRouterLlm.aclose`: um
+        # cliente por turno, fechado por quem o `client_for` construiu.
+        await self._client.aclose()
+
 
 class AnthropicLlm:
     def __init__(
@@ -217,6 +222,11 @@ class AnthropicLlm:
             provider="anthropic",
             tool_calls=tool_calls,
         )
+
+    async def aclose(self) -> None:
+        # Item 40 da auditoria — mesmo motivo do `OpenRouterLlm.aclose`: um
+        # cliente por turno, fechado por quem o `client_for` construiu.
+        await self._client.aclose()
 
 
 def _anthropic_turn(message: Message) -> dict:

@@ -530,6 +530,11 @@ def build_responder(
 
             # --- cascata D4 (BYO-only): sem chave da org, o toque morre alto.
             agent_llm: LlmPort = llm
+            # Item 40 da auditoria: só o cliente que ESTA chamada construiu (via
+            # `resolve_agent_llm`/`client_for`) é fechado no `finally` abaixo.
+            # `llm` é o cliente de plataforma do Judge 1 — por processo, ruling
+            # D — e nunca passa por aqui dentro.
+            owns_agent_llm = False
             if agent_llm_from_org_keys:
                 try:
                     agent_llm = resolve_agent_llm(
@@ -537,6 +542,7 @@ def build_responder(
                         agent_provider=version.provider,
                         base_secret=base_secret,
                     )
+                    owns_agent_llm = True
                 except NoOrgLlmKey as reason:
                     async with conn.transaction():
                         await scope_to_organization(conn, job.organization_id)
@@ -554,285 +560,298 @@ def build_responder(
                     await note_step("skipped", "Sem chave de LLM da loja — agente não respondeu")
                     return None
 
-            knowledge = await _knowledge(
-                conn,
-                job,
-                resolved.tools,
-                pending,
-                metered("embedding", version.agent_id),
-                clock,
-                knowledge_limit,
-            )
-
-            persona = version.persona or {}
-            language = str(persona.get("language") or settings.primary_language)
-            agent_block = AgentBlock(
-                agent_id=str(version.agent_id or version.id),
-                name=version.name,
-                tone=str(persona.get("tone") or "friendly"),
-                language=language,
-                # 10.4: as colunas que a radial escreve, lidas de verdade.
-                presentation_mode=version.presentation_mode,
-                guidelines=tuple(persona.get("guidelines") or ()),
-                adaptation=version.adaptation_flags,
-                base_instructions=version.base_prompt or "",
-            )
-            window_open = True
-            if state.last_inbound_at is not None:
-                window_open = clock.now() - state.last_inbound_at < timedelta(hours=24)
-            compiled = compile_prompt(
-                agent=agent_block,
-                mission=resolved,
-                state=StateBlock(
-                    moment_ids=tuple(str(m) for m in moment_view.moment_ids),
-                    moment_facts=moment_view.facts,
-                    moment_public_claim=moment_view.public_claim,
-                    grant_id=str(valid_grants[0].id) if valid_grants else None,
-                    grant_lines=_money_lines(valid_grants),
-                    ledger_lines=ledger_lines,
-                    contact_facts=agent_repo.contact_fact_pairs(state),
-                    purchase_lines=orders_repo.history_lines(purchase),
-                ),
-                channel=ChannelBlock(
-                    channel=state.last_channel or "whatsapp",
-                    window_open=window_open,
-                    constraints=(),
-                ),
-                conversation=ConversationBlock(
-                    conversation_id=str(job.conversation_id),
-                    transcript=tuple((m.author, m.text) for m in transcript),
-                ),
-                mode="turn",
-            )
-            # 9.1: o span do turno (aberto pelo worker) ganha os IDs que a
-            # trilha interna já tem — telemetria e banco contam UMA história.
-            annotate(
-                mission_version_id=resolved.mission_version_id,
-                moment_ids=(
-                    ",".join(str(m) for m in moment_view.moment_ids)
-                    if moment_view.moment_ids
-                    else None
-                ),
-                grant_id=str(valid_grants[0].id) if valid_grants else None,
-            )
-
-            system = compiled.text
-            if knowledge:
-                # Conhecimento é recuperação, não área de config — anexa ao
-                # frame sem virar bloco de dono (registro em tool_calls).
-                system += "\n\n# CONHECIMENTO\n" + "\n".join(
-                    f"- {chunk}" for chunk in knowledge
+            try:
+                knowledge = await _knowledge(
+                    conn,
+                    job,
+                    resolved.tools,
+                    pending,
+                    metered("embedding", version.agent_id),
+                    clock,
+                    knowledge_limit,
                 )
-            # Item 39: `transcript` já exclui a janela pendente (query em
-            # `repository/agent.py::load_recent_transcript`), então concatenar
-            # é seguro — nenhuma mensagem aparece duas vezes.
-            conversation = _as_chat(transcript + pending)
 
-            chat = _metered(conn, job, agent_llm, clock, "agent_reply", version.agent_id)
-            # Juízes do lojista (radial → Juízes) entram como rubrica extra,
-            # sempre standard — o veto de silêncio segue só da plataforma.
-            judge = PreSendJudge(
-                metered("judge_pre", version.agent_id),
-                with_merchant_judges(rubrics, version.settings),
-            )
-            context = JudgeContext(
-                conversation=tuple(f"{message.author}: {message.text}" for message in pending),
-                knowledge=tuple(knowledge),
-                language=language,
-                never_say_ai=True,
-            )
-
-            # --- 9.3b: as tools que o modelo pode PEDIR neste turno. A grade é
-            # a interseção missão∩agente (permissão estreita); o dinheiro segue
-            # decidido pelo offer engine dentro da própria tool.
-            turn_tools: dict[str, Any] = {}
-            tool_specs: tuple[ToolSpec, ...] = ()
-            if "create_coupon" in resolved.tools:
-                turn_tools["create_coupon"] = CreateCoupon(
+                persona = version.persona or {}
+                language = str(persona.get("language") or settings.primary_language)
+                agent_block = AgentBlock(
+                    agent_id=str(version.agent_id or version.id),
+                    name=version.name,
+                    tone=str(persona.get("tone") or "friendly"),
+                    language=language,
+                    # 10.4: as colunas que a radial escreve, lidas de verdade.
+                    presentation_mode=version.presentation_mode,
+                    guidelines=tuple(persona.get("guidelines") or ()),
+                    adaptation=version.adaptation_flags,
+                    base_instructions=version.base_prompt or "",
+                )
+                window_open = True
+                if state.last_inbound_at is not None:
+                    window_open = clock.now() - state.last_inbound_at < timedelta(hours=24)
+                compiled = compile_prompt(
+                    agent=agent_block,
                     mission=resolved,
-                    moment=active_moments[0] if active_moments else None,
-                    base_secret=base_secret,
-                    clock=clock,
-                    transport=shopify_transport,
+                    state=StateBlock(
+                        moment_ids=tuple(str(m) for m in moment_view.moment_ids),
+                        moment_facts=moment_view.facts,
+                        moment_public_claim=moment_view.public_claim,
+                        grant_id=str(valid_grants[0].id) if valid_grants else None,
+                        grant_lines=_money_lines(valid_grants),
+                        ledger_lines=ledger_lines,
+                        contact_facts=agent_repo.contact_fact_pairs(state),
+                        purchase_lines=orders_repo.history_lines(purchase),
+                    ),
+                    channel=ChannelBlock(
+                        channel=state.last_channel or "whatsapp",
+                        window_open=window_open,
+                        constraints=(),
+                    ),
+                    conversation=ConversationBlock(
+                        conversation_id=str(job.conversation_id),
+                        transcript=tuple((m.author, m.text) for m in transcript),
+                    ),
+                    mode="turn",
                 )
-                tool_specs = (CREATE_COUPON_SPEC,)
-            # 10.7 — tools custom LIGADAS (ligar exigiu teste ok, CHECK do
-            # schema). Read-only por construção: nunca abrem a porta do
-            # dinheiro, então entram por serem do agente, sem passar pela
-            # interseção de missão que governa create_coupon.
-            for row in custom_rows:
-                if row.name in turn_tools:
-                    continue
-                turn_tools[row.name] = CustomHttpTool(row, base_secret=base_secret)
-                tool_specs = (*tool_specs, tool_spec_for(row))
+                # 9.1: o span do turno (aberto pelo worker) ganha os IDs que a
+                # trilha interna já tem — telemetria e banco contam UMA história.
+                annotate(
+                    mission_version_id=resolved.mission_version_id,
+                    moment_ids=(
+                        ",".join(str(m) for m in moment_view.moment_ids)
+                        if moment_view.moment_ids
+                        else None
+                    ),
+                    grant_id=str(valid_grants[0].id) if valid_grants else None,
+                )
 
-            async def run_turn_tool(call: ToolCall) -> str:
-                tool = turn_tools.get(call.name)
-                if tool is None:
-                    payload: dict[str, Any] = {"error": f"tool desconhecida: {call.name}"}
-                else:
-                    result = await run_tool(
-                        conn,
-                        tool,
-                        ToolContext(
-                            organization_id=job.organization_id,
-                            conversation_id=job.conversation_id,
-                        ),
-                        dict(call.arguments),
+                system = compiled.text
+                if knowledge:
+                    # Conhecimento é recuperação, não área de config — anexa ao
+                    # frame sem virar bloco de dono (registro em tool_calls).
+                    system += "\n\n# CONHECIMENTO\n" + "\n".join(
+                        f"- {chunk}" for chunk in knowledge
+                    )
+                # Item 39: `transcript` já exclui a janela pendente (query em
+                # `repository/agent.py::load_recent_transcript`), então concatenar
+                # é seguro — nenhuma mensagem aparece duas vezes.
+                conversation = _as_chat(transcript + pending)
+
+                chat = _metered(conn, job, agent_llm, clock, "agent_reply", version.agent_id)
+                # Juízes do lojista (radial → Juízes) entram como rubrica extra,
+                # sempre standard — o veto de silêncio segue só da plataforma.
+                judge = PreSendJudge(
+                    metered("judge_pre", version.agent_id),
+                    with_merchant_judges(rubrics, version.settings),
+                )
+                context = JudgeContext(
+                    conversation=tuple(f"{message.author}: {message.text}" for message in pending),
+                    knowledge=tuple(knowledge),
+                    language=language,
+                    never_say_ai=True,
+                )
+
+                # --- 9.3b: as tools que o modelo pode PEDIR neste turno. A grade é
+                # a interseção missão∩agente (permissão estreita); o dinheiro segue
+                # decidido pelo offer engine dentro da própria tool.
+                turn_tools: dict[str, Any] = {}
+                tool_specs: tuple[ToolSpec, ...] = ()
+                if "create_coupon" in resolved.tools:
+                    turn_tools["create_coupon"] = CreateCoupon(
+                        mission=resolved,
+                        moment=active_moments[0] if active_moments else None,
+                        base_secret=base_secret,
                         clock=clock,
+                        transport=shopify_transport,
                     )
-                    payload = (
-                        dict(result.output or {})
-                        if result.success
-                        else {"error": result.error}
-                    )
-                return json.dumps(payload, ensure_ascii=False)
+                    tool_specs = (CREATE_COUPON_SPEC,)
+                # 10.7 — tools custom LIGADAS (ligar exigiu teste ok, CHECK do
+                # schema). Read-only por construção: nunca abrem a porta do
+                # dinheiro, então entram por serem do agente, sem passar pela
+                # interseção de missão que governa create_coupon.
+                for row in custom_rows:
+                    if row.name in turn_tools:
+                        continue
+                    turn_tools[row.name] = CustomHttpTool(row, base_secret=base_secret)
+                    tool_specs = (*tool_specs, tool_spec_for(row))
 
-            async def generate(attempt: int, feedback: tuple[str, ...]) -> str:
-                messages = [Message(role="system", content=system), *conversation]
-                if feedback:
-                    # Regenerar sem dizer o que estava errado é repetir.
-                    messages.append(
-                        Message(
-                            role="system",
-                            content=(
-                                "A resposta anterior foi reprovada nos critérios: "
-                                f"{', '.join(feedback)}. Reescreva corrigindo isso."
+                async def run_turn_tool(call: ToolCall) -> str:
+                    tool = turn_tools.get(call.name)
+                    if tool is None:
+                        payload: dict[str, Any] = {"error": f"tool desconhecida: {call.name}"}
+                    else:
+                        result = await run_tool(
+                            conn,
+                            tool,
+                            ToolContext(
+                                organization_id=job.organization_id,
+                                conversation_id=job.conversation_id,
                             ),
+                            dict(call.arguments),
+                            clock=clock,
                         )
-                    )
-                for _ in range(MAX_TOOL_ROUNDS):
+                        payload = (
+                            dict(result.output or {})
+                            if result.success
+                            else {"error": result.error}
+                        )
+                    return json.dumps(payload, ensure_ascii=False)
+
+                async def generate(attempt: int, feedback: tuple[str, ...]) -> str:
+                    messages = [Message(role="system", content=system), *conversation]
+                    if feedback:
+                        # Regenerar sem dizer o que estava errado é repetir.
+                        messages.append(
+                            Message(
+                                role="system",
+                                content=(
+                                    "A resposta anterior foi reprovada nos critérios: "
+                                    f"{', '.join(feedback)}. Reescreva corrigindo isso."
+                                ),
+                            )
+                        )
+                    for _ in range(MAX_TOOL_ROUNDS):
+                        answer = await chat.chat(
+                            ChatRequest(
+                                model=version.config.model,
+                                messages=tuple(messages),
+                                think=gate.think,
+                                tools=tool_specs,
+                            )
+                        )
+                        if not answer.tool_calls:
+                            return _unwrapped(answer.text)
+                        # A volta do loop: o pedido do modelo e a resposta da tool
+                        # entram na conversa; nenhuma transação fica aberta aqui
+                        # (run_tool abre e fecha as suas — ADR-6 vale no loop).
+                        messages.append(
+                            Message(
+                                role="assistant",
+                                content=answer.text,
+                                tool_calls=answer.tool_calls,
+                            )
+                        )
+                        for call in answer.tool_calls:
+                            messages.append(
+                                Message(
+                                    role="tool",
+                                    content=await run_turn_tool(call),
+                                    tool_call_id=call.id,
+                                )
+                            )
+                    # Rodadas esgotadas: a última chamada sai SEM tools — concluir
+                    # em texto deixa de ser opcional.
                     answer = await chat.chat(
                         ChatRequest(
                             model=version.config.model,
                             messages=tuple(messages),
                             think=gate.think,
-                            tools=tool_specs,
                         )
                     )
-                    if not answer.tool_calls:
-                        return _unwrapped(answer.text)
-                    # A volta do loop: o pedido do modelo e a resposta da tool
-                    # entram na conversa; nenhuma transação fica aberta aqui
-                    # (run_tool abre e fecha as suas — ADR-6 vale no loop).
-                    messages.append(
-                        Message(
-                            role="assistant",
-                            content=answer.text,
-                            tool_calls=answer.tool_calls,
-                        )
+                    return _unwrapped(answer.text)
+
+                await note_step("started", f"{version.name} assumiu a conversa")
+
+                async def traced_generate(attempt: int, feedback: tuple[str, ...]) -> str:
+                    await note_step(
+                        "generating",
+                        "Gerando resposta"
+                        if attempt == 0
+                        else "Refinando a resposta (ajustes da verificação)",
                     )
-                    for call in answer.tool_calls:
-                        messages.append(
-                            Message(
-                                role="tool",
-                                content=await run_turn_tool(call),
-                                tool_call_id=call.id,
-                            )
+                    return await generate(attempt, feedback)
+
+                async def traced_judge(draft: str, *args: Any, **kwargs: Any):
+                    await note_step("judging", "Verificando a resposta antes de enviar")
+                    return await judge(draft, *args, **kwargs)
+
+                outcome = await guarded_reply(traced_generate, traced_judge, context=context)
+
+                # --- o rastro: uma nota por tentativa (RNF-050), transação própria
+                for judgement in outcome.judgements:
+                    async with conn.transaction():
+                        await scope_to_organization(conn, job.organization_id)
+                        await scores_repo.record_pre_send_score(
+                            conn,
+                            organization_id=job.organization_id,
+                            conversation_id=job.conversation_id,
+                            judge_model=JUDGE_MODEL,
+                            score=judgement.score,
+                            verdict=judgement.outcome,
+                            rationale=judgement.rationale,
                         )
-                # Rodadas esgotadas: a última chamada sai SEM tools — concluir
-                # em texto deixa de ser opcional.
-                answer = await chat.chat(
-                    ChatRequest(
-                        model=version.config.model,
-                        messages=tuple(messages),
-                        think=gate.think,
+
+                if outcome.draft is None:
+                    # O alerta vem ANTES da conclusão: uma morte no meio deixa
+                    # alerta duplicado (benigno e visível) em vez de silêncio.
+                    async with conn.transaction():
+                        await scope_to_organization(conn, job.organization_id)
+                        await alerts_repo.open_alert(
+                            conn,
+                            organization_id=job.organization_id,
+                            type=alerts_repo.CRITICAL_VIOLATION,
+                            severity="critical",
+                            title="Judge 1 reprovou a resposta e nada foi enviado",
+                            payload={
+                                "conversation_id": str(job.conversation_id),
+                                "blocked_by": outcome.blocked_by,
+                                "attempts": outcome.attempts,
+                                "think": gate.think,
+                                "think_reason": gate.reason,
+                                # "Quero ver o que ela iria mandar" (17/08): o veto
+                                # segura o envio, não a evidência.
+                                "draft": outcome.last_draft,
+                                "judge_rationale": (
+                                    outcome.judgement.rationale if outcome.judgement else None
+                                ),
+                            },
+                        )
+                    retained = (outcome.last_draft or "").strip()
+                    preview = f" — ia enviar: “{retained[:120]}”" if retained else ""
+                    await note_step(
+                        "skipped", "Resposta retida pela verificação de qualidade" + preview
                     )
-                )
-                return _unwrapped(answer.text)
+                    return None
 
-            await note_step("started", f"{version.name} assumiu a conversa")
-
-            async def traced_generate(attempt: int, feedback: tuple[str, ...]) -> str:
-                await note_step(
-                    "generating",
-                    "Gerando resposta"
-                    if attempt == 0
-                    else "Refinando a resposta (ajustes da verificação)",
-                )
-                return await generate(attempt, feedback)
-
-            async def traced_judge(draft: str, *args: Any, **kwargs: Any):
-                await note_step("judging", "Verificando a resposta antes de enviar")
-                return await judge(draft, *args, **kwargs)
-
-            outcome = await guarded_reply(traced_generate, traced_judge, context=context)
-
-            # --- o rastro: uma nota por tentativa (RNF-050), transação própria
-            for judgement in outcome.judgements:
-                async with conn.transaction():
-                    await scope_to_organization(conn, job.organization_id)
-                    await scores_repo.record_pre_send_score(
+                # --- blocked_topics (item 30): a última coisa antes do envio.
+                # Os outros guards decidem sobre o que CHEGOU; este decide sobre o
+                # que o modelo PRODUZIU, e por isso mora aqui e não lá em cima.
+                # Não substitui o Judge 1: o juiz tem rubricas próprias e não
+                # conhece a lista de assuntos que ESTE lojista proibiu.
+                topic = resolve_blocked_topic(version.settings, outcome.draft)
+                if topic is not None:
+                    marked = await transfer_to_human(
                         conn,
                         organization_id=job.organization_id,
                         conversation_id=job.conversation_id,
-                        judge_model=JUDGE_MODEL,
-                        score=judgement.score,
-                        verdict=judgement.outcome,
-                        rationale=judgement.rationale,
-                    )
-
-            if outcome.draft is None:
-                # O alerta vem ANTES da conclusão: uma morte no meio deixa
-                # alerta duplicado (benigno e visível) em vez de silêncio.
-                async with conn.transaction():
-                    await scope_to_organization(conn, job.organization_id)
-                    await alerts_repo.open_alert(
-                        conn,
-                        organization_id=job.organization_id,
-                        type=alerts_repo.CRITICAL_VIOLATION,
+                        reason="blocked_topic",
                         severity="critical",
-                        title="Judge 1 reprovou a resposta e nada foi enviado",
-                        payload={
-                            "conversation_id": str(job.conversation_id),
-                            "blocked_by": outcome.blocked_by,
-                            "attempts": outcome.attempts,
-                            "think": gate.think,
-                            "think_reason": gate.reason,
-                            # "Quero ver o que ela iria mandar" (17/08): o veto
-                            # segura o envio, não a evidência.
-                            "draft": outcome.last_draft,
-                            "judge_rationale": (
-                                outcome.judgement.rationale if outcome.judgement else None
-                            ),
-                        },
+                        title="Resposta tocou num assunto proibido — nada foi enviado",
+                        # Mesma regra do veto do Judge 1: o bloqueio segura o
+                        # envio, não a evidência.
+                        payload={"topic": topic, "draft": outcome.draft},
                     )
-                retained = (outcome.last_draft or "").strip()
-                preview = f" — ia enviar: “{retained[:120]}”" if retained else ""
-                await note_step(
-                    "skipped", "Resposta retida pela verificação de qualidade" + preview
-                )
-                return None
+                    await note_step(
+                        "transferred",
+                        f"Assunto proibido na resposta (“{topic}”)"
+                        + ("" if marked else UNMIRRORED_DETAIL),
+                    )
+                    return None
 
-            # --- blocked_topics (item 30): a última coisa antes do envio.
-            # Os outros guards decidem sobre o que CHEGOU; este decide sobre o
-            # que o modelo PRODUZIU, e por isso mora aqui e não lá em cima.
-            # Não substitui o Judge 1: o juiz tem rubricas próprias e não
-            # conhece a lista de assuntos que ESTE lojista proibiu.
-            topic = resolve_blocked_topic(version.settings, outcome.draft)
-            if topic is not None:
-                marked = await transfer_to_human(
-                    conn,
-                    organization_id=job.organization_id,
-                    conversation_id=job.conversation_id,
-                    reason="blocked_topic",
-                    severity="critical",
-                    title="Resposta tocou num assunto proibido — nada foi enviado",
-                    # Mesma regra do veto do Judge 1: o bloqueio segura o
-                    # envio, não a evidência.
-                    payload={"topic": topic, "draft": outcome.draft},
-                )
-                await note_step(
-                    "transferred",
-                    f"Assunto proibido na resposta (“{topic}”)"
-                    + ("" if marked else UNMIRRORED_DETAIL),
-                )
-                return None
-
-            # As flags de entrega viajam COM o envio (payload da outbox): o
-            # sender obedece por linha, sem env global (Pacote B 17/08).
-            split, rhythm = delivery_flags(version.settings)
-            return {"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}}
+                # As flags de entrega viajam COM o envio (payload da outbox): o
+                # sender obedece por linha, sem env global (Pacote B 17/08).
+                split, rhythm = delivery_flags(version.settings)
+                return {"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}}
+            finally:
+                # Item 40 da auditoria (ruling C): um cliente por turno,
+                # fechado aqui — o único ponto onde o adapter resolvido por
+                # `resolve_agent_llm` nasce e morre neste responder. O `llm`
+                # de plataforma (Judge 1, ruling D) nunca entra aqui porque
+                # `owns_agent_llm` só fica True quando a cascata BYO resolveu
+                # um cliente novo. `touch()` (agent_core/toucher.py) repete
+                # exatamente este padrão de criação e HOJE não fecha — achado
+                # vizinho, registrado no FORK.md e no checklist, fora do
+                # escopo deste fechamento (ruling C: um só ponto por vez).
+                if owns_agent_llm:
+                    await agent_llm.aclose()
 
     return respond
 
