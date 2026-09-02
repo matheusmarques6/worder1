@@ -693,7 +693,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   review para essa decisão: `header_media_url` já existe na linha da tabela, então o caso de header
   de mídia tem fonte no banco — a porta não a devolve por paridade com o TS.
 
-- [x] **35. Alinhar versões de API** `[relatado]` · commit `c5f91898`
+- [x] **35. Alinhar versões de API** `[relatado]` · commit `c5f91898` · relatório `task-35-report.md`
   Meta: TS `v22.0` (`src/lib/whatsapp/api-version.ts:6`) × Python `v19.0` (`cloud_api.py:29`, `render.yaml`).
   Shopify: TS `2026-04` × Python `2024-01` (`connectors/shopify.py:22`).
 
@@ -711,13 +711,15 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **O que continua sobrescrevível:** `AGENTS_META_API_VERSION`, porque a Meta aposenta versão por
   cronograma e o piloto não pode depender de deploy para acompanhar. `runtime/.env.piloto` é
-  arquivo local de credenciais, não template do repo, e segue em `v19.0` até quem roda o piloto
-  atualizar à mão.
+  arquivo local de credenciais, não template do repo, e segue em `v19.0`. Isto não é mais pendência
+  morna: a v19.0 foi aposentada pela Meta em 21/mai/2026 (verificado em 02/set/2026, ver
+  `task-35-evidence.md`) — o piloto local está apontando para uma versão que a Meta já pode recusar.
+  Quem roda o piloto precisa atualizar `runtime/.env.piloto` à mão, e o quanto antes.
 
   **Não mudou, de propósito:** o cupom continua em REST. A Shopify recomenda migrar
   `PriceRule`/`DiscountCode` para o Admin GraphQL — o item 33 já tinha registrado a depreciação —
   mas isso é desenho próprio, é o caminho do dinheiro, e é maior que trocar o número da versão.
-  Fica proposto como fila.
+  Proposto como item 64 desta fila.
 
   **Achado do item, registrado e não implementado:** o próprio lado TS não fala uma versão só.
   Além do `v22.0` de `api-version.ts:6` (WhatsApp), há `v19.0` fixo em `src/lib/meta-api.ts:13`
@@ -727,10 +729,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   nada disso entrou neste item — mas quem for aposentar uma versão da Meta vai mexer em seis
   arquivos do TS, não em um.
 
-  **Suíte:** `tests/unit` 1154 verdes. `tests/pipeline` e `tests/db` não rodaram — pedem Postgres
-  em Docker, e o Docker Desktop desta máquina está desligado; nenhuma delas afirma versão de API.
-  Duas falhas de `tests/unit` fora do item (`test_humanize`, `test_secret_box_vectors`) são locale
-  do Windows, não código: passam com `PYTHONUTF8=1`.
+  **Suíte:** `tests/unit` 1152 verdes, 2 falhas pré-existentes de locale (`test_humanize`,
+  `test_secret_box_vectors`, item 54 — as duas passam com `PYTHONUTF8=1`) — 1154 no total.
+  `tests/pipeline` e `tests/db` não rodaram — pedem Postgres em Docker, e o Docker Desktop desta
+  máquina está desligado; nenhuma delas afirma versão de API.
 
 - [ ] **36. Providers ausentes no Python** `[confirmado]`
   Python tem OpenRouter, OpenAI-compat e Anthropic; o TS tem esses mais Gemini, DeepSeek e Groq.
@@ -888,6 +890,24 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   bug de tipo latente — `toucher.py:92` passa tupla onde `mission_resolver.py:63` declara `str | None`);
   paridade preview↔turno; contagem de duplicação do transcript; ciclo de vida dos clientes httpx; teto de
   chamadas por turno; 429/5xx/timeout dos provedores; `server._read_request` malformado.
+
+- [ ] **64. Migrar cupom da Shopify de REST para GraphQL** `[proposto]` · *(descoberto no item 35)*
+  `connectors/shopify.py` cria e busca cupom por três chamadas REST: `POST /price_rules.json`
+  (`:219`), `GET /price_rules.json` (`:172`) e `POST /price_rules/{rule_id}/discount_codes.json`
+  (`:250`). O item 33 já tinha registrado que `PriceRule`/`DiscountCode` são recursos legados da
+  Admin REST desde outubro/2024; o item 35 confirmou de novo, direto na documentação da versão
+  exata que o runtime usa hoje (`2026-04`): `PriceRule` e `DiscountCode` continuam documentados e
+  respondendo, com aviso de legado — *"The REST Admin API is a legacy API as of October 1,
+  2024"* (`shopify.dev/docs/api/admin-rest/2026-04/resources/pricerule` e `.../discountcode`,
+  verificado em 02/set/2026) —, mas sem data de remoção anunciada para os endpoints REST em si. Não
+  é urgência de prazo: é dívida técnica com aviso de legado, sem deadline visível ainda.
+  Efeito na loja: nenhum hoje — os dois endpoints seguem funcionando em `2026-04` com os mesmos
+  filtros que `_find_price_rule_id` usa (`ends_at_min`/`ends_at_max`/`limit`). O risco é a Shopify
+  desligar a REST Admin API por inteiro (ou só estes dois recursos) sem o runtime ter migrado a
+  tempo, e o cupom do funil de recuperação parar de sair. Trabalho com desenho próprio — mapear
+  `priceRuleCreate`/`discountCodeBasicCreate` (Admin GraphQL) contra o shape que
+  `_find_price_rule_id` e a criação do cupom esperam hoje — e é o caminho do dinheiro do produto,
+  por isso não entrou no item 35. Evidência completa em `task-35-evidence.md`.
 
 ---
 
