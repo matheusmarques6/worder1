@@ -47,92 +47,130 @@
 --    `new.cost_usd` como está. O mapa `purpose`→`feature` (o que o teste
 --    `runtime/tests/unit/test_ai_usage_logs_bridge.py` trava) não muda —
 --    só o valor de `cost_usd` no INSERT do espelho.
+--
+-- Fix round 1 (review, 0 Critical/0 Important, 4 Minor):
+--
+-- Minor 1 — `ai_usage_logs` não nasce em `supabase/migrations/` (vem de
+-- setup fora de banda). Mesma classe do item 0a: `20260621_phase0_foundations.sql`
+-- tinha um `CREATE INDEX` fora do bloco guardado e derrubava `supabase start`
+-- num banco limpo, porque `IF NOT EXISTS` fala do índice, nunca da tabela.
+-- Esta migration tinha o MESMO risco herdado — `ALTER TABLE ai_usage_logs`
+-- quebra se a tabela não existir, e nada aqui garantia isso antes desta
+-- migration no stream versionado (o item 37, que criou o trigger do passo 3,
+-- já corria esse risco; herdado não é justificativa). Migration inteira
+-- agora dentro de um `DO $guard$ ... $guard$` guardado por
+-- `to_regclass('public.ai_usage_logs')`, no molde exato de
+-- `20260621_phase0_foundations.sql` — se a tabela não existir, `RAISE NOTICE`
+-- e sai sem tocar em nada.
+--
+-- Minor 2 — linhas gravadas ANTES desta migration com `cost_usd = 0` ficam
+-- ambíguas: podiam significar "gasto real zero" OU "modelo fora da tabela de
+-- preços" (o comportamento antigo que este item mata). Não há como
+-- distinguir os dois retroativamente sem reprocessar cada chamada contra o
+-- provider — não é backfill deste item (pedir isso sem saber o volume seria
+-- inventar trabalho). Declarado via `COMMENT ON COLUMN` abaixo: uma soma de
+-- `cost_usd` sobre um período que cruza esta data é um PISO, não um total.
 -- ============================================================================
 
--- --------------------------------------------------------------------------
--- 1. cost_usd sem DEFAULT 0 — ausência de dado não vira gasto zero.
--- --------------------------------------------------------------------------
-alter table public.ai_usage_logs
-    alter column cost_usd drop default;
+DO $guard$
+BEGIN
+    IF to_regclass('public.ai_usage_logs') IS NULL THEN
+        RAISE NOTICE 'ai_usage_logs ausente — pulando migration de cost_usd desconhecido (item 42)';
+        RETURN;
+    END IF;
 
--- --------------------------------------------------------------------------
--- 2. ai_monthly_cost_usd devolve (spent_usd, has_unknown_cost). Muda o
---    tipo de retorno (NUMERIC → TABLE) — Postgres não deixa trocar isso
---    com CREATE OR REPLACE, precisa DROP + CREATE. DROP já derruba os
---    GRANTs da versão antiga; refeitos abaixo.
--- --------------------------------------------------------------------------
-drop function if exists ai_monthly_cost_usd(uuid, timestamptz);
+    -- --------------------------------------------------------------------
+    -- 1. cost_usd sem DEFAULT 0 — ausência de dado não vira gasto zero.
+    -- --------------------------------------------------------------------
+    ALTER TABLE public.ai_usage_logs
+        ALTER COLUMN cost_usd DROP DEFAULT;
 
-create function ai_monthly_cost_usd(
-    p_organization_id uuid,
-    p_month_start     timestamptz
-)
-returns table (spent_usd numeric, has_unknown_cost boolean)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-    select
-        coalesce(sum(cost_usd), 0)               as spent_usd,
-        coalesce(bool_or(cost_usd is null), false) as has_unknown_cost
-    from   ai_usage_logs
-    where  organization_id = p_organization_id
-      and  created_at >= p_month_start;
-$$;
+    COMMENT ON COLUMN public.ai_usage_logs.cost_usd IS
+        'Custo USD da chamada, reportado pelo provedor (OpenRouter) ou estimado por tabela (direto). '
+        'NULL = modelo fora da tabela de precos (desconhecido) -- nunca gasto zero inventado (item 42). '
+        'Linhas gravadas antes de 2026-09-02 usavam 0 pros dois casos (gasto real zero E modelo sem '
+        'preco) -- ambiguas; uma soma sobre um periodo que cruza essa data e um piso, nao um total.';
 
--- Mesma postura de segurança da versão original (20260616_ai_budgets.sql):
--- só service_role, nunca anon/authenticated/public.
-revoke execute on function ai_monthly_cost_usd(uuid, timestamptz) from public;
-revoke execute on function ai_monthly_cost_usd(uuid, timestamptz) from anon;
-revoke execute on function ai_monthly_cost_usd(uuid, timestamptz) from authenticated;
-grant execute on function ai_monthly_cost_usd(uuid, timestamptz) to service_role;
+    -- --------------------------------------------------------------------
+    -- 2. ai_monthly_cost_usd devolve (spent_usd, has_unknown_cost). Muda o
+    --    tipo de retorno (NUMERIC → TABLE) — Postgres não deixa trocar isso
+    --    com CREATE OR REPLACE, precisa DROP + CREATE. DROP já derruba os
+    --    GRANTs da versão antiga; refeitos abaixo, idênticos ao original.
+    -- --------------------------------------------------------------------
+    DROP FUNCTION IF EXISTS ai_monthly_cost_usd(uuid, timestamptz);
 
--- --------------------------------------------------------------------------
--- 3. O espelho do item 37 parava de inventar 0 pro custo desconhecido do
---    runtime. Redefine a função inteira (mesmo corpo de
---    20260902000001_ai_usage_logs_bridge.sql, só a linha do cost_usd no
---    INSERT muda) — signature idêntica, CREATE OR REPLACE basta aqui.
--- --------------------------------------------------------------------------
-create or replace function internal.mirror_llm_call_to_usage_logs()
-    returns trigger
-    language plpgsql
-as $$
-declare
-    v_feature text;
-begin
-    if new.organization_id is null then
-        -- Chamada de plataforma (pack base, sem org por trás) — nada do
-        -- lojista para contabilizar, e ai_usage_logs.organization_id é
-        -- NOT NULL.
-        return new;
-    end if;
+    CREATE FUNCTION ai_monthly_cost_usd(
+        p_organization_id uuid,
+        p_month_start     timestamptz
+    )
+    RETURNS TABLE (spent_usd numeric, has_unknown_cost boolean)
+    LANGUAGE sql
+    STABLE
+    SECURITY DEFINER
+    SET search_path = public
+    AS $body$
+        SELECT
+            COALESCE(SUM(cost_usd), 0)                AS spent_usd,
+            COALESCE(BOOL_OR(cost_usd IS NULL), false) AS has_unknown_cost
+        FROM   ai_usage_logs
+        WHERE  organization_id = p_organization_id
+          AND  created_at >= p_month_start;
+    $body$;
 
-    case new.purpose
-        when 'agent_reply'      then v_feature := 'runtime_agent_reply';
-        when 'judge_pre'        then v_feature := 'runtime_judge_pre';
-        when 'judge_async'      then v_feature := 'runtime_judge_async';
-        when 'prompt_generator' then v_feature := 'runtime_prompt_generator';
-        when 'copy_variation'   then v_feature := 'runtime_copy_variation';
-        when 'embedding'        then v_feature := 'runtime_embedding';
-        else
-            raise exception
-                'internal.llm_calls.purpose sem mapa para ai_usage_logs.feature: %', new.purpose;
-    end case;
+    -- Mesma postura de segurança da versão original (20260616_ai_budgets.sql):
+    -- só service_role, nunca anon/authenticated/public.
+    REVOKE EXECUTE ON FUNCTION ai_monthly_cost_usd(uuid, timestamptz) FROM PUBLIC;
+    REVOKE EXECUTE ON FUNCTION ai_monthly_cost_usd(uuid, timestamptz) FROM anon;
+    REVOKE EXECUTE ON FUNCTION ai_monthly_cost_usd(uuid, timestamptz) FROM authenticated;
+    GRANT EXECUTE ON FUNCTION ai_monthly_cost_usd(uuid, timestamptz) TO service_role;
 
-    insert into public.ai_usage_logs
-        (organization_id, provider, model, feature, agent_id, conversation_id,
-         prompt_tokens, completion_tokens, cost_usd, duration_ms, success)
-    values
-        (new.organization_id, new.provider, new.model, v_feature, new.agent_id,
-         new.conversation_id, coalesce(new.input_tokens, 0), coalesce(new.output_tokens, 0),
-         new.cost_usd, new.latency_ms, true);
-    -- ^ item 42: `new.cost_usd` propagado como está (NULL fica NULL) — era
-    -- `coalesce(new.cost_usd, 0)`. `llm.py`'s `Usage.cost_usd: float | None`
-    -- é `None` de propósito para OpenAI/Anthropic direto (a API não devolve
-    -- custo); forçar 0 aqui era o mesmo achatamento que este item mata do
-    -- outro lado (cost-tracker.ts).
+    -- --------------------------------------------------------------------
+    -- 3. O espelho do item 37 parava de inventar 0 pro custo desconhecido do
+    --    runtime. Redefine a função inteira (mesmo corpo de
+    --    20260902000001_ai_usage_logs_bridge.sql, só a linha do cost_usd no
+    --    INSERT muda) — signature idêntica, CREATE OR REPLACE basta aqui.
+    -- --------------------------------------------------------------------
+    CREATE OR REPLACE FUNCTION internal.mirror_llm_call_to_usage_logs()
+        RETURNS TRIGGER
+        LANGUAGE plpgsql
+    AS $body$
+    DECLARE
+        v_feature text;
+    BEGIN
+        IF new.organization_id IS NULL THEN
+            -- Chamada de plataforma (pack base, sem org por trás) — nada do
+            -- lojista para contabilizar, e ai_usage_logs.organization_id é
+            -- NOT NULL.
+            RETURN new;
+        END IF;
 
-    return new;
-end;
-$$;
+        CASE new.purpose
+            WHEN 'agent_reply'      THEN v_feature := 'runtime_agent_reply';
+            WHEN 'judge_pre'        THEN v_feature := 'runtime_judge_pre';
+            WHEN 'judge_async'      THEN v_feature := 'runtime_judge_async';
+            WHEN 'prompt_generator' THEN v_feature := 'runtime_prompt_generator';
+            WHEN 'copy_variation'   THEN v_feature := 'runtime_copy_variation';
+            WHEN 'embedding'        THEN v_feature := 'runtime_embedding';
+            ELSE
+                RAISE EXCEPTION
+                    'internal.llm_calls.purpose sem mapa para ai_usage_logs.feature: %', new.purpose;
+        END CASE;
+
+        INSERT INTO public.ai_usage_logs
+            (organization_id, provider, model, feature, agent_id, conversation_id,
+             prompt_tokens, completion_tokens, cost_usd, duration_ms, success)
+        VALUES
+            (new.organization_id, new.provider, new.model, v_feature, new.agent_id,
+             new.conversation_id, COALESCE(new.input_tokens, 0), COALESCE(new.output_tokens, 0),
+             new.cost_usd, new.latency_ms, true);
+        -- ^ item 42: `new.cost_usd` propagado como está (NULL fica NULL) — era
+        -- `coalesce(new.cost_usd, 0)`. `llm.py`'s `Usage.cost_usd: float | None`
+        -- é `None` de propósito para OpenAI/Anthropic direto (a API não devolve
+        -- custo); forçar 0 aqui era o mesmo achatamento que este item mata do
+        -- outro lado (cost-tracker.ts).
+
+        RETURN new;
+    END;
+    $body$;
+END
+$guard$;
