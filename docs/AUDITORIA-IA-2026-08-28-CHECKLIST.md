@@ -814,9 +814,11 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   calls dela) — redesenho de fluxo, não wiring de uma escrita nova. Consumidores que dependem de
   `agent_traces` (propostas de melhoria, dataset de kappa/eval) continuam zerados para org migrada.
   Proposto como item novo na fila, com o próprio achado desta investigação como ponto de partida.
+  Virou o **item 65**.
 
   **Fora desta parte, por escopo:** `update_agent_stats` (não lê nenhuma das duas tabelas — só nunca é
-  chamada para org migrada; nenhum ruling do item cobriu isso, não implementado). A RLS de
+  chamada para org migrada; nenhum ruling do item cobriu isso, não implementado — ver **item 67**).
+  A RLS de
   `ai_usage_logs` (`FOR ALL USING (true)`, sem isolamento real por org) fica como está — ruling E:
   consertá-la é postura de segurança que atinge o lado TS também, não é este item.
 
@@ -866,7 +868,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   quatro motivos comportamentais, e DUAS (`engine.ts` via `guards.ts:isWithinSchedule`,
   `guards.py:is_within_schedule`) pra horário — todas mantidas por convenção de comentário ("paridade
   de semântica, não de código"), sem teste cruzado que trave divergência entre TS e Python. Risco:
-  qualquer uma pode divergir das demais em silêncio, e nada no CI pegaria.
+  qualquer uma pode divergir das demais em silêncio, e nada no CI pegaria. Virou o **item 66**.
 
 - [ ] **38. Typing indicator** `[relatado]`
   Divergência já declarada. Depende do outbox carregar o wamid do último inbound.
@@ -1024,6 +1026,63 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `priceRuleCreate`/`discountCodeBasicCreate` (Admin GraphQL) contra o shape que
   `_find_price_rule_id` e a criação do cupom esperam hoje — e é o caminho do dinheiro do produto,
   por isso não entrou no item 35. Evidência completa em `task-35-evidence.md`.
+
+- [ ] **65. `agent_traces` para org migrada** `[proposto]` · *(descoberto no item 37)*
+  O runtime não escreve a trilha do lojista, e o item 37 tentou e parou aqui por motivo verificado.
+  `guarded_reply` (`runtime/src/agents_runtime/judges/pre_send.py:304-371`) escolhe o rascunho de
+  melhor **nota** entre até três tentativas (`REGENERATION_LIMIT=2`), não necessariamente a última
+  (`:348-349`); `GuardedOutcome` (`pre_send.py:151-160`) carrega `draft`/`judgement`/`judgements`/
+  `last_draft`, mas não `tool_calls` nem a identidade da tentativa vencedora. As funções `generate` e
+  `run_turn_tool`, ambas locais dentro de `build_responder` em `responder.py`, também não acumulam
+  essa informação por tentativa para quem chama depois — `generate` só devolve o texto final, e as
+  tool calls de cada rodada ficam presas ao escopo de `run_turn_tool`. Efeito na loja: propostas de
+  melhoria e o dataset de kappa/eval continuam vazios para org migrada, porque essas leituras
+  dependem de `agent_traces`. O que decide o item: atribuir texto e `tool_calls` à tentativa
+  vencedora é redesenho do fluxo de geração (`guarded_reply`/`GuardedOutcome`/`generate`), não
+  repositório novo mais migração — por isso não coube no item 37. Ponto de partida:
+  `.superpowers/sdd/AUDITORIA-IA-2026-08-28-CHECKLIST/task-37-report.md` (seção "agent_traces —
+  BLOCKED").
+  *(Nota de correção: a citação original apontava `agent_core/pre_send.py`; o arquivo real é
+  `judges/pre_send.py` — corrigido acima.)*
+
+- [ ] **66. Paridade da regra de guard entre TS e Python** `[relatado]` · *(descoberto no item 37)*
+  A mesma regra de guard existe em **três** cópias para os quatro motivos comportamentais
+  (`stop_on_human_reply`, teto de mensagens, cooldown de transferência, ativação manual):
+  `src/lib/ai/cloud-runner.ts` (decisão real, org legacy), o badge em
+  `src/lib/ai/conversation-ai-status.ts` (predição, as duas orgs) e
+  `runtime/src/agents_runtime/agent_core/guards.py::evaluate_inbound_guards` (decisão real, org
+  runtime). Para horário há **duas** cópias: `src/lib/ai/guards.ts::isWithinSchedule` ×
+  `guards.py::is_within_schedule`. As cópias `cloud-runner.ts`×`conversation-ai-status.ts` existem
+  desde o item 12; o que o item 37 mudou é que o badge passou a rodar lado a lado com a decisão real
+  do Python para org `runtime` — antes o badge tinha early-return incondicional para essa org, e não
+  havia como as duas discordarem. Não existe teste de paridade cruzada TS↔Python; o único contrato é
+  um comentário (`guards.py:14-21`, "paridade de semântica, não de código"). Efeito na loja: as
+  cópias divergem com o tempo — alguém muda um limiar de um lado e esquece o outro — e o badge volta
+  a mentir por outro caminho, sem ninguém perceber. Esta auditoria já corrigiu cinco vezes o defeito
+  de "duas cópias da mesma regra que divergem"; vale um teste de paridade (fixture compartilhada)
+  antes que aconteça de novo aqui.
+
+- [ ] **67. Contadores de agente sem escritor no runtime** `[relatado]` · *(descoberto no item 37)*
+  `update_agent_stats(p_agent_id, p_tokens, p_response_time)` e
+  `increment_agent_conversations(p_agent_id)` são funções SQL definidas só em
+  `supabase/migrations-archive/20260613_agent_stats_rpcs.sql` — fora do que o CI aplica, mesmo achado
+  do item 49 — e atualizam `ai_agents.total_messages`, `.total_tokens_used`, `.avg_response_time_ms`
+  e `.total_conversations`. Hoje só têm um chamador cada, e é sempre o motor TS:
+  `update_agent_stats` só em `src/lib/ai/engine.ts:443`; `increment_agent_conversations` só em
+  `src/lib/ai/cloud-sender.ts:371`. Nenhum arquivo em `runtime/` chama qualquer um dos dois. O
+  carimbo de `ai_agent_id` tem o mesmo buraco: em `whatsapp_cloud_messages` só é gravado pelo motor
+  TS (`cloud-sender.ts:333,362`); em `whatsapp_cloud_conversations`, só pela rota manual
+  `[id]/bot` (toggle humano). A função que o runtime usa para espelhar cada envio,
+  `internal.mirror_outbound_to_inbox` (`supabase/migrations/20260813000003_sender_preflight.sql:228-271`),
+  insere em `whatsapp_cloud_messages` sem a coluna `ai_agent_id` e no `update` de
+  `whatsapp_cloud_conversations` só toca `last_message_at`/`last_message_preview`/
+  `last_message_direction`/`updated_at` — nunca `ai_agent_id`. Efeito na loja: para org migrada, o
+  card do agente (`src/components/whatsapp/analytics/ai/AIAgentCard.tsx`) mostra tokens, latência
+  média e contagem de conversas/mensagens congelados no valor de antes da migração — a mesma classe
+  "zero permanente" do item 37, só que no dashboard de estatísticas em vez de propostas/kappa; e
+  `src/lib/ai/proposals.ts` filtra por `ai_agent_id` em `whatsapp_cloud_messages` (`:132,160,166`),
+  então sem o carimbo essas consultas também ficam sem linha para atribuir ao agente certo em org
+  migrada.
 
 ---
 
