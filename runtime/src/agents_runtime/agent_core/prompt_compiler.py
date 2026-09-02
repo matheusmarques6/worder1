@@ -22,8 +22,9 @@ relógio, sem I/O, sem LLM — momento e ledger chegam resolvidos no StateBlock.
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
-from agents_runtime.agent_core.media import STORE_MARK
+from agents_runtime.agent_core.media import is_store_media_line
 from agents_runtime.agent_core.mission_resolver import ResolvedMission
+from agents_runtime.agent_core.think_gate import PendingMessage
 
 AI_DISCLOSURE_LINE = (
     "Se perguntarem se você é uma IA ou um robô, confirme com naturalidade — "
@@ -259,15 +260,19 @@ def _conversation_block(conversation: ConversationBlock | None, mode: str) -> Re
         # MESMO `transcript` — repeti-lo aqui como texto dobrava o tamanho do
         # prompt de entrada por chamada, em até 12 chamadas por turno. Só
         # sobrevive o que é EXCLUSIVO do bloco: a rubrica de mídia da loja
-        # (`agent_core/media.py::STORE_MARK`), que `_as_chat` descarta de
-        # propósito (`is_store_media_line`, item 31) para não virar fala
-        # imitável — apresentar `[A loja enviou uma imagem]` como mensagem
-        # `assistant` anterior é a superfície de imitação que custou a
-        # resposta crua de 17/08.
+        # (`agent_core/media.py::is_store_media_line`), que `_as_chat`
+        # descarta de propósito (mesmo predicado, item 31) para não virar
+        # fala imitável — apresentar `[A loja enviou uma imagem]` como
+        # mensagem `assistant` anterior é a superfície de imitação que
+        # custou a resposta crua de 17/08. Reusa o predicado canônico (não
+        # reimplementa `STORE_MARK`/autor na mão) — `PendingMessage` só
+        # existe aqui pra dar ao predicado a forma que ele espera;
+        # `media_kind` (o único campo que sobra, default `None`) não importa
+        # pra esta checagem.
         lines.extend(
             f"{author}: {text}"
             for author, text in conversation.transcript
-            if author != "contact" and text.startswith(STORE_MARK)
+            if is_store_media_line(PendingMessage(author=author, text=text))
         )
         if len(lines) == 1:
             lines.append("Sem rubrica de mídia da loja nesta janela.")
