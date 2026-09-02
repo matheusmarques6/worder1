@@ -18,6 +18,7 @@ jeito de fazer isso sem `from_env` expor um parâmetro de teste que a produção
 não usaria).
 """
 
+import json
 import uuid
 
 import httpx
@@ -25,9 +26,10 @@ import psycopg
 import pytest
 
 import agents_runtime.channels.cloud_api as cloud_api
+from agents_runtime.channels.template_components import TemplateParametersMissing
 from agents_runtime.repository.outbox import ClaimedSend
 from tests.db.conftest import TwoTenants
-from tests.db.factories import create_channel_account
+from tests.db.factories import create_channel_account, create_whatsapp_template
 
 
 async def _sender_shaped_connection(dsn: str) -> psycopg.AsyncConnection:
@@ -150,3 +152,127 @@ class TestFromEnvResolvesARealTokenOnTheUnscopedSenderConnection:
             await channel.aclose()
 
         assert seen_auth == ["Bearer token-a", "Bearer token-b"]
+
+
+class TestFromEnvAsksTheRealTemplatePort:
+    """Auditoria 2026-08-28, item 34 — o buraco que o default abre.
+
+    `CloudApiChannel(load_template_shape=None)` significa "não sei", e "não
+    sei" MANDA. É o que os testes de unidade usam (não há Postgres lá) e é o
+    comportamento certo para uma org sem catálogo sincronizado — mas se
+    `from_env` esquecesse de ligar o loader de verdade, a produção inteira
+    cairia nesse default e a guarda deste item ficaria muda sem nenhum teste
+    reclamar. Este arquivo já existe por causa do buraco gêmeo no item 20.
+    """
+
+    async def test_a_template_that_demands_a_variable_never_reaches_the_wire(
+        self,
+        dsn: str,
+        admin: psycopg.Connection,
+        two_tenants: TwoTenants,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("ENCRYPTION_KEY", "x" * 32)
+        account = create_channel_account(
+            admin, two_tenants.a.id, access_token="token-de-producao"
+        )
+        create_whatsapp_template(
+            admin,
+            two_tenants.a.id,
+            name="volta_pra_loja",
+            body_text="Oi {{1}}, seu carrinho ainda está aqui",
+        )
+
+        calls = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal calls
+            calls += 1
+            return httpx.Response(200, json={"messages": [{"id": "wamid.NAO"}]})
+
+        real_async_client = httpx.AsyncClient
+
+        def client_with_mock_transport(*args, **kwargs):
+            kwargs["transport"] = httpx.MockTransport(handler)
+            return real_async_client(*args, **kwargs)
+
+        monkeypatch.setattr(cloud_api.httpx, "AsyncClient", client_with_mock_transport)
+
+        channel = cloud_api.from_env(dsn)
+        conn = await _sender_shaped_connection(dsn)
+        try:
+            with pytest.raises(TemplateParametersMissing) as failure:
+                await channel.send(
+                    conn,
+                    ClaimedSend(
+                        outbox_id=uuid.uuid4(),
+                        organization_id=two_tenants.a.id,
+                        channel_type="whatsapp",
+                        channel_external_id=account.external_account_id,
+                        to_phone_e164="+5511987654321",
+                        payload={"template": {"name": "volta_pra_loja", "language": "pt_BR"}},
+                        idempotency_key="idem-template-exige",
+                        attempt_count=1,
+                    ),
+                )
+        finally:
+            await conn.close()
+            await channel.aclose()
+
+        assert calls == 0
+        assert "volta_pra_loja" in str(failure.value)
+
+    async def test_another_orgs_template_is_not_the_answer_for_this_one(
+        self,
+        dsn: str,
+        admin: psycopg.Connection,
+        two_tenants: TwoTenants,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A tabela não tem RLS. Se a leitura não fosse escopada, o template
+        exigente da org B recusaria o envio perfeitamente válido da org A —
+        e o vazamento seria de dados, não só de comportamento."""
+        monkeypatch.setenv("ENCRYPTION_KEY", "x" * 32)
+        account = create_channel_account(
+            admin, two_tenants.a.id, access_token="token-de-producao"
+        )
+        create_whatsapp_template(
+            admin, two_tenants.b.id, name="volta_pra_loja", body_text="Oi {{1}}"
+        )
+
+        seen: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.update(json.loads(request.content))
+            return httpx.Response(200, json={"messages": [{"id": "wamid.OK"}]})
+
+        real_async_client = httpx.AsyncClient
+
+        def client_with_mock_transport(*args, **kwargs):
+            kwargs["transport"] = httpx.MockTransport(handler)
+            return real_async_client(*args, **kwargs)
+
+        monkeypatch.setattr(cloud_api.httpx, "AsyncClient", client_with_mock_transport)
+
+        channel = cloud_api.from_env(dsn)
+        conn = await _sender_shaped_connection(dsn)
+        try:
+            wamid = await channel.send(
+                conn,
+                ClaimedSend(
+                    outbox_id=uuid.uuid4(),
+                    organization_id=two_tenants.a.id,
+                    channel_type="whatsapp",
+                    channel_external_id=account.external_account_id,
+                    to_phone_e164="+5511987654321",
+                    payload={"template": {"name": "volta_pra_loja", "language": "pt_BR"}},
+                    idempotency_key="idem-template-de-outra-org",
+                    attempt_count=1,
+                ),
+            )
+        finally:
+            await conn.close()
+            await channel.aclose()
+
+        assert wamid == "wamid.OK"
+        assert seen["template"] == {"name": "volta_pra_loja", "language": {"code": "pt_BR"}}
