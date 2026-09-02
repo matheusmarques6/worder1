@@ -720,11 +720,59 @@ finalidades diferentes (`test_the_budget_is_shared_across_purposes`), e um turno
 finalidades reais (agent_reply + judge_pre + embedding) fica sob o default
 (`test_a_normal_turn_never_touches_the_default_budget`).
 
-**Suíte:** `tests/unit` 1203 verdes (`PYTHONUTF8=1`; era 1197, +6). `lint-imports`: 3 contratos
-mantidos, 0 quebrados. `tests/db` e `tests/pipeline` pedem Postgres, indisponível nesta máquina — não
-rodaram; a integração completa (`_metered`/`partial` compartilhando o `TurnBudget` do turno real) foi
-verificada manualmente contra a composição de `responder.py` (ver `task-41-report.md`), não só contra
-dublês.
+**Suíte antes do fix round 1:** `tests/unit` 1203 verdes (`PYTHONUTF8=1`; era 1197, +6). `lint-imports`:
+3 contratos mantidos, 0 quebrados. `tests/db` e `tests/pipeline` pedem Postgres, indisponível nesta
+máquina — não rodaram; a integração completa (`_metered`/`partial` compartilhando o `TurnBudget` do
+turno real) foi verificada manualmente contra a composição de `responder.py` (ver `task-41-report.md`),
+não só contra dublês.
+
+**Fix round 1 (review — `task-41-report.md`, seção "Fix round 1").**
+
+*Important 1 — `touch()` ficou inteiro fora do teto.* `agent_core/toucher.py::build_toucher.touch`
+chamava `_metered(...)` **sem** `budget=` nos dois call sites (`agent_reply`, `judge_pre`) — o segundo
+tipo de turno do runtime não tinha teto nenhum aplicado, contradizendo a afirmação de que o item 41
+cobre "toda chamada de LLM de um turno". É a SEGUNDA vez seguida que `touch()` é o gêmeo esquecido: no
+item 40 foi o cliente httpx que não fechava lá; agora foi o teto que não contava lá — as duas achadas
+pela review, não pelo implementador. Corrigido: `touch()` ganhou `turn_llm_call_limit` (mesmo default
+de `respond()`, mesma leitura de ambiente) e um `TurnBudget` por chamada de `touch(job)`, compartilhado
+entre os dois `_metered(...)`; o alerta de "sem rascunho" ganhou o mesmo título condicional do
+responder (não culpa o Judge 1 quando o motivo foi o teto). Trava de regressão nova e GENÉRICA —
+`test_llm_metering.py::TestEveryMeteredCallSiteIsBudgeted::test_no_metered_call_site_forgets_the_turn_budget`
+— varre por AST todo `agent_core/*.py` atrás de `_metered(...)`/`partial(_metered, ...)` sem `budget=`,
+para que um TERCEIRO esquecimento (um turno novo, um refactor) quebre a suíte em vez de esperar outra
+review ler o código. Verificado ao vivo: revertendo só o `budget=` do primeiro call site de `touch()`,
+o teste falha nomeando o `toucher.py:397` exato; restaurado, volta a passar. Registro do padrão em si
+— não conserto de escopo novo — foi para o item 44 (`docs/AUDITORIA-IA-2026-08-28-CHECKLIST.md`), com
+a varredura completa de quais dos itens 30/37/39/40/41 `touch()` acompanhou (todos, exceto a exclusão
+deliberada de item 39 — `touch()` não tem janela pendente para excluir).
+
+*Important 2 — faltava a trava do cenário mais arriscado.* Nenhum teste exercitava o `TurnBudget`
+estourando DENTRO de `judge()` (não de `generate()`) na mesma tentativa em que `generate()` já tinha
+produzido um rascunho, com um `best` julgado de tentativa anterior disponível — exatamente o cenário
+que a review teve de verificar lendo `judges/pre_send.py::guarded_reply` linha por linha porque nada
+o travava. O comportamento estava certo (o rascunho não julgado nunca vira `outcome.draft`, porque
+`judgements.append(judgement)` só roda depois do bloco `try`), mas sem prova. Teste novo:
+`test_pre_send_judge.py::TestTheTurnBudget::test_the_cap_inside_the_judge_never_promotes_the_unjudged_draft`
+— `TurnBudget(limit=3)`: tentativa 0 gasta 2 slots (gera + julga, reprova padrão, vira `best`);
+tentativa 1 gera (3º slot) e PRODUZ um rascunho, mas o julgamento dele estoura o teto. Afirma
+`outcome.draft == "rascunho 0"` (o `best` julgado), nunca `"rascunho 1"` (gerado, nunca julgado).
+Verificado ao vivo: uma regressão simulada (promover o rascunho recém-gerado a `best` no branch de
+`TurnBudgetExceeded`) faz o teste falhar exatamente na asserção certa; revertida a regressão, volta a
+passar.
+
+*Minor 1 — a ressalva do default não estava no checklist.* `docs/AUDITORIA-IA-2026-08-28-CHECKLIST.md`
+(ruling D do item 41) explicava a conta 2-4-8 mas não dizia que veio da FORMA do código, sem dado
+empírico de banco — só este `FORK.md` e o relatório (git-ignorado) diziam isso. Acrescentada a
+ressalva também no checklist, com a recomendação de revalidar contra dado real quando houver acesso ao
+banco piloto.
+
+*Minor 2 — `TurnBudget.reserve` não documentava o caso de falha.* Uma chamada que lança (rede, timeout,
+HTTP 500) já tinha consumido o slot — `reserve()` roda antes do `await self._inner.chat(...)`, sem
+`try/except` ao redor, sem rollback em nenhum branch de erro. Comportamento real, verificado no
+código, agora declarado na docstring de `reserve()`.
+
+**Suíte após o fix round 1:** `tests/unit` 1205 verdes (`PYTHONUTF8=1`; era 1203, +2). `lint-imports`:
+3 contratos mantidos, 0 quebrados.
 
 ### Regras When/Do
 

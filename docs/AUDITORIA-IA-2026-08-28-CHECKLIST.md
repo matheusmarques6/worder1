@@ -1158,6 +1158,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   INTEIRA do Judge 1 sem disparar, e ainda para em metade do pior caso de desenho (16) — apertado o
   bastante para nunca custar as 16 chamadas por acidente, folgado o bastante para não cortar turno
   legítimo (o risco que o ruling D pede para evitar: um teto raso vira resposta pior, não erro visível).
+  **Ressalva (fix round 1 — Minor #1 da review):** os números 2-4 acima vêm da FORMA do código (contando
+  chamadas por caminho), não de dado empírico de `internal.llm_calls` — não havia Postgres acessível
+  nesta tarefa para medir o gasto real de um turno normal. Revalidar contra dado real quando houver
+  acesso ao banco piloto; se a média medida divergir muito de 2-4, o default de 8 deve ser revisto.
 
   **Ruling E, respeitado.** `MAX_TOOL_ROUNDS` e `REGENERATION_LIMIT` não mudaram.
 
@@ -1176,8 +1180,29 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   sem deixar linha, o teto é compartilhado entre finalidades, e um turno normal com as três
   finalidades reais fica sob o default.
 
-  **Suíte:** `tests/unit` 1203 verdes (`PYTHONUTF8=1`; era 1197, +6). `lint-imports`: 3 contratos
-  mantidos, 0 quebrados. `tests/db`/`tests/pipeline` pedem Postgres, indisponível nesta máquina.
+  **Fix round 1 (review — `task-41-report.md`, seção "Fix round 1").** Dois Important.
+  `agent_core/toucher.py::build_toucher.touch` chamava `_metered(...)` **sem** `budget=` nos dois
+  call sites (`agent_reply`, `judge_pre`) — o toque (segundo tipo de turno do runtime) ficava
+  INTEIRAMENTE fora do teto do item 41. Corrigido: `touch()` ganhou o mesmo `TurnBudget` por turno,
+  compartilhado entre as duas finalidades, e o mesmo título de alerta corrigido quando o motivo é o
+  teto (não o Judge 1). Trava de regressão nova e genérica —
+  `test_llm_metering.py::TestEveryMeteredCallSiteIsBudgeted` — varre `agent_core/*.py` por QUALQUER
+  `_metered(...)`/`partial(_metered, ...)` sem `budget=`, não só o caso já visto (é a segunda vez
+  seguida que `touch()` é o gêmeo esquecido de `respond()` — a primeira foi o `aclose()` do item 40;
+  ver a nota nova no item 44 abaixo). Faltava também a trava do cenário mais arriscado: o teto
+  estourando DENTRO de `judge()` (não de `generate()`) na mesma tentativa em que `generate()` já
+  tinha produzido um rascunho, com um `best` julgado de tentativa anterior disponível — o
+  comportamento (rascunho não julgado nunca vira `outcome.draft`) estava certo por leitura de
+  código, sem nada que o travasse; teste novo
+  `test_pre_send_judge.py::TestTheTurnBudget::test_the_cap_inside_the_judge_never_promotes_the_unjudged_draft`
+  prova (verificado ao vivo: uma regressão simulada que promovesse o rascunho não julgado quebra a
+  asserção). Dois Minor: a docstring de `TurnBudget.reserve` (`metering.py`) passou a declarar que uma
+  chamada que FALHA já consumiu o slot, sem rollback; e a ressalva sobre o default (acima, no
+  parágrafo do ruling D) — estava só em `FORK.md`/relatório, agora está aqui também.
+
+  **Suíte após o fix round 1:** `tests/unit` 1205 verdes (`PYTHONUTF8=1`; era 1203, +2). `lint-imports`:
+  3 contratos mantidos, 0 quebrados. `tests/db`/`tests/pipeline` pedem Postgres, indisponível nesta
+  máquina.
 
 - [ ] **42. Custo vindo do provedor, não de tabela hardcoded** `[confirmado]`
   `src/lib/ai/cost-tracker.ts:61-62` devolve `0` para modelo fora do dicionário; as 15 chaves são todas
@@ -1194,6 +1219,26 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `toucher.py:43` já importa privados do responder. As três divergências são consequência da cópia:
   não desembrulha envelope JSON (`:334` — o bug do `{"body":…}` de 17/08 segue aberto nesse caminho),
   não consulta conhecimento (`:309` passa `knowledge=()`), não tem tool-loop. Fatorar mata a classe.
+
+  **Padrão observado duas vezes — `touch()` é o gêmeo que fica pra trás (nota do item 41, fix round
+  1).** Item 40: `agent_core/toucher.py::build_toucher.touch` não fechava o cliente httpx do LLM do
+  agente — só `agent_core/responder.py::build_responder.respond` tinha `scoped_agent_llm` na primeira
+  versão (corrigido no próprio item 40, fix round 1). Item 41: `toucher.py::build_toucher.touch`
+  chamava `_metered(...)` sem `budget=` — o teto de custo do turno não cobria o toque (corrigido no
+  fix round 1 deste item). As duas vezes foram achadas pela REVIEW, não pelo implementador — o padrão
+  é maior que os dois casos: quem edita `respond()` esquece de perguntar "e o `touch()`?".
+  Varredura desta tarefa (item 41, fix round 1) sobre o que os itens 35-41 mudaram em `respond()`
+  e se `touch()` acompanhou: guards de comportamento (item 30) — os dois chamam
+  `evaluate_inbound_guards`/`schedule_silence`/`resolve_blocked_topic` (`responder.py::respond`,
+  `toucher.py::touch`); `agent_id` em `_metered` (item 37) — os dois passam `version.agent_id`
+  (`responder.py:665`, `toucher.py:397,402`); `scoped_agent_llm` (item 40) — os dois, desde o fix
+  round 1 daquele item; `TurnBudget` (item 41) — os dois, desde este fix round 1. `exclude_inbound_after_seq`
+  (item 39, `agent_repo.load_recent_transcript`) é a ÚNICA divergência restante, e é DELIBERADA, não
+  gap: só `responder.py::respond` tem uma janela de mensagens pendente para excluir do transcript —
+  `toucher.py::touch` não nasce de inbound, não tem essa janela, e o próprio item 39 já registrou
+  isso (`runtime/FORK.md`, seção do item 39). Recomendação para itens futuros: todo item que editar
+  `responder.py::respond` fecha só depois de perguntar "isto vale para `toucher.py::touch` também?" —
+  é essa pergunta, feita cedo, que evita a terceira vez.
 
 - [ ] **45. Paridade preview ↔ turno** `[confirmado]`
   `runtime/.../server.py:154-156` fixa `presentation_mode="nome_funcao"` e `adaptation=()`; não aplica
