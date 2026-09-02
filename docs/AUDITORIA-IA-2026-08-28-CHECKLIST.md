@@ -978,11 +978,20 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   estimava. **A economia absoluta é a mesma nos dois cenários: 982 caracteres a menos por chamada**
   (o tamanho do dump que deixou de ser escrito duas vezes) — o que muda entre os cenários é só o
   denominador, quanto do resto do `system` (AGENT/MISSÃO/ESTADO/CANAL, e agora CONHECIMENTO) já
-  pesava sem nunca ter duplicado. **A razão varia com a composição do prompt; a economia absoluta,
-  não** — um `system` de produção com mais conhecimento/persona tende a uma razão ainda mais perto
-  de 1,0×–1,3× do que de 1,59×. **Corrigindo a promessa deste item: o ganho medido vai de 1,38× a
-  1,59×** neste cenário sintético, não ~2×, com 982 caracteres de economia absoluta por chamada.
-  Continua valendo por chamada, multiplicado pelas até 12 gerações por turno (ruling E, intocado).
+  pesava sem nunca ter duplicado.
+
+  **Fix round 2 (achado da re-review): os chunks sintéticos são menores que os reais.** Os 5 chunks
+  do cenário com RAG somam 901 caracteres, média de 180 por chunk — bem abaixo do `chunk_size` real,
+  que chega a 2000 caracteres por chunk (`text-processor.ts`, default de 500 tokens). Portanto **a
+  razão real com RAG em produção é MENOR que 1,38×** — outro fator, mesmo mecanismo do achado
+  anterior (texto fixo maior dilui a razão) — enquanto **a economia absoluta de 982 caracteres por
+  chamada não muda**, porque ela não depende do tamanho do resto do prompt. **A razão varia com a
+  composição do prompt; a economia absoluta, não** — um `system` de produção com persona maior,
+  mais fatos de ESTADO e chunks de conhecimento do tamanho real tende a uma razão ainda mais perto
+  de 1,0× do que de 1,38×–1,59×. **Corrigindo a promessa deste item: o ganho medido vai de 1,38× a
+  1,59× neste cenário sintético (e é otimista mesmo nesse teto, por causa dos chunks pequenos), não
+  ~2×**, com 982 caracteres de economia absoluta por chamada. Continua valendo por chamada,
+  multiplicado pelas até 12 gerações por turno (ruling E, intocado).
 
   **Teste que trava a duplicação.** `tests/unit/test_prompt_compiler_blocks.py::TestTheConversationBlockDoesNotDuplicateTheChatArray`
   (3 casos, sem banco): texto comum do transcript não chega ao bloco em modo `"turn"`; a rubrica de
