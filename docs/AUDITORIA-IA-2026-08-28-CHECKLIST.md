@@ -693,9 +693,44 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   review para essa decisão: `header_media_url` já existe na linha da tabela, então o caso de header
   de mídia tem fonte no banco — a porta não a devolve por paridade com o TS.
 
-- [ ] **35. Alinhar versões de API** `[confirmado]`
+- [x] **35. Alinhar versões de API** `[relatado]` · commit `c5f91898`
   Meta: TS `v22.0` (`src/lib/whatsapp/api-version.ts:6`) × Python `v19.0` (`cloud_api.py:29`, `render.yaml`).
   Shopify: TS `2026-04` × Python `2024-01` (`connectors/shopify.py:22`).
+
+  **Subiu, e a conferência foi o trabalho — não o `sed`.** Meta em `v22.0`
+  (`cloud_api.py:53`, `render.yaml`, `.env.piloto.example`, `DEPLOY.md`) e Shopify em `2026-04`
+  (`connectors/shopify.py:26`). Trocar duas constantes é uma linha cada; o que custa é responder se
+  o que este runtime manda continua válido do outro lado. Conferidos no changelog da Graph API, um
+  a um, só os pontos que este canal toca: corpo de texto, corpo de template com `components` (o que
+  o item 34 acabou de construir), `biz_opaque_callback_data` e os códigos de erro que
+  `queueing/failures.py` classifica em PERMANENT/TRANSIENT — nada mudou entre v19.0 e v22.0. Do
+  lado da Shopify, `price_rules.json` e `discount_codes.json` estão marcados legados desde
+  outubro/2024, mas seguem respondendo em `2026-04` com exatamente os filtros que
+  `_find_price_rule_id` usa (`ends_at_min`/`ends_at_max`/`limit`) — a busca fechada do item 33
+  continua fechada.
+
+  **O que continua sobrescrevível:** `AGENTS_META_API_VERSION`, porque a Meta aposenta versão por
+  cronograma e o piloto não pode depender de deploy para acompanhar. `runtime/.env.piloto` é
+  arquivo local de credenciais, não template do repo, e segue em `v19.0` até quem roda o piloto
+  atualizar à mão.
+
+  **Não mudou, de propósito:** o cupom continua em REST. A Shopify recomenda migrar
+  `PriceRule`/`DiscountCode` para o Admin GraphQL — o item 33 já tinha registrado a depreciação —
+  mas isso é desenho próprio, é o caminho do dinheiro, e é maior que trocar o número da versão.
+  Fica proposto como fila.
+
+  **Achado do item, registrado e não implementado:** o próprio lado TS não fala uma versão só.
+  Além do `v22.0` de `api-version.ts:6` (WhatsApp), há `v19.0` fixo em `src/lib/meta-api.ts:13`
+  (Ads), `src/lib/instagram/api.ts:6` e nas quatro rotas de `api/instagram` e
+  `api/integrations/meta`, e `2024-01` fixo em `src/app/api/shopify/pixel/route.ts:14`. São
+  superfícies diferentes (Marketing API, Instagram, pixel), então nenhuma é paridade do runtime e
+  nada disso entrou neste item — mas quem for aposentar uma versão da Meta vai mexer em seis
+  arquivos do TS, não em um.
+
+  **Suíte:** `tests/unit` 1154 verdes. `tests/pipeline` e `tests/db` não rodaram — pedem Postgres
+  em Docker, e o Docker Desktop desta máquina está desligado; nenhuma delas afirma versão de API.
+  Duas falhas de `tests/unit` fora do item (`test_humanize`, `test_secret_box_vectors`) são locale
+  do Windows, não código: passam com `PYTHONUTF8=1`.
 
 - [ ] **36. Providers ausentes no Python** `[confirmado]`
   Python tem OpenRouter, OpenAI-compat e Anthropic; o TS tem esses mais Gemini, DeepSeek e Groq.
