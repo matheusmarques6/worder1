@@ -23,8 +23,10 @@ import pytest
 
 from agents_runtime.channels.cloud_api import CloudApiChannel, from_env
 from agents_runtime.channels.port import before_the_provider
+from agents_runtime.channels.template_components import TemplateParametersMissing
 from agents_runtime.queueing.failures import Failure, classify, is_rate_limited
 from agents_runtime.repository.outbox import ClaimedSend
+from agents_runtime.repository.whatsapp_templates import TemplateShape
 
 
 def a_send(**overrides) -> ClaimedSend:
@@ -346,3 +348,199 @@ async def test_a_provider_refusal_did_reach_it() -> None:
         await channel_answering(handler).send(None, a_send())
 
     assert before_the_provider(failure.value) is False
+
+
+# --- Auditoria 2026-08-28, item 34 — templates com componentes e variáveis ---
+#
+# O achado: `{name, language}` e nada mais. Um template APROVADO COM PARÂMETRO
+# configurado como fallback de janela fechada saía sem `components`, a Meta
+# recusava, e o cliente não recebia nada — justo na hora em que esse caminho
+# existe. Os testes abaixo cobrem as duas metades do conserto: a FORMA (a do
+# TS, `src/lib/whatsapp/template-components.ts:92-146`) e a RECUSA nomeada
+# quando o template exige o que ninguém tem para dar (ruling B).
+
+
+def channel_knowing(handler, shape, *, token: str = "token-de-teste") -> CloudApiChannel:
+    """O canal com a porta de templates ligada a uma resposta fixa.
+
+    `shape=None` é "a org nunca sincronizou este template" — o "não sei" do
+    ruling C, que manda como sempre mandou.
+    """
+
+    async def load_token(conn, organization_id) -> str:
+        return token
+
+    async def load_template_shape(conn, organization_id, name, language):
+        return shape
+
+    return CloudApiChannel(
+        load_token=load_token,
+        load_template_shape=load_template_shape,
+        transport=httpx.MockTransport(handler),
+    )
+
+
+def a_template_send(**template) -> ClaimedSend:
+    return a_send(payload={"template": {"name": "volta_pra_loja", "language": "pt_BR", **template}})
+
+
+async def test_a_template_with_parameters_carries_the_components_the_ts_builds() -> None:
+    """A forma é a do TS, verbatim: `{type:'body',parameters:[{type:'text'}]}`
+    (`template-components.ts:126-131`)."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={"messages": [{"id": "wamid.V"}]})
+
+    shape = TemplateShape(
+        components=None, header_type="none", body_text="Oi {{1}}, o pedido {{2}} saiu", buttons=None
+    )
+    await channel_knowing(handler, shape).send(
+        None, a_template_send(body_variables=["Ana", "#123"])
+    )
+
+    assert seen["template"] == {
+        "name": "volta_pra_loja",
+        "language": {"code": "pt_BR"},
+        "components": [
+            {
+                "type": "body",
+                "parameters": [{"type": "text", "text": "Ana"}, {"type": "text", "text": "#123"}],
+            }
+        ],
+    }
+
+
+async def test_a_template_that_demands_variables_is_refused_before_the_wire() -> None:
+    """Ruling B: falha fechada e NOMEADA. Um valor chutado num template
+    aprovado é pior que um envio recusado — e o erro tem que dizer qual
+    template, quantos parâmetros ele pede e que ninguém os forneceu."""
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json={"messages": [{"id": "wamid.X"}]})
+
+    shape = TemplateShape(
+        components=None, header_type="none", body_text="Oi {{1}}, o pedido {{2}} saiu", buttons=None
+    )
+
+    with pytest.raises(TemplateParametersMissing) as failure:
+        await channel_knowing(handler, shape).send(None, a_template_send())
+
+    assert calls == 0
+    message = str(failure.value)
+    assert "volta_pra_loja" in message
+    assert "2" in message
+    # Permanente: insistir num template que continua exigindo o que ninguém
+    # tem só queima a escada de retentativa.
+    assert classify(failure.value) is Failure.PERMANENT
+    # E é bug nosso, nunca da conta: o breaker do número não conta isto.
+    assert before_the_provider(failure.value)
+
+
+async def test_the_wrong_number_of_variables_is_refused_too() -> None:
+    """`body_vars_mismatch` do TS (`template-components.ts:120-125`): mandar
+    UMA variável para um template de duas é rejeição garantida da Meta."""
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json={"messages": [{"id": "wamid.X"}]})
+
+    shape = TemplateShape(
+        components=None, header_type="none", body_text="Oi {{1}}, o pedido {{2}} saiu", buttons=None
+    )
+
+    with pytest.raises(TemplateParametersMissing):
+        await channel_knowing(handler, shape).send(None, a_template_send(body_variables=["Ana"]))
+
+    assert calls == 0
+
+
+async def test_a_media_header_without_its_url_is_refused() -> None:
+    """`missing_header_media` do TS (`template-components.ts:99-104`): um
+    header IMAGE/VIDEO/DOCUMENT sem link é recusa certa da Meta."""
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json={"messages": [{"id": "wamid.X"}]})
+
+    shape = TemplateShape(
+        components=[{"type": "HEADER", "format": "IMAGE"}, {"type": "BODY", "text": "Oi!"}],
+        header_type="none",
+        body_text=None,
+        buttons=None,
+    )
+
+    with pytest.raises(TemplateParametersMissing):
+        await channel_knowing(handler, shape).send(None, a_template_send())
+
+    assert calls == 0
+
+
+async def test_a_template_that_demands_nothing_goes_out_exactly_as_before() -> None:
+    """Ruling A: sem parâmetro, o payload sai byte a byte como saía."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={"messages": [{"id": "wamid.T"}]})
+
+    shape = TemplateShape(
+        components=None, header_type="none", body_text="Volte quando quiser!", buttons=None
+    )
+    await channel_knowing(handler, shape).send(None, a_template_send())
+
+    assert seen["template"] == {"name": "volta_pra_loja", "language": {"code": "pt_BR"}}
+
+
+async def test_a_template_the_org_never_synced_is_sent_as_it_always_was() -> None:
+    """Ruling C: linha ausente é "não sei", nunca "exige parâmetro". Recusar
+    por falta de sincronização calaria uma loja que hoje funciona."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={"messages": [{"id": "wamid.T"}]})
+
+    await channel_knowing(handler, None).send(None, a_template_send())
+
+    assert seen["template"] == {"name": "volta_pra_loja", "language": {"code": "pt_BR"}}
+
+
+async def test_the_template_lookup_asks_for_the_sends_own_name_and_language() -> None:
+    """Uma fila com duas orgs e dois idiomas: perguntar pelo template errado é
+    recusar o envio certo (ou pior, deixar passar o errado)."""
+    asked: list[tuple] = []
+
+    async def load_template_shape(conn, organization_id, name, language):
+        asked.append((organization_id, name, language))
+        return None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"messages": [{"id": "wamid.T"}]})
+
+    async def load_token(conn, organization_id) -> str:
+        return "t"
+
+    channel = CloudApiChannel(
+        load_token=load_token,
+        load_template_shape=load_template_shape,
+        transport=httpx.MockTransport(handler),
+    )
+    org = uuid.uuid4()
+    await channel.send(
+        None,
+        a_send(
+            organization_id=org,
+            payload={"template": {"name": "carrinho", "language": "en_US"}},
+        ),
+    )
+
+    assert asked == [(org, "carrinho", "en_US")]

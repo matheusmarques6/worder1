@@ -24,6 +24,7 @@ conta ativa da org de CADA envio via `internal.active_whatsapp_business_account`
 20): uma leitura por envio, e medir se isso pesa é tarefa de outro item.
 """
 
+import logging
 import os
 from collections.abc import Awaitable, Callable
 from uuid import UUID
@@ -32,10 +33,14 @@ import httpx
 import psycopg
 
 from agents_runtime.channels.port import ChannelPort, mark_before_the_provider
+from agents_runtime.channels.template_components import build_components
 from agents_runtime.crypto.secret_box import base_secret_from_env
 from agents_runtime.queueing.failures import meta_error_code
 from agents_runtime.repository.outbox import ClaimedSend
 from agents_runtime.repository.whatsapp_accounts import load_active_account, resolve_token
+from agents_runtime.repository.whatsapp_templates import TemplateShape, load_template_shape
+
+logger = logging.getLogger(__name__)
 
 # v19.0 is the version worder1 ran in production — proven, not newest.
 # Overridable per environment because Meta retires versions on a schedule.
@@ -48,6 +53,13 @@ GRAPH_URL = "https://graph.facebook.com"
 #: os testes de unidade ligam uma falsa, sem tocar em Postgres.
 TokenLoader = Callable[[psycopg.AsyncConnection, UUID], Awaitable[str]]
 
+#: O seam da porta de templates (item 34): conexão + org + nome + idioma → a
+#: forma do template aprovado, ou `None` se a org nunca sincronizou aquele
+#: nome. `from_env` liga `repository.whatsapp_templates.load_template_shape`.
+TemplateShapeLoader = Callable[
+    [psycopg.AsyncConnection, UUID, str, str], Awaitable[TemplateShape | None]
+]
+
 
 class CloudApiChannel:
     """One door out, per ADR: only senders hold an instance of this."""
@@ -56,6 +68,7 @@ class CloudApiChannel:
         self,
         *,
         load_token: TokenLoader,
+        load_template_shape: TemplateShapeLoader | None = None,
         api_version: str = DEFAULT_API_VERSION,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
@@ -65,11 +78,17 @@ class CloudApiChannel:
             transport=transport,
         )
         self._load_token = load_token
+        # Ausente = a mesma coisa que uma org sem template sincronizado: o
+        # "não sei" do ruling C, que manda como sempre mandou. É o default
+        # porque os testes de unidade não têm Postgres, e é seguro porque a
+        # produção passa por `from_env`, onde o loader real é obrigatório —
+        # `tests/db/test_cloud_api_channel_real_wiring.py` prova a fiação.
+        self._load_template_shape = load_template_shape
 
     async def send(self, conn: psycopg.AsyncConnection, send: ClaimedSend) -> str:
         try:
             token = await self._load_token(conn, send.organization_id)
-            payload = self._payload_for(send)
+            payload = await self._payload_for(conn, send)
         except BaseException as error:
             # Item 32, ruling U(a): nada disto tocou a Meta. Token que não abre
             # e payload malformado são bugs nossos, e contá-los no breaker
@@ -109,8 +128,7 @@ class CloudApiChannel:
             raise ValueError(f"payload inválido: resposta 2xx sem wamid: {response.text[:200]}")
         return str(wamid)
 
-    @staticmethod
-    def _payload_for(send: ClaimedSend) -> dict:
+    async def _payload_for(self, conn: psycopg.AsyncConnection, send: ClaimedSend) -> dict:
         base = {
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
@@ -122,17 +140,39 @@ class CloudApiChannel:
 
         if "template" in send.payload:
             # O preflight rebaixou um toque de janela fechada para o template
-            # aprovado — o shape é o mínimo da Cloud API: nome + idioma.
+            # aprovado. Nome + idioma é o mínimo da Cloud API; o que faltava
+            # (item 34) é `components`, sem o qual um template APROVADO COM
+            # PARÂMETRO sai vazio e a Meta recusa — justo na janela fechada,
+            # que é a única hora em que este caminho existe.
             template = send.payload["template"]
             if not isinstance(template, dict) or not template.get("name"):
                 raise ValueError(f"payload inválido: template sem 'name' — {template!r:.80}")
-            return base | {
-                "type": "template",
-                "template": {
-                    "name": str(template["name"]),
-                    "language": {"code": str(template.get("language") or "pt_BR")},
-                },
-            }
+            name = str(template["name"])
+            language = str(template.get("language") or "pt_BR")
+            shape = None
+            if self._load_template_shape is not None:
+                shape = await self._load_template_shape(
+                    conn, send.organization_id, name, language
+                )
+                if shape is None:
+                    # Ruling C: ausência de sincronização é "não sei", nunca
+                    # "não exige parâmetro" — recusar aqui calaria uma loja que
+                    # hoje funciona. Fica registrado para quem for investigar
+                    # uma recusa da Meta que não passou por esta guarda.
+                    logger.info(
+                        "template fora do catálogo sincronizado; enviado sem validação",
+                        extra={"template": name, "language": language},
+                    )
+            components = build_components(shape, template, described_as=f"{name} ({language})")
+            wire = {"name": name, "language": {"code": language}}
+            if components:
+                # Divergência DECLARADA: o TS manda `components: []` sempre
+                # (`cloud-api.ts:325`, `meta-api.ts:141`). Aqui a chave é
+                # omitida quando não há nada — ruling A, o envio sem parâmetro
+                # sai byte a byte como saía antes deste item. A Meta aceita as
+                # duas formas.
+                wire["components"] = components
+            return base | {"type": "template", "template": wire}
 
         if "text" not in send.payload:
             # Media arrives with the funnels (E3). Guessing at an unknown
@@ -168,7 +208,15 @@ def from_env(dsn: str) -> ChannelPort:
             )
         return resolve_token(account, base_secret=base_secret)
 
+    async def load_shape(
+        conn: psycopg.AsyncConnection, organization_id: UUID, name: str, language: str
+    ) -> TemplateShape | None:
+        return await load_template_shape(
+            conn, organization_id=organization_id, name=name, language=language
+        )
+
     return CloudApiChannel(
         load_token=load_token,
+        load_template_shape=load_shape,
         api_version=os.environ.get("AGENTS_META_API_VERSION", DEFAULT_API_VERSION),
     )
