@@ -18,6 +18,8 @@ Nenhum hostname aqui: adapters moram em direct_providers.py/openrouter.py
 """
 
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from agents_runtime.agent_core import openrouter
@@ -117,3 +119,31 @@ def resolve_agent_llm(
     raise NoOrgLlmKey(
         f"org sem chave para '{agent_provider}' e sem OpenRouter próprio (BYO-only)"
     )
+
+
+@asynccontextmanager
+async def scoped_agent_llm(agent_llm: LlmPort, *, owns: bool) -> AsyncIterator[LlmPort]:
+    """Item 40 da auditoria: o único ponto de fechamento do cliente httpx que
+    `resolve_agent_llm` constrói por turno — usado por `respond()`
+    (`agent_core/responder.py`) e por `touch()` (`agent_core/toucher.py`).
+
+    Os dois são pontos INDEPENDENTES onde um adapter de LLM nasce e morre
+    (mesma cascata BYO, chamada uma vez por turno/toque); fechar nos dois não
+    é espalhar remendo — é o mesmo conserto nos dois lugares onde o defeito
+    existe (fix round 1 do item 40, `task-40-report.md`).
+
+    `owns=False` nunca fecha: é o `llm` de plataforma do Judge 1, por
+    processo (ruling D) — outros turnos concorrentes ainda o usam. Só o
+    cliente que a cascata BYO efetivamente construiu (`owns=True`) fecha
+    aqui, e fecha sempre — saída normal, exceção ou cancelamento —, porque é
+    um `finally` de verdade, não uma chamada solta que um `return`
+    intermediário pularia.
+
+    Sem pool, sem registro entre turnos (ruling B/C): isto fecha um cliente
+    que já foi construído, nunca decide reusar um velho.
+    """
+    try:
+        yield agent_llm
+    finally:
+        if owns:
+            await agent_llm.aclose()

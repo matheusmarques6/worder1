@@ -74,7 +74,7 @@ from agents_runtime.agent_core.prompt_compiler import (
     StateBlock,
     compile_prompt,
 )
-from agents_runtime.agent_core.providers import NoOrgLlmKey, resolve_agent_llm
+from agents_runtime.agent_core.providers import NoOrgLlmKey, resolve_agent_llm, scoped_agent_llm
 from agents_runtime.agent_core.think_gate import PendingMessage, should_think
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
@@ -560,7 +560,7 @@ def build_responder(
                     await note_step("skipped", "Sem chave de LLM da loja — agente não respondeu")
                     return None
 
-            try:
+            async with scoped_agent_llm(agent_llm, owns=owns_agent_llm):
                 knowledge = await _knowledge(
                     conn,
                     job,
@@ -840,18 +840,6 @@ def build_responder(
                 # sender obedece por linha, sem env global (Pacote B 17/08).
                 split, rhythm = delivery_flags(version.settings)
                 return {"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}}
-            finally:
-                # Item 40 da auditoria (ruling C): um cliente por turno,
-                # fechado aqui — o único ponto onde o adapter resolvido por
-                # `resolve_agent_llm` nasce e morre neste responder. O `llm`
-                # de plataforma (Judge 1, ruling D) nunca entra aqui porque
-                # `owns_agent_llm` só fica True quando a cascata BYO resolveu
-                # um cliente novo. `touch()` (agent_core/toucher.py) repete
-                # exatamente este padrão de criação e HOJE não fecha — achado
-                # vizinho, registrado no FORK.md e no checklist, fora do
-                # escopo deste fechamento (ruling C: um só ponto por vez).
-                if owns_agent_llm:
-                    await agent_llm.aclose()
 
     return respond
 
